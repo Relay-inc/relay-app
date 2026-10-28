@@ -260,3 +260,14 @@
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* text a comment is on (ticket 11): underlined in amber, the open thread's stronger */
+.page-editor .cm-comment {
+  background: color-mix(in srgb, var(--soon) 14%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--soon) 55%, transparent);
+  cursor: pointer;
+}
+.page-editor .cm-comment-active {
+  background: color-mix(in srgb, var(--soon) 30%, transparent);
+  border-bottom-color: var(--soon);
+}

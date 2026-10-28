@@ -571,6 +571,80 @@ function handle(cmd: string, a: Args): unknown {
         ],
       };
     }
+    case "page_comments": {
+      // a note of this Mac's own: one open thread with a reply, one resolved; what the page adds comes after them
+      const path = String(a.path);
+      if (!comments.has(path)) {
+        const at = Date.now();
+        comments.set(path, [
+          {
+            id: "c1",
+            by: "Ana Vos",
+            mine: false,
+            k: "comment",
+            t: "Is this still the first thing to do?",
+            q: "First open loop",
+            a: { o: 0 },
+            at: at - 3 * 3600_000,
+          },
+          {
+            id: "r1",
+            by: "Ben Lauwers",
+            mine: false,
+            k: "reply",
+            on: "c1",
+            t: "Yes, before the demo.",
+            at: at - 2 * 3600_000,
+          },
+          {
+            id: "c2",
+            by: "Ana Vos",
+            mine: false,
+            k: "comment",
+            t: "Which repo is the old one?",
+            q: "The previous repo is archived",
+            a: { o: 0 },
+            at: at - 26 * 3600_000,
+          },
+          { id: "x2", by: "Ben Lauwers", mine: false, k: "resolve", on: "c2", at: at - 25 * 3600_000 },
+        ]);
+      }
+      const all = comments.get(path)!;
+      const gone = new Set(
+        all.filter(e => e.k === "delete" && all.find(t => t.id === e.on)?.by === e.by).map(e => e.on),
+      );
+      const item = (e: Comment) => ({ id: e.id, by: e.by, mine: e.mine, at: e.at, text: e.t ?? "" });
+      const threads = all
+        .filter(e => e.k === "comment" && !gone.has(e.id))
+        .map(e => {
+          const last = all.filter(x => x.on === e.id && (x.k === "resolve" || x.k === "reopen")).pop();
+          return {
+            ...item(e),
+            quote: e.q,
+            anchor: e.a,
+            resolved: last?.k === "resolve",
+            replies: all.filter(x => x.k === "reply" && x.on === e.id && !gone.has(x.id)).map(item),
+          };
+        });
+      return { kind: "file", threads };
+    }
+    case "page_comment": {
+      const list = comments.get(String(a.path)) ?? [];
+      const id = `n${list.length + 1}`;
+      list.push({
+        id,
+        by: "You",
+        mine: true,
+        k: String(a.kind),
+        on: String(a.on),
+        t: String(a.text),
+        q: String(a.quote),
+        a: a.anchor,
+        at: Date.now(),
+      });
+      comments.set(String(a.path), list);
+      return id;
+    }
     case "page_restore": {
       const hash = `h${++writes}`;
       written.set(String(a.path), { text: String(a.text), hash });
@@ -1404,6 +1478,19 @@ const liveAt = (after: string) => {
   return i < 0 ? text.length : i + after.length;
 };
 // the page editor's saves (write_note), and whether a note changed on disk since it was read
+type Comment = {
+  id: string;
+  by: string;
+  mine: boolean;
+  k: string;
+  on?: string;
+  t?: string;
+  q?: string;
+  a?: unknown;
+  at: number;
+};
+const comments = new Map<string, Comment[]>(); // a page's comment entries (ticket 11), by its path
+
 const written = new Map<string, { text: string; hash: string }>();
 let writes = 0;
 let diskChanged = false;

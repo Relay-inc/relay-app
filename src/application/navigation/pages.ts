@@ -164,6 +164,15 @@ export function watchPage(page: string, merge: (change: OutsideChange) => void) 
  *  change made outside (merged with what is typed, else the bar). */
 export type { PageHistory, PageVersion } from "../../infrastructure/backend";
 export const loadHistory = (page: string) => backend.pageHistory(page);
+export type { PageComments } from "../../infrastructure/backend";
+export const loadComments = (page: string) => backend.pageComments(page);
+export const addComment = (page: string, kind: string, on: string, text = "", quote = "", anchor: unknown = null) =>
+  backend.pageComment(page, kind, on, text, quote, anchor);
+/** Another member's comment on a shared document arrived (its sidecar `<doc>#comments` changed). */
+export const onComments = (doc: string, then: () => void) =>
+  backend.onSharedDoc(change => {
+    if (change.id === `${doc}#comments`) then();
+  });
 export async function restorePage(page: string, kind: backend.PageHistory["kind"], text: string) {
   if (kind === "doc") return backend.pageRestore(page, text);
   const { hash } = await backend.writeNote(page, text, "", true);

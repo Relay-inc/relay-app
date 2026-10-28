@@ -1364,6 +1364,25 @@ const VIEWS = {
     await waitText("Ben Lauwers");
     await settle(page);
   },
+  // a page's comments beside it (ticket 11): an open thread with a reply, its text marked in the page
+  "page-comments": async () => {
+    await VIEWS["page-view"]();
+    await page.getByRole("button", { name: "Comments", exact: true }).click();
+    await waitText("Is this still the first thing to do?");
+    await page.getByText("“First open loop”").click();
+    await settle(page);
+  },
+  // in dark, the resolved threads unfolded under the open ones
+  "page-comments-resolved": async () => {
+    await open(page, server.url, { fixture: "dark" });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText("Stand van zaken");
+    await page.getByRole("button", { name: "Comments", exact: true }).click();
+    await page.getByRole("button", { name: "Resolved (1)" }).click();
+    await waitText("Which repo is the old one?");
+    await settle(page);
+  },
   // the oldest version picked: what changed since, green and red, with Restore
   "page-history-diff": async () => {
     await open(page, server.url, { fixture: "dark" });

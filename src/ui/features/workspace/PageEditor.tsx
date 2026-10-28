@@ -22,6 +22,8 @@ import {
 } from "../../../application/navigation/pages";
 import { headAfter, lineChanges, merge3, oneChange } from "../../../domain/workspace/merge";
 import { LOCAL, openSharedPage, type Peer, type SharedPage } from "../../../application/workspace/coedit";
+import { yAnchor, ySpan } from "../../../application/workspace/anchors";
+import { findQuote, type Span } from "../../../domain/workspace/comments";
 import { useT } from "../../hooks/useT";
 import { livePreview } from "./livePreview";
 import { blockEditing, type BlockWords } from "./blocks";
@@ -31,6 +33,25 @@ const SAVE_AFTER = 1000; // ms after the last keystroke
 
 /** Writes a new head (the page's properties edited) with what is typed in the body: one save, the same hash check. */
 export type HeadWriter = { current: ((head: string) => Promise<void>) | null };
+/** What a page's comments (ticket 11) ask of its editor, in body offsets: the selection to comment on, an anchor for it
+ *  (Yjs relative positions on a shared document, else the offset with the quote), where an anchor is now, the
+ *  commented text marked (`active` the open thread's) and a thread's text shown. */
+export type CommentsApi = {
+  selection: () => { from: number; to: number; quote: string } | null;
+  anchor: (from: number, to: number) => unknown;
+  locate: (anchor: unknown, quote: string) => Span;
+  mark: (spans: { id: string; from: number; to: number }[], active: string | null) => void;
+  reveal: (from: number, to: number) => void;
+};
+/** The editor's side of a page's comments, and what it tells them: a selection made or gone, ⌘⌥M, a commented text
+ *  clicked, the text changed (anchors move). */
+export type CommentHooks = {
+  onApi: (api: CommentsApi | null) => void;
+  onSelect: (has: boolean) => void;
+  onKey: () => void;
+  onOpen: (id: string) => void;
+  onEdited: () => void;
+};
 /** A page's file split into what comes before the body and the body, the way the page shows it. */
 export type PageSplit = (text: string) => { head: string; body: string };
 
@@ -69,6 +90,13 @@ class PeerCaret extends WidgetType {
     return true;
   }
 }
+// the text comments are on
+const setComments = StateEffect.define<DecorationSet>();
+const commentMarks = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update: (marks, tr) => tr.effects.find(e => e.is(setComments))?.value ?? marks.map(tr.changes),
+  provide: field => EditorView.decorations.from(field),
+});
 // the lines a change made outside Relay touched, marked for a moment with who made it
 const markOutside = StateEffect.define<DecorationSet>();
 const outsideMarks = StateField.define<DecorationSet>({
@@ -88,6 +116,7 @@ export function PageEditor({
   headRef,
   split,
   onPeers,
+  comments,
 }: {
   page: string;
   head: string;
@@ -95,6 +124,7 @@ export function PageEditor({
   headRef: HeadWriter;
   split: PageSplit;
   onPeers?: (peers: Peer[]) => void; // who else is on the page, when it is a shared document
+  comments?: CommentHooks;
 }) {
   const { t } = useT();
   const [changed, setChanged] = useState(false);
@@ -131,6 +161,7 @@ export function PageEditor({
         body={body}
         split={split}
         onPeers={onPeers}
+        comments={comments}
         onReady={(write, setHead) => {
           save.current = write;
           headRef.current = setHead;
@@ -150,6 +181,7 @@ function Editor(props: {
   body: string;
   split: PageSplit;
   onPeers?: (peers: Peer[]) => void;
+  comments?: CommentHooks;
   onReady: (write: (force?: boolean) => Promise<void>, setHead: (head: string) => Promise<void>) => void; // Keep mine, properties
   onChanged: (changed: boolean) => void;
   onFailed: (error: string) => void;
@@ -157,6 +189,10 @@ function Editor(props: {
   const { t } = useT();
   const host = useRef<HTMLDivElement>(null);
   const [first] = useState(props); // what the editor was made from
+  const hooks = useRef(props.comments); // the page's newest callbacks, called from the editor made once
+  useEffect(() => {
+    hooks.current = props.comments;
+  });
   const label = t("page.editor");
   const [by] = useState(() => ({
     relay: t("page.updatedLinks"),
@@ -233,6 +269,7 @@ function Editor(props: {
           livePreview((link, drawer) => void followPageLink(link, drawer)),
           blockEditing(words, () => workspacePaths()), // before the keymap below: Tab in a table moves between cells
           keymap.of([
+            { key: "Mod-Alt-m", run: () => (hooks.current?.onKey(), true) },
             // on a shared document ⌘Z undoes only what was typed here (Y.UndoManager with this Mac's origin)
             { key: "Mod-z", run: () => !!shared && (shared.undo.undo(), true) },
             { key: "Mod-Shift-z", run: () => !!shared && (shared.undo.redo(), true) },
@@ -250,6 +287,14 @@ function Editor(props: {
           ]),
           outsideMarks,
           peerMarks,
+          commentMarks,
+          EditorView.domEventHandlers({
+            mousedown: e => {
+              const id = (e.target as HTMLElement).closest?.("[data-comment]")?.getAttribute("data-comment");
+              if (id) hooks.current?.onOpen(id);
+              return false;
+            },
+          }),
           EditorView.contentAttributes.of({ "aria-label": label, spellcheck: "true" }),
           EditorView.updateListener.of(u => {
             const fromShared = u.transactions.some(tr => tr.annotation(fromDoc));
@@ -269,6 +314,8 @@ function Editor(props: {
               const { anchor, head: at } = u.state.selection.main;
               shared.cursor(headLen + anchor, headLen + at);
             }
+            if (u.selectionSet) hooks.current?.onSelect(!u.state.selection.main.empty);
+            if (u.docChanged) hooks.current?.onEdited();
             if (u.docChanged) {
               window.clearTimeout(timer);
               timer = window.setTimeout(() => void write(), SAVE_AFTER);
@@ -277,6 +324,38 @@ function Editor(props: {
           }),
         ],
       }),
+    });
+    // the page's comments: in body offsets; a shared document's anchors are on its whole text, after the head
+    hooks.current?.onApi({
+      selection: () => {
+        const { from, to } = view.state.selection.main;
+        return from === to ? null : { from, to, quote: view.state.sliceDoc(from, to) };
+      },
+      anchor: (from, to) => (shared ? yAnchor(shared.text, headLen + from, headLen + to) : { o: from }),
+      locate: (anchor, quote) => {
+        if (shared && (anchor as { y?: unknown } | null)?.y) {
+          const span = ySpan(shared.text, anchor);
+          return span && span.from >= headLen ? { from: span.from - headLen, to: span.to - headLen } : null;
+        }
+        return findQuote(view.state.doc.toString(), quote, Number((anchor as { o?: number } | null)?.o ?? 0));
+      },
+      mark: (spans, active) => {
+        const end = view.state.doc.length;
+        const marks = spans
+          .filter(s => s.from < s.to && s.to <= end)
+          .map(s =>
+            Decoration.mark({
+              class: s.id === active ? "cm-comment cm-comment-active" : "cm-comment",
+              attributes: { "data-comment": s.id },
+            }).range(s.from, s.to),
+          );
+        view.dispatch({ effects: setComments.of(Decoration.set(marks, true)) });
+      },
+      reveal: (from, to) =>
+        view.dispatch({
+          selection: { anchor: from, head: to },
+          effects: EditorView.scrollIntoView(from, { y: "center" }),
+        }),
     });
     // the file changed outside Relay (Claude, Obsidian, a shared round): merged into what is typed when the two did not
     // change the same lines, else the bar. Not undoable with ⌘Z: it is not the user's edit.
@@ -343,6 +422,7 @@ function Editor(props: {
             pageTextIs(page, now);
           }
         });
+        hooks.current?.onEdited(); // anchors on the document can be found now
         sp.peers(peers => {
           onPeers?.(peers);
           const end = view.state.doc.length;
@@ -362,6 +442,7 @@ function Editor(props: {
       });
     return () => {
       closed = true;
+      hooks.current?.onApi(null);
       shared?.close();
       onPeers?.([]);
       stopWatching();

@@ -5,6 +5,7 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { Related } from "../domain/related/rules";
+import type { CommentThread } from "../domain/workspace/comments";
 import type { GitRepo } from "../domain/git/git";
 import type { CommitFile, GitCommit } from "../domain/git/graph";
 import type { FileEntry, FileRoot } from "../domain/files/files";
@@ -137,6 +138,12 @@ export type PageVersion = {
 export type PageHistory = { kind: "doc" | "git" | "none"; versions: PageVersion[] };
 export const pageHistory = (path: string) => invoke<PageHistory>("page_history", { path });
 export const pageRestore = (path: string, text: string) => invoke<void>("page_restore", { path, text });
+/** A page's comment threads (ticket 11): "doc" a shared document's (`doc` its id, every member's), "file" this Mac's. */
+export type PageComments = { kind: "doc" | "file"; doc?: string; threads: CommentThread[] };
+export const pageComments = (path: string) => invoke<PageComments>("page_comments", { path });
+/** A comment, reply, resolve, reopen or delete on a page; `on` the thread, `quote` and `anchor` for a new comment. */
+export const pageComment = (path: string, kind: string, on: string, text: string, quote: string, anchor: unknown) =>
+  invoke<string>("page_comment", { path, kind, on, text, quote, anchor });
 export const sharedDocOpen = (path: string) => invoke<SharedDoc | null>("shared_doc_open", { path });
 /** An edit made in a page's editor (Yjs v1 update, base64): into the document and sent. */
 export const sharedDocEdit = (path: string, doc: string, update: string) =>

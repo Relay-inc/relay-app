@@ -48,11 +48,12 @@ pub const MAX_DOCS: usize = 10_000;
 /// authors of parts left out (named when edits are missing). `via`: who made the edit not sent yet when it came from
 /// the note's file ("claude", "disk", "relay"; kept with the update for history). `bound`: the server knows the note's
 /// record name is a document's (`doc_bind`). `bound_as`: the path the server was told is this document's (`doc_bind`),
-/// "" none yet. `seeded`: made from an existing file here (8b), not by an edit.
+/// "" none yet. `seeded`: made from an existing file here (8b), not by an edit. `owners`: a comments sidecar's entries
+/// (map "c"), each with the author of the sealed update that last wrote it, never what the entry says of itself.
 #[derive(Default, Clone, Serialize, Deserialize)]
 #[serde(default)]
 struct Cursor { seq: u64, epoch: u32, path: String, at: String, out: String, pending: bool, acked: String, mine: u64, seen: BTreeMap<String, u64>,
-    lost: std::collections::BTreeSet<String>, via: String, bound_as: String, seeded: bool }
+    lost: std::collections::BTreeSet<String>, via: String, bound_as: String, seeded: bool, owners: BTreeMap<String, String> }
 struct Open { doc: Doc, c: Cursor }
 
 type On = Arc<dyn Fn(&str, &[u8]) + Send + Sync>;
@@ -96,6 +97,21 @@ fn change(doc: &Doc, f: impl FnOnce(&Doc)) -> Vec<u8> {
     f(doc);
     doc.transact().encode_state_as_update_v1(&before)
 }
+/// A comments sidecar's entries (map "c"): key -> its JSON.
+fn entries_of(doc: &Doc) -> BTreeMap<String, String> {
+    // the map first: getting it takes a write transaction, which waits forever behind an open read one
+    let m = doc.get_or_insert_map("c");
+    let txn = doc.transact();
+    m.iter(&txn).map(|(k, v)| (k.to_string(), v.to_string(&txn))).collect()
+}
+/// Who wrote each entry of a sidecar that changed from `before`: `author`, for every entry it added or changed.
+fn own_entries(o: &mut Open, before: &BTreeMap<String, String>, author: &str) {
+    let now = entries_of(&o.doc);
+    for (k, v) in &now { if before.get(k) != Some(v) { o.c.owners.insert(k.clone(), author.to_string()); } }
+    o.c.owners.retain(|k, _| now.contains_key(k));
+}
+/// A comment entry's key: what this Mac makes (16 hex), at most 32 of [0-9a-z].
+fn entry_key(k: &str) -> bool { !k.is_empty() && k.len() <= 32 && k.bytes().all(|b| b.is_ascii_digit() || b.is_ascii_lowercase()) }
 fn sv_of(hex_sv: &str) -> StateVector { unhex(hex_sv).and_then(|b| StateVector::decode_v1(&b).ok()).unwrap_or_default() }
 /// What others wrote, taken here since `before`, counts as held by the server: per client, `acked` rises to the clock
 /// it reached (this Mac's own edits do not move while the document's lock is held). With nothing of this Mac's
@@ -286,6 +302,36 @@ impl Docs {
         Ok(lock(&self.open).get(id).map_or_else(|| Doc::new().transact().encode_state_as_update_v1(&sv), |o| o.doc.transact().encode_state_as_update_v1(&sv)))
     }
 
+    /// A note's comments (its sidecar `<id>#comments`): (key, author, JSON) per entry whose author is known, the author
+    /// being who sealed the update that last wrote it (`owners`), so an entry cannot claim someone else wrote it.
+    pub fn comments(&self, id: &str) -> Vec<(String, String, String)> {
+        let side = format!("{id}#comments");
+        if !note_id(id) { return vec![]; }
+        let open = lock(&self.open);
+        let Some(o) = open.get(&side) else { return vec![] };
+        let owners = o.c.owners.clone();
+        entries_of(&o.doc).into_iter().filter_map(|(k, v)| Some((k.clone(), owners.get(&k)?.clone(), v))).collect()
+    }
+    /// One comment entry written into note `id`'s sidecar by this Mac (its author), then sent (or with the next sync).
+    pub fn put_comment(&self, id: &str, key: &str, json: &str) -> Result<(), String> {
+        if !note_id(id) || !entry_key(key) { return Err("not a comment of a note".into()); }
+        let side = format!("{id}#comments");
+        let busy = self.busy(&side);
+        let _one = lock(&busy);
+        {
+            let mut open = lock(&self.open);
+            let o = Self::entry(&mut open, &side);
+            change(&o.doc, |d| { let m = d.get_or_insert_map("c"); m.insert(&mut d.transact_mut(), key, json); });
+            o.c.owners.insert(key.to_string(), self.me.clone());
+            o.c.pending = true;
+            self.save(&open, &side)?;
+        }
+        if let Err(e) = self.push(&side) { self.warn(format!("not sent yet, again at the next sync: {e}")); }
+        Ok(())
+    }
+    /// This device as the author of what it writes.
+    pub fn me(&self) -> &str { &self.me }
+
     /// Whether `path` is taken by another note than `except` (as APFS compares names).
     fn taken(&self, path: &str, except: Option<&str>) -> bool {
         let f = fold(path);
@@ -373,7 +419,10 @@ impl Docs {
         {
             let mut open = lock(&self.open);
             let o = Self::entry(&mut open, id);
+            let side = id.contains('#');
+            let before = if side { entries_of(&o.doc) } else { BTreeMap::new() };
             apply(&o.doc, update)?;
+            if side { own_entries(o, &before, &self.me); }
             o.c.pending = true;
             self.save(&open, id)?;
         }
@@ -463,7 +512,7 @@ impl Docs {
                 o.c.seq = seq;
                 last = seq;
                 let from = u["from"].as_str().unwrap_or("");
-                match self.take_part(&keys, &name, o, part, from) {
+                match self.take_part(&keys, &name, o, part, from, id.contains('#')) {
                     Ok(b) => got.push(b),
                     Err(e) => { if !from.is_empty() { o.c.lost.insert(from.to_string()); } let l = o.c.path.clone(); self.warn(format!("{}: update {seq} left out: {e}", if l.is_empty() { id.to_string() } else { l })); }
                 }
@@ -490,11 +539,13 @@ impl Docs {
 
     /// One update from the log or the live channel, checked and applied: its Yjs bytes. `from`: who the server says
     /// pushed it; a part sealed by anyone else does not open.
-    fn take_part(&self, keys: &Keys, name: &str, o: &mut Open, part: &[u8], from: &str) -> Result<Vec<u8>, String> {
+    fn take_part(&self, keys: &Keys, name: &str, o: &mut Open, part: &[u8], from: &str, side: bool) -> Result<Vec<u8>, String> {
         if from.is_empty() { return Err("the server does not say who pushed it".into()); }
         let p = keys.open_doc(&self.vault, name, "u", 0, from, part)?;
         if p.epoch < keys.epoch() && o.c.epoch == keys.epoch() { return Err("sealed under an old key".into()); }
+        let before = if side { entries_of(&o.doc) } else { BTreeMap::new() };
         apply(&o.doc, &p.body)?;
+        if side { own_entries(o, &before, &p.author); }
         // a gap in an author's counter: the server holds updates back (or gave them to nobody)
         if let Some(n) = p.meta["n"].as_u64() {
             let last = o.c.seen.get(&p.author).copied().unwrap_or(0);
@@ -706,7 +757,7 @@ impl Docs {
     /// the log, otherwise the log is pulled. Returns the document's id when this Mac knows it. Not on the channel's
     /// own thread: it may pull.
     pub fn take_live(&self, name: &str, seq: u64, from: &str, part: &[u8]) -> Result<Option<String>, String> {
-        let mut ids: Vec<String> = self.paths().into_values().collect();
+        let mut ids: Vec<String> = self.paths().into_values().flat_map(|id| [format!("{id}#comments"), id]).collect();
         ids.extend(lock(&self.open).keys().cloned());
         let Some(id) = ids.into_iter().find(|id| self.name(id) == name) else { return Ok(None) };
         let busy = self.busy(&id);
@@ -720,7 +771,7 @@ impl Docs {
             let o = Self::entry(&mut open, &id);
             let before = o.doc.transact().state_vector();
             o.c.seq = seq;
-            let r = self.take_part(&keys, name, o, part, from);
+            let r = self.take_part(&keys, name, o, part, from, id.contains('#'));
             o.c.epoch = keys.epoch();
             raise_acked(o, &before);
             self.save(&open, &id)?;
@@ -975,6 +1026,31 @@ mod tests {
         assert_eq!((b.paths().get("Plan.md"), b.text(&id).as_str()), (Some(&id), "one two"));
         std::fs::remove_dir_all(tmp("off-a")).ok();
         std::fs::remove_dir_all(tmp("off-b")).ok();
+    }
+
+    /// A comment written on A reaches B through the note's sidecar with A as its author, whatever the entry says of
+    /// itself; an entry B overwrites is B's from then on (so B cannot put words in A's name); the note's text is untouched.
+    #[test]
+    fn comments_travel_in_the_sidecar_with_the_sealed_author() {
+        let (srv, k) = (Server::default(), Keys::from(VaultKey::generate()));
+        let ((a, _), (b, _)) = (mac(&srv, &k, "com-a", A), mac(&srv, &k, "com-b", B));
+        let id = a.create("Plan.md", "the plan\n").unwrap();
+        a.put_comment(&id, "c1", r#"{"k":"comment","t":"Why?","by":"someone else"}"#).unwrap();
+        b.sync().unwrap();
+        assert_eq!(b.comments(&id), [("c1".to_string(), A.to_string(), r#"{"k":"comment","t":"Why?","by":"someone else"}"#.to_string())]);
+        // B rewrites A's entry with a raw update, as a modified client could
+        let side = format!("{id}#comments");
+        let doc = Doc::new();
+        apply(&doc, &b.diff(&side, &StateVector::default().encode_v1()).unwrap()).unwrap();
+        let u = change(&doc, |d| { let m = d.get_or_insert_map("c"); m.insert(&mut d.transact_mut(), "c1", r#"{"k":"comment","t":"Agreed"}"#); });
+        b.apply_local(&side, &u).unwrap();
+        assert_eq!(b.comments(&id)[0].1, B);
+        a.sync().unwrap();
+        assert_eq!(a.comments(&id)[0].1, B, "the overwrite is B's, not A's");
+        assert_eq!(a.text(&id), "the plan\n");
+        assert!(a.put_comment(&id, "../x", "{}").is_err() && a.put_comment("manifest", "c2", "{}").is_err());
+        std::fs::remove_dir_all(tmp("com-a")).ok();
+        std::fs::remove_dir_all(tmp("com-b")).ok();
     }
 
     /// Three sessions by two authors (A, B, A again) read from the log as three versions with their texts; a version
