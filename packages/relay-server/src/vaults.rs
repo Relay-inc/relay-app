@@ -44,7 +44,7 @@ pub(crate) struct Invite { pub id: String, code: String, pub role: String, wrapp
 /// the whole list still checks, so no member can break it for the others.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(crate) struct Vault { pub id: String, pub name: String, pub created: u64, pub members: Vec<Member>, pub invites: Vec<Invite>,
-    #[serde(default)] epoch: u32, #[serde(default)] keys: BTreeMap<String, BTreeMap<String, String>>, #[serde(default)] rekey: bool,
+    #[serde(default)] pub(crate) epoch: u32, #[serde(default)] keys: BTreeMap<String, BTreeMap<String, String>>, #[serde(default)] rekey: bool,
     #[serde(default)] log: Vec<members::Entry> }
 impl Vault {
     fn role(&self, fp: &str) -> Option<&str> { self.members.iter().find(|m| m.fp == fp).map(|m| m.role.as_str()) }
@@ -53,7 +53,7 @@ impl Vault {
 
 /// Exactly `n` lowercase hex characters: every id, code and blob name. Anything else never reaches a path.
 pub(crate) fn hex(s: &str, n: usize) -> bool { s.len() == n && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) }
-fn dir(data: &Path) -> PathBuf { data.join("vaults") }
+pub(crate) fn dir(data: &Path) -> PathBuf { data.join("vaults") }
 
 /// A vault's file, its expired and used-up invites left out. None when there is no such vault.
 fn load(data: &Path, id: &str) -> Option<Vault> {
@@ -130,7 +130,7 @@ impl Vaults {
         f(&mut load(&self.data, id).ok_or("no such vault")?)
     }
     /// The same for a member, with its role.
-    fn with<T>(&self, id: &str, fp: &str, f: impl FnOnce(&mut Vault, &str) -> Result<T, String>) -> Result<T, String> {
+    pub(crate) fn with<T>(&self, id: &str, fp: &str, f: impl FnOnce(&mut Vault, &str) -> Result<T, String>) -> Result<T, String> {
         self.locked(id, |v| { let role = v.role(fp).ok_or("no such vault")?.to_string(); f(v, &role) })
     }
     /// A read: the caller must be a member now, the blobs it reads are each written whole (temp file and rename).

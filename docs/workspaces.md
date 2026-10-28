@@ -200,6 +200,42 @@ Expired invites are dropped whenever the file is read.
 `<data>/vaults/<id>/blobs/<name>`: one record per file, written to a temp file and renamed, under a per-vault lock so
 the compare-and-swap holds. A record at most `mirror::MAX_FILE` plus 64 KiB.
 
+`<data>/vaults/<id>/docs/<name>/log/<seq>` and `.../snap/<upto>`: a document's sealed updates, numbered from 1 with no
+gap, and the snapshots members wrote (see Documents). Written whole under the vault's lock; never deleted.
+
+## Documents
+
+A note several members edit at once is a document instead of a file the rounds copy whole: a Yjs document whose
+markdown is one Y.Text, so the `.md` written out is that text and nothing is lost going back and forth to Obsidian or
+an agent. Its edits merge; there are no conflict copies for it.
+
+- **Which note.** The workspace's manifest document (id `manifest`) maps each path to a random document id (32 hex) in
+  its map `paths`. A rename changes only the manifest, so a document keeps its history across renames. A document's
+  name on the server is the epoch-0 naming key over `doc:<id>`; a sidecar (comments) is `doc:<id>#<what>`.
+- **On the server**, per document an append-only log of sealed updates and the sealed snapshots members write once
+  `SNAPSHOT_EVERY` (200) updates are past the last one. The server never reads, merges or deletes them: the log is the
+  document's history, kept for good. Ops (members only, `vault_*`'s rules): `doc_push {vault, doc, updates: [len…]}`
+  with the parts after the line (each at most 4 MiB, one push at most 16 MiB, under the vault's current key, else
+  `key changed` / `no such key epoch`), answers `{seq, seqs}`; `doc_pull {vault, doc, since}` answers the newest
+  snapshot past `since` when there is one, then the updates after it, up to 32 MiB (`more`), the parts after the line;
+  `doc_snapshot_put {vault, doc, upto, len}` (a place the log has; the first snapshot of a place stays);
+  `doc_list {vault}` (each document's name, log length, last snapshot). A pushed update also goes at once to the other
+  members' live streams as `{t:"doc", doc, seq, from, body}` when it fits a frame; one that does not waits for a pull.
+- **A part** (update or snapshot) is sealed like a record: `u32 BE epoch << 20 || nonce || ChaCha20-Poly1305(enc_key,
+  aad = "doc:" + epoch + ":" + vault + ":" + name + ":" + kind + ":" + upto, plain)`, kind `u` (upto 0) or `s` (upto
+  its place in the log); `plain` = `u16 BE meta_len || JSON {a: author device (16 hex), t: ms, l: member list head} ||
+  Yjs update (v1)`. An update's place in the log is the server's, given after it is sealed (as a frame's): Yjs updates
+  apply in any order and more than once, so a server that reorders or repeats them changes nothing in the text.
+- **Old keys.** An update under an older key than a Mac's newest, past where that Mac had the log when it took the new
+  key, is refused there: a removed member still holds the old key. Before a Mac's first pull on the new key it cannot
+  tell, as with records.
+- **On each Mac**, per workspace, each document's state and how far it has the log (`shared-docs/<id>/`). Every
+  round pulls the documents the server has further (the manifest first), and writes the notes whose text changed
+  (temp file and rename). A note that is a document stays out of the file rounds, so it never has two writers.
+- **Not yet** (8b): a note becomes a document only through `Docs::create` (no UI), an existing file is not turned
+  into one, an edit made to the `.md` on disk does not go into its document (the next change from the document
+  writes over it), and an older Relay still syncs that note as a file.
+
 ## Record
 
 `u32 big endian (meta_len | epoch << 20) || meta (meta_len bytes, at most 64 KiB) || data`

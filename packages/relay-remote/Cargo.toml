@@ -16,3 +16,5 @@ rcgen = { version = "0.14", default-features = false, features = ["ring", "crypt
 ring = "0.17"
 # a member's static X25519 key, to receive a rotated vault key (ring only has ephemeral agreement keys)
 x25519-dalek = { version = "2", features = ["static_secrets"] }
+# the documents of a shared vault (docs.rs): Yjs-compatible CRDTs, one Y.Text of markdown per note
+yrs = "0.28"

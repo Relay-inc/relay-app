@@ -5,6 +5,7 @@
 
 use relay_remote::channel::{Channel, Event};
 use relay_remote::client::Client;
+use relay_remote::docs::Docs;
 use relay_remote::sync::{self, Filter, Guard, Manifest, Mode, Walker};
 use relay_remote::tls::Identity;
 use relay_remote::vault::{Keys, VaultKey};
@@ -84,6 +85,8 @@ pub fn load_key(data: &Path, id: &str) -> Result<Keys, String> {
 /// Where a round keeps what it deletes or mostly empties here: <data>/shared-trash/<id>/<round's minute>/<path>.
 fn trash(data: &Path, id: &str) -> PathBuf { data.join("shared-trash").join(id) }
 const TRASH_DAYS: i64 = 30;
+/// The vault's documents on this Mac (docs/workspaces.md, Documents).
+fn docs_dir(data: &Path, id: &str) -> PathBuf { data.join("shared-docs").join(id) }
 fn base_path(data: &Path, id: &str) -> PathBuf { data.join("shared-base").join(format!("{id}.json")) }
 
 /// The server of a vault, reached with this Mac's own certificate.
@@ -190,9 +193,17 @@ struct One { walker: Walker, allowed: Vec<String>, moved: Vec<(String, String)> 
 /// `live`: each vault's live channel, kept open next to the rounds (keep_live).
 #[derive(Default)]
 /// `live`: each vault's channel and the key epoch it was started with: a newer key starts it again.
-pub struct Hub { vaults: Mutex<HashMap<String, Arc<Mutex<One>>>>, pub status: Mutex<HashMap<String, Status>>, live: Mutex<HashMap<String, (Channel, u32)>> }
+/// `docs`: each vault's documents, kept loaded between rounds and live updates.
+pub struct Hub { vaults: Mutex<HashMap<String, Arc<Mutex<One>>>>, pub status: Mutex<HashMap<String, Status>>, live: Mutex<HashMap<String, (Channel, u32)>>,
+    docs: Mutex<HashMap<String, Arc<Docs>>> }
 
 impl Hub {
+    /// Vault `v`'s documents, loaded once, on its newest key.
+    fn docs(&self, data: &Path, v: &Shared, me: &Identity, key: Keys) -> Arc<Docs> {
+        let d = self.docs.lock().unwrap().entry(v.id.clone()).or_insert_with(|| Arc::new(client(v, me).docs(&v.id, key.clone(), &docs_dir(data, &v.id), &me.fingerprint()))).clone();
+        d.set_keys(key);
+        d
+    }
     fn one(&self, id: &str) -> Arc<Mutex<One>> { self.vaults.lock().unwrap().entry(id.into()).or_default().clone() }
 
     /// One round for a vault: the folder here against the server, both ways. A file changed on both sides keeps both,
@@ -209,7 +220,7 @@ impl Hub {
         let mut st = Status { at: chrono::Utc::now().timestamp(), ..Default::default() };
         match load_key(data, &v.id).and_then(|k| Ok((k, filter(Path::new(&v.folder))?))) {
             Err(e) => st.errors.push(e),
-            Ok((key, f)) => {
+            Ok((key, mut f)) => {
                 let stamp = chrono::Local::now().format("%Y-%m-%d %H%M").to_string();
                 let cutoff = (chrono::Local::now() - chrono::Duration::days(TRASH_DAYS)).format("%Y-%m-%d").to_string();
                 for e in std::fs::read_dir(trash(data, &v.id)).into_iter().flatten().flatten() {
@@ -217,12 +228,7 @@ impl Hub {
                 }
                 std::fs::create_dir_all(&v.folder).ok();
                 let base: Manifest = std::fs::read_to_string(base_path(data, &v.id)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
-                let allowed = std::mem::take(&mut one.allowed);
-                let copy = |p: &str| conflict_copy(&f, p, name, &stamp);
-                let to = trash(data, &v.id).join(&stamp);
-                let keep = |p: &str, d: &[u8]| sync::write_atomic(&to.join(p), d, None);
-                let guard = Guard { allow_deletes: false, allowed: &allowed, moved: &moved, keep: &keep };
-                let remote = client(v, me).sealed(&v.id, key);
+                let remote = client(v, me).sealed(&v.id, key.clone());
                 // the keys first: a new one taken, the members pinned, this Mac's keys sent, a due rotation made
                 // (admin); every change saved before anything goes on (docs/workspaces.md, Key rotation)
                 match remote.keep_keys(&|k| save_key(data, &v.id, k)) {
@@ -234,6 +240,21 @@ impl Hub {
                     }
                     Err(e) => st.errors.push(format!("key: {e}")),
                 }
+                // the documents: every log the server has further, the notes they changed written out; a note that is a
+                // document stays out of the file rounds, so it never has two writers (docs/workspaces.md, Documents)
+                let docs = self.docs(data, v, me, load_key(data, &v.id).unwrap_or_else(|_| key.clone()));
+                match docs.sync() {
+                    Ok(_) => { let (_, errors) = docs.export(Path::new(&v.folder)); st.errors.extend(errors.into_iter().map(|e| format!("document: {e}"))); }
+                    // a relay-server from before documents: none there, nothing to say every round
+                    Err(e) if e.contains("unknown request") || e.contains("is not allowed") => {}
+                    Err(e) => st.errors.push(format!("documents: {e}")),
+                }
+                f.prefixes.extend(docs.paths().into_keys());
+                let allowed = std::mem::take(&mut one.allowed);
+                let copy = |p: &str| conflict_copy(&f, p, name, &stamp);
+                let to = trash(data, &v.id).join(&stamp);
+                let keep = |p: &str, d: &[u8]| sync::write_atomic(&to.join(p), d, None);
+                let guard = Guard { allow_deletes: false, allowed: &allowed, moved: &moved, keep: &keep };
                 remote.know(&base);
                 let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, &mut one.walker, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
                 // files still under an older key, sealed again under the newest
@@ -298,6 +319,8 @@ impl Hub {
         std::fs::remove_file(key_path(data, id)).ok();
         std::fs::remove_file(base_path(data, id)).ok();
         std::fs::remove_dir_all(trash(data, id)).ok();
+        std::fs::remove_dir_all(docs_dir(data, id)).ok();
+        self.docs.lock().unwrap().remove(id);
         // stopped first: its last Down would bring the status back
         let c = self.live.lock().unwrap().remove(id);
         if let Some((c, _)) = c { c.stop(); }
@@ -324,8 +347,15 @@ impl Hub {
             let e = key.epoch();
             let (h, id) = (app.clone(), v.id.clone());
             let (d, vid) = (data.to_path_buf(), v.id.clone());
+            let folder = v.folder.clone();
             let on = move |e: Event| {
                 let up = match e {
+                    // another member's edit to a document: taken (or its log pulled), the note written out
+                    Event::Doc { doc, seq, body, .. } => {
+                        let docs = h.state::<crate::App>().shared.docs.lock().unwrap().get(&vid).cloned();
+                        if let Some(docs) = docs { if docs.take_live(&doc, seq, &body).is_ok_and(|x| x.is_some()) { docs.export(Path::new(&folder)); } }
+                        return;
+                    }
                     Event::Live { .. } => true,
                     Event::Down(_) => false,
                     // a frame written with a longer member list than this Mac holds: the server holds entries back

@@ -1573,3 +1573,116 @@ fn a_live_channel_walls() {
     a.stop();
     b.stop();
 }
+
+/// A shared vault's documents (docs/workspaces.md, Documents): a note made a document on one Mac reaches another
+/// through the log; edits made on both while apart end as one text; a live update arrives within a moment; a long log
+/// gets a snapshot that a Mac starting from nothing reads instead; a rename keeps the document; a sidecar is a
+/// document too; a removed member pulls nothing; the server stores only sealed parts, and only under the current key.
+#[test]
+fn a_shared_vaults_documents() {
+    use relay_remote::channel::{Channel, Event};
+    use relay_remote::docs::{listing, MANIFEST};
+    use relay_remote::vault::{Keys, VaultKey};
+    use serde_json::json;
+    use std::sync::mpsc;
+    use yrs::updates::decoder::Decode;
+    use yrs::{ReadTxn, StateVector, Text, Transact, Update};
+    let s = start("docs");
+    let lid = device("docs-laptop");
+    let (l, _) = client::pair(&pair_line(&s), &lid, "laptop").unwrap();
+    let laptop = Client::new(&l.host, l.port, &l.fp, lid.clone());
+    let vault = laptop.vault_create("Team").unwrap().id;
+    let key = Keys::from(VaultKey::generate());
+    let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
+    let cid = device("docs-colleague");
+    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let colleague = Client::new(&line.host, line.port, &line.fp, cid.clone());
+    let dirs = std::env::temp_dir().join(format!("relay-e2e-docs-{}", std::process::id()));
+    let a = laptop.docs(&vault, key.clone(), &dirs.join("a"), &lid.fingerprint());
+    let b = colleague.docs(&vault, theirs.clone(), &dirs.join("b"), &cid.fingerprint());
+    // an edit as an editor makes it: the document's state into a Y.Doc, a change, the change as one update
+    let edit = |d: &relay_remote::docs::Docs, id: &str, f: &dyn Fn(&yrs::TextRef, &mut yrs::TransactionMut)| {
+        let doc = yrs::Doc::new();
+        doc.transact_mut().apply_update(Update::decode_v1(&d.diff(id, &StateVector::default().encode_v1()).unwrap()).unwrap()).unwrap();
+        let before = doc.transact().state_vector();
+        let t = doc.get_or_insert_text("md");
+        f(&t, &mut doc.transact_mut());
+        let u = doc.transact().encode_state_as_update_v1(&before);
+        d.apply_local(id, &u).unwrap();
+    };
+    use yrs::updates::encoder::Encode;
+
+    // made on the laptop, there on the colleague's Mac after a sync: the manifest names it, the text is the same
+    let id = a.create("Projects/Plan.md", "# Plan\n").unwrap();
+    let changed = b.sync().unwrap();
+    assert!(changed.contains(&MANIFEST.to_string()) && changed.contains(&id), "{changed:?}");
+    assert_eq!((b.paths().get("Projects/Plan.md"), b.text(&id).as_str()), (Some(&id), "# Plan\n"));
+    assert!(a.create("Projects/Plan.md", "again").is_err(), "a path is one document");
+
+    // both edit while apart: each sync brings the other's, the text ends the same on both, with both edits in it
+    edit(&a, &id, &|t, txn| t.insert(txn, 0, "A "));
+    edit(&b, &id, &|t, txn| { let n = t.len(txn); t.insert(txn, n, "B\n"); });
+    b.sync().unwrap();
+    a.sync().unwrap();
+    assert_eq!(a.text(&id), b.text(&id));
+    assert!(a.text(&id).starts_with("A # Plan") && a.text(&id).ends_with("B\n"), "{}", a.text(&id));
+
+    // live: the colleague's stream gets the laptop's update within a moment, and takes it
+    let (tx, rx) = mpsc::channel();
+    let ch = Channel::start(colleague.clone(), &vault, theirs.clone(), move |e| { tx.send(e).ok(); });
+    let until = Instant::now() + Duration::from_secs(10);
+    while !matches!(rx.recv_timeout(until.saturating_duration_since(Instant::now())), Ok(Event::Live { .. })) { assert!(Instant::now() < until, "not live"); }
+    let t0 = Instant::now();
+    edit(&a, &id, &|t, txn| t.insert(txn, 0, "L "));
+    let (doc, seq, body) = loop {
+        match rx.recv_timeout(Duration::from_secs(5)).expect("no live update") { Event::Doc { doc, seq, body, .. } => break (doc, seq, body), _ => continue }
+    };
+    assert!(t0.elapsed() < Duration::from_millis(500), "{:?}", t0.elapsed());
+    let got = std::sync::Arc::new(std::sync::Mutex::new(0));
+    { let g = got.clone(); b.subscribe(move |_, _| *g.lock().unwrap() += 1); }
+    assert_eq!(b.take_live(&doc, seq, &body).unwrap().as_deref(), Some(id.as_str()));
+    assert!(b.text(&id).starts_with("L A "), "{}", b.text(&id));
+    assert_eq!(*got.lock().unwrap(), 1, "the editor hears of it");
+    ch.stop();
+
+    // a long log: a snapshot once SNAPSHOT_EVERY updates are past it; a Mac starting from nothing reads it and the rest
+    for i in 0..205 { edit(&a, &id, &|t, txn| { let n = t.len(txn); t.insert(txn, n, &format!("{i},")); }); }
+    let list = listing(&laptop.call(json!({"op": "doc_list", "vault": vault})).unwrap());
+    let (n, snap) = list[&a.name(&id)];
+    assert!(snap >= 200 && n > snap, "log {n}, snapshot {snap}");
+    let fresh = colleague.docs(&vault, theirs.clone(), &dirs.join("c"), &cid.fingerprint());
+    fresh.sync().unwrap();
+    assert_eq!(fresh.text(&id), a.text(&id));
+    let pulled = colleague.call(json!({"op": "doc_pull", "vault": vault, "doc": a.name(&id), "since": 0}));
+    assert_eq!(pulled.unwrap()["snapshot"]["upto"], json!(snap), "from nothing: the snapshot, then what follows");
+
+    // a rename changes the manifest only: same document, same history
+    a.rename("Projects/Plan.md", "Projects/Plan 2.md").unwrap();
+    b.sync().unwrap();
+    assert_eq!((b.paths().get("Projects/Plan 2.md"), b.paths().contains_key("Projects/Plan.md")), (Some(&id), false));
+
+    // a sidecar (comments, ticket 11) is a document of its own name
+    let side = format!("{id}#comments");
+    edit(&a, &side, &|t, txn| t.insert(txn, 0, "a comment"));
+    b.sync().unwrap();
+    assert_eq!(b.text(&side), "a comment");
+
+    // export: the note written whole, once; a second export writes nothing
+    let root = dirs.join("folder");
+    let (wrote, errors) = b.export(&root);
+    assert_eq!((wrote, errors), (vec!["Projects/Plan 2.md".to_string()], vec![]));
+    assert_eq!(std::fs::read_to_string(root.join("Projects/Plan 2.md")).unwrap(), b.text(&id));
+    assert!(b.export(&root).0.is_empty(), "unchanged: not written again");
+
+    // on the server: nothing readable, and nothing under another key than the vault's
+    let stored = s.data.join("vaults").join(&vault).join("docs").join(a.name(&id)).join("log").join(format!("{:012}", 1));
+    assert!(!String::from_utf8_lossy(&std::fs::read(stored).unwrap()).contains("Plan"));
+    // (a part under another key than the vault's is refused: docs.rs's unit test, a push needs its body after the line)
+
+    // the colleague removed: no pull, no push, no list
+    laptop.vault_remove(&vault, &cid.fingerprint()).unwrap();
+    // (a device in no vault any more is not paired either: refused at the handshake, not with "no such vault")
+    assert!(b.pull(&id).is_err());
+    assert!(colleague.call(json!({"op": "doc_list", "vault": vault})).is_err());
+    std::fs::remove_dir_all(&dirs).ok();
+}
