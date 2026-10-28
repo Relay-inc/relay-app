@@ -15,6 +15,7 @@ import {
   PICK_MODS,
   pickLabel,
   pickModOf,
+  WORKSPACE_KEYS,
   type CommandId,
 } from "../../../domain/settings/shortcuts";
 import { mailExperimental } from "../../../domain/settings/types";
@@ -117,6 +118,9 @@ export function ShortcutsPage() {
         rows
       >
         {rows(APP)}
+      </Section>
+      <Section title={t("keys.sec.workspaces")} rows>
+        {rows(WORKSPACE_KEYS)}
       </Section>
       <Section title={t("keys.sec.chat")} rows>
         {rows(["chat.send"])}

@@ -42,7 +42,9 @@ import {
 } from "../conversations/selectors";
 import { chatAgent } from "../agents/agents";
 import { useWorkspaceStore } from "../workspace/store";
-import { contexts, otherVaultOf, projectLabel, projectName, shownName } from "../workspace/vault";
+import { contexts, projectLabel, projectName, shownName, vaultName } from "../workspace/vault";
+import { chatVault, inWorkspace, vaultChoices } from "../../domain/conversations/rules";
+import { activeFolder } from "./workspaces";
 import { ghOn, mailOn, saveMainSettings, setSettingsState, settings } from "../settings/settings";
 import { readyBoards } from "../board/board";
 import { useMailStore } from "../mail/store";
@@ -182,9 +184,15 @@ const convRow = (conversation: Chat, folder = ""): ConvRow => ({
   closable: !(conversation.draft && !typedOf(conversation.key)),
   closing: cs().closing.has(conversation.key),
   orch: !!conversation.orch,
-  // a general conversation running in another vault: not to be taken for one of the main vault
-  ...(conversation.project ? {} : { vault: otherVaultOf(conversation) ?? undefined }),
+  ...orphanVault(conversation),
 });
+// a conversation that ran in a folder no longer a workspace here: it shows under the main one, with that folder's name
+function orphanVault(conversation: Chat): { vault?: string } {
+  const vault = chatVault(conversation, useWorkspaceStore.getState().snap);
+  return !vault || vaultChoices(settings()).some(choice => choice.folder === vault) ? {} : { vault: vaultName(vault) };
+}
+// whether a conversation or project of `vault` shows in the workspace the sidebar shows
+const shownIn = (vault: string, workspace: string) => inWorkspace(vault, workspace, settings());
 const WORK_ICON = { review: "pr", mail: "mail", meeting: "cal" } as const;
 // a piece of Today's work in progress, as a row under its project
 const workRow = (work: Work): ConvRow => ({
@@ -380,10 +388,19 @@ const section = (id: string, query: string, rest: Omit<Section, "id" | "collapse
   ...rest,
 });
 
-function generalSection(query: string, sessions: TerminalSession[]): Section {
-  const conversations = listed(null).filter(conversation => !query || conversation.title.toLowerCase().includes(query));
+// the general conversations of the workspace shown: run in it, or picked for it before they start
+function generalSection(query: string, sessions: TerminalSession[], workspace: string): Section {
+  const snap = useWorkspaceStore.getState().snap;
+  const conversations = listed(null).filter(
+    conversation =>
+      shownIn(chatVault(conversation, snap), workspace) && (!query || conversation.title.toLowerCase().includes(query)),
+  );
+  // ponytail: a terminal session knows no vault, so the general ones show with the main vault only
   const generalSessions = sessions.filter(
-    session => !session.project && (!query || session.title.toLowerCase().includes(query)),
+    session =>
+      !session.project &&
+      workspace === (snap.vault?.vault ?? "") &&
+      (!query || session.title.toLowerCase().includes(query)),
   );
   const { inside, loose } = byFolder(conversations, conversation => conversation.folder, sb().folders[""]);
   return section(GENERAL, query, {
@@ -426,15 +443,16 @@ function contextSection(
   query: string,
   sessions: TerminalSession[],
   selectedProject: string | null,
+  workspace: string,
 ): Section | undefined {
-  const candidates = useWorkspaceStore
-    .getState()
-    .snap.projects.filter(
-      project =>
-        project.context === context &&
-        matchesQuery(project, query) &&
-        (query || hasOpenWork(project, sessions) || project.name === selectedProject),
-    );
+  const { snap } = useWorkspaceStore.getState();
+  const candidates = snap.projects.filter(
+    project =>
+      project.context === context &&
+      shownIn(project.vault || snap.vault?.vault || "", workspace) &&
+      matchesQuery(project, query) &&
+      (query || hasOpenWork(project, sessions) || project.name === selectedProject),
+  );
   // manual order from dragging comes first, the rest follows by recency (each project's read once, not per comparison)
   const last = new Map(candidates.map(project => [project.name, lastActivity(project.name, sessions)]));
   const shown = ordered(
@@ -459,9 +477,10 @@ export function sidebarModel(): SidebarModel {
   const query = sb().find.toLowerCase();
   const selectedProject = projectOf(nav().selected);
   const sessions = terminalSessions();
-  const byId: Record<string, Section> = { [GENERAL]: generalSection(query, sessions) };
+  const workspace = activeFolder();
+  const byId: Record<string, Section> = { [GENERAL]: generalSection(query, sessions, workspace) };
   contexts().forEach((context, index) => {
-    const built = contextSection(context, index, query, sessions, selectedProject);
+    const built = contextSection(context, index, query, sessions, selectedProject, workspace);
     if (built) byId[context] = built;
   });
   // sections the user never dragged follow in the index order

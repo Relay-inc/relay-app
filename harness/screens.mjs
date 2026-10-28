@@ -122,7 +122,7 @@ const VIEWS = {
     await settingsPage("Machines", null, "nomirror");
     await waitText("For workspaces only.");
     // the intro says "for workspaces only." too (text matches ignore case): the row's own words
-    await intoView("For workspaces only. This Mac's vault");
+    await intoView("For workspaces only. This Mac's Personal workspace");
   },
   // Settings › Machines, a machine online whose mirror holds 9 deletes back: the first 5 listed, Restore and Delete
   "settings-machines-mirror-held": async () => {
@@ -152,7 +152,8 @@ const VIEWS = {
   // a new conversation about the side vault's Northwind Portal: the Runs in pick fixed on that vault (it stays there)
   "composer-vault": async () => {
     await open(page, server.url, { fixture: "shared" });
-    await page.getByPlaceholder("Search").fill("northwind");
+    await page.keyboard.press("Control+Digit2"); // the side vault shown
+    await page.getByPlaceholder(/^Search in /).fill("northwind");
     await byText(page, "Northwind Portal (Side vault)").hover();
     await page
       .getByRole("button", { name: "New conversation about Northwind Portal (Side vault)", exact: true })
@@ -827,6 +828,7 @@ const VIEWS = {
   },
   usage: async () => {
     await open(page, server.url);
+    await page.getByRole("button", { name: /^Switch workspace/ }).click(); // usage sits in the workspace menu
     await page
       .getByRole("button", { name: /^(Usage|Claude Code)/ })
       .first()
@@ -854,6 +856,7 @@ const VIEWS = {
   // the usage redesign in dark mode (#105)
   "dark-usage": async () => {
     await open(page, server.url, { fixture: "dark" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click(); // usage sits in the workspace menu
     await page
       .getByRole("button", { name: /^(Usage|Claude Code)/ })
       .first()
@@ -1069,6 +1072,11 @@ const VIEWS = {
     ]),
   ),
   // the keys that work in a conversation, Find among them
+  // ⌃1 to ⌃9 for the workspaces, changeable like the others (PR #294)
+  "settings-shortcuts-workspaces": async () => {
+    await settingsPage("Shortcuts");
+    await intoView("Workspace 9 in the footer's menu");
+  },
   "settings-shortcuts-chat": async () => {
     await settingsPage("Shortcuts");
     await intoView("Find in the conversation");
@@ -1137,15 +1145,30 @@ const VIEWS = {
   // has one)
   "settings-other-vaults": async () => {
     await settingsPage("General", undefined, "shared");
-    await intoView("Other vault folders");
+    await intoView("Other workspace folders");
   },
   // the side vault's and the workspace's projects in the sidebar, in their own context (found by the search)
   "sidebar-shared": async () => {
     await open(page, server.url, { fixture: "shared" });
-    // a project shows once it has conversations; the search finds both of the side vault's
-    await page.getByPlaceholder("Search").fill("h");
+    // the side vault shown (Ctrl-2); a project shows once it has conversations, the search finds both of its own
+    await page.keyboard.press("Control+Digit2");
+    await page.getByPlaceholder("Search in Side vault").fill("h");
     await waitText("Team Handbook");
     await page.getByText("Hiring 2027", { exact: true }).scrollIntoViewIfNeeded();
+  },
+  // the footer's workspace menu: Personal, the side vault and the workspace Northwind, with the three actions (PR workspace-switcher)
+  "workspace-menu": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await waitText("Open a folder as workspace…");
+  },
+  // Northwind picked there: the footer, the search and a new general conversation follow it (PR workspace-switcher)
+  "workspace-switched": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await page.getByRole("menuitemradio", { name: /Northwind/ }).click();
+    await page.evaluate(() => window.__harness.emit("menu", "new-general"));
+    await settle(page);
   },
   "settings-interface": async () => {
     await settingsPage("General");

@@ -18,7 +18,7 @@ import { ghOn, initLanguage, mailOn, setSettingsState, settings } from "./settin
 import { loadSnapshot, project, refreshIcons, reloadIcons, checkFavicons } from "./workspace/vault";
 import { onboard, runSetup, takeSetup } from "./workspace/vault-setup";
 import { useConversationsStore } from "./conversations/store";
-import { saveChats, newChat } from "./conversations/chats";
+import { saveChats, newChatHere } from "./conversations/chats";
 import { chatFromDictation } from "./conversations/dictation";
 import { listenToPill } from "./conversations/pill";
 import { terminalOf } from "./conversations/selectors";
@@ -136,7 +136,7 @@ function listenToBackend() {
 // the Gesprek menu: Cmd-T in the current project, Cmd-Option-T general, Cmd-Shift-T the one closed last, Cmd-W closes
 // the open conversation, Set Up Vault runs the setup interview. Cmd-N (a new window) stays in the backend
 function onMenu(item: string) {
-  if (item === "new-general") select(newChat(null));
+  if (item === "new-general") select(newChatHere(null));
   else if (item === "new-project") newHere();
   else if (item === "reopen-chat") void reopenLast();
   else if (item === "close-chat" && !isView(selected()) && !cs().chats[selected()]?.draft) closeChat(selected());

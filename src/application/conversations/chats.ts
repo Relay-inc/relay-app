@@ -1,10 +1,13 @@
 import { newChatKey } from "../../domain/navigation/keys";
-import { chatsToStore, newChatEntry } from "../../domain/conversations/rules";
+import { activeWorkspace, chatsToStore, newChatEntry, pickedVault } from "../../domain/conversations/rules";
+import { useNavigationStore } from "../navigation/store";
 import { ensureCoordinator, ensureWorkerChat } from "../../domain/orchestrator/rules";
 import type { Worker } from "../../domain/orchestrator/types";
 import { storage } from "../../infrastructure/storage";
 import { useConversationsStore } from "./store";
 import { typedOf, useDraftsStore } from "./drafts";
+import { settings } from "../settings/settings";
+import { useWorkspaceStore } from "../workspace/store";
 
 /** The conversations' metadata to localStorage (`chats`): a draft only once something is typed in it. */
 export const saveChats = () =>
@@ -12,8 +15,9 @@ export const saveChats = () =>
     "chats",
     chatsToStore({ chats: useConversationsStore.getState().chats, typed: useDraftsStore.getState().typed }),
   );
-/** A new draft conversation under a project (null: general), in one of its sidebar folders when `folder` is given;
- *  its key. It is stored once something is typed. */
+/** A new draft conversation under a project (null: general, in the main vault), in one of its sidebar folders when
+ *  `folder` is given; its key. It is stored once something is typed. Reminders, boards, the Brain and a forked terminal
+ *  session start here: what they hand over is the main vault's. */
 export function newChat(project: string | null, folder = ""): string {
   const now = Date.now();
   const key = newChatKey(now);
@@ -21,6 +25,22 @@ export function newChat(project: string | null, folder = ""): string {
     draft.chats[key] = newChatEntry(key, project, now);
     if (folder) draft.chats[key].folder = folder;
   });
+  return key;
+}
+/** A new conversation the user starts from the sidebar, the menu, Cmd-K or dictation: a general one runs in the
+ *  workspace the sidebar shows. */
+export function newChatHere(project: string | null, folder = ""): string {
+  const key = newChat(project, folder);
+  const vault = project
+    ? undefined
+    : pickedVault(
+        activeWorkspace(settings(), useNavigationStore.getState().sidebar.workspace),
+        useWorkspaceStore.getState().snap.vault?.vault ?? "",
+      );
+  if (vault)
+    useConversationsStore.setState(draft => {
+      draft.chats[key].vault = vault;
+    });
   return key;
 }
 /** A new conversation that starts from something (a mail, a PR review): its title and a first note, which also keeps

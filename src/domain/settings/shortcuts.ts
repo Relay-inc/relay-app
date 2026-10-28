@@ -18,6 +18,16 @@ export const COMMANDS = {
   "app.settings": { scope: "app", keys: ["meta+Comma"] },
   "app.escape": { scope: "app", keys: ["Escape"] },
   "app.stop": { scope: "app", keys: ["ctrl+KeyC"] },
+  // the workspaces in the footer's menu, by their place
+  "app.workspace1": { scope: "app", keys: ["ctrl+Digit1"] },
+  "app.workspace2": { scope: "app", keys: ["ctrl+Digit2"] },
+  "app.workspace3": { scope: "app", keys: ["ctrl+Digit3"] },
+  "app.workspace4": { scope: "app", keys: ["ctrl+Digit4"] },
+  "app.workspace5": { scope: "app", keys: ["ctrl+Digit5"] },
+  "app.workspace6": { scope: "app", keys: ["ctrl+Digit6"] },
+  "app.workspace7": { scope: "app", keys: ["ctrl+Digit7"] },
+  "app.workspace8": { scope: "app", keys: ["ctrl+Digit8"] },
+  "app.workspace9": { scope: "app", keys: ["ctrl+Digit9"] },
   "chat.send": { scope: "chat", keys: ["Enter"] },
   "chat.find": { scope: "chat", keys: ["meta+KeyF", "ctrl+KeyF"] },
   "card.confirm": { scope: "card", keys: ["Enter"] },
@@ -170,6 +180,26 @@ export function pickedDigit(settings: Settings, e: Keys) {
   if (mod && e.shiftKey) return 0;
   const digit = /^(Digit|Numpad)([1-9])$/.exec(e.code)?.[2] ?? (/^[1-9]$/.test(e.key) ? e.key : "");
   return Number(digit) || 0;
+}
+/** ⌃1 to ⌃9 by default: the workspace at that place in the footer's menu. */
+export const WORKSPACE_KEYS = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `app.workspace${n}` as CommandId);
+/** The workspace a key press switches to, 1 to 9, or 0. A key the answers on a question take (⌃ and a digit when
+ *  they take ⌃) stays theirs. */
+export function workspaceDigit(settings: Settings, e: Keys) {
+  if (pickedDigit(settings, e)) return 0;
+  return WORKSPACE_KEYS.findIndex(id => pressed(settings, id, e)) + 1;
+}
+/** The key of the workspace at place `n` (1 to 9) as the menu shows it, "" when the answers on a question take it. */
+export function workspaceKeyLabel(settings: Settings, n: number) {
+  const binding = bindingsOf(settings, WORKSPACE_KEYS[n - 1])[0];
+  if (!binding) return "";
+  const { mods, token } = split(binding);
+  const press = {
+    key: token.replace(/^Digit/, ""),
+    code: token,
+    ...Object.fromEntries(MODS.map(mod => [`${mod}Key`, mods.includes(mod)])),
+  } as Keys;
+  return pickedDigit(settings, press) ? "" : bindingLabel(binding);
 }
 export const pickLabel = (mod: PickMod) => (mod ? SYMBOLS[mod] : "") + "1–9";
 

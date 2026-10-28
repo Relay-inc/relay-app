@@ -7,7 +7,7 @@ import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
 import { useConversationsStore } from "../conversations/store";
 import { chatsOf, selectedProject } from "../conversations/selectors";
-import { newChat, dropEmptyDraft, markSeen } from "../conversations/chats";
+import { newChat, newChatHere, dropEmptyDraft, markSeen } from "../conversations/chats";
 import { typedOf } from "../conversations/drafts";
 import { ensureHistory } from "../conversations/history";
 import { loadBrain } from "../brain/brain";
@@ -102,7 +102,7 @@ export function show(key: string) {
 /** A project's newest conversation, or a new one under it. */
 export const openProject = (project: string) => select(chatsOf(project)[0]?.key || newChat(project));
 /** A new conversation under the open one's project, or a general one. */
-export const newHere = () => select(newChat(isView(nav().selected) ? null : selectedProject()));
+export const newHere = () => select(newChatHere(isView(nav().selected) ? null : selectedProject()));
 
 let toastTimer = 0;
 /** A bar at the bottom of the middle column for `ms`, with an undo (or other) button when `undo` is given. */

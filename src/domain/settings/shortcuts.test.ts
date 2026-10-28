@@ -1,6 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bindingLabel, bindingOf, isBinding, pickedDigit, pressed, refusal, withBindings } from "./shortcuts.ts";
+import {
+  bindingLabel,
+  bindingOf,
+  isBinding,
+  pickedDigit,
+  pressed,
+  refusal,
+  withBindings,
+  workspaceDigit,
+  workspaceKeyLabel,
+} from "./shortcuts.ts";
 import type { Settings } from "./types.ts";
 
 const key = (
@@ -79,4 +89,22 @@ test("the answers on a question follow their modifier", () => {
   const alt = withBindings(none, "card.pick", ["alt"]);
   assert.equal(pickedDigit(alt, key("¡", "Digit1", { alt: true })), 1);
   assert.equal(pickedDigit(alt, key("1", "Digit1")), 0);
+});
+
+test("⌃1 to ⌃9 switch workspaces, changeable, and leave a key the answers on a question take", () => {
+  const plain = none;
+  assert.equal(workspaceDigit(plain, key("2", "Digit2", { ctrl: true })), 2);
+  assert.equal(workspaceKeyLabel(plain, 2), "⌃2");
+  assert.equal(workspaceDigit(plain, key("2", "Digit2", { alt: true })), 0);
+  // rebound in Settings › Shortcuts
+  const moved = withBindings(plain, "app.workspace2", ["alt+meta+Digit2"]);
+  assert.equal(workspaceDigit(moved, key("2", "Digit2", { alt: true, meta: true })), 2);
+  assert.equal(workspaceDigit(moved, key("2", "Digit2", { ctrl: true })), 0);
+  assert.equal(workspaceKeyLabel(moved, 2), "⌥⌘2");
+  // the answers take ⌃: ⌃2 is theirs, the menu shows no key
+  const cards = withBindings(plain, "card.pick", ["ctrl"]);
+  assert.equal(workspaceDigit(cards, key("2", "Digit2", { ctrl: true })), 0);
+  assert.equal(workspaceKeyLabel(cards, 2), "");
+  // and ⌃2 is taken for another command
+  assert.equal(refusal(plain, "app.settings", "ctrl+Digit2")?.by, "app.workspace2");
 });

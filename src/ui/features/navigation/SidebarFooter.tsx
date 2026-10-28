@@ -1,15 +1,8 @@
-import { useT } from "../../hooks/useT";
-import { useKeyLabel } from "../../hooks/useKeyLabel";
-import { Icon } from "../../components/Icon";
-import mark from "../../assets/relay-mark.svg";
 import { RecordingRow } from "./RecordingRow";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
-const BTN =
-  "relative flex size-7 items-center justify-center rounded-md text-secondary hover:bg-fill-2 hover:text-label transition-colors duration-150 ease-out";
-const GLYPH = "glyph size-4 flex-none";
-const DOT = { "": "bg-ok", soon: "bg-soon", late: "bg-late" };
-
-/** The footer bar: what Relay records when it does (RecordingRow), the Relay mark, the usage button with its status dot, the light/dark toggle and the settings button, with a dot when there is a Relay update. */
+/** The footer bar: what Relay records when it does (RecordingRow), and the workspace with its menu, which also holds
+ *  usage, the light/dark toggle and settings. */
 export function SidebarFooter({
   selected,
   dark,
@@ -22,47 +15,27 @@ export function SidebarFooter({
 }: {
   selected: boolean; // the usage view is open
   dark: boolean; // the page is dark: the toggle offers light
-  tip: string; // the usage button's tooltip
+  tip: string; // the usage item's text
   level: "" | "soon" | "late"; // "" shows no dot
-  update: string; // a newer Relay version: a dot on the settings button, "" for none
+  update: string; // a newer Relay version: a dot on the settings item, "" for none
   onUsage: () => void;
   onTheme: () => void;
   onSettings: () => void;
 }) {
-  const { t } = useT();
-  const settingsKey = useKeyLabel("app.settings");
-  const themeTip = t(dark ? "nav.themeLight" : "nav.themeDark");
   return (
     <div className="flex flex-col border-t border-separator">
       <RecordingRow />
-      <div className="flex items-center gap-0.5 pt-2 pr-2 pb-2.5 pl-3.5">
-        <img className="w-3.5 h-4 flex-none" src={mark} alt="Relay" title="Relay" />
-        <span className="flex-1" />
-        <button
-          className={`${BTN} ${selected ? "bg-accent-soft text-accent-text!" : ""}`}
-          title={tip}
-          aria-label={tip}
-          onClick={onUsage}
-        >
-          <Icon name="gauge" className={GLYPH} />
-          <span
-            className={`absolute bottom-1.25 right-1.25 size-1.5 rounded-full ring-[1.5px] ring-sidebar ${level ? "opacity-100" : "opacity-0"} ${DOT[level]}`}
-          />
-        </button>
-        <button className={BTN} title={themeTip} aria-label={themeTip} onClick={onTheme}>
-          <Icon name={dark ? "sun" : "moon"} className={GLYPH} />
-        </button>
-        <button
-          className={BTN}
-          title={update ? t("nav.updateTooltip", { version: update }) : t("nav.settingsTooltip", { key: settingsKey })}
-          aria-label={t("nav.settingsLabel")}
-          onClick={onSettings}
-        >
-          <Icon name="gear" className={GLYPH} />
-          <span
-            className={`absolute bottom-1.25 right-1.25 size-1.5 rounded-full bg-accent ring-[1.5px] ring-sidebar ${update ? "opacity-100" : "opacity-0"}`}
-          />
-        </button>
+      <div className="flex items-center pt-2 pr-2 pb-2.5 pl-2">
+        <WorkspaceSwitcher
+          usageOpen={selected}
+          usageTip={tip}
+          level={level}
+          dark={dark}
+          update={update}
+          onUsage={onUsage}
+          onTheme={onTheme}
+          onSettings={onSettings}
+        />
       </div>
     </div>
   );

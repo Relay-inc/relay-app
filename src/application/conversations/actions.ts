@@ -41,7 +41,7 @@ import {
   terminalOf,
   terminalSessions,
 } from "./selectors";
-import { newChat, saveChats } from "./chats";
+import { newChat, newChatHere, saveChats } from "./chats";
 import { prepImages, releaseImages } from "./images";
 import { fromPaths, pickedPaths } from "./attachments";
 import { flush } from "./events";
@@ -668,7 +668,7 @@ export const ctrlC = () => (cs().status[selected()] === "busy" ? stopChat() : se
 // ---------- Cmd-K: a question that becomes a new general conversation in the background, the open screen stays.
 // It always starts general; the projects it names are offered once in the conversation afterwards.
 export function quickSend(text: string, imgs: Img[], files: string[] = []) {
-  const key = newChat(null);
+  const key = newChatHere(null);
   const hits = findProjects(text);
   if (hits.length)
     set(draft => {
