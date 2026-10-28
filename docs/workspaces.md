@@ -3,7 +3,8 @@
 A workspace is a team space several people share through a relay-server. The server stores only ciphertext and never
 has the workspace key. Access is by device certificate (the mTLS pin every Relay already has). Relay syncs the workspace
 into a plain folder on each Mac with `sync::run` (TwoWay, conflict copies, never a merge). Each member's own Obsidian
-vault stays their vault: it never goes to a workspace.
+vault never goes to a workspace: in the app it is their Personal workspace, next to the other vault folders they added
+and the shared workspaces. The sidebar shows one workspace at a time, picked in its footer (⌃1 to ⌃9).
 
 The protocol and the code call a workspace a vault: the server ops are `vault_*`, the Tauri commands `shared_vault_*`,
 the settings key `sharedVaults`, the Rust module `shared_vaults.rs`. Only the app and these docs say workspace.
@@ -39,7 +40,7 @@ auto-mode classifier judges those. Share a workspace with people you would let r
 does:
 
 - **A conversation stays where it runs.** It runs in its project's vault or workspace, a general one in the one picked
-  in its composer before its first message (your vault unless another is picked, checked against the vaults and
+  in its composer before its first message (the workspace the sidebar shows unless another is picked, checked against the vaults and
   workspaces here), and may not read or edit the others or their transcripts. Its first message names a project only
   of that vault or workspace, and once it started it moves only to its projects. Anywhere but the main vault it also
   may not touch Relay's data folder or Claude's config folders (with their `.claude.json`), and runs with no own MCP

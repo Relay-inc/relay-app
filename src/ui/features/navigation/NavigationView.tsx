@@ -45,6 +45,8 @@ import { FolderName } from "./FolderName";
 import { useReorder } from "./useReorder";
 import { DROP_LINE_AFTER } from "./rows";
 import { closeWork, openWork } from "../../../application/today/work";
+import { activeFolder } from "../../../application/navigation/workspaces";
+import { vaultName } from "../../../application/workspace/vault";
 import "../../styles/navigation.css";
 
 // a view's menu has its key in `chatKey`, a folder's its id
@@ -66,6 +68,7 @@ export function NavigationView({ className }: { className: string }) {
   const hidden = useDerived(() => hiddenViews());
   const more = useDerived(() => moreOn());
   const dark = useDerived(() => isDark());
+  const workspace = useDerived(() => vaultName(activeFolder()));
   const selected = useNavigationStore(s => s.selected);
   const update = useNavigationStore(s => s.update);
   const find = useNavigationStore(s => s.sidebar.find);
@@ -267,8 +270,6 @@ export function NavigationView({ className }: { className: string }) {
         subs={row.subs}
         subsTitle={row.subsTitle}
         mark={row.orch ? t("nav.orchWorker") : ""}
-        hint={row.vault}
-        hintTitle={row.vault ? t("nav.inVault", { name: row.vault }) : undefined}
         {...dropzone("conv", row.key)}
         onPointerDown={press("conv", row.key, row.parent)}
         onClick={unlessDragged(() => select(row.key))}
@@ -380,7 +381,7 @@ export function NavigationView({ className }: { className: string }) {
         <input
           className="min-w-0 flex-1 text-[13px] text-label outline-none select-text placeholder:text-tertiary"
           value={find}
-          placeholder={t("nav.search")}
+          placeholder={t("nav.searchIn", { name: workspace })}
           onChange={e => setFind(e.target.value)}
         />
       </label>

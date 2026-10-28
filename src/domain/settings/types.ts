@@ -28,7 +28,13 @@ export type Accent = "relay" | "graphite";
 export type TerminalApp = "auto" | "iterm" | "wezterm" | "terminal";
 /** The views on top of the sidebar: rows with names or a row of icons, the order they were dragged in, the ones switched off. */
 /** `more`: the "…" that lists the switched-off views, shown unless it is false. */
-export type SidebarCfg = { layout?: "list" | "icons"; order?: string[]; hidden?: string[]; more?: boolean };
+export type SidebarCfg = {
+  layout?: "list" | "icons";
+  order?: string[];
+  hidden?: string[];
+  more?: boolean;
+  workspace?: string; // the vault folder the sidebar shows, none for the main vault
+};
 /** Another computer in the LAN running relay-server. */
 export type Machine = {
   id: string;

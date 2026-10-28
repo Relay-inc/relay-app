@@ -1,10 +1,12 @@
 import { newChatKey } from "../../domain/navigation/keys";
-import { chatsToStore, newChatEntry } from "../../domain/conversations/rules";
+import { activeWorkspace, chatsToStore, newChatEntry, pickedVault } from "../../domain/conversations/rules";
 import { ensureCoordinator, ensureWorkerChat } from "../../domain/orchestrator/rules";
 import type { Worker } from "../../domain/orchestrator/types";
 import { storage } from "../../infrastructure/storage";
 import { useConversationsStore } from "./store";
 import { typedOf, useDraftsStore } from "./drafts";
+import { settings } from "../settings/settings";
+import { useWorkspaceStore } from "../workspace/store";
 
 /** The conversations' metadata to localStorage (`chats`): a draft only once something is typed in it. */
 export const saveChats = () =>
@@ -12,14 +14,18 @@ export const saveChats = () =>
     "chats",
     chatsToStore({ chats: useConversationsStore.getState().chats, typed: useDraftsStore.getState().typed }),
   );
-/** A new draft conversation under a project (null: general), in one of its sidebar folders when `folder` is given;
- *  its key. It is stored once something is typed. */
+/** A new draft conversation under a project (null: general, in the workspace the sidebar shows), in one of its sidebar
+ *  folders when `folder` is given; its key. It is stored once something is typed. */
 export function newChat(project: string | null, folder = ""): string {
   const now = Date.now();
   const key = newChatKey(now);
   useConversationsStore.setState(draft => {
     draft.chats[key] = newChatEntry(key, project, now);
     if (folder) draft.chats[key].folder = folder;
+    const vault = project
+      ? undefined
+      : pickedVault(activeWorkspace(settings()), useWorkspaceStore.getState().snap.vault?.vault ?? "");
+    if (vault) draft.chats[key].vault = vault;
   });
   return key;
 }
@@ -43,6 +49,7 @@ export function startChat(
   useConversationsStore.setState(draft => {
     const conversation = draft.chats[key];
     conversation.title = start.title;
+    delete conversation.vault; // a mail, a review or a briefing is the main vault's
     if (start.fromMail) conversation.fromMail = true;
     if (start.mail) conversation.mail = start.mail;
     if (start.provider) conversation.provider = start.provider;

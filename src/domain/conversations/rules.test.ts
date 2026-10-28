@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  activeWorkspace,
   changesVault,
   chatVault,
   followChats,
@@ -169,6 +170,14 @@ test("a new conversation picks among every vault, a project's runs in its own an
     { list: [], value: "/shared/team", fixed: true, other: true },
   );
   assert.equal(chatVault({ project: "Alpha", vault: "/shared/team" }, snap), "/main");
+});
+
+test("the workspace shown: the one picked while it is still here, else the main vault", () => {
+  const s = { vault: "/main", extraVaults: ["/me/Notes"] };
+  assert.equal(activeWorkspace(s), "/main");
+  assert.equal(activeWorkspace({ ...s, sidebar: { workspace: "/me/Notes" } }), "/me/Notes");
+  // a folder removed since it was picked
+  assert.equal(activeWorkspace({ ...s, sidebar: { workspace: "/gone" } }), "/main");
 });
 
 test("a conversation started once a message went out or a session runs", () => {

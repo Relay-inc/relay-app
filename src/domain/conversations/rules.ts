@@ -241,6 +241,12 @@ export function vaultChoices(s: Pick<Settings, "vault" | "extraVaults" | "shared
     main: folder === s.vault,
   }));
 }
+/** The workspace the sidebar shows and new conversations start in: the folder picked in the footer while it is still
+ *  one of the vaults here, else the main vault. */
+export function activeWorkspace(s: Pick<Settings, "vault" | "extraVaults" | "sharedVaults" | "sidebar">) {
+  const picked = s.sidebar?.workspace;
+  return picked && vaultChoices(s).some(choice => choice.folder === picked) ? picked : s.vault;
+}
 /** The vault folder a conversation runs in: its project's, else the one picked for it (a general one), else the main
  *  vault. */
 export function chatVault(

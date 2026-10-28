@@ -152,6 +152,7 @@ const VIEWS = {
   // a new conversation about the side vault's Northwind Portal: the Runs in pick fixed on that vault (it stays there)
   "composer-vault": async () => {
     await open(page, server.url, { fixture: "shared" });
+    await page.keyboard.press("Control+Digit2"); // the side vault shown
     await page.getByPlaceholder("Search").fill("northwind");
     await byText(page, "Northwind Portal (Side vault)").hover();
     await page
@@ -1137,15 +1138,30 @@ const VIEWS = {
   // has one)
   "settings-other-vaults": async () => {
     await settingsPage("General", undefined, "shared");
-    await intoView("Other vault folders");
+    await intoView("Other workspace folders");
   },
   // the side vault's and the workspace's projects in the sidebar, in their own context (found by the search)
   "sidebar-shared": async () => {
     await open(page, server.url, { fixture: "shared" });
-    // a project shows once it has conversations; the search finds both of the side vault's
-    await page.getByPlaceholder("Search").fill("h");
+    // the side vault shown (Ctrl-2); a project shows once it has conversations, the search finds both of its own
+    await page.keyboard.press("Control+Digit2");
+    await page.getByPlaceholder("Search in Side vault").fill("h");
     await waitText("Team Handbook");
     await page.getByText("Hiring 2027", { exact: true }).scrollIntoViewIfNeeded();
+  },
+  // the footer's workspace menu: Personal, the side vault and the workspace Northwind, with the three actions (PR workspace-switcher)
+  "workspace-menu": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await waitText("Open a folder as workspace…");
+  },
+  // Northwind picked there: the footer, the search and a new general conversation follow it (PR workspace-switcher)
+  "workspace-switched": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await page.getByRole("menuitemradio", { name: /Northwind/ }).click();
+    await page.evaluate(() => window.__harness.emit("menu", "new-general"));
+    await settle(page);
   },
   "settings-interface": async () => {
     await settingsPage("General");

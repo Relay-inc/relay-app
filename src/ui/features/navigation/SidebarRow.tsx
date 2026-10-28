@@ -30,8 +30,6 @@ type Props = Omit<ComponentProps<"div">, "className"> & {
   subs?: number; // subagents working
   subsTitle?: string;
   mark?: string; // a worker of the orchestrator: its small marker carries this tooltip
-  hint?: string; // a short word after the name: the vault a general conversation runs in
-  hintTitle?: string;
   meta?: Meta;
   addTitle?: string; // the "+" of a project or folder row
   dragging?: boolean;
@@ -84,8 +82,6 @@ export function SidebarRow({
   subs = 0,
   subsTitle = "",
   mark = "",
-  hint = "",
-  hintTitle,
   meta,
   addTitle = "",
   dragging = false,
@@ -172,11 +168,6 @@ export function SidebarRow({
       >
         {name}
       </span>
-      {hint ? (
-        <span className="flex-none max-w-24 truncate text-xs text-tertiary" title={hintTitle}>
-          {hint}
-        </span>
-      ) : null}
       {mark ? (
         <span className="flex-none text-tertiary" title={mark}>
           <Icon name="agent" className="glyph size-3" />

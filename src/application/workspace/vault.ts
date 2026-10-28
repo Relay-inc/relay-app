@@ -32,9 +32,12 @@ export const projectLabel = (name: string | null) =>
 /** The project's name without its icon, where a crab already marks the row (the orchestrator's workers). */
 export const projectName = (name: string | null) =>
   name ? settings().projects[name]?.label || shownName(name) : t("general");
-/** The name a vault folder shows by: a shared vault's own name, else its folder's. */
-export const vaultName = (folder: string) =>
-  vaultChoices(settings()).find(choice => choice.folder === folder)?.name ?? (folder.split("/").pop() || folder);
+/** The name a workspace shows by: Personal for the main vault, a shared vault's own name, else its folder's. */
+export function vaultName(folder: string) {
+  const choice = vaultChoices(settings()).find(candidate => candidate.folder === folder);
+  if (choice?.main) return t("composer.yourVault");
+  return choice?.name ?? (folder.split("/").pop() || folder);
+}
 /** The name of the vault a conversation runs in (its project's, else the one picked for it) when that is not the main
  *  vault, else null. */
 export function otherVaultOf(chat: Pick<Chat, "project" | "vault"> | undefined) {
