@@ -422,6 +422,8 @@ export default {
   "page.edited": "Bearbeitet {ago}",
   "page.ask": "Claude fragen",
   "page.editor": "Text der Seite",
+  "page.updatedByClaude": "Von Claude geändert",
+  "page.updatedOnDisk": "Auf der Festplatte geändert",
   "page.changedOnDisk":
     "Diese Notiz wurde auf der Festplatte geändert, seit du sie geöffnet hast. Nichts wurde gespeichert.",
   "page.reload": "Neu laden",

@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { EditorState } from "@codemirror/state";
-import { EditorView, keymap, drawSelection } from "@codemirror/view";
+import { EditorState, StateEffect, StateField, Transaction, type Range } from "@codemirror/state";
+import { Decoration, EditorView, keymap, drawSelection, type DecorationSet } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { followPageLink, loadPage, savePage, workspacePaths } from "../../../application/navigation/pages";
+import {
+  adoptPage,
+  followPageLink,
+  loadPage,
+  savePage,
+  watchPage,
+  workspacePaths,
+} from "../../../application/navigation/pages";
+import { lineChanges, merge3 } from "../../../domain/workspace/merge";
 import { useT } from "../../hooks/useT";
 import { livePreview } from "./livePreview";
 import { blockEditing, type BlockWords } from "./blocks";
@@ -13,6 +21,17 @@ const SAVE_AFTER = 1000; // ms after the last keystroke
 
 /** Writes a new head (the page's properties edited) with what is typed in the body: one save, the same hash check. */
 export type HeadWriter = { current: ((head: string) => Promise<void>) | null };
+/** A page's file split into what comes before the body and the body, the way the page shows it. */
+export type PageSplit = (text: string) => { head: string; body: string };
+
+const MARK_FOR = 3000; // ms the lines changed outside stay marked
+// the lines a change made outside Relay touched, marked for a moment with who made it
+const markOutside = StateEffect.define<DecorationSet>();
+const outsideMarks = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update: (marks, tr) => tr.effects.find(e => e.is(markOutside))?.value ?? marks.map(tr.changes),
+  provide: field => EditorView.decorations.from(field),
+});
 
 /** A page's body as an editor: markdown with a live preview, saved a second after typing stops, on blur and with ⌘S.
  *  `head` is what comes before the body in the file (frontmatter, the title's heading) and goes back unchanged, unless
@@ -23,11 +42,13 @@ export function PageEditor({
   head,
   body,
   headRef,
+  split,
 }: {
   page: string;
   head: string;
   body: string;
   headRef: HeadWriter;
+  split: PageSplit;
 }) {
   const { t } = useT();
   const [changed, setChanged] = useState(false);
@@ -62,6 +83,7 @@ export function PageEditor({
         page={page}
         head={head}
         body={body}
+        split={split}
         onReady={(write, setHead) => {
           save.current = write;
           headRef.current = setHead;
@@ -79,6 +101,7 @@ function Editor(props: {
   page: string;
   head: string;
   body: string;
+  split: PageSplit;
   onReady: (write: (force?: boolean) => Promise<void>, setHead: (head: string) => Promise<void>) => void; // Keep mine, properties
   onChanged: (changed: boolean) => void;
   onFailed: (error: string) => void;
@@ -87,6 +110,7 @@ function Editor(props: {
   const host = useRef<HTMLDivElement>(null);
   const [first] = useState(props); // what the editor was made from
   const label = t("page.editor");
+  const [by] = useState(() => ({ claude: t("page.updatedByClaude"), disk: t("page.updatedOnDisk") }));
   const [words] = useState<BlockWords>(() => ({
     kind: kind => t(`block.${kind}`),
     turnInto: t("block.turnInto"),
@@ -97,8 +121,9 @@ function Editor(props: {
     handle: t("block.handle"),
   }));
   useEffect(() => {
-    const { page, body, onReady, onChanged, onFailed } = first;
+    const { page, body, split, onReady, onChanged, onFailed } = first;
     let head = first.head; // a property edited above replaces it
+    let headRead = head; // the head as the file last had it
     let saved = body;
     let timer = 0;
     let blocked = false; // changed on disk: no autosave until Reload or Keep mine
@@ -114,6 +139,7 @@ function Editor(props: {
           return;
         }
         saved = text;
+        headRead = head;
         blocked = false;
         onChanged(false);
         onFailed("");
@@ -148,6 +174,7 @@ function Editor(props: {
             ...defaultKeymap,
             ...historyKeymap,
           ]),
+          outsideMarks,
           EditorView.contentAttributes.of({ "aria-label": label, spellcheck: "true" }),
           EditorView.updateListener.of(u => {
             if (u.docChanged) {
@@ -159,10 +186,47 @@ function Editor(props: {
         ],
       }),
     });
+    // the file changed outside Relay (Claude, Obsidian, a shared round): merged into what is typed when the two did not
+    // change the same lines, else the bar. Not undoable with ⌘Z: it is not the user's edit.
+    let unmark = 0;
+    const stopWatching = watchPage(page, ({ text: disk, hash, by: who }) => {
+      if (blocked) return; // the bar is up: Reload or Keep mine decides
+      const theirs = split(disk);
+      const typed = view.state.doc.toString();
+      const nextHead = theirs.head === headRead ? head : head === headRead || theirs.head === head ? theirs.head : null;
+      const merged = nextHead === null ? null : merge3(saved, typed, theirs.body);
+      if (nextHead === null || merged === null) {
+        blocked = true;
+        onChanged(true);
+        return;
+      }
+      const changes = lineChanges(typed, merged);
+      // where each change lands in the new text: its first line gets the mark
+      const starts: number[] = [];
+      let shift = 0;
+      for (const c of changes) {
+        if (c.insert.trim()) starts.push(c.from + shift); // a removal leaves nothing to mark
+        shift += c.insert.length - (c.to - c.from);
+      }
+      saved = theirs.body;
+      head = nextHead;
+      headRead = theirs.head;
+      adoptPage(page, disk, hash);
+      view.dispatch({ changes, annotations: Transaction.addToHistory.of(false) });
+      const mark = Decoration.line({ class: "cm-outside", attributes: { "data-by": by[who] } });
+      const doc = view.state.doc;
+      const marks: Range<Decoration>[] = starts.map(at => mark.range(doc.lineAt(Math.min(at, doc.length)).from));
+      view.dispatch({ effects: markOutside.of(Decoration.set(marks, true)) });
+      window.clearTimeout(unmark);
+      unmark = window.setTimeout(() => view.dispatch({ effects: markOutside.of(Decoration.none) }), MARK_FOR);
+      if (head !== theirs.head) void write(false, true); // a property edited here that the file does not have yet
+    });
     return () => {
+      stopWatching();
+      window.clearTimeout(unmark);
       void write(); // leaving the page saves what was typed
       view.destroy();
     };
-  }, [first, label, words]);
+  }, [first, label, words, by]);
   return <div ref={host} className="page-editor" />;
 }

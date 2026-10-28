@@ -62,7 +62,8 @@ export const openNote = (path: string) =>
 export const notePath = (path?: string) => (path && /\.md$/i.test(noteOf(path)) && noteKnown(noteOf(path)) ? path : "");
 // what the notes index was made from: an unchanged list keeps the parsed markdown (every 30 s and every turn end)
 let notesRead: string | null = null;
-async function loadNotes() {
+/** Which notes exist, read again (a note changed outside Relay: the Pages tab and the links follow). */
+export async function loadNotes() {
   let notes = EMPTY_NOTES;
   let read = "";
   try {
@@ -83,9 +84,12 @@ async function loadNotes() {
 }
 
 /** The vault read again: projects, reminders, sessions, and which notes exist. */
-export async function loadSnapshot() {
+export const loadSnapshot = () => readSnapshot(true);
+/** The 30 s poll: the vault without which notes exist, the file watcher keeps those (noteChanged). */
+export const pollSnapshot = () => readSnapshot(false);
+async function readSnapshot(notes: boolean) {
   try {
-    const [snap] = await Promise.all([backend.snapshot(), loadNotes()]);
+    const [snap] = await Promise.all([backend.snapshot(), notes ? loadNotes() : null]);
     useWorkspaceStore.setState(draft => {
       draft.snap = snap;
       draft.snapErr = "";

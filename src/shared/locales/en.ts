@@ -418,6 +418,8 @@ const en = {
   "page.edited": "Edited {ago}",
   "page.ask": "Ask Claude",
   "page.editor": "Page text",
+  "page.updatedByClaude": "Updated by Claude",
+  "page.updatedOnDisk": "Updated on disk",
   "page.changedOnDisk": "This note changed on disk since you opened it. Nothing was saved.",
   "page.reload": "Reload",
   "page.keepMine": "Keep mine",

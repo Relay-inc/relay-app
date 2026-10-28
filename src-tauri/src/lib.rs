@@ -17,6 +17,7 @@ use agent_core::{pending, usage, AgentProvider, Terminal};
 
 mod actions;
 mod agents;
+mod watch;
 mod anywhere;
 mod brain;
 mod awake;
@@ -863,6 +864,7 @@ fn write_note(state: State<App>, target: String, text: String, expect: String, f
     let v = need_vault(&state)?;
     let roots: Vec<String> = std::iter::once(v).chain(extra_vaults(&state.settings.lock().unwrap())).collect();
     let hash = vault::write_note(&roots, &target, &text, &expect, force)?;
+    watch::wrote(&roots[0], &target, &hash); // not an outside change: the watcher stays quiet about it
     Ok(json!({"hash": hash}))
 }
 
@@ -2632,6 +2634,7 @@ pub fn run() {
             awake::start(app.handle());
             retry::start(app.handle());
             vaultsync::start(app.handle());
+            watch::start(app.handle()); // the notes changed outside Relay: an open page merges them, the Pages tab redraws
             updater::start(app.handle());
             refresh_index(app.handle());
             #[cfg(feature = "selftest")]

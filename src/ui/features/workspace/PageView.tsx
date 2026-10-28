@@ -52,10 +52,7 @@ export function PageView({ target, className }: { target: string; className: str
   const chats = project ? chatsOf(project.key) : [];
 
   const headRef = useRef<HeadWriter["current"]>(null);
-  const match = page ? FRONTMATTER.exec(page.text) : null;
-  const { title, body } = noteTitle(path, page ? page.text.slice(match ? match[0].length : 0) : noteName(path));
-  // what comes before the body in the file (frontmatter, the title's heading): the editor writes it back unchanged
-  const head = page ? page.text.slice(0, page.text.length - body.length) : "";
+  const { title, head, body } = page ? pageParts(path, page.text) : { ...noteTitle(path, noteName(path)), head: "" };
   const folders = path.split("/").slice(0, -1);
 
   return (
@@ -145,7 +142,14 @@ export function PageView({ target, className }: { target: string; className: str
                 <PageBody text={body} />
               </>
             ) : (
-              <PageEditor key={target} page={target} head={head} body={body} headRef={headRef} />
+              <PageEditor
+                key={target}
+                page={target}
+                head={head}
+                body={body}
+                headRef={headRef}
+                split={text => pageParts(path, text)}
+              />
             )}
           </article>
         )}
@@ -168,4 +172,12 @@ function PageBody({ text }: { text: string }) {
       text={text}
     />
   );
+}
+
+/** A page's file in parts: its title, what comes before the body (frontmatter, the title's heading: the editor writes it
+ *  back unchanged) and the body. */
+function pageParts(path: string, text: string) {
+  const match = FRONTMATTER.exec(text);
+  const { title, body } = noteTitle(path, text.slice(match ? match[0].length : 0));
+  return { title, head: text.slice(0, text.length - body.length), body };
 }

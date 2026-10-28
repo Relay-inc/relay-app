@@ -22,6 +22,8 @@ selftest = []
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+# file system events for open pages and the Pages tab (src/watch.rs)
+notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
 tauri = { version = "2", features = ["macos-private-api", "tray-icon", "unstable"] }
 # the tray menu (src/tray.rs), same version as tauri's tray-icon
 muda = { version = "0.20", default-features = false }

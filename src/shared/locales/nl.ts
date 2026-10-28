@@ -423,6 +423,8 @@ export default {
   "page.edited": "Bewerkt {ago}",
   "page.ask": "Vraag Claude",
   "page.editor": "Tekst van de pagina",
+  "page.updatedByClaude": "Aangepast door Claude",
+  "page.updatedOnDisk": "Aangepast op schijf",
   "page.changedOnDisk": "Deze note is op schijf gewijzigd sinds je ze opende. Er is niets bewaard.",
   "page.reload": "Opnieuw laden",
   "page.keepMine": "Mijn versie houden",

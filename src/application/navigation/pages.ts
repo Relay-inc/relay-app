@@ -11,7 +11,8 @@ import { newChatHere } from "../conversations/chats";
 import { typeInto } from "../conversations/actions";
 import { settings } from "../settings/settings";
 import { useWorkspaceStore } from "../workspace/store";
-import { contexts, loadSnapshot, projectName } from "../workspace/vault";
+import { contexts, loadNotes, loadSnapshot, projectName } from "../workspace/vault";
+import { FILE_TOOLS } from "../../domain/git/git";
 import { copy, select, toast } from "./navigation";
 import { openDetail } from "./panel";
 import { useNavigationStore } from "./store";
@@ -145,6 +146,54 @@ export async function savePage(page: string, text: string, force = false): Promi
     if (String(e) === "changed") return "changed";
     throw e;
   }
+}
+/** The file of an open page as it is now, after a change made outside Relay: its text, hash and who changed it
+ *  ("claude" when a conversation's file tool wrote it in the last seconds, else "disk"). */
+export type OutsideChange = { text: string; hash: string; by: "claude" | "disk" };
+const watchers = new Map<string, (change: OutsideChange) => void>();
+/** An open page's editor hears about its file changing outside Relay; the returned function stops that. */
+export function watchPage(page: string, merge: (change: OutsideChange) => void) {
+  watchers.set(page, merge);
+  return () => {
+    if (watchers.get(page) === merge) watchers.delete(page);
+  };
+}
+// a conversation's Edit or Write of this note that ended in the last 15 s
+function byClaude(page: string) {
+  const since = Date.now() - 15_000;
+  const tail = page.startsWith("/") ? page : `/${page}`;
+  return Object.values(useConversationsStore.getState().messages).some(items =>
+    items.some(
+      item =>
+        item.kind === "tool" &&
+        !!item.tool &&
+        FILE_TOOLS.has(item.tool.name) &&
+        (item.end ?? item.at ?? 0) > since &&
+        String((item.tool.input as { file_path?: unknown }).file_path ?? "").endsWith(tail),
+    ),
+  );
+}
+/** A note changed outside Relay (the file watcher): the Pages tab reads which notes exist again, and an open page that
+ *  holds another text than the file gets the file's, to merge. */
+export async function noteChanged({ path, hash }: { path: string; hash: string }) {
+  void loadNotes();
+  const merge = watchers.get(path);
+  const read = useNavigationStore.getState().panel.detail[pageKey(path)] as Page | undefined;
+  if (!merge || !hash || !read || "err" in read || read.hash === hash) return;
+  const by = byClaude(path) ? "claude" : "disk";
+  try {
+    const fresh = (await backend.readNote(path)) as Page;
+    if (!("err" in fresh)) merge({ text: fresh.text, hash: fresh.hash, by });
+  } catch {
+    /* gone meanwhile: the next save says so */
+  }
+}
+/** The page now holds the file's text and hash (merged in by its editor): the next save checks against these. */
+export function adoptPage(page: string, text: string, hash: string) {
+  set(draft => {
+    const read = draft.panel.detail[pageKey(page)] as Page | undefined;
+    if (read && !("err" in read)) draft.panel.detail[pageKey(page)] = { ...read, text, hash, modified: Date.now() };
+  });
 }
 // the values a key has in the workspace's notes, read once per workspace and key
 const values = new Map<string, Promise<string[]>>();

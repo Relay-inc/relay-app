@@ -15,7 +15,8 @@ import { storage } from "../infrastructure/storage";
 import { t } from "../shared/i18n";
 import { applyTheme } from "../infrastructure/window";
 import { ghOn, initLanguage, mailOn, setSettingsState, settings } from "./settings/settings";
-import { loadSnapshot, project, refreshIcons, reloadIcons, checkFavicons } from "./workspace/vault";
+import { noteChanged } from "./navigation/pages";
+import { loadSnapshot, pollSnapshot, project, refreshIcons, reloadIcons, checkFavicons } from "./workspace/vault";
 import { onboard, runSetup, takeSetup } from "./workspace/vault-setup";
 import { useConversationsStore } from "./conversations/store";
 import { saveChats, newChatHere } from "./conversations/chats";
@@ -259,7 +260,8 @@ function startPolls() {
   setInterval(pollSubs, 2000);
   setInterval(followOpenTerminal, 2000);
   setInterval(followOutsideTurns, 2000);
-  setInterval(loadSnapshot, 30000);
+  setInterval(pollSnapshot, 30000);
+  backend.onNoteChanged(noteChanged); // which notes exist, and an open page merges a change made outside
   backend.onRemindersChanged(loadSnapshot);
   backend.onRemoteChat(({ key, title, provider }) => {
     useConversationsStore.setState(draft => {

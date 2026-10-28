@@ -429,6 +429,8 @@ export default {
   "page.edited": "Modifiée {ago}",
   "page.ask": "Demander à Claude",
   "page.editor": "Texte de la page",
+  "page.updatedByClaude": "Modifié par Claude",
+  "page.updatedOnDisk": "Modifié sur le disque",
   "page.changedOnDisk": "Cette note a changé sur le disque depuis que vous l'avez ouverte. Rien n'a été enregistré.",
   "page.reload": "Recharger",
   "page.keepMine": "Garder la mienne",
