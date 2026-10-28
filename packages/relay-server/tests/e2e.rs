@@ -1060,3 +1060,138 @@ fn a_shared_vaults_live_channel() {
     drop(s);
 }
 
+
+/// A team for the live channel tests: the laptop (admin) and a colleague who joined with a link, and the vault key.
+struct Team { s: Server, laptop: Client, lid: Identity, colleague: Client, cid: Identity, vault: String, key: relay_remote::vault::VaultKey }
+fn team(tag: &str) -> Team {
+    use relay_remote::vault::VaultKey;
+    let s = start(tag);
+    let lid = device(&format!("{tag}-laptop"));
+    let (l, _) = client::pair(&pair_line(&s), &lid, "laptop").unwrap();
+    let laptop = Client::new(&l.host, l.port, &l.fp, lid.clone());
+    let vault = laptop.vault_create("Team").unwrap().id;
+    let key = VaultKey::generate();
+    let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
+    let cid = device(&format!("{tag}-colleague"));
+    let (line, _, _) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let colleague = Client::new(&line.host, line.port, &line.fp, cid.clone());
+    Team { s, laptop, lid, colleague, cid, vault, key }
+}
+/// A raw stream's connection is shut after `secs`: a read on it never waits longer, the test fails instead of hanging.
+fn deadline(w: &relay_remote::tls::Writer, secs: u64) { let w = w.clone(); std::thread::spawn(move || { std::thread::sleep(Duration::from_secs(secs)); w.shutdown(); }); }
+/// Lines of a raw stream until it ends: (frames read, the bye's reason if one came).
+fn drain(r: &mut impl BufRead) -> (usize, String) {
+    let (mut frames, mut l) = (0, String::new());
+    loop {
+        l.clear();
+        if !r.read_line(&mut l).is_ok_and(|n| n > 0) { return (frames, String::new()); }
+        let v: serde_json::Value = serde_json::from_str(&l).unwrap_or_default();
+        match v["t"].as_str() { Some("frame") => frames += 1, Some("bye") => return (frames, v["why"].as_str().unwrap_or("").into()), _ => {} }
+    }
+}
+fn events(c: &Client, vault: &str, key: &relay_remote::vault::VaultKey) -> (relay_remote::channel::Channel, std::sync::mpsc::Receiver<relay_remote::channel::Event>) {
+    let (tx, rx) = std::sync::mpsc::channel();
+    (relay_remote::channel::Channel::start(c.clone(), vault, key.clone(), move |e| { tx.send(e).ok(); }), rx)
+}
+fn wait_for(rx: &std::sync::mpsc::Receiver<relay_remote::channel::Event>, secs: u64, f: impl Fn(&relay_remote::channel::Event) -> bool) -> relay_remote::channel::Event {
+    let until = Instant::now() + Duration::from_secs(secs);
+    loop {
+        let e = rx.recv_timeout(until.saturating_duration_since(Instant::now())).unwrap_or_else(|_| panic!("nothing within {secs} s"));
+        if f(&e) { return e; }
+    }
+}
+
+/// A member whose Relay stops reading while another sends a lot: it loses its stream (its queue is bounded in bytes),
+/// the others keep getting every frame, and the server stays responsive (a removal answers at once).
+#[test]
+fn a_live_channel_survives_a_member_that_stops_reading() {
+    use relay_remote::channel::Event;
+    let t = team("stall");
+    let doc = t.key.name("Big.md");
+    // the colleague's second stream: opened, never read
+    let (_, mut stalled, sw) = t.colleague.vault_stream(&t.vault, 0, "").unwrap();
+    deadline(&sw, 60);
+    let (b, rb) = events(&t.colleague, &t.vault, &t.key);
+    let (a, ra) = events(&t.laptop, &t.vault, &t.key);
+    wait_for(&rb, 10, |e| matches!(e, Event::Live { .. }));
+    wait_for(&ra, 10, |e| matches!(e, Event::Live { .. }));
+    // 250 frames of 200 KB: some 100 MB in hex, far past what a socket and the queue of the stream nobody reads hold
+    let big = vec![7u8; 200 << 10];
+    for _ in 0..250 { a.send("update", &doc, &big).unwrap(); }
+    let mut got = 0;
+    while got < 250 { if let Event::Frame(f) = wait_for(&rb, 60, |e| matches!(e, Event::Frame(_))) { assert_eq!(f.body.len(), big.len()); got += 1; } }
+    // the stalled stream was dropped: what was in flight, then the end, well before its own deadline
+    let t0 = Instant::now();
+    let (frames, _) = drain(&mut stalled);
+    assert!(frames < 250 && t0.elapsed() < Duration::from_secs(30), "{frames} frames, {:?}", t0.elapsed());
+    // and the server answers at once
+    let t0 = Instant::now();
+    t.laptop.vault_remove(&t.vault, &t.cid.fingerprint()).unwrap();
+    assert!(t0.elapsed() < Duration::from_secs(3), "{:?}", t0.elapsed());
+    wait_for(&rb, 5, |e| matches!(e, Event::Down(why) if why.contains("no longer a member")));
+    a.stop();
+    b.stop();
+}
+
+/// The walls of the live channel: a few streams per device, a rate limit, no stream before joining, a frame played
+/// again or reflected is not passed on twice, and a revoke by the CLI (another process) closes a stream within seconds.
+#[test]
+fn a_live_channel_walls() {
+    use relay_remote::channel::Event;
+    use relay_remote::tls::hex;
+    use serde_json::json;
+    let t = team("chanwall");
+    let doc = t.key.name("Notes.md");
+    let port: u16 = t.laptop.addr.rsplit(':').next().unwrap().parse().unwrap();
+
+    // a fifth stream of one device closes its first
+    let mut first = t.colleague.vault_stream(&t.vault, 0, "").unwrap();
+    deadline(&first.2, 20);
+    let rest: Vec<_> = (0..4).map(|_| t.colleague.vault_stream(&t.vault, 0, "").unwrap()).collect();
+    assert_eq!(drain(&mut first.1).1, "too many streams");
+    for (_, _, w) in &rest { w.shutdown(); }
+
+    // more lines than the rate allows (pings count too): closed with the reason
+    let (_, mut r, mut w) = t.colleague.vault_stream(&t.vault, 0, "").unwrap();
+    deadline(&w, 20);
+    for _ in 0..400 { if w.write_all(b"{\"t\":\"ping\"}\n").is_err() { break; } }
+    assert_eq!(drain(&mut r).1, "too many frames");
+
+    // a device let through the handshake by an open invite, that has not joined: no stream
+    let (_, _) = t.laptop.vault_invite(&t.vault, "member", &t.key, "127.0.0.1", port).unwrap();
+    let sid = device("chanwall-stranger");
+    let stranger = Client::new("127.0.0.1", port, &t.laptop.fp, sid);
+    assert!(stranger.vault_stream(&t.vault, 0, "").err().unwrap().contains("not paired"));
+
+    // played again (same n) or reflected (this device's own): passed on once, and never to itself
+    let (a, ra) = events(&t.laptop, &t.vault, &t.key);
+    wait_for(&ra, 10, |e| matches!(e, Event::Live { .. }));
+    let (_, _r2, mut w2) = t.colleague.vault_stream(&t.vault, 0, "").unwrap();
+    let me = &t.cid.fingerprint()[..16];
+    let frame = |n: u64, body: &[u8], from: &str| format!("{}\n", json!({"t": "frame", "kind": "update", "doc": doc, "n": n, "body": hex(&t.key.seal_frame(&t.vault, "update", &doc, from, n, body).unwrap())}));
+    w2.write_all(frame(5, b"once", me).as_bytes()).unwrap();
+    w2.write_all(frame(5, b"once", me).as_bytes()).unwrap();
+    w2.write_all(frame(4, b"older", me).as_bytes()).unwrap();
+    w2.write_all(frame(6, b"next", me).as_bytes()).unwrap();
+    let Event::Frame(f) = wait_for(&ra, 5, |e| matches!(e, Event::Frame(_))) else { unreachable!() };
+    assert_eq!((f.n, f.body.as_slice()), (5, &b"once"[..]));
+    let Event::Frame(f) = wait_for(&ra, 5, |e| matches!(e, Event::Frame(_))) else { unreachable!() };
+    assert_eq!((f.n, f.body.as_slice()), (6, &b"next"[..]), "the repeat and the older one were dropped");
+    // a second stream of the laptop's own device sends: the laptop's channel does not take it as another member's
+    let (_, _r3, mut w3) = t.laptop.vault_stream(&t.vault, 0, "").unwrap();
+    w3.write_all(frame(9, b"mine", &t.lid.fingerprint()[..16]).as_bytes()).unwrap();
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(!ra.try_iter().any(|e| matches!(e, Event::Frame(_))), "its own frame came back");
+    w2.shutdown();
+    w3.shutdown();
+
+    // revoked by the CLI, another process: the colleague's stream closes within a few seconds
+    let (b, rb) = events(&t.colleague, &t.vault, &t.key);
+    wait_for(&rb, 10, |e| matches!(e, Event::Live { .. }));
+    let t0 = Instant::now();
+    assert!(bin().args(["revoke", "colleague"]).env("RELAY_SERVER_DATA", &t.s.data).output().unwrap().status.success());
+    wait_for(&rb, 10, |e| matches!(e, Event::Down(why) if why.contains("no longer a member")));
+    assert!(t0.elapsed() < Duration::from_secs(5), "{:?}", t0.elapsed());
+    a.stop();
+    b.stop();
+}
