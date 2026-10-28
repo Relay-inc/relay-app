@@ -908,7 +908,12 @@ async fn duplicate_note(state: State<'_, App>, target: String) -> Result<String,
 async fn move_path(app: AppHandle, state: State<'_, App>, from: String, to: String, dry: bool) -> Result<Value, String> {
     let roots = page_roots(&state)?;
     let plan = on_files(move || pagefiles::plan(&roots, &from, &to).and_then(|p| if dry { Ok(p) } else { pagefiles::apply(&p).map(|_| p) })).await?;
-    if !dry { if let Some(id) = shared_at(&state, &plan.root) { app.state::<App>().shared.let_through(&id, plan.gone.clone()); } }
+    if !dry {
+        if let Some(id) = shared_at(&state, &plan.root) { app.state::<App>().shared.let_through(&id, plan.gone.clone()); }
+        // Relay's own move: quiet for the watcher, the rewritten notes come to an open page as relinked
+        let edits: Vec<(String, String)> = plan.edits.iter().map(|(at, _, new)| (at.clone(), new.clone())).collect();
+        watch::moved(&plan.root, &pagefiles::files(&plan.root, &plan.to), &edits);
+    }
     Ok(json!({"links": plan.links, "notes": plan.edits.len(), "path": plan.rel_to}))
 }
 /// A page or folder into its workspace's .trash/. Returns {root, trash, path}: what `restore_path` takes for Undo. In a

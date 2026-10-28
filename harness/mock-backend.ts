@@ -1419,7 +1419,7 @@ const harness = {
     const now = written.get(lastPage)?.text ?? vault.noteText(lastPage).text;
     const hash = `h${++writes}`;
     written.set(lastPage, { text: now.replace(find, put), hash });
-    emit("note-changed", { path: lastPage, hash });
+    emit("note-changed", { path: lastPage, hash, relinked: false });
   },
   /** the board pipeline's calls so far */
   pipelineCalls: () => structuredClone(pipelineCalls),

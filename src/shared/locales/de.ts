@@ -422,6 +422,7 @@ export default {
   "page.edited": "Bearbeitet {ago}",
   "page.ask": "Claude fragen",
   "page.editor": "Text der Seite",
+  "page.updatedLinks": "Links aktualisiert",
   "page.updatedByClaude": "Von Claude geändert",
   "page.updatedOnDisk": "Auf der Festplatte geändert",
   "page.changedOnDisk":

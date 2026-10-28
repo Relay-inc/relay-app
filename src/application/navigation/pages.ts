@@ -147,9 +147,10 @@ export async function savePage(page: string, text: string, force = false): Promi
     throw e;
   }
 }
-/** The file of an open page as it is now, after a change made outside Relay: its text, hash and who changed it
- *  ("claude" when a conversation's file tool wrote it in the last seconds, else "disk"). */
-export type OutsideChange = { text: string; hash: string; by: "claude" | "disk" };
+/** The file of an open page as it is now, after a change made outside the page: its text, hash and who changed it
+ *  ("relay" when a move in the Pages tab rewrote its links, "claude" when a conversation's file tool wrote it in the
+ *  last seconds, else "disk"). */
+export type OutsideChange = { text: string; hash: string; by: "relay" | "claude" | "disk" };
 const watchers = new Map<string, (change: OutsideChange) => void>();
 /** An open page's editor hears about its file changing outside Relay; the returned function stops that. */
 export function watchPage(page: string, merge: (change: OutsideChange) => void) {
@@ -175,12 +176,12 @@ function byClaude(page: string) {
 }
 /** A note changed outside Relay (the file watcher): the Pages tab reads which notes exist again, and an open page that
  *  holds another text than the file gets the file's, to merge. */
-export async function noteChanged({ path, hash }: { path: string; hash: string }) {
+export async function noteChanged({ path, hash, relinked }: backend.NoteChange) {
   void loadNotes();
   const merge = watchers.get(path);
   const read = useNavigationStore.getState().panel.detail[pageKey(path)] as Page | undefined;
   if (!merge || !hash || !read || "err" in read || read.hash === hash) return;
-  const by = byClaude(path) ? "claude" : "disk";
+  const by = relinked ? "relay" : byClaude(path) ? "claude" : "disk";
   try {
     const fresh = (await backend.readNote(path)) as Page;
     if (!("err" in fresh)) merge({ text: fresh.text, hash: fresh.hash, by });

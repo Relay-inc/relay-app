@@ -110,7 +110,11 @@ function Editor(props: {
   const host = useRef<HTMLDivElement>(null);
   const [first] = useState(props); // what the editor was made from
   const label = t("page.editor");
-  const [by] = useState(() => ({ claude: t("page.updatedByClaude"), disk: t("page.updatedOnDisk") }));
+  const [by] = useState(() => ({
+    relay: t("page.updatedLinks"),
+    claude: t("page.updatedByClaude"),
+    disk: t("page.updatedOnDisk"),
+  }));
   const [words] = useState<BlockWords>(() => ({
     kind: kind => t(`block.${kind}`),
     turnInto: t("block.turnInto"),

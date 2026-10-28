@@ -1,7 +1,9 @@
 // Notes changed outside Relay (Claude, Obsidian, git, a shared round): file system events on every workspace folder,
-// gathered for a moment, become one `note-changed` event per markdown file, {path, hash}: the path the way a page opens
-// it (relative to the main vault, another workspace's by its folder as set + the relative path) and the text's hash, ""
-// when the file is gone. What Relay itself wrote (`wrote`) and a file whose text did not change send nothing.
+// gathered for a moment, become one `note-changed` event per markdown file, {path, hash, relinked}: the path the way a
+// page opens it (relative to the main vault, another workspace's by its folder as set + the relative path) and the
+// text's hash, "" when the file is gone. What Relay itself wrote (a page's save, a moved page: `wrote`) and a file whose
+// text did not change send nothing; a note whose links a move rewrote (`relinked`) is sent with `relinked: true`, so an
+// open page takes it in without saying it changed on disk.
 use notify::{RecursiveMode, Watcher};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -13,6 +15,8 @@ use crate::{vault, App};
 
 // a file's text hash as last known: written by Relay or already announced
 static KNOWN: LazyLock<Mutex<HashMap<PathBuf, String>>> = LazyLock::new(Default::default);
+// notes whose links a move just rewrote, with the hash of what it wrote
+static RELINKED: LazyLock<Mutex<HashMap<PathBuf, String>>> = LazyLock::new(Default::default);
 const SKIP: [&str; 5] = [".trash", ".git", ".relay", ".obsidian", "node_modules"];
 
 /// Relay wrote this text over the note (`write_note`): the event it causes is not an outside change.
@@ -22,19 +26,33 @@ pub fn wrote(main: &str, target: &str, hash: &str) {
     KNOWN.lock().unwrap().insert(p, hash.to_string());
 }
 
-/// What to announce for a file an event named: (its page path, its hash) or None when it is no note of the roots, sits
+/// Relay moved these files (a page or a folder, `pagefiles::apply`), and rewrote the links in `edits` (path, text): the
+/// moved files are no outside change, the rewritten notes are announced as relinked.
+pub fn moved(root: &Path, files: &[String], edits: &[(String, String)]) {
+    let mut known = KNOWN.lock().unwrap();
+    for f in files {
+        let p = root.join(f);
+        if let Ok(t) = std::fs::read_to_string(&p) { known.insert(p, vault::text_hash(&t)); }
+    }
+    drop(known);
+    let mut relinked = RELINKED.lock().unwrap();
+    for (at, text) in edits { relinked.insert(root.join(at), vault::text_hash(text)); }
+}
+
+/// What to announce for a file an event named: (its page path, its hash, whether a move rewrote its links) or None when it is no note of the roots, sits
 /// in a skipped folder, or its text is what is known. `roots`: (folder as set, canonical folder), the main vault first.
-fn change(roots: &[(String, String)], file: &Path) -> Option<(String, String)> {
+fn change(roots: &[(String, String)], file: &Path) -> Option<(String, String, bool)> {
     // hidden files are no notes: Relay's own temporary ones (`.relay-sync-…`) among them
     if file.extension().is_none_or(|e| e != "md") || file.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.')) { return None; }
     let (i, rel) = roots.iter().enumerate().find_map(|(i, (_, c))| file.strip_prefix(c).ok().map(|r| (i, r.to_path_buf())))?;
     if rel.components().any(|c| SKIP.contains(&c.as_os_str().to_string_lossy().as_ref())) { return None; }
     let hash = std::fs::read_to_string(file).map(|t| vault::text_hash(&t)).unwrap_or_default();
+    let relinked = RELINKED.lock().unwrap().remove(file).is_some_and(|h| h == hash);
     let mut known = KNOWN.lock().unwrap();
     if known.get(file).map_or(hash.is_empty(), |h| *h == hash) { return None; }
     known.insert(file.to_path_buf(), hash.clone());
     let rel = rel.to_string_lossy();
-    Some((if i == 0 { rel.into_owned() } else { format!("{}/{rel}", roots[i].0.trim_end_matches('/')) }, hash))
+    Some((if i == 0 { rel.into_owned() } else { format!("{}/{rel}", roots[i].0.trim_end_matches('/')) }, hash, relinked))
 }
 
 fn roots(app: &AppHandle) -> Vec<(String, String)> {
@@ -67,7 +85,7 @@ pub fn start(app: &AppHandle) {
             files.sort();
             files.dedup();
             for f in files {
-                if let Some((path, hash)) = change(&watched, &f) { app.emit("note-changed", serde_json::json!({"path": path, "hash": hash})).ok(); }
+                if let Some((path, hash, relinked)) = change(&watched, &f) { app.emit("note-changed", serde_json::json!({"path": path, "hash": hash, "relinked": relinked})).ok(); }
             }
         }
     });
@@ -90,11 +108,17 @@ mod tests {
         assert_eq!(change(&roots, &note), None);
         // someone else changed it: announced once, by its page path
         std::fs::write(&note, "two").unwrap();
-        assert_eq!(change(&roots, &note), Some(("A.md".into(), vault::text_hash("two"))));
+        assert_eq!(change(&roots, &note), Some(("A.md".into(), vault::text_hash("two"), false)));
         assert_eq!(change(&roots, &note), None);
         // gone: announced with an empty hash
         std::fs::remove_file(&note).unwrap();
-        assert_eq!(change(&roots, &note), Some(("A.md".into(), String::new())));
+        assert_eq!(change(&roots, &note), Some(("A.md".into(), String::new(), false)));
+        // a page Relay moved is quiet at its new place; a note whose links it rewrote is announced as relinked
+        std::fs::write(PathBuf::from(&root).join("C.md"), "moved").unwrap();
+        std::fs::write(PathBuf::from(&root).join("D.md"), "[[C]]").unwrap();
+        moved(Path::new(&root), &["C.md".into()], &[("D.md".into(), "[[C]]".into())]);
+        assert_eq!(change(&roots, &PathBuf::from(&root).join("C.md")), None);
+        assert_eq!(change(&roots, &PathBuf::from(&root).join("D.md")), Some(("D.md".into(), vault::text_hash("[[C]]"), true)));
         // the trash and other files are not notes
         std::fs::write(PathBuf::from(&root).join(".trash/B.md"), "x").unwrap();
         assert_eq!(change(&roots, &PathBuf::from(&root).join(".trash/B.md")), None);
