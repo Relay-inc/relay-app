@@ -7,7 +7,7 @@ use relay_remote::channel::{Channel, Event};
 use relay_remote::client::Client;
 use relay_remote::sync::{self, Filter, Guard, Manifest, Mode, Walker};
 use relay_remote::tls::Identity;
-use relay_remote::vault::VaultKey;
+use relay_remote::vault::{Keys, VaultKey};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -53,7 +53,8 @@ pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter()
 /// deletes held for the user (sync::Guard). `bad`: blobs there that did not open with the key (left alone). `live`: the
 /// vault's live channel is connected (relay_remote::channel), else it syncs by rounds only.
 #[derive(Default, Clone, serde::Serialize)]
-pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub bad: usize, pub live: bool }
+/// `waiting`: the members a due key rotation waits for (no public key from their Relay yet, docs/workspaces.md).
+pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub bad: usize, pub live: bool, pub waiting: Vec<String> }
 
 /// Run the rounds now, without waiting for the interval: a vault was just made or joined.
 static NOW: AtomicBool = AtomicBool::new(false);
@@ -62,13 +63,17 @@ pub fn sync_now() { NOW.store(true, Ordering::Relaxed); }
 pub fn asked() -> bool { NOW.swap(false, Ordering::Relaxed) }
 
 fn key_path(data: &Path, id: &str) -> PathBuf { data.join(format!("shared-{id}.key")) }
-pub fn save_key(data: &Path, id: &str, key: &VaultKey) -> Result<(), String> {
+/// The vault's keys (relay_remote::vault::Keys: every epoch's, this member's secret, its pins), written whole: a temp
+/// file 0600 renamed over the old one, so a crash never leaves half a key file.
+pub fn save_key(data: &Path, id: &str, keys: &Keys) -> Result<(), String> {
     use std::os::unix::fs::OpenOptionsExt;
-    std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(key_path(data, id))
-        .and_then(|mut f| std::io::Write::write_all(&mut f, key.to_hex().as_bytes())).map_err(|e| e.to_string())
+    let (p, tmp) = (key_path(data, id), data.join(format!(".shared-{id}.key.tmp")));
+    std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp)
+        .and_then(|mut f| std::io::Write::write_all(&mut f, keys.format().as_bytes()).and_then(|_| f.sync_all()))
+        .and_then(|_| std::fs::rename(&tmp, &p)).map_err(|e| e.to_string())
 }
-pub fn load_key(data: &Path, id: &str) -> Result<VaultKey, String> {
-    std::fs::read_to_string(key_path(data, id)).ok().and_then(|k| VaultKey::from_hex(k.trim())).ok_or_else(|| format!("the key of workspace {id} is missing on this Mac"))
+pub fn load_key(data: &Path, id: &str) -> Result<Keys, String> {
+    std::fs::read_to_string(key_path(data, id)).ok().and_then(|k| Keys::parse(&k)).ok_or_else(|| format!("the key of workspace {id} is missing on this Mac"))
 }
 /// Where a round keeps what it deletes or mostly empties here: <data>/shared-trash/<id>/<round's minute>/<path>.
 fn trash(data: &Path, id: &str) -> PathBuf { data.join("shared-trash").join(id) }
@@ -178,7 +183,8 @@ pub fn real_path(p: &str) -> Result<String, String> {
 struct One { walker: Walker, allowed: Vec<String>, moved: Vec<(String, String)> }
 /// `live`: each vault's live channel, kept open next to the rounds (keep_live).
 #[derive(Default)]
-pub struct Hub { vaults: Mutex<HashMap<String, Arc<Mutex<One>>>>, pub status: Mutex<HashMap<String, Status>>, live: Mutex<HashMap<String, Channel>> }
+/// `live`: each vault's channel and the key epoch it was started with: a newer key starts it again.
+pub struct Hub { vaults: Mutex<HashMap<String, Arc<Mutex<One>>>>, pub status: Mutex<HashMap<String, Status>>, live: Mutex<HashMap<String, (Channel, u32)>> }
 
 impl Hub {
     fn one(&self, id: &str) -> Arc<Mutex<One>> { self.vaults.lock().unwrap().entry(id.into()).or_default().clone() }
@@ -213,12 +219,21 @@ impl Hub {
                 let remote = client(v, me).sealed(&v.id, key);
                 remote.know(&base);
                 let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, &mut one.walker, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
+                // after the round, from what its manifest said: a new key fetched, this Mac's public key registered, a
+                // due rotation made (admin); writes this round refused for an old key go through on the next
+                match remote.keep_keys() {
+                    Ok(k) => {
+                        if let Some(keys) = k.keys { if let Err(e) = save_key(data, &v.id, &keys) { st.errors.push(format!("key: {e}")); } }
+                        st.waiting = k.waiting;
+                    }
+                    Err(e) => st.errors.push(format!("key: {e}")),
+                }
                 // a round that failed (the server out of reach) keeps what the user let through for the next one
                 if !r.errors.is_empty() { one.allowed = allowed.clone(); }
                 // the next round plans against this base: one not written is an error, not a quiet success
                 if next != base { if let Err(e) = write_base(data, &v.id, &next) { st.errors.push(format!("base: {e}")); } }
                 st = Status { pushed: r.pushed.len() + r.deleted_remote.len(), pulled: r.pulled.len() + r.deleted_local.len(),
-                    conflicts: r.conflicts, errors: [st.errors, r.errors].concat(), held: r.held, bad: remote.bad().len(), ..st };
+                    conflicts: r.conflicts, errors: [r.errors, st.errors].concat(), held: r.held, bad: remote.bad().len(), ..st };
             }
         }
         // still under the vault's lock: a leave waiting for this round removes the status after it
@@ -266,7 +281,7 @@ impl Hub {
         std::fs::remove_dir_all(trash(data, id)).ok();
         // stopped first: its last Down would bring the status back
         let c = self.live.lock().unwrap().remove(id);
-        if let Some(c) = c { c.stop(); }
+        if let Some((c, _)) = c { c.stop(); }
         self.status.lock().unwrap().remove(id);
         self.vaults.lock().unwrap().remove(id);
     }
@@ -276,11 +291,15 @@ impl Hub {
     /// use them come next (docs/workspaces.md, Live channel).
     pub fn keep_live(&self, app: &AppHandle, data: &Path, list: &[Shared], me: &Identity) {
         let mut live = self.live.lock().unwrap();
-        // a channel of a vault no longer listed stops after this lock is let go (its Down marks it not live)
-        let gone: Vec<Channel> = live.keys().filter(|id| !list.iter().any(|v| &v.id == *id)).cloned().collect::<Vec<_>>().into_iter().filter_map(|id| live.remove(&id)).collect();
+        // a channel of a vault no longer listed, or one still on an older key than the key file's, stops after this
+        // lock is let go (its Down marks it not live); the second starts again with the new key
+        let epochs: HashMap<String, u32> = list.iter().filter_map(|v| load_key(data, &v.id).ok().map(|k| (v.id.clone(), k.epoch()))).collect();
+        let stale: Vec<String> = live.iter().filter(|(id, (_, e))| epochs.get(*id) != Some(e)).map(|(id, _)| id.clone()).collect();
+        let gone: Vec<Channel> = stale.into_iter().filter_map(|id| live.remove(&id)).map(|(c, _)| c).collect();
         for v in list {
             if live.contains_key(&v.id) { continue; }
             let Ok(key) = load_key(data, &v.id) else { continue };
+            let e = key.epoch();
             let (h, id) = (app.clone(), v.id.clone());
             let on = move |e: Event| {
                 let up = match e { Event::Live { .. } => true, Event::Down(_) => false, Event::Frame(_) => return };
@@ -289,7 +308,7 @@ impl Hub {
                 all.entry(id.clone()).or_default().live = up;
                 h.emit("shared-vaults", serde_json::to_value(&*all).unwrap_or_default()).ok();
             };
-            live.insert(v.id.clone(), Channel::start(client(v, me), &v.id, key, on));
+            live.insert(v.id.clone(), (Channel::start(client(v, me), &v.id, key, on), e));
         }
         drop(live);
         for c in gone { c.stop(); }
@@ -376,11 +395,11 @@ pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String,
     let template = app.path().resolve("default-vault", tauri::path::BaseDirectory::Resource).map_err(|e| e.to_string())?;
     let overlay = app.path().resolve("team-vault", tauri::path::BaseDirectory::Resource).map_err(|e| e.to_string())?;
     let (c, at) = (state.machines.client(&m), folder.clone());
-    let (r, key) = tauri::async_runtime::spawn_blocking(move || -> Result<(relay_remote::client::VaultRef, VaultKey), String> {
+    let (r, key) = tauri::async_runtime::spawn_blocking(move || -> Result<(relay_remote::client::VaultRef, Keys), String> {
         // the folder first: a vault that could not get its notes is not made on the server at all
         let empty = !std::fs::read_dir(&folder).is_ok_and(|mut d| d.any(|e| e.is_ok_and(|e| e.file_name() != ".DS_Store")));
         if empty { crate::vault::create_team(&template, &overlay, Path::new(&folder))?; }
-        Ok((c.vault_create(&name)?, VaultKey::generate()))
+        Ok((c.vault_create(&name)?, Keys::from(VaultKey::generate())))
     }).await.map_err(|e| e.to_string())??;
     if !valid_id(&r.id) { return Err(format!("the server answered an invalid workspace id {:?}", r.id)); }
     // keys, bases and trash go by id alone: an id this Mac is in already would overwrite that vault's key
@@ -389,7 +408,7 @@ pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String,
     let v = Shared { id: r.id.clone(), name: r.name, host: m["host"].as_str().unwrap_or("").into(), port: m["port"].as_u64().unwrap_or(0) as u16,
         fp: m["fp"].as_str().unwrap_or("").into(), folder: at, role: "admin".into() };
     add(&app, &state, &v)?;
-    Ok(serde_json::json!({"id": r.id, "recovery": key.to_hex()}))
+    Ok(serde_json::json!({"id": r.id, "recovery": key.recovery()}))
 }
 
 /// Join a shared vault with an invite link: this Mac pairs with the server as a vault-only device (when it is not
@@ -469,7 +488,7 @@ fn left_already(e: &str) -> bool { ["no such vault", "not paired", "not a member
 #[tauri::command]
 pub fn shared_vault_recovery(app: AppHandle, id: String) -> Result<String, String> {
     if !valid_id(&id) { return Err("not a workspace id".into()); }
-    load_key(&crate::data_dir(&app), &id).map(|k| k.to_hex())
+    load_key(&crate::data_dir(&app), &id).map(|k| k.recovery())
 }
 
 /// The held deletes of a vault the user saw (`paths`): let them through in its next round, or put the files back.

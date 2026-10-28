@@ -131,6 +131,7 @@ export type SharedStatus = {
   held: string[];
   bad: number;
   live?: boolean; // the live channel is connected; false or missing: rounds every 10 s only
+  waiting?: string[]; // a due key change waits for these members' Relay (no public key from it yet)
 };
 /** An open invite of a shared vault: single use, `expires` in epoch seconds. */
 export type SharedInvite = { id: string; role: SharedRole; expires: number };

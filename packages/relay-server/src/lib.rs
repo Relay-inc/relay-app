@@ -79,7 +79,7 @@ const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answ
 /// What a vault-only device may ask: its shared vaults, nothing else. It never runs agents, reads a mirror or pairs
 /// further devices, and makes no vaults of its own. `pair` with a code from the owner makes it a full device.
 const VAULT_OPS: &[&str] = &["pair", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
-    "vault_get", "vault_put", "vault_put_many", "vault_delete", "vault_stream"];
+    "vault_get", "vault_put", "vault_put_many", "vault_delete", "vault_stream", "vault_pk", "vault_rotate"];
 /// What a vault-only device may ask besides, while it is admin of a vault here: it keeps the server, so it sees what
 /// the server is and updates it (`update`, to an official release only: signed with Relay's release key, upgrade.rs).
 /// Never a conversation, the mirror, a phone, GitHub or a vault of its own.
@@ -348,7 +348,15 @@ impl Server {
                 reply(&mut w, res)
             }
             "vault_remove" => reply(&mut w, self.vaults.remove(&fp, s("vault"), s("fp")).map(|_| json!({}))),
-            "vault_manifest" => reply(&mut w, self.vaults.manifest(&fp, s("vault")).map(|b| json!({"blobs": b}))),
+            "vault_manifest" => reply(&mut w, self.vaults.manifest(&fp, s("vault"))),
+            "vault_pk" => reply(&mut w, self.vaults.set_pk(&fp, s("vault"), s("pk"), s("mac")).map(|_| json!({}))),
+            "vault_rotate" => {
+                let keys = req["keys"].as_object().cloned().unwrap_or_default();
+                let res = self.vaults.rotate(&fp, s("vault"), req["epoch"].as_u64().unwrap_or(0), &keys);
+                // the old key's frames stop here: who reconnects opens with the new one (channel.rs)
+                if res.is_ok() { eprintln!("relay-server: a shared vault's key changed ({peer})"); }
+                reply(&mut w, res)
+            }
             "vault_get" => match self.vaults.get(&fp, s("vault"), s("name")) {
                 Ok((b, etag)) => { proto::write_json(&mut w, &json!({"ok": true, "len": b.len(), "etag": etag}))?; w.write_all(&b)?; w.shutdown(); Ok(()) }
                 Err(e) => reply(&mut w, Err(e)),

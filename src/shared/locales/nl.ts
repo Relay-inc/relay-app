@@ -1026,6 +1026,8 @@ export default {
   "set.sharedCounts": "{sent} verstuurd, {received} ontvangen",
   "set.sharedBad_one": "{n} bestand daar opent niet met deze sleutel.",
   "set.sharedBad_other": "{n} bestanden daar openen niet met deze sleutel.",
+  "set.sharedRekeyWaits":
+    "Iemand is vertrokken, dus de sleutel verandert. Dat wacht tot {names} Relay bijwerkt en een keer opent.",
   "set.sharedConflicts_one": "{n} conflict. Beide versies zijn bewaard:",
   "set.sharedConflicts_other": "{n} conflicten. Beide versies zijn bewaard:",
   "set.sharedHeld_one":

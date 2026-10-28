@@ -10,11 +10,16 @@ use ring::rand::{SecureRandom, SystemRandom};
 use ring::{hkdf, hmac};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Mutex, MutexGuard};
 
 const SALT: &[u8] = b"relay shared vault v1";
 const INVITE_SALT: &[u8] = b"relay vault invite v1";
+const REKEY_SALT: &[u8] = b"relay vault rekey v1";
+/// A record's first 4 bytes: its meta part's length in the low 20 bits (MAX_META is 64 KiB), and in the 12 above the
+/// epoch of the key it is sealed under: 0 for every record before the first rotation, which is how they always were.
+const EPOCH_SHIFT: u32 = 20;
+pub const MAX_EPOCH: u32 = (1 << (32 - EPOCH_SHIFT)) - 1;
 /// A record's meta part at most, and a whole record at most: the mirror's biggest file (64 MiB) plus that. The server
 /// holds records to the same limits.
 pub const MAX_META: usize = 64 << 10;
@@ -23,7 +28,7 @@ pub const MAX_RECORD: u64 = (64 << 20) + MAX_META as u64;
 /// A shared vault's key: 32 random bytes, kept by every member and never sent to the server in the clear. The sealing
 /// key and the naming key are derived from it once, not for every record.
 #[derive(Clone)]
-pub struct VaultKey { raw: [u8; 32], enc: LessSafeKey, names: hmac::Key }
+pub struct VaultKey { raw: [u8; 32], enc: LessSafeKey, names: hmac::Key, auth: hmac::Key }
 /// Never the bytes, so a key cannot end up in a log.
 impl std::fmt::Debug for VaultKey { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("VaultKey(..)") } }
 impl VaultKey {
@@ -31,7 +36,7 @@ impl VaultKey {
         let prk = hkdf::Salt::new(hkdf::HKDF_SHA256, SALT).extract(&raw);
         // expand only fails above 255 hash lengths, 32 bytes never does
         let enc = LessSafeKey::new(UnboundKey::from(prk.expand(&[b"enc"], &CHACHA20_POLY1305).unwrap()));
-        VaultKey { raw, enc, names: hmac::Key::from(prk.expand(&[b"name"], hmac::HMAC_SHA256).unwrap()) }
+        VaultKey { raw, enc, names: hmac::Key::from(prk.expand(&[b"name"], hmac::HMAC_SHA256).unwrap()), auth: hmac::Key::from(prk.expand(&[b"auth"], hmac::HMAC_SHA256).unwrap()) }
     }
     pub fn generate() -> VaultKey {
         let mut k = [0u8; 32];
@@ -46,52 +51,165 @@ impl VaultKey {
     pub fn name(&self, path: &str) -> String { name(&self.names, path) }
 
     /// The record for one file: `u32 BE meta_len || meta || data`, each part `nonce || ciphertext+tag`.
-    pub fn record(&self, path: &str, data: &[u8], mtime: i64) -> Result<Vec<u8>, String> {
-        let n = self.name(path);
-        let meta = json!({"p": path, "h": sync::sha256_hex(data), "s": data.len(), "m": mtime}).to_string();
-        let meta = seal(&self.enc, format!("meta:{n}").as_bytes(), meta.as_bytes())?;
-        if meta.len() > MAX_META { return Err("path too long".into()); }
-        let mut out = (meta.len() as u32).to_be_bytes().to_vec();
-        out.extend(meta);
-        out.extend(seal(&self.enc, format!("data:{n}").as_bytes(), data)?);
-        Ok(out)
-    }
+    pub fn record(&self, path: &str, data: &[u8], mtime: i64) -> Result<Vec<u8>, String> { seal_record(self, self, 0, path, data, mtime) }
     /// What a record's meta says about its file (path, plaintext size, mtime, plaintext hash), refused when it was not
     /// sealed under `name` or when `name` is not its path's: a record moved to another name.
-    pub fn open_meta(&self, name: &str, meta: &[u8]) -> Result<Entry, String> {
-        #[derive(Deserialize)]
-        struct Meta { p: String, h: String, s: u64, m: i64 }
-        let plain = open(&self.enc, format!("meta:{name}").as_bytes(), meta).ok_or("meta does not open with this vault's key")?;
-        let m: Meta = serde_json::from_slice(&plain).map_err(|e| format!("meta: {e}"))?;
-        if self.name(&m.p) != name { return Err("record is filed under another name".into()); }
-        Ok(Entry { path: m.p, size: m.s, mtime: m.m, hash: m.h })
-    }
+    pub fn open_meta(&self, name: &str, meta: &[u8]) -> Result<Entry, String> { open_meta(self, self, 0, name, meta) }
     /// A whole record's content.
-    pub fn open_data(&self, name: &str, record: &[u8]) -> Result<Vec<u8>, String> {
-        let (_, data) = split(record).ok_or("not a record")?;
-        open(&self.enc, format!("data:{name}").as_bytes(), data).ok_or_else(|| "content does not open with this vault's key".into())
-    }
+    pub fn open_data(&self, name: &str, record: &[u8]) -> Result<Vec<u8>, String> { open_data(self, 0, name, record) }
+    /// A member's X25519 public key (hex) vouched for under this key: only a member who holds it can, so a server
+    /// cannot slip its own key in for a member's when a rotated key is sealed to them (`SealedRemote::keep_keys`).
+    pub fn pk_mac(&self, vault: &str, fp: &str, pk: &str) -> String { hex(hmac::sign(&self.auth, format!("pk:{vault}:{fp}:{pk}").as_bytes()).as_ref()) }
+}
+fn aad(part: &str, e: u32, name: &str) -> String { if e == 0 { format!("{part}:{name}") } else { format!("{part}:{e}:{name}") } }
+/// A record sealed under `k` at epoch `e`, named by `names` (the epoch-0 key: names never change, see `Keys`).
+fn seal_record(k: &VaultKey, names: &VaultKey, e: u32, path: &str, data: &[u8], mtime: i64) -> Result<Vec<u8>, String> {
+    let n = names.name(path);
+    let meta = json!({"p": path, "h": sync::sha256_hex(data), "s": data.len(), "m": mtime}).to_string();
+    let meta = seal(&k.enc, aad("meta", e, &n).as_bytes(), meta.as_bytes())?;
+    if meta.len() > MAX_META { return Err("path too long".into()); }
+    let mut out = ((meta.len() as u32) | (e << EPOCH_SHIFT)).to_be_bytes().to_vec();
+    out.extend(meta);
+    out.extend(seal(&k.enc, aad("data", e, &n).as_bytes(), data)?);
+    Ok(out)
+}
+fn open_meta(k: &VaultKey, names: &VaultKey, e: u32, name: &str, meta: &[u8]) -> Result<Entry, String> {
+    #[derive(Deserialize)]
+    struct Meta { p: String, h: String, s: u64, m: i64 }
+    let plain = open(&k.enc, aad("meta", e, name).as_bytes(), meta).ok_or("meta does not open with this vault's key")?;
+    let m: Meta = serde_json::from_slice(&plain).map_err(|e| format!("meta: {e}"))?;
+    if names.name(&m.p) != name { return Err("record is filed under another name".into()); }
+    Ok(Entry { path: m.p, size: m.s, mtime: m.m, hash: m.h })
+}
+fn open_data(k: &VaultKey, e: u32, name: &str, record: &[u8]) -> Result<Vec<u8>, String> {
+    let (_, data) = split(record).ok_or("not a record")?;
+    open(&k.enc, aad("data", e, name).as_bytes(), data).ok_or_else(|| "content does not open with this vault's key".into())
 }
 impl VaultKey {
     /// A live frame (channel.rs) sealed for the other members: `nonce || ciphertext+tag`, bound to the vault, the kind,
     /// the document's name, the sending device (the first 16 hex of its fingerprint) and its own counter `n`. The
     /// server can neither read it nor pass it off as another vault's, document's or member's.
     pub fn seal_frame(&self, vault: &str, kind: &str, doc: &str, from: &str, n: u64, plain: &[u8]) -> Result<Vec<u8>, String> {
-        seal(&self.enc, frame_aad(vault, kind, doc, from, n).as_bytes(), plain)
+        seal(&self.enc, frame_aad(0, vault, kind, doc, from, n).as_bytes(), plain)
     }
     pub fn open_frame(&self, vault: &str, kind: &str, doc: &str, from: &str, n: u64, sealed: &[u8]) -> Result<Vec<u8>, String> {
-        open(&self.enc, frame_aad(vault, kind, doc, from, n).as_bytes(), sealed).ok_or_else(|| "frame does not open with this vault's key".into())
+        open_frame(self, 0, vault, kind, doc, from, n, sealed)
     }
 }
-fn frame_aad(vault: &str, kind: &str, doc: &str, from: &str, n: u64) -> String { format!("frame:{vault}:{kind}:{doc}:{from}:{n}") }
+#[allow(clippy::too_many_arguments)]
+fn open_frame(k: &VaultKey, e: u32, vault: &str, kind: &str, doc: &str, from: &str, n: u64, sealed: &[u8]) -> Result<Vec<u8>, String> {
+    open(&k.enc, frame_aad(e, vault, kind, doc, from, n).as_bytes(), sealed).ok_or_else(|| "frame does not open with this vault's key".into())
+}
+fn frame_aad(e: u32, vault: &str, kind: &str, doc: &str, from: &str, n: u64) -> String {
+    if e == 0 { format!("frame:{vault}:{kind}:{doc}:{from}:{n}") } else { format!("frame:{e}:{vault}:{kind}:{doc}:{from}:{n}") }
+}
+
+/// A shared vault's keys on one Mac (docs/workspaces.md, Key rotation). `ring`: every epoch's key, 0 the one the vault
+/// was made with; a rotation adds the next, and everything new is sealed under the newest. Records keep their names
+/// under epoch 0's naming key: renaming every record would rewrite the whole vault, and what a name gives away (that a
+/// guessed path exists) a removed member knew already. `secret`: this member's X25519 secret, a rotated key is sealed
+/// to its public key. `pins`: the public keys of the other members as this Mac first vouched for them.
+#[derive(Clone)]
+pub struct Keys { ring: BTreeMap<u32, VaultKey>, pub secret: Option<[u8; 32]>, pub pins: BTreeMap<String, String> }
+impl From<VaultKey> for Keys { fn from(k: VaultKey) -> Keys { Keys { ring: BTreeMap::from([(0, k)]), secret: None, pins: BTreeMap::new() } } }
+impl std::fmt::Debug for Keys { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "Keys(epoch {})", self.epoch()) } }
+impl Keys {
+    /// The newest epoch here; everything is sealed under its key.
+    pub fn epoch(&self) -> u32 { *self.ring.keys().next_back().unwrap_or(&0) }
+    pub fn current(&self) -> &VaultKey { self.ring.values().next_back().unwrap() }
+    pub fn get(&self, e: u32) -> Option<&VaultKey> { self.ring.get(&e) }
+    pub fn add(&mut self, e: u32, k: VaultKey) { self.ring.insert(e, k); }
+    fn first(&self) -> &VaultKey { self.ring.values().next().unwrap() }
+    fn at(&self, e: u32) -> Result<&VaultKey, String> { self.get(e).ok_or_else(|| format!("sealed under key {e}, which is not on this Mac yet")) }
+    pub fn name(&self, path: &str) -> String { self.first().name(path) }
+    pub fn record(&self, path: &str, data: &[u8], mtime: i64) -> Result<Vec<u8>, String> { seal_record(self.current(), self.first(), self.epoch(), path, data, mtime) }
+    pub fn open_meta(&self, e: u32, name: &str, meta: &[u8]) -> Result<Entry, String> { open_meta(self.at(e)?, self.first(), e, name, meta) }
+    pub fn open_data(&self, name: &str, record: &[u8]) -> Result<Vec<u8>, String> { let e = epoch(record).ok_or("not a record")?; open_data(self.at(e)?, e, name, record) }
+    /// A frame under the newest key, and that key's epoch (it goes along in the frame).
+    pub fn seal_frame(&self, vault: &str, kind: &str, doc: &str, from: &str, n: u64, plain: &[u8]) -> Result<(u32, Vec<u8>), String> {
+        let e = self.epoch();
+        Ok((e, seal(&self.current().enc, frame_aad(e, vault, kind, doc, from, n).as_bytes(), plain)?))
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn open_frame(&self, e: u32, vault: &str, kind: &str, doc: &str, from: &str, n: u64, sealed: &[u8]) -> Result<Vec<u8>, String> {
+        open_frame(self.at(e)?, e, vault, kind, doc, from, n, sealed)
+    }
+    /// This member's X25519 public key (hex), its secret made on first use.
+    pub fn public(&mut self) -> String {
+        let s = *self.secret.get_or_insert_with(random32);
+        hex(x25519_dalek::PublicKey::from(&x25519_dalek::StaticSecret::from(s)).as_bytes())
+    }
+
+    /// The key file (shared-<id>.key, 0600): epoch 0's key in hex on the first line, as the file was before rotation
+    /// existed, then a line per later epoch (`<epoch> <hex>`), `secret <hex>` and `pin <fp> <public key>`.
+    pub fn parse(s: &str) -> Option<Keys> {
+        let mut lines = s.lines();
+        let mut k = Keys::from(VaultKey::from_hex(lines.next()?)?);
+        for l in lines {
+            match l.split_whitespace().collect::<Vec<_>>()[..] {
+                ["secret", h] => k.secret = Some(unhex(h)?.try_into().ok()?),
+                ["pin", fp, pk] => { k.pins.insert(fp.into(), pk.into()); }
+                [e, h] => k.add(e.parse().ok().filter(|e| *e > 0 && *e <= MAX_EPOCH)?, VaultKey::from_hex(h)?),
+                [] => {}
+                _ => return None,
+            }
+        }
+        Some(k)
+    }
+    /// What Settings shows as the recovery key: the keys alone, without this member's secret and pins. Before any
+    /// rotation that is the one hex line it always was.
+    pub fn recovery(&self) -> String { Keys { secret: None, pins: BTreeMap::new(), ..self.clone() }.format().trim_end().to_string() }
+    pub fn format(&self) -> String {
+        let mut out = self.first().to_hex() + "\n";
+        for (e, k) in self.ring.iter().skip(1) { out += &format!("{e} {}\n", k.to_hex()); }
+        if let Some(s) = self.secret { out += &format!("secret {}\n", hex(&s)); }
+        for (fp, pk) in &self.pins { out += &format!("pin {fp} {pk}\n"); }
+        out
+    }
+}
+fn random32() -> [u8; 32] {
+    let mut k = [0u8; 32];
+    SystemRandom::new().fill(&mut k).expect("system randomness");
+    k
+}
+
+/// A rotated vault key sealed to one member's X25519 public key: hex(ephemeral public || nonce || ciphertext+tag), the
+/// key derived from the shared point with HKDF, the seal bound to the vault, the epoch and the member.
+pub fn seal_for(pk_hex: &str, vault: &str, e: u32, fp: &str, key: &VaultKey) -> Result<String, String> {
+    let pk: [u8; 32] = unhex(pk_hex).and_then(|p| p.try_into().ok()).ok_or("a member's public key is not 64 hex")?;
+    let eph = x25519_dalek::StaticSecret::from(random32());
+    let epub = x25519_dalek::PublicKey::from(&eph);
+    let k = rekey_key(&eph, &pk, epub.as_bytes())?;
+    let mut out = epub.as_bytes().to_vec();
+    out.extend(seal(&k, format!("rekey:{vault}:{e}:{fp}").as_bytes(), &key.raw)?);
+    Ok(hex(&out))
+}
+/// The key back with this member's secret; refused for another member, vault or epoch, or a changed byte.
+pub fn open_for(secret: &[u8; 32], wrapped_hex: &str, vault: &str, e: u32, fp: &str) -> Result<VaultKey, String> {
+    let blob = unhex(wrapped_hex).filter(|b| b.len() > 32).ok_or("the sealed key is not hex")?;
+    let me = x25519_dalek::StaticSecret::from(*secret);
+    let epub: [u8; 32] = blob[..32].try_into().unwrap();
+    let k = rekey_key(&me, &epub, &epub)?;
+    let raw = open(&k, format!("rekey:{vault}:{e}:{fp}").as_bytes(), &blob[32..]).ok_or("the sealed key does not open for this member")?;
+    raw.try_into().map(VaultKey::new).map_err(|_| "the sealed key is not a vault key".into())
+}
+fn rekey_key(mine: &x25519_dalek::StaticSecret, theirs: &[u8; 32], epub: &[u8; 32]) -> Result<LessSafeKey, String> {
+    let shared = mine.diffie_hellman(&x25519_dalek::PublicKey::from(*theirs));
+    // a low-order public key gives every party the same all-zero point
+    if !shared.was_contributory() { return Err("not a usable public key".into()); }
+    let prk = hkdf::Salt::new(hkdf::HKDF_SHA256, REKEY_SALT).extract(shared.as_bytes());
+    Ok(LessSafeKey::new(UnboundKey::from(prk.expand(&[epub], &CHACHA20_POLY1305).map_err(|_| "hkdf")?)))
+}
 fn name(names: &hmac::Key, path: &str) -> String { hex(hmac::sign(names, path.as_bytes()).as_ref()) }
 /// A record's (meta, data): `u32 BE meta_len || meta || data`. None when it is no record, its meta past MAX_META or
 /// past its end. The server lists and checks records with this too.
 pub fn split(record: &[u8]) -> Option<(&[u8], &[u8])> {
-    let n = u32::from_be_bytes(record.get(..4)?.try_into().ok()?) as usize;
+    let n = (u32::from_be_bytes(record.get(..4)?.try_into().ok()?) & ((1 << EPOCH_SHIFT) - 1)) as usize;
     if n > MAX_META { return None; }
     Some((record.get(4..4 + n)?, record.get(4 + n..)?))
 }
+/// The epoch of the key a record is sealed under (its header, bound into both seals).
+pub fn epoch(record: &[u8]) -> Option<u32> { Some(u32::from_be_bytes(record.get(..4)?.try_into().ok()?) >> EPOCH_SHIFT) }
 /// nonce (12) || ciphertext+tag, a fresh random nonce every time.
 fn seal(key: &LessSafeKey, aad: &[u8], plain: &[u8]) -> Result<Vec<u8>, String> {
     let mut nonce = [0u8; 12];
@@ -115,15 +233,24 @@ fn invite_key(secret_hex: &str) -> Result<LessSafeKey, String> {
     let prk = hkdf::Salt::new(hkdf::HKDF_SHA256, INVITE_SALT).extract(&secret);
     Ok(LessSafeKey::new(UnboundKey::from(prk.expand(&[b"wrap"], &CHACHA20_POLY1305).unwrap())))
 }
-/// The vault key sealed for an invite: hex(nonce || ciphertext+tag) under the link's secret, bound to the vault id.
-pub fn wrap(key: &VaultKey, secret_hex: &str, vault: &str) -> Result<String, String> {
-    Ok(hex(&seal(&invite_key(secret_hex)?, format!("invite:{vault}").as_bytes(), &key.raw)?))
+/// The vault's keys sealed for an invite: hex(nonce || ciphertext+tag) under the link's secret, bound to the vault id.
+/// Before any rotation that is the one key's 32 bytes, as always (an older Relay can still join); after, every epoch's,
+/// `u32 BE epoch || key` each, so a new member reads what was sealed before it came.
+pub fn wrap(keys: &Keys, secret_hex: &str, vault: &str) -> Result<String, String> {
+    let plain: Vec<u8> = if keys.ring.len() == 1 { keys.first().raw.to_vec() } else { keys.ring.iter().flat_map(|(e, k)| [&e.to_be_bytes()[..], &k.raw[..]].concat()).collect() };
+    Ok(hex(&seal(&invite_key(secret_hex)?, format!("invite:{vault}").as_bytes(), &plain)?))
 }
-/// The vault key back from an invite; refused for another secret, another vault or a changed byte.
-pub fn unwrap(wrapped_hex: &str, secret_hex: &str, vault: &str) -> Result<VaultKey, String> {
+/// The vault's keys back from an invite; refused for another secret, another vault or a changed byte.
+pub fn unwrap(wrapped_hex: &str, secret_hex: &str, vault: &str) -> Result<Keys, String> {
     let blob = unhex(wrapped_hex).ok_or("the wrapped key is not hex")?;
-    let key = open(&invite_key(secret_hex)?, format!("invite:{vault}").as_bytes(), &blob).ok_or("the invite does not open with this link")?;
-    key.try_into().map(VaultKey::new).map_err(|_| "the wrapped key is not a vault key".into())
+    let plain = open(&invite_key(secret_hex)?, format!("invite:{vault}").as_bytes(), &blob).ok_or("the invite does not open with this link")?;
+    let bad = || "the wrapped key is not a vault key".to_string();
+    if plain.len() == 32 { return Ok(Keys::from(VaultKey::new(plain.try_into().unwrap()))); }
+    if plain.is_empty() || plain.len() % 36 != 0 { return Err(bad()); }
+    let mut ring = BTreeMap::new();
+    for c in plain.chunks(36) { ring.insert(u32::from_be_bytes(c[..4].try_into().unwrap()), VaultKey::new(c[4..].try_into().unwrap())); }
+    if !ring.contains_key(&0) { return Err(bad()); }
+    Ok(Keys { ring, secret: None, pins: BTreeMap::new() })
 }
 
 /// One request to the server and its answer: the request line, the bytes after it, and at most how many bytes may
@@ -137,17 +264,21 @@ struct Seen { name: String, etag: String, hash: String, size: u64 }
 
 /// sync::Remote over a shared vault: encrypts on put, decrypts on get, maps the plaintext hashes sync::run plans
 /// with to the server's etags (cached from the last manifest).
-pub struct SealedRemote { vault: String, key: VaultKey, call: Call, seen: Mutex<HashMap<String, Seen>>, bad: Mutex<Vec<String>>, known: Mutex<HashMap<String, Entry>> }
+/// `state`: what the last manifest said besides the records (the vault's key epoch, whether a rotation is due, this
+/// member's role and registered public key), for `keep_keys`.
+pub struct SealedRemote { vault: String, keys: Mutex<Keys>, call: Call, seen: Mutex<HashMap<String, Seen>>, bad: Mutex<Vec<String>>, known: Mutex<HashMap<String, Entry>>, state: Mutex<Value> }
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> { m.lock().unwrap_or_else(|e| e.into_inner()) }
 impl SealedRemote {
-    pub(crate) fn new(vault: &str, key: VaultKey, call: Call) -> SealedRemote {
-        SealedRemote { vault: vault.into(), key, call, seen: Default::default(), bad: Default::default(), known: Default::default() }
+    pub(crate) fn new(vault: &str, keys: Keys, call: Call) -> SealedRemote {
+        SealedRemote { vault: vault.into(), keys: Mutex::new(keys), call, seen: Default::default(), bad: Default::default(), known: Default::default(), state: Default::default() }
     }
+    fn keys(&self) -> Keys { lock(&self.keys).clone() }
     /// The last round's base, so a record that will not open under a known path's name reads as that path unchanged:
     /// left out, it would read as deleted there and be deleted on every member's Mac. A new write over it still goes
     /// through (its etag is the broken record's).
     pub fn know(&self, base: &Manifest) {
-        *lock(&self.known) = base.values().map(|e| (self.key.name(&e.path), e.clone())).collect();
+        let k = self.keys();
+        *lock(&self.known) = base.values().map(|e| (k.name(&e.path), e.clone())).collect();
     }
     /// The records the last manifest could not open or that sit under another path's name (`name: why`). They stay out
     /// of the sync, so one broken record never stops it; a member with the key wrote them, or the server broke them.
@@ -165,15 +296,73 @@ impl SealedRemote {
         lock(&self.seen).insert(path.into(), Seen { name, etag: etag.into(), hash: sync::sha256_hex(data), size: data.len() as u64 });
     }
 }
+/// What `keep_keys` did: `keys` when they changed (to save), `waiting` the members a due rotation waits for.
+#[derive(Debug, Default)]
+pub struct KeyStep { pub keys: Option<Keys>, pub waiting: Vec<String> }
+impl SealedRemote {
+    /// After a round, from what its manifest said (docs/workspaces.md, Key rotation):
+    /// 1. the keys of epochs rotated since, each sealed to this member's public key, fetched and opened;
+    /// 2. this member's public key registered, vouched for under the newest key, again after every rotation;
+    /// 3. for an admin when a member left or was removed: a new key, sealed to every member left, made current. It
+    ///    waits (`waiting`) while a member has no public key vouched for under the current key, or one that differs
+    ///    from what this Mac pinned: a server or a removed member could have slipped its own in.
+    ///
+    /// The server makes a rotation current in one step, so an interrupted one never half happens; the admin's next
+    /// round does it again. A server that knows no rotation (older) answers no epoch, and nothing happens.
+    pub fn keep_keys(&self) -> Result<KeyStep, String> {
+        let st = lock(&self.state).clone();
+        let Some(server) = st["epoch"].as_u64().map(|e| e as u32) else { return Ok(KeyStep::default()) };
+        let (mut k, mut changed, mut waiting) = (self.keys(), false, vec![]);
+        let me = st["me"]["fp"].as_str().unwrap_or_default().to_string();
+        if k.secret.is_none() { k.public(); changed = true; }
+        let info = || -> Result<Value, String> { Ok((self.call)(json!({"op": "vault_info", "vault": self.vault}), None, None)?.0["vault"].take()) };
+        if server > k.epoch() {
+            let secret = k.secret.unwrap();
+            for (e, w) in info()?["keys"].as_object().cloned().unwrap_or_default() {
+                let Ok(e) = e.parse::<u32>() else { continue };
+                if k.get(e).is_none() { k.add(e, open_for(&secret, w.as_str().unwrap_or_default(), &self.vault, e, &me)?); changed = true; }
+            }
+        }
+        if k.epoch() == server {
+            let (pk, e) = (k.public(), k.epoch());
+            let mac = format!("{e}:{}", k.current().pk_mac(&self.vault, &me, &pk));
+            if st["me"]["pk"].as_str() != Some(&pk) || st["me"]["mac"].as_str() != Some(&mac) {
+                (self.call)(json!({"op": "vault_pk", "vault": self.vault, "pk": pk, "mac": mac}), None, None)?;
+            }
+            if st["rekey"].as_bool() == Some(true) && st["role"].as_str() == Some("admin") && e < MAX_EPOCH {
+                let (next, mut sealed) = (VaultKey::generate(), serde_json::Map::new());
+                for m in info()?["members"].as_array().cloned().unwrap_or_default() {
+                    let s = |f: &str| m[f].as_str().unwrap_or_default().to_string();
+                    let (fp, pk, mac) = (s("fp"), s("pk"), s("mac"));
+                    let vouched = !pk.is_empty() && mac == format!("{e}:{}", k.current().pk_mac(&self.vault, &fp, &pk));
+                    let pinned = k.pins.get(&fp).is_none_or(|p| *p == pk);
+                    match seal_for(&pk, &self.vault, e + 1, &fp, &next) {
+                        Ok(w) if vouched && pinned => { sealed.insert(fp.clone(), w.into()); k.pins.entry(fp).or_insert(pk); }
+                        _ => waiting.push(s("name")),
+                    }
+                }
+                if waiting.is_empty() {
+                    (self.call)(json!({"op": "vault_rotate", "vault": self.vault, "epoch": e + 1, "keys": sealed}), None, None)?;
+                    k.add(e + 1, next);
+                }
+                // the pins of this attempt stay, also when it waits
+                changed = true;
+            }
+        }
+        if changed { *lock(&self.keys) = k.clone(); }
+        Ok(KeyStep { keys: changed.then_some(k), waiting })
+    }
+}
 impl sync::Remote for SealedRemote {
     fn manifest(&self) -> Result<Manifest, String> {
         #[derive(Deserialize)]
-        struct Blob { name: String, etag: String, meta: String }
-        let (v, _) = (self.call)(json!({"op": "vault_manifest", "vault": self.vault}), None, None)?;
-        let blobs: Vec<Blob> = serde_json::from_value(v["blobs"].clone()).map_err(|e| format!("blobs: {e}"))?;
-        let (mut m, mut seen, mut bad) = (Manifest::new(), HashMap::new(), vec![]);
+        struct Blob { name: String, etag: String, meta: String, #[serde(default)] e: u32 }
+        let (mut v, _) = (self.call)(json!({"op": "vault_manifest", "vault": self.vault}), None, None)?;
+        let blobs: Vec<Blob> = serde_json::from_value(v["blobs"].take()).map_err(|e| format!("blobs: {e}"))?;
+        *lock(&self.state) = v;
+        let (k, mut m, mut seen, mut bad) = (self.keys(), Manifest::new(), HashMap::new(), vec![]);
         for b in blobs {
-            match unhex(&b.meta).ok_or_else(|| "meta is not hex".to_string()).and_then(|meta| self.key.open_meta(&b.name, &meta)) {
+            match unhex(&b.meta).ok_or_else(|| "meta is not hex".to_string()).and_then(|meta| k.open_meta(b.e, &b.name, &meta)) {
                 Ok(e) => { seen.insert(e.path.clone(), Seen { name: b.name, etag: b.etag, hash: e.hash.clone(), size: e.size }); m.insert(e.path.clone(), e); }
                 Err(why) => {
                     if let Some(e) = lock(&self.known).get(&b.name).cloned() {
@@ -191,7 +380,7 @@ impl sync::Remote for SealedRemote {
     fn get(&self, path: &str) -> Result<Vec<u8>, String> {
         let s = lock(&self.seen).get(path).cloned().ok_or("not in the manifest")?;
         let (_, rec) = (self.call)(json!({"op": "vault_get", "vault": self.vault, "name": s.name}), None, Some(MAX_RECORD))?;
-        let d = self.key.open_data(&s.name, &rec)?;
+        let d = self.keys().open_data(&s.name, &rec)?;
         // a meta that understates its content, to slip a big file past max_size: the hash alone would let it through
         if d.len() as u64 != s.size { return Err("remote content is not the size its manifest says".into()); }
         // a record changed since the manifest, or a meta and a content from two different records
@@ -199,18 +388,19 @@ impl sync::Remote for SealedRemote {
         Ok(d)
     }
     fn put(&self, path: &str, data: &[u8], mtime: i64, expect: &str) -> Result<(), String> {
-        let (x, rec, name) = (self.etag(path, expect)?, self.key.record(path, data, mtime)?, self.key.name(path));
+        let k = self.keys();
+        let (x, rec, name) = (self.etag(path, expect)?, k.record(path, data, mtime)?, k.name(path));
         let (v, _) = (self.call)(json!({"op": "vault_put", "vault": self.vault, "name": name, "len": rec.len(), "expect": x}), Some(rec), None)?;
         self.wrote(path, name, v["etag"].as_str().ok_or("no etag")?, data);
         Ok(())
     }
     fn put_many(&self, files: &[(String, Vec<u8>, i64, String)]) -> Result<Vec<Option<String>>, String> {
         let mut res: Vec<Option<String>> = vec![None; files.len()];
-        let (mut head, mut body, mut sent) = (vec![], vec![], vec![]);
+        let (k, mut head, mut body, mut sent) = (self.keys(), vec![], vec![], vec![]);
         for (i, (p, d, m, x)) in files.iter().enumerate() {
-            match self.etag(p, x).and_then(|x| Ok((x, self.key.record(p, d, *m)?))) {
+            match self.etag(p, x).and_then(|x| Ok((x, k.record(p, d, *m)?))) {
                 Ok((x, rec)) => {
-                    let name = self.key.name(p);
+                    let name = k.name(p);
                     head.push(json!({"name": name, "len": rec.len(), "expect": x}));
                     body.extend(rec);
                     sent.push((i, name));
@@ -232,7 +422,7 @@ impl sync::Remote for SealedRemote {
     }
     fn delete(&self, path: &str, hash: &str) -> Result<(), String> {
         let x = self.etag(path, hash)?;
-        let name = self.key.name(path);
+        let name = self.keys().name(path);
         (self.call)(json!({"op": "vault_delete", "vault": self.vault, "name": name, "expect": x}), None, None)?;
         lock(&self.seen).remove(path);
         Ok(())
@@ -293,7 +483,8 @@ mod tests {
     fn two_seals_differ() {
         let k = VaultKey::generate();
         assert_ne!(k.record("a.md", b"x", 1).unwrap(), k.record("a.md", b"x", 1).unwrap());
-        assert_ne!(wrap(&k, &"1".repeat(64), "0123456789abcdef").unwrap(), wrap(&k, &"1".repeat(64), "0123456789abcdef").unwrap());
+        let r = Keys::from(k.clone());
+        assert_ne!(wrap(&r, &"1".repeat(64), "0123456789abcdef").unwrap(), wrap(&r, &"1".repeat(64), "0123456789abcdef").unwrap());
     }
     #[test]
     fn names_are_stable_per_path_and_key() {
@@ -306,15 +497,80 @@ mod tests {
     }
     #[test]
     fn wrap_round_trip() {
-        let (k, secret, vault) = (VaultKey::generate(), crate::tls::random_key(), "0123456789abcdef");
+        let (k, secret, vault) = (Keys::from(VaultKey::generate()), crate::tls::random_key(), "0123456789abcdef");
         let w = wrap(&k, &secret, vault).unwrap();
-        assert_eq!(unwrap(&w, &secret, vault).unwrap().to_hex(), k.to_hex());
+        assert_eq!(unwrap(&w, &secret, vault).unwrap().format(), k.format());
         assert!(unwrap(&w, &crate::tls::random_key(), vault).is_err(), "another secret");
         assert!(unwrap(&w, &secret, "fedcba9876543210").is_err(), "another vault");
         let mut t = unhex(&w).unwrap();
         t[20] ^= 1;
         assert!(unwrap(&hex(&t), &secret, vault).is_err(), "a changed byte");
         assert!(unwrap("zz", &secret, vault).is_err() && wrap(&k, "short", vault).is_err());
+    }
+    #[test]
+    fn a_later_epoch_seals_under_its_own_key_and_keeps_the_names() {
+        let k0 = VaultKey::generate();
+        let mut keys = Keys::from(k0.clone());
+        let old = keys.record("a.md", b"old", 1).unwrap();
+        assert_eq!((epoch(&old), keys.epoch()), (Some(0), 0));
+        keys.add(1, VaultKey::generate());
+        let r = keys.record("a.md", b"new", 2).unwrap();
+        let n = keys.name("a.md");
+        assert_eq!((epoch(&r), n.clone()), (Some(1), k0.name("a.md")), "the name stays epoch 0's");
+        assert_eq!(keys.open_meta(1, &n, split(&r).unwrap().0).unwrap().size, 3);
+        assert_eq!((keys.open_data(&n, &r).unwrap(), keys.open_data(&n, &old).unwrap()), (b"new".to_vec(), b"old".to_vec()));
+        // epoch 0's key alone: the new record does not open, neither as epoch 0 nor with a header turned back
+        let only0 = Keys::from(k0.clone());
+        assert!(only0.open_data(&n, &r).unwrap_err().contains("not on this Mac"));
+        assert!(only0.open_meta(1, &n, split(&r).unwrap().0).is_err() && k0.open_meta(&n, split(&r).unwrap().0).is_err());
+        let mut back = r.clone();
+        back[0] &= 0x00;
+        back[1] &= 0x0f;
+        assert!(keys.open_data(&n, &back).is_err(), "the epoch is bound into the seal");
+        // frames too
+        let (e, f) = keys.seal_frame("0123456789abcdef", "update", &n, "aaaaaaaaaaaaaaaa", 1, b"hi").unwrap();
+        assert_eq!((e, keys.open_frame(1, "0123456789abcdef", "update", &n, "aaaaaaaaaaaaaaaa", 1, &f).unwrap()), (1, b"hi".to_vec()));
+        assert!(keys.open_frame(0, "0123456789abcdef", "update", &n, "aaaaaaaaaaaaaaaa", 1, &f).is_err() && only0.open_frame(1, "0123456789abcdef", "update", &n, "aaaaaaaaaaaaaaaa", 1, &f).is_err());
+    }
+    #[test]
+    fn a_rotated_key_opens_only_for_its_member() {
+        let (mut a, mut b) = (Keys::from(VaultKey::generate()), Keys::from(VaultKey::generate()));
+        let (pa, _) = (a.public(), b.public());
+        let next = VaultKey::generate();
+        let w = seal_for(&pa, "0123456789abcdef", 1, "fp-a", &next).unwrap();
+        assert_eq!(open_for(&a.secret.unwrap(), &w, "0123456789abcdef", 1, "fp-a").unwrap().to_hex(), next.to_hex());
+        assert!(open_for(&b.secret.unwrap(), &w, "0123456789abcdef", 1, "fp-a").is_err(), "another member's secret");
+        assert!(open_for(&a.secret.unwrap(), &w, "0123456789abcdef", 2, "fp-a").is_err(), "another epoch");
+        assert!(open_for(&a.secret.unwrap(), &w, "fedcba9876543210", 1, "fp-a").is_err(), "another vault");
+        assert!(open_for(&a.secret.unwrap(), &w, "0123456789abcdef", 1, "fp-b").is_err(), "filed for another member");
+        let mut t = unhex(&w).unwrap();
+        t[40] ^= 1;
+        assert!(open_for(&a.secret.unwrap(), &hex(&t), "0123456789abcdef", 1, "fp-a").is_err(), "a changed byte");
+        assert!(seal_for(&"00".repeat(32), "0123456789abcdef", 1, "fp-a", &next).is_err(), "a low-order key");
+        // the vouching mac binds the vault, the member and its key
+        let k = a.current().clone();
+        let m = k.pk_mac("v", "fp-a", &pa);
+        assert!(m != k.pk_mac("v", "fp-b", &pa) && m != k.pk_mac("w", "fp-a", &pa) && m != VaultKey::generate().pk_mac("v", "fp-a", &pa));
+    }
+    #[test]
+    fn the_key_file_and_an_invite_carry_every_epoch() {
+        let mut keys = Keys::from(VaultKey::generate());
+        // before any rotation: the file is the one hex line it always was, the invite the 32 bytes it always was
+        assert_eq!(keys.format().lines().count(), 1);
+        assert_eq!(Keys::parse(&keys.format()).unwrap().format(), keys.format());
+        let (secret, vault) = (crate::tls::random_key(), "0123456789abcdef");
+        let plain = open(&invite_key(&secret).unwrap(), format!("invite:{vault}").as_bytes(), &unhex(&wrap(&keys, &secret, vault).unwrap()).unwrap()).unwrap();
+        assert_eq!(plain.len(), 32);
+        keys.add(1, VaultKey::generate());
+        keys.add(2, VaultKey::generate());
+        keys.public();
+        keys.pins.insert("f".repeat(64), "a".repeat(64));
+        let back = Keys::parse(&keys.format()).unwrap();
+        assert_eq!((back.format(), back.epoch(), back.secret), (keys.format(), 2, keys.secret));
+        let joined = unwrap(&wrap(&keys, &secret, vault).unwrap(), &secret, vault).unwrap();
+        assert_eq!((joined.epoch(), joined.get(1).unwrap().to_hex(), joined.name("x.md")), (2, keys.get(1).unwrap().to_hex(), keys.name("x.md")));
+        assert!(joined.secret.is_none() && joined.pins.is_empty(), "a joiner makes its own secret, pins nothing yet");
+        for bad in ["", "zz", &format!("{}\n0 {}", "a".repeat(64), "b".repeat(64)), &format!("{}\nwhat is this", "a".repeat(64))] { assert!(Keys::parse(bad).is_none(), "{bad}"); }
     }
     #[test]
     fn from_hex_cases() {
@@ -347,7 +603,7 @@ mod tests {
                 "vault_manifest" => {
                     let blobs: Vec<Value> = lock(&self.blobs).iter().map(|(n, r)| {
                         let meta = split(r).map(|(m, _)| hex(m)).unwrap_or_default();
-                        json!({"name": n, "etag": sync::sha256_hex(r), "size": r.len(), "meta": meta})
+                        json!({"name": n, "etag": sync::sha256_hex(r), "size": r.len(), "meta": meta, "e": epoch(r).unwrap_or(0)})
                     }).collect();
                     Ok((json!({"ok": true, "blobs": blobs}), vec![]))
                 }
@@ -377,7 +633,7 @@ mod tests {
     }
     fn sealed(srv: &Arc<Server>, key: &VaultKey) -> SealedRemote {
         let srv = srv.clone();
-        SealedRemote::new("0123456789abcdef", key.clone(), Box::new(move |req, body, _| srv.answer(req, body)))
+        SealedRemote::new("0123456789abcdef", key.clone().into(), Box::new(move |req, body, _| srv.answer(req, body)))
     }
 
     struct Tmp(PathBuf);

@@ -888,17 +888,17 @@ fn a_shared_vault_invite_join_and_walls() {
 #[test]
 fn two_macs_share_a_vault_through_the_server() {
     use relay_remote::sync::{self, Filter, Guard, Mode, Walker};
-    use relay_remote::vault::VaultKey;
+    use relay_remote::vault::{Keys, VaultKey};
     let s = start("vaultsync");
     let lid = device("share-laptop");
     let (l, _) = client::pair(&pair_line(&s), &lid, "laptop").unwrap();
     let laptop = Client::new(&l.host, l.port, &l.fp, lid);
     let vault = laptop.vault_create("Team").unwrap().id;
-    let key = VaultKey::generate();
+    let key = Keys::from(VaultKey::generate());
     let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
     let cid = device("share-colleague");
     let (line, joined, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
-    assert_eq!((joined.id.as_str(), joined.role.as_str(), theirs.to_hex()), (vault.as_str(), "member", key.to_hex()));
+    assert_eq!((joined.id.as_str(), joined.role.as_str(), theirs.format()), (vault.as_str(), "member", key.format()));
     let colleague = Client::new(&line.host, line.port, &line.fp, cid.clone());
     assert!(client::vault_join(&link, &device("share-late"), "late").is_err(), "a link works once");
 
@@ -906,7 +906,7 @@ fn two_macs_share_a_vault_through_the_server() {
     let (a, b) = (dir("a"), dir("b"));
     let keep = |_: &str, _: &[u8]| Ok(());
     let guard = Guard { allow_deletes: false, allowed: &[], keep: &keep };
-    let round = |c: &Client, k: &VaultKey, root: &std::path::Path, base: &mut sync::Manifest, w: &mut Walker| {
+    let round = |c: &Client, k: &Keys, root: &std::path::Path, base: &mut sync::Manifest, w: &mut Walker| {
         let (next, r) = sync::run(Mode::TwoWay, root, base, w, &Filter::vault_default(), &c.sealed(&vault, k.clone()), &|p| sync::conflict_copy(p, "mac", "now"), &|_| false, &guard, &|_, _| {});
         *base = next;
         r
@@ -956,7 +956,7 @@ fn two_macs_share_a_vault_through_the_server() {
 #[test]
 fn a_shared_vaults_live_channel() {
     use relay_remote::channel::{Channel, Event};
-    use relay_remote::vault::VaultKey;
+    use relay_remote::vault::{Keys, VaultKey};
     use serde_json::json;
     use std::sync::mpsc;
     let s = start("channel");
@@ -964,7 +964,7 @@ fn a_shared_vaults_live_channel() {
     let (l, _) = client::pair(&pair_line(&s), &lid, "laptop").unwrap();
     let laptop = Client::new(&l.host, l.port, &l.fp, lid.clone());
     let vault = laptop.vault_create("Team").unwrap().id;
-    let key = VaultKey::generate();
+    let key = Keys::from(VaultKey::generate());
     let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
     let cid = device("chan-colleague");
     let (line, _, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
@@ -980,7 +980,7 @@ fn a_shared_vaults_live_channel() {
 
     // a raw stream read below never waits forever: shut after 10 s, the read returns and the test fails instead
     let deadline = |w: &relay_remote::tls::Writer| { let w = w.clone(); std::thread::spawn(move || { std::thread::sleep(Duration::from_secs(10)); w.shutdown(); }); };
-    let chan = |c: &Client, k: &VaultKey| {
+    let chan = |c: &Client, k: &Keys| {
         let (tx, rx) = mpsc::channel();
         let ch = Channel::start(c.clone(), &vault, k.clone(), move |e| { tx.send(e).ok(); });
         (ch, rx)
@@ -1061,16 +1061,100 @@ fn a_shared_vaults_live_channel() {
 }
 
 
+/// Key rotation with the app's own calls against the real binary (docs/workspaces.md, Key rotation): a third member is
+/// removed, the rotation waits for a member whose Relay registered no public key yet, then the admin's next round
+/// rotates. An admin that stops right after the server took the rotation gets its own new key back from the server.
+/// The colleague, offline meanwhile, is refused with the old key, fetches the new one and goes on. The removed member
+/// cannot open what is written after, neither from the server (refused) nor from the server's disk.
+#[test]
+fn a_removed_member_reads_nothing_written_after_the_key_changes() {
+    use relay_remote::sync::Remote;
+    use relay_remote::vault::{epoch, Keys, SealedRemote};
+    let t = team("rotate");
+    let l = client::pair(&pair_line(&t.s), &device("rotate-unused"), "unused").map(|(l, _)| l).unwrap();
+    let (link, _) = t.laptop.vault_invite(&t.vault, "member", &t.key, &l.host, l.port).unwrap();
+    let did = device("rotate-third");
+    let (line, _, mut kc) = client::vault_join(&link, &did, "third").unwrap();
+    let third = Client::new(&line.host, line.port, &line.fp, did.clone());
+    // the colleague's keys as its join gave them: the same key 0
+    let (mut ka, mut kb) = (t.key.clone(), t.key.clone());
+    // one round's key step: the manifest, then keep_keys; the keys saved as the app saves them
+    let step = |c: &Client, k: &mut Keys| -> (SealedRemote, Vec<String>) {
+        let r = c.sealed(&t.vault, Keys::parse(&k.format()).unwrap());
+        r.manifest().unwrap();
+        let st = r.keep_keys().unwrap();
+        if let Some(n) = st.keys { *k = n; }
+        (r, st.waiting)
+    };
+    step(&t.laptop, &mut ka);
+    step(&third, &mut kc);
+    let info = || t.laptop.call(serde_json::json!({"op": "vault_info", "vault": t.vault})).unwrap()["vault"].clone();
+    let pk_of = |fp: &str| info()["members"].as_array().unwrap().iter().find(|m| m["fp"] == fp).unwrap()["pk"].as_str().unwrap().to_string();
+    assert_eq!(pk_of(&t.lid.fingerprint()), ka.public(), "registered");
+    assert_eq!(pk_of(&t.cid.fingerprint()), "", "the colleague's Relay has not been round yet");
+
+    t.laptop.vault_remove(&t.vault, &did.fingerprint()).unwrap();
+    // the colleague has no public key yet: the rotation waits for it, by name
+    let (_, waiting) = step(&t.laptop, &mut ka);
+    assert_eq!((waiting, ka.epoch()), (vec!["colleague".to_string()], 0));
+    step(&t.colleague, &mut kb);
+    // the admin's round now rotates; it stops before it saves its new key (that copy is dropped)
+    let mut lost = ka.clone();
+    let (_, waiting) = step(&t.laptop, &mut lost);
+    assert_eq!((waiting.len(), lost.epoch()), (0, 1));
+    assert_eq!((info()["epoch"].as_u64(), info()["rekey"].as_bool()), (Some(1), Some(false)));
+    // restarted with the key file as it was: the next round gets the new key back, sealed to itself
+    step(&t.laptop, &mut ka);
+    assert_eq!(ka.get(1).unwrap().to_hex(), lost.get(1).unwrap().to_hex());
+
+    // the admin writes under the new key
+    let a = t.laptop.sealed(&t.vault, ka.clone());
+    a.manifest().unwrap();
+    a.put("Projects/Plan.md", b"after the key changed", 5, "").unwrap();
+    // the colleague, still on key 0 (offline during the rotation): its write is refused, its round fetches the key
+    let b = t.colleague.sealed(&t.vault, kb.clone());
+    b.manifest().unwrap();
+    assert_eq!(b.put("notes.md", b"from b", 6, "").unwrap_err(), "key changed");
+    let (b, _) = step(&t.colleague, &mut kb);
+    assert_eq!(kb.epoch(), 1);
+    let b2 = t.colleague.sealed(&t.vault, kb.clone());
+    assert_eq!(b2.manifest().unwrap().keys().collect::<Vec<_>>(), ["Projects/Plan.md"]);
+    assert_eq!(b2.get("Projects/Plan.md").unwrap(), b"after the key changed");
+    b2.put("notes.md", b"from b", 6, "").unwrap();
+    drop(b);
+
+    // the removed member: refused by the server, and the record on the server's disk does not open with what it holds
+    assert!(third.sealed(&t.vault, kc.clone()).manifest().is_err());
+    let blob = std::fs::read(t.s.data.join("vaults").join(&t.vault).join("blobs").join(ka.name("Projects/Plan.md"))).unwrap();
+    assert_eq!(epoch(&blob), Some(1));
+    assert!(kc.open_data(&ka.name("Projects/Plan.md"), &blob).unwrap_err().contains("not on this Mac"));
+    assert!(kc.public().len() == 64 && kc.get(1).is_none());
+
+    // the live channel: frames under the new key reach who holds it, not a channel still on key 0
+    let (ca, _) = events(&t.laptop, &t.vault, &ka);
+    let (_cb, rb) = events(&t.colleague, &t.vault, &kb);
+    let (_old, ro) = events(&t.colleague, &t.vault, &t.key);
+    for rx in [&rb, &ro] { wait_for(rx, 10, |e| matches!(e, relay_remote::channel::Event::Live { .. })); }
+    std::thread::sleep(Duration::from_millis(300));
+    ca.send("update", &"d".repeat(64), b"new epoch").unwrap();
+    match wait_for(&rb, 10, |e| matches!(e, relay_remote::channel::Event::Frame(_))) {
+        relay_remote::channel::Event::Frame(f) => assert_eq!(f.body, b"new epoch"),
+        _ => unreachable!(),
+    }
+    assert!(ro.recv_timeout(Duration::from_secs(2)).map(|e| !matches!(e, relay_remote::channel::Event::Frame(_))).unwrap_or(true), "the old key cannot open it");
+    ca.stop();
+}
+
 /// A team for the live channel tests: the laptop (admin) and a colleague who joined with a link, and the vault key.
-struct Team { s: Server, laptop: Client, lid: Identity, colleague: Client, cid: Identity, vault: String, key: relay_remote::vault::VaultKey }
+struct Team { s: Server, laptop: Client, lid: Identity, colleague: Client, cid: Identity, vault: String, key: relay_remote::vault::Keys }
 fn team(tag: &str) -> Team {
-    use relay_remote::vault::VaultKey;
+    use relay_remote::vault::{Keys, VaultKey};
     let s = start(tag);
     let lid = device(&format!("{tag}-laptop"));
     let (l, _) = client::pair(&pair_line(&s), &lid, "laptop").unwrap();
     let laptop = Client::new(&l.host, l.port, &l.fp, lid.clone());
     let vault = laptop.vault_create("Team").unwrap().id;
-    let key = VaultKey::generate();
+    let key = Keys::from(VaultKey::generate());
     let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
     let cid = device(&format!("{tag}-colleague"));
     let (line, _, _) = client::vault_join(&link, &cid, "colleague").unwrap();
@@ -1089,7 +1173,7 @@ fn drain(r: &mut impl BufRead) -> (usize, String) {
         match v["t"].as_str() { Some("frame") => frames += 1, Some("bye") => return (frames, v["why"].as_str().unwrap_or("").into()), _ => {} }
     }
 }
-fn events(c: &Client, vault: &str, key: &relay_remote::vault::VaultKey) -> (relay_remote::channel::Channel, std::sync::mpsc::Receiver<relay_remote::channel::Event>) {
+fn events(c: &Client, vault: &str, key: &relay_remote::vault::Keys) -> (relay_remote::channel::Channel, std::sync::mpsc::Receiver<relay_remote::channel::Event>) {
     let (tx, rx) = std::sync::mpsc::channel();
     (relay_remote::channel::Channel::start(c.clone(), vault, key.clone(), move |e| { tx.send(e).ok(); }), rx)
 }
@@ -1168,7 +1252,7 @@ fn a_live_channel_walls() {
     wait_for(&ra, 10, |e| matches!(e, Event::Live { .. }));
     let (_, _r2, mut w2) = t.colleague.vault_stream(&t.vault, 0, "").unwrap();
     let me = &t.cid.fingerprint()[..16];
-    let frame = |n: u64, body: &[u8], from: &str| format!("{}\n", json!({"t": "frame", "kind": "update", "doc": doc, "n": n, "body": hex(&t.key.seal_frame(&t.vault, "update", &doc, from, n, body).unwrap())}));
+    let frame = |n: u64, body: &[u8], from: &str| format!("{}\n", json!({"t": "frame", "kind": "update", "doc": doc, "n": n, "body": hex(&t.key.seal_frame(&t.vault, "update", &doc, from, n, body).unwrap().1)}));
     w2.write_all(frame(5, b"once", me).as_bytes()).unwrap();
     w2.write_all(frame(5, b"once", me).as_bytes()).unwrap();
     w2.write_all(frame(4, b"older", me).as_bytes()).unwrap();

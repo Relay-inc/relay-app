@@ -233,7 +233,7 @@ fn read_frames(vaults: &Vaults, fp: &str, id: &str, me: u64, heard: &AtomicU64, 
         if body.len() > MAX_BODY * 2 || body.len() % 2 != 0 || !body.bytes().all(|b| b.is_ascii_hexdigit()) { return Err("frame too big or not hex".into()); }
         // `from`: the sender's device as the TLS handshake proved it; the app binds it in the seal, so the server
         // cannot pass a frame off as another member's (a member, holding the key, could)
-        let mut out = json!({"t": "frame", "seq": 0, "from": &fp[..16], "kind": kind, "doc": doc, "n": n, "body": body});
+        let mut out = json!({"t": "frame", "seq": 0, "from": &fp[..16], "e": v["e"].as_u64().unwrap_or(0), "kind": kind, "doc": doc, "n": n, "body": body});
         let full = {
             let mut all = rooms.rooms.lock().unwrap();
             let Some(room) = all.get_mut(id) else { return Ok(()) };

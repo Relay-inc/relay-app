@@ -1036,6 +1036,8 @@ export default {
   "set.sharedCounts": "{sent} envoyés, {received} reçus",
   "set.sharedBad_one": "{n} fichier là-bas ne s'ouvre pas avec cette clé.",
   "set.sharedBad_other": "{n} fichiers là-bas ne s'ouvrent pas avec cette clé.",
+  "set.sharedRekeyWaits":
+    "Quelqu'un est parti, la clé change donc. Elle attend que {names} mette Relay à jour et l'ouvre une fois.",
   "set.sharedConflicts_one": "{n} conflit. Les deux versions sont gardées :",
   "set.sharedConflicts_other": "{n} conflits. Les deux versions sont gardées :",
   "set.sharedHeld_one":

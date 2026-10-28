@@ -6,7 +6,7 @@
 
 use crate::client::Client;
 use crate::tls::{self, hex, unhex};
-use crate::vault::VaultKey;
+use crate::vault::Keys;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
@@ -45,7 +45,7 @@ pub enum Event {
 type On = Box<dyn Fn(Event) + Send + Sync>;
 
 struct Inner {
-    client: Client, vault: String, key: VaultKey, me: String, on: On,
+    client: Client, vault: String, key: Keys, me: String, on: On,
     n: AtomicU64, w: Mutex<Option<tls::Writer>>, live: AtomicBool, stop: AtomicBool,
     /// the last `n` seen per (sender, doc, kind): a frame the server plays again is dropped
     last: Mutex<HashMap<(String, String, String), u64>>,
@@ -55,7 +55,8 @@ pub struct Channel(Arc<Inner>);
 
 impl Channel {
     /// Start keeping vault `vault`'s stream open on `client`'s server, on a thread of its own, until `stop`.
-    pub fn start(client: Client, vault: &str, key: VaultKey, on: impl Fn(Event) + Send + Sync + 'static) -> Channel {
+    pub fn start(client: Client, vault: &str, key: impl Into<Keys>, on: impl Fn(Event) + Send + Sync + 'static) -> Channel {
+        let key = key.into();
         let me = client.me()[..16].to_string();
         // the counter starts at the time, so frames of a restarted app never repeat an `n` of before
         let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_micros() as u64);
@@ -77,9 +78,10 @@ impl Channel {
     pub fn send(&self, kind: &str, doc: &str, plain: &[u8]) -> Result<(), String> {
         let i = &self.0;
         let n = i.n.fetch_add(1, Ordering::SeqCst);
-        let body = i.key.seal_frame(&i.vault, kind, doc, &i.me, n, plain)?;
+        // under the newest key here; its epoch goes along so the others open it with the same one
+        let (e, body) = i.key.seal_frame(&i.vault, kind, doc, &i.me, n, plain)?;
         if body.len() > MAX_BODY { return Err("frame too big".into()); }
-        let line = json!({"t": "frame", "kind": kind, "doc": doc, "n": n, "body": hex(&body)}).to_string() + "\n";
+        let line = json!({"t": "frame", "e": e, "kind": kind, "doc": doc, "n": n, "body": hex(&body)}).to_string() + "\n";
         let mut w = i.w.lock().unwrap().clone().ok_or("not connected")?;
         w.write_all(line.as_bytes()).map_err(|e| e.to_string())
     }
@@ -144,7 +146,7 @@ impl Channel {
                     // never this device's own (reflected back), never one it saw already (played again)
                     if from == i.me { continue; }
                     // one that does not open (another key, tampered with) is dropped, not passed on
-                    let Some(body) = v["body"].as_str().and_then(unhex).and_then(|b| i.key.open_frame(&i.vault, kind, doc, from, n, &b).ok()) else { continue };
+                    let Some(body) = v["body"].as_str().and_then(unhex).and_then(|b| i.key.open_frame(v["e"].as_u64().unwrap_or(0) as u32, &i.vault, kind, doc, from, n, &b).ok()) else { continue };
                     {
                         let mut last = i.last.lock().unwrap();
                         let seen = last.entry((from.into(), doc.into(), kind.into())).or_insert(0);

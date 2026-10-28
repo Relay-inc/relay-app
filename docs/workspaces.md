@@ -53,8 +53,9 @@ forge or move one: the seal binds the workspace, the kind, the record name, the 
 counter, and Relay drops a frame it saw already (by that counter) and one that claims to be its own. That guarantee is
 against the server only: every member holds the same key, so a member could seal a frame in another member's name.
 
-**Removing a member** stops their device at the server at once, and closes their live stream. They keep what they synced and the key: v1 has no key
-rotation (it needs a static X25519 key per device, `ring` has only ephemeral agreement).
+**Removing a member** stops their device at the server at once, and closes their live stream. They keep what they
+synced and the keys they had, so the key changes (Key rotation, below): what is written after the change does not open
+with what they hold, also not for whoever gets the server's disk. What they had before stays readable to them.
 
 **The fence is a guard, not a sandbox.** It keeps a conversation in its workspace and Claude Code's file tools and file
 commands out of your vault and the other workspaces. It is not a boundary against a member who sets out to reach your
@@ -124,7 +125,7 @@ Handshake: a device is accepted when it is in `clients.json`, or a pairing code 
 
 A device that came in through an invite is a *vault-only* client (`Client.vaults_only = true`): it may only send
 `VAULT_OPS` = `pair` (a code from the owner makes it a full device), `vault_info`, `vault_invite`, `vault_invite_revoke`, `vault_join`, `vault_remove`,
-`vault_manifest`, `vault_get`, `vault_put`, `vault_put_many`, `vault_delete`, `vault_stream`. It never runs agents, reads a mirror or pairs
+`vault_manifest`, `vault_get`, `vault_put`, `vault_put_many`, `vault_delete`, `vault_stream`, `vault_pk`, `vault_rotate`. It never runs agents, reads a mirror or pairs
 further devices. While it is admin of a vault here it also gets `KEEPER_OPS` = `info` (the server's paths and version)
 and `update` (with `signature`, the release's `.sig` of the binary), nothing more. A linked device (a phone) gets no vault ops.
 
@@ -134,19 +135,22 @@ blob name 64 lowercase hex. Anything else is refused.
 | Request | Who | Reply |
 |---|---|---|
 | `vault_create {name}` | a full device (not vaults_only, not linked) | `{vault: {id, name}}`, the caller is its admin |
-| `vault_info {vault}` | member | `{vault: {id, name, role, members: [{name, fp, role, added}], invites: [{id, role, expires}]}}`, invites only for admins (else `[]`) |
-| `vault_invite {vault, role, wrapped}` | admin | `{invite: {id, code, expires}}`, `role` admin or member, `wrapped` hex at most 512 chars, expires in 24 h |
+| `vault_info {vault}` | member | `{vault: {id, name, role, members: [{name, fp, role, added, pk, mac}], invites: [{id, role, expires}], epoch, rekey, keys: {epoch: sealed}}}`, invites only for admins (else `[]`), `keys` only the caller's |
+| `vault_invite {vault, role, wrapped}` | admin | `{invite: {id, code, expires}}`, `role` admin or member, `wrapped` hex at most 8192 chars, expires in 24 h |
 | `vault_invite_revoke {vault, invite}` | admin | `{}` |
 | `vault_join {vault, invite, name, proof}` | anyone with a valid link | `{vault: {id, name}, role, wrapped}`, `proof` = `tls::proof(code, client_fp, server_fp)`, 5 wrong proofs drop the invite, success consumes it, adds the device to `clients.json` as vaults_only when it is new (name deduplicated as in `pair`) and as a member |
-| `vault_remove {vault, fp}` | admin, or the member itself (leave) | `{}`, refused when it would leave members without an admin, a vaults_only client with no vault left is removed from `clients.json` |
-| `vault_manifest {vault}` | member | `{blobs: [{name, etag, size, meta}]}`, `meta` hex of the record's meta part, `etag` sha256 hex of the whole record file, `size` its bytes |
+| `vault_remove {vault, fp}` | admin, or the member itself (leave) | `{}`, refused when it would leave members without an admin, a vaults_only client with no vault left is removed from `clients.json`; sets `rekey` |
+| `vault_manifest {vault}` | member | `{blobs: [{name, etag, size, meta, e}], epoch, rekey, role, me: {fp, pk, mac}}`, `meta` hex of the record's meta part, `etag` sha256 hex of the whole record file, `size` its bytes, `e` the epoch in its header |
 | `vault_get {vault, name}` | member | reply line `{ok, len, etag}`, then `len` bytes: the record |
 | `vault_put {vault, name, len, expect}` + `len` bytes | member | `{etag}`, written only if the current record's etag is `expect` (`""`: it must not exist), else `changed meanwhile` |
 | `vault_put_many {vault, files: [{name, len, expect}]}` + the bodies one after the other | member | `{etags: {name: etag}, errors: {name: why}}` |
 | `vault_delete {vault, name, expect}` | member | `{}`, only if the current etag is `expect`, else `changed meanwhile` |
 | `vault_stream {vault, v, since, epoch}` | member | stays open, see Live channel |
+| `vault_pk {vault, pk, mac}` | member, for itself | `{}`, `pk` 64 hex, `mac` `<epoch>:<64 hex>` |
+| `vault_rotate {vault, epoch, keys: {fp: sealed}}` | admin | `{epoch}`, only the next epoch, a sealed key for every member and nobody else; clears `rekey` and every open invite |
 
-`revoke` of a client also removes its memberships.
+A `vault_put` (and each file of `vault_put_many`) under another epoch than the current one is refused: `key changed`
+for an older one, `no such key epoch` for a newer one. `revoke` of a client also removes its memberships and sets `rekey`.
 
 ## Live channel
 
@@ -164,13 +168,14 @@ Relay never asks and keeps its rounds.
 - **App to server:** `{"t": "frame", "kind", "doc", "n", "body"}` and `{"t": "ping"}`. `kind` `update` or `awareness`,
   `doc` a record name (64 hex), `n` the sender's own counter (it starts at the time in µs, so it never repeats), `body`
   hex of the sealed frame, at most 256 KiB sealed.
-- **Server to app:** `{"t": "frame", "seq", "from", "kind", "doc", "n", "body"}`, `{"t": "ping"}` every 15 s and
+- **Server to app:** `{"t": "frame", "seq", "from", "e", "kind", "doc", "n", "body"}`, `{"t": "ping"}` every 15 s and
   `{"t": "bye", "why"}` before it closes. `from` is the first 16 hex of the sender's certificate fingerprint, from the
   handshake. An update gets the next `seq` of its workspace, an awareness frame `seq` 0. A sender never gets its own;
   Relay also drops a frame whose `from` is its own device, and one whose `n` is not above the last it took from that
   sender for that document and kind.
 - **Seal:** `nonce (12) || ChaCha20-Poly1305(enc_key, aad = "frame:" + vault + ":" + kind + ":" + doc + ":" + from + ":" + n,
-  plaintext)`. A frame that does not open is dropped.
+  plaintext)`, under the sender's newest key; after a rotation `e` names that key's epoch and the aad starts with
+  `"frame:" + e + ":"`. A frame that does not open (a key this Mac does not hold yet, or tampered with) is dropped.
 - **Members:** checked when the stream opens and on every frame, against the workspace's members as vault.json last
   said (re-read when it changes, every 2 s by the workspace's one checker). A removal by an admin closes the stream at
   once, a `revoke` by the CLI (another process) within 2 s.
@@ -193,13 +198,16 @@ the compare-and-swap holds. A record at most `mirror::MAX_FILE` plus 64 KiB.
 
 ## Record
 
-`u32 big endian meta_len || meta (meta_len bytes, at most 64 KiB) || data`
+`u32 big endian (meta_len | epoch << 20) || meta (meta_len bytes, at most 64 KiB) || data`
 
 - `meta` = `nonce (12) || ChaCha20-Poly1305(enc_key, aad = "meta:" + name, JSON {"p": path, "h": sha256 hex of the
   plaintext, "s": plaintext size, "m": mtime})`
 - `data` = `nonce (12) || ChaCha20-Poly1305(enc_key, aad = "data:" + name, plaintext)`
 
-The server only parses `meta_len` (to list `meta` in the manifest) and checks it fits the record.
+`enc_key` is the key of the record's epoch. From epoch 1 on the aads are `"meta:" + epoch + ":" + name` and
+`"data:" + epoch + ":" + name`, so the epoch in the header is bound into both seals. Epoch 0 is how every record was
+before rotation existed: its header is the plain `meta_len`. The server parses `meta_len` (to list `meta` in the
+manifest) and the epoch (to refuse a write under an old key), and checks it fits the record.
 
 ## Keys
 
@@ -207,8 +215,40 @@ The server only parses `meta_len` (to list `meta` in the manifest) and checks it
   `name` (HMAC-SHA256). `name(path)` = hex HMAC(name, path).
 - Invite: the link secret is 32 random bytes. HKDF-SHA256 with salt `relay vault invite v1` and info `wrap` derives a
   ChaCha20-Poly1305 key, and `wrapped` = hex(`nonce || seal(aad = "invite:" + vault id, vault key)`).
-- On the Mac the workspace key lives in Relay's data folder as `shared-<id>.key` (hex, 0600), like the mirror keys. It
-  is also the recovery key Relay shows when the workspace is made, and again on its row in Settings › Machines.
+- On the Mac the workspace's keys live in Relay's data folder as `shared-<id>.key` (0600), like the mirror keys:
+  epoch 0's key in hex on the first line (before any rotation that is the whole file, as it always was), then
+  `<epoch> <hex>` per later key, `secret <hex>` (this member's X25519 secret) and `pin <fp> <public key>`. The keys
+  alone are the recovery key Relay shows when the workspace is made, and again on its row in Settings › Machines.
+- An invite after a rotation carries every epoch's key (`u32 BE epoch || key` each), so a new member reads what was
+  written before it came; before any rotation it is the one key's 32 bytes, as always.
+
+## Key rotation
+
+Removing a member, a member leaving, or `revoke` sets `rekey` on the workspace. The next round of an admin's Relay
+rotates: a new random workspace key, epoch + 1, sealed to every member left, made current by `vault_rotate` in one step.
+
+- **Each member's public key.** Every Relay makes an X25519 key per workspace (`secret` in its key file) and registers
+  the public half with `vault_pk`, vouched for with `mac` = `epoch:` + hex HMAC-SHA256(auth key of that epoch,
+  `"pk:" + vault + ":" + fp + ":" + pk`) (HKDF info `auth`). It registers again after every rotation, under the new key.
+- **Sealed to each member:** `hex(ephemeral X25519 public (32) || nonce (12) || ChaCha20-Poly1305(k, aad = "rekey:" +
+  vault + ":" + epoch + ":" + fp, new key))`, `k` = HKDF-SHA256(salt `relay vault rekey v1`, the X25519 shared point,
+  info the ephemeral public key). A low-order public key is refused.
+- **Who it waits for.** The admin's Relay seals only to a public key vouched for under the current key, and one that
+  matches what it pinned for that member at an earlier rotation. A member with neither (a Relay that predates rotation,
+  or one not opened since the last rotation) holds it up; Settings › Machines names them, and the workspace keeps
+  working on the old key meanwhile.
+- **Interrupted.** `vault_rotate` is one write on the server: a rotation happened or it did not. An admin that stops
+  after the server took it but before it saved the key gets it back on its next round, sealed to itself like everyone.
+- **The others.** A member's round sees the new epoch in the manifest and fetches its sealed key (`vault_info.keys`). A
+  write it made meanwhile under the old key is refused (`key changed`) and goes through on the next round. Its live
+  channel starts again with the new key.
+- **Names stay.** Record names stay HMACs under epoch 0's naming key: renaming every record would rewrite the whole
+  workspace, and a removed member who gets the server's disk learns only whether a path it guesses exists.
+- **Nothing is sealed again.** Records written before the rotation stay under their old key: the removed member had
+  read them already. A new member gets every epoch's key in its invite.
+- **What it does not cover.** A server that colludes with a removed member at the first rotation after the removal
+  could slip in its own public key for a member: that member's vouching mac is under a key the removed member still
+  holds. Pins catch it from the next rotation on.
 
 ## Invite link
 

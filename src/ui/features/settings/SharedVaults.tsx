@@ -150,6 +150,10 @@ function SharedRow({ vault }: { vault: SharedVault }) {
               </StatusLine>
             ))}
             {status.bad ? <StatusLine level="warn">{tn("set.sharedBad", status.bad)}</StatusLine> : null}
+            {/* someone left: the key changes once every member left has a Relay that can receive the new one */}
+            {status.waiting?.length ? (
+              <StatusLine level="warn">{t("set.sharedRekeyWaits", { names: status.waiting.join(", ") })}</StatusLine>
+            ) : null}
             {status.conflicts.length ? (
               <div className="grid gap-0.5">
                 <span className="text-xs text-s-muted">{tn("set.sharedConflicts", status.conflicts.length)}</span>

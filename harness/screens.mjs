@@ -1122,6 +1122,14 @@ const VIEWS = {
   // Settings › Machines of the workspace's admin: Team server, paired for workspaces only, with the workspace under it: its
   // last round (a conflict copy, two deletes held), the members open (this Mac, an admin, a member, an open invite), a
   // new invite link made and the recovery key shown again
+  // a member left: the workspace's key changes once the remaining members' Relay can receive it (PR key rotation)
+  "settings-shared-rekey": async () => {
+    await settingsPage("Machines", undefined, "shared-rekey");
+    await page.setViewportSize({ width: 900, height: 1000 });
+    await waitText("waits for Design laptop");
+    await page.getByText("waits for Design laptop").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   "settings-shared-vaults": async () => {
     await settingsPage("Machines", undefined, "shared");
     await page.setViewportSize({ width: 900, height: 1600 });
