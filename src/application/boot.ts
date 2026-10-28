@@ -46,6 +46,7 @@ import { loadPhoneShared } from "./conversations/phoneShare";
 import { loadWorkers, onOrchEvent } from "./orchestrator/orchestrator";
 import { onPipelineWorker, runPipelines } from "./pipeline/runner";
 import { loadRetries, onRetryEvent } from "./conversations/retry";
+import { loadRecent, sidebarTab } from "./navigation/pages";
 
 // The main window's start: listeners first, then settings, language and vault, then the conversations from earlier
 // versions, then the polls. Every poll of the app starts here, once.
@@ -275,6 +276,9 @@ function startPolls() {
   if (selected() !== BRAIN) loadBrain();
   setInterval(loadBrain, 5 * 60000);
   window.addEventListener("focus", loadBrain);
+  // the Pages tab's Recent: the notes conversations touched this week, read while that tab shows
+  if (sidebarTab() === "pages") loadRecent();
+  setInterval(() => sidebarTab() === "pages" && loadRecent(), 5 * 60000);
   loadMeetings(); // the meetings about to start, under Waiting, with a banner 5 minutes before
   setInterval(loadMeetings, 5 * 60000);
   setInterval(loadTodayCards, 5 * 60000); // the user's cards under Today

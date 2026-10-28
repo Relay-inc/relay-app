@@ -1170,6 +1170,39 @@ const VIEWS = {
     await page.evaluate(() => window.__harness.emit("menu", "new-general"));
     await settle(page);
   },
+  // the sidebar's Chats tab, next to Pages, with the conversations of the workspace counted (PR workspace-pages)
+  "chats-tab": async () => {
+    await open(page, server.url);
+    await page.getByRole("tab", { name: /^Chats/ }).waitFor();
+  },
+  // the Pages tab: Recent from the conversations' reads, the contexts with their projects, the folders (PR workspace-pages)
+  "pages-tab": async () => {
+    await open(page, server.url);
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await waitText("Folders");
+    await settle(page);
+  },
+  // a project unfolded to its folder, its note open in the drawer, and a top folder unfolded (PR workspace-pages)
+  "pages-expanded": async () => {
+    await open(page, server.url);
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Beacon Billing"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Beacon Billing/Documents"]').click();
+    await page.locator('[data-folder="Resources"]').click();
+    await waitText("Billing Spec");
+    await settle(page);
+  },
+  // the side vault's Pages: its notes, opened by their absolute path (PR workspace-pages)
+  "pages-shared": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.keyboard.press("Control+Digit2");
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-folder="Contexts"]').click();
+    await page.locator('[data-folder="Contexts/Team"]').click();
+    await page.locator('[data-folder="Contexts/Team/Projects"]').click();
+    await page.locator('[data-page="Contexts/Team/Projects/Team Handbook.md"]').click();
+    await settle(page);
+  },
   "settings-interface": async () => {
     await settingsPage("General");
     await intoView("Accent");

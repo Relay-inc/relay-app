@@ -20,6 +20,7 @@ import { request } from "../../application/navigation/requests";
 import { isKey, mailExperimental, settings } from "../../application/settings/settings";
 import { switchToNth } from "../../application/navigation/workspaces";
 import { workspaceDigit } from "../../domain/settings/shortcuts";
+import { swapSidebarTab } from "../../application/navigation/pages";
 import { useMailStore } from "../../application/mail/store";
 import {
   clearMailSelection,
@@ -190,6 +191,10 @@ function onKey(e: KeyboardEvent) {
     request("find");
   } else if (isKey(e, "app.escape")) {
     onEscape(e);
+  } else if (isKey(e, "app.sidebarTab")) {
+    // Cmd-.: the sidebar's other tab, Chats or Pages
+    e.preventDefault();
+    swapSidebarTab();
   } else if (workspaceDigit(settings(), e)) {
     // ⌃1 to ⌃9 by default (Settings › Shortcuts): the workspace at that place in the footer's menu
     e.preventDefault();

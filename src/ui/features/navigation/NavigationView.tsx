@@ -35,6 +35,7 @@ import { usageSummary } from "../../../application/usage/usage";
 import { useDerived } from "../../hooks/useDerived";
 import { useDismiss } from "../../hooks/useDismiss";
 import { useT } from "../../hooks/useT";
+import { useKeyLabel } from "../../hooks/useKeyLabel";
 import { copyText } from "../../components/copy";
 import { Icon } from "../../components/Icon";
 import { SidebarRow } from "./SidebarRow";
@@ -46,6 +47,8 @@ import { useReorder } from "./useReorder";
 import { DROP_LINE_AFTER } from "./rows";
 import { closeWork, openWork } from "../../../application/today/work";
 import { activeFolder } from "../../../application/navigation/workspaces";
+import { chatCount, setSidebarTab, sidebarTab, workspacePaths } from "../../../application/navigation/pages";
+import { PagesView } from "./PagesView";
 import { vaultName } from "../../../application/workspace/vault";
 import "../../styles/navigation.css";
 
@@ -69,6 +72,10 @@ export function NavigationView({ className }: { className: string }) {
   const more = useDerived(() => moreOn());
   const dark = useDerived(() => isDark());
   const workspace = useDerived(() => vaultName(activeFolder()));
+  const tab = useDerived(() => sidebarTab());
+  const chatsN = useDerived(() => chatCount());
+  const pagesN = useDerived(() => workspacePaths().length);
+  const tabKey = useKeyLabel("app.sidebarTab");
   const selected = useNavigationStore(s => s.selected);
   const update = useNavigationStore(s => s.update);
   const find = useNavigationStore(s => s.sidebar.find);
@@ -383,13 +390,35 @@ export function NavigationView({ className }: { className: string }) {
         <input
           className="min-w-0 flex-1 text-[13px] text-label outline-none select-text placeholder:text-tertiary"
           value={find}
-          placeholder={t("nav.searchIn", { name: workspace })}
+          placeholder={t(tab === "pages" ? "nav.searchPagesIn" : "nav.searchIn", { name: workspace })}
           onChange={e => setFind(e.target.value)}
         />
       </label>
+      <div
+        role="tablist"
+        aria-label={t("nav.tabs")}
+        className="flex items-center gap-4 mx-3 px-1.5 border-b border-separator"
+      >
+        {(["chats", "pages"] as const).map(id => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={tab === id}
+            className={`h-7.5 -mb-px flex items-center gap-1.5 border-b-2 cursor-default ${tab === id ? "border-label text-label font-medium" : "border-transparent text-secondary hover:text-label"}`}
+            onClick={() => setSidebarTab(id)}
+          >
+            {t(id === "chats" ? "nav.tabChats" : "nav.tabPages")}
+            <span className="text-xs font-normal text-tertiary tabular-nums">{id === "chats" ? chatsN : pagesN}</span>
+          </button>
+        ))}
+        <span className="flex-1" />
+        <span className="text-xs text-tertiary" title={t("keys.app.sidebarTab")}>
+          {tabKey}
+        </span>
+      </div>
       <nav className="flex-1 overflow-y-auto px-2 pt-1.5 pb-4 flex flex-col gap-px">
         {renderViews()}
-        {sections.map(renderSection)}
+        {tab === "pages" ? <PagesView /> : sections.map(renderSection)}
       </nav>
       <SidebarFooter
         selected={selected === USAGE}

@@ -1835,7 +1835,9 @@ fn brain_note(state: State<App>, root: String, path: String) -> Result<Value, St
 /// [{key, root, path, at, kind}]. Only transcripts written in that window are opened.
 #[tauri::command]
 async fn brain_touches(app: AppHandle, state: State<'_, App>, days: u32) -> Result<Value, String> {
-    let roots: Vec<String> = brain_roots_of(&state)?.into_iter().map(|r| r.0).collect();
+    let mut roots: Vec<String> = brain_roots_of(&state)?.into_iter().map(|r| r.0).collect();
+    // the other vaults too: the sidebar's Pages tab lists a workspace's recent notes from them
+    roots.extend(extra_vaults(&state.settings.lock().unwrap()).iter().map(|e| vault::canon(e)));
     let since = chrono::Utc::now().timestamp_millis() - days.min(60) as i64 * 86_400_000;
     let p: &'static dyn AgentProvider = &agent_claude::PROVIDER;
     let env = env_of(&app, &state, p);
