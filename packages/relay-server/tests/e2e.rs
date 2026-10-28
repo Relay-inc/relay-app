@@ -978,6 +978,8 @@ fn a_shared_vaults_live_channel() {
     // a phone (a linked device) gets no vault ops at all
     assert!(linked(&laptop, "chan-phone").vault_stream(&vault, 0, "").err().unwrap().contains("not allowed"));
 
+    // a raw stream read below never waits forever: shut after 10 s, the read returns and the test fails instead
+    let deadline = |w: &relay_remote::tls::Writer| { let w = w.clone(); std::thread::spawn(move || { std::thread::sleep(Duration::from_secs(10)); w.shutdown(); }); };
     let chan = |c: &Client, k: &VaultKey| {
         let (tx, rx) = mpsc::channel();
         let ch = Channel::start(c.clone(), &vault, k.clone(), move |e| { tx.send(e).ok(); });
@@ -1020,9 +1022,10 @@ fn a_shared_vaults_live_channel() {
     a.send("update", &doc, b"second").unwrap();
     a.send("update", &doc, b"third").unwrap();
     let (hello, mut r, w) = colleague.vault_stream(&vault, seq, &epoch).unwrap();
+    deadline(&w);
     assert_eq!(hello["resumed"], true);
     let mut got = vec![];
-    for _ in 0..2 { let mut l = String::new(); r.read_line(&mut l).unwrap(); let v: serde_json::Value = serde_json::from_str(&l).unwrap(); got.push(v["seq"].as_u64().unwrap()); }
+    for _ in 0..2 { let mut l = String::new(); r.read_line(&mut l).unwrap(); let v: serde_json::Value = serde_json::from_str(&l).expect("a missed frame within 10 s"); got.push(v["seq"].as_u64().unwrap()); }
     assert_eq!(got, vec![seq + 1, seq + 2]);
     w.shutdown();
     // another epoch (a server restarted since) does not resume
@@ -1030,6 +1033,7 @@ fn a_shared_vaults_live_channel() {
 
     // a frame over the limit closes that stream with the reason, the others go on
     let (_, mut r, mut w) = colleague.vault_stream(&vault, 0, "").unwrap();
+    deadline(&w);
     w.write_all(format!("{}\n", json!({"t": "frame", "kind": "update", "doc": doc, "n": 1, "body": "ab".repeat(relay_remote::channel::MAX_BODY + 1)})).as_bytes()).unwrap();
     let mut l = String::new();
     while r.read_line(&mut l).is_ok_and(|n| n > 0) && !l.contains("bye") { l.clear(); }
