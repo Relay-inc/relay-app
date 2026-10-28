@@ -573,7 +573,7 @@ function handle(cmd: string, a: Args): unknown {
     }
     case "page_comments": {
       // a note of this Mac's own: one open thread with a reply, one resolved; what the page adds comes after them
-      const path = String(a.path);
+      const path = commentKey(a.path);
       if (!comments.has(path)) {
         const at = Date.now();
         comments.set(path, [
@@ -585,6 +585,7 @@ function handle(cmd: string, a: Args): unknown {
             t: "Is this still the first thing to do?",
             q: "First open loop",
             a: { o: 0 },
+            m: teamComments ? [ME] : undefined,
             at: at - 3 * 3600_000,
           },
           {
@@ -609,27 +610,17 @@ function handle(cmd: string, a: Args): unknown {
           { id: "x2", by: "Ben Lauwers", mine: false, k: "resolve", on: "c2", at: at - 25 * 3600_000 },
         ]);
       }
-      const all = comments.get(path)!;
-      const gone = new Set(
-        all.filter(e => e.k === "delete" && all.find(t => t.id === e.on)?.by === e.by).map(e => e.on),
-      );
-      const item = (e: Comment) => ({ id: e.id, by: e.by, mine: e.mine, at: e.at, text: e.t ?? "" });
-      const threads = all
-        .filter(e => e.k === "comment" && !gone.has(e.id))
-        .map(e => {
-          const last = all.filter(x => x.on === e.id && (x.k === "resolve" || x.k === "reopen")).pop();
-          return {
-            ...item(e),
-            quote: e.q,
-            anchor: e.a,
-            resolved: last?.k === "resolve",
-            replies: all.filter(x => x.k === "reply" && x.on === e.id && !gone.has(x.id)).map(item),
-          };
-        });
-      return { kind: "file", threads };
+      const threads = threadsOf(comments.get(path)!);
+      return teamComments ? { kind: "doc", doc: "d1", members: MEMBERS, threads } : { kind: "file", threads };
     }
+    case "workspace_inbox":
+      return [...comments].flatMap(([page, all]) =>
+        threadsOf(all)
+          .filter(t => !t.resolved && t.mentionsMe)
+          .map(thread => ({ page, thread })),
+      );
     case "page_comment": {
-      const list = comments.get(String(a.path)) ?? [];
+      const list = comments.get(commentKey(a.path)) ?? [];
       const id = `n${list.length + 1}`;
       list.push({
         id,
@@ -640,9 +631,10 @@ function handle(cmd: string, a: Args): unknown {
         t: String(a.text),
         q: String(a.quote),
         a: a.anchor,
+        m: (a.mentions as string[] | undefined) ?? [],
         at: Date.now(),
       });
-      comments.set(String(a.path), list);
+      comments.set(commentKey(a.path), list);
       return id;
     }
     case "page_restore": {
@@ -1487,9 +1479,38 @@ type Comment = {
   t?: string;
   q?: string;
   a?: unknown;
+  m?: string[]; // members mentioned (ticket 12)
   at: number;
 };
 const comments = new Map<string, Comment[]>(); // a page's comment entries (ticket 11), by its path
+// ticket 12: pages read as a team workspace's documents (members to mention, an Inbox), set with __harness.teamComments
+let teamComments = false;
+const ME = "aaaaaaaaaaaaaaaa";
+const MEMBERS = [
+  { fp: "bbbbbbbbbbbbbbbb", name: "Ben Lauwers" },
+  { fp: "cccccccccccccccc", name: "Ana Vos" },
+];
+/** A page's comments are kept by its path in its workspace (the same note opened from the Inbox in another one). */
+const commentKey = (path: unknown) => String(path).replace(/^\/Users\/me\/(Shared\/Northwind|Vault)\//, "");
+/** A page's threads from its entries, as comments.rs makes them. */
+function threadsOf(all: Comment[]) {
+  const gone = new Set(all.filter(e => e.k === "delete" && all.find(t => t.id === e.on)?.by === e.by).map(e => e.on));
+  const item = (e: Comment) => ({ id: e.id, by: e.by, mine: e.mine, at: e.at, text: e.t ?? "" });
+  return all
+    .filter(e => e.k === "comment" && !gone.has(e.id))
+    .map(e => {
+      const last = all.filter(x => x.on === e.id && (x.k === "resolve" || x.k === "reopen")).pop();
+      const replies = all.filter(x => x.k === "reply" && x.on === e.id && !gone.has(x.id));
+      return {
+        ...item(e),
+        quote: e.q,
+        anchor: e.a,
+        resolved: last?.k === "resolve",
+        replies: replies.map(item),
+        mentionsMe: [e, ...replies].some(x => x.m?.includes(ME)),
+      };
+    });
+}
 
 const written = new Map<string, { text: string; hash: string }>();
 let writes = 0;
@@ -1574,6 +1595,7 @@ const harness = {
   written: () => [...written.values()].pop()?.text ?? null,
   /** someone changed a note on disk: the next save without force is refused */
   changeOnDisk: () => void (diskChanged = true),
+  teamComments: () => void (teamComments = true),
   // the page last read changed outside Relay: its text through `edit`, then the file watcher's event (watch.rs)
   editOutside: (find: string, put: string) => {
     const now = written.get(lastPage)?.text ?? vault.noteText(lastPage).text;

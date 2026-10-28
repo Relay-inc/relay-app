@@ -242,6 +242,8 @@ const TEXT: &[(&str, [&str; 4])] = &[
         "Ongeldig project '{v}': icon (max 4 tekens), label (max 60) en img (png data url) moeten tekst zijn",
         "Projet '{v}' invalide : l'icône (4 caractères max.), le nom (60 max.) et img (data url png) doivent être du texte",
         "Ungültiges Projekt '{v}': Symbol (max. 4 Zeichen), Name (max. 60) und img (PNG-Data-URL) müssen Text sein"]),
+    ("ws.mentioned", ["{v} mentioned you in a comment", "{v} noemde je in een opmerking", "{v} vous a mentionné dans un commentaire", "{v} hat dich in einem Kommentar erwähnt"]),
+    ("ws.mentionedPush", ["You were mentioned in a comment", "Je werd genoemd in een opmerking", "Vous avez été mentionné dans un commentaire", "Du wurdest in einem Kommentar erwähnt"]),
     ("err.override", ["Invalid override '{v}'", "Ongeldige override '{v}'", "Remplacement '{v}' invalide", "Ungültige Zuordnung '{v}'"]),
     ("err.empty", ["empty message", "leeg bericht", "message vide", "leere Nachricht"]),
     ("err.gh_owners", ["GitHub: at most 10 owners, only letters, digits and -", "GitHub: hoogstens 10 owners, enkel letters, cijfers en -", "GitHub : 10 propriétaires au plus, uniquement lettres, chiffres et -", "GitHub: höchstens 10 Owner, nur Buchstaben, Ziffern und -"]),
@@ -914,7 +916,7 @@ async fn page_history(app: AppHandle, state: State<'_, App>, path: String) -> Re
         if state.shared.loaded_docs(&vault).is_some_and(|d| d.paths().contains_key(&rel)) {
             let names = shared_vaults::member_names(&state, &vault).await;
             let versions = on_files(move || app.state::<App>().shared.doc_history(&vault, &rel).unwrap_or_else(|| Ok(vec![]))).await?;
-            let named = |fp: &str| names.get(fp).cloned().unwrap_or_else(|| fp.chars().take(8).collect());
+            let named = |fp: &str| shared_vaults::name_of(&names, fp);
             return Ok(json!({"kind": "doc", "versions": versions.iter().rev().map(|v| json!({
                 "key": v.to.to_string(), "author": named(&v.author), "by": v.by, "at": v.end, "text": v.text, "added": v.added, "removed": v.removed,
             })).collect::<Vec<_>>()}));
@@ -948,10 +950,12 @@ pub(crate) async fn comments_of(state: &State<'_, App>, target: &str) -> Result<
             let names = shared_vaults::member_names(state, &vault).await;
             let docs = state.shared.loaded_docs(&vault).ok_or("the workspace's documents are not loaded yet")?;
             let entries: Vec<comments::Entry> = docs.comments(&doc).into_iter().filter_map(|(k, a, v)| Some((k, a, serde_json::from_str(&v).ok()?))).collect();
-            // a member's fingerprint as the server lists it, an author as the first 16 hex of it
-            let name = |a: &str| names.iter().find(|(fp, _)| fp.starts_with(a)).map(|(_, n)| n.clone()).unwrap_or_else(|| a.chars().take(8).collect());
+            let name = |a: &str| shared_vaults::name_of(&names, a);
             let me = docs.me().to_string();
-            Ok(json!({"kind": "doc", "doc": doc, "threads": comments::threads(&entries, &|a| a == me, &name)}))
+            // who an @ in a comment may name (ticket 12): the other members, by the first 16 hex a mention keeps
+            let members: Vec<Value> = names.iter().map(|(fp, n)| (fp.chars().take(16).collect::<String>(), n)).filter(|(fp, _)| *fp != me)
+                .map(|(fp, n)| json!({"fp": fp, "name": n})).collect();
+            Ok(json!({"kind": "doc", "doc": doc, "members": members, "threads": comments::threads(&entries, &|a| a == me, &name)}))
         }
         Commented::File(root, rel) => {
             let me = sys_name();
@@ -960,8 +964,8 @@ pub(crate) async fn comments_of(state: &State<'_, App>, target: &str) -> Result<
     }
 }
 /// A comment entry added to a page (`comments::entry`): its key.
-pub(crate) fn comment_add(state: &State<App>, target: &str, kind: &str, on: &str, text: &str, quote: &str, anchor: &Value) -> Result<String, String> {
-    let v = comments::entry(kind, on, text, quote, anchor)?;
+pub(crate) fn comment_add(state: &State<App>, target: &str, kind: &str, on: &str, text: &str, quote: &str, anchor: &Value, mentions: &[String]) -> Result<String, String> {
+    let v = comments::entry(kind, on, text, quote, anchor, mentions)?;
     let key = comments::new_key();
     match commented(state, target)? {
         Commented::Doc(vault, doc) => state.shared.loaded_docs(&vault).ok_or("the workspace's documents are not loaded yet")?.put_comment(&doc, &key, &v.to_string())?,
@@ -974,8 +978,63 @@ pub(crate) fn comment_add(state: &State<App>, target: &str, kind: &str, on: &str
 async fn page_comments(state: State<'_, App>, path: String) -> Result<Value, String> { comments_of(&state, &path).await }
 /// A comment, reply, resolve, reopen or delete on a page; `anchor` and `quote` for a new comment.
 #[tauri::command]
-async fn page_comment(app: AppHandle, path: String, kind: String, on: String, text: String, quote: String, anchor: Value) -> Result<String, String> {
-    on_files(move || comment_add(&app.state::<App>(), &path, &kind, &on, &text, &quote, &anchor)).await
+async fn page_comment(app: AppHandle, path: String, kind: String, on: String, text: String, quote: String, anchor: Value, mentions: Option<Vec<String>>) -> Result<String, String> {
+    on_files(move || comment_add(&app.state::<App>(), &path, &kind, &on, &text, &quote, &anchor, &mentions.unwrap_or_default())).await
+}
+/// A shared workspace's comment entries of a document, as comments.rs reads them.
+fn entries_of(docs: &relay_remote::docs::Docs, id: &str) -> Vec<comments::Entry> {
+    docs.comments(id).into_iter().filter_map(|(k, a, v)| Some((k, a, serde_json::from_str(&v).ok()?))).collect()
+}
+/// The Inbox of the workspace in `folder` (ticket 12): its open comment threads that mention this Mac's member or are on a
+/// page this Mac edited, newest first, each with the page it is on. Empty for a workspace of this Mac's own.
+#[tauri::command]
+async fn workspace_inbox(state: State<'_, App>, folder: String) -> Result<Vec<Value>, String> {
+    let Some(v) = shared_vaults::list(&state.settings.lock().unwrap()).into_iter().find(|v| v.folder == folder) else { return Ok(vec![]) };
+    let Some(docs) = state.shared.loaded_docs(&v.id) else { return Ok(vec![]) };
+    let names = shared_vaults::member_names(&state, &v.id).await;
+    let me = docs.me().to_string();
+    let mut out: Vec<Value> = docs.paths().into_iter().flat_map(|(rel, id)| {
+        let edited = docs.edited(&id);
+        let page = format!("{}/{rel}", v.folder.trim_end_matches('/'));
+        comments::threads(&entries_of(&docs, &id), &|a| a == me, &|a| shared_vaults::name_of(&names, a)).into_iter()
+            .filter(move |t| t["resolved"] != true && (t["mentionsMe"] == true || edited))
+            .map(move |t| json!({"page": page, "thread": t})).collect::<Vec<_>>()
+    }).collect();
+    out.sort_by_key(|x| std::cmp::Reverse(x["thread"]["at"].as_u64().unwrap_or(0)));
+    Ok(out)
+}
+/// Ticket 12: the comments in a shared workspace that mention this Mac's member and were not told yet, each a banner,
+/// once (the keys told are kept beside its documents, so a restart tells nothing again), and a bare push to this Mac's
+/// phones (ntfy.sh is public: no name, no text). The first look at a workspace only notes what is there, so an update of
+/// Relay tells nothing old.
+fn tell_mentions(h: &AppHandle, v: &shared_vaults::Shared) {
+    let st = h.state::<App>();
+    let Some(docs) = st.shared.loaded_docs(&v.id) else { return };
+    let me = docs.me().to_string();
+    let file = data_dir(h).join("shared-docs").join(&v.id).join("mentions-seen.json");
+    let first = comments::load_seen(&file).is_none();
+    let mut seen = comments::load_seen(&file).unwrap_or_default();
+    let mut told = vec![];
+    for (_, id) in docs.paths() {
+        for (key, author) in comments::fresh_mentions(&entries_of(&docs, &id), &|m| m == me, &seen) { seen.insert(key); told.push(author); }
+    }
+    if told.is_empty() && !first { return; }
+    comments::save_seen(&file, &seen);
+    if first { return; }
+    let s = st.settings.lock().unwrap().clone();
+    let lang = ui_lang_of(&s);
+    let names = shared_vaults::member_names_now(&st, &v.id);
+    for author in &told {
+        notify::notify(h.clone(), String::new(), v.name.clone(), tr_v(lang, "ws.mentioned", &shared_vaults::name_of(&names, author)), Some(format!("mention:{}", v.id)));
+    }
+    for m in machines::runners(&s) {
+        let Ok(key) = mirror::key(&data_dir(h), m["id"].as_str().unwrap_or("")) else { continue };
+        let text = tr(lang, "ws.mentionedPush");
+        std::thread::spawn(move || {
+            std::process::Command::new("curl").args(["-fsS", "-m", "10", "-H", "Title: Relay", "-d", &text, &ntfy_url(&key)])
+                .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().ok();
+        });
+    }
 }
 /// A shared workspace's document made a version from its history again, as this Mac's edit (`page_history` "doc").
 #[tauri::command]
@@ -2860,6 +2919,7 @@ pub fn run() {
                             let listed = || shared_vaults::find(&st.settings.lock().unwrap(), &v.id).is_ok();
                             let Some(r) = st.shared.round(&data_dir(&h), &v, &st.machines.id, &sys_name(), &listed) else { return };
                             shared_vaults::skills_shared(&h, &v.folder);
+                            tell_mentions(&h, &v);
                             // a card came in or went out: the index here follows (it does not sync)
                             if r.pulled + r.pushed > 0 || !std::path::Path::new(&v.folder).join("System/rules/core/work-state.md").is_file() {
                                 shared_vaults::index_shared(&h, &v.folder);
@@ -2884,7 +2944,7 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![shared_doc_absorb, shared_doc_open, page_history, page_restore, page_comments, page_comment, shared_doc_edit, shared_awareness, shared_vaults::shared_vault_docs, snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, migrate_project, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, write_note, property_values, create_note, free_page_name, duplicate_note, move_path, trash_path, restore_path, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_trust, shared_vaults::shared_vault_pending_invite, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
+        .invoke_handler(tauri::generate_handler![shared_doc_absorb, shared_doc_open, page_history, page_restore, page_comments, page_comment, workspace_inbox, shared_doc_edit, shared_awareness, shared_vaults::shared_vault_docs, snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, migrate_project, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, write_note, property_values, create_note, free_page_name, duplicate_note, move_path, trash_path, restore_path, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_trust, shared_vaults::shared_vault_pending_invite, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the window used last back (the main one may be hidden)

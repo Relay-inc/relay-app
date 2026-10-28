@@ -16,6 +16,7 @@ import { FILE_TOOLS } from "../../domain/git/git";
 import { copy, select, toast } from "./navigation";
 import { openDetail } from "./panel";
 import { useNavigationStore } from "./store";
+import { makeStore } from "../make-store";
 import { activeFolder, workspaces } from "./workspaces";
 
 // The sidebar's two tabs: Chats (the conversations, as before) and Pages (the notes of the workspace shown).
@@ -166,8 +167,35 @@ export type { PageHistory, PageVersion } from "../../infrastructure/backend";
 export const loadHistory = (page: string) => backend.pageHistory(page);
 export type { PageComments } from "../../infrastructure/backend";
 export const loadComments = (page: string) => backend.pageComments(page);
-export const addComment = (page: string, kind: string, on: string, text = "", quote = "", anchor: unknown = null) =>
-  backend.pageComment(page, kind, on, text, quote, anchor);
+export const addComment = (
+  page: string,
+  kind: string,
+  on: string,
+  text = "",
+  quote = "",
+  anchor: unknown = null,
+  mentions: string[] = [],
+) => backend.pageComment(page, kind, on, text, quote, anchor, mentions);
+export type { InboxItem } from "../../infrastructure/backend";
+export const loadInbox = (folder: string) => backend.workspaceInbox(folder);
+/** Any comment of a shared document changed (a member's, live): an Inbox reads itself again. */
+export const onAnyComments = (then: () => void) =>
+  backend.onSharedDoc(change => {
+    if (change.id.endsWith("#comments")) then();
+  });
+/** A thread to open with its page (from the Inbox): PageView takes it when that page shows (`n` tells one ask from the
+ *  next, also on the page already open). */
+export const usePageThread = makeStore<{ page: string; thread: string; n: number }>(() => ({
+  page: "",
+  thread: "",
+  n: 0,
+}));
+export function openPageThread(page: string, thread: string) {
+  // the Inbox names a page by its full path (any workspace's), a page of the workspace shown by its path in it
+  const at = page.startsWith("/") ? page : target(page);
+  usePageThread.setState(s => ({ page: at, thread, n: s.n + 1 }));
+  select(pageKey(at));
+}
 /** Another member's comment on a shared document arrived (its sidecar `<doc>#comments` changed). */
 export const onComments = (doc: string, then: () => void) =>
   backend.onSharedDoc(change => {

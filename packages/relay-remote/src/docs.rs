@@ -331,6 +331,8 @@ impl Docs {
     }
     /// This device as the author of what it writes.
     pub fn me(&self) -> &str { &self.me }
+    /// Whether this Mac ever sent an edit of a document (its Inbox counts the comments on pages it edited, ticket 12).
+    pub fn edited(&self, id: &str) -> bool { lock(&self.open).get(id).is_some_and(|o| o.c.mine > 0) }
 
     /// Whether `path` is taken by another note than `except` (as APFS compares names).
     fn taken(&self, path: &str, except: Option<&str>) -> bool {

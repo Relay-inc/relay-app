@@ -1372,6 +1372,35 @@ const VIEWS = {
     await page.getByText("“First open loop”").click();
     await settle(page);
   },
+  // ticket 12, in dark: a comment on a team workspace's page, @ listing the members whose name starts with what is typed
+  "comment-mention": async () => {
+    await open(page, server.url, { fixture: "dark" });
+    await page.evaluate(() => window.__harness.teamComments());
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText("Stand van zaken");
+    await page.getByRole("button", { name: "Comments", exact: true }).click();
+    await waitText("Is this still the first thing to do?");
+    await page.locator(".cm-content").getByText("Second open loop").dblclick();
+    await page.getByRole("button", { name: "Comment", exact: true }).click();
+    await page.getByPlaceholder("Add a comment… @ names a member").pressSequentially("Can you check this, @");
+    await waitText("@Ben Lauwers");
+    await settle(page);
+  },
+  // ticket 12: the team workspace's Inbox in its menu, a thread that mentions you on top
+  "workspace-inbox": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.evaluate(() => window.__harness.teamComments());
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').first().click();
+    await page.getByRole("button", { name: "Comments", exact: true }).click();
+    await waitText("Is this still the first thing to do?");
+    await page.keyboard.press("Control+Digit3");
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await page.getByRole("button", { name: /^Inbox/ }).click();
+    await waitText("Ana Vos");
+    await settle(page);
+  },
   // in dark, the resolved threads unfolded under the open ones
   "page-comments-resolved": async () => {
     await open(page, server.url, { fixture: "dark" });
