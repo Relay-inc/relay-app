@@ -828,6 +828,7 @@ const VIEWS = {
   },
   usage: async () => {
     await open(page, server.url);
+    await page.getByRole("button", { name: /^Switch workspace/ }).click(); // usage sits in the workspace menu
     await page
       .getByRole("button", { name: /^(Usage|Claude Code)/ })
       .first()
@@ -855,6 +856,7 @@ const VIEWS = {
   // the usage redesign in dark mode (#105)
   "dark-usage": async () => {
     await open(page, server.url, { fixture: "dark" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click(); // usage sits in the workspace menu
     await page
       .getByRole("button", { name: /^(Usage|Claude Code)/ })
       .first()
