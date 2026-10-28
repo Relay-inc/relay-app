@@ -233,38 +233,47 @@ manifest) and the epoch (to refuse a write under an old key), and checks it fits
 ## Members
 
 Who is in a workspace, who is an admin and which key is current come from its member list, never from the server's
-own `vault.json` (that one only decides who may connect). The list is an append-only chain of entries
-(`relay_remote::members`): `{seq, prev, kind, fp, id, pk, role, epoch, h, at, by, sig}`, `prev` the hash of the entry
-before (sha256 of what it signs and its signature), `sig` the Ed25519 signature of `by` over every other field and the
-vault id.
+own `vault.json` (that one only decides who may connect, and its roles follow the list). The list is an append-only
+chain of entries (`relay_remote::members`), at most 10 000: `{seq, prev, kind, fp, id, pk, role, epoch, h, at, by, sig,
+mac}`, `prev` the hash of the entry before (sha256 of what it signs and its signature), `sig` the Ed25519 signature of
+`by` over every other field but `mac`, and the vault id. Every hex field is lowercase, and every field a kind does not
+use is empty.
 
-- `create` (the creator, signed by itself), `add` (a member, its identity `id` and X25519 key `pk`, its role),
-  `remove`, `promote`, `demote`, `device` (a member's new keys) are signed by an admin of the list as it stood just
-  before; `leave` by the member itself; `rekey` (epoch `epoch` is current, the sha256 of its key `h`) by an admin.
+- `create` (the creator, signed by itself, with `mac`: its identity vouched for under the vault's epoch-0 key, which the
+  server never has), `add` (a member with its identity `id`, X25519 key `pk` and `role`), `remove`, `promote`,
+  `demote`, `device` (a member's new keys) are signed by an admin of the list as it stood just before; `leave` by the
+  member itself; `rekey` (epoch `epoch` is current, the sha256 of its key `h`) by an admin. No entry may leave the list
+  without an admin, and none may leave it empty.
 - A `remove` or `leave` leaves the list waiting for a `rekey`; a `device` entry is refused while it waits (the new keys
-  could be the removed member's). The list never runs out of members.
-- **Every Mac checks the whole list** from its first entry, against the creator's identity it knows: from the invite
-  link (`creator=`), or, for a workspace from before the list, from the first list it saw. It also checks that the list
-  is an extension of the one it saw last (`head` in its key file): another entry at a length it saw is a fork, a
-  shorter list is entries held back. Either stops this Mac's key step and shows a warning. A joiner checks that the
-  list holds the head its invite link named (`head=`).
+  could be the removed member's).
+- **A new workspace** gets its list right away: Relay writes the `create` before anything else reaches the server.
+- **Every Mac checks the list** against the creator's identity it knows: from the invite link (`creator=`), or, knowing
+  none, only a list whose `create` is vouched for under epoch 0's key (a server cannot start one). It checks only what
+  is new since it last checked, which must follow what it checked (else: a fork), and the list must reach the `head`
+  in its key file (else: held back, also when the server has no list at all) and hold the head an invite link named.
+  Every append this Mac makes moves its `head` on, so a dropped entry of its own is noticed too. A fork or a list held
+  back stops this Mac's key step, shows a warning, and counts the key as changing (the part held back could be a
+  removal).
 - **The server cannot write an entry**: it has no member's identity, and it takes an append only when the whole list
-  then still checks, so a member cannot break the list for the others either. What it can do is hold the newest
-  entries back. Every record's meta (`l`) and every frame (bound into its seal) names the list head its writer had
-  seen; a Mac that reads a longer one than the server gives it, or another one at a length it has, warns.
+  then still checks (so no member can break the list for the others). It refuses `vault_remove` on a listed workspace,
+  and `relay-server revoke` leaves a listed workspace's members as they are (the device cannot connect any more; an
+  admin removes it in Relay, which changes the key). What the server can do is hold entries back. Every record's meta
+  (`l`) and every frame (bound into its seal) names the list head its writer had seen; a Mac that reads a longer one
+  than the server gives it, or another one at a length it has, warns.
 - **Joining.** The joiner's Relay publishes its keys (`vault_pk`) with `imac`, an HMAC with a key derived from the
-  invite link's secret (HKDF info `join`). The inviting admin's Relay kept that secret (`invite` in its key file) and
-  adds the joiner (`add`, with the role of the invite) once `imac` checks, sealing it the keys of every epoch since the
-  invite. Until then the joiner reads with the keys its invite carried and is no holder of a new key.
+  invite link's secret (HKDF info `join`). The inviting admin's Relay kept that secret, the invite's role and expiry
+  (`invite` in its key file; dropped when revoked, expired, or a key change made the invite void) and adds the joiner
+  once `imac` checks, sealing it the keys of every epoch since the invite. Until then the joiner reads with the keys
+  its invite carried and is no holder of a new key.
 - **Removing and leaving** is a signed entry (`vault_append`), and the server removes the member in the same write.
-  From then on every Mac treats the workspace as changing its key, whatever the server's `rekey` says, and warns when
-  that lasts over an hour.
+  From then on every Mac counts the key as changing, whatever the server's `rekey` says, and warns after an hour.
 - **A member who set up Relay again** publishes new keys; every Mac shows it, and an admin can trust them with a
-  `device` entry (after a confirm, and only when the publication is signed by the new identity and vouched for under
-  the newest key). Every other Mac follows the list.
-- **A workspace from before the list** gets one from the first admin on this version: a `create` with itself, then an
-  `add` for every member the server lists whose keys are vouched for under the workspace key, only while nobody has
-  been removed and no key has changed (trust on upgrade). Its members take that first list as theirs.
+  `device` entry (after a confirm; only when the publication is signed by the new identity and vouched for under the
+  newest key, and no removal waits). Every other Mac follows the list.
+- **A workspace from before the list** gets one from the first admin on this version, in one round: the `create`, then
+  an `add` as member for every member the server lists whose Relay already published keys vouched for under the
+  workspace key. Later rounds add nobody that way; a member updated after that needs an invite. Two admins at once:
+  the server takes one list, and the other admin takes it on its next round.
 
 ## Key rotation
 
@@ -292,10 +301,11 @@ public key is refused.
 What it does not cover:
 
 - **Holding back, everywhere.** A server that holds the same newest entries back from every member, and drops every
-  record that names them, is only noticed by a member who saw them (the admin who wrote them). Nobody takes a key the
-  list does not name, so this delays a rotation; it does not let anyone read.
-- **Trust on upgrade.** For a workspace from before the list, the first list is taken as it comes: a server colluding
-  with a member who was removed before the upgrade could have it list a device of theirs.
+  record and frame that names them, is only noticed by the Mac that wrote them. Nobody takes a key the list does not
+  name, so this delays a key change; it does not let anyone read.
+- **Trust on upgrade.** A workspace from before the list takes the first list vouched for under its epoch-0 key. A
+  server colluding with someone who held that key before the upgrade (a member removed then) could start the list
+  with a device of theirs.
 - **What was read before.** A removed member keeps every key up to their removal and what they synced; a member's Mac
   holds the keys in a file (0600), like the mirror keys.
 

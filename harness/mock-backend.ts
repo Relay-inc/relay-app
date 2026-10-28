@@ -92,6 +92,7 @@ if (fixture === "shared-rekey")
   for (const s of Object.values(sharedStatus))
     Object.assign(s, {
       warnings: ["Someone left over an hour ago, and the key has not changed since."],
+      rekeying: true,
       changed: [{ fp: vault.sharedMembers[1].fp, name: "Studio Mac" }],
       held: [],
       conflicts: [],

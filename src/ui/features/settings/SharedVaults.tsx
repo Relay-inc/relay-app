@@ -152,6 +152,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
               </StatusLine>
             ))}
             {status.bad ? <StatusLine level="warn">{tn("set.sharedBad", status.bad)}</StatusLine> : null}
+            {status.rekeying ? <StatusLine level="warn">{t("set.sharedRekeying")}</StatusLine> : null}
             {/* the member list: held back, forked, or a removal still waiting for its key change */}
             {status.warnings?.map(w => (
               <StatusLine key={w} level="warn">

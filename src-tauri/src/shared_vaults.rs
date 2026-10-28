@@ -56,8 +56,9 @@ pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter()
 /// `warnings`: what the member list says is wrong (docs/workspaces.md, Members): a list the server cannot be trusted on,
 /// another member who saw a newer one, a removal that waits too long for its key change. `changed`: members whose
 /// Relay publishes other keys than the list has (they set it up again), until an admin trusts them.
+/// `rekeying`: someone left and the key has not changed yet (or the member list is held back, which could hide that).
 pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub bad: usize, pub live: bool,
-    pub warnings: Vec<String>, pub changed: Vec<Changed> }
+    pub warnings: Vec<String>, pub changed: Vec<Changed>, pub rekeying: bool }
 #[derive(Clone, serde::Serialize)]
 pub struct Changed { pub fp: String, pub name: String }
 
@@ -228,6 +229,7 @@ impl Hub {
                     Ok(k) => {
                         st.errors.extend(k.errors.into_iter().map(|e| format!("key: {e}")));
                         st.warnings = k.warnings;
+                        st.rekeying = k.rekeying;
                         st.changed = k.changed.into_iter().map(|(fp, name)| Changed { fp, name }).collect();
                     }
                     Err(e) => st.errors.push(format!("key: {e}")),
@@ -321,8 +323,25 @@ impl Hub {
             let Ok(key) = load_key(data, &v.id) else { continue };
             let e = key.epoch();
             let (h, id) = (app.clone(), v.id.clone());
+            let (d, vid) = (data.to_path_buf(), v.id.clone());
             let on = move |e: Event| {
-                let up = match e { Event::Live { .. } => true, Event::Down(_) => false, Event::Frame(_) => return };
+                let up = match e {
+                    Event::Live { .. } => true,
+                    Event::Down(_) => false,
+                    // a frame written with a longer member list than this Mac holds: the server holds entries back
+                    Event::Frame(f) => {
+                        let theirs = f.list.split_once(':').and_then(|(n, _)| n.parse::<u64>().ok()).unwrap_or(0);
+                        let mine = load_key(&d, &vid).ok().and_then(|k| k.head).map_or(0, |(n, _)| n);
+                        if theirs <= mine { return; }
+                        let st = h.state::<crate::App>();
+                        let mut all = st.shared.status.lock().unwrap();
+                        let s = all.entry(id.clone()).or_default();
+                        let w = "Another member has seen a newer member list than the server gives this Mac.".to_string();
+                        if !s.warnings.contains(&w) { s.warnings.push(w); }
+                        h.emit("shared-vaults", serde_json::to_value(&*all).unwrap_or_default()).ok();
+                        return;
+                    }
+                };
                 let st = h.state::<crate::App>();
                 let mut all = st.shared.status.lock().unwrap();
                 all.entry(id.clone()).or_default().live = up;
@@ -427,7 +446,13 @@ pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String,
     if !valid_id(&r.id) { return Err(format!("the server answered an invalid workspace id {:?}", r.id)); }
     // keys, bases and trash go by id alone: an id this Mac is in already would overwrite that vault's key
     if list(&state.settings.lock().unwrap()).iter().any(|x| x.id == r.id) { return Err(format!("this Mac is in a workspace with id {} already", r.id)); }
-    save_key(&crate::data_dir(&app), &r.id, &key)?;
+    let data = crate::data_dir(&app);
+    save_key(&data, &r.id, &key)?;
+    // the member list before anything else reaches the server: its first entry, by this Mac (docs/workspaces.md)
+    let (vid, c) = (r.id.clone(), client(&Shared { id: r.id.clone(), name: String::new(), host: m["host"].as_str().unwrap_or("").into(), port: m["port"].as_u64().unwrap_or(0) as u16,
+        fp: m["fp"].as_str().unwrap_or("").into(), folder: String::new(), role: String::new() }, &state.machines.id));
+    let k2 = key.clone();
+    tauri::async_runtime::spawn_blocking(move || c.sealed(&vid, k2).start(&|k| save_key(&data, &vid, k))).await.map_err(|e| e.to_string())??;
     let v = Shared { id: r.id.clone(), name: r.name, host: m["host"].as_str().unwrap_or("").into(), port: m["port"].as_u64().unwrap_or(0) as u16,
         fp: m["fp"].as_str().unwrap_or("").into(), folder: at, role: "admin".into() };
     add(&app, &state, &v)?;
@@ -482,7 +507,7 @@ pub async fn shared_vault_invite(app: AppHandle, state: St<'_>, id: String, role
         // remembered, so this Mac's round adds whoever joins with it to the member list
         let secret = relay_remote::proto::PairLine::parse(&link).and_then(|l| l.secret).ok_or("the invite link has no secret")?;
         let mut k = load_key(&data, &v.id)?;
-        k.invites.push(relay_remote::vault::Invited { id: inv.id.clone(), secret, role: role.into(), epoch: keys.epoch() });
+        k.invites.push(relay_remote::vault::Invited { id: inv.id.clone(), secret, role: role.into(), epoch: keys.epoch(), expires: inv.expires });
         save_key(&data, &v.id, &k)?;
         Ok((link, inv))
     })).await?;
@@ -516,8 +541,17 @@ pub async fn shared_vault_info(app: AppHandle, state: St<'_>, id: String) -> Res
 
 /// Withdraw an invite that was not used yet (admins).
 #[tauri::command]
-pub async fn shared_vault_invite_revoke(state: St<'_>, id: String, invite: String) -> Result<(), String> {
-    on_server(&state, &id, move |v, c| c.vault_invite_revoke(&v.id, &invite)).await
+pub async fn shared_vault_invite_revoke(app: AppHandle, state: St<'_>, id: String, invite: String) -> Result<(), String> {
+    let (data, a) = (crate::data_dir(&app), app.clone());
+    on_server(&state, &id, move |v, c| {
+        c.vault_invite_revoke(&v.id, &invite)?;
+        // and out of the key file: whoever joins with it is never added to the member list
+        a.state::<crate::App>().shared.with_vault(&v.id.clone(), || {
+            let mut k = load_key(&data, &v.id)?;
+            k.invites.retain(|i| i.id != invite);
+            save_key(&data, &v.id, &k)
+        })
+    }).await
 }
 
 /// Remove a member (admins), or leave the vault when `fp` is this Mac's or "" (a removed member cannot ask the server
@@ -530,7 +564,11 @@ pub async fn shared_vault_remove(app: AppHandle, state: St<'_>, id: String, fp: 
     // a signed entry on the member list when the vault has one (the server removes them in the same write), else
     // the server's removal alone; with no key here (a vault that lost it) only the server's
     let key = load_key(&crate::data_dir(&app), &id);
-    let gone = on_server(&state, &id, move |v, c| match key { Ok(k) => c.sealed(&v.id, k).remove(&who), Err(_) => c.vault_remove(&v.id, &who) }).await;
+    let (data, a) = (crate::data_dir(&app), app.clone());
+    let gone = on_server(&state, &id, move |v, c| match key {
+        Ok(k) => a.state::<crate::App>().shared.with_vault(&v.id.clone(), || c.sealed(&v.id, k).remove(&who, &|k| save_key(&data, &v.id, k))),
+        Err(_) => c.vault_remove(&v.id, &who),
+    }).await;
     if fp != me { return gone; }
     // leaving: what the server says when this Mac is out already does not keep the vault here
     if let Err(e) = gone { if !left_already(&e) { return Err(e); } }

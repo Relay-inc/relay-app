@@ -134,6 +134,7 @@ export type SharedStatus = {
   // what the member list says is wrong: a list the server cannot be trusted on, another member who saw a newer one, a
   // removal that waits too long for its key change
   warnings?: string[];
+  rekeying?: boolean; // someone left and the key has not changed yet
   changed?: { fp: string; name: string }[]; // members whose Relay publishes other keys than the member list has
 };
 /** An open invite of a shared vault: single use, `expires` in epoch seconds. */

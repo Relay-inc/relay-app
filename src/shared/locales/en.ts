@@ -1019,6 +1019,8 @@ const en = {
   "set.sharedCounts": "{sent} sent, {received} received",
   "set.sharedBad_one": "{n} file there does not open with this key.",
   "set.sharedBad_other": "{n} files there do not open with this key.",
+  "set.sharedRekeying":
+    "Someone left: the key changes on an admin's next round. Until then, what you write can still be read with the old key.",
   "set.sharedKeyChanged":
     "{name}'s Relay shows other keys than the member list has. They may have set up Relay again, or someone is in between.",
   "set.sharedTrustAsk": "Trust {name}'s new key…",
