@@ -2,8 +2,9 @@
 // work-state row (a hand-kept table) or card (a vault whose work-state.md build-index.py generates from the project
 // notes' frontmatter), its entries in .relay/config.json (icon, Design link, repos) and its scratch notes. `plan` reads
 // both sides and writes nothing; `apply` writes the plan. Nothing is written while a path in the target exists, and a
-// move removes only what was copied, after every write succeeded. Conversations are not touched here: they stay in the
-// vault they ran in (policy::fence), the webview makes them general conversations there.
+// move removes only what was copied, after every write succeeded. On a move the project's Claude Code conversations go
+// along (`Carry`): their transcripts are copied first, the sessions point at the new vault once every write worked, the
+// originals go last (lib.rs `migrate_run`).
 
 use regex::Regex;
 use relay_remote::sync::Filter;
@@ -236,6 +237,54 @@ impl Plan {
     }
 }
 
+/// A conversation's Claude Code transcript (`<sid>.jsonl`) and its folder (subagents, tool results) moving from one
+/// vault's transcript folder to another's, in the same account: `--resume` finds a session by its folder.
+pub struct Carry { pub from: PathBuf, pub to: PathBuf, pub sid: String }
+
+fn copy_tree(from: &Path, to: &Path, written: &mut Vec<PathBuf>) -> Result<(), String> {
+    let m = fs::symlink_metadata(from).map_err(|e| e.to_string())?;
+    if m.file_type().is_symlink() { return Ok(()); }
+    if fs::symlink_metadata(to).is_ok() { return Err(format!("{} is there already", to.display())); }
+    if m.is_dir() {
+        fs::create_dir_all(to).map_err(|e| e.to_string())?;
+        written.push(to.into());
+        for e in fs::read_dir(from).map_err(|e| e.to_string())?.flatten() { copy_tree(&e.path(), &to.join(e.file_name()), written)?; }
+    } else {
+        fs::create_dir_all(to.parent().unwrap()).map_err(|e| e.to_string())?;
+        fs::copy(from, to).map_err(|e| format!("{}: {e}", to.display()))?;
+        written.push(to.into());
+    }
+    Ok(())
+}
+/// The sessions of the conversations `keys` now run in `vault` ("" the main one). The only place a started
+/// conversation changes vault: everywhere else it stays where it began (policy::fence, the webview's `leavesVault`).
+pub fn rehome(sids: &mut std::collections::HashMap<String, crate::agents::Sess>, keys: &[String], vault: &str) {
+    for k in keys { if let Some(s) = sids.get_mut(k) { s.vault = vault.to_string(); } }
+}
+/// Takes back what a copy wrote, newest first (files, then the folders they were in).
+pub fn undo(written: &[PathBuf]) {
+    for p in written.iter().rev() { if p.is_dir() { fs::remove_dir(p).ok(); } else { fs::remove_file(p).ok(); } }
+}
+/// Every transcript copied to its new folder, the originals left: nothing when one is there already, and a failed copy
+/// takes back the others. The paths written, for `undo` when a later step fails.
+pub fn copy_transcripts(list: &[Carry]) -> Result<Vec<PathBuf>, String> {
+    let mut written = vec![];
+    let res = list.iter().try_for_each(|c| {
+        for name in [format!("{}.jsonl", c.sid), c.sid.clone()] {
+            if fs::symlink_metadata(c.from.join(&name)).is_ok() { copy_tree(&c.from.join(&name), &c.to.join(&name), &mut written)?; }
+        }
+        Ok::<_, String>(())
+    });
+    match res { Ok(()) => Ok(written), Err(e) => { undo(&written); Err(e) } }
+}
+/// The originals, once the copies are in use.
+pub fn drop_transcripts(list: &[Carry]) {
+    for c in list {
+        fs::remove_file(c.from.join(format!("{}.jsonl", c.sid))).ok();
+        fs::remove_dir_all(c.from.join(&c.sid)).ok();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -357,6 +406,50 @@ mod tests {
         // what did not go stays in the source, with its folders
         assert!(a.join("Contexts/Work/Portfolio/Kestrel/.claude/settings.json").is_file());
         assert!(!a.join("Contexts/Work/Portfolio/Kestrel/Kestrel.md").exists());
+    }
+
+    #[test]
+    fn transcripts_move_with_their_folder_and_roll_back() {
+        let t = tmp("carry");
+        let (old, new) = (t.join("projects/-old"), t.join("projects/-new"));
+        w(&old, "s1.jsonl", "one");
+        w(&old, "s1/subagents/agent-a.jsonl", "sub");
+        w(&old, "s1/tool-results/x.txt", "tool");
+        w(&old, "s2.jsonl", "two");
+        w(&old, "other.jsonl", "not moved");
+        let list = [Carry { from: old.clone(), to: new.clone(), sid: "s1".into() }, Carry { from: old.clone(), to: new.clone(), sid: "s2".into() }];
+        // a transcript already in the target: nothing stays written, the originals untouched
+        w(&new, "s2.jsonl", "theirs");
+        assert!(copy_transcripts(&list).is_err());
+        assert!(!new.join("s1.jsonl").exists() && !new.join("s1").exists());
+        assert_eq!(fs::read_to_string(new.join("s2.jsonl")).unwrap(), "theirs");
+        fs::remove_file(new.join("s2.jsonl")).unwrap();
+        // a later step failing takes the copies back too
+        let written = copy_transcripts(&list).unwrap();
+        assert_eq!(fs::read_to_string(new.join("s1/subagents/agent-a.jsonl")).unwrap(), "sub");
+        undo(&written);
+        assert!(!new.join("s1.jsonl").exists() && !new.join("s1").exists() && !new.join("s2.jsonl").exists());
+        // done: copies in place, originals gone, other sessions left
+        copy_transcripts(&list).unwrap();
+        drop_transcripts(&list);
+        assert_eq!(fs::read_to_string(new.join("s1.jsonl")).unwrap(), "one");
+        assert_eq!(fs::read_to_string(new.join("s1/tool-results/x.txt")).unwrap(), "tool");
+        assert!(!old.join("s1.jsonl").exists() && !old.join("s1").exists() && !old.join("s2.jsonl").exists());
+        assert!(old.join("other.jsonl").is_file());
+    }
+
+    #[test]
+    fn only_the_moved_conversations_change_vault() {
+        use crate::agents::Sess;
+        let sess = |v: &str| Sess { provider: "claude".into(), sid: "s".into(), account: String::new(), vault: v.into() };
+        let mut sids: std::collections::HashMap<String, Sess> = [("a".into(), sess("")), ("b".into(), sess("")), ("c".into(), sess("/other"))].into();
+        rehome(&mut sids, &["a".into(), "c".into(), "gone".into()], "/team");
+        assert_eq!(sids["a"].vault, "/team");
+        assert_eq!(sids["b"].vault, "", "a conversation not moved keeps its vault");
+        assert_eq!(sids["c"].vault, "/team");
+        rehome(&mut sids, &["a".into()], "");
+        assert_eq!(sids["a"].vault, "", "back to the main vault");
+        assert_eq!(sids.len(), 3);
     }
 
     #[test]

@@ -315,6 +315,12 @@ const TEXT: &[(&str, [&str; 4])] = &[
         "Cette machine sert uniquement aux espaces de travail : aucune conversation n'y tourne et le coffre de ce Mac n'y va pas", "Diese Maschine ist nur für Workspaces: Dort läuft kein Gespräch, und der Vault dieses Macs geht nicht dorthin"]),
     ("err.machine_repair", ["This machine is already paired the other way: forget it first, then pair it again", "Deze machine is al op de andere manier gekoppeld: vergeet ze eerst en koppel ze dan opnieuw",
         "Cette machine est déjà appairée autrement : oubliez-la d'abord, puis appairez-la à nouveau", "Diese Maschine ist schon anders gekoppelt: Vergiss sie zuerst und kopple sie dann neu"]),
+    ("err.mig_machine", ["{v} runs on a work machine: move it back to this Mac first, then move the project", "{v} loopt op een werkmachine: zet het eerst terug op deze Mac en verplaats dan het project",
+        "{v} tourne sur une machine de travail : ramenez-la d'abord sur ce Mac, puis déplacez le projet", "{v} läuft auf einer Arbeitsmaschine: hol es zuerst auf diesen Mac zurück und verschiebe dann das Projekt"]),
+    ("err.mig_phone", ["{v} is shared with the phone: stop sharing it (/unshare-phone), then move the project", "{v} is gedeeld met de telefoon: stop het delen (/unshare-phone) en verplaats dan het project",
+        "{v} est partagée avec le téléphone : arrêtez le partage (/unshare-phone), puis déplacez le projet", "{v} ist mit dem Telefon geteilt: beende das Teilen (/unshare-phone) und verschiebe dann das Projekt"]),
+    ("err.mig_busy", ["{v} is still working or waiting on you: let it finish, then move the project", "{v} is nog bezig of wacht op jou: laat het eerst afronden en verplaats dan het project",
+        "{v} travaille encore ou vous attend : laissez-la finir, puis déplacez le projet", "{v} arbeitet noch oder wartet auf dich: lass es zuerst fertig werden und verschiebe dann das Projekt"]),
     ("err.no_context", ["That workspace has no context to put the project in", "Die workspace heeft geen context om het project in te zetten", "Cet espace de travail n'a aucun contexte où mettre le projet", "Dieser Workspace hat keinen Kontext für das Projekt"]),
     ("err.no_machine", ["No such work machine", "Onbekende werkmachine", "Machine de travail inconnue", "Unbekannte Arbeitsmaschine"]),
     ("err.cal_email", ["Calendar: enter the calendar's email address", "Agenda: vul het e-mailadres van de agenda in", "Agenda : saisissez l'adresse e-mail de l'agenda", "Kalender: Gib die E-Mail-Adresse des Kalenders ein"]),
@@ -703,12 +709,43 @@ fn set_project_repos(app: AppHandle, state: State<App>, project: String, repos: 
 /// A project moved or copied to another workspace (migrate.rs): `mode` "move" or "copy", into `context` of the
 /// workspace `to` ("" its context of the same name, else its first). `dry`: nothing is written, the answer is what the
 /// dialog shows, with the target's contexts, whether it is a team workspace and the key the project gets there. A
-/// workspace of cards gets its index rebuilt after.
+/// workspace of cards gets its index rebuilt after. `chats`: the project's conversations as the webview has them
+/// (`{key, title, mail}`); on a move each one says whether it goes along (`migrate_chats`).
 #[tauri::command]
-async fn migrate_project(app: AppHandle, project: String, to: String, context: String, mode: String, dry: bool) -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(move || migrate_run(&app, &project, &to, &context, mode == "move", dry)).await.map_err(|e| e.to_string())?
+async fn migrate_project(app: AppHandle, project: String, to: String, context: String, mode: String, dry: bool, chats: Option<Vec<Value>>) -> Result<Value, String> {
+    let chats = chats.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || migrate_run(&app, &project, &to, &context, mode == "move", dry, &chats)).await.map_err(|e| e.to_string())?
 }
-fn migrate_run(app: &AppHandle, project: &str, to: &str, context: &str, mv: bool, dry: bool) -> Result<Value, String> {
+/// On a move, which of the project's conversations go along to `to`, and their transcripts' folders: a Claude Code one
+/// that ran in the project's vault, except one that read mail when `to` is a team workspace (the mail would reach the
+/// team's notes). Codex and OpenCode run in the main vault only (err.vault_only_claude), so theirs stay. The whole move
+/// is refused while one of them runs a turn, waits on a card, runs on a work machine or is shared with the phone: its
+/// session would change folders under it.
+fn migrate_chats(app: &AppHandle, from_vault: &str, to: &str, team: bool, chats: &[Value]) -> Result<(Vec<Value>, Vec<(String, migrate::Carry)>), String> {
+    let state = app.state::<App>();
+    let main = need_vault(&state)?;
+    let p: &'static dyn AgentProvider = &agent_claude::PROVIDER;
+    let (mut out, mut carries) = (vec![], vec![]);
+    for c in chats {
+        let (key, title) = (c["key"].as_str().unwrap_or(""), c["title"].as_str().unwrap_or(""));
+        let Some(sess) = state.sids.lock().unwrap().get(key).cloned() else { continue };
+        if state.machines.bind_of(key).is_some() { return Err(trc_v("err.mig_machine", title)); }
+        if share::is_shared(app, key) { return Err(trc_v("err.mig_phone", title)); }
+        let (busy, tainted) = state.procs.lock().unwrap().get(key).map_or((false, false), |x| (x.turns.busy(), x.tainted));
+        if busy || pending::list(&pending_dir(app)).into_iter().any(|x| x["project"] == key) { return Err(trc_v("err.mig_busy", title)); }
+        let ran_in = if sess.vault.is_empty() { main.clone() } else { sess.vault.clone() };
+        let why = if sess.provider != "claude" { "provider" } else if team && (tainted || c["mail"] == true) { "mail" } else if ran_in != from_vault { "elsewhere" } else { "" };
+        out.push(json!({"key": key, "title": title, "moves": why.is_empty(), "why": why}));
+        if !why.is_empty() { continue; }
+        let mut eb = in_vault(env_of(app, &state, p), ran_in);
+        eb.opts["account"] = json!(sess.account);
+        let from = PathBuf::from(agent_claude::transcripts_of(&eb.env(), &sess.sid));
+        let to_dir = from.with_file_name(agent_claude::slug(to));
+        carries.push((key.to_string(), migrate::Carry { from, to: to_dir, sid: sess.sid }));
+    }
+    Ok((out, carries))
+}
+fn migrate_run(app: &AppHandle, project: &str, to: &str, context: &str, mv: bool, dry: bool, chats: &[Value]) -> Result<Value, String> {
     let state = app.state::<App>();
     let (from_vault, name) = project_home(&state, project)?;
     let s = state.settings.lock().unwrap().clone();
@@ -736,8 +773,26 @@ fn migrate_run(app: &AppHandle, project: &str, to: &str, context: &str, mv: bool
     out["context"] = json!(ctx);
     out["team"] = json!(team);
     out["key"] = json!(policy::project_key(&s, to, &name));
+    let (convs, carries) = if mv { migrate_chats(app, &from_vault, to, team, chats)? } else { (vec![], vec![]) };
+    out["chats"] = json!(convs);
     if dry { return Ok(out); }
-    plan.apply(&from, &dst, mv, &chrono::Local::now().format("%Y-%m-%d").to_string())?;
+    // the agents of the conversations that go stop first, so their transcripts are complete; the next message resumes
+    // each one in the new vault
+    for (key, _) in &carries { if let Some(mut x) = state.procs.lock().unwrap().remove(key) { x.child.kill().ok(); } }
+    let list: Vec<migrate::Carry> = carries.iter().map(|(_, c)| migrate::Carry { from: c.from.clone(), to: c.to.clone(), sid: c.sid.clone() }).collect();
+    let written = migrate::copy_transcripts(&list)?;
+    if let Err(e) = plan.apply(&from, &dst, mv, &chrono::Local::now().format("%Y-%m-%d").to_string()) {
+        migrate::undo(&written);
+        return Err(e);
+    }
+    // the one place a started conversation changes vault: its project went, with its transcript
+    {
+        let keys: Vec<String> = carries.iter().map(|(k, _)| k.clone()).collect();
+        let mut sids = state.sids.lock().unwrap();
+        migrate::rehome(&mut sids, &keys, if to == need_vault(&state)? { "" } else { to });
+        save_sids(app, &sids);
+    }
+    migrate::drop_transcripts(&list);
     for side in [&from, &dst].into_iter().filter(|x| migrate::cards(x)) {
         if shared_vaults::list(&s).iter().any(|v| v.folder == side.vault) { shared_vaults::index_shared(app, &side.vault); } else { rebuild_index(app, &side.vault); }
     }

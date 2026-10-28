@@ -569,6 +569,41 @@ const SCENARIOS = {
     s.check("Personal stored as none", (await stored()).at(-1) === "");
   },
 
+  // a project moved to another workspace takes its conversations along: they show under it there
+  async migrate(s) {
+    await s.load({ fixture: "shared" });
+    const { page } = s;
+    await click(nav(page).getByText("GENERAL", { exact: true })); // folded, so the project's menu fits
+    await nav(page).getByText("Beacon", { exact: true }).first().click({ button: "right" });
+    await click(page.getByRole("button", { name: "Side vault", exact: true }).first());
+    s.check("the dialog says the conversations go along", await waitText(page, "go along and continue there"));
+    await click(page.getByRole("button", { name: "Move", exact: true }));
+    s.check(
+      "migrate_project moved it",
+      await page
+        .waitForFunction(() => window.__harness.calls.some(c => c.cmd === "migrate_project" && !c.args.dry), null, {
+          timeout: 4000,
+        })
+        .then(
+          () => true,
+          () => false,
+        ),
+    );
+    await settle(page);
+    const run = (await s.calls("migrate_project")).find(c => !c.args.dry);
+    s.check("a move", run?.args.mode === "move");
+    s.check(
+      "the started conversations are sent along",
+      (run?.args.chats ?? []).some(c => c.title === "Prepare the client call"),
+    );
+    s.check("done", await waitText(page, "Moved to Side vault"));
+    s.check("gone from Personal", !(await navHas(page, "Billing sync double balances")));
+    await page.keyboard.press("Control+Digit2");
+    await settle(page);
+    s.check("the project shows in the side vault", await navHas(page, "Beacon Billing"));
+    s.check("its conversations show under it there", await navHas(page, "Billing sync double balances"));
+  },
+
   async mail(s) {
     await s.load();
     const { page, keys } = s;

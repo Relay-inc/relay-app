@@ -57,6 +57,9 @@ pub fn rekey(app: &AppHandle, from: &str, to: &str) {
     if with(app, |f| f.shared.contains_key(from)) { update(app, |f| if let Some(t) = f.shared.remove(from) { f.shared.insert(to.into(), t); }); }
 }
 
+/// Whether the conversation `key` is shared with the phone.
+pub fn is_shared(app: &AppHandle, key: &str) -> bool { with(app, |f| f.shared.contains_key(key)) }
+
 /// What may be reached from the phone now: shared, on this Mac (one on a machine the phone sees there), not the
 /// orchestrator's, and not holding mail text (the same rule as moving to a machine: the server would see it).
 fn reachable(app: &AppHandle, key: &str) -> bool {
