@@ -159,6 +159,16 @@ export function watchPage(page: string, merge: (change: OutsideChange) => void) 
     if (watchers.get(page) === merge) watchers.delete(page);
   };
 }
+/** A version from a page's history made its text again. A shared workspace's document: as an edit of it, which the
+ *  open editor and every member get. Any other note: written over its file, and the open editor takes it in as a
+ *  change made outside (merged with what is typed, else the bar). */
+export type { PageHistory, PageVersion } from "../../infrastructure/backend";
+export const loadHistory = (page: string) => backend.pageHistory(page);
+export async function restorePage(page: string, kind: backend.PageHistory["kind"], text: string) {
+  if (kind === "doc") return backend.pageRestore(page, text);
+  const { hash } = await backend.writeNote(page, text, "", true);
+  watchers.get(page)?.({ text, hash, by: "relay" });
+}
 // a conversation's Edit or Write of this note that ended in the last 15 s
 function byClaude(page: string) {
   const since = Date.now() - 15_000;

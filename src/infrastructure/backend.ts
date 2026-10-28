@@ -124,6 +124,19 @@ export const sharedDocAbsorb = (path: string, by: string) => invoke<void>("share
 /** A page's note as a shared document: its id, everything this Mac has of it (Yjs v1, base64), this device and the name
  *  its cursor shows; null when the note is no document (it is saved as a file). */
 export type SharedDoc = { vault: string; doc: string; state: string; me: string; name: string };
+/** A version in a page's history: a document's session (`added`/`removed` lines against the one before) or a commit. */
+export type PageVersion = {
+  key: string;
+  author: string;
+  by?: string[];
+  at: number;
+  text: string;
+  added?: number;
+  removed?: number;
+};
+export type PageHistory = { kind: "doc" | "git" | "none"; versions: PageVersion[] };
+export const pageHistory = (path: string) => invoke<PageHistory>("page_history", { path });
+export const pageRestore = (path: string, text: string) => invoke<void>("page_restore", { path, text });
 export const sharedDocOpen = (path: string) => invoke<SharedDoc | null>("shared_doc_open", { path });
 /** An edit made in a page's editor (Yjs v1 update, base64): into the document and sent. */
 export const sharedDocEdit = (path: string, doc: string, update: string) =>

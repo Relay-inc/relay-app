@@ -179,6 +179,22 @@ pub fn show(top: &str, hash: &str, path_env: &str) -> Result<Value, String> {
     Ok(json!({"hash": hash, "body": body.trim_end(), "files": split(&diff)}))
 }
 
+/// The commits that changed one file, newest first, following it across renames: per commit its hash, author, time
+/// (ms) and the file's text then. At most `max`. Only reads.
+pub fn file_history(top: &str, rel: &str, max: usize, path_env: &str) -> Result<Vec<Value>, String> {
+    if ok(top, &["rev-parse", "--verify", "-q", "HEAD"], path_env).is_none() { return Ok(vec![]); }
+    let n = format!("-n{max}");
+    let out = run(top, &["-c", "core.quotepath=off", "log", "--follow", &n, "--format=%x1e%H%x1f%an%x1f%at", "--name-only", "--", rel], path_env)?;
+    Ok(out.split('\x1e').filter_map(|r| {
+        let (head, files) = r.split_once('\n')?;
+        let f: Vec<&str> = head.split('\x1f').collect();
+        let path = files.lines().map(str::trim).find(|l| !l.is_empty())?;
+        // a commit that removed the file has no text of it
+        let text = git(top, &["show", &format!("{}:{path}", f.first()?)], path_env).filter(|(s, _)| *s).map(|(_, o)| o)?;
+        Some(json!({"key": f[0], "author": f.get(1)?, "at": f.get(2)?.parse::<u64>().unwrap_or(0) * 1000, "path": path, "text": text}))
+    }).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,4 +315,23 @@ mod tests {
         assert!(show(&top, "HEAD", &path).is_err());
         std::fs::remove_dir_all(&tmp).ok();
     }
+
+    /// A note's commits newest first, its text at each, through a rename (`--follow`); a file never committed has none.
+    #[test]
+    fn a_files_history_follows_it_across_a_rename() {
+        let path = std::env::var("PATH").unwrap();
+        let tmp = std::env::temp_dir().join(format!("relay-git-hist-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        sh(&tmp, "git init -q -b main . && git config user.email t@t && git config user.name Kim \\
+            && printf 'one\\n' > A.md && git add A.md && git commit -qm one \\
+            && git mv A.md B.md && printf 'one\\ntwo\\n' > B.md && git add B.md && git commit -qm two");
+        let top = tmp.to_string_lossy().to_string();
+        let h = file_history(&top, "B.md", 10, &path).unwrap();
+        let got: Vec<(&str, &str, &str)> = h.iter().map(|v| (v["author"].as_str().unwrap(), v["path"].as_str().unwrap(), v["text"].as_str().unwrap())).collect();
+        assert_eq!(got, [("Kim", "B.md", "one\ntwo\n"), ("Kim", "A.md", "one\n")]);
+        assert!(file_history(&top, "C.md", 10, &path).unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }
+

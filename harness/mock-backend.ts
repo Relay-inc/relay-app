@@ -557,6 +557,25 @@ function handle(cmd: string, a: Args): unknown {
           >
         )[String(a.key)] ?? []
       );
+    case "page_history": {
+      // three sessions of the page's note: the newest is the note now, each older one a few lines shorter
+      const now = String(vault.noteText(a.path).text ?? "");
+      const cut = (n: number) => now.split("\n").slice(0, -n).join("\n") + "\n";
+      const at = Date.now();
+      return {
+        kind: "doc",
+        versions: [
+          { key: "9", author: "Ana Vos", by: ["claude"], at: at - 20 * 60_000, text: now, added: 3, removed: 0 },
+          { key: "6", author: "Ben Lauwers", by: [""], at: at - 3 * 3600_000, text: cut(3), added: 4, removed: 1 },
+          { key: "2", author: "Ana Vos", by: ["disk"], at: at - 2 * 86_400_000, text: cut(7), added: 12, removed: 0 },
+        ],
+      };
+    }
+    case "page_restore": {
+      const hash = `h${++writes}`;
+      written.set(String(a.path), { text: String(a.text), hash });
+      return null;
+    }
     case "write_note": {
       // a file changed on disk since the page read it (set with __harness.changeOnDisk): refused unless forced
       if (diskChanged && !a.force) return Promise.reject("changed");

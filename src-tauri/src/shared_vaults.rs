@@ -352,6 +352,22 @@ impl Hub {
         let c = self.live.lock().unwrap().get(id).map(|(c, _)| c.clone()).ok_or("not live")?;
         c.send("awareness", doc, body.as_bytes())
     }
+    /// The history of vault `id`'s note `path` when it is a document (`Docs::history`), else None.
+    pub fn doc_history(&self, id: &str, path: &str) -> Option<Result<Vec<relay_remote::docs::Version>, String>> {
+        let docs = self.loaded_docs(id)?;
+        let doc = docs.paths().get(path)?.clone();
+        Some(docs.history(&doc))
+    }
+    /// Vault `id`'s note `path`, a document, made `text` again (a version from its history) as this Mac's edit, then
+    /// written out on a thread of its own as after an edit in a page.
+    pub fn doc_restore(&self, id: &str, folder: &str, path: &str, text: &str) -> Result<(), String> {
+        let docs = self.loaded_docs(id).ok_or("the workspace's documents are not loaded yet")?;
+        let doc = docs.paths().get(path).cloned().ok_or("not a document")?;
+        docs.set_text(&doc, text, "restore")?;
+        let (id, folder) = (id.to_string(), folder.to_string());
+        if let Some(h) = APP.get().cloned() { std::thread::spawn(move || h.state::<crate::App>().shared.export_now(&id, &folder)); }
+        Ok(())
+    }
     /// Vault `id`'s documents, when its rounds loaded them.
     pub fn loaded_docs(&self, id: &str) -> Option<Arc<Docs>> { self.docs.lock().unwrap().get(id).cloned() }
     /// Notes of vault `id` moved (the Pages tab, `moves`: from, to; the files are there already): each that is a
@@ -509,6 +525,10 @@ async fn on_server<T: Send + 'static>(state: &St<'_>, id: &str, call: impl FnOnc
     let v = find(&state.settings.lock().unwrap(), id)?;
     let c = client(&v, &state.machines.id);
     tauri::async_runtime::spawn_blocking(move || call(v, c)).await.map_err(|e| e.to_string())?
+}
+/// Vault `id`'s members as the server lists them: fingerprint → name (who an update in a document's history is by).
+pub async fn member_names(state: &St<'_>, id: &str) -> std::collections::BTreeMap<String, String> {
+    on_server(state, id, |v, c| c.vault_info(&v.id)).await.map(|i| i.members.into_iter().map(|m| (m.fp, m.name)).collect()).unwrap_or_default()
 }
 /// Work on the Hub off the async worker: it waits for a running round of that vault.
 async fn on_hub<T: Send + 'static>(app: &AppHandle, f: impl FnOnce(&Hub, &Path) -> T + Send + 'static) -> Result<T, String> {
