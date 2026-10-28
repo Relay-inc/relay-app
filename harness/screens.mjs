@@ -1277,6 +1277,62 @@ const VIEWS = {
     await waitText("Keep mine", 4000);
     await settle(page);
   },
+  // the / menu on a new line of a page, filtered by "/to" (ticket 3)
+  "editor-slash-menu": async () => {
+    await VIEWS["page-view"]();
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("\n/");
+    await page.locator(".cm-tooltip-autocomplete").waitFor();
+    await settle(page);
+  },
+  "editor-slash-menu-dark": async () => {
+    await VIEWS["page-view-dark"]();
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("\n/to");
+    await page.locator(".cm-tooltip-autocomplete").waitFor();
+    await settle(page);
+  },
+  // [[ completes the workspace's notes
+  "editor-wikilink-complete": async () => {
+    await VIEWS["page-view"]();
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("\nSee [[Nor");
+    await page.locator(".cm-tooltip-autocomplete").waitFor();
+    await settle(page);
+  },
+  // a table from the / menu, filled with Tab; Tab in the last cell adds a row
+  "editor-table": async () => {
+    await VIEWS["page-view"]();
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("\n\n/table");
+    await page.locator(".cm-tooltip-autocomplete").waitFor();
+    // CodeMirror takes Enter as a pick only 75 ms after the list opened, by Date.now, which the harness pins: move it on
+    await page.clock.setFixedTime(await page.evaluate(() => Date.now() + 1000));
+    await page.keyboard.press("Enter");
+    for (const cell of ["Kristof", "Build", "Laurent", "Review"]) {
+      await page.keyboard.type(cell);
+      await page.keyboard.press("Tab");
+    }
+    await page.keyboard.type("Jeppe");
+    await settle(page);
+  },
+  // a block's handle clicked: Turn into, Duplicate, Delete
+  "editor-block-handle": async () => {
+    await VIEWS["page-view"]();
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("\n\n## Next steps\nCall the client on Thursday");
+    const line = await page.locator(".cm-line", { hasText: "Next steps" }).boundingBox();
+    await page.mouse.click(line.x + line.width - 4, line.y - 40); // the cursor off the heading: it shows formatted
+    await page.mouse.move(line.x + 20, line.y + line.height / 2);
+    await page.locator(".cm-block-handle").click();
+    await page.locator(".cm-block-menu").waitFor();
+    await settle(page);
+  },
   // Ask Claude on the side vault's page: a new conversation in that workspace with the note's path typed in
   "page-ask": async () => {
     await VIEWS["pages-shared"]();
