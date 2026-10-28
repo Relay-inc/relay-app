@@ -1,12 +1,20 @@
-import { useEffect } from "react";
-import { askAboutPage, loadPage, pagePath, pageProject, type Page } from "../../../application/navigation/pages";
+import { useEffect, useRef } from "react";
+import {
+  askAboutPage,
+  loadPage,
+  pagePath,
+  pageProject,
+  savePage,
+  type Page,
+} from "../../../application/navigation/pages";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { pageKey } from "../../../domain/navigation/keys";
 import { workspaces } from "../../../application/navigation/workspaces";
 import { chatsOf } from "../../../application/conversations/selectors";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useWorkspaceStore } from "../../../application/workspace/store";
-import { noteProperties, noteTitle } from "../../../domain/workspace/rules";
+import { noteTitle } from "../../../domain/workspace/rules";
+import { frontmatterOf, withFrontmatter } from "../../../domain/workspace/properties";
 import { noteName } from "../../../domain/navigation/pages";
 import { clockTime } from "../../../shared/format";
 import { isImg } from "../../../shared/icons";
@@ -17,8 +25,9 @@ import { Markdown } from "../../components/Markdown";
 import { Icon } from "../../components/Icon";
 import { Note } from "../../components/Note";
 import { ProjectImg } from "../../components/ProjectImg";
-import { FRONTMATTER, LEAD, PropertyValue } from "./NoteDetail";
-import { PageEditor } from "./PageEditor";
+import { FRONTMATTER } from "./NoteDetail";
+import { PageEditor, type HeadWriter } from "./PageEditor";
+import { Properties } from "./Properties";
 
 const EDIT_MAX = 1_000_000; // characters: a bigger note is shown read-only
 
@@ -40,8 +49,8 @@ export function PageView({ target, className }: { target: string; className: str
   useConversationsStore(s => s.chats); // the count follows new and closed conversations
   const chats = project ? chatsOf(project.key) : [];
 
+  const headRef = useRef<HeadWriter["current"]>(null);
   const match = page ? FRONTMATTER.exec(page.text) : null;
-  const properties = match ? noteProperties(match[1]) : [];
   const { title, body } = noteTitle(path, page ? page.text.slice(match ? match[0].length : 0) : noteName(path));
   // what comes before the body in the file (frontmatter, the title's heading): the editor writes it back unchanged
   const head = page ? page.text.slice(0, page.text.length - body.length) : "";
@@ -101,40 +110,31 @@ export function PageView({ target, className }: { target: string; className: str
                 </span>
                 <h1 className="text-3xl font-semibold tracking-tight text-pretty">{title}</h1>
               </div>
-              {properties.length || project ? (
-                <dl className="grid grid-cols-[140px_minmax(0,1fr)] gap-x-4 gap-y-2 text-[13px] leading-normal">
-                  {properties
-                    .filter(([key]) => !LEAD.includes(key))
-                    .map(([key, values]) => (
-                      <div key={key} className="contents">
-                        <dt className="text-tertiary">{key}</dt>
-                        <dd className="flex flex-wrap gap-1.5 text-label wrap-anywhere">
-                          {values.filter(Boolean).map((value, i) => (
-                            <span key={i} className="px-2 rounded-md bg-fill-2">
-                              <PropertyValue value={value} />
-                            </span>
-                          ))}
-                        </dd>
-                      </div>
-                    ))}
-                  {project ? (
-                    <>
-                      <dt className="text-tertiary">{t("page.conversations")}</dt>
-                      <dd>
-                        <span className="inline-flex items-center gap-1.5 px-2 rounded-md border border-separator text-accent-text">
-                          <Icon name="chat" className="glyph size-3" />
-                          {chats.length
-                            ? t("page.latest", {
-                                n: chats.length,
-                                time: clockTime(new Date(chats[0].at).toISOString(), locale),
-                              })
-                            : 0}
-                        </span>
-                      </dd>
-                    </>
-                  ) : null}
-                </dl>
-              ) : null}
+              <Properties
+                yaml={frontmatterOf(head) ?? ""}
+                onChange={yaml => {
+                  const next = withFrontmatter(head, yaml);
+                  // through the editor: what is typed in the body goes along, one write, one hash check
+                  void (headRef.current ? headRef.current(next) : savePage(target, next + body));
+                }}
+              >
+                {project ? (
+                  <>
+                    <dt className="h-7 flex items-center pl-4 text-tertiary">{t("page.conversations")}</dt>
+                    <dd className="flex items-center px-2">
+                      <span className="inline-flex items-center gap-1.5 px-2 rounded-md border border-separator text-accent-text">
+                        <Icon name="chat" className="glyph size-3" />
+                        {chats.length
+                          ? t("page.latest", {
+                              n: chats.length,
+                              time: clockTime(new Date(chats[0].at).toISOString(), locale),
+                            })
+                          : 0}
+                      </span>
+                    </dd>
+                  </>
+                ) : null}
+              </Properties>
             </header>
             <div className="h-px bg-separator" />
             {page.text.length > EDIT_MAX ? (
@@ -143,7 +143,7 @@ export function PageView({ target, className }: { target: string; className: str
                 <PageBody text={body} />
               </>
             ) : (
-              <PageEditor key={target} page={target} head={head} body={body} />
+              <PageEditor key={target} page={target} head={head} body={body} headRef={headRef} />
             )}
           </article>
         )}

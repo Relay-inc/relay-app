@@ -11,10 +11,24 @@ import "../../styles/page-editor.css";
 
 const SAVE_AFTER = 1000; // ms after the last keystroke
 
+/** Writes a new head (the page's properties edited) with what is typed in the body: one save, the same hash check. */
+export type HeadWriter = { current: ((head: string) => Promise<void>) | null };
+
 /** A page's body as an editor: markdown with a live preview, saved a second after typing stops, on blur and with ⌘S.
- *  `head` is what comes before the body in the file (frontmatter, the title's heading) and goes back unchanged. When the
- *  file changed on disk since it was read, nothing is written and a bar offers Reload or Keep mine. */
-export function PageEditor({ page, head, body }: { page: string; head: string; body: string }) {
+ *  `head` is what comes before the body in the file (frontmatter, the title's heading) and goes back unchanged, unless
+ *  the properties above set a new one through `headRef`. When the file changed on disk since it was read, nothing is
+ *  written and a bar offers Reload or Keep mine. */
+export function PageEditor({
+  page,
+  head,
+  body,
+  headRef,
+}: {
+  page: string;
+  head: string;
+  body: string;
+  headRef: HeadWriter;
+}) {
   const { t } = useT();
   const [changed, setChanged] = useState(false);
   const [failed, setFailed] = useState("");
@@ -48,7 +62,10 @@ export function PageEditor({ page, head, body }: { page: string; head: string; b
         page={page}
         head={head}
         body={body}
-        onReady={write => (save.current = write)}
+        onReady={(write, setHead) => {
+          save.current = write;
+          headRef.current = setHead;
+        }}
         onChanged={setChanged}
         onFailed={setFailed}
       />
@@ -62,7 +79,7 @@ function Editor(props: {
   page: string;
   head: string;
   body: string;
-  onReady: (write: (force?: boolean) => Promise<void>) => void; // what Keep mine calls
+  onReady: (write: (force?: boolean) => Promise<void>, setHead: (head: string) => Promise<void>) => void; // Keep mine, properties
   onChanged: (changed: boolean) => void;
   onFailed: (error: string) => void;
 }) {
@@ -80,14 +97,16 @@ function Editor(props: {
     handle: t("block.handle"),
   }));
   useEffect(() => {
-    const { page, head, body, onReady, onChanged, onFailed } = first;
+    const { page, body, onReady, onChanged, onFailed } = first;
+    let head = first.head; // a property edited above replaces it
     let saved = body;
     let timer = 0;
     let blocked = false; // changed on disk: no autosave until Reload or Keep mine
-    const write = async (force = false) => {
+    // `dirty`: the head changed, write even when the body did not
+    const write = async (force = false, dirty = false) => {
       window.clearTimeout(timer);
       const text = view.state.doc.toString();
-      if ((text === saved || blocked) && !force) return;
+      if ((blocked || (text === saved && !dirty)) && !force) return;
       try {
         if ((await savePage(page, head + text, force)) === "changed") {
           blocked = true;
@@ -102,7 +121,10 @@ function Editor(props: {
         onFailed(String(e));
       }
     };
-    onReady(write);
+    onReady(write, next => {
+      head = next;
+      return write(false, true);
+    });
     const view = new EditorView({
       parent: host.current!,
       state: EditorState.create({

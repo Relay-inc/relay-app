@@ -121,6 +121,8 @@ export const readNote = (target: string) => invoke<unknown>("read_note", { targe
  *  `force`. Resolves to the new text's hash. */
 export const writeNote = (target: string, text: string, expect: string, force: boolean) =>
   invoke<{ hash: string }>("write_note", { target, text, expect, force });
+/** The values a frontmatter key has across a workspace folder's notes, most used first. */
+export const propertyValues = (folder: string, key: string) => invoke<string[]>("property_values", { folder, key });
 export const pickFolder = () => invoke<string | null>("pick_folder");
 export const pickPath = (folder: boolean, start: string) => invoke<string | null>("pick_path", { folder, start });
 export const detectVault = (path: string) => invoke<VaultStatus>("detect_vault", { path });

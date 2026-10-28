@@ -145,6 +145,18 @@ export async function savePage(page: string, text: string, force = false): Promi
     throw e;
   }
 }
+// the values a key has in the workspace's notes, read once per workspace and key
+const values = new Map<string, Promise<string[]>>();
+/** What a page's property offers to pick from: the values the key has across the workspace shown, most used first. */
+export function propertyValues(key: string) {
+  const id = `${activeFolder()}\u001f${key}`;
+  if (!values.has(id))
+    values.set(
+      id,
+      backend.propertyValues(activeFolder(), key).catch(() => []),
+    );
+  return values.get(id)!;
+}
 /** A [[link]] in a page: the note of the workspace shown it names opens as a page, or in the right drawer with
  *  `drawer` (⌘-click), as a link in a conversation does. */
 export function followPageLink(link: string, drawer: boolean) {
