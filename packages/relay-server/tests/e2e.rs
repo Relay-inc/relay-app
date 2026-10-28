@@ -1079,7 +1079,7 @@ impl Member {
         let keys = self.keys();
         let (link, inv) = self.c.vault_invite(&t.vault, role, &keys, &t.host, t.port).unwrap();
         let mut k = self.keys();
-        k.invites.push(relay_remote::vault::Invited { id: inv.id, secret: relay_remote::proto::PairLine::parse(&link).unwrap().secret.unwrap(), role: role.into(), epoch: keys.epoch() });
+        k.invites.push(relay_remote::vault::Invited { id: inv.id, secret: relay_remote::proto::PairLine::parse(&link).unwrap().secret.unwrap(), role: role.into(), epoch: keys.epoch(), expires: inv.expires });
         *self.file.lock().unwrap() = k.format();
         link
     }
@@ -1105,6 +1105,8 @@ fn list_of(t: &Team, m: &Member) -> relay_remote::members::List {
 fn trio(tag: &str, b_role: &str) -> (Team, Member, Member, Member) {
     let t = team(tag);
     let a = Member::new(&t.laptop, &t.lid, &t.key);
+    // as the app does right after making a workspace: the member list first
+    a.remote(&t.vault).start(&a.save()).unwrap();
     rounds(&t, &[&a], 1);
     let (b, _) = join(&a.invite(&t, b_role), &format!("{tag}-b"));
     rounds(&t, &[&b, &a], 1);
@@ -1123,7 +1125,7 @@ fn trio(tag: &str, b_role: &str) -> (Team, Member, Member, Member) {
 fn a_removed_member_reads_nothing_written_after_the_key_changes() {
     use relay_remote::sync::Remote;
     let (t, a, b, c) = trio("rotate", "member");
-    a.remote(&t.vault).remove(&c.fp).unwrap();
+    a.remote(&t.vault).remove(&c.fp, &a.save()).unwrap();
     assert!(list_of(&t, &a).pending.is_some());
     let st = a.step(&t.vault);
     assert_eq!((st.errors.len(), a.keys().epoch()), (0, 1), "{st:?}");
@@ -1211,6 +1213,10 @@ fn a_withheld_tail_and_a_fork_are_noticed() {
     edit_vault(&t, |v| v["log"].as_array_mut().unwrap().push(serde_json::to_value(&x1).unwrap()));
     c.step(&t.vault);
     edit_vault(&t, |v| { let log = v["log"].as_array_mut().unwrap(); log.pop(); log.push(serde_json::to_value(&x2).unwrap()); });
+    // the next entry, on the other history: c sees it does not follow what it checked
+    let l2 = list_of(&t, &a);
+    let x3 = ka.sign_entry(&t.vault, &l2, &a.fp, relay_remote::members::Entry { kind: "demote".into(), fp: b.fp.clone(), ..Default::default() });
+    edit_vault(&t, |v| v["log"].as_array_mut().unwrap().push(serde_json::to_value(&x3).unwrap()));
     let st = c.step(&t.vault);
     assert!(st.warnings.iter().any(|w| w.contains("fork")), "{st:?}");
 }
@@ -1220,7 +1226,7 @@ fn a_withheld_tail_and_a_fork_are_noticed() {
 #[test]
 fn a_removed_admin_and_the_server_cannot_change_the_key() {
     let (t, a, b, c) = trio("rotate-removed-admin", "admin");
-    a.remote(&t.vault).remove(&b.fp).unwrap();
+    a.remote(&t.vault).remove(&b.fp, &a.save()).unwrap();
     let l = list_of(&t, &a);
     let entry = b.keys().sign_entry(&t.vault, &l, &b.fp, relay_remote::members::Entry { kind: "rekey".into(), epoch: 1, h: "9".repeat(64), ..Default::default() });
     edit_vault(&t, |v| v["members"].as_array_mut().unwrap().push(serde_json::json!({"fp": b.fp, "name": "b", "role": "admin", "added": 0})));
@@ -1237,7 +1243,7 @@ fn a_joiner_during_a_key_change_is_added_and_gets_the_new_key() {
     use relay_remote::sync::Remote;
     let (t, a, b, c) = trio("rotate-joiner", "member");
     let link = a.invite(&t, "member");
-    a.remote(&t.vault).remove(&c.fp).unwrap();
+    a.remote(&t.vault).remove(&c.fp, &a.save()).unwrap();
     let (d, _) = join(&link, "rotate-joiner-d");
     rounds(&t, &[&d, &a, &b, &d, &a, &d, &b], 1);
     let l = list_of(&t, &a);
@@ -1255,7 +1261,7 @@ fn a_joiner_during_a_key_change_is_added_and_gets_the_new_key() {
 fn a_promotion_by_the_server_alone_is_ignored() {
     let (t, a, b, c) = trio("rotate-promote", "member");
     edit_vault(&t, |v| { for m in v["members"].as_array_mut().unwrap() { if m["fp"] == b.fp.as_str() { m["role"] = serde_json::json!("admin"); } } });
-    a.remote(&t.vault).remove(&c.fp).unwrap();
+    a.remote(&t.vault).remove(&c.fp, &a.save()).unwrap();
     b.step(&t.vault);
     assert_eq!((b.keys().epoch(), list_of(&t, &a).epoch), (0, 0));
     let l = list_of(&t, &a);
@@ -1267,7 +1273,7 @@ fn a_promotion_by_the_server_alone_is_ignored() {
 #[test]
 fn trusting_a_new_device_during_an_unfinished_removal_is_refused() {
     let (t, a, b, c) = trio("rotate-trust-pending", "member");
-    a.remote(&t.vault).remove(&c.fp).unwrap();
+    a.remote(&t.vault).remove(&c.fp, &a.save()).unwrap();
     assert!(a.remote(&t.vault).trust(&b.fp, &a.save()).unwrap_err().contains("key has not changed"));
 }
 
@@ -1293,7 +1299,7 @@ fn a_member_who_set_up_relay_again_is_trusted_by_hand() {
 #[test]
 fn two_admins_rotating_at_once_end_on_one_key() {
     let (t, a, b, c) = trio("rotate-two", "admin");
-    a.remote(&t.vault).remove(&c.fp).unwrap();
+    a.remote(&t.vault).remove(&c.fp, &a.save()).unwrap();
     std::thread::scope(|s| { s.spawn(|| a.step(&t.vault)); s.spawn(|| b.step(&t.vault)); });
     rounds(&t, &[&a, &b], 2);
     assert_eq!((a.keys().epoch(), b.keys().epoch()), (1, 1));
@@ -1308,7 +1314,7 @@ fn a_lost_answer_before_saving_loses_nothing() {
     let info = t.laptop.call(serde_json::json!({"op": "vault_info", "vault": t.vault})).unwrap();
     let on_server = info["vault"]["members"].as_array().unwrap().iter().find(|m| m["fp"] == a.fp.as_str()).unwrap().clone();
     assert_eq!(on_server["pk"].as_str(), Some(a.keys().public().as_str()), "what the server has is what was saved");
-    a.remote(&t.vault).remove(&c.fp).unwrap();
+    a.remote(&t.vault).remove(&c.fp, &a.save()).unwrap();
     assert!(a.remote(&t.vault).keep_keys(&|k| if k.epoch() == 1 { Err("stopped".into()) } else { Ok(()) }).is_err());
     assert_eq!(a.keys().epoch(), 0);
     rounds(&t, &[&a, &b], 1);
@@ -1320,7 +1326,7 @@ fn a_lost_answer_before_saving_loses_nothing() {
 fn an_invite_from_an_admin_still_on_the_old_key_is_refused() {
     use relay_remote::sync::Remote;
     let (t, a, b, c) = trio("rotate-invite", "member");
-    a.remote(&t.vault).remove(&c.fp).unwrap();
+    a.remote(&t.vault).remove(&c.fp, &a.save()).unwrap();
     let old = a.keys();
     a.step(&t.vault);
     assert_eq!(t.laptop.vault_invite(&t.vault, "member", &old, &t.host, t.port).unwrap_err(), "key changed");
@@ -1338,7 +1344,7 @@ fn an_invite_from_an_admin_still_on_the_old_key_is_refused() {
 fn an_old_key_record_after_the_rotation_is_refused() {
     use relay_remote::sync::Remote;
     let (t, a, b, c) = trio("rotate-old", "member");
-    a.remote(&t.vault).remove(&c.fp).unwrap();
+    a.remote(&t.vault).remove(&c.fp, &a.save()).unwrap();
     rounds(&t, &[&a, &b], 1);
     let k0 = t.key.get(0).unwrap();
     std::fs::write(t.s.data.join("vaults").join(&t.vault).join("blobs").join(k0.name("Planted.md")), k0.record("Planted.md", b"from the removed member", 1).unwrap()).unwrap();
@@ -1347,15 +1353,63 @@ fn an_old_key_record_after_the_rotation_is_refused() {
     assert!(r.bad().iter().any(|x| x.contains("old key")), "{:?}", r.bad());
 }
 
-/// A workspace from before the member list: its first admin on this version starts the list, the members vouched for
-/// under the key are added (trust on upgrade), and they take the list from then on.
+/// A workspace from before the member list: its first admin on this version starts the list in one round, adding the
+/// members whose keys are vouched for under the key then (trust on upgrade), as members. They take the list (its first
+/// entry vouched for under epoch 0's key). Later rounds add nobody that way.
 #[test]
 fn an_existing_workspace_gets_a_member_list() {
     let t = team("rotate-migrate");
     let (a, b) = (Member::new(&t.laptop, &t.lid, &t.key), Member::new(&t.colleague, &t.cid, &t.key));
-    rounds(&t, &[&a, &b, &a, &b], 1);
+    rounds(&t, &[&b, &a, &b], 1);
     let l = list_of(&t, &a);
-    assert_eq!((l.members.len(), l.admin(&a.fp), b.keys().creator, b.keys().head.map(|h| h.0)), (2, true, Some(a.keys().identity()), Some(l.len)));
+    assert_eq!((l.members.len(), l.admin(&a.fp), l.admin(&b.fp), b.keys().creator, b.keys().head.map(|h| h.0)), (2, true, false, Some(a.keys().identity()), Some(l.len)));
+    // the server's own removal is refused now: the list decides; and the only admin cannot leave
+    assert!(t.laptop.vault_remove(&t.vault, &b.fp).unwrap_err().contains("member list"));
+    assert!(a.remote(&t.vault).remove(&a.fp, &a.save()).unwrap_err().contains("no admin left"));
+}
+
+/// Two admins upgrade at once: one list wins, the other admin drops its own attempt and takes the winner's.
+#[test]
+fn two_admins_upgrading_at_once_end_on_one_list() {
+    let t = team("rotate-migrate-two");
+    edit_vault(&t, |v| { for m in v["members"].as_array_mut().unwrap() { m["role"] = serde_json::json!("admin"); } });
+    let (a, b) = (Member::new(&t.laptop, &t.lid, &t.key), Member::new(&t.colleague, &t.cid, &t.key));
+    std::thread::scope(|s| { s.spawn(|| a.step(&t.vault)); s.spawn(|| b.step(&t.vault)); });
+    rounds(&t, &[&a, &b], 2);
+    let (ka, kb) = (a.keys(), b.keys());
+    assert_eq!(ka.creator, kb.creator, "one creator");
+    assert_eq!(ka.head, kb.head);
+}
+
+/// A Mac that knows no creator (a workspace from before the list) is served a list the server made itself: a create,
+/// adds and a key change of its own. Refused: its first entry is not vouched for under epoch 0's key.
+#[test]
+fn a_list_the_server_starts_itself_is_refused() {
+    let t = team("rotate-server-list");
+    let b = Member::new(&t.colleague, &t.cid, &t.key);
+    let mut evil = relay_remote::vault::Keys::from(relay_remote::vault::VaultKey::generate());
+    evil.ensure();
+    let efp = "e".repeat(64);
+    let create = evil.creation(&t.vault, &efp);
+    let l0 = relay_remote::members::check(&t.vault, std::slice::from_ref(&create), None).unwrap().0;
+    let rekey = evil.sign_entry(&t.vault, &l0, &efp, relay_remote::members::Entry { kind: "rekey".into(), epoch: 1, h: "9".repeat(64), ..Default::default() });
+    edit_vault(&t, |v| { v["log"] = serde_json::json!([create, rekey]); v["epoch"] = serde_json::json!(1); });
+    let st = b.step(&t.vault);
+    assert!(st.warnings.iter().any(|w| w.contains("not started by a member")) && b.keys().creator.is_none() && b.keys().epoch() == 0, "{st:?}");
+}
+
+/// The server drops the remover's own `remove` again: that admin saw it (its head moved on), so it warns and counts the
+/// key as changing. An empty list after one was seen: the same.
+#[test]
+fn a_dropped_own_entry_or_an_emptied_list_is_held_back() {
+    let (t, a, b, c) = trio("rotate-dropped", "member");
+    a.remote(&t.vault).remove(&c.fp, &a.save()).unwrap();
+    edit_vault(&t, |v| { v["log"].as_array_mut().unwrap().pop(); });
+    let st = a.step(&t.vault);
+    assert!(st.rekeying && st.warnings.iter().any(|w| w.contains("held back")) && a.keys().epoch() == 0, "{st:?}");
+    edit_vault(&t, |v| v["log"] = serde_json::json!([]));
+    let st = b.step(&t.vault);
+    assert!(st.rekeying && st.warnings.iter().any(|w| w.contains("held back")), "{st:?}");
 }
 
 /// An older Relay (no key step) against a rotated workspace: its writes are refused, it pulls nothing it cannot open
@@ -1374,7 +1428,7 @@ fn an_old_relay_against_a_rotated_workspace_deletes_nothing() {
     let mut round = || { let (n, r) = sync::run(Mode::TwoWay, &dir, &base, &mut w, &Filter::vault_default(), &b.c.sealed(&t.vault, old.clone()), &|p| sync::conflict_copy(p, "mac", "now"), &|_| false, &guard, &|_, _| {}); base = n; r };
     std::fs::write(dir.join("mine.md"), "before").unwrap();
     assert_eq!(round().pushed, vec!["mine.md"]);
-    a.remote(&t.vault).remove(&c.fp).unwrap();
+    a.remote(&t.vault).remove(&c.fp, &a.save()).unwrap();
     a.step(&t.vault);
     let ra = a.remote(&t.vault);
     ra.manifest().unwrap();

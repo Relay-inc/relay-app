@@ -122,9 +122,9 @@ pub struct Keys {
     ring: BTreeMap<u32, VaultKey>, pub secret: Option<[u8; 32]>, pub sign: Option<[u8; 32]>, pub creator: Option<String>,
     pub head: Option<(u64, String)>, pub expect: Option<String>, pub joined: Option<String>, pub invites: Vec<Invited>,
 }
-/// An invite this Mac made: its id, the link's secret, the role and the epoch it carried keys up to.
+/// An invite this Mac made: its id, the link's secret, the role, the epoch it carried keys up to, and when it expires.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Invited { pub id: String, pub secret: String, pub role: String, pub epoch: u32 }
+pub struct Invited { pub id: String, pub secret: String, pub role: String, pub epoch: u32, pub expires: u64 }
 impl From<VaultKey> for Keys {
     fn from(k: VaultKey) -> Keys { Keys { ring: BTreeMap::from([(0, k)]), secret: None, sign: None, creator: None, head: None, expect: None, joined: None, invites: vec![] } }
 }
@@ -191,6 +191,15 @@ impl Keys {
         };
         ok.then(|| (s("id").into(), s("pk").into()))
     }
+    /// The member list's first entry, made by this member: signed by its identity, and that identity vouched for under
+    /// epoch 0's key (`mac`), which the server never has.
+    pub fn creation(&self, vault: &str, me: &str) -> crate::members::Entry {
+        let (id, pk) = (self.identity(), self.public());
+        let mac = self.first().vouch(&create_msg(vault, me, &id, &pk));
+        self.sign_entry(vault, &crate::members::List::default(), me, crate::members::Entry { kind: "create".into(), fp: me.into(), id, pk, role: "admin".into(), mac, ..Default::default() })
+    }
+    /// Whether a list's first entry was made by a member: its creator vouched for under epoch 0's key.
+    fn made_by_member(&self, vault: &str, e: &crate::members::Entry) -> bool { self.first().vouched(&create_msg(vault, &e.fp, &e.id, &e.pk), &e.mac) }
     /// A member list entry signed by this member.
     pub fn sign_entry(&self, vault: &str, list: &crate::members::List, me: &str, e: crate::members::Entry) -> crate::members::Entry {
         crate::members::sign(vault, list, me, &self.sign.expect("ensure first"), e)
@@ -198,7 +207,7 @@ impl Keys {
 
     /// The key file (shared-<id>.key, 0600): epoch 0's key in hex on the first line, as the file was before rotation
     /// existed, then a line per later epoch (`<epoch> <hex>`) and, once each, `secret <hex>`, `sign <hex>`,
-    /// `creator <hex>`, `head <length> <hex>`, `expect <hex>`, `joined <hex>`, and `invite <id> <secret> <role> <epoch>`
+    /// `creator <hex>`, `head <length> <hex>`, `expect <hex>`, `joined <hex>`, and `invite <id> <secret> <role> <epoch> <expires>`
     /// per open invite. Every value is checked: a line that is not one of these makes the whole file unreadable.
     pub fn parse(s: &str) -> Option<Keys> {
         let mut lines = s.lines();
@@ -213,8 +222,8 @@ impl Keys {
                 ["head", n, h] if hex64(h) => { once(k.head.is_some())?; k.head = Some((n.parse().ok()?, h.into())) }
                 ["expect", h] if hex64(h) => { once(k.expect.is_some())?; k.expect = Some(h.into()) }
                 ["joined", h] if hex64(h) => { once(k.joined.is_some())?; k.joined = Some(h.into()) }
-                ["invite", id, sec, role, e] if id.len() == 16 && unhex(id).is_some() && hex64(sec) && (role == "admin" || role == "member") => {
-                    k.invites.push(Invited { id: id.into(), secret: sec.into(), role: role.into(), epoch: e.parse().ok()? });
+                ["invite", id, sec, role, e, x] if id.len() == 16 && id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) && hex64(sec) && (role == "admin" || role == "member") => {
+                    k.invites.push(Invited { id: id.into(), secret: sec.into(), role: role.into(), epoch: e.parse().ok()?, expires: x.parse().ok()? });
                 }
                 [e, h] => {
                     let e = e.parse().ok().filter(|e| *e > 0 && *e <= MAX_EPOCH)?;
@@ -236,7 +245,7 @@ impl Keys {
         if let Some((n, h)) = &self.head { out += &format!("head {n} {h}\n"); }
         if let Some(h) = &self.expect { out += &format!("expect {h}\n"); }
         if let Some(h) = &self.joined { out += &format!("joined {h}\n"); }
-        for i in &self.invites { out += &format!("invite {} {} {} {}\n", i.id, i.secret, i.role, i.epoch); }
+        for i in &self.invites { out += &format!("invite {} {} {} {} {}\n", i.id, i.secret, i.role, i.epoch, i.expires); }
         out
     }
     /// What Settings shows as the recovery key: the keys alone. Before any rotation the one hex line it always was.
@@ -246,6 +255,9 @@ impl Keys {
 }
 use crate::members::hex64;
 fn pub_msg(vault: &str, fp: &str, pk: &str, id: &str) -> String { format!("pub:{vault}:{fp}:{pk}:{id}") }
+fn create_msg(vault: &str, fp: &str, id: &str, pk: &str) -> String { format!("create:{vault}:{fp}:{id}:{pk}") }
+/// Per vault, the member list as this app last checked it: the next round checks only what is new.
+static CHECKED: std::sync::OnceLock<Mutex<HashMap<String, (List, Vec<String>)>>> = std::sync::OnceLock::new();
 /// A publication proven with an invite link's secret (HKDF info `join`): only the link's holder has it.
 fn invite_mac(secret_hex: &str, msg: &str) -> Option<String> {
     let secret = unhex(secret_hex).filter(|s| s.len() == 32)?;
@@ -408,27 +420,66 @@ impl SealedRemote {
 /// cannot be trusted on, a removal that waits too long for a new key), `changed` the members (fp, name) who publish
 /// other keys than the list has (they set up Relay again; an admin can trust them), and `errors`.
 #[derive(Debug, Default)]
-pub struct KeyStep { pub keys: Option<Keys>, pub warnings: Vec<String>, pub changed: Vec<(String, String)>, pub errors: Vec<String> }
+/// `rekeying`: someone left and the key has not changed yet, or the member list is held back (it could hold a removal).
+pub struct KeyStep { pub keys: Option<Keys>, pub warnings: Vec<String>, pub changed: Vec<(String, String)>, pub errors: Vec<String>, pub rekeying: bool }
 use crate::members::{self, List};
 impl SealedRemote {
     fn info(&self) -> Result<Value, String> { Ok((self.call)(json!({"op": "vault_info", "vault": self.vault}), None, None)?.0["vault"].take()) }
-    fn entries(&self) -> Result<Vec<members::Entry>, String> {
-        let (v, _) = (self.call)(json!({"op": "vault_log", "vault": self.vault}), None, None)?;
-        serde_json::from_value(v["entries"].clone()).map_err(|e| format!("member list: {e}"))
-    }
-    /// The member list from the server, checked from the creator this Mac knows, and refused when it is not an
-    /// extension of what this Mac saw before (a fork, or older: the server holding entries back) or does not hold the
-    /// head an invite link named.
+    /// The member list from the server, checked: from the creator this Mac knows (or, knowing none, a first entry
+    /// vouched for under epoch 0's key), only what is new since this app last checked it, and refused when it is not an
+    /// extension of what this Mac saw (`head`: a fork, or held back, also when the server has none) or does not hold
+    /// the head an invite link named. None: there is no list, and this Mac never saw one.
     fn list(&self, k: &Keys) -> Result<Option<(List, Vec<String>)>, String> {
-        let entries = self.entries()?;
-        if entries.is_empty() { return Ok(None); }
-        let (list, hashes) = members::check(&self.vault, &entries, k.creator.as_deref())?;
-        if let Some((n, h)) = &k.head { if *n == 0 || !list.has(&hashes, n - 1, h) { return Err("The server's member list is not the one this Mac saw before: a fork, or entries held back. Nothing changes here until it is.".into()); } }
+        let cache = CHECKED.get_or_init(Mutex::default);
+        // per vault and identity: one app may hold several (tests do)
+        let slot = format!("{}:{}", self.vault, if k.sign.is_some() { k.identity() } else { String::new() });
+        let base = lock(cache).get(&slot).cloned().filter(|(l, _)| k.creator.as_deref().is_none_or(|c| c == l.creator)).unwrap_or_default();
+        let (v, _) = (self.call)(json!({"op": "vault_log", "vault": self.vault, "from": base.0.len}), None, None)?;
+        let len = v["len"].as_u64().unwrap_or(0);
+        let held = || "The member list is held back: the server gives this Mac fewer entries than it saw. It may hold a removal, so the key counts as changing.".to_string();
+        if len < base.0.len {
+            if k.head.is_some() { return Err(held()); }
+            // a list this Mac never took as its own: checked again from the start
+            lock(cache).remove(&slot);
+            return self.list(k);
+        }
+        let new: Vec<members::Entry> = serde_json::from_value(v["entries"].clone()).map_err(|e| format!("member list: {e}"))?;
+        if base.0.len == 0 && new.is_empty() {
+            if k.head.is_some() || k.expect.is_some() { return Err(held()); }
+            return Ok(None);
+        }
+        if base.0.len == 0 && k.creator.is_none() && !new.first().is_some_and(|e| k.made_by_member(&self.vault, e)) {
+            return Err("The server's member list was not started by a member of this workspace.".into());
+        }
+        // what is new must follow what this app checked: another history behind it is a fork
+        if base.0.len > 0 && new.first().is_some_and(|e| e.prev != base.0.head) { return Err("The server's member list is not the one this Mac saw before: a fork. Nothing changes here until it is.".into()); }
+        let (list, hashes) = members::extend(&self.vault, base.0, base.1, &new, k.creator.as_deref())?;
+        if let Some((n, h)) = &k.head {
+            if *n > list.len { return Err(held()); }
+            if *n == 0 || !list.has(&hashes, n - 1, h) { return Err("The server's member list is not the one this Mac saw before: a fork. Nothing changes here until it is.".into()); }
+        }
         if let Some(x) = &k.expect { if !hashes.contains(x) { return Err("The server's member list does not hold the one the invite named.".into()); } }
+        lock(cache).insert(slot, (list.clone(), hashes.clone()));
         Ok(Some((list, hashes)))
     }
-    fn append(&self, entry: &members::Entry, keys: Value) -> Result<(), String> {
-        (self.call)(json!({"op": "vault_append", "vault": self.vault, "entry": entry, "keys": keys}), None, None).map(|_| ())
+    /// An entry onto the list; once the server took it, this Mac's head is that entry, saved.
+    fn append(&self, k: &mut Keys, list: &List, entry: &members::Entry, keys: Value, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<(), String> {
+        // checked here first: an entry the list would refuse (the last admin leaving) never goes out
+        members::extend(&self.vault, list.clone(), vec![list.head.clone()], std::slice::from_ref(entry), None).map_err(|e| e.replace("member list entry", "this change"))?;
+        (self.call)(json!({"op": "vault_append", "vault": self.vault, "entry": entry, "keys": keys}), None, None)?;
+        k.head = Some((list.len + 1, entry.hash(&self.vault)));
+        if entry.kind == "create" { k.creator = Some(entry.id.clone()); }
+        save(k)?;
+        *lock(&self.keys) = k.clone();
+        Ok(())
+    }
+    /// A new vault's member list, before anything else reaches the server: its first entry, by this Mac.
+    pub fn start(&self, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<(), String> {
+        let mut k = self.keys();
+        if k.ensure() { save(&k)?; }
+        let me = (self.call)(json!({"op": "vault_info", "vault": self.vault}), None, None)?.0["vault"]["me"].as_str().unwrap_or_default().to_string();
+        let e = k.creation(&self.vault, &me);
+        self.append(&mut k, &List::default(), &e, json!({}), save)
     }
     /// Before a round (docs/workspaces.md, Members and Key rotation), with `vault_info` and the member list:
     /// 1. this member's secrets made where missing, and saved before the server hears of them;
@@ -448,41 +499,9 @@ impl SealedRemote {
         let v = self.info()?;
         if v["epoch"].as_u64().is_none() { return Ok(step); }
         let me = v["me"].as_str().unwrap_or_default().to_string();
-        let (list, hashes) = match self.list(&k) {
-            Ok(Some(l)) => l,
-            Ok(None) => {
-                // no list yet: the first admin on this version starts it with itself
-                if v["role"] == "admin" && k.creator.is_none() {
-                    let e = k.sign_entry(&self.vault, &List::default(), &me, members::Entry { kind: "create".into(), fp: me.clone(), id: k.identity(), pk: k.public(), role: "admin".into(), ..Default::default() });
-                    k.creator = Some(k.identity());
-                    keep(&k, &mut step)?;
-                    self.append(&e, json!({}))?;
-                }
-                return Ok(step);
-            }
-            Err(why) => { step.warnings.push(why); return Ok(step); }
-        };
-        if k.creator.as_deref() != Some(list.creator.as_str()) || k.head.as_ref().map(|(n, _)| *n) != Some(list.len) || k.expect.is_some() {
-            (k.creator, k.head, k.expect) = (Some(list.creator.clone()), Some((list.len, list.head.clone())), None);
-            keep(&k, &mut step)?;
-        }
-        *lock(&self.checked) = Some((list.clone(), hashes.clone()));
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-        if list.pending.is_some_and(|at| now.saturating_sub(at) > 3600) { step.warnings.push("Someone left over an hour ago, and the key has not changed since.".into()); }
-        while k.epoch() < list.epoch {
-            let e = k.epoch() + 1;
-            match take_rotation(&k, v["keys"][e.to_string()]["sealed"].as_str().unwrap_or_default(), &self.vault, e, &me, &list) {
-                Ok(n) => { k.add(e, n); keep(&k, &mut step)?; }
-                // the later ones wait for this one
-                Err(why) => { step.errors.push(format!("key {e}: {why}")); break; }
-            }
-        }
-        if k.joined.is_some() && list.members.contains_key(&me) { k.joined = None; keep(&k, &mut step)?; }
-        for m in v["members"].as_array().into_iter().flatten() {
-            let fp = m["fp"].as_str().unwrap_or_default();
-            let Some(l) = list.members.get(fp) else { continue };
-            if k.proven(&self.vault, m, None).is_some_and(|(id, pk)| id != l.id || pk != l.pk) { step.changed.push((fp.into(), m["name"].as_str().unwrap_or_default().into())); }
-        }
+        if k.invites.iter().any(|i| i.expires <= now) { k.invites.retain(|i| i.expires > now); keep(&k, &mut step)?; }
+        // this member's keys, published before anything else: a list being made (or an admin adding it) needs them
         let mine = k.publication(&self.vault, &me);
         let empty = json!({});
         let on_server = v["members"].as_array().into_iter().flatten().find(|m| m["fp"] == me.as_str()).unwrap_or(&empty);
@@ -492,24 +511,59 @@ impl SealedRemote {
             req["vault"] = json!(self.vault);
             (self.call)(req, None, None)?;
         }
+        let (list, hashes) = match self.list(&k) {
+            Ok(Some(l)) => l,
+            Ok(None) => {
+                // no list yet: the first admin on this version starts it (or this Mac started it and the server lost it)
+                if v["role"] == "admin" && k.creator.as_ref().is_none_or(|c| *c == k.identity()) {
+                    let e = k.creation(&self.vault, &me);
+                    match self.append(&mut k, &List::default(), &e, json!({}), save) {
+                        Ok(()) => { step.keys = Some(k.clone()); self.migrate(&mut k, &v, &me, save)?; step.keys = Some(k.clone()); }
+                        // another admin was first: its list, vouched for under the key, is taken next round
+                        Err(why) => step.errors.push(format!("member list: {why}")),
+                    }
+                }
+                return Ok(step);
+            }
+            Err(why) => { step.warnings.push(why); step.rekeying = true; return Ok(step); }
+        };
+        if k.creator.as_deref() != Some(list.creator.as_str()) || k.head.as_ref() != Some(&(list.len, list.head.clone())) || k.expect.is_some() {
+            (k.creator, k.head, k.expect) = (Some(list.creator.clone()), Some((list.len, list.head.clone())), None);
+            keep(&k, &mut step)?;
+        }
+        *lock(&self.checked) = Some((list.clone(), hashes.clone()));
+        step.rekeying = list.pending.is_some();
+        if list.pending.is_some_and(|at| now.saturating_sub(at) > 3600) { step.warnings.push("Someone left over an hour ago, and the key has not changed since.".into()); }
+        let before = k.epoch();
+        while k.epoch() < list.epoch {
+            let e = k.epoch() + 1;
+            match take_rotation(&k, v["keys"][e.to_string()]["sealed"].as_str().unwrap_or_default(), &self.vault, e, &me, &list) {
+                Ok(n) => { k.add(e, n); keep(&k, &mut step)?; }
+                // the later ones wait for this one
+                Err(why) => { step.errors.push(format!("key {e}: {why}")); break; }
+            }
+        }
+        // invites made before a key change carry the old keys: the server dropped them, so does this Mac
+        if k.epoch() != before && !k.invites.is_empty() { k.invites.clear(); keep(&k, &mut step)?; }
+        if k.joined.is_some() && list.members.contains_key(&me) { k.joined = None; keep(&k, &mut step)?; }
+        for m in v["members"].as_array().into_iter().flatten() {
+            let fp = m["fp"].as_str().unwrap_or_default();
+            let Some(l) = list.members.get(fp) else { continue };
+            if k.proven(&self.vault, m, None).is_some_and(|(id, pk)| id != l.id || pk != l.pk) { step.changed.push((fp.into(), m["name"].as_str().unwrap_or_default().into())); }
+        }
         if !list.admin(&me) || k.epoch() != list.epoch { return Ok(step); }
-        // a joiner, proven with an invite this Mac made; while the list has seen no removal or new key yet, also a
-        // member the server lists that is vouched for under the key (a vault from before the list: trust on upgrade)
-        let first = list.epoch == 0 && list.pending.is_none() && !hashes.is_empty() && list.members.len() as u64 == list.len;
+        // a joiner proven with an invite this Mac made
         for m in v["members"].as_array().into_iter().flatten() {
             let fp = m["fp"].as_str().unwrap_or_default();
             if list.members.contains_key(fp) { continue; }
-            let inv = k.invites.iter().find(|i| m["via"].as_str() == Some(i.id.as_str())).cloned();
-            let proven = match &inv { Some(i) => k.proven(&self.vault, m, Some(&i.secret)), None if first => k.proven(&self.vault, m, None), None => None };
-            let Some((id, pk)) = proven else { continue };
-            let role = inv.as_ref().map_or_else(|| m["role"].as_str().unwrap_or("member").to_string(), |i| i.role.clone());
-            let since = inv.as_ref().map_or(0, |i| i.epoch);
+            let Some(inv) = k.invites.iter().find(|i| m["via"].as_str() == Some(i.id.as_str())).cloned() else { continue };
+            let Some((id, pk)) = k.proven(&self.vault, m, Some(&inv.secret)) else { continue };
             let mut keys = serde_json::Map::new();
-            for e in since + 1..=k.epoch() { keys.insert(e.to_string(), json!(seal_for(&pk, &self.vault, e, fp, &k.get(e).unwrap().raw)?)); }
-            let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "add".into(), fp: fp.into(), id, pk, role, ..Default::default() });
-            self.append(&e, json!(keys))?;
-            k.invites.retain(|i| Some(&i.id) != inv.as_ref().map(|x| &x.id));
-            keep(&k, &mut step)?;
+            for e in inv.epoch + 1..=k.epoch() { keys.insert(e.to_string(), json!(seal_for(&pk, &self.vault, e, fp, &k.get(e).unwrap().raw)?)); }
+            let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "add".into(), fp: fp.into(), id, pk, role: inv.role.clone(), ..Default::default() });
+            k.invites.retain(|i| i.id != inv.id);
+            self.append(&mut k, &list, &e, json!(keys), save)?;
+            step.keys = Some(k.clone());
             // one entry a round: the next one follows the list as it is now
             return Ok(step);
         }
@@ -519,12 +573,31 @@ impl SealedRemote {
             let mut sealed = serde_json::Map::new();
             for (fp, m) in &list.members { sealed.insert(fp.clone(), json!(seal_for(&m.pk, &self.vault, e, fp, &next.raw)?)); }
             match (self.call)(json!({"op": "vault_rotate", "vault": self.vault, "epoch": e, "keys": sealed, "entry": entry}), None, None) {
-                Ok(_) => { k.add(e, next); k.head = Some((list.len + 1, entry.hash(&self.vault))); keep(&k, &mut step)?; }
+                Ok(_) => {
+                    k.add(e, next);
+                    k.head = Some((list.len + 1, entry.hash(&self.vault)));
+                    k.invites.clear();
+                    keep(&k, &mut step)?;
+                    step.rekeying = false;
+                }
                 // another admin was first, or the answer was lost: the next round takes the key from the list
                 Err(why) => step.errors.push(format!("rotate: {why}")),
             }
         }
         Ok(step)
+    }
+    /// In the round that made the list of a vault from before it: every member the server lists whose keys are signed
+    /// and vouched for under the key is added, as a member (trust on upgrade). Only then: later, only invites add.
+    fn migrate(&self, k: &mut Keys, v: &Value, me: &str, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<(), String> {
+        for m in v["members"].as_array().into_iter().flatten() {
+            let fp = m["fp"].as_str().unwrap_or_default();
+            if fp == me { continue; }
+            let Some((id, pk)) = k.proven(&self.vault, m, None) else { continue };
+            let Some((list, _)) = self.list(k)? else { return Ok(()) };
+            let e = k.sign_entry(&self.vault, &list, me, members::Entry { kind: "add".into(), fp: fp.into(), id, pk, role: "member".into(), ..Default::default() });
+            self.append(k, &list, &e, json!({}), save)?;
+        }
+        Ok(())
     }
     /// After the round's manifest: a record written with a member list head this Mac's list does not hold. Newer than
     /// its list: the server holds entries back from this Mac; at a length it has, with another hash: a fork.
@@ -540,8 +613,8 @@ impl SealedRemote {
     }
     /// Take `fp` out of the member list (`leave` for this Mac itself), signed by this Mac; the server removes it too.
     /// A vault without a list (an older server, or not upgraded yet) only has the server's removal.
-    pub fn remove(&self, fp: &str) -> Result<(), String> {
-        let k = self.keys();
+    pub fn remove(&self, fp: &str, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<(), String> {
+        let mut k = self.keys();
         let v = self.info()?;
         let me = v["me"].as_str().unwrap_or_default().to_string();
         let Some((list, _)) = (if v["epoch"].is_null() { None } else { self.list(&k)? }) else {
@@ -549,13 +622,13 @@ impl SealedRemote {
         };
         let kind = if fp == me { "leave" } else { "remove" };
         let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: kind.into(), fp: fp.into(), ..Default::default() });
-        self.append(&e, json!({}))
+        self.append(&mut k, &list, &e, json!({}), save)
     }
     /// An admin trusts a member's new keys (it set up Relay again): a `device` entry with what the member publishes now,
     /// signed by its new identity and vouched for under the newest key. Refused while a removal waits for a new key: the
     /// new keys could be the removed member's.
     pub fn trust(&self, fp: &str, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<(), String> {
-        let k = self.keys();
+        let mut k = self.keys();
         let v = self.info()?;
         let me = v["me"].as_str().unwrap_or_default().to_string();
         let (list, _) = self.list(&k)?.ok_or("this workspace has no member list yet")?;
@@ -564,8 +637,7 @@ impl SealedRemote {
         let m = v["members"].as_array().into_iter().flatten().find(|m| m["fp"] == fp).ok_or("not a member of this workspace")?;
         let (id, pk) = k.proven(&self.vault, m, None).ok_or("its new key is not signed by it, or not vouched for by a member")?;
         let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "device".into(), fp: fp.into(), id, pk, ..Default::default() });
-        self.append(&e, json!({}))?;
-        save(&k)
+        self.append(&mut k, &list, &e, json!({}), save)
     }
     /// Seal again under the newest key, at most `max` files of the last manifest still under an older one (each read
     /// and checked as any get). Old records then die out, and a new member's Relay never has to take one. The count.
@@ -800,7 +872,7 @@ mod tests {
         a.ensure();
         b.ensure();
         let (fa, fb) = ("a".repeat(64), "b".repeat(64));
-        let mut log = vec![a.sign_entry(v, &List::default(), &fa, E { kind: "create".into(), fp: fa.clone(), id: a.identity(), pk: a.public(), role: "admin".into(), ..Default::default() })];
+        let mut log = vec![a.creation(v, &fa)];
         let at = |log: &Vec<E>| members::check(v, log, None).unwrap().0;
         log.push(a.sign_entry(v, &at(&log), &fa, E { kind: "add".into(), fp: fb.clone(), id: b.identity(), pk: b.public(), role: "member".into(), ..Default::default() }));
         let next = VaultKey::generate();
@@ -836,7 +908,7 @@ mod tests {
         keys.add(1, VaultKey::generate());
         keys.ensure();
         (keys.creator, keys.head, keys.joined) = (Some("c".repeat(64)), Some((4, "d".repeat(64))), Some("e".repeat(64)));
-        keys.invites.push(Invited { id: "0123456789abcdef".into(), secret: "f".repeat(64), role: "member".into(), epoch: 1 });
+        keys.invites.push(Invited { id: "0123456789abcdef".into(), secret: "f".repeat(64), role: "member".into(), epoch: 1, expires: 1_900_000_000 });
         let back = Keys::parse(&keys.format()).unwrap();
         assert_eq!((back.format(), back.head.clone(), back.invites.len()), (keys.format(), keys.head.clone(), 1));
         assert_eq!(keys.recovery().lines().count(), 2, "the keys alone");

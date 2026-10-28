@@ -77,10 +77,17 @@ pub fn invite_open(data: &Path) -> bool { all(data).iter().any(|v| !v.invites.is
 /// Whether `fp` is admin of a vault here: it keeps this server (lib.rs KEEPER_OPS).
 pub(crate) fn keeps(data: &Path, fp: &str) -> bool { all(data).iter().any(|v| v.role(fp) == Some("admin")) }
 
-/// A revoked device leaves every vault. Nobody left: the vault goes, its ciphertext is of no use to anyone here.
+/// A revoked device leaves every vault without a member list. Nobody left: the vault goes, its ciphertext is of no use
+/// to anyone here. A vault with a member list is left as it is (the device cannot connect any more, but only an admin of
+/// the list can take it out, which changes the key): returns those vaults' names, for the CLI to say so.
 // ponytail: no lock against a running server (revoke is the CLI's own process); clients.json has the same race with pair
-pub(crate) fn forget(data: &Path, fps: &[String]) {
+pub(crate) fn forget(data: &Path, fps: &[String]) -> Vec<String> {
+    let mut listed = vec![];
     for mut v in all(data) {
+        if !v.log.is_empty() {
+            if v.members.iter().any(|m| fps.contains(&m.fp)) { listed.push(v.name.clone()); }
+            continue;
+        }
         let (n, members) = (v.members.len() + v.invites.len(), v.members.len());
         v.members.retain(|m| !fps.contains(&m.fp));
         // the invites they made go too: a link of someone who is out lets nobody in
@@ -92,6 +99,7 @@ pub(crate) fn forget(data: &Path, fps: &[String]) {
         if v.members.len() != members { v.rekey = true; }
         if v.members.is_empty() { fs::remove_dir_all(dir(data).join(&v.id)).ok(); } else if v.members.len() + v.invites.len() != n { save(data, &v).ok(); }
     }
+    listed
 }
 
 /// The etag of the record at `p`, "" when there is none.
@@ -199,7 +207,8 @@ impl Vaults {
             let known = list.iter().find(|c| c.fp == fp).map(|c| c.name.clone());
             let who = known.clone().unwrap_or_else(|| device_name(&list, name, fp));
             match v.members.iter_mut().find(|m| m.fp == fp) {
-                Some(m) => if inv.role == "admin" { m.role = "admin".into(); },
+                // with a member list a promotion is an entry on it, never the server's own doing
+                Some(m) => if inv.role == "admin" && v.log.is_empty() { m.role = "admin".into(); },
                 None => v.members.push(Member { fp: fp.into(), name: who.clone(), role: inv.role.clone(), added: now(), pk: String::new(), id: String::new(), sig: String::new(), mac: String::new(), imac: String::new(), via: inv.id.clone() }),
             }
             // the vault first: a member that is not a client yet cannot connect, a client in no vault could
@@ -215,7 +224,11 @@ impl Vaults {
     /// An admin removes a member, or a member leaves. Never the last admin while others stay; the last member takes the
     /// vault with it. A vault-only device in no vault any more is unpaired.
     pub fn remove(&self, fp: &str, id: &str, who: &str) -> Result<(), String> {
-        self.with(id, fp, |v, me| self.drop_member(v, fp, me, who))?;
+        self.with(id, fp, |v, me| {
+            // the member list decides who is in: a removal is a signed entry on it (vault_append)
+            if !v.log.is_empty() { return Err("this workspace has a member list: remove members from the member list".into()); }
+            self.drop_member(v, fp, me, who)
+        })?;
         self.removed(id, who)
     }
     /// `who` out of `v`, asked by `fp` with role `me`, saved (or the vault gone with its last member).
@@ -293,8 +306,11 @@ impl Vaults {
     /// Every record: its name, etag, size and meta part (hex). One that cannot be read or is no record is listed too,
     /// with an empty meta (and an empty etag when unreadable): left out, it would read as deleted, and every member would
     /// delete that file. With an empty meta a member's Relay keeps it as it was (`SealedRemote::know`).
-    /// The member list, for a member.
-    pub fn log(&self, fp: &str, id: &str) -> Result<Value, String> { Ok(json!({"entries": self.member(id, fp)?.log})) }
+    /// The member list from entry `from` on, and its length, for a member.
+    pub fn log(&self, fp: &str, id: &str, from: u64) -> Result<Value, String> {
+        let v = self.member(id, fp)?;
+        Ok(json!({"entries": v.log.get(from as usize..).unwrap_or_default(), "len": v.log.len()}))
+    }
     /// A member appends an entry it signed (`by` is the caller), only when the whole list then still checks: no member
     /// can break it for the others. A `remove` or `leave` removes the member here too, in the same write; an `add`
     /// stores the keys sealed to the new member (`keys`: epoch -> sealed) for the epochs since its invite.
@@ -313,6 +329,14 @@ impl Vaults {
             log.push(e.clone());
             members::check(&v.id, &log, None)?;
             v.log = log;
+            // the roles here follow the list: who may rotate or invite on this server is who the list says
+            match e.kind.as_str() {
+                "add" | "promote" | "demote" => {
+                    let role = match e.kind.as_str() { "promote" => "admin", "demote" => "member", _ => e.role.as_str() };
+                    if let Some(m) = v.members.iter_mut().find(|m| m.fp == e.fp) { m.role = role.into(); }
+                }
+                _ => {}
+            }
             if e.kind == "add" {
                 for (ep, w) in keys {
                     let w = w.as_str().filter(|w| !w.is_empty() && w.len() <= MAX_WRAPPED && hex(w, w.len())).ok_or("bad sealed key")?;
@@ -320,7 +344,14 @@ impl Vaults {
                     v.keys.entry(ep.clone()).or_default().insert(e.fp.clone(), w.into());
                 }
             }
-            if e.kind == "remove" || e.kind == "leave" { gone = Some(e.fp.clone()); return self.drop_member(v, fp, me, &e.fp); }
+            if e.kind == "remove" || e.kind == "leave" {
+                gone = Some(e.fp.clone());
+                // the list (checked above) keeps an admin; the server's own roles follow it
+                v.members.retain(|m| m.fp != e.fp);
+                v.invites.retain(|i| i.by != e.fp);
+                v.rekey = true;
+                return save(&self.data, v);
+            }
             save(&self.data, v)
         })?;
         if let Some(who) = gone { self.removed(id, &who)?; }
