@@ -13,7 +13,7 @@ fn folder(project: &str) -> Result<String, String> {
     if f.is_empty() { Err("bad project".into()) } else { Ok(f) }
 }
 fn valid_id(id: &str) -> bool { !id.is_empty() && id.len() <= 32 && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()) }
-fn dir(vault: &str, project: &str) -> Result<PathBuf, String> {
+pub fn dir(vault: &str, project: &str) -> Result<PathBuf, String> {
     Ok(PathBuf::from(vault).join(".relay/notes").join(folder(project)?))
 }
 fn new_id() -> String {

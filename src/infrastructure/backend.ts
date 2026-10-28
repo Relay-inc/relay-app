@@ -134,6 +134,24 @@ export const findIconSites = (projects: { name: string; context: string; summary
 export const captureVault = (key: string) => invoke<void>("capture_vault", { key });
 export const projectRepos = () => invoke<Record<string, string[]>>("project_repos");
 export const setProjectRepos = (project: string, repos: string[]) => invoke("set_project_repos", { project, repos });
+/** What moving or copying a project to another workspace takes along (src-tauri migrate.rs), or, without `dry`, done. */
+export type MigratePlan = {
+  files: string[]; // the notes as they land in the target workspace
+  scratch: number;
+  skipped: string[]; // left behind: links, and what a team workspace does not take
+  conflicts: string[]; // in the way in the target: nothing is written while there are any
+  row: boolean; // a work-state row or card goes along
+  card: boolean; // the target keeps its projects as cards
+  icon: boolean;
+  design: boolean;
+  repos: number;
+  contexts: string[];
+  context: string;
+  team: boolean;
+  key: string; // the project's key in the target workspace
+};
+export const migrateProject = (project: string, to: string, context: string, mode: "move" | "copy", dry: boolean) =>
+  invoke<MigratePlan>("migrate_project", { project, to, context, mode, dry });
 /** The Design drawer's native claude.ai webview (design.rs), placed by the drawer's bounds in logical px. */
 export const designShow = (url: string, r: DOMRect) =>
   invoke("design_show", { url, x: r.x, y: r.y, w: r.width, h: r.height });

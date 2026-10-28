@@ -36,6 +36,7 @@ mod git;
 mod explorer;
 mod mail;
 mod meeting;
+mod migrate;
 pub mod notify;
 mod permissions;
 mod orch;
@@ -314,6 +315,7 @@ const TEXT: &[(&str, [&str; 4])] = &[
         "Cette machine sert uniquement aux espaces de travail : aucune conversation n'y tourne et le coffre de ce Mac n'y va pas", "Diese Maschine ist nur für Workspaces: Dort läuft kein Gespräch, und der Vault dieses Macs geht nicht dorthin"]),
     ("err.machine_repair", ["This machine is already paired the other way: forget it first, then pair it again", "Deze machine is al op de andere manier gekoppeld: vergeet ze eerst en koppel ze dan opnieuw",
         "Cette machine est déjà appairée autrement : oubliez-la d'abord, puis appairez-la à nouveau", "Diese Maschine ist schon anders gekoppelt: Vergiss sie zuerst und kopple sie dann neu"]),
+    ("err.no_context", ["That workspace has no context to put the project in", "Die workspace heeft geen context om het project in te zetten", "Cet espace de travail n'a aucun contexte où mettre le projet", "Dieser Workspace hat keinen Kontext für das Projekt"]),
     ("err.no_machine", ["No such work machine", "Onbekende werkmachine", "Machine de travail inconnue", "Unbekannte Arbeitsmaschine"]),
     ("err.cal_email", ["Calendar: enter the calendar's email address", "Agenda: vul het e-mailadres van de agenda in", "Agenda : saisissez l'adresse e-mail de l'agenda", "Kalender: Gib die E-Mail-Adresse des Kalenders ein"]),
     ("err.cal_url", ["That is no secret iCal address. In Google Calendar: Settings › your calendar › Integrate calendar › Secret address in iCal format.", "Dat is geen geheim iCal-adres. In Google Agenda: Instellingen › je agenda › Agenda integreren › Geheim adres in iCal-indeling.", "Ce n'est pas une adresse iCal secrète. Dans Google Agenda : Paramètres › votre agenda › Intégrer l'agenda › Adresse secrète au format iCal.", "Das ist keine geheime iCal-Adresse. In Google Kalender: Einstellungen › dein Kalender › Kalender integrieren › Geheime Adresse im iCal-Format."]),
@@ -658,14 +660,19 @@ async fn capture_vault(app: AppHandle, state: State<'_, App>, key: String) -> Re
 fn refresh_index(app: &AppHandle) {
     let vault = app.state::<App>().settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string();
     if vault.is_empty() { return; }
+    let app = app.clone();
+    std::thread::spawn(move || rebuild_index(&app, &vault));
+}
+/// A vault's project index rebuilt now, by the script index_script picks. Errors are logged.
+fn rebuild_index(app: &AppHandle, vault: &str) {
     let bundled = app.path().resolve("default-vault/System/scripts/build-index.py", tauri::path::BaseDirectory::Resource).ok();
-    let Some(script) = index_script(PathBuf::from(&vault).join("System/scripts/build-index.py"), bundled) else { return };
+    let Some(script) = index_script(PathBuf::from(vault).join("System/scripts/build-index.py"), bundled) else { return };
     let path = app.state::<App>().path.clone();
-    std::thread::spawn(move || match Command::new("python3").arg(&script).env("VAULT", &vault).env("PATH", &path).output() {
+    match Command::new("python3").arg(&script).env("VAULT", vault).env("PATH", &path).output() {
         Ok(o) if o.status.success() => {}
         Ok(o) => eprintln!("build-index: {}", String::from_utf8_lossy(&o.stderr).trim()),
         Err(e) => eprintln!("build-index: {e}"),
-    });
+    }
 }
 /// Which build-index.py rebuilds a vault's index. A copy of the starter script gets the app's own copy, so a vault an
 /// older Relay made follows today's rules too (an Active project untouched for 30 days shows as Quiet). Every starter
@@ -692,6 +699,49 @@ fn set_project_repos(app: AppHandle, state: State<App>, project: String, repos: 
     // the main window's title bar shows the PRs button by them
     app.emit("repos-changed", ()).ok();
     Ok(())
+}
+/// A project moved or copied to another workspace (migrate.rs): `mode` "move" or "copy", into `context` of the
+/// workspace `to` ("" its context of the same name, else its first). `dry`: nothing is written, the answer is what the
+/// dialog shows, with the target's contexts, whether it is a team workspace and the key the project gets there. A
+/// workspace of cards gets its index rebuilt after.
+#[tauri::command]
+async fn migrate_project(app: AppHandle, project: String, to: String, context: String, mode: String, dry: bool) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || migrate_run(&app, &project, &to, &context, mode == "move", dry)).await.map_err(|e| e.to_string())?
+}
+fn migrate_run(app: &AppHandle, project: &str, to: &str, context: &str, mv: bool, dry: bool) -> Result<Value, String> {
+    let state = app.state::<App>();
+    let (from_vault, name) = project_home(&state, project)?;
+    let s = state.settings.lock().unwrap().clone();
+    if !all_vaults(&s).iter().any(|v| v == to) { return Err(trc_v("err.vault_unknown", to)); }
+    let side = |v: &str| {
+        let st = vault::status(v, &vault_map(&s, v));
+        if st["ok"] != true { return Err(tr_v(ui_lang_of(&s), "err.no_vault", v)); }
+        Ok(migrate::Side { vault: v.into(), work_state: mapped(&st, "workState"), notes: mapped(&st, "notes") })
+    };
+    let (from, dst) = (side(&from_vault)?, side(to)?);
+    let context_of = |side: &migrate::Side, name: &str| snapshot::vault_projects(&side.vault, &side.work_state, &side.notes).ok()
+        .and_then(|(l, _)| l.into_iter().find(|p| p["name"] == name)).map(|p| p["context"].as_str().unwrap_or("").to_string());
+    let contexts = snapshot::contexts(&dst.vault, &dst.notes)?;
+    let own = context_of(&from, &name).unwrap_or_default();
+    let ctx = if !context.is_empty() { context.to_string() } else if contexts.contains(&own) { own } else { contexts.first().cloned().ok_or_else(|| trc("err.no_context"))? };
+    let team = shared_vaults::list(&s).iter().any(|v| v.folder == to);
+    let filter = if team { shared_vaults::filter(std::path::Path::new(to))? } else {
+        let mut f = relay_remote::sync::Filter::vault_default();
+        f.names.push(".claude".into());
+        f
+    };
+    let plan = migrate::plan(&from, &dst, &name, &ctx, &filter, context_of(&dst, &name).is_some())?;
+    let mut out = plan.json(&dst);
+    out["contexts"] = json!(contexts);
+    out["context"] = json!(ctx);
+    out["team"] = json!(team);
+    out["key"] = json!(policy::project_key(&s, to, &name));
+    if dry { return Ok(out); }
+    plan.apply(&from, &dst, mv, &chrono::Local::now().format("%Y-%m-%d").to_string())?;
+    for side in [&from, &dst].into_iter().filter(|x| migrate::cards(x)) {
+        if shared_vaults::list(&s).iter().any(|v| v.folder == side.vault) { shared_vaults::index_shared(app, &side.vault); } else { rebuild_index(app, &side.vault); }
+    }
+    Ok(out)
 }
 /// "Not now" on a repo a conversation committed to: unlinked on purpose, it is not offered again.
 #[tauri::command]
@@ -2514,7 +2564,7 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_pending_invite, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
+        .invoke_handler(tauri::generate_handler![snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, migrate_project, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_pending_invite, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the window used last back (the main one may be hidden)

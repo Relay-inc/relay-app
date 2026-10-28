@@ -427,3 +427,37 @@ mod dry_run {
         println!("{}", serde_json::to_string_pretty(&super::seed(&v, &map)).unwrap());
     }
 }
+
+// ---------- a project moving to another vault (migrate.rs)
+
+/// A project's entries in a vault's config: `{icons, designs, repos}` with only its own keys, and the icon file its
+/// entry points at (a picked image, or a site's stored favicon), relative to `.relay/`.
+pub fn project_entries(vault: &str, project: &str) -> (Value, Option<String>) {
+    let c = load(vault).unwrap_or_else(|| json!({}));
+    let mut out = json!({"icons": {}, "designs": {}, "repos": {}});
+    let mut file = None;
+    if let Some(v) = c["icons"][project].as_str() {
+        out["icons"][project] = json!(v);
+        file = match icon_kind(v) { Icon::File(f) if !f.contains("..") => Some(f.to_string()), Icon::Site(_) => Some(icon_file(project)), _ => None }
+            .filter(|f| path(vault).with_file_name(f).is_file());
+    }
+    if let Some(v) = c["designs"][project].as_str() { out["designs"][project] = json!(v); }
+    for (r, p) in c["repos"].as_object().into_iter().flatten().filter(|(_, p)| p.as_str() == Some(project)) { out["repos"][r] = p.clone(); }
+    (out, file)
+}
+/// `project_entries` of another vault written into this one's config, over what it has under those keys.
+pub fn add_project_entries(vault: &str, entries: &Value) -> Result<(), String> {
+    let mut c = load(vault).unwrap_or_else(|| json!({}));
+    for k in ["icons", "designs", "repos"] {
+        if !c[k].is_object() { c[k] = json!({}); }
+        for (n, v) in entries[k].as_object().into_iter().flatten() { c[k][n] = v.clone(); }
+    }
+    save(vault, &c)
+}
+/// A project's entries out of a vault's config. Its icon file is left to the caller.
+pub fn drop_project_entries(vault: &str, project: &str) -> Result<(), String> {
+    let Some(mut c) = load(vault) else { return Ok(()) };
+    for k in ["icons", "designs"] { if let Some(m) = c[k].as_object_mut() { m.remove(project); } }
+    if let Some(m) = c["repos"].as_object_mut() { m.retain(|_, p| p.as_str() != Some(project)); }
+    save(vault, &c)
+}
