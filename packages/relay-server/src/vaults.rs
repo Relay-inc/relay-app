@@ -61,9 +61,6 @@ pub(crate) fn all(data: &Path) -> Vec<Vault> {
 /// For the handshake: a device that is not paired gets in while some vault has an invite open (it may then only join).
 pub fn invite_open(data: &Path) -> bool { all(data).iter().any(|v| !v.invites.is_empty()) }
 
-/// Whether `fp` is a member of vault `id` now (channel.rs checks an open stream with it).
-pub(crate) fn is_member(data: &Path, id: &str, fp: &str) -> bool { hex(id, 16) && load(data, id).is_some_and(|v| v.role(fp).is_some()) }
-
 /// Whether `fp` is admin of a vault here: it keeps this server (lib.rs KEEPER_OPS).
 pub(crate) fn keeps(data: &Path, fp: &str) -> bool { all(data).iter().any(|v| v.role(fp) == Some("admin")) }
 

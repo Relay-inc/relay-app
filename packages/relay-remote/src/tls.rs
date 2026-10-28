@@ -158,15 +158,16 @@ fn establish(mut conn: Connection, tcp: TcpStream, timeout: Duration) -> io::Res
     // a write is sealed whole; backpressure comes from the socket, not from rustls' buffer
     conn.set_buffer_limit(None);
     let peer_fp = conn.peer_certificates().and_then(|c| c.first()).map(|c| fingerprint(c)).ok_or_else(|| io::Error::other("peer sent no certificate"))?;
-    let out = tcp.try_clone()?;
-    Ok(Duplex { shared: Arc::new(Shared { conn: Mutex::new(conn), out: Mutex::new(out), closed: Default::default() }), tcp, peer_fp })
+    let (out, raw) = (tcp.try_clone()?, tcp.try_clone()?);
+    Ok(Duplex { shared: Arc::new(Shared { conn: Mutex::new(conn), out: Mutex::new(out), raw, closed: Default::default() }), tcp, peer_fp })
 }
 
 // The rustls state and the socket's write half. `conn` is only held for in-memory work, never across a blocking
 // socket call. `out` is taken before `conn` and held while the sealed records go out, so records reach the socket in
 // the order they were sealed.
-// closed: shut down from this side, for a watcher that should stop with the stream
-struct Shared { conn: Mutex<Connection>, out: Mutex<TcpStream>, closed: std::sync::atomic::AtomicBool }
+// closed: shut down from this side, for a watcher that should stop with the stream. `raw`: the socket once more, for
+// what must never wait on `out` (a write blocked on a peer that does not read holds it): shutting down, timeouts.
+struct Shared { conn: Mutex<Connection>, out: Mutex<TcpStream>, raw: TcpStream, closed: std::sync::atomic::AtomicBool }
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> { m.lock().unwrap_or_else(|e| e.into_inner()) }
 impl Shared {
     fn send(&self, f: impl FnOnce(&mut Connection) -> io::Result<()>) -> io::Result<()> {
@@ -235,12 +236,26 @@ impl Write for Writer {
     fn flush(&mut self) -> io::Result<()> { Ok(()) }
 }
 impl Writer {
-    /// Send close_notify and shut the TCP socket down both ways, so a reader blocked on the other half returns.
+    /// Send close_notify when nothing else is being written, and shut the TCP socket down both ways, so a reader blocked
+    /// on the other half returns. Never waits: a write stuck on a peer that does not read ends with an error instead.
     pub fn shutdown(&self) {
         self.0.closed.store(true, std::sync::atomic::Ordering::SeqCst);
-        self.0.send(|c| { c.send_close_notify(); Ok(()) }).ok();
-        lock(&self.0.out).shutdown(Shutdown::Both).ok();
+        if let Ok(mut out) = self.0.out.try_lock() {
+            let mut tls = Vec::new();
+            {
+                let mut c = lock(&self.0.conn);
+                c.send_close_notify();
+                while c.wants_write() { if c.write_tls(&mut tls).is_err() { break; } }
+            }
+            // nonblocking for this last write: a full socket buffer drops the close_notify, not the shutdown
+            self.0.raw.set_nonblocking(true).ok();
+            out.write_all(&tls).ok();
+        }
+        self.0.raw.shutdown(Shutdown::Both).ok();
     }
+    /// A write that takes longer than `d` fails (and the connection with it), for a connection that stays open on a
+    /// peer that may stop reading.
+    pub fn set_write_timeout(&self, d: Duration) -> io::Result<()> { self.0.raw.set_write_timeout(Some(d)) }
     /// Whether `shutdown` ran on this connection.
     pub fn is_closed(&self) -> bool { self.0.closed.load(std::sync::atomic::Ordering::SeqCst) }
 }
