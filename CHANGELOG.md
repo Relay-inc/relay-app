@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- **Move or copy a project to another workspace**: right-click a project, Move to workspace or Copy to workspace. Its notes (the project's folder), its work-state row (or its card, in a workspace that builds its work-state from cards), its icon, Design link, linked repos and scratch notes go along. Nothing is written when something of that name is already there, and a move removes only what was copied, once every write worked. Into a team workspace the files are listed and Move waits until you tick that every member may see them; files a team workspace does not sync stay behind. Conversations that already started stay in the workspace they ran in, as general conversations there
+- **Move or copy a project to another workspace**: right-click a project, Move to workspace or Copy to workspace. Its notes (the project's folder), its work-state row (or its card, in a workspace that builds its work-state from cards), its icon, Design link, linked repos and scratch notes go along. Nothing is written when something of that name is already there, and a move removes only what was copied, once every write worked. Into a team workspace the files are listed and Move waits until you tick that every member may see them; files a team workspace does not sync stay behind. Conversations that already started stay in the workspace they ran in, as general conversations there (#296)
 
 ### Changed
 
