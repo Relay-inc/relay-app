@@ -560,6 +560,9 @@ function handle(cmd: string, a: Args): unknown {
       written.set(String(a.target), { text: String(a.text), hash });
       return { hash };
     }
+    case "shared_doc_absorb":
+      // a shared workspace's document taking a file change: nothing to show in the harness
+      return null;
     case "project_icons":
       return vault.projectIcons();
     case "project_repos":

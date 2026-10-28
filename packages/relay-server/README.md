@@ -239,7 +239,8 @@ device names and fingerprints, open invites) and one record per file in `blobs/`
   notes who pushed each, and passes each new one to the other members' streams; it cannot read or forge them and never
   deletes any. It could hold some back or repeat them: the members' Relays warn of a gap in an author's updates or of
   edits that build on one they lack, and a repeat changes nothing. 10 000 documents a workspace, 512 MiB a member a
-  day.
+  day. A note that became a document is named to the server (`doc_bind`, its file's record name): a write or delete
+  of that record by an older Relay's file sync is refused with "update Relay".
 - **Removing someone** stops their device here at once, including their open stream. They keep what they already
   synced and the keys they had, so an admin's Relay then changes the workspace key: the new key goes to every member
   left, sealed to each one's own public key, and the server refuses writes under the old one. What is written after

@@ -119,6 +119,8 @@ export const vaultNotes = () => invoke<VaultNotes>("vault_notes");
 export const readNote = (target: string) => invoke<unknown>("read_note", { target });
 /** Writes a page over its note; rejects with "changed" when the file is no longer the text with hash `expect`, unless
  *  `force`. Resolves to the new text's hash. */
+/** A note changed outside Relay: in a shared workspace, a document's file change becomes an edit of the document. */
+export const sharedDocAbsorb = (path: string, by: string) => invoke<void>("shared_doc_absorb", { path, by });
 export const writeNote = (target: string, text: string, expect: string, force: boolean) =>
   invoke<{ hash: string }>("write_note", { target, text, expect, force });
 /** The values a frontmatter key has across a workspace folder's notes, most used first. */

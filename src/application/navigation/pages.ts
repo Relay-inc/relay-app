@@ -178,10 +178,12 @@ function byClaude(page: string) {
  *  holds another text than the file gets the file's, to merge. */
 export async function noteChanged({ path, hash, relinked }: backend.NoteChange) {
   void loadNotes();
+  const by = relinked ? "relay" : byClaude(path) ? "claude" : "disk";
+  // another workspace's note (an absolute path): if it is a shared document, its file change becomes an edit of it
+  if (hash && path.startsWith("/")) void backend.sharedDocAbsorb(path, by).catch(() => {});
   const merge = watchers.get(path);
   const read = useNavigationStore.getState().panel.detail[pageKey(path)] as Page | undefined;
   if (!merge || !hash || !read || "err" in read || read.hash === hash) return;
-  const by = relinked ? "relay" : byClaude(path) ? "claude" : "disk";
   try {
     const fresh = (await backend.readNote(path)) as Page;
     if (!("err" in fresh)) merge({ text: fresh.text, hash: fresh.hash, by });

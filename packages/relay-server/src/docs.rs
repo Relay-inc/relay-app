@@ -123,6 +123,22 @@ impl Vaults {
         })
     }
 
+    /// Record names that are documents now (`names`, as the members name a note's file): a write or delete of one by
+    /// the file rounds is refused from then on (`bound`), so a Relay from before documents does not keep a second,
+    /// stale copy of the note in sync as a file. Never unbound.
+    pub fn doc_bind(&self, fp: &str, id: &str, names: &[String]) -> Result<(), String> {
+        if names.len() > 1000 || names.iter().any(|n| !hex(n, 64)) { return Err("bad names".into()); }
+        self.with(id, fp, |_, _| {
+            let d = dir(self.data()).join(id).join("bound");
+            fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+            if fs::read_dir(&d).map_or(0, |r| r.count()) + names.len() > 2 * MAX_DOCS { return Err("too many documents in this workspace".into()); }
+            for n in names { fs::write(d.join(n), b"").map_err(|e| e.to_string())?; }
+            Ok(())
+        })
+    }
+    /// Whether record `name` of vault `id` is a document's (`doc_bind`).
+    pub(crate) fn bound(&self, id: &str, name: &str) -> bool { hex(name, 64) && dir(self.data()).join(id).join("bound").join(name).exists() }
+
     /// The vault's documents: each one's name, log length and last snapshot.
     pub fn doc_list(&self, fp: &str, id: &str) -> Result<Value, String> {
         self.member(id, fp)?;
@@ -177,6 +193,15 @@ mod tests {
         assert_eq!((v["updates"].as_array().unwrap().len(), v["more"].as_bool(), v["updates"][0]["seq"].as_u64()), (5, Some(false), Some(201)));
         assert_eq!(vs.doc_list(&me, &id).unwrap()["docs"], json!([{"doc": name, "seq": 205, "snap": 200}]));
         assert_eq!(numbered(&vs.doc(&id, &name).join("log")), (1..=205).collect::<Vec<_>>(), "nothing deleted");
+        // a note made a document: the file rounds may no longer write or delete its record (an older Relay's)
+        let rec = |e: u32| { let mut r = (4u32 | (e << 20)).to_be_bytes().to_vec(); r.extend([1u8; 4 + 40]); r };
+        let note = "e".repeat(64);
+        let etag = vs.put(&me, &id, &note, &rec(1), Some("")).unwrap();
+        vs.doc_bind(&me, &id, &[note.clone()]).unwrap();
+        assert!(vs.put(&me, &id, &note, &rec(1), Some(&etag)).unwrap_err().contains("update Relay"));
+        assert!(vs.delete(&me, &id, &note, Some(&etag)).unwrap_err().contains("update Relay"));
+        assert_eq!(vs.doc_bind(&"b".repeat(64), &id, &[note.clone()]).unwrap_err(), "no such vault", "not a member");
+        assert_eq!(vs.doc_bind(&me, &id, &["x".into()]).unwrap_err(), "bad names");
         fs::remove_dir_all(&data).ok();
     }
 }

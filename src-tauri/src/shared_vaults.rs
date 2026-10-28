@@ -85,6 +85,8 @@ pub fn load_key(data: &Path, id: &str) -> Result<Keys, String> {
 /// Where a round keeps what it deletes or mostly empties here: <data>/shared-trash/<id>/<round's minute>/<path>.
 fn trash(data: &Path, id: &str) -> PathBuf { data.join("shared-trash").join(id) }
 const TRASH_DAYS: i64 = 30;
+/// Notes made documents in one round at most (docs/workspaces.md, Documents): a big workspace takes a few rounds.
+const SEED: usize = 50;
 /// The vault's documents on this Mac (docs/workspaces.md, Documents).
 fn docs_dir(data: &Path, id: &str) -> PathBuf { data.join("shared-docs").join(id) }
 fn base_path(data: &Path, id: &str) -> PathBuf { data.join("shared-base").join(format!("{id}.json")) }
@@ -244,14 +246,16 @@ impl Hub {
                 // document stays out of the file rounds, so it never has two writers (docs/workspaces.md, Documents)
                 let docs = self.docs(data, v, me, load_key(data, &v.id).unwrap_or_else(|_| key.clone()));
                 match docs.sync() {
-                    Ok(_) => {}
+                    // the workspace's notes become documents, SEED a round (the rest stay on the file rounds until then)
+                    Ok(_) => { docs.seed(Path::new(&v.folder), &f, SEED); }
                     // a relay-server from before documents: none there, nothing to say every round
                     Err(e) if e.contains("unknown request") || e.contains("is not allowed") => {}
                     Err(e) => st.errors.push(format!("documents: {e}")),
                 }
-                // written even when some documents failed; a file a note replaces goes to the trash first
-                let kept = trash(data, &v.id).join(&stamp);
-                let (_, errors) = docs.export(Path::new(&v.folder), &f, &|p, b| { sync::write_atomic(&kept.join(p), b, None).ok(); });
+                // written even when some documents failed; a file a note replaces (one that was a plain note here,
+                // changed before this Mac knew it is a document) stays next to it as a conflict copy
+                let folder = Path::new(&v.folder);
+                let (_, errors) = docs.export(folder, &f, &|p, b| { sync::write_atomic(&folder.join(conflict_copy(&f, p, name, &stamp)), b, None).ok(); });
                 st.errors.extend(errors.into_iter().map(|e| format!("document: {e}")));
                 st.warnings.extend(docs.take_warnings());
                 f.prefixes.extend(docs.excluded(&f));
@@ -282,6 +286,21 @@ impl Hub {
         for c in &st.conflicts { if !conflicts.contains(c) { conflicts.push(c.clone()); } }
         all.insert(v.id.clone(), Status { pushed: prev.pushed + st.pushed, pulled: prev.pulled + st.pulled, conflicts, live: prev.live, ..st.clone() });
         Some(st)
+    }
+
+    /// A note of vault `id` (in `folder`, `path` relative) changed on disk, by `by` ("claude", "disk", "relay"): taken
+    /// into its document when it is one (Docs::absorb), on a thread of its own (it sends).
+    pub fn absorb(&self, id: &str, folder: &str, path: &str, by: &str) {
+        let Some(docs) = self.docs.lock().unwrap().get(id).cloned() else { return };
+        let (folder, path, by) = (folder.to_string(), path.to_string(), by.to_string());
+        std::thread::spawn(move || { if let Ok(f) = filter(Path::new(&folder)) { docs.absorb(Path::new(&folder), &f, &path, &by).ok(); } });
+    }
+    /// Notes of vault `id` moved (the Pages tab, `moves`: from, to): each that is a document follows in the manifest,
+    /// keeping its history.
+    pub fn moved_notes(&self, id: &str, moves: &[(String, String)]) {
+        let Some(docs) = self.docs.lock().unwrap().get(id).cloned() else { return };
+        let paths = docs.paths();
+        for (from, to) in moves { if paths.contains_key(from) { docs.rename(from, to).ok(); } }
     }
 
     /// `f` while no round of vault `id` runs: the key file it writes is not overwritten by a round's copy.

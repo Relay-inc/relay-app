@@ -53,6 +53,9 @@ impl Vault {
 
 /// Exactly `n` lowercase hex characters: every id, code and blob name. Anything else never reaches a path.
 pub(crate) fn hex(s: &str, n: usize) -> bool { s.len() == n && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) }
+/// The file rounds' answer for a note that is a document now (docs.rs, `doc_bind`): only a Relay from before documents
+/// writes one as a file.
+const BOUND: &str = "this note is a shared document now: update Relay to change it";
 pub(crate) fn dir(data: &Path) -> PathBuf { data.join("vaults") }
 
 /// A vault's file, its expired and used-up invites left out. None when there is no such vault.
@@ -416,6 +419,7 @@ impl Vaults {
                 std::cmp::Ordering::Greater => return Err("no such key epoch".into()),
                 std::cmp::Ordering::Equal => {}
             }
+            if self.bound(id, name) { return Err(BOUND.into()); }
             let p = self.blobs(id).join(name);
             if etag_at(&p)? != expect { return Err("changed meanwhile".into()); }
             sync::write_atomic(&p, record, None).map_err(|e| e.to_string())?;
@@ -427,6 +431,7 @@ impl Vaults {
         if !hex(name, 64) { return Err("bad name".into()); }
         let expect = expect.ok_or("expect missing")?;
         self.with(id, fp, |_, _| {
+            if self.bound(id, name) { return Err(BOUND.into()); }
             let p = self.blobs(id).join(name);
             if etag_at(&p)? != expect { return Err("changed meanwhile".into()); }
             if !expect.is_empty() { fs::remove_file(&p).map_err(|e| e.to_string())?; }

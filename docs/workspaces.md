@@ -256,9 +256,27 @@ an agent. Its edits merge; there are no conflict copies for it.
   wrote it (to the trash first otherwise), unless another note has that place now or the file rounds keep it out. A
   note that is a document, and its old path until that file is gone, stay out of the file rounds. A live update is
   taken on a thread of its own, under the same lock as the rounds.
-- **Not yet** (8b): a note becomes a document only through `Docs::create` (no UI), an existing file is not turned
-  into one, an edit made to the `.md` on disk does not go into its document (the next change from the document
-  writes over it, the old content to the trash), and an older Relay still syncs that note as a file.
+- **Which notes are documents.** All of them: on a relay-server with documents, each round makes up to 50 of the
+  workspace's notes documents (`.md` the file rounds would sync, not through a link, no conflict copy), with the text
+  the file has then; the rest stay on the file rounds until their turn. Two Macs doing it for the same note at once:
+  the manifest keeps one, and the other is dropped when its text is the same, else kept as a conflict copy (above).
+  The server is told each document's record name (`doc_bind {vault, names}`, the file rounds' name for the path, at
+  most 1000 a call, never undone; a rename binds the new path too): a write or delete of that record by the file
+  rounds is refused from then on with "this note is a shared document now: update Relay to change it". So a Relay from
+  before documents keeps syncing every other file and gets that error for a note that is a document; the copy it has
+  stays as it was (the record is not deleted, an older Relay would delete its file).
+- **A change on disk.** When the note's file changes outside the document (Claude, Obsidian, a page's save, git), the
+  change is what differs from the text Relay last wrote there (kept per document, `<id>.out`), never the file over the
+  document: lines matched first, then the chars that differ, made on top of what others changed meanwhile (text others
+  removed stays removed, text both put at one place stays, theirs first). It goes out as this Mac's update, with who
+  made it in the meta (`o`: `claude` when a conversation's file tool wrote it in the last seconds, `relay` for a page's
+  save or a link a move rewrote, else `disk`). The mtime and hash only notice the change; nothing is decided by which
+  is newer. It is taken when the watcher hears of it (the page that heard it asks), when a page saves, and at the latest
+  by the next export, which takes a changed file in before it writes. A byte-order mark and CRLF line ends do not go
+  into the document. A note's file deleted here is written back (warned): a document the workspace shares is not
+  deleted by removing its file on one Mac. A note moved in the Pages tab keeps its document (the manifest follows).
+  A file at a document's place that this Mac had not written yet and that differs (a plain note changed here before
+  it learned the note is a document) stays next to it as a conflict copy.
 
 ## Record
 
