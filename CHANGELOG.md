@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Changed
 
-- **One workspace at a time, picked in the sidebar's footer**: your own vault is now your Personal workspace, next to the vault folders you added and the shared workspaces. The footer shows the workspace with its note count; click it for the list of workspaces (⌃1 to ⌃9 switch too), Open a folder as workspace…, New workspace from template… and Workspace settings. The sidebar's projects, general conversations and search follow the workspace shown, and a new general conversation starts in it. Reminders, mail and Today stay on your Personal workspace. The app now says workspace where it said vault for these folders
+- **One workspace at a time, picked in the sidebar's footer**: your own vault is now your Personal workspace, next to the vault folders you added and the shared workspaces. The footer shows the workspace with its note count; click it for the list of workspaces (⌃1 to ⌃9 switch too), Open a folder as workspace…, New workspace from template… and Workspace settings. The sidebar's projects, general conversations and search follow the workspace shown, and a new general conversation starts in it. Reminders, mail and Today stay on your Personal workspace. The app now says workspace where it said vault for these folders (#294)
 
 ## [0.0.39] - 2026-10-27
 
