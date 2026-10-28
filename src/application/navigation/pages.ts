@@ -42,7 +42,8 @@ export function chatCount() {
   const { snap } = useWorkspaceStore.getState();
   const workspace = activeFolder();
   return Object.values(useConversationsStore.getState().chats).filter(
-    chat => !chat.draft && !chat.closed && chat.key !== ORCH && inWorkspace(chatVault(chat, snap), workspace, settings()),
+    chat =>
+      !chat.draft && !chat.closed && chat.key !== ORCH && inWorkspace(chatVault(chat, snap), workspace, settings()),
   ).length;
 }
 
