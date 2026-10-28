@@ -124,7 +124,7 @@ pub struct Vaults { data: PathBuf, fp: String, locks: Mutex<HashMap<String, Arc<
 impl Vaults {
     pub fn new(data: &Path, fp: &str) -> Vaults { Vaults { data: data.into(), fp: fp.into(), locks: Mutex::default(), seen: Mutex::default(), rooms: Rooms::default(), docs: Default::default() } }
     pub(crate) fn data(&self) -> &Path { &self.data }
-    fn blobs(&self, id: &str) -> PathBuf { dir(&self.data).join(id).join("blobs") }
+    pub(crate) fn blobs(&self, id: &str) -> PathBuf { dir(&self.data).join(id).join("blobs") }
 
     /// Vault `id`, read and changed by `f` without another request in between. A vault that is not there and one the
     /// caller is not a member of answer the same.
@@ -369,7 +369,9 @@ impl Vaults {
         let v = self.member(id, fp)?;
         let m = v.members.iter().find(|m| m.fp == fp).ok_or("no such vault")?;
         let state = json!({"epoch": v.epoch, "rekey": v.rekey, "role": m.role, "me": {"fp": fp, "pk": m.pk, "mac": m.mac}});
-        let blobs = self.blobs_listed(id)?;
+        let mut blobs = self.blobs_listed(id)?;
+        // a record that is a document's now (docs.rs, `doc_bind`): said, so a Relay does not seal it again either
+        for b in &mut blobs { if b["name"].as_str().is_some_and(|n| self.bound(id, n)) { b["bound"] = json!(true); } }
         let mut out = state;
         out["blobs"] = json!(blobs);
         Ok(out)

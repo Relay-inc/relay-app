@@ -39,6 +39,13 @@ pub fn moved(root: &Path, files: &[String], edits: &[(String, String)]) {
     for (at, text) in edits { relinked.insert(root.join(at), vault::text_hash(text)); }
 }
 
+/// A shared document's note Relay wrote out (another member's edit, `Docs::export`): announced as relinked, so an open
+/// page takes it in without saying it changed on disk, and its document does not take it as a change.
+pub fn exported(file: &Path) {
+    let p = std::fs::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
+    if let Ok(t) = std::fs::read_to_string(&p) { RELINKED.lock().unwrap().insert(p, vault::text_hash(&t)); }
+}
+
 /// What to announce for a file an event named: (its page path, its hash, whether a move rewrote its links) or None when it is no note of the roots, sits
 /// in a skipped folder, or its text is what is known. `roots`: (folder as set, canonical folder), the main vault first.
 fn change(roots: &[(String, String)], file: &Path) -> Option<(String, String, bool)> {

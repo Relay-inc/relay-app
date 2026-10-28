@@ -1138,6 +1138,15 @@ const VIEWS = {
     await page.getByText("Only if Studio Mac told you").scrollIntoViewIfNeeded();
     await settle(page);
   },
+  // an admin turns making the notes documents on (ticket 8b, opt-in per workspace)
+  "settings-shared-docs": async () => {
+    await settingsPage("Machines", undefined, "shared");
+    await page.setViewportSize({ width: 900, height: 1000 });
+    await waitText("Notes as shared documents");
+    await page.getByRole("switch").first().click();
+    await page.getByText("Notes as shared documents").first().scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   "settings-shared-vaults": async () => {
     await settingsPage("Machines", undefined, "shared");
     await page.setViewportSize({ width: 900, height: 1600 });

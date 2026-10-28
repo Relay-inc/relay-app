@@ -18,3 +18,5 @@ ring = "0.17"
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 # the documents of a shared vault (docs.rs): Yjs-compatible CRDTs, one Y.Text of markdown per note
 yrs = "0.28"
+# a document's change on disk measured line by line (docs.rs, merge3): Myers in linear space
+similar = "2"

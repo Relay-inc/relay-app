@@ -37,6 +37,8 @@ pub const PULL_LIMIT: u64 = 1000;
 /// Updates in the log between two snapshots the server takes (`doc_snapshot_put`, for ticket 10's history; this
 /// side writes none).
 pub const SNAPSHOT_EVERY: u64 = 200;
+/// Documents in one vault at most (the server refuses more).
+pub const MAX_DOCS: usize = 10_000;
 
 /// How far this Mac has a document: every update up to `seq` taken (or skipped, warned), `epoch` the newest key when it
 /// last pulled (an update under an older key after that is a removed member's).
@@ -45,11 +47,12 @@ pub const SNAPSHOT_EVERY: u64 = 200;
 /// device's counter of updates to it; `seen` the last counter of each author (a gap: updates held back); `lost` the
 /// authors of parts left out (named when edits are missing). `via`: who made the edit not sent yet when it came from
 /// the note's file ("claude", "disk", "relay"; kept with the update for history). `bound`: the server knows the note's
-/// record name is a document's (`doc_bind`).
+/// record name is a document's (`doc_bind`). `bound_as`: the path the server was told is this document's (`doc_bind`),
+/// "" none yet. `seeded`: made from an existing file here (8b), not by an edit.
 #[derive(Default, Clone, Serialize, Deserialize)]
 #[serde(default)]
 struct Cursor { seq: u64, epoch: u32, path: String, at: String, out: String, pending: bool, acked: String, mine: u64, seen: BTreeMap<String, u64>,
-    lost: std::collections::BTreeSet<String>, via: String, bound: bool }
+    lost: std::collections::BTreeSet<String>, via: String, bound_as: String, seeded: bool }
 struct Open { doc: Doc, c: Cursor }
 
 type On = Arc<dyn Fn(&str, &[u8]) + Send + Sync>;
@@ -118,43 +121,32 @@ fn line_starts(s: &[char]) -> Vec<usize> {
     if *v.last().unwrap() != s.len() { v.push(s.len()); }
     v
 }
-/// The changes from `a` to `b`: whole lines matched by their longest common subsequence, each changed run between
-/// them trimmed to the chars that differ.
+/// The changes from `a` to `b`: whole lines matched (Myers, linear space), each changed run between them trimmed to
+/// the chars that differ.
 fn diff(a: &[char], b: &[char]) -> Vec<Hunk> {
     let (la, lb) = (line_starts(a), line_starts(b));
-    let (n, m) = (la.len() - 1, lb.len() - 1);
-    let al = |i: usize| &a[la[i]..la[i + 1]];
-    let bl = |j: usize| &b[lb[j]..lb[j + 1]];
-    let mut pairs = vec![];
-    // ponytail: an O(n·m) table of lines; past 4M cells (2000 lines against 2000) no line is matched and the changed
-    // middle is one run, trimmed to what differs at its ends
-    if n.saturating_mul(m) <= 4_000_000 {
-        let w = m + 1;
-        let mut t = vec![0u32; (n + 1) * w];
-        for i in (0..n).rev() {
-            for j in (0..m).rev() { t[i * w + j] = if al(i) == bl(j) { t[(i + 1) * w + j + 1] + 1 } else { t[(i + 1) * w + j].max(t[i * w + j + 1]) }; }
-        }
-        let (mut i, mut j) = (0, 0);
-        while i < n && j < m {
-            if al(i) == bl(j) { pairs.push((i, j)); i += 1; j += 1; } else if t[(i + 1) * w + j] >= t[i * w + j + 1] { i += 1; } else { j += 1; }
-        }
+    let lines = |s: &[char], l: &[usize]| -> Vec<String> { (0..l.len() - 1).map(|i| s[l[i]..l[i + 1]].iter().collect()).collect() };
+    let (xa, xb) = (lines(a, &la), lines(b, &lb));
+    let mut runs: Vec<(usize, usize, usize, usize)> = vec![];
+    for op in similar::capture_diff_slices(similar::Algorithm::Myers, &xa, &xb) {
+        if matches!(op, similar::DiffOp::Equal { .. }) { continue; }
+        let (o, n) = (op.old_range(), op.new_range());
+        // a removal and an insertion next to each other are one run
+        match runs.last_mut() { Some(r) if r.1 == o.start && r.3 == n.start => { r.1 = o.end; r.3 = n.end; } _ => runs.push((o.start, o.end, n.start, n.end)) }
     }
-    pairs.push((n, m));
-    let (mut out, mut i, mut j) = (vec![], 0, 0);
-    for (pi, pj) in pairs {
-        if pi > i || pj > j {
-            let (mut s, mut e, mut t, mut u) = (la[i], la[pi], lb[j], lb[pj]);
-            while s < e && t < u && a[s] == b[t] { s += 1; t += 1; }
-            while s < e && t < u && a[e - 1] == b[u - 1] { e -= 1; u -= 1; }
-            if s < e || t < u { out.push((s, e, t, u)); }
-        }
-        (i, j) = (pi + 1, pj + 1);
+    let mut out = vec![];
+    for (i, pi, j, pj) in runs {
+        let (mut s, mut e, mut t, mut u) = (la[i], la[pi], lb[j], lb[pj]);
+        while s < e && t < u && a[s] == b[t] { s += 1; t += 1; }
+        while s < e && t < u && a[e - 1] == b[u - 1] { e -= 1; u -= 1; }
+        if s < e || t < u { out.push((s, e, t, u)); }
     }
     out
 }
-/// `disk`'s changes to `base`, made on `cur` (which holds others' changes to `base`): (char position in `cur`, chars
-/// removed, text put there), the last place first, removals before what goes in at one place. Text others changed
-/// too is theirs (not removed again); text both put at one place stays, theirs first.
+/// `disk`'s changes to `base`, made on `cur` (which holds others' changes to `base`), as diff3 does: (char position
+/// in `cur`, chars removed, text put there), the last place first, removals before what goes in at one place. A
+/// change both sides made alike counts once; text others changed or removed is theirs (not removed again); text both
+/// put at one place stays, theirs first.
 fn merge3(base: &[char], cur: &[char], disk: &[char]) -> Vec<(usize, usize, String)> {
     let theirs = diff(base, cur);
     // where base position p (between two chars) is in `cur`: inside a run others changed, after their text
@@ -171,7 +163,8 @@ fn merge3(base: &[char], cur: &[char], disk: &[char]) -> Vec<(usize, usize, Stri
     let gone = |x: usize| theirs.iter().any(|&(s, e, _, _)| s <= x && x < e);
     let mut edits = vec![];
     for (s, e, t, u) in diff(base, disk) {
-        // ponytail: each removed char placed on its own, O(removed · others' runs); fine for a note
+        // the same change on both sides: already in `cur`
+        if theirs.iter().any(|&(ts, te, tt, tu)| ts == s && te == e && cur[tt..tu] == disk[t..u]) { continue; }
         let mut run: Option<(usize, usize)> = None;
         for x in s..e {
             if gone(x) { continue; }
@@ -184,7 +177,18 @@ fn merge3(base: &[char], cur: &[char], disk: &[char]) -> Vec<(usize, usize, Stri
     edits.sort_by(|a, b| b.0.cmp(&a.0).then(a.2.is_empty().cmp(&b.2.is_empty()).reverse()));
     edits
 }
-
+/// The edits of `merge3` made on a document whose text is `cur`, as one change (Y.Text counts UTF-8 bytes).
+fn make_edits(doc: &Doc, cur: &str, edits: &[(usize, usize, String)]) {
+    let at: Vec<u32> = cur.char_indices().map(|(i, _)| i as u32).chain([cur.len() as u32]).collect();
+    change(doc, |d| {
+        let t = d.get_or_insert_text("md");
+        let mut txn = d.transact_mut();
+        for (p, del, ins) in edits {
+            if *del > 0 { t.remove_range(&mut txn, at[*p], at[p + del] - at[*p]); }
+            if !ins.is_empty() { t.insert(&mut txn, at[*p], ins); }
+        }
+    });
+}
 /// A note's conflict name: "Plan.md" -> "Plan (conflict 1a2b3c4d).md", the same on every Mac for the same document.
 fn conflict_path(path: &str, id: &str) -> String { format!("{} (conflict {}).md", path.trim_end_matches(".md"), &id[..8]) }
 
@@ -216,6 +220,9 @@ impl Docs {
     fn save(&self, open: &BTreeMap<String, Open>, id: &str) -> Result<(), String> {
         let o = &open[id];
         sync::write_atomic(&self.dir.join(Self::file(id)), &o.doc.transact().encode_state_as_update_v1(&StateVector::default()), None).map_err(|e| e.to_string())?;
+        self.save_index(open)
+    }
+    fn save_index(&self, open: &BTreeMap<String, Open>) -> Result<(), String> {
         let index: BTreeMap<&String, &Cursor> = open.iter().map(|(k, o)| (k, &o.c)).collect();
         sync::write_atomic(&self.dir.join("index.json"), serde_json::to_string(&index).unwrap().as_bytes(), None).map_err(|e| e.to_string())
     }
@@ -229,6 +236,15 @@ impl Docs {
         let map = m.doc.get_or_insert_map("paths");
         let txn = m.doc.transact();
         map.iter(&txn).filter_map(|(p, v)| Some((p.to_string(), v.to_string(&txn)))).filter(|(p, id)| safe_path(p) && note_id(id)).collect()
+    }
+    /// The notes deleted in the Pages tab (manifest map "gone"): document id -> the path it had. The document and its
+    /// log stay on the server (history); no Mac brings one back, and Undo puts it back at that path.
+    pub fn gone(&self) -> BTreeMap<String, String> {
+        let open = lock(&self.open);
+        let Some(m) = open.get(MANIFEST) else { return BTreeMap::new() };
+        let map = m.doc.get_or_insert_map("gone");
+        let txn = m.doc.transact();
+        map.iter(&txn).filter_map(|(id, v)| Some((id.to_string(), v.to_string(&txn)))).filter(|(id, p)| note_id(id) && safe_path(p)).collect()
     }
     /// The paths the file rounds must leave alone: every note `filter` lets a document have, and where a document was
     /// last written until its old file is gone.
@@ -254,8 +270,9 @@ impl Docs {
         let f = fold(path);
         self.paths().keys().any(|p| fold(p) == f && Some(p.as_str()) != except)
     }
-    /// A new note as a document (8a: only this, no UI; seeding existing files is 8b): its text, its path in the
-    /// manifest. Kept here first; sent now if the server can be reached, else with the next sync.
+    /// A new note as a document: its text, then its path in the manifest, so no Mac learns of the note before its text
+    /// can reach it. Kept here first; sent now if the server can be reached, else with the next sync (the documents
+    /// before the manifest).
     pub fn create(&self, path: &str, text: &str) -> Result<String, String> {
         if !safe_path(path) { return Err(format!("not a note path: {path}")); }
         if self.taken(path, None) { return Err(format!("already a document: {path}")); }
@@ -269,29 +286,58 @@ impl Docs {
             (o.c.pending, o.c.path) = (true, path.into());
             self.save(&open, &id)?;
         }
-        self.manifest(|m, txn| { m.insert(txn, path, id.clone()); })?;
         self.send(&id);
+        self.manifest(|m, _, txn| { m.insert(txn, path, id.clone()); })?;
         Ok(id)
     }
-    /// A note moved: only the manifest changes, the document (and its history) stays. Its old file goes at the next
-    /// export.
+    /// A note moved: only the manifest changes, the document (and its history) stays. The old file goes at the next
+    /// export (`file_moved` when the Pages tab moved it already).
     pub fn rename(&self, from: &str, to: &str) -> Result<(), String> {
         if !safe_path(to) { return Err(format!("not a note path: {to}")); }
         let id = self.paths().get(from).ok_or_else(|| format!("not a document: {from}"))?.clone();
         if self.taken(to, Some(from)) { return Err(format!("already a document: {to}")); }
-        self.manifest(|m, txn| { m.remove(txn, from); m.insert(txn, to, id.clone()); })?;
+        self.manifest(|m, _, txn| { m.remove(txn, from); m.insert(txn, to, id.clone()); })?;
         let mut open = lock(&self.open);
-        if let Some(o) = open.get_mut(&id) { (o.c.path, o.c.bound) = (to.into(), false); }
+        if let Some(o) = open.get_mut(&id) { o.c.path = to.into(); }
         self.save(&open, &id)
     }
-    /// A change to the manifest, kept here and sent.
-    fn manifest(&self, f: impl FnOnce(&yrs::MapRef, &mut yrs::TransactionMut)) -> Result<(), String> {
+    /// The Pages tab moved the note's file to `path` (its document renamed there): the file there is the one Relay
+    /// wrote, so a change to it (links the move rewrote) is measured as usual.
+    pub fn file_moved(&self, path: &str) {
+        let Some(id) = self.paths().get(path).cloned() else { return };
+        let mut open = lock(&self.open);
+        if let Some(o) = open.get_mut(&id) { o.c.at = path.into(); }
+        self.save(&open, &id).ok();
+    }
+    /// A note deleted in the Pages tab (its file is in the trash already): out of the manifest, into "gone", so every
+    /// Mac removes its file. Returns its document id, None when it is no document.
+    pub fn remove(&self, path: &str) -> Result<Option<String>, String> {
+        let Some(id) = self.paths().get(path).cloned() else { return Ok(None) };
+        self.manifest(|m, g, txn| { m.remove(txn, path); g.insert(txn, id.as_str(), path); })?;
+        let mut open = lock(&self.open);
+        if let Some(o) = open.get_mut(&id) { o.c.at.clear(); }
+        self.save(&open, &id)?;
+        Ok(Some(id))
+    }
+    /// Undo of `remove`: the document back at `path` (its file is back from the trash). Whether there was one.
+    pub fn restore(&self, path: &str) -> Result<bool, String> {
+        let Some(id) = self.gone().into_iter().find(|(_, p)| p == path).map(|(id, _)| id) else { return Ok(false) };
+        if self.taken(path, None) { return Err(format!("already a document: {path}")); }
+        self.manifest(|m, g, txn| { g.remove(txn, id.as_str()); m.insert(txn, path, id.clone()); })?;
+        let mut open = lock(&self.open);
+        let o = Self::entry(&mut open, &id);
+        (o.c.path, o.c.at) = (path.into(), path.into());
+        self.save(&open, &id)?;
+        Ok(true)
+    }
+    /// A change to the manifest (its maps "paths" and "gone"), kept here and sent.
+    fn manifest(&self, f: impl FnOnce(&yrs::MapRef, &yrs::MapRef, &mut yrs::TransactionMut)) -> Result<(), String> {
         let busy = self.busy(MANIFEST);
         let _one = lock(&busy);
         {
             let mut open = lock(&self.open);
             let o = Self::entry(&mut open, MANIFEST);
-            change(&o.doc, |d| { let m = d.get_or_insert_map("paths"); f(&m, &mut d.transact_mut()); });
+            change(&o.doc, |d| { let (m, g) = (d.get_or_insert_map("paths"), d.get_or_insert_map("gone")); f(&m, &g, &mut d.transact_mut()); });
             o.c.pending = true;
             self.save(&open, MANIFEST)?;
         }
@@ -441,8 +487,8 @@ impl Docs {
     }
 
     /// Every document whose log the server has further than this Mac, the manifest first (it names the others), then
-    /// each note's and its sidecars'; then whatever this Mac has not sent yet. A document that fails is warned and the
-    /// others go on. Returns the ids that changed.
+    /// each note's and its sidecars'; then whatever this Mac has not sent yet (the documents before the manifest). A
+    /// document that fails is warned and the others go on. Returns the ids that changed.
     pub fn sync(&self) -> Result<Vec<String>, String> {
         let (v, _) = (self.call)(json!({"op": "doc_list", "vault": self.vault}), None, None)?;
         let server: BTreeMap<String, u64> = v["docs"].as_array().into_iter().flatten().filter_map(|d| Some((d["doc"].as_str()?.to_string(), d["seq"].as_u64()?))).collect();
@@ -452,6 +498,7 @@ impl Docs {
         if behind(MANIFEST) { pull(MANIFEST); }
         // where the manifest puts each document now
         self.one_per_name();
+        self.one_path_per_doc();
         let paths = self.paths();
         { let mut open = lock(&self.open); for (p, id) in &paths { Self::entry(&mut open, id).c.path = p.clone(); } }
         let mut ids: Vec<String> = self.paths().into_values().collect();
@@ -478,24 +525,39 @@ impl Docs {
         // a document with nothing missing names no lost authors any more
         let all: Vec<String> = lock(&self.open).keys().cloned().collect();
         for id in all { if !self.missing(&id) { if let Some(o) = lock(&self.open).get_mut(&id) { o.c.lost.clear(); } } }
-        let pending: Vec<String> = lock(&self.open).iter().filter(|(_, o)| o.c.pending).map(|(k, _)| k.clone()).collect();
+        // a note's text before its place in the manifest: no Mac learns of a note it cannot read yet
+        let mut pending: Vec<String> = lock(&self.open).iter().filter(|(_, o)| o.c.pending).map(|(k, _)| k.clone()).collect();
+        pending.sort_by_key(|id| id == MANIFEST);
         for id in pending { self.send(&id); }
         self.bind();
         Ok(changed)
     }
     /// The notes that are documents, named to the server by their record names (the vault's naming key over the path,
     /// as the file rounds name them): a Relay from before documents is refused a write or delete of one, so it does not
-    /// keep a second, stale copy in sync as a file. A relay-server from before documents: quiet.
+    /// keep a second, stale copy in sync as a file. A moved note's old name, and a deleted one's, are let go again
+    /// (`doc_unbind`). A relay-server from before documents: quiet.
     fn bind(&self) {
-        let todo: Vec<(String, String)> = self.paths().into_iter().filter(|(_, id)| lock(&self.open).get(id).is_some_and(|o| !o.c.bound)).map(|(p, id)| (id, p)).collect();
         let keys = lock(&self.keys).clone();
+        let paths = self.paths();
+        let gone = self.gone();
+        // (id, the path to bind or "", the path to let go or "")
+        let todo: Vec<(String, String, String)> = {
+            let open = lock(&self.open);
+            let mut v: Vec<(String, String, String)> = paths.iter().filter_map(|(p, id)| open.get(id).filter(|o| o.c.bound_as != *p).map(|o| (id.clone(), p.clone(), o.c.bound_as.clone()))).collect();
+            v.extend(gone.keys().filter_map(|id| open.get(id).filter(|o| !o.c.bound_as.is_empty()).map(|o| (id.clone(), String::new(), o.c.bound_as.clone()))));
+            v
+        };
         for chunk in todo.chunks(1000) {
-            let names: Vec<String> = chunk.iter().map(|(_, p)| keys.name(p)).collect();
-            match (self.call)(json!({"op": "doc_bind", "vault": self.vault, "names": names}), None, None) {
+            let bind: Vec<String> = chunk.iter().filter(|t| !t.1.is_empty()).map(|t| keys.name(&t.1)).collect();
+            let unbind: Vec<String> = chunk.iter().filter(|t| !t.2.is_empty()).map(|t| keys.name(&t.2)).collect();
+            let mut r = Ok((json!({}), vec![]));
+            if !bind.is_empty() { r = (self.call)(json!({"op": "doc_bind", "vault": self.vault, "names": bind}), None, None); }
+            if r.is_ok() && !unbind.is_empty() { r = (self.call)(json!({"op": "doc_unbind", "vault": self.vault, "names": unbind}), None, None); }
+            match r {
                 Ok(_) => {
                     let mut open = lock(&self.open);
-                    for (id, _) in chunk { if let Some(o) = open.get_mut(id) { o.c.bound = true; } }
-                    if let Some((id, _)) = chunk.first() { self.save(&open, id).ok(); }
+                    for (id, p, _) in chunk { if let Some(o) = open.get_mut(id) { o.c.bound_as = p.clone(); } }
+                    self.save_index(&open).ok();
                 }
                 Err(e) if e.contains("unknown request") || e.contains("is not allowed") => return,
                 Err(e) => { self.warn(format!("notes not marked as documents on the server yet: {e}")); return; }
@@ -512,25 +574,41 @@ impl Docs {
         }
         for (from, to, id) in moves {
             if self.taken(&to, None) { continue; }
-            if self.manifest(|m, txn| { m.remove(txn, from.as_str()); m.insert(txn, to.as_str(), id.clone()); }).is_ok() { self.warn(format!("{from}: the same name as another note on a Mac's disk, moved to {to}")); }
+            if self.manifest(|m, _, txn| { m.remove(txn, from.as_str()); m.insert(txn, to.as_str(), id.clone()); }).is_ok() { self.warn(format!("{from}: the same name as another note on a Mac's disk, moved to {to}")); }
+        }
+    }
+    /// One document at two paths (two members moved it apart): the path that sorts first keeps it, the other leaves
+    /// the manifest, the same on every Mac.
+    fn one_path_per_doc(&self) {
+        let mut first: BTreeMap<String, String> = BTreeMap::new();
+        let mut drop = vec![];
+        for (p, id) in self.paths() { if first.contains_key(&id) { drop.push((p, id)); } else { first.insert(id, p); } }
+        for (p, id) in drop {
+            if self.manifest(|m, _, txn| { m.remove(txn, p.as_str()); }).is_ok() { self.warn(format!("{p}: moved to two places at once; it stays at {}", first[&id])); }
         }
     }
     /// A document the manifest no longer names, though this Mac had it at a path and it has text: two members made
-    /// a note at the same path at once and the manifest kept the other one. It goes back in next to it, as a conflict
-    /// copy (the same name on every Mac, so they agree).
+    /// a note at the same path at once and the manifest kept the other one. Made from an existing file here and not
+    /// edited since: dropped (the file's text is the other one's too, or the export keeps it as a conflict copy). The
+    /// same text as the one that kept the place: dropped too. Else it goes back in next to it, as a conflict copy (the
+    /// same name on every Mac, so they agree). A deleted note ("gone") is no orphan.
     fn keep_orphans(&self, paths: &BTreeMap<String, String>) {
         let named: std::collections::BTreeSet<&String> = paths.values().collect();
-        let lost: Vec<(String, String, String)> = lock(&self.open).iter()
-            .filter(|(id, o)| note_id(id) && !named.contains(id) && !o.c.path.is_empty() && !text_of(&o.doc).is_empty())
-            .map(|(id, o)| (id.clone(), conflict_path(&o.c.path, id), o.c.path.clone())).collect();
-        for (id, p, was) in lost {
-            // the same text as the note that kept the place (two Macs made the same file a document): nothing to keep
-            if paths.get(&was).is_some_and(|w| self.text(w) == self.text(&id)) {
-                if let Some(o) = lock(&self.open).get_mut(&id) { o.c.path.clear(); }
+        let gone = self.gone();
+        let lost: Vec<(String, String, String, bool)> = lock(&self.open).iter()
+            .filter(|(id, o)| note_id(id) && !named.contains(id) && !gone.contains_key(*id) && !o.c.path.is_empty() && !text_of(&o.doc).is_empty())
+            .map(|(id, o)| (id.clone(), conflict_path(&o.c.path, id), o.c.path.clone(), o.c.seeded && o.c.mine <= 1)).collect();
+        for (id, p, was, seeded) in lost {
+            if seeded || paths.get(&was).is_some_and(|w| self.text(w) == self.text(&id)) {
+                let mut open = lock(&self.open);
+                open.remove(&id);
+                std::fs::remove_file(self.dir.join(Self::file(&id))).ok();
+                std::fs::remove_file(self.out_file(&id)).ok();
+                self.save_index(&open).ok();
                 continue;
             }
             if self.taken(&p, None) { continue; }
-            if self.manifest(|m, txn| { m.insert(txn, p.as_str(), id.clone()); }).is_ok() { self.warn(format!("{p}: made at the same path as another note at the same time, kept next to it")); }
+            if self.manifest(|m, _, txn| { m.insert(txn, p.as_str(), id.clone()); }).is_ok() { self.warn(format!("{p}: made at the same path as another note at the same time, kept next to it")); }
             if let Some(o) = lock(&self.open).get_mut(&id) { o.c.path = p; }
         }
     }
@@ -566,81 +644,89 @@ impl Docs {
         Ok(Some(id))
     }
 
-    /// The note's file `b` taken into its document as this Mac's edit: what changed in it since the text Relay last
-    /// wrote there (`out_file`), made on top of what others changed meanwhile (`merge3`), never the file over the
-    /// document. `by` goes with the update (who made it). Returns whether the document changed; the edit waits to be
-    /// sent (the caller pushes it).
-    fn take_disk(&self, id: &str, o: &mut Open, b: &[u8], by: &str) -> bool {
+    /// What the note's file `b` changes in its document (whose text is `cur`): measured against the text Relay last
+    /// wrote there or took from it (`out_file`), made on top of what others changed meanwhile (`merge3`), never the
+    /// file over the document. None: there is no such text to measure against, so the file is not diffed (the export
+    /// keeps it as a conflict copy). Also the file's text, the next one to measure against.
+    fn disk_edits(&self, id: &str, cur: &str, b: &[u8]) -> Option<(Vec<(usize, usize, String)>, String)> {
+        let base = std::fs::read_to_string(self.out_file(id)).ok()?;
         let disk = doc_text(b);
-        let cur = text_of(&o.doc);
-        let base = std::fs::read_to_string(self.out_file(id)).unwrap_or_else(|_| cur.clone());
-        o.c.out = sync::sha256_hex(b);
-        sync::write_atomic(&self.out_file(id), disk.as_bytes(), None).ok();
-        if disk == base { return false; }
+        if disk == base { return Some((vec![], disk)); }
         let (bc, cc, dc): (Vec<char>, Vec<char>, Vec<char>) = (base.chars().collect(), cur.chars().collect(), disk.chars().collect());
-        let edits = merge3(&bc, &cc, &dc);
-        if edits.is_empty() { return false; }
-        // Y.Text counts in UTF-8 bytes: each char's offset in `cur` (the edits go last place first, so these hold)
-        let at: Vec<u32> = cur.char_indices().map(|(i, _)| i as u32).chain([cur.len() as u32]).collect();
-        change(&o.doc, |d| {
-            let t = d.get_or_insert_text("md");
-            let mut txn = d.transact_mut();
-            for (p, del, ins) in &edits {
-                if *del > 0 { t.remove_range(&mut txn, at[*p], at[p + del] - at[*p]); }
-                if !ins.is_empty() { t.insert(&mut txn, at[*p], ins); }
-            }
-        });
-        (o.c.pending, o.c.via) = (true, by.into());
-        true
+        Some((merge3(&bc, &cc, &dc), disk))
     }
-    /// A note's file changed (a page's save, the watcher, Claude): taken into its document (`take_disk`) and sent.
-    /// Nothing when the file is no document's, sits where documents are not written, was not written here yet (the
-    /// next export decides), or is what Relay last wrote there.
+    /// The text a change on disk is measured against next, written once the cursor that names it is saved.
+    fn set_base(&self, id: &str, text: &str) -> Result<(), String> { sync::write_atomic(&self.out_file(id), text.as_bytes(), None).map(|_| ()).map_err(|e| format!("{id}: {e}")) }
+
+    /// A note's file changed (a page's save, the watcher, Claude): what changed taken into its document as this Mac's
+    /// edit (`disk_edits`), with who made it (`by`: "claude", "disk", "relay"), and sent. Nothing when the file is no
+    /// document's, sits where documents are not written, was not written here yet or has nothing to be measured
+    /// against (the next export decides), or is what Relay last wrote there. The diff runs outside the lock on all
+    /// documents; the document's own lock keeps everything else off it meanwhile.
     pub fn absorb(&self, root: &Path, filter: &Filter, path: &str, by: &str) -> Result<bool, String> {
         let Some(id) = self.paths().get(path).cloned() else { return Ok(false) };
         if filter.skips(path, false) || through_link(root, path) { return Ok(false); }
         let busy = self.busy(&id);
         let _one = lock(&busy);
-        let changed = {
-            let mut open = lock(&self.open);
-            let Some(o) = open.get_mut(&id) else { return Ok(false) };
+        let (cur, b) = {
+            let open = lock(&self.open);
+            let Some(o) = open.get(&id) else { return Ok(false) };
             if fold(&o.c.at) != fold(path) { return Ok(false); }
             let Ok(b) = std::fs::read(root.join(path)) else { return Ok(false) };
             if sync::sha256_hex(&b) == o.c.out { return Ok(false); }
-            let changed = self.take_disk(&id, o, &b, by);
-            self.save(&open, &id)?;
-            changed
+            (text_of(&o.doc), b)
         };
-        if changed { if let Err(e) = self.push(&id) { self.warn(format!("not sent yet, again at the next sync: {e}")); } }
-        Ok(changed)
+        let Some((edits, disk)) = self.disk_edits(&id, &cur, &b) else { return Ok(false) };
+        {
+            let mut open = lock(&self.open);
+            let Some(o) = open.get_mut(&id) else { return Ok(false) };
+            if !edits.is_empty() { make_edits(&o.doc, &cur, &edits); (o.c.pending, o.c.via) = (true, by.into()); }
+            o.c.out = sync::sha256_hex(&b);
+            self.save(&open, &id)?;
+        }
+        self.set_base(&id, &disk)?;
+        if !edits.is_empty() { if let Err(e) = self.push(&id) { self.warn(format!("not sent yet, again at the next sync: {e}")); } }
+        Ok(!edits.is_empty())
     }
-    /// The folder's notes made documents, at most `batch` a call: each .md no document has, that `filter` lets
-    /// through, not through a link and no conflict copy, with the text it has now (it stays on the file rounds until
-    /// then). Another Mac making the same note a document at once: the manifest keeps one, and the other comes back as
-    /// a conflict copy only when its text differs (`keep_orphans`). Returns the paths made documents.
-    pub fn seed(&self, root: &Path, filter: &Filter, batch: usize) -> Vec<String> {
+    /// The folder's notes made documents, at most `batch` a call (seeding; only when the workspace has it on and on an
+    /// admin's Mac, the caller decides): each .md no document has, that `filter` lets through, not through a link, no
+    /// conflict copy, at most one update big, and `agreed` (path, hash: the file as the last file round left it on
+    /// both sides), with its text now. Never past MAX_DOCS documents. Another Mac making the same note a document at
+    /// once: the manifest keeps one (`keep_orphans`). Returns the paths made documents.
+    pub fn seed(&self, root: &Path, filter: &Filter, batch: usize, agreed: &dyn Fn(&str, &str) -> bool) -> Vec<String> {
         let Ok((files, _)) = lock(&self.walker).scan(root, filter) else { return vec![] };
         let held: std::collections::BTreeSet<String> = self.excluded(filter).iter().map(|p| fold(p)).collect();
         let mut made = vec![];
-        for path in files.into_keys() {
-            if made.len() >= batch { break; }
+        let mut count = self.paths().len();
+        for (path, entry) in files {
+            if made.len() >= batch || count >= MAX_DOCS { break; }
             if !safe_path(&path) || path.contains(" (conflict ") || held.contains(&fold(&path)) || self.taken(&path, None) || through_link(root, &path) { continue; }
+            if !agreed(&path, &entry.hash) { continue; }
+            if entry.size > MAX_UPDATE / 2 { self.warn(format!("{path}: too big to be a document, stays a file")); continue; }
             let Ok(b) = std::fs::read(root.join(&path)) else { continue };
+            if sync::sha256_hex(&b) != entry.hash { continue; }
             let text = doc_text(&b);
             let Ok(id) = self.create(&path, &text) else { continue };
-            let mut open = lock(&self.open);
-            if let Some(o) = open.get_mut(&id) { (o.c.at, o.c.out) = (path.clone(), sync::sha256_hex(&b)); }
-            sync::write_atomic(&self.out_file(&id), text.as_bytes(), None).ok();
-            self.save(&open, &id).ok();
+            {
+                let mut open = lock(&self.open);
+                if let Some(o) = open.get_mut(&id) { (o.c.at, o.c.out, o.c.seeded) = (path.clone(), entry.hash.clone(), true); }
+                if self.save(&open, &id).is_err() { continue; }
+            }
+            if let Err(e) = self.set_base(&id, &text) { self.warn(e); }
             made.push(path);
+            count += 1;
         }
         made
     }
 
     /// Write each note whose document's text changed since it was last written here, under `root` (temp file and
-    /// rename). Never where `filter` keeps files out (System/, hidden), never through a symlink. A file there that is
-    /// not what Relay last wrote goes to `keep` first; a renamed note's old file goes once it is as Relay wrote it
-    /// (else to `keep`). Returns the paths written (Relay's own, for a watcher) and what failed.
+    /// rename). Never where `filter` keeps files out (System/, hidden), never through a symlink, never a document that
+    /// has no text here yet (another Mac's, its text not come). A note's file changed here since Relay wrote it is
+    /// taken in first (`disk_edits`), never written over; one with nothing to measure against, or not what Relay last
+    /// wrote at a place it had not written yet, goes to `keep` first (a conflict copy); a renamed note's old file goes
+    /// once it is as Relay wrote it (else to `keep`); a deleted note's file goes from every Mac (to `keep` when it was
+    /// changed here). A file that changes while it is being written is left for the next export. Returns the paths
+    /// written (Relay's own, for a watcher) and what failed.
     pub fn export(&self, root: &Path, filter: &Filter, keep: &dyn Fn(&str, &[u8])) -> (Vec<String>, Vec<String>) {
         let (mut wrote, mut errors, mut taken) = (vec![], vec![], vec![]);
         // a renamed note's old place another note has taken since: that file is the other note's, not removed
@@ -649,46 +735,67 @@ impl Docs {
             if filter.skips(&path, false) || through_link(root, &path) { self.warn(format!("{path}: a document is not written there (a guarded or linked folder)")); continue; }
             let busy = self.busy(&id);
             let _one = lock(&busy);
-            let mut open = lock(&self.open);
-            let Some(o) = open.get_mut(&id) else { continue };
             let file = root.join(&path);
+            let Some((at, out, fresh)) = lock(&self.open).get(&id).map(|o| (o.c.at.clone(), o.c.out.clone(), o.c.seq == 0 && !o.c.pending && o.c.at.is_empty())) else { continue };
+            // another Mac's note whose text has not come yet: nothing to write
+            if fresh { continue; }
+            let seen = std::fs::read(&file).ok();
             // changed here since Relay wrote it (Claude, an editor, git): taken in first, never written over; gone:
             // written back (a note the workspace shares is not deleted by removing its file here)
-            let mut dirty = false;
-            if o.c.at == path {
-                match std::fs::read(&file) {
-                    Ok(b) => if sync::sha256_hex(&b) != o.c.out {
-                        if self.take_disk(&id, o, &b, "disk") { taken.push(id.clone()); }
-                        dirty = true;
-                    },
-                    Err(_) if !o.c.out.is_empty() => self.warn(format!("{path}: deleted here, but the workspace shares it as a document: written back")),
-                    Err(_) => {}
+            if at == path {
+                match &seen {
+                    Some(b) if sync::sha256_hex(b) != out => {
+                        let cur = self.text(&id);
+                        if let Some((edits, disk)) = self.disk_edits(&id, &cur, b) {
+                            let mut open = lock(&self.open);
+                            let Some(o) = open.get_mut(&id) else { continue };
+                            if !edits.is_empty() { make_edits(&o.doc, &cur, &edits); (o.c.pending, o.c.via) = (true, "disk".into()); taken.push(id.clone()); }
+                            o.c.out = sync::sha256_hex(b);
+                            if let Err(e) = self.save(&open, &id) { errors.push(e); continue; }
+                            drop(open);
+                            if let Err(e) = self.set_base(&id, &disk) { errors.push(e); continue; }
+                        }
+                    }
+                    None if !out.is_empty() => self.warn(format!("{path}: deleted here, but the workspace shares it as a document: written back")),
+                    _ => {}
                 }
             }
-            let text = text_of(&o.doc);
+            let (text, at, out) = { let open = lock(&self.open); let o = &open[&id]; (text_of(&o.doc), o.c.at.clone(), o.c.out.clone()) };
             let h = sync::sha256_hex(text.as_bytes());
-            if o.c.at == path && h == o.c.out && file.exists() {
-                if dirty { if let Err(e) = self.save(&open, &id) { errors.push(e); } }
-                continue;
-            }
+            if at == path && h == out && seen.as_ref().is_some_and(|b| sync::sha256_hex(b) == out) { continue; }
             // the note's old place, after a rename: as Relay wrote it, it goes; anything else is kept first
-            if !o.c.at.is_empty() && fold(&o.c.at) != fold(&path) && !owned.contains(&fold(&o.c.at)) && !filter.skips(&o.c.at, false) && !through_link(root, &o.c.at) {
-                let old = root.join(&o.c.at);
+            if !at.is_empty() && fold(&at) != fold(&path) && !owned.contains(&fold(&at)) && !filter.skips(&at, false) && !through_link(root, &at) {
+                let old = root.join(&at);
                 if let Ok(b) = std::fs::read(&old) {
-                    if sync::sha256_hex(&b) != o.c.out { keep(&o.c.at, &b); }
-                    if let Err(e) = std::fs::remove_file(&old) { errors.push(format!("{}: {e}", o.c.at)); continue; }
+                    if sync::sha256_hex(&b) != out { keep(&at, &b); }
+                    if let Err(e) = std::fs::remove_file(&old) { errors.push(format!("{at}: {e}")); continue; }
                 }
             }
-            if let Ok(b) = std::fs::read(&file) { if sync::sha256_hex(&b) != o.c.out && sync::sha256_hex(&b) != h { keep(&path, &b); } }
-            match sync::write_atomic(&file, text.as_bytes(), None) {
-                Ok(_) => {
-                    (o.c.out, o.c.at) = (h, path.clone());
-                    sync::write_atomic(&self.out_file(&id), text.as_bytes(), None).ok();
-                    wrote.push(path.clone());
-                    if let Err(e) = self.save(&open, &id) { errors.push(e); }
+            // a file here this Mac has no measure for (not written here yet, or nothing to diff against): kept first
+            if let Some(b) = &seen { if sync::sha256_hex(b) != out && sync::sha256_hex(b) != h { keep(&path, b); } }
+            // changed while this ran: the next export takes it in
+            if std::fs::read(&file).ok().map(|b| sync::sha256_hex(&b)) != seen.as_ref().map(|b| sync::sha256_hex(b)) { continue; }
+            if let Err(e) = sync::write_atomic(&file, text.as_bytes(), None) { errors.push(format!("{path}: {e}")); continue; }
+            // the text a later change is measured against, then the cursor that says it was written
+            if let Err(e) = self.set_base(&id, &text) { errors.push(e); continue; }
+            let mut open = lock(&self.open);
+            if let Some(o) = open.get_mut(&id) { (o.c.out, o.c.at) = (h, path.clone()); }
+            if let Err(e) = self.save(&open, &id) { errors.push(e); }
+            wrote.push(path.clone());
+        }
+        // deleted in the Pages tab (on any Mac): its file goes here too, kept first when it was changed here
+        for (id, _) in self.gone() {
+            let mut open = lock(&self.open);
+            let Some(o) = open.get_mut(&id) else { continue };
+            if o.c.at.is_empty() { continue; }
+            let at = std::mem::take(&mut o.c.at);
+            if !owned.contains(&fold(&at)) && !filter.skips(&at, false) && !through_link(root, &at) {
+                if let Ok(b) = std::fs::read(root.join(&at)) {
+                    if sync::sha256_hex(&b) != o.c.out { keep(&at, &b); }
+                    if let Err(e) = std::fs::remove_file(root.join(&at)) { errors.push(format!("{at}: {e}")); }
                 }
-                Err(e) => errors.push(format!("{path}: {e}")),
             }
+            self.save_index(&open).ok();
         }
         for id in taken { self.send(&id); }
         (wrote, errors)
@@ -709,7 +816,7 @@ mod tests {
     const V: &str = "0123456789abcdef";
     /// A server's document ops in memory: per name its log (part, who pushed it).
     #[derive(Default)]
-    struct Fake { logs: BTreeMap<String, Vec<(Vec<u8>, String)>>, bound: Vec<String> }
+    struct Fake { logs: BTreeMap<String, Vec<(Vec<u8>, String)>>, bound: Vec<String>, order: Vec<String> }
     type Server = Arc<Mutex<Fake>>;
     fn call(srv: &Server, me: &str, online: &Arc<AtomicBool>) -> Call {
         let (srv, me, online) = (srv.clone(), me.to_string(), online.clone());
@@ -718,7 +825,7 @@ mod tests {
             let mut f = srv.lock().unwrap();
             let doc = req["doc"].as_str().unwrap_or("").to_string();
             match req["op"].as_str().unwrap() {
-                "doc_push" => { let log = f.logs.entry(doc).or_default(); log.push((body.unwrap(), me.clone())); Ok((json!({"seq": log.len()}), vec![])) }
+                "doc_push" => { f.order.push(doc.clone()); let log = f.logs.entry(doc).or_default(); log.push((body.unwrap(), me.clone())); Ok((json!({"seq": log.len()}), vec![])) }
                 "doc_pull" => {
                     let since = req["since"].as_u64().unwrap() as usize;
                     let log = f.logs.get(&doc).cloned().unwrap_or_default();
@@ -729,6 +836,7 @@ mod tests {
                 }
                 "doc_list" => Ok((json!({"docs": f.logs.iter().map(|(d, l)| json!({"doc": d, "seq": l.len()})).collect::<Vec<_>>()}), vec![])),
                 "doc_bind" => { f.bound.extend(req["names"].as_array().unwrap().iter().map(|n| n.as_str().unwrap().to_string())); Ok((json!({}), vec![])) }
+                "doc_unbind" => { let gone: Vec<String> = req["names"].as_array().unwrap().iter().map(|n| n.as_str().unwrap().to_string()).collect(); f.bound.retain(|n| !gone.contains(n)); Ok((json!({}), vec![])) }
                 _ => Ok((json!({}), vec![])),
             }
         })
@@ -1019,6 +1127,10 @@ mod tests {
         assert_eq!(merged(base, "# Plan\ntwo\nthree\n", "# Plan\none\ntwo\nthree!\n"), "# Plan\ntwo\nthree!\n");
         // both added to one line at one place: both kept, theirs first
         assert_eq!(merged("x\n", "x theirs\n", "x mine\n"), "x theirs mine\n");
+        // the same change on both sides counts once: an edit, a removed line, an added line
+        assert_eq!(merged("x\n", "x mine\n", "x mine\n"), "x mine\n");
+        assert_eq!(merged("a\nb\nc\n", "a\nc\n", "a\nc\n"), "a\nc\n");
+        assert_eq!(merged("a\nc\n", "a\nb\nc\n", "a\nb\nc\n"), "a\nb\nc\n");
         // both rewrote one word: theirs replaced it, mine goes after it
         assert_eq!(merged("a b c\n", "a B c\n", "a bee c\n"), "a Bee c\n");
         // nothing changed on disk: nothing done; unicode counts as chars
@@ -1097,16 +1209,23 @@ mod tests {
         std::fs::write(rb.join("Differs.md"), "from b").unwrap();
         a_on.store(false, Ordering::SeqCst);
         b_on.store(false, Ordering::SeqCst);
-        let (sa, sb) = (a.seed(&ra, &f, 50), b.seed(&rb, &f, 50));
+        let (sa, sb) = (a.seed(&ra, &f, 50, &|_, _| true), b.seed(&rb, &f, 50, &|_, _| true));
         assert_eq!((sa.clone(), sb), (vec!["Differs.md".to_string(), "Same.md".to_string()], vec!["Differs.md".to_string(), "Same.md".to_string()]));
-        assert!(a.seed(&ra, &f, 50).is_empty(), "made once");
+        assert!(a.seed(&ra, &f, 50, &|_, _| true).is_empty(), "made once");
         a_on.store(true, Ordering::SeqCst);
         b_on.store(true, Ordering::SeqCst);
         for _ in 0..3 { a.sync().unwrap(); b.sync().unwrap(); }
         assert_eq!(a.paths(), b.paths());
         let paths: Vec<String> = a.paths().into_keys().collect();
         assert_eq!(paths.iter().filter(|p| p.starts_with("Same")).count(), 1, "the same text: one document, {paths:?}");
-        assert_eq!(paths.iter().filter(|p| p.starts_with("Differs")).count(), 2, "different texts: both, {paths:?}");
+        assert_eq!(paths.iter().filter(|p| p.starts_with("Differs")).count(), 1, "one document, {paths:?}");
+        // the Mac whose seed lost keeps its own file's text as a conflict copy when it differs
+        let lost: Arc<Mutex<Vec<String>>> = Arc::default();
+        for (d, r) in [(&a, &ra), (&b, &rb)] { let lost = lost.clone(); d.export(r, &f, &move |p, b| lost.lock().unwrap().push(format!("{p}={}", String::from_utf8_lossy(b)))); }
+        let kept = lost.lock().unwrap().clone();
+        assert_eq!(kept.len(), 1, "{kept:?}");
+        assert!(kept[0] == "Differs.md=from a" || kept[0] == "Differs.md=from b", "{kept:?}");
+        assert_eq!(std::fs::read_to_string(ra.join("Differs.md")).unwrap(), std::fs::read_to_string(rb.join("Differs.md")).unwrap());
         let bound = srv.lock().unwrap().bound.clone();
         assert!(bound.contains(&k.name("Same.md")) && bound.contains(&k.name("Differs.md")), "the server knows them");
         for t in ["seed-a", "seed-b", "seed-ra", "seed-rb"] { std::fs::remove_dir_all(tmp(t)).ok(); }
@@ -1122,7 +1241,7 @@ mod tests {
         std::fs::create_dir_all(root.join("Old")).unwrap();
         std::fs::write(root.join("Old/Plan.md"), "text").unwrap();
         let f = Filter::vault_default();
-        a.seed(&root, &f, 50);
+        a.seed(&root, &f, 50, &|_, _| true);
         let id = a.paths()["Old/Plan.md"].clone();
         a.sync().unwrap();
         // the Pages tab moves the file, then the document follows it
@@ -1133,7 +1252,140 @@ mod tests {
         a.export(&root, &f, &|_, _| panic!("nothing kept"));
         assert_eq!(a.paths().get("New/Plan.md"), Some(&id));
         assert!(!root.join("Old/Plan.md").exists() && std::fs::read_to_string(root.join("New/Plan.md")).unwrap() == "text");
-        assert!(srv.lock().unwrap().bound.contains(&k.name("New/Plan.md")));
+        let bound = srv.lock().unwrap().bound.clone();
+        assert!(bound.contains(&k.name("New/Plan.md")) && !bound.contains(&k.name("Old/Plan.md")), "the old name let go");
         for t in ["mv-a", "mv-root"] { std::fs::remove_dir_all(tmp(t)).ok(); }
+    }
+
+
+    /// A long note (5000 lines), changed on disk at lines 10, 1000, 1990 and 4000 while another member changed line
+    /// 3000: every change lands where it was made, quickly.
+    #[test]
+    fn a_long_note_changed_in_many_places_merges_line_by_line() {
+        let base: Vec<String> = (0..5000).map(|i| format!("line {i}\n")).collect();
+        let mut cur = base.clone();
+        cur[3000] = "line 3000 by B\n".into();
+        let mut disk = base.clone();
+        for i in [10, 1000, 1990, 4000] { disk[i] = format!("line {i} by Claude\n"); }
+        let t = std::time::Instant::now();
+        let out = merged(&base.concat(), &cur.concat(), &disk.concat());
+        assert!(t.elapsed() < std::time::Duration::from_secs(2), "took {:?}", t.elapsed());
+        let mut want = disk.clone();
+        want[3000] = "line 3000 by B\n".into();
+        assert_eq!(out, want.concat());
+    }
+
+    /// A note's text goes to the server before its place in the manifest; a Mac that has the place but not the text
+    /// writes nothing for it.
+    #[test]
+    fn a_notes_text_goes_before_its_place_and_a_place_without_text_is_not_written() {
+        let (srv, k) = (Server::default(), Keys::from(VaultKey::generate()));
+        let ((a, _), (b, _)) = (mac(&srv, &k, "first-a", A), mac(&srv, &k, "first-b", B));
+        let id = a.create("Plan.md", "text").unwrap();
+        let order = srv.lock().unwrap().order.clone();
+        assert_eq!(order, vec![a.name(&id), a.name(MANIFEST)]);
+        // the text held back from B: the manifest names the note, B writes nothing for it
+        srv.lock().unwrap().logs.remove(&a.name(&id));
+        b.sync().unwrap();
+        let root = tmp("first-root");
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::create_dir_all(&root).unwrap();
+        assert!(b.export(&root, &Filter::vault_default(), &|_, _| panic!("nothing kept")).0.is_empty());
+        assert!(!root.join("Plan.md").exists());
+        for t in ["first-a", "first-b", "first-root"] { std::fs::remove_dir_all(tmp(t)).ok(); }
+    }
+
+    /// No text to measure a file against (a document from before this kept one): the file is not diffed; it stays as
+    /// a conflict copy when it differs, and the document is written.
+    #[test]
+    fn a_file_with_nothing_to_measure_against_is_kept_not_diffed() {
+        let (srv, k) = (Server::default(), Keys::from(VaultKey::generate()));
+        let (a, _) = mac(&srv, &k, "nobase-a", A);
+        let root = tmp("nobase-root");
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::create_dir_all(&root).unwrap();
+        let f = Filter::vault_default();
+        let id = a.create("Plan.md", "doc").unwrap();
+        a.export(&root, &f, &|_, _| panic!("nothing kept"));
+        std::fs::remove_file(a.out_file(&id)).unwrap();
+        std::fs::write(root.join("Plan.md"), "edited").unwrap();
+        assert!(!a.absorb(&root, &f, "Plan.md", "disk").unwrap());
+        let kept: Arc<Mutex<Vec<(String, Vec<u8>)>>> = Arc::default();
+        { let kept = kept.clone(); a.export(&root, &f, &move |p, b| kept.lock().unwrap().push((p.into(), b.to_vec()))); }
+        assert_eq!(kept.lock().unwrap().clone(), vec![("Plan.md".to_string(), b"edited".to_vec())]);
+        assert_eq!((a.text(&id).as_str(), std::fs::read_to_string(root.join("Plan.md")).unwrap().as_str()), ("doc", "doc"));
+        for t in ["nobase-a", "nobase-root"] { std::fs::remove_dir_all(tmp(t)).ok(); }
+    }
+
+    /// Deleted in the Pages tab on A: out of the manifest, its file goes on B too, its server name let go; Undo puts
+    /// it back for both.
+    #[test]
+    fn a_note_deleted_in_the_pages_tab_goes_from_every_mac_and_comes_back_with_undo() {
+        let (srv, k) = (Server::default(), Keys::from(VaultKey::generate()));
+        let ((a, _), (b, _)) = (mac(&srv, &k, "del-a", A), mac(&srv, &k, "del-b", B));
+        let (ra, rb) = (tmp("del-ra"), tmp("del-rb"));
+        for r in [&ra, &rb] { std::fs::remove_dir_all(r).ok(); std::fs::create_dir_all(r).unwrap(); }
+        let f = Filter::vault_default();
+        let none = |_: &str, _: &[u8]| panic!("nothing kept");
+        let id = a.create("Plan.md", "text").unwrap();
+        a.sync().unwrap();
+        a.export(&ra, &f, &none);
+        b.sync().unwrap();
+        b.export(&rb, &f, &none);
+        assert!(rb.join("Plan.md").exists() && srv.lock().unwrap().bound.contains(&k.name("Plan.md")));
+        // A's Pages tab trashed the file, then the document goes
+        std::fs::remove_file(ra.join("Plan.md")).unwrap();
+        assert_eq!(a.remove("Plan.md").unwrap(), Some(id.clone()));
+        a.sync().unwrap();
+        b.sync().unwrap();
+        b.export(&rb, &f, &none);
+        assert!(!rb.join("Plan.md").exists(), "gone on B too");
+        assert!(!srv.lock().unwrap().bound.contains(&k.name("Plan.md")), "its name let go");
+        assert!(b.paths().is_empty() && b.gone().contains_key(&id));
+        // Undo on A: back on both
+        std::fs::write(ra.join("Plan.md"), "text").unwrap();
+        assert!(a.restore("Plan.md").unwrap());
+        b.sync().unwrap();
+        b.export(&rb, &f, &none);
+        assert_eq!(std::fs::read_to_string(rb.join("Plan.md")).unwrap(), "text");
+        for t in ["del-a", "del-b", "del-ra", "del-rb"] { std::fs::remove_dir_all(tmp(t)).ok(); }
+    }
+
+    /// Moved to two places at once on two Macs: both end with the one that sorts first.
+    #[test]
+    fn a_note_moved_to_two_places_at_once_ends_at_one() {
+        let (srv, k) = (Server::default(), Keys::from(VaultKey::generate()));
+        let ((a, a_on), (b, b_on)) = (mac(&srv, &k, "two-a", A), mac(&srv, &k, "two-b", B));
+        let id = a.create("X.md", "x").unwrap();
+        b.sync().unwrap();
+        a_on.store(false, Ordering::SeqCst);
+        b_on.store(false, Ordering::SeqCst);
+        a.rename("X.md", "Z.md").unwrap();
+        b.rename("X.md", "Y.md").unwrap();
+        a_on.store(true, Ordering::SeqCst);
+        b_on.store(true, Ordering::SeqCst);
+        for _ in 0..3 { a.sync().unwrap(); b.sync().unwrap(); }
+        assert_eq!(a.paths(), b.paths());
+        assert_eq!(a.paths(), [("Y.md".to_string(), id)].into_iter().collect());
+        for t in ["two-a", "two-b"] { std::fs::remove_dir_all(tmp(t)).ok(); }
+    }
+
+    /// Seeding takes only notes the last file round left the same on both sides, and none too big for an update.
+    #[test]
+    fn only_agreed_and_small_notes_are_seeded() {
+        let (srv, k) = (Server::default(), Keys::from(VaultKey::generate()));
+        let (a, _) = mac(&srv, &k, "agree-a", A);
+        let root = tmp("agree-root");
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("Synced.md"), "same").unwrap();
+        std::fs::write(root.join("Changed here.md"), "not synced yet").unwrap();
+        std::fs::write(root.join("Huge.md"), "h".repeat(3 << 20)).unwrap();
+        let synced = sync::sha256_hex(b"same");
+        let big = sync::sha256_hex("h".repeat(3 << 20).as_bytes());
+        let made = a.seed(&root, &Filter::vault_default(), 50, &|p, h| (p == "Synced.md" && h == synced) || (p == "Huge.md" && h == big));
+        assert_eq!(made, vec!["Synced.md".to_string()]);
+        assert!(a.take_warnings().iter().any(|w| w.contains("Huge.md: too big")));
+        for t in ["agree-a", "agree-root"] { std::fs::remove_dir_all(tmp(t)).ok(); }
     }
 }

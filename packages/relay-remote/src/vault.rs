@@ -436,11 +436,11 @@ struct Seen { name: String, etag: String, hash: String, size: u64, e: u32, mtime
 /// `heads`: the member list heads the last manifest's records were written with, and `checked` the list as `keep_keys`
 /// last checked it (with every entry's hash), for `list_warnings`.
 pub struct SealedRemote { vault: String, keys: Mutex<Keys>, call: Call, seen: Mutex<HashMap<String, Seen>>, bad: Mutex<Vec<String>>, known: Mutex<HashMap<String, Entry>>, state: Mutex<Value>,
-    heads: Mutex<BTreeMap<u64, String>>, checked: Mutex<Option<(crate::members::List, Vec<String>)>> }
+    heads: Mutex<BTreeMap<u64, String>>, checked: Mutex<Option<(crate::members::List, Vec<String>)>>, bound: Mutex<std::collections::BTreeSet<String>> }
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> { m.lock().unwrap_or_else(|e| e.into_inner()) }
 impl SealedRemote {
     pub(crate) fn new(vault: &str, keys: Keys, call: Call) -> SealedRemote {
-        SealedRemote { vault: vault.into(), keys: Mutex::new(keys), call, seen: Default::default(), bad: Default::default(), known: Default::default(), state: Default::default(), heads: Default::default(), checked: Default::default() }
+        SealedRemote { vault: vault.into(), keys: Mutex::new(keys), call, seen: Default::default(), bad: Default::default(), known: Default::default(), state: Default::default(), heads: Default::default(), checked: Default::default(), bound: Default::default() }
     }
     fn keys(&self) -> Keys { lock(&self.keys).clone() }
     /// The last round's base, so a record that will not open under a known path's name reads as that path unchanged:
@@ -472,7 +472,9 @@ impl SealedRemote {
 /// other keys than the list has (they set up Relay again; an admin can trust them), and `errors`.
 #[derive(Debug, Default)]
 /// `rekeying`: someone left and the key has not changed yet, or the member list is held back (it could hold a removal).
-pub struct KeyStep { pub keys: Option<Keys>, pub warnings: Vec<String>, pub changed: Vec<(String, String)>, pub errors: Vec<String>, pub rekeying: bool }
+/// `docs`: an admin turned on making the workspace's notes documents (the member list's `docs-on`); `admin`: this Mac
+/// is an admin of the list.
+pub struct KeyStep { pub keys: Option<Keys>, pub warnings: Vec<String>, pub changed: Vec<(String, String)>, pub errors: Vec<String>, pub rekeying: bool, pub docs: bool, pub admin: bool }
 use crate::members::{self, List};
 impl SealedRemote {
     fn info(&self) -> Result<Value, String> { Ok((self.call)(json!({"op": "vault_info", "vault": self.vault}), None, None)?.0["vault"].take()) }
@@ -593,6 +595,7 @@ impl SealedRemote {
         }
         *lock(&self.checked) = Some((list.clone(), hashes.clone()));
         step.rekeying = list.pending.is_some();
+        (step.docs, step.admin) = (list.docs, list.admin(&me));
         if list.pending.is_some_and(|at| now.saturating_sub(at) > 3600) { step.warnings.push("Someone left over an hour ago, and the key has not changed since.".into()); }
         let before = k.epoch();
         while k.epoch() < list.epoch {
@@ -686,6 +689,18 @@ impl SealedRemote {
         let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: kind.into(), fp: fp.into(), ..Default::default() });
         self.append(&mut k, &list, &e, json!({}), save)
     }
+    /// An admin turns making the workspace's notes documents on or off: a `docs-on` / `docs-off` entry, signed by this
+    /// Mac, which every member checks like any other.
+    pub fn set_docs(&self, on: bool, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<(), String> {
+        let mut k = self.keys();
+        let v = self.info()?;
+        let me = v["me"].as_str().unwrap_or_default().to_string();
+        let (list, _) = self.list(&k)?.ok_or("this workspace has no member list yet")?;
+        if !list.admin(&me) { return Err("only an admin can change this".into()); }
+        if list.docs == on { return Ok(()); }
+        let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: if on { "docs-on" } else { "docs-off" }.into(), ..Default::default() });
+        self.append(&mut k, &list, &e, json!({}), save)
+    }
     /// An admin trusts a member's new keys (it set up Relay again): a `device` entry with what the member publishes now,
     /// signed by its new identity and vouched for under the newest key. Refused while a removal waits for a new key: the
     /// new keys could be the removed member's.
@@ -705,7 +720,8 @@ impl SealedRemote {
     /// and checked as any get). Old records then die out, and a new member's Relay never has to take one. The count.
     pub fn reseal(&self, max: usize) -> usize {
         let cur = lock(&self.keys).epoch();
-        let old: Vec<(String, Seen)> = lock(&self.seen).iter().filter(|(_, s)| s.e < cur).take(max).map(|(p, s)| (p.clone(), s.clone())).collect();
+        let bound = lock(&self.bound).clone();
+        let old: Vec<(String, Seen)> = lock(&self.seen).iter().filter(|(_, s)| s.e < cur && !bound.contains(&s.name)).take(max).map(|(p, s)| (p.clone(), s.clone())).collect();
         use sync::Remote;
         old.into_iter().filter(|(p, s)| self.get(p).and_then(|d: Vec<u8>| self.put(p, &d, s.mtime, &s.hash)).is_ok()).count()
     }
@@ -718,12 +734,14 @@ impl SealedRemote {
 impl sync::Remote for SealedRemote {
     fn manifest(&self) -> Result<Manifest, String> {
         #[derive(Deserialize)]
-        struct Blob { name: String, etag: String, meta: String, #[serde(default)] e: u32 }
+        struct Blob { name: String, etag: String, meta: String, #[serde(default)] e: u32, #[serde(default)] bound: bool }
         let (mut v, _) = (self.call)(json!({"op": "vault_manifest", "vault": self.vault}), None, None)?;
         let blobs: Vec<Blob> = serde_json::from_value(v["blobs"].take()).map_err(|e| format!("blobs: {e}"))?;
         *lock(&self.state) = v;
         let (k, mut m, mut seen, mut bad) = (self.keys(), Manifest::new(), HashMap::new(), vec![]);
         let known = lock(&self.known).clone();
+        // a note that is a document now (docs.rs): its record stays as it was, never sealed again (`reseal`)
+        *lock(&self.bound) = blobs.iter().filter(|b| b.bound).map(|b| b.name.clone()).collect();
         for b in blobs {
             let opened = unhex(&b.meta).ok_or_else(|| "meta is not hex".to_string()).and_then(|meta| k.open_meta_seen(b.e, &b.name, &meta))
                 .map(|(e, l)| {

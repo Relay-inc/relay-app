@@ -81,7 +81,7 @@ const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answ
 /// further devices, and makes no vaults of its own. `pair` with a code from the owner makes it a full device.
 const VAULT_OPS: &[&str] = &["pair", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
     "vault_get", "vault_put", "vault_put_many", "vault_delete", "vault_stream", "vault_pk", "vault_rotate", "vault_log", "vault_append",
-    "doc_push", "doc_pull", "doc_snapshot_put", "doc_list", "doc_bind"];
+    "doc_push", "doc_pull", "doc_snapshot_put", "doc_list", "doc_bind", "doc_unbind"];
 /// What a vault-only device may ask besides, while it is admin of a vault here: it keeps the server, so it sees what
 /// the server is and updates it (`update`, to an official release only: signed with Relay's release key, upgrade.rs).
 /// Never a conversation, the mirror, a phone, GitHub or a vault of its own.
@@ -403,6 +403,10 @@ impl Server {
             "doc_bind" => {
                 let names: Vec<String> = req["names"].as_array().into_iter().flatten().filter_map(|n| n.as_str().map(String::from)).collect();
                 reply(&mut w, self.vaults.doc_bind(&fp, s("vault"), &names).map(|_| json!({})))
+            }
+            "doc_unbind" => {
+                let names: Vec<String> = req["names"].as_array().into_iter().flatten().filter_map(|n| n.as_str().map(String::from)).collect();
+                reply(&mut w, self.vaults.doc_unbind(&fp, s("vault"), &names).map(|_| json!({})))
             }
             "vault_delete" => reply(&mut w, self.vaults.delete(&fp, s("vault"), s("name"), req["expect"].as_str()).map(|_| json!({}))),
             // stays open: the vault's live frames both ways (channel.rs), sealed by the members, never stored here

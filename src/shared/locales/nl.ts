@@ -1026,6 +1026,10 @@ export default {
   "set.sharedCounts": "{sent} verstuurd, {received} ontvangen",
   "set.sharedBad_one": "{n} bestand daar opent niet met deze sleutel.",
   "set.sharedBad_other": "{n} bestanden daar openen niet met deze sleutel.",
+  "set.sharedDocs": "Notities als gedeelde documenten",
+  "set.sharedDocsHelp":
+    "Bewerkingen van leden aan de notities van de workspace worden samengevoegd terwijl ze typen, in plaats van conflictkopieën. De Relay van een beheerder zet de notities stap voor stap om; een oudere Relay synchroniseert de andere bestanden verder.",
+  "set.sharedDocsOn": "Aan",
   "set.sharedRekeying":
     "Iemand is vertrokken: de sleutel verandert bij de volgende ronde van een admin. Tot dan is wat je schrijft nog leesbaar met de oude sleutel.",
   "set.sharedKeyChanged":

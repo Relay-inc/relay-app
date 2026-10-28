@@ -14,6 +14,7 @@ import {
   openForm,
   pickSharedFolder,
   removeMember,
+  setSharedDocs,
   settleShared,
   showRecovery,
   toggleMembers,
@@ -29,6 +30,7 @@ import { PathField } from "./PathField";
 import { Section } from "./Section";
 import { Segmented } from "./Segmented";
 import { StatusLine } from "./StatusLine";
+import { Switch } from "./Switch";
 
 const EDGE = "border-b border-s-border px-3.5 py-3 last:border-b-0";
 const ROW = `grid min-w-0 grid-cols-1 gap-2.5 ${EDGE}`;
@@ -152,6 +154,22 @@ function SharedRow({ vault }: { vault: SharedVault }) {
               </StatusLine>
             ))}
             {status.bad ? <StatusLine level="warn">{tn("set.sharedBad", status.bad)}</StatusLine> : null}
+            {/* making the notes documents: off until an admin turns it on; every member sees which */}
+            {status.admin || status.docs ? (
+              <div className="flex items-start gap-3 py-1">
+                <div className="grid flex-1 gap-0.5">
+                  <label htmlFor={`docs-${vault.id}`} className="text-xs text-s-fg">
+                    {t("set.sharedDocs")}
+                  </label>
+                  <span className="text-xs text-s-muted">{t("set.sharedDocsHelp")}</span>
+                </div>
+                {status.admin ? (
+                  <Switch id={`docs-${vault.id}`} on={!!status.docs} onToggle={on => setSharedDocs(vault.id, on)} />
+                ) : (
+                  <span className={PILL}>{t("set.sharedDocsOn")}</span>
+                )}
+              </div>
+            ) : null}
             {status.rekeying ? <StatusLine level="warn">{t("set.sharedRekeying")}</StatusLine> : null}
             {/* the member list: held back, forked, or a removal still waiting for its key change */}
             {status.warnings?.map(w => (
