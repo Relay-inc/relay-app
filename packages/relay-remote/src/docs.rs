@@ -92,6 +92,16 @@ fn change(doc: &Doc, f: impl FnOnce(&Doc)) -> Vec<u8> {
     doc.transact().encode_state_as_update_v1(&before)
 }
 fn sv_of(hex_sv: &str) -> StateVector { unhex(hex_sv).and_then(|b| StateVector::decode_v1(&b).ok()).unwrap_or_default() }
+/// What others wrote, taken here since `before`, counts as held by the server: per client, `acked` rises to the clock
+/// it reached (this Mac's own edits do not move while the document's lock is held). With nothing of this Mac's
+/// pending, everything here is held.
+fn raise_acked(o: &mut Open, before: &StateVector) {
+    let after = o.doc.transact().state_vector();
+    let mut acked = sv_of(&o.c.acked);
+    for (c, k) in after.iter() { if *k > before.get(c) && *k > acked.get(c) { acked.set_max(*c, *k); } }
+    if !o.c.pending { acked = after; }
+    o.c.acked = hex(&acked.encode_v1());
+}
 /// A note's conflict name: "Plan.md" -> "Plan (conflict 1a2b3c4d).md", the same on every Mac for the same document.
 fn conflict_path(path: &str, id: &str) -> String { format!("{} (conflict {}).md", path.trim_end_matches(".md"), &id[..8]) }
 
@@ -200,7 +210,7 @@ impl Docs {
             o.c.pending = true;
             self.save(&open, MANIFEST)?;
         }
-        if let Err(e) = self.flush(MANIFEST) { self.warn(format!("not sent yet, again at the next sync: {e}")); }
+        if let Err(e) = self.push(MANIFEST) { self.warn(format!("not sent yet, again at the next sync: {e}")); }
         Ok(())
     }
     /// An edit made here (ticket 9's editor): into this Mac's state, then to the server (or with the next sync).
@@ -215,14 +225,22 @@ impl Docs {
             o.c.pending = true;
             self.save(&open, id)?;
         }
-        if let Err(e) = self.flush(id) { self.warn(format!("not sent yet, again at the next sync: {e}")); }
+        if let Err(e) = self.push(id) { self.warn(format!("not sent yet, again at the next sync: {e}")); }
         Ok(())
     }
     /// `flush` under the document's lock, a failure only warned (the edit stays pending).
     fn send(&self, id: &str) {
         let busy = self.busy(id);
         let _one = lock(&busy);
-        if let Err(e) = self.flush(id) { self.warn(format!("not sent yet, again at the next sync: {e}")); }
+        if let Err(e) = self.push(id) { self.warn(format!("not sent yet, again at the next sync: {e}")); }
+    }
+    /// `flush`, and when what is not held yet is too big for one update (this Mac had not counted others' edits as
+    /// held), the log pulled once first (which counts them) and tried again. The caller holds the document's lock.
+    fn push(&self, id: &str) -> Result<(), String> {
+        match self.flush(id) {
+            Err(e) if e.contains("too big") => { self.pull_locked(id)?; self.flush(id) }
+            r => r,
+        }
     }
 
     /// Send what this Mac has of a document and the server does not hold yet (everything past `acked`), as one update
@@ -283,36 +301,36 @@ impl Docs {
             let o = Self::entry(&mut open, id);
             let before = o.doc.transact().state_vector();
             let mut last = o.c.seq;
+            // a page that breaks off (cut short, a gap) keeps what came before it: saved and passed on, then the error
+            let mut broke = None;
             for u in v["updates"].as_array().into_iter().flatten() {
-                let seq = u["seq"].as_u64().ok_or("update without seq")?;
-                let part = take(u["len"].as_u64().unwrap_or(0))?;
+                let (Some(seq), Ok(part)) = (u["seq"].as_u64(), take(u["len"].as_u64().unwrap_or(0))) else { broke = Some("pull cut short".to_string()); break };
                 if seq <= o.c.seq { continue; }
-                if seq != o.c.seq + 1 { return Err(format!("the log skips from {} to {seq}", o.c.seq)); }
+                if seq != o.c.seq + 1 { broke = Some(format!("the log skips from {} to {seq}", o.c.seq)); break; }
                 o.c.seq = seq;
                 last = seq;
                 let from = u["from"].as_str().unwrap_or("");
                 match self.take_part(&keys, &name, o, part, from) {
                     Ok(b) => got.push(b),
-                    Err(e) => { o.c.lost.insert(from.to_string()); let l = o.c.path.clone(); self.warn(format!("{}: update {seq} left out: {e}", if l.is_empty() { id.to_string() } else { l })); }
+                    Err(e) => { if !from.is_empty() { o.c.lost.insert(from.to_string()); } let l = o.c.path.clone(); self.warn(format!("{}: update {seq} left out: {e}", if l.is_empty() { id.to_string() } else { l })); }
                 }
             }
             o.c.epoch = keys.epoch();
-            // what others wrote counts as held: per client, the clock it reached here by this pull (this Mac's own
-            // edits do not move while the document's lock is held)
-            let after = o.doc.transact().state_vector();
-            let mut acked = sv_of(&o.c.acked);
-            for (c, k) in after.iter() { if *k > before.get(c) && *k > acked.get(c) { acked.set_max(*c, *k); } }
-            if !o.c.pending { acked = after; }
-            o.c.acked = hex(&acked.encode_v1());
-            let more = v["more"] == true && last < v["seq"].as_u64().unwrap_or(0);
+            raise_acked(o, &before);
+            let end = v["seq"].as_u64().unwrap_or(0);
+            // more only when this page moved on: a server that says `more` and gives nothing new is not asked forever
+            let more = broke.is_none() && v["more"] == true && last > since && last < end;
+            if broke.is_none() && v["more"] == true && !more { self.warn(format!("{}: the server says there is more and gives nothing new", self.label_of(o, id))); }
             any |= !got.is_empty();
             self.save(&open, id)?;
             drop(open);
             for b in &got { for f in &on { f(id, b); } }
+            if let Some(e) = broke { return Err(e); }
             if !more { break; }
         }
         Ok(any)
     }
+    fn label_of(&self, o: &Open, id: &str) -> String { if o.c.path.is_empty() { id.to_string() } else { o.c.path.clone() } }
     /// Whether a document holds edits Yjs cannot place yet: they build on an update this Mac does not have.
     fn missing(&self, id: &str) -> bool { lock(&self.open).get(id).is_some_and(|o| o.doc.transact().has_missing_updates()) }
     fn label(&self, id: &str) -> String { lock(&self.open).get(id).map(|o| o.c.path.clone()).filter(|p| !p.is_empty()).unwrap_or_else(|| id.to_string()) }
@@ -368,8 +386,11 @@ impl Docs {
             if self.missing(&id) {
                 let who = lock(&self.open).get(&id).map(|o| o.c.lost.iter().cloned().collect::<Vec<_>>().join(", ")).unwrap_or_default();
                 self.warn(format!("{}: edits from {} are missing on this Mac", self.label(&id), if who.is_empty() { "another member".into() } else { who }));
-            } else if let Some(o) = lock(&self.open).get_mut(&id) { o.c.lost.clear(); }
+            }
         }
+        // a document with nothing missing names no lost authors any more
+        let all: Vec<String> = lock(&self.open).keys().cloned().collect();
+        for id in all { if !self.missing(&id) { if let Some(o) = lock(&self.open).get_mut(&id) { o.c.lost.clear(); } } }
         let pending: Vec<String> = lock(&self.open).iter().filter(|(_, o)| o.c.pending).map(|(k, _)| k.clone()).collect();
         for id in pending { self.send(&id); }
         Ok(changed)
@@ -418,9 +439,11 @@ impl Docs {
         let body = {
             let mut open = lock(&self.open);
             let o = Self::entry(&mut open, &id);
+            let before = o.doc.transact().state_vector();
             o.c.seq = seq;
             let r = self.take_part(&keys, name, o, part, from);
             o.c.epoch = keys.epoch();
+            raise_acked(o, &before);
             self.save(&open, &id)?;
             r
         };
@@ -612,6 +635,40 @@ mod tests {
         assert!(b.take_warnings().is_empty());
         std::fs::remove_dir_all(tmp("ack-a")).ok();
         std::fs::remove_dir_all(tmp("ack-b")).ok();
+    }
+
+    /// A server that says there is more and gives nothing new: the pull stops (warned), it does not ask forever.
+    #[test]
+    fn a_server_that_says_more_and_gives_nothing_is_not_asked_forever() {
+        let k = Keys::from(VaultKey::generate());
+        let lies: Call = Box::new(|_, _, _| Ok((json!({"updates": [], "seq": 999_999, "more": true}), vec![])));
+        let d = Arc::new(Docs::new(V, k, lies, &tmp("lie"), A));
+        let (tx, rx) = std::sync::mpsc::channel();
+        { let d = d.clone(); std::thread::spawn(move || { tx.send(d.pull(MANIFEST)).ok(); }); }
+        assert_eq!(rx.recv_timeout(std::time::Duration::from_secs(5)).expect("the pull never ended"), Ok(false));
+        assert!(d.take_warnings().iter().any(|w| w.contains("gives nothing new")));
+        std::fs::remove_dir_all(tmp("lie")).ok();
+    }
+
+    /// A Mac kept current by live updates alone (5 MiB of another's edits), then an edit of its own: the push is only
+    /// that edit.
+    #[test]
+    fn after_live_updates_a_push_is_only_this_macs_own_edit() {
+        let (srv, k) = (Server::default(), Keys::from(VaultKey::generate()));
+        let ((a, _), (b, _)) = (mac(&srv, &k, "live-a", A), mac(&srv, &k, "live-b", B));
+        let id = a.create("Plan.md", "").unwrap();
+        b.sync().unwrap();
+        let mb = "m".repeat(1 << 20);
+        for _ in 0..5 { append(&a, &id, &mb); }
+        let name = a.name(&id);
+        let log = srv.lock().unwrap().logs[&name].clone();
+        for (i, (p, who)) in log.iter().enumerate().skip(1) { b.take_live(&name, i as u64 + 1, who, p).unwrap(); }
+        assert_eq!(b.text(&id).len(), 5 << 20);
+        append(&b, &id, "!");
+        let last = srv.lock().unwrap().logs[&name].last().unwrap().clone();
+        assert!(last.1 == B && last.0.len() < 4096, "a push of {} bytes", last.0.len());
+        std::fs::remove_dir_all(tmp("live-a")).ok();
+        std::fs::remove_dir_all(tmp("live-b")).ok();
     }
 
     /// The live channel and a round on one document at once: no update taken twice or lost.
