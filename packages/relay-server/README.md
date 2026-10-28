@@ -231,7 +231,9 @@ device names and fingerprints, open invites) and one record per file in `blobs/`
   server passes the frames members send (sealed with the workspace key, so unreadable here) to the other members at
   once. It stores none of them: only the last updates per workspace stay in memory for a short reconnect, gone at a
   restart, after which the rounds catch up. Members only, checked when the stream opens, on every frame and every 2 s;
-  a frame is at most 256 KiB and a connection may send 100 a second (300 at once), past that its stream is closed.
+  a frame is at most 256 KiB and a connection may send 100 lines a second (300 at once), past that its stream is closed.
+  At most 4 streams per device and workspace, a 4 MiB queue and a 10 s write timeout per stream: a member that stops
+  reading loses its stream, the others go on.
 - **Removing someone** stops their device here at once, including their open stream. They keep what they already synced and the key (no key rotation
   yet). The last admin cannot leave while others stay. `relay-server revoke` also takes a device out of its workspaces.
 

@@ -48,9 +48,10 @@ admin of no workspace there. A machine the user paired is never touched.
 
 **The live channel** passes frames, not files: sealed under the workspace key on the sender's Mac, passed to the
 other members, never written to disk. The server sees which workspace and which record name (an HMAC) a frame is for,
-its size, its kind (`update` or `awareness`) and who sent it, as with records. It could drop, delay or replay one, not
-read, forge or move one: the seal binds the workspace, the kind, the record name, the sender's device and the sender's
-own counter.
+its size, its kind (`update` or `awareness`) and who sent it, as with records. It could drop or delay one, not read,
+forge or move one: the seal binds the workspace, the kind, the record name, the sender's device and the sender's own
+counter, and Relay drops a frame it saw already (by that counter) and one that claims to be its own. That guarantee is
+against the server only: every member holds the same key, so a member could seal a frame in another member's name.
 
 **Removing a member** stops their device at the server at once, and closes their live stream. They keep what they synced and the key: v1 has no key
 rotation (it needs a static X25519 key per device, `ring` has only ephemeral agreement).
@@ -152,8 +153,9 @@ blob name 64 lowercase hex. Anything else is refused.
 Next to its rounds, Relay keeps one `vault_stream` connection per workspace open (`relay_remote::channel`, the server's
 side `relay-server/src/channel.rs`). It carries frames between members within moments instead of at the next 10 s
 round. Nothing uses the frames yet: the documents edited together come next. The workspace menu says per team
-workspace whether it is live or syncing every 10 s. An older server answers `unknown request`; Relay then stays on
-rounds and asks again every 5 minutes. An older Relay never asks and keeps its rounds.
+workspace whether it is live or syncing every 10 s. An older server answers `unknown request` (to a device that only
+shares vaults: `"vault_stream" is not allowed …`); Relay then stays on rounds and asks again every 5 minutes. An older
+Relay never asks and keeps its rounds.
 
 - **Open:** `{"op": "vault_stream", "vault", "v": 1, "since", "epoch"}`. Another `v` is refused. The reply line is
   `{ok, v, epoch, seq, resumed}`: `epoch` is new at every start of the server, `seq` the last update it passed on for
@@ -164,14 +166,21 @@ rounds and asks again every 5 minutes. An older Relay never asks and keeps its r
   hex of the sealed frame, at most 256 KiB sealed.
 - **Server to app:** `{"t": "frame", "seq", "from", "kind", "doc", "n", "body"}`, `{"t": "ping"}` every 15 s and
   `{"t": "bye", "why"}` before it closes. `from` is the first 16 hex of the sender's certificate fingerprint, from the
-  handshake. An update gets the next `seq` of its workspace, an awareness frame `seq` 0. A sender never gets its own.
+  handshake. An update gets the next `seq` of its workspace, an awareness frame `seq` 0. A sender never gets its own;
+  Relay also drops a frame whose `from` is its own device, and one whose `n` is not above the last it took from that
+  sender for that document and kind.
 - **Seal:** `nonce (12) || ChaCha20-Poly1305(enc_key, aad = "frame:" + vault + ":" + kind + ":" + doc + ":" + from + ":" + n,
   plaintext)`. A frame that does not open is dropped.
-- **Limits:** a member check when the stream opens, on every frame and every 2 s (a removal by an admin closes it at
-  once, a `revoke` by the CLI within 2 s). 100 frames a second, 300 at once. 1024 lines queued for a member that does
-  not read, then its stream is dropped (it catches up through rounds). The last 512 updates or 8 MiB per workspace in
-  memory, nothing on disk. The app gives up on a connection silent for 45 s and reconnects after 1 s, doubling up to
-  60 s.
+- **Members:** checked when the stream opens and on every frame, against the workspace's members as vault.json last
+  said (re-read when it changes, every 2 s by the workspace's one checker). A removal by an admin closes the stream at
+  once, a `revoke` by the CLI (another process) within 2 s.
+- **Limits:** 100 lines a second (frames and pings), 300 at once. At most 4 streams per device per workspace; a fifth
+  closes the oldest. Each stream has a queue of 4 MiB and a write timeout of 10 s: a member that stops reading loses its
+  stream (it catches up through rounds) and never holds up the others; streams are closed outside the server's lock.
+  The server closes a stream that sent nothing for 45 s; the app does the same for a server silent that long.
+- **Memory:** the last 512 updates or 2 MiB per workspace, shared by every stream (a resume sends from it), nothing on
+  disk. A workspace nobody streams for 10 minutes is freed, its updates with it; so is one whose last member left.
+- **Reconnect:** after 1 s, doubling up to 60 s.
 
 ## Storage on the server
 
