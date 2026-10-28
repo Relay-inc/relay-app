@@ -24,12 +24,13 @@ const INVITE_TRIES: u32 = 5;
 /// A vault's name at most, in characters; a wrapped vault key at most, in hex characters (an invite carries every
 /// epoch's key, 36 bytes each).
 const MAX_NAME: usize = 100;
-const MAX_WRAPPED: usize = 8192;
+const MAX_WRAPPED: usize = 256 << 10;
 
-/// `pk`: the member's X25519 public key (hex) a rotated vault key is sealed to; `mac`: `<epoch>:<hex>`, the members'
-/// proof that it is theirs (relay_remote::vault::VaultKey::pk_mac). Both opaque here.
+/// A member's publication (relay_remote::vault::Keys::publication), all opaque here: `pk` its X25519 public key a
+/// rotated vault key is sealed to, `id` its Ed25519 identity, `sig` the identity's signature, `mac` `<epoch>:<hex>`.
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub(crate) struct Member { pub fp: String, pub name: String, pub role: String, pub added: u64, #[serde(default)] pk: String, #[serde(default)] mac: String }
+pub(crate) struct Member { pub fp: String, pub name: String, pub role: String, pub added: u64,
+    #[serde(default)] pk: String, #[serde(default)] id: String, #[serde(default)] sig: String, #[serde(default)] mac: String }
 /// `code`: the pairing-style secret the link holds, proven with `tls::proof`. `wrapped`: the vault key sealed under the
 /// link's other secret, handed out on a good proof. `by`: the admin who made it.
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -130,7 +131,7 @@ impl Vaults {
         let name = name.trim();
         if name.is_empty() || name.chars().count() > MAX_NAME || name.chars().any(char::is_control) { return Err(format!("a vault name is 1 to {MAX_NAME} characters")); }
         let id = tls::random_secret()[..16].to_string();
-        let v = Vault { id: id.clone(), name: name.into(), created: now(), members: vec![Member { fp: fp.into(), name: who.into(), role: "admin".into(), added: now(), pk: String::new(), mac: String::new() }], invites: vec![],
+        let v = Vault { id: id.clone(), name: name.into(), created: now(), members: vec![Member { fp: fp.into(), name: who.into(), role: "admin".into(), added: now(), pk: String::new(), id: String::new(), sig: String::new(), mac: String::new() }], invites: vec![],
             epoch: 0, keys: BTreeMap::new(), rekey: false };
         fs::create_dir_all(self.blobs(&id)).map_err(|e| e.to_string())?;
         save(&self.data, &v)?;
@@ -140,19 +141,22 @@ impl Vaults {
     pub fn info(&self, fp: &str, id: &str) -> Result<Value, String> {
         let v = self.member(id, fp)?;
         let role = v.role(fp).unwrap_or_default();
-        let members: Vec<Value> = v.members.iter().map(|m| json!({"name": m.name, "fp": m.fp, "role": m.role, "added": m.added, "pk": m.pk, "mac": m.mac})).collect();
+        let members: Vec<Value> = v.members.iter().map(|m| json!({"name": m.name, "fp": m.fp, "role": m.role, "added": m.added, "pk": m.pk, "id": m.id, "sig": m.sig, "mac": m.mac})).collect();
         let invites: Vec<Value> = if role == "admin" { v.invites.iter().map(|i| json!({"id": i.id, "role": i.role, "expires": i.expires})).collect() } else { vec![] };
-        // each rotated key as sealed to the caller: nobody gets another member's
-        let keys: serde_json::Map<String, Value> = v.keys.iter().filter_map(|(e, by)| by.get(fp).map(|w| (e.clone(), json!(w)))).collect();
-        Ok(json!({"vault": {"id": v.id, "name": v.name, "role": role, "members": members, "invites": invites, "epoch": v.epoch, "rekey": v.rekey, "keys": keys}}))
+        // each rotated key as sealed to the caller (nobody gets another member's), with who it was sealed to: the
+        // rotating admin signed that list
+        let keys: serde_json::Map<String, Value> = v.keys.iter().filter_map(|(e, by)| by.get(fp).map(|w| (e.clone(), json!({"sealed": w, "holders": by.keys().collect::<Vec<_>>()})))).collect();
+        Ok(json!({"vault": {"id": v.id, "name": v.name, "role": role, "me": fp, "members": members, "invites": invites, "epoch": v.epoch, "rekey": v.rekey, "keys": keys}}))
     }
 
-    /// An admin opens an invite: its code goes into the link.
-    pub fn invite(&self, fp: &str, id: &str, role: &str, wrapped: &str) -> Result<Value, String> {
+    /// An admin opens an invite: its code goes into the link. `epoch`: the newest key the inviter's Relay sealed into
+    /// it; one behind is refused (`key changed`): that Relay fetches the new key and invites again.
+    pub fn invite(&self, fp: &str, id: &str, role: &str, wrapped: &str, epoch: u64) -> Result<Value, String> {
         if role != "admin" && role != "member" { return Err("role is admin or member".into()); }
         if wrapped.is_empty() || wrapped.len() > MAX_WRAPPED || !hex(wrapped, wrapped.len()) { return Err("bad wrapped key".into()); }
         self.with(id, fp, |v, me| {
             if me != "admin" { return Err("only an admin can invite".into()); }
+            if epoch != v.epoch as u64 { return Err("key changed".into()); }
             let i = Invite { id: tls::random_secret()[..16].into(), code: tls::random_secret(), role: role.into(), wrapped: wrapped.into(), expires: now() + INVITE_SECS, fails: 0, by: fp.into() };
             let out = json!({"invite": {"id": i.id, "code": i.code, "expires": i.expires}});
             v.invites.push(i);
@@ -191,7 +195,7 @@ impl Vaults {
             let who = known.clone().unwrap_or_else(|| device_name(&list, name, fp));
             match v.members.iter_mut().find(|m| m.fp == fp) {
                 Some(m) => if inv.role == "admin" { m.role = "admin".into(); },
-                None => v.members.push(Member { fp: fp.into(), name: who.clone(), role: inv.role.clone(), added: now(), pk: String::new(), mac: String::new() }),
+                None => v.members.push(Member { fp: fp.into(), name: who.clone(), role: inv.role.clone(), added: now(), pk: String::new(), id: String::new(), sig: String::new(), mac: String::new() }),
             }
             // the vault first: a member that is not a client yet cannot connect, a client in no vault could
             save(&self.data, v)?;
@@ -229,13 +233,15 @@ impl Vaults {
         Ok(())
     }
 
-    /// A member registers its own X25519 public key and the members' proof of it, both opaque here.
-    pub fn set_pk(&self, fp: &str, id: &str, pk: &str, mac: &str) -> Result<(), String> {
+    /// A member publishes its own keys (`vault_pk`): checked for shape only, the members check the rest.
+    pub fn set_pk(&self, fp: &str, vault: &str, p: &Value) -> Result<(), String> {
+        let s = |f: &str| p[f].as_str().unwrap_or_default().to_string();
+        let (pk, id, sig, mac) = (s("pk"), s("id"), s("sig"), s("mac"));
         let ok_mac = mac.split_once(':').is_some_and(|(e, h)| e.parse::<u32>().is_ok() && hex(h, 64));
-        if !hex(pk, 64) || !ok_mac { return Err("bad public key".into()); }
-        self.with(id, fp, |v, _| {
+        if !hex(&pk, 64) || !hex(&id, 64) || !hex(&sig, 128) || !ok_mac { return Err("bad public key".into()); }
+        self.with(vault, fp, |v, _| {
             let m = v.members.iter_mut().find(|m| m.fp == fp).ok_or("no such vault")?;
-            (m.pk, m.mac) = (pk.into(), mac.into());
+            (m.pk, m.id, m.sig, m.mac) = (pk, id, sig, mac);
             save(&self.data, v)
         })
     }
@@ -363,7 +369,7 @@ mod tests {
     fn listed(s: &Vaults, id: &str) -> Vec<Value> { s.manifest(ADMIN, id).unwrap()["blobs"].as_array().unwrap().clone() }
     fn made(s: &Vaults) -> String { s.create(ADMIN, "laptop", "Team").unwrap()["vault"]["id"].as_str().unwrap().to_string() }
     fn invite(s: &Vaults, id: &str, role: &str) -> (String, String) {
-        let v = s.invite(ADMIN, id, role, &"ab".repeat(32)).unwrap();
+        let v = s.invite(ADMIN, id, role, &"ab".repeat(32), 0).unwrap();
         (v["invite"]["id"].as_str().unwrap().into(), v["invite"]["code"].as_str().unwrap().into())
     }
     fn join(s: &Vaults, fp: &str, id: &str, role: &str) {
@@ -429,10 +435,10 @@ mod tests {
         assert!(s.create(ADMIN, "laptop", " ").is_err());
         assert!(s.create(ADMIN, "laptop", &"x".repeat(MAX_NAME + 1)).is_err());
         let id = made(&s);
-        assert!(s.invite(ADMIN, &id, "owner", "ab").unwrap_err().contains("role"));
-        assert!(s.invite(ADMIN, &id, "member", &"a".repeat(MAX_WRAPPED + 1)).unwrap_err().contains("wrapped"));
-        assert!(s.invite(ADMIN, &id, "member", "xyz").unwrap_err().contains("wrapped"));
-        assert!(s.invite(ADMIN, &id, "member", &"a".repeat(MAX_WRAPPED)).is_ok());
+        assert!(s.invite(ADMIN, &id, "owner", "ab", 0).unwrap_err().contains("role"));
+        assert!(s.invite(ADMIN, &id, "member", &"a".repeat(MAX_WRAPPED + 1), 0).unwrap_err().contains("wrapped"));
+        assert!(s.invite(ADMIN, &id, "member", "xyz", 0).unwrap_err().contains("wrapped"));
+        assert!(s.invite(ADMIN, &id, "member", &"a".repeat(MAX_WRAPPED), 0).is_ok());
         assert!(s.info(ADMIN, &id.to_uppercase()).is_err());
         assert!(s.info(ADMIN, "../../clients.js").is_err());
         assert!(s.join(OTHER, &id, "nothex", "x", "00").unwrap_err().contains("bad invite"));
@@ -485,7 +491,7 @@ mod tests {
         assert!(info["vault"]["invites"].as_array().unwrap().is_empty());
         assert_eq!(s.info(ADMIN, &id).unwrap()["vault"]["invites"].as_array().unwrap().len(), 1);
         // a member may not invite; joining again with an admin invite raises it, a member invite never lowers
-        assert!(s.invite(OTHER, &id, "member", "ab").unwrap_err().contains("only an admin"));
+        assert!(s.invite(OTHER, &id, "member", "ab", 0).unwrap_err().contains("only an admin"));
         join(&s, OTHER, &id, "admin");
         join(&s, OTHER, &id, "member");
         assert_eq!(s.info(OTHER, &id).unwrap()["vault"]["role"], "admin");
@@ -499,7 +505,7 @@ mod tests {
         let e1 = s.put(ADMIN, &id, &name('1'), &record(b"m", b"d"), Some("")).unwrap();
         let no = |r: Result<Value, String>| assert_eq!(r.unwrap_err(), "no such vault");
         no(s.info(OTHER, &id));
-        no(s.invite(OTHER, &id, "admin", "ab"));
+        no(s.invite(OTHER, &id, "admin", "ab", 0));
         no(s.invite_revoke(OTHER, &id, "0000000000000000").map(|_| json!({})));
         no(s.remove(OTHER, &id, ADMIN).map(|_| json!({})));
         no(s.remove(OTHER, &id, OTHER).map(|_| json!({})));
@@ -551,7 +557,7 @@ mod tests {
         join(&s, OTHER, &id, "member");
         forget(&s.data, &[ADMIN.to_string()]);
         // OTHER is admin now: it can invite, and it can leave again
-        assert!(s.invite(OTHER, &id, "member", &"ab".repeat(32)).is_ok());
+        assert!(s.invite(OTHER, &id, "member", &"ab".repeat(32), 0).is_ok());
         s.remove(OTHER, &id, OTHER).unwrap();
     }
     #[test]
@@ -581,9 +587,10 @@ mod tests {
         let info = |fp: &str| s.info(fp, &id).unwrap()["vault"].clone();
         assert_eq!((info(ADMIN)["epoch"].as_u64(), info(ADMIN)["rekey"].as_bool()), (Some(0), Some(false)));
         // a public key: only one's own, only well-formed
-        assert!(s.set_pk(ADMIN, &id, "nothex", &format!("0:{}", "a".repeat(64))).is_err());
-        assert!(s.set_pk(ADMIN, &id, &"a".repeat(64), "no mac").is_err());
-        s.set_pk(OTHER, &id, &"b".repeat(64), &format!("0:{}", "c".repeat(64))).unwrap();
+        let publ = |pk: &str, mac: &str| json!({"pk": pk, "id": "d".repeat(64), "sig": "e".repeat(128), "mac": mac});
+        assert!(s.set_pk(ADMIN, &id, &publ("nothex", &format!("0:{}", "a".repeat(64)))).is_err());
+        assert!(s.set_pk(ADMIN, &id, &publ(&"a".repeat(64), "no mac")).is_err());
+        s.set_pk(OTHER, &id, &publ(&"b".repeat(64), &format!("0:{}", "c".repeat(64)))).unwrap();
         assert_eq!(info(ADMIN)["members"].as_array().unwrap().iter().find(|m| m["fp"] == OTHER).unwrap()["pk"], "b".repeat(64));
         s.remove(ADMIN, &id, third).unwrap();
         assert_eq!(info(ADMIN)["rekey"], true);
@@ -600,8 +607,11 @@ mod tests {
         s.rotate(ADMIN, &id, 1, &keys(&[ADMIN, OTHER])).unwrap();
         let v = info(OTHER);
         assert_eq!((v["epoch"].as_u64(), v["rekey"].as_bool(), v["keys"].as_object().unwrap().len()), (Some(1), Some(false), 1));
-        assert_eq!(v["keys"]["1"], "ab".repeat(46), "its own sealed key only");
+        assert_eq!(v["keys"]["1"]["sealed"], "ab".repeat(46), "its own sealed key only");
+        assert_eq!(v["keys"]["1"]["holders"].as_array().unwrap().len(), 2, "with who it was sealed to");
         assert!(info(ADMIN)["invites"].as_array().unwrap().is_empty() && s.join(third, &id, &inv, "x", "00").is_err(), "invites carried the old keys");
+        assert_eq!(s.invite(ADMIN, &id, "member", &"ab".repeat(32), 0).unwrap_err(), "key changed", "an invite with the old keys");
+        assert!(s.invite(ADMIN, &id, "member", &"ab".repeat(32), 1).is_ok());
         assert!(s.put(OTHER, &id, &name('1'), &rec(0), Some(&e0)).unwrap_err().contains("key changed"));
         s.put(OTHER, &id, &name('1'), &rec(1), Some(&e0)).unwrap();
         assert_eq!(listed(&s, &id)[0]["e"], 1);

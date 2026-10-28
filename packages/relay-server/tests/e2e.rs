@@ -1061,88 +1061,238 @@ fn a_shared_vaults_live_channel() {
 }
 
 
-/// Key rotation with the app's own calls against the real binary (docs/workspaces.md, Key rotation): a third member is
-/// removed, the rotation waits for a member whose Relay registered no public key yet, then the admin's next round
-/// rotates. An admin that stops right after the server took the rotation gets its own new key back from the server.
-/// The colleague, offline meanwhile, is refused with the old key, fetches the new one and goes on. The removed member
-/// cannot open what is written after, neither from the server (refused) nor from the server's disk.
+/// One member's Member for the key rotation tests: its client and its key file (what `keep_keys` saved last).
+struct Member { c: Client, fp: String, file: std::sync::Arc<std::sync::Mutex<String>> }
+impl Member {
+    fn new(c: &Client, id: &Identity, keys: &relay_remote::vault::Keys) -> Member { Member { c: c.clone(), fp: id.fingerprint(), file: std::sync::Arc::new(std::sync::Mutex::new(keys.format())) } }
+    fn keys(&self) -> relay_remote::vault::Keys { relay_remote::vault::Keys::parse(&self.file.lock().unwrap()).unwrap() }
+    fn remote(&self, vault: &str) -> relay_remote::vault::SealedRemote { self.c.sealed(vault, self.keys()) }
+    /// A round's key step, saving as the app does.
+    fn step(&self, vault: &str) -> relay_remote::vault::KeyStep {
+        let f = self.file.clone();
+        self.remote(vault).keep_keys(&move |k| { *f.lock().unwrap() = k.format(); Ok(()) }).unwrap()
+    }
+}
+fn vault_json(t: &Team) -> PathBuf { t.s.data.join("vaults").join(&t.vault).join("vault.json") }
+fn edit_vault(t: &Team, f: impl FnOnce(&mut serde_json::Value)) {
+    let mut v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(vault_json(t)).unwrap()).unwrap();
+    f(&mut v);
+    std::fs::write(vault_json(t), v.to_string()).unwrap();
+}
+/// A team of three: the laptop (admin), the colleague and a third member, each with its keys pinned on every Member.
+fn trio(tag: &str) -> (Team, Member, Member, Member, Identity) {
+    let t = team(tag);
+    let (a, b) = (Member::new(&t.laptop, &t.lid, &t.key), Member::new(&t.colleague, &t.cid, &t.key));
+    a.step(&t.vault);
+    let l = client::pair(&pair_line(&t.s), &device(&format!("{tag}-unused")), "unused").map(|(l, _)| l).unwrap();
+    let (link, _) = t.laptop.vault_invite(&t.vault, "member", &a.keys(), &l.host, l.port).unwrap();
+    let did = device(&format!("{tag}-third"));
+    let (line, _, kc) = client::vault_join(&link, &did, "third").unwrap();
+    let c = Member::new(&Client::new(&line.host, line.port, &line.fp, did.clone()), &did, &kc);
+    for _ in 0..2 { for m in [&a, &b, &c] { m.step(&t.vault); } }
+    assert_eq!(b.keys().pins.len(), 3, "everyone pinned on first sight, nobody has left yet");
+    (t, a, b, c, did)
+}
+
+/// Key rotation with the app's own calls against the real binary (docs/workspaces.md, Key rotation): the third member
+/// is removed, the admin's round rotates, the colleague (offline meanwhile) is refused with the old key, fetches the
+/// new one and goes on. The removed member cannot open what is written after, from the server (refused) or its disk.
 #[test]
 fn a_removed_member_reads_nothing_written_after_the_key_changes() {
     use relay_remote::sync::Remote;
-    use relay_remote::vault::{epoch, Keys, SealedRemote};
-    let t = team("rotate");
-    let l = client::pair(&pair_line(&t.s), &device("rotate-unused"), "unused").map(|(l, _)| l).unwrap();
-    let (link, _) = t.laptop.vault_invite(&t.vault, "member", &t.key, &l.host, l.port).unwrap();
-    let did = device("rotate-third");
-    let (line, _, mut kc) = client::vault_join(&link, &did, "third").unwrap();
-    let third = Client::new(&line.host, line.port, &line.fp, did.clone());
-    // the colleague's keys as its join gave them: the same key 0
-    let (mut ka, mut kb) = (t.key.clone(), t.key.clone());
-    // one round's key step: the manifest, then keep_keys; the keys saved as the app saves them
-    let step = |c: &Client, k: &mut Keys| -> (SealedRemote, Vec<String>) {
-        let r = c.sealed(&t.vault, Keys::parse(&k.format()).unwrap());
-        r.manifest().unwrap();
-        let st = r.keep_keys().unwrap();
-        if let Some(n) = st.keys { *k = n; }
-        (r, st.waiting)
-    };
-    step(&t.laptop, &mut ka);
-    step(&third, &mut kc);
-    let info = || t.laptop.call(serde_json::json!({"op": "vault_info", "vault": t.vault})).unwrap()["vault"].clone();
-    let pk_of = |fp: &str| info()["members"].as_array().unwrap().iter().find(|m| m["fp"] == fp).unwrap()["pk"].as_str().unwrap().to_string();
-    assert_eq!(pk_of(&t.lid.fingerprint()), ka.public(), "registered");
-    assert_eq!(pk_of(&t.cid.fingerprint()), "", "the colleague's Relay has not been round yet");
-
+    let (t, a, b, c, did) = trio("rotate");
     t.laptop.vault_remove(&t.vault, &did.fingerprint()).unwrap();
-    // the colleague has no public key yet: the rotation waits for it, by name
-    let (_, waiting) = step(&t.laptop, &mut ka);
-    assert_eq!((waiting, ka.epoch()), (vec!["colleague".to_string()], 0));
-    step(&t.colleague, &mut kb);
-    // the admin's round now rotates; it stops before it saves its new key (that copy is dropped)
-    let mut lost = ka.clone();
-    let (_, waiting) = step(&t.laptop, &mut lost);
-    assert_eq!((waiting.len(), lost.epoch()), (0, 1));
-    assert_eq!((info()["epoch"].as_u64(), info()["rekey"].as_bool()), (Some(1), Some(false)));
-    // restarted with the key file as it was: the next round gets the new key back, sealed to itself
-    step(&t.laptop, &mut ka);
-    assert_eq!(ka.get(1).unwrap().to_hex(), lost.get(1).unwrap().to_hex());
-
-    // the admin writes under the new key
-    let a = t.laptop.sealed(&t.vault, ka.clone());
-    a.manifest().unwrap();
-    a.put("Projects/Plan.md", b"after the key changed", 5, "").unwrap();
-    // the colleague, still on key 0 (offline during the rotation): its write is refused, its round fetches the key
-    let b = t.colleague.sealed(&t.vault, kb.clone());
-    b.manifest().unwrap();
-    assert_eq!(b.put("notes.md", b"from b", 6, "").unwrap_err(), "key changed");
-    let (b, _) = step(&t.colleague, &mut kb);
-    assert_eq!(kb.epoch(), 1);
-    let b2 = t.colleague.sealed(&t.vault, kb.clone());
-    assert_eq!(b2.manifest().unwrap().keys().collect::<Vec<_>>(), ["Projects/Plan.md"]);
-    assert_eq!(b2.get("Projects/Plan.md").unwrap(), b"after the key changed");
-    b2.put("notes.md", b"from b", 6, "").unwrap();
-    drop(b);
-
-    // the removed member: refused by the server, and the record on the server's disk does not open with what it holds
-    assert!(third.sealed(&t.vault, kc.clone()).manifest().is_err());
-    let blob = std::fs::read(t.s.data.join("vaults").join(&t.vault).join("blobs").join(ka.name("Projects/Plan.md"))).unwrap();
-    assert_eq!(epoch(&blob), Some(1));
-    assert!(kc.open_data(&ka.name("Projects/Plan.md"), &blob).unwrap_err().contains("not on this Mac"));
-    assert!(kc.public().len() == 64 && kc.get(1).is_none());
-
+    let st = a.step(&t.vault);
+    assert_eq!((st.waiting.len(), st.errors.len(), a.keys().epoch()), (0, 0, 1), "{st:?}");
+    let ra = a.remote(&t.vault);
+    ra.manifest().unwrap();
+    ra.put("Projects/Plan.md", b"after the key changed", 5, "").unwrap();
+    // the colleague, still on key 0: refused before it goes out, its next round takes the key
+    let rb = b.remote(&t.vault);
+    rb.manifest().unwrap();
+    assert_eq!(rb.put("notes.md", b"from b", 6, "").unwrap_err(), "key changed");
+    assert!(b.step(&t.vault).errors.is_empty());
+    let rb = b.remote(&t.vault);
+    assert_eq!(rb.manifest().unwrap().keys().collect::<Vec<_>>(), ["Projects/Plan.md"]);
+    assert_eq!(rb.get("Projects/Plan.md").unwrap(), b"after the key changed");
+    rb.put("notes.md", b"from b", 6, "").unwrap();
+    // the removed member: refused by the server, and the record on its disk does not open with what it holds
+    assert!(c.remote(&t.vault).manifest().is_err());
+    let blob = std::fs::read(t.s.data.join("vaults").join(&t.vault).join("blobs").join(a.keys().name("Projects/Plan.md"))).unwrap();
+    assert_eq!(relay_remote::vault::epoch(&blob), Some(1));
+    assert!(c.keys().open_data(&a.keys().name("Projects/Plan.md"), &blob).unwrap_err().contains("not on this Mac"));
     // the live channel: frames under the new key reach who holds it, not a channel still on key 0
-    let (ca, _) = events(&t.laptop, &t.vault, &ka);
-    let (_cb, rb) = events(&t.colleague, &t.vault, &kb);
+    let (ca, _) = events(&t.laptop, &t.vault, &a.keys());
+    let (_cb, rx) = events(&t.colleague, &t.vault, &b.keys());
     let (_old, ro) = events(&t.colleague, &t.vault, &t.key);
-    for rx in [&rb, &ro] { wait_for(rx, 10, |e| matches!(e, relay_remote::channel::Event::Live { .. })); }
+    for r in [&rx, &ro] { wait_for(r, 10, |e| matches!(e, relay_remote::channel::Event::Live { .. })); }
     std::thread::sleep(Duration::from_millis(300));
     ca.send("update", &"d".repeat(64), b"new epoch").unwrap();
-    match wait_for(&rb, 10, |e| matches!(e, relay_remote::channel::Event::Frame(_))) {
-        relay_remote::channel::Event::Frame(f) => assert_eq!(f.body, b"new epoch"),
-        _ => unreachable!(),
-    }
-    assert!(ro.recv_timeout(Duration::from_secs(2)).map(|e| !matches!(e, relay_remote::channel::Event::Frame(_))).unwrap_or(true), "the old key cannot open it");
+    match wait_for(&rx, 10, |e| matches!(e, relay_remote::channel::Event::Frame(_))) { relay_remote::channel::Event::Frame(f) => assert_eq!(f.body, b"new epoch"), _ => unreachable!() }
+    assert!(ro.recv_timeout(Duration::from_secs(2)).map(|e| !matches!(e, relay_remote::channel::Event::Frame(_))).unwrap_or(true));
     ca.stop();
+}
+
+/// The server alone makes epoch 1: a key of its own sealed to each member's real public key. No member takes it, and
+/// nothing goes out under any key meanwhile.
+#[test]
+fn a_server_that_seals_its_own_key_is_refused() {
+    use relay_remote::sync::Remote;
+    use relay_remote::vault::{seal_for, VaultKey};
+    let (t, _a, b, _c, _) = trio("rotate-forged");
+    let evil = VaultKey::generate().to_hex();
+    edit_vault(&t, |v| {
+        let mut sealed = serde_json::Map::new();
+        for m in v["members"].as_array().unwrap() {
+            let (fp, pk) = (m["fp"].as_str().unwrap(), m["pk"].as_str().unwrap());
+            let payload = [&relay_remote::tls::unhex(&evil).unwrap()[..], &[0u8; 32], &[0u8; 64], &relay_remote::tls::unhex(&v["members"][0]["fp"].as_str().unwrap()).unwrap()].concat();
+            sealed.insert(fp.into(), serde_json::json!(seal_for(pk, &t.vault, 1, fp, &payload).unwrap()));
+        }
+        v["epoch"] = serde_json::json!(1);
+        v["keys"] = serde_json::json!({"1": sealed});
+    });
+    let st = b.step(&t.vault);
+    assert_eq!(b.keys().epoch(), 0);
+    assert!(st.errors.iter().any(|e| e.contains("not sealed by a member")), "{st:?}");
+    let r = b.remote(&t.vault);
+    r.manifest().unwrap();
+    assert_eq!(r.put("x.md", b"x", 1, "").unwrap_err(), "key changed", "nothing goes out under any key");
+}
+
+/// The server swaps a member's public key: every other Member shows it, and a due rotation waits for it.
+#[test]
+fn a_server_that_swaps_a_members_key_is_refused_and_shown() {
+    let (t, a, b, _c, did) = trio("rotate-swap");
+    let other = { let mut k = relay_remote::vault::Keys::from(relay_remote::vault::VaultKey::generate()); k.ensure(); k.public() };
+    edit_vault(&t, |v| { for m in v["members"].as_array_mut().unwrap() { if m["fp"] == b.fp.as_str() { m["pk"] = serde_json::json!(other); } } });
+    let st = a.step(&t.vault);
+    assert_eq!(st.changed.iter().map(|(_, n)| n.as_str()).collect::<Vec<_>>(), ["colleague"], "{st:?}");
+    t.laptop.vault_remove(&t.vault, &did.fingerprint()).unwrap();
+    let st = a.step(&t.vault);
+    assert_eq!((st.waiting, a.keys().epoch()), (vec![("colleague".to_string(), "changed".to_string())], 0));
+}
+
+/// After a rotation the server (or a removed member through it) puts an epoch-0 record in: no member takes it.
+#[test]
+fn an_old_key_record_after_the_rotation_is_refused() {
+    use relay_remote::sync::Remote;
+    let (t, a, b, _c, did) = trio("rotate-old");
+    t.laptop.vault_remove(&t.vault, &did.fingerprint()).unwrap();
+    a.step(&t.vault);
+    b.step(&t.vault);
+    let k0 = t.key.get(0).unwrap();
+    let name = k0.name("Planted.md");
+    std::fs::write(t.s.data.join("vaults").join(&t.vault).join("blobs").join(&name), k0.record("Planted.md", b"from the removed member", 1).unwrap()).unwrap();
+    let r = b.remote(&t.vault);
+    assert!(r.manifest().unwrap().get("Planted.md").is_none());
+    assert!(r.bad().iter().any(|x| x.contains("old key")), "{:?}", r.bad());
+}
+
+/// Two admins rotate at once: the server takes one, the other's round takes that key, and they end on the same key.
+#[test]
+fn two_admins_rotating_at_once_end_on_one_key() {
+    let (t, a, b, c, _) = trio("rotate-two");
+    let l = client::pair(&pair_line(&t.s), &device("rotate-two-unused2"), "unused").map(|(l, _)| l).unwrap();
+    let (link, _) = t.laptop.vault_invite(&t.vault, "admin", &a.keys(), &l.host, l.port).unwrap();
+    client::vault_join(&link, &t.cid, "colleague").unwrap();
+    for _ in 0..2 { for m in [&a, &b, &c] { m.step(&t.vault); } }
+    assert!(a.keys().pins[&b.fp].admin && b.keys().pins[&a.fp].admin, "the promotion seen while nobody left");
+    t.laptop.vault_remove(&t.vault, &c.fp).unwrap();
+    let (sa, sb) = std::thread::scope(|s| { let x = s.spawn(|| a.step(&t.vault)); let y = s.spawn(|| b.step(&t.vault)); (x.join().unwrap(), y.join().unwrap()) });
+    for _ in 0..2 { for m in [&a, &b] { m.step(&t.vault); } }
+    assert_eq!((a.keys().epoch(), b.keys().epoch()), (1, 1), "{sa:?} {sb:?}");
+    assert_eq!(a.keys().get(1).unwrap().to_hex(), b.keys().get(1).unwrap().to_hex());
+}
+
+/// The answer to `vault_pk` and to `vault_rotate` lost before the Member saved: the secrets were saved before the
+/// server heard of them, and the admin gets its new key back from the server, sealed to itself.
+#[test]
+fn a_lost_answer_before_saving_loses_nothing() {
+    let (t, a, b, _c, did) = trio("rotate-lost");
+    let (pk, id) = (a.keys().public(), a.keys().identity());
+    let info = t.laptop.call(serde_json::json!({"op": "vault_info", "vault": t.vault})).unwrap();
+    let on_server = info["vault"]["members"].as_array().unwrap().iter().find(|m| m["fp"] == a.fp.as_str()).unwrap().clone();
+    assert_eq!((on_server["pk"].as_str(), on_server["id"].as_str()), (Some(pk.as_str()), Some(id.as_str())), "what the server has is what was saved");
+    t.laptop.vault_remove(&t.vault, &did.fingerprint()).unwrap();
+    // the save of the new key fails (the Member stops): the server has the rotation, the key file not
+    let before = a.file.lock().unwrap().clone();
+    let r = a.remote(&t.vault);
+    assert!(r.keep_keys(&|k| if k.epoch() == 1 { Err("stopped".into()) } else { Ok(()) }).is_err());
+    assert_eq!((relay_remote::vault::Keys::parse(&before).unwrap().epoch(), a.keys().epoch()), (0, 0));
+    a.step(&t.vault);
+    b.step(&t.vault);
+    assert_eq!((a.keys().epoch(), a.keys().get(1).unwrap().to_hex()), (1, b.keys().get(1).unwrap().to_hex()));
+}
+
+/// An admin still on the old key invites: refused, it takes the new key and invites again; the joiner reads all.
+#[test]
+fn an_invite_from_an_admin_still_on_the_old_key_is_refused() {
+    use relay_remote::sync::Remote;
+    let (t, a, b, _c, did) = trio("rotate-invite");
+    t.laptop.vault_remove(&t.vault, &did.fingerprint()).unwrap();
+    let old = a.keys();
+    a.step(&t.vault);
+    let l = client::pair(&pair_line(&t.s), &device("rotate-invite-unused2"), "unused").map(|(l, _)| l).unwrap();
+    assert_eq!(t.laptop.vault_invite(&t.vault, "member", &old, &l.host, l.port).unwrap_err(), "key changed");
+    let (link, _) = t.laptop.vault_invite(&t.vault, "member", &a.keys(), &l.host, l.port).unwrap();
+    let nid = device("rotate-invite-new");
+    let (line, _, kn) = client::vault_join(&link, &nid, "new").unwrap();
+    assert_eq!((kn.epoch(), kn.pins.len()), (1, 3), "every key, and who the inviter trusts");
+    b.step(&t.vault);
+    let rb = b.remote(&t.vault);
+    rb.manifest().unwrap();
+    rb.put("x.md", b"x", 1, "").unwrap();
+    let n = Member::new(&Client::new(&line.host, line.port, &line.fp, nid.clone()), &nid, &kn);
+    assert_eq!(n.remote(&t.vault).manifest().unwrap().keys().collect::<Vec<_>>(), ["x.md"]);
+}
+
+/// A member set up Relay again (new keys, still a member): every Member shows it; an admin trusts it by hand. A key the
+/// server swapped in cannot be trusted that way.
+#[test]
+fn a_member_who_set_up_relay_again_is_trusted_by_hand() {
+    let (t, a, b, _c, _) = trio("rotate-trust");
+    let mut fresh = b.keys();
+    fresh.secret = None;
+    fresh.sign = None;
+    fresh.ensure();
+    *b.file.lock().unwrap() = fresh.format();
+    b.step(&t.vault);
+    assert_eq!(a.step(&t.vault).changed.len(), 1);
+    let save = { let f = a.file.clone(); move |k: &relay_remote::vault::Keys| { *f.lock().unwrap() = k.format(); Ok(()) } };
+    a.remote(&t.vault).trust(&b.fp, &save).unwrap();
+    assert!(a.step(&t.vault).changed.is_empty());
+    assert_eq!(a.keys().pins[&b.fp].pk, fresh.public());
+    let other = { let mut k = relay_remote::vault::Keys::from(relay_remote::vault::VaultKey::generate()); k.ensure(); k.public() };
+    edit_vault(&t, |v| { for m in v["members"].as_array_mut().unwrap() { if m["fp"] == b.fp.as_str() { m["pk"] = serde_json::json!(other); } } });
+    assert!(a.remote(&t.vault).trust(&b.fp, &save).unwrap_err().contains("not signed by it"));
+}
+
+/// An older Relay (no key step) against a rotated workspace: its writes are refused, it pulls nothing it cannot open
+/// and deletes nothing.
+#[test]
+fn an_old_relay_against_a_rotated_workspace_deletes_nothing() {
+    use relay_remote::sync::{self, Filter, Guard, Mode, Walker};
+    let (t, a, _b, _c, did) = trio("rotate-oldapp");
+    let dir = std::env::temp_dir().join(format!("relay-rotate-oldapp-{}", std::process::id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    let keep = |_: &str, _: &[u8]| Ok(());
+    let guard = Guard { allow_deletes: false, allowed: &[], keep: &keep };
+    let (mut base, mut w) = (sync::Manifest::new(), Walker::default());
+    let mut round = || { let (n, r) = sync::run(Mode::TwoWay, &dir, &base, &mut w, &Filter::vault_default(), &t.colleague.sealed(&t.vault, t.key.clone()), &|p| sync::conflict_copy(p, "mac", "now"), &|_| false, &guard, &|_, _| {}); base = n; r };
+    std::fs::write(dir.join("mine.md"), "before").unwrap();
+    assert_eq!(round().pushed, vec!["mine.md"]);
+    t.laptop.vault_remove(&t.vault, &did.fingerprint()).unwrap();
+    a.step(&t.vault);
+    let ra = a.remote(&t.vault);
+    use relay_remote::sync::Remote;
+    ra.manifest().unwrap();
+    ra.put("new.md", b"under key 1", 2, "").unwrap();
+    std::fs::write(dir.join("mine.md"), "after").unwrap();
+    let r = round();
+    assert!(r.pushed.is_empty() && r.pulled.is_empty() && r.deleted_local.is_empty() && !r.errors.is_empty(), "{r:?}");
+    assert_eq!(std::fs::read_to_string(dir.join("mine.md")).unwrap(), "after");
+    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A team for the live channel tests: the laptop (admin) and a colleague who joined with a link, and the vault key.

@@ -42,7 +42,7 @@ pub enum Event {
     /// Not connected, and why.
     Down(String),
 }
-type On = Box<dyn Fn(Event) + Send + Sync>;
+type On = Arc<dyn Fn(Event) + Send + Sync>;
 
 struct Inner {
     client: Client, vault: String, key: Keys, me: String, on: On,
@@ -60,10 +60,21 @@ impl Channel {
         let me = client.me()[..16].to_string();
         // the counter starts at the time, so frames of a restarted app never repeat an `n` of before
         let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_micros() as u64);
-        let c = Channel(Arc::new(Inner { client, vault: vault.into(), key, me, on: Box::new(on), n: AtomicU64::new(n), w: Mutex::default(), live: AtomicBool::new(false), stop: AtomicBool::new(false), last: Mutex::default() }));
+        Channel::spawn(Inner { client, vault: vault.into(), key, me, on: Arc::new(on), n: AtomicU64::new(n), w: Mutex::default(), live: AtomicBool::new(false), stop: AtomicBool::new(false), last: Mutex::default() })
+    }
+    fn spawn(inner: Inner) -> Channel {
+        let c = Channel(Arc::new(inner));
         let c2 = c.clone();
         thread::spawn(move || c2.run());
         c
+    }
+    /// This channel again with newer keys (a rotation): it stops, and the new one goes on with its counter and with
+    /// the last `n` it took from each sender, so a frame seen before the restart is still dropped after it.
+    pub fn renew(&self, key: impl Into<Keys>) -> Channel {
+        let i = &self.0;
+        self.stop();
+        Channel::spawn(Inner { client: i.client.clone(), vault: i.vault.clone(), key: key.into(), me: i.me.clone(), on: i.on.clone(), n: AtomicU64::new(i.n.load(Ordering::SeqCst)),
+            w: Mutex::default(), live: AtomicBool::new(false), stop: AtomicBool::new(false), last: Mutex::new(i.last.lock().unwrap().clone()) })
     }
     pub fn live(&self) -> bool { self.0.live.load(Ordering::SeqCst) }
     /// Stop for good; `on` gets `Down` once more. Never waits on the connection.

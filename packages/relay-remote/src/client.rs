@@ -179,7 +179,8 @@ impl Client {
     /// other device reaches it. The vault key goes to the server wrapped under a fresh secret that only the link holds.
     pub fn vault_invite(&self, vault: &str, role: &str, key: &Keys, host: &str, port: u16) -> Result<(String, Invite), String> {
         let secret = tls::random_key();
-        let v = self.call(json!({"op": "vault_invite", "vault": vault, "role": role, "wrapped": vault::wrap(key, &secret, vault)?}))?;
+        // the epoch of the newest key sealed in: a server past it refuses (`key changed`), and the caller fetches the new key
+        let v = self.call(json!({"op": "vault_invite", "vault": vault, "role": role, "wrapped": vault::wrap(key, &secret, vault)?, "epoch": key.epoch()}))?;
         // the link pins the certificate this connection checked
         let inv = &v["invite"];
         let s = |k: &str| inv[k].as_str().map(String::from);

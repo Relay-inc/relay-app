@@ -340,7 +340,7 @@ impl Server {
             // shared vaults (vaults.rs): only ciphertext passes here, by member
             "vault_create" => reply(&mut w, self.vaults.create(&fp, &my_name, s("name"))),
             "vault_info" => reply(&mut w, self.vaults.info(&fp, s("vault"))),
-            "vault_invite" => reply(&mut w, self.vaults.invite(&fp, s("vault"), s("role"), s("wrapped"))),
+            "vault_invite" => reply(&mut w, self.vaults.invite(&fp, s("vault"), s("role"), s("wrapped"), req["epoch"].as_u64().unwrap_or(0))),
             "vault_invite_revoke" => reply(&mut w, self.vaults.invite_revoke(&fp, s("vault"), s("invite")).map(|_| json!({}))),
             "vault_join" => {
                 let res = self.vaults.join(&fp, s("vault"), s("invite"), s("name"), s("proof"));
@@ -349,7 +349,7 @@ impl Server {
             }
             "vault_remove" => reply(&mut w, self.vaults.remove(&fp, s("vault"), s("fp")).map(|_| json!({}))),
             "vault_manifest" => reply(&mut w, self.vaults.manifest(&fp, s("vault"))),
-            "vault_pk" => reply(&mut w, self.vaults.set_pk(&fp, s("vault"), s("pk"), s("mac")).map(|_| json!({}))),
+            "vault_pk" => reply(&mut w, self.vaults.set_pk(&fp, s("vault"), &req).map(|_| json!({}))),
             "vault_rotate" => {
                 let keys = req["keys"].as_object().cloned().unwrap_or_default();
                 let res = self.vaults.rotate(&fp, s("vault"), req["epoch"].as_u64().unwrap_or(0), &keys);

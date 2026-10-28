@@ -62,6 +62,8 @@ struct Room {
     seq: u64, ring: VecDeque<(u64, Line)>, bytes: usize, subs: Vec<Sub>,
     /// vault.json's mtime when `members` was read; the fingerprints that may stream
     stamp: Option<SystemTime>, members: HashSet<String>, idle_since: Option<Instant>,
+    /// the vault's key epoch as vault.json said: a frame under an older key is dropped (a removed member holds it)
+    epoch: u64,
 }
 impl Room {
     fn push(&mut self, seq: u64, line: Line) {
@@ -110,6 +112,7 @@ fn refresh(data: &Path, id: &str, room: &mut Room) -> Option<()> {
     if room.stamp != Some(stamp) {
         let v: Value = serde_json::from_str(&std::fs::read_to_string(vault_file(data, id)).ok()?).ok()?;
         room.members = v["members"].as_array().into_iter().flatten().filter_map(|m| m["fp"].as_str().map(String::from)).collect();
+        room.epoch = v["epoch"].as_u64().unwrap_or(0);
         room.stamp = Some(stamp);
     }
     Some(())
@@ -238,6 +241,7 @@ fn read_frames(vaults: &Vaults, fp: &str, id: &str, me: u64, heard: &AtomicU64, 
             let mut all = rooms.rooms.lock().unwrap();
             let Some(room) = all.get_mut(id) else { return Ok(()) };
             if !room.members.contains(fp) { return Err("no longer a member".into()); }
+            if out["e"].as_u64().unwrap_or(0) < room.epoch { continue; }
             if kind == "update" { room.seq += 1; out["seq"] = json!(room.seq); }
             let line: Line = out.to_string().into();
             if kind == "update" { room.push(room.seq, line.clone()); }
