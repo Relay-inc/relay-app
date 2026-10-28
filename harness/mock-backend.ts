@@ -83,6 +83,7 @@ let vaultSync = {
   } | null,
 };
 const movedMails = new Set<string>(); // "account:id" archived or deleted, gone from mail_list
+const moved: Record<string, { name: string; vault: string }> = {}; // migrate_project: project -> its new key and vault
 const phoneShared = new Set<string>(); // conversation keys shared with the phone (/share-phone)
 // the shared vaults on a relay-server (fixture "shared"): the last rounds, and the one vault's members and open invites
 let sharedStatus: Record<string, any> = shared ? vault.sharedStatus(Math.floor(Date.now() / 1000)) : {};
@@ -471,7 +472,10 @@ function handle(cmd: string, a: Args): unknown {
     case "snapshot": {
       const snap = vault.snapshot(reminders);
       if (!shared) return snap;
-      const own = snap.projects.map(p => ({ ...p, vault: vault.VAULT, label: p.name }));
+      // a project moved by migrate_project lives in its new vault under its new key
+      const own = snap.projects.map(p =>
+        moved[p.name] ? { ...p, ...moved[p.name], label: p.name } : { ...p, vault: vault.VAULT, label: p.name },
+      );
       return { ...snap, projects: [...own, ...vault.teamProjects] };
     }
     case "vault_notes":
@@ -522,7 +526,20 @@ function handle(cmd: string, a: Args): unknown {
       const base = `Contexts/${context}/${team ? "Projects" : "Portfolio"}/${name}`;
       const files = [`${base}/Documents/Kick-off.md`, `${base}/Documents/Scope.md`, `${base}/${name}.md`];
       const clash = a.to === vault.TEAM_VAULT && name === "Northwind Portal";
+      const key = `${name}\u001f5f2c8e91a7d04b36`;
+      // on a move each started conversation goes along, except one that read mail into a team workspace
+      const chats =
+        a.mode === "move"
+          ? (a.chats ?? []).map((c: any) => ({
+              key: c.key,
+              title: c.title,
+              moves: !(team && c.mail),
+              why: team && c.mail ? "mail" : "",
+            }))
+          : [];
+      if (!a.dry && a.mode === "move") moved[name] = { name: key, vault: String(a.to) };
       return {
+        chats,
         files,
         scratch: 1,
         skipped: team ? [`Contexts/Agency/Portfolio/${name}/.claude/settings.json`] : [],
@@ -535,7 +552,7 @@ function handle(cmd: string, a: Args): unknown {
         contexts,
         context,
         team,
-        key: `${name}\u001f5f2c8e91a7d04b36`,
+        key,
       };
     }
     case "set_project_repos":

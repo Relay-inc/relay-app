@@ -149,9 +149,17 @@ export type MigratePlan = {
   context: string;
   team: boolean;
   key: string; // the project's key in the target workspace
+  /** on a move, each started conversation: whether it goes along, else why not ("provider", "mail", "elsewhere") */
+  chats: { key: string; title: string; moves: boolean; why: string }[];
 };
-export const migrateProject = (project: string, to: string, context: string, mode: "move" | "copy", dry: boolean) =>
-  invoke<MigratePlan>("migrate_project", { project, to, context, mode, dry });
+export const migrateProject = (
+  project: string,
+  to: string,
+  context: string,
+  mode: "move" | "copy",
+  dry: boolean,
+  chats: { key: string; title: string; mail: boolean }[],
+) => invoke<MigratePlan>("migrate_project", { project, to, context, mode, dry, chats });
 /** The Design drawer's native claude.ai webview (design.rs), placed by the drawer's bounds in logical px. */
 export const designShow = (url: string, r: DOMRect) =>
   invoke("design_show", { url, x: r.x, y: r.y, w: r.width, h: r.height });

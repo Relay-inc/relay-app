@@ -6,11 +6,18 @@ import { projectName, vaultName } from "../../../application/workspace/vault";
 import { useT } from "../../hooks/useT";
 
 const SELECT = "h-8 px-2 rounded-md border border-separator-strong bg-bg text-sm min-w-0";
+// why a conversation does not go along with its project
+const WHY: Record<string, "mig.whyProvider" | "mig.whyMail" | "mig.whyElsewhere"> = {
+  provider: "mig.whyProvider",
+  mail: "mig.whyMail",
+  elsewhere: "mig.whyElsewhere",
+};
 const LIST = "max-h-40 overflow-auto mt-1 px-2 py-1 rounded-md bg-fill-2 text-xs text-secondary font-mono";
 
 /** Move or copy a project to another workspace: what goes (notes, its row or card, icon, Design link, repos, scratch
- *  notes), what stays (links, files a team workspace does not take, started conversations), what is in the way. Into a
- *  team workspace the files are listed and a box says every member will see them; the button waits for a tick. */
+ *  notes), which conversations go along on a move and which stay (another agent, mail into a team workspace), what stays
+ *  of the files (links, what a team workspace does not take), what is in the way. Into a team workspace the files and
+ *  the conversations are listed, a box says every member will see them, and the button waits for a tick. */
 export function MigrateDialog({
   project,
   from,
@@ -45,6 +52,8 @@ export function MigrateDialog({
   }, [project, to, mode, context]);
 
   const [name, target] = [projectName(project), vaultName(to)];
+  const going = plan?.chats.filter(chat => chat.moves) ?? [];
+  const staying = plan?.chats.filter(chat => !chat.moves) ?? [];
   const blocked = !plan || plan.conflicts.length > 0 || (plan.team && !seen) || busy;
   const go = async () => {
     setBusy(true);
@@ -97,12 +106,21 @@ export function MigrateDialog({
             {goes.filter(Boolean).map(line => (
               <li key={line}>{line}</li>
             ))}
-            {started ? (
+            {going.length ? <li>{tn("mig.chatsGo", going.length)}</li> : null}
+            {staying.length ? (
               <li className="text-secondary">
-                {mode === "move"
-                  ? tn("mig.chatsStay", started, { here: vaultName(shownUnder(from)) })
-                  : tn("mig.chatsCopy", started, { here: vaultName(shownUnder(from)) })}
+                {tn("mig.chatsStay", staying.length, { here: vaultName(shownUnder(from)) })}
+                <ul className="pl-1">
+                  {staying.map(chat => (
+                    <li key={chat.key} className="truncate">
+                      {chat.title} ({t(WHY[chat.why] ?? "mig.whyElsewhere")})
+                    </li>
+                  ))}
+                </ul>
               </li>
+            ) : null}
+            {mode === "copy" && started ? (
+              <li className="text-secondary">{tn("mig.chatsCopy", started, { here: vaultName(shownUnder(from)) })}</li>
             ) : null}
           </ul>
         ) : null}
@@ -137,6 +155,18 @@ export function MigrateDialog({
                 ))}
               </div>
             </details>
+            {going.length ? (
+              <>
+                <p className="mt-2">{t("mig.teamChats", { target })}</p>
+                <ul className="mt-1 pl-5 list-disc">
+                  {going.map(chat => (
+                    <li key={chat.key} className="truncate">
+                      {chat.title}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
             <label className="mt-2 flex items-center gap-2">
               <input type="checkbox" checked={seen} onChange={e => setSeen(e.target.checked)} />
               {t("mig.teamOk", { target })}
