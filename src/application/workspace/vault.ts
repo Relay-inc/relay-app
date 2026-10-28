@@ -35,7 +35,7 @@ export const projectName = (name: string | null) =>
 /** The name a workspace shows by: Personal for the main vault, a shared vault's own name, else its folder's. */
 export function vaultName(folder: string) {
   const choice = vaultChoices(settings()).find(candidate => candidate.folder === folder);
-  if (choice?.main) return t("composer.yourVault");
+  if (choice?.main) return t("ws.personal");
   return choice?.name ?? (folder.split("/").pop() || folder);
 }
 /** The name of the vault a conversation runs in (its project's, else the one picked for it) when that is not the main

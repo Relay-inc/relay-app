@@ -122,7 +122,7 @@ const VIEWS = {
     await settingsPage("Machines", null, "nomirror");
     await waitText("For workspaces only.");
     // the intro says "for workspaces only." too (text matches ignore case): the row's own words
-    await intoView("For workspaces only. This Mac's vault");
+    await intoView("For workspaces only. This Mac's Personal workspace");
   },
   // Settings › Machines, a machine online whose mirror holds 9 deletes back: the first 5 listed, Restore and Delete
   "settings-machines-mirror-held": async () => {
@@ -153,7 +153,7 @@ const VIEWS = {
   "composer-vault": async () => {
     await open(page, server.url, { fixture: "shared" });
     await page.keyboard.press("Control+Digit2"); // the side vault shown
-    await page.getByPlaceholder("Search").fill("northwind");
+    await page.getByPlaceholder(/^Search in /).fill("northwind");
     await byText(page, "Northwind Portal (Side vault)").hover();
     await page
       .getByRole("button", { name: "New conversation about Northwind Portal (Side vault)", exact: true })
@@ -1072,6 +1072,11 @@ const VIEWS = {
     ]),
   ),
   // the keys that work in a conversation, Find among them
+  // ⌃1 to ⌃9 for the workspaces, changeable like the others (PR #294)
+  "settings-shortcuts-workspaces": async () => {
+    await settingsPage("Shortcuts");
+    await intoView("Workspace 9 in the footer's menu");
+  },
   "settings-shortcuts-chat": async () => {
     await settingsPage("Shortcuts");
     await intoView("Find in the conversation");

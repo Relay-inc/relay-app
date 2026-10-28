@@ -2,7 +2,7 @@ import { dictationCancel, dictationDownload, dictationStart, dictationStop } fro
 import { makeStore } from "../make-store";
 import { select } from "../navigation/navigation";
 import { useNavigationStore } from "../navigation/store";
-import { newChat } from "./chats";
+import { newChatHere } from "./chats";
 import { sendMsg } from "./actions";
 
 /** The composer's dictation (src-tauri/src/dictation.rs): `offer` asks to download the speech model first. */
@@ -70,6 +70,6 @@ export const dismissDictationError = () => set({ error: "" });
 
 /** What was said with the new-conversation shortcut from any app: a new conversation in General, sent at once. */
 export async function chatFromDictation(text: string) {
-  await select(newChat(null));
+  await select(newChatHere(null));
   await sendMsg(text);
 }

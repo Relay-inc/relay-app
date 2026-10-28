@@ -10,6 +10,8 @@ import { useDerived } from "../../hooks/useDerived";
 import { useDismiss } from "../../hooks/useDismiss";
 import { useT } from "../../hooks/useT";
 import { useKeyLabel } from "../../hooks/useKeyLabel";
+import { useSettingsStore } from "../../../application/settings/store";
+import { WORKSPACE_KEYS, workspaceKeyLabel } from "../../../domain/settings/shortcuts";
 import { Icon } from "../../components/Icon";
 
 // a workspace's square in the context tints, by its place in the list
@@ -55,6 +57,10 @@ export function WorkspaceSwitcher({
 }) {
   const { t, tn } = useT();
   const settingsKey = useKeyLabel("app.settings");
+  // ⌃1 to ⌃9 as bound in Settings › Shortcuts, none where the answers on a question take the key
+  const keys = useSettingsStore(s =>
+    WORKSPACE_KEYS.map((_, i) => workspaceKeyLabel(s.settings, i + 1)).join("\n"),
+  ).split("\n");
   const list = useDerived(() => workspaces());
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -121,7 +127,7 @@ export function WorkspaceSwitcher({
                     .join(" · ")}
                 </span>
               </span>
-              {i < 9 ? <span className="flex-none text-xs text-tertiary tabular-nums">⌃{i + 1}</span> : null}
+              {keys[i] ? <span className="flex-none text-xs text-tertiary tabular-nums">{keys[i]}</span> : null}
               <Icon
                 name="check"
                 className={`glyph size-3.5 flex-none stroke-2 text-accent-text ${workspace.active ? "" : "invisible"}`}

@@ -42,8 +42,8 @@ import {
 } from "../conversations/selectors";
 import { chatAgent } from "../agents/agents";
 import { useWorkspaceStore } from "../workspace/store";
-import { contexts, projectLabel, projectName, shownName } from "../workspace/vault";
-import { chatVault } from "../../domain/conversations/rules";
+import { contexts, projectLabel, projectName, shownName, vaultName } from "../workspace/vault";
+import { chatVault, inWorkspace, vaultChoices } from "../../domain/conversations/rules";
 import { activeFolder } from "./workspaces";
 import { ghOn, mailOn, saveMainSettings, setSettingsState, settings } from "../settings/settings";
 import { readyBoards } from "../board/board";
@@ -184,7 +184,15 @@ const convRow = (conversation: Chat, folder = ""): ConvRow => ({
   closable: !(conversation.draft && !typedOf(conversation.key)),
   closing: cs().closing.has(conversation.key),
   orch: !!conversation.orch,
+  ...orphanVault(conversation),
 });
+// a conversation that ran in a folder no longer a workspace here: it shows under the main one, with that folder's name
+function orphanVault(conversation: Chat): { vault?: string } {
+  const vault = chatVault(conversation, useWorkspaceStore.getState().snap);
+  return !vault || vaultChoices(settings()).some(choice => choice.folder === vault) ? {} : { vault: vaultName(vault) };
+}
+// whether a conversation or project of `vault` shows in the workspace the sidebar shows
+const shownIn = (vault: string, workspace: string) => inWorkspace(vault, workspace, settings());
 const WORK_ICON = { review: "pr", mail: "mail", meeting: "cal" } as const;
 // a piece of Today's work in progress, as a row under its project
 const workRow = (work: Work): ConvRow => ({
@@ -385,7 +393,7 @@ function generalSection(query: string, sessions: TerminalSession[], workspace: s
   const snap = useWorkspaceStore.getState().snap;
   const conversations = listed(null).filter(
     conversation =>
-      chatVault(conversation, snap) === workspace && (!query || conversation.title.toLowerCase().includes(query)),
+      shownIn(chatVault(conversation, snap), workspace) && (!query || conversation.title.toLowerCase().includes(query)),
   );
   // ponytail: a terminal session knows no vault, so the general ones show with the main vault only
   const generalSessions = sessions.filter(
@@ -441,7 +449,7 @@ function contextSection(
   const candidates = snap.projects.filter(
     project =>
       project.context === context &&
-      (project.vault || snap.vault?.vault) === workspace &&
+      shownIn(project.vault || snap.vault?.vault || "", workspace) &&
       matchesQuery(project, query) &&
       (query || hasOpenWork(project, sessions) || project.name === selectedProject),
   );

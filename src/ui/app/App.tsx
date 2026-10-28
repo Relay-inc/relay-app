@@ -19,7 +19,7 @@ import { closeDrawer, closeTicket, openDetail } from "../../application/navigati
 import { request } from "../../application/navigation/requests";
 import { isKey, mailExperimental, settings } from "../../application/settings/settings";
 import { switchToNth } from "../../application/navigation/workspaces";
-import { pickModOf } from "../../domain/settings/shortcuts";
+import { workspaceDigit } from "../../domain/settings/shortcuts";
 import { useMailStore } from "../../application/mail/store";
 import {
   clearMailSelection,
@@ -170,11 +170,6 @@ function stuckArrow(e: KeyboardEvent) {
     (e.key === "ArrowUp" && atStart)
   );
 }
-// ⌃ and a digit by its physical key, unless the answers on a question card take ⌃ (Settings › Shortcuts)
-const workspaceDigit = (e: KeyboardEvent) =>
-  e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && pickModOf(settings()) !== "ctrl"
-    ? Number(/^Digit([1-9])$/.exec(e.code)?.[1] ?? 0)
-    : 0;
 function onKey(e: KeyboardEvent) {
   if (stuckArrow(e)) {
     e.preventDefault();
@@ -195,10 +190,10 @@ function onKey(e: KeyboardEvent) {
     request("find");
   } else if (isKey(e, "app.escape")) {
     onEscape(e);
-  } else if (workspaceDigit(e)) {
-    // Ctrl-1 to Ctrl-9: the workspace at that place in the footer's menu
+  } else if (workspaceDigit(settings(), e)) {
+    // ⌃1 to ⌃9 by default (Settings › Shortcuts): the workspace at that place in the footer's menu
     e.preventDefault();
-    switchToNth(workspaceDigit(e));
+    switchToNth(workspaceDigit(settings(), e));
   } else if (typesIntoComposer(e)) {
     request("focus-composer");
   }

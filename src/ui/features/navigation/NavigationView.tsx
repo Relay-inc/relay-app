@@ -28,7 +28,7 @@ import {
   renameFolder,
   deleteFolder,
 } from "../../../application/navigation/sidebar";
-import { newChat } from "../../../application/conversations/chats";
+import { newChatHere } from "../../../application/conversations/chats";
 import { chatsOf, closedOf, sessionIdOf, terminalSessions } from "../../../application/conversations/selectors";
 import { closeAll, closeChat, reopen } from "../../../application/conversations/actions";
 import { usageSummary } from "../../../application/usage/usage";
@@ -155,14 +155,14 @@ export function NavigationView({ className }: { className: string }) {
       openProjectPanel();
     } else if (itemId === "copyid") copyText(sessionIdOf(target.chatKey));
     else if (itemId === "close") closeChat(target.chatKey);
-    else if (itemId === "new") select(newChat(target.project));
+    else if (itemId === "new") select(newChatHere(target.project));
     else if (itemId === "newfolder") addFolder(target.project ?? "");
     else if (itemId === "closeall") closeAll(target.project);
     else reopen(itemId.slice("reopen:".length));
   };
 
   const pickFolder = (target: MenuTarget, itemId: string) => {
-    if (itemId === "new") select(newChat(target.project, target.chatKey));
+    if (itemId === "new") select(newChatHere(target.project, target.chatKey));
     else if (itemId === "renamefolder") editFolder(target.chatKey);
     else deleteFolder(target.chatKey);
   };
@@ -270,6 +270,8 @@ export function NavigationView({ className }: { className: string }) {
         subs={row.subs}
         subsTitle={row.subsTitle}
         mark={row.orch ? t("nav.orchWorker") : ""}
+        hint={row.vault}
+        hintTitle={row.vault ? t("nav.inRemoved", { name: row.vault }) : undefined}
         {...dropzone("conv", row.key)}
         onPointerDown={press("conv", row.key, row.parent)}
         onClick={unlessDragged(() => select(row.key))}
@@ -301,7 +303,7 @@ export function NavigationView({ className }: { className: string }) {
           {...dropzone("folder", folder.id)}
           onClick={unlessDragged(() => toggleSection(folder.id))}
           onContextMenu={openMenu({ chatKey: folder.id, project: folder.project || null, kind: "folder" })}
-          onAdd={unlessDragged(() => select(newChat(folder.project || null, folder.id)))}
+          onAdd={unlessDragged(() => select(newChatHere(folder.project || null, folder.id)))}
         />
       )}
       {folder.open ? folder.convs.map(row => renderConversation(row, true, indent)) : null}
@@ -325,7 +327,7 @@ export function NavigationView({ className }: { className: string }) {
         onPointerDown={press("proj", project.name, project.context)}
         onClick={unlessDragged(() => openProject(project.name))}
         onContextMenu={openMenu({ chatKey: "", project: project.name, kind: "proj" })}
-        onAdd={unlessDragged(() => select(newChat(project.name)))}
+        onAdd={unlessDragged(() => select(newChatHere(project.name)))}
       />
       {project.folders.map(folder => renderFolder(folder, true))}
       {project.convs.map(row => renderConversation(row, true))}
@@ -351,7 +353,7 @@ export function NavigationView({ className }: { className: string }) {
           onPointerDown={press("sec", section.id)}
           onClick={unlessDragged(() => toggleSection(section.id))}
           onContextMenu={section.id === GENERAL ? openMenu({ chatKey: "", project: null, kind: "proj" }) : undefined}
-          onAdd={section.add === undefined ? undefined : unlessDragged(() => select(newChat(section.add || null)))}
+          onAdd={section.add === undefined ? undefined : unlessDragged(() => select(newChatHere(section.add || null)))}
         />
         {section.open ? (
           <>
@@ -371,7 +373,7 @@ export function NavigationView({ className }: { className: string }) {
           className="btn-icon"
           title={t("nav.newChat")}
           aria-label={t("nav.newChat")}
-          onClick={() => select(newChat(null))}
+          onClick={() => select(newChatHere(null))}
         >
           <Icon name="compose" className="glyph size-4" />
         </button>

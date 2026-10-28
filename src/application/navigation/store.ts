@@ -42,6 +42,9 @@ type NavigationState = {
     convOrder: Record<string, string[]>; // conversations per project or folder (or "" for Algemeen)
     folders: Record<string, Folder[]>; // the folders per project (or "" for Algemeen)
     editing: string; // the folder whose name is being typed, "" for none
+    // the vault folder the sidebar shows, "" for the main vault: kept here, not in the settings, which the settings
+    // window saves whole from its own copy
+    workspace: string;
   };
 };
 
@@ -78,10 +81,11 @@ export const useNavigationStore = makeStore<NavigationState>(() => ({
     convOrder: storage.get<Record<string, string[]>>("convOrder", {}),
     folders: storage.get<Record<string, Folder[]>>("folders", {}),
     editing: "",
+    workspace: storage.get<string>("workspace", ""),
   },
 }));
 // the sidebar as another Relay window arranged it
-for (const key of ["collapsed", "secOrder", "projOrder", "convOrder", "folders"] as const)
+for (const key of ["collapsed", "secOrder", "projOrder", "convOrder", "folders", "workspace"] as const)
   storage.watch(key, () =>
     useNavigationStore.setState(draft => {
       Object.assign(draft.sidebar, { [key]: storage.get<unknown>(key, draft.sidebar[key]) });

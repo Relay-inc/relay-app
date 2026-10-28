@@ -33,7 +33,6 @@ export type SidebarCfg = {
   order?: string[];
   hidden?: string[];
   more?: boolean;
-  workspace?: string; // the vault folder the sidebar shows, none for the main vault
 };
 /** Another computer in the LAN running relay-server. */
 export type Machine = {

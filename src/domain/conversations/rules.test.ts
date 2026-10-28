@@ -6,6 +6,7 @@ import {
   chatVault,
   followChats,
   hasStarted,
+  inWorkspace,
   pickedVault,
   sameVaultProjects,
   terminalSessions,
@@ -174,10 +175,21 @@ test("a new conversation picks among every vault, a project's runs in its own an
 
 test("the workspace shown: the one picked while it is still here, else the main vault", () => {
   const s = { vault: "/main", extraVaults: ["/me/Notes"] };
-  assert.equal(activeWorkspace(s), "/main");
-  assert.equal(activeWorkspace({ ...s, sidebar: { workspace: "/me/Notes" } }), "/me/Notes");
+  assert.equal(activeWorkspace(s, ""), "/main");
+  assert.equal(activeWorkspace(s, "/me/Notes"), "/me/Notes");
   // a folder removed since it was picked
-  assert.equal(activeWorkspace({ ...s, sidebar: { workspace: "/gone" } }), "/main");
+  assert.equal(activeWorkspace(s, "/gone"), "/main");
+});
+
+test("in a workspace: its own vault's, and the main one keeps what ran in a folder no longer here", () => {
+  const s = { vault: "/main", extraVaults: ["/me/Notes"] };
+  assert.equal(inWorkspace("/main", "/main", s), true);
+  assert.equal(inWorkspace("/me/Notes", "/me/Notes", s), true);
+  assert.equal(inWorkspace("/me/Notes", "/main", s), false);
+  assert.equal(inWorkspace("/main", "/me/Notes", s), false);
+  // a folder removed since: under the main workspace, not under another
+  assert.equal(inWorkspace("/gone", "/main", s), true);
+  assert.equal(inWorkspace("/gone", "/me/Notes", s), false);
 });
 
 test("a conversation started once a message went out or a session runs", () => {
