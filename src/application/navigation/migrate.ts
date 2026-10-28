@@ -1,11 +1,12 @@
 import { t } from "../../shared/i18n";
-import { hasStarted } from "../../domain/conversations/rules";
+import { hasStarted, inWorkspace, vaultChoices } from "../../domain/conversations/rules";
 import { push } from "../../domain/conversations/events";
 import * as backend from "../../infrastructure/backend";
 import { useConversationsStore } from "../conversations/store";
 import { saveChats } from "../conversations/chats";
 import { useWorkspaceStore } from "../workspace/store";
 import { loadSnapshot, vaultName } from "../workspace/vault";
+import { settings } from "../settings/settings";
 import { toast } from "./navigation";
 
 export type { MigratePlan } from "../../infrastructure/backend";
@@ -18,6 +19,12 @@ export const projectVault = (project: string) => {
   const snap = useWorkspaceStore.getState().snap;
   return snap.projects.find(p => p.name === project)?.vault || snap.vault?.vault || "";
 };
+
+/** The workspace a conversation that ran in `vault` shows under (domain `inWorkspace`): its own, or the main one. */
+export function shownUnder(vault: string) {
+  const s = settings();
+  return vaultChoices(s).find(choice => inWorkspace(vault, choice.folder, s))?.folder ?? s.vault;
+}
 
 /** What the dialog shows: what goes, what stays, what is in the way, the target's contexts. */
 export const migratePreview = (project: string, to: string, mode: "move" | "copy", context = "") =>
@@ -51,7 +58,10 @@ export async function migrate(project: string, to: string, mode: "move" | "copy"
         chat.project = null;
         delete chat.folder;
         if (from && from !== main) chat.vault = from;
-        push(draft, chat.key, { kind: "note", text: t("mig.stayed", { name: vaultName(to), here: vaultName(from) }) });
+        push(draft, chat.key, {
+          kind: "note",
+          text: t("mig.stayed", { name: vaultName(to), here: vaultName(shownUnder(from || main)) }),
+        });
       }
     });
     saveChats();

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { migrate, migratePreview, type MigratePlan } from "../../../application/navigation/migrate";
+import { migrate, migratePreview, shownUnder, type MigratePlan } from "../../../application/navigation/migrate";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { hasStarted } from "../../../domain/conversations/rules";
 import { projectName, vaultName } from "../../../application/workspace/vault";
@@ -100,8 +100,8 @@ export function MigrateDialog({
             {started ? (
               <li className="text-secondary">
                 {mode === "move"
-                  ? tn("mig.chatsStay", started, { here: vaultName(from) })
-                  : tn("mig.chatsCopy", started, { here: vaultName(from) })}
+                  ? tn("mig.chatsStay", started, { here: vaultName(shownUnder(from)) })
+                  : tn("mig.chatsCopy", started, { here: vaultName(shownUnder(from)) })}
               </li>
             ) : null}
           </ul>
