@@ -114,10 +114,12 @@ type Listed = HashMap<String, (Stamp, Value)>;
 
 /// `fp`: this server's certificate, which an invite's proof is bound to. `locks`: one per vault, for every write.
 /// `seen`: per vault, its records as the last manifest listed them, by name. `rooms`: the vaults' live streams (channel.rs).
-pub struct Vaults { data: PathBuf, fp: String, locks: Mutex<HashMap<String, Arc<Mutex<()>>>>, seen: Mutex<HashMap<String, Listed>>, pub(crate) rooms: Rooms }
+/// `docs`: the documents' log lengths and members' daily bytes (docs.rs).
+pub struct Vaults { data: PathBuf, fp: String, locks: Mutex<HashMap<String, Arc<Mutex<()>>>>, seen: Mutex<HashMap<String, Listed>>, pub(crate) rooms: Rooms,
+    pub(crate) docs: crate::docs::Kept }
 
 impl Vaults {
-    pub fn new(data: &Path, fp: &str) -> Vaults { Vaults { data: data.into(), fp: fp.into(), locks: Mutex::default(), seen: Mutex::default(), rooms: Rooms::default() } }
+    pub fn new(data: &Path, fp: &str) -> Vaults { Vaults { data: data.into(), fp: fp.into(), locks: Mutex::default(), seen: Mutex::default(), rooms: Rooms::default(), docs: Default::default() } }
     pub(crate) fn data(&self) -> &Path { &self.data }
     fn blobs(&self, id: &str) -> PathBuf { dir(&self.data).join(id).join("blobs") }
 

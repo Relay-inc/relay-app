@@ -244,12 +244,17 @@ impl Hub {
                 // document stays out of the file rounds, so it never has two writers (docs/workspaces.md, Documents)
                 let docs = self.docs(data, v, me, load_key(data, &v.id).unwrap_or_else(|_| key.clone()));
                 match docs.sync() {
-                    Ok(_) => { let (_, errors) = docs.export(Path::new(&v.folder)); st.errors.extend(errors.into_iter().map(|e| format!("document: {e}"))); }
+                    Ok(_) => {}
                     // a relay-server from before documents: none there, nothing to say every round
                     Err(e) if e.contains("unknown request") || e.contains("is not allowed") => {}
                     Err(e) => st.errors.push(format!("documents: {e}")),
                 }
-                f.prefixes.extend(docs.paths().into_keys());
+                // written even when some documents failed; a file a note replaces goes to the trash first
+                let kept = trash(data, &v.id).join(&stamp);
+                let (_, errors) = docs.export(Path::new(&v.folder), &f, &|p, b| { sync::write_atomic(&kept.join(p), b, None).ok(); });
+                st.errors.extend(errors.into_iter().map(|e| format!("document: {e}")));
+                st.warnings.extend(docs.take_warnings());
+                f.prefixes.extend(docs.excluded(&f));
                 let allowed = std::mem::take(&mut one.allowed);
                 let copy = |p: &str| conflict_copy(&f, p, name, &stamp);
                 let to = trash(data, &v.id).join(&stamp);
@@ -319,8 +324,9 @@ impl Hub {
         std::fs::remove_file(key_path(data, id)).ok();
         std::fs::remove_file(base_path(data, id)).ok();
         std::fs::remove_dir_all(trash(data, id)).ok();
-        std::fs::remove_dir_all(docs_dir(data, id)).ok();
+        // the documents dropped first: a live update waits for this lock (with_vault), so none is still at work
         self.docs.lock().unwrap().remove(id);
+        std::fs::remove_dir_all(docs_dir(data, id)).ok();
         // stopped first: its last Down would bring the status back
         let c = self.live.lock().unwrap().remove(id);
         if let Some((c, _)) = c { c.stop(); }
@@ -350,10 +356,20 @@ impl Hub {
             let folder = v.folder.clone();
             let on = move |e: Event| {
                 let up = match e {
-                    // another member's edit to a document: taken (or its log pulled), the note written out
-                    Event::Doc { doc, seq, body, .. } => {
-                        let docs = h.state::<crate::App>().shared.docs.lock().unwrap().get(&vid).cloned();
-                        if let Some(docs) = docs { if docs.take_live(&doc, seq, &body).is_ok_and(|x| x.is_some()) { docs.export(Path::new(&folder)); } }
+                    // another member's edit to a document: taken (or its log pulled) and the note written out, on a
+                    // thread of its own (the channel's reader never waits on the server) under the vault's round lock
+                    Event::Doc { doc, seq, from, body } => {
+                        let (h, vid, folder, data) = (h.clone(), vid.clone(), folder.clone(), d.clone());
+                        std::thread::spawn(move || {
+                            let st = h.state::<crate::App>();
+                            st.shared.with_vault(&vid, || {
+                                let Some(docs) = st.shared.docs.lock().unwrap().get(&vid).cloned() else { return };
+                                let Ok(f) = filter(Path::new(&folder)) else { return };
+                                let kept = trash(&data, &vid).join(chrono::Local::now().format("%Y-%m-%d %H%M").to_string());
+                                let keep = |p: &str, b: &[u8]| { sync::write_atomic(&kept.join(p), b, None).ok(); };
+                                if docs.take_live(&doc, seq, &from, &body).is_ok_and(|x| x.is_some()) { docs.export(Path::new(&folder), &f, &keep); }
+                            });
+                        });
                         return;
                     }
                     Event::Live { .. } => true,

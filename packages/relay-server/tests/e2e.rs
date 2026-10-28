@@ -1634,13 +1634,14 @@ fn a_shared_vaults_documents() {
     while !matches!(rx.recv_timeout(until.saturating_duration_since(Instant::now())), Ok(Event::Live { .. })) { assert!(Instant::now() < until, "not live"); }
     let t0 = Instant::now();
     edit(&a, &id, &|t, txn| t.insert(txn, 0, "L "));
-    let (doc, seq, body) = loop {
-        match rx.recv_timeout(Duration::from_secs(5)).expect("no live update") { Event::Doc { doc, seq, body, .. } => break (doc, seq, body), _ => continue }
+    let (doc, seq, from, body) = loop {
+        match rx.recv_timeout(Duration::from_secs(5)).expect("no live update") { Event::Doc { doc, seq, from, body } => break (doc, seq, from, body), _ => continue }
     };
+    assert_eq!(from, &lid.fingerprint()[..16], "the server says who pushed it");
     assert!(t0.elapsed() < Duration::from_millis(500), "{:?}", t0.elapsed());
     let got = std::sync::Arc::new(std::sync::Mutex::new(0));
     { let g = got.clone(); b.subscribe(move |_, _| *g.lock().unwrap() += 1); }
-    assert_eq!(b.take_live(&doc, seq, &body).unwrap().as_deref(), Some(id.as_str()));
+    assert_eq!(b.take_live(&doc, seq, &from, &body).unwrap().as_deref(), Some(id.as_str()));
     assert!(b.text(&id).starts_with("L A "), "{}", b.text(&id));
     assert_eq!(*got.lock().unwrap(), 1, "the editor hears of it");
     ch.stop();
@@ -1669,10 +1670,11 @@ fn a_shared_vaults_documents() {
 
     // export: the note written whole, once; a second export writes nothing
     let root = dirs.join("folder");
-    let (wrote, errors) = b.export(&root);
+    let f = relay_remote::sync::Filter::vault_default();
+    let (wrote, errors) = b.export(&root, &f, &|_, _| {});
     assert_eq!((wrote, errors), (vec!["Projects/Plan 2.md".to_string()], vec![]));
     assert_eq!(std::fs::read_to_string(root.join("Projects/Plan 2.md")).unwrap(), b.text(&id));
-    assert!(b.export(&root).0.is_empty(), "unchanged: not written again");
+    assert!(b.export(&root, &f, &|_, _| {}).0.is_empty(), "unchanged: not written again");
 
     // on the server: nothing readable, and nothing under another key than the vault's
     let stored = s.data.join("vaults").join(&vault).join("docs").join(a.name(&id)).join("log").join(format!("{:012}", 1));

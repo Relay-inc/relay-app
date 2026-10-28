@@ -235,8 +235,10 @@ device names and fingerprints, open invites) and one record per file in `blobs/`
   At most 4 streams per device and workspace, a 4 MiB queue and a 10 s write timeout per stream: a member that stops
   reading loses its stream, the others go on.
 - **Documents.** A note members edit together is a document: an append-only log of updates sealed on the members'
-  Macs (`doc_push`, `doc_pull`, `doc_snapshot_put`, `doc_list`), under `vaults/<id>/docs/`. The server orders them and
-  passes each new one to the other members' streams; it cannot read, merge or change them, and never deletes any.
+  Macs (`doc_push`, `doc_pull`, `doc_snapshot_put`, `doc_list`), under `vaults/<id>/docs/`. The server numbers them,
+  notes who pushed each, and passes each new one to the other members' streams; it cannot read or forge them and never
+  deletes any. It could hold some back or repeat them: the members' Relays warn of a gap in an author's updates, and a
+  repeat changes nothing. 10 000 documents a workspace, 512 MiB a member a day.
 - **Removing someone** stops their device here at once, including their open stream. They keep what they already
   synced and the keys they had, so an admin's Relay then changes the workspace key: the new key goes to every member
   left, sealed to each one's own public key, and the server refuses writes under the old one. What is written after
