@@ -9,6 +9,7 @@
 
 use crate::channel::Rooms;
 use crate::{clients, device_name, now, save_clients, write_private, Client, CLIENTS};
+use relay_remote::members;
 use relay_remote::vault::{epoch, split, MAX_EPOCH, MAX_RECORD};
 use relay_remote::{sync, tls};
 use serde_json::{json, Value};
@@ -29,18 +30,22 @@ const MAX_WRAPPED: usize = 256 << 10;
 /// A member's publication (relay_remote::vault::Keys::publication), all opaque here: `pk` its X25519 public key a
 /// rotated vault key is sealed to, `id` its Ed25519 identity, `sig` the identity's signature, `mac` `<epoch>:<hex>`.
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
+/// `imac`: proof made with the invite link it joined with, `via` that invite's id (an admin adds it to the member list).
 pub(crate) struct Member { pub fp: String, pub name: String, pub role: String, pub added: u64,
-    #[serde(default)] pk: String, #[serde(default)] id: String, #[serde(default)] sig: String, #[serde(default)] mac: String }
+    #[serde(default)] pk: String, #[serde(default)] id: String, #[serde(default)] sig: String, #[serde(default)] mac: String,
+    #[serde(default)] imac: String, #[serde(default)] via: String }
 /// `code`: the pairing-style secret the link holds, proven with `tls::proof`. `wrapped`: the vault key sealed under the
 /// link's other secret, handed out on a good proof. `by`: the admin who made it.
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub(crate) struct Invite { pub id: String, code: String, pub role: String, wrapped: String, pub expires: u64, #[serde(default)] fails: u32, by: String }
 /// `epoch`: the key every record and frame is sealed under now (docs/workspaces.md, Key rotation). `keys`: per epoch
-/// after 0, the vault key sealed to each member that was in at that rotation. `rekey`: someone left or was removed
-/// since, so an admin's Relay rotates.
+/// after 0, the vault key sealed to each member that was in at that rotation (or added after). `rekey`: someone left or
+/// was removed since. `log`: the member list (relay_remote::members), which the members check; appended to only when
+/// the whole list still checks, so no member can break it for the others.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(crate) struct Vault { pub id: String, pub name: String, pub created: u64, pub members: Vec<Member>, pub invites: Vec<Invite>,
-    #[serde(default)] epoch: u32, #[serde(default)] keys: BTreeMap<String, BTreeMap<String, String>>, #[serde(default)] rekey: bool }
+    #[serde(default)] epoch: u32, #[serde(default)] keys: BTreeMap<String, BTreeMap<String, String>>, #[serde(default)] rekey: bool,
+    #[serde(default)] log: Vec<members::Entry> }
 impl Vault {
     fn role(&self, fp: &str) -> Option<&str> { self.members.iter().find(|m| m.fp == fp).map(|m| m.role.as_str()) }
     fn has_admin(&self) -> bool { self.members.iter().any(|m| m.role == "admin") }
@@ -131,8 +136,8 @@ impl Vaults {
         let name = name.trim();
         if name.is_empty() || name.chars().count() > MAX_NAME || name.chars().any(char::is_control) { return Err(format!("a vault name is 1 to {MAX_NAME} characters")); }
         let id = tls::random_secret()[..16].to_string();
-        let v = Vault { id: id.clone(), name: name.into(), created: now(), members: vec![Member { fp: fp.into(), name: who.into(), role: "admin".into(), added: now(), pk: String::new(), id: String::new(), sig: String::new(), mac: String::new() }], invites: vec![],
-            epoch: 0, keys: BTreeMap::new(), rekey: false };
+        let v = Vault { id: id.clone(), name: name.into(), created: now(), members: vec![Member { fp: fp.into(), name: who.into(), role: "admin".into(), added: now(), pk: String::new(), id: String::new(), sig: String::new(), mac: String::new(), imac: String::new(), via: String::new() }], invites: vec![],
+            epoch: 0, keys: BTreeMap::new(), rekey: false, log: vec![] };
         fs::create_dir_all(self.blobs(&id)).map_err(|e| e.to_string())?;
         save(&self.data, &v)?;
         Ok(json!({"vault": {"id": id, "name": v.name}}))
@@ -141,11 +146,11 @@ impl Vaults {
     pub fn info(&self, fp: &str, id: &str) -> Result<Value, String> {
         let v = self.member(id, fp)?;
         let role = v.role(fp).unwrap_or_default();
-        let members: Vec<Value> = v.members.iter().map(|m| json!({"name": m.name, "fp": m.fp, "role": m.role, "added": m.added, "pk": m.pk, "id": m.id, "sig": m.sig, "mac": m.mac})).collect();
+        let members: Vec<Value> = v.members.iter().map(|m| json!({"name": m.name, "fp": m.fp, "role": m.role, "added": m.added, "pk": m.pk, "id": m.id, "sig": m.sig, "mac": m.mac, "imac": m.imac, "via": m.via})).collect();
         let invites: Vec<Value> = if role == "admin" { v.invites.iter().map(|i| json!({"id": i.id, "role": i.role, "expires": i.expires})).collect() } else { vec![] };
         // each rotated key as sealed to the caller (nobody gets another member's), with who it was sealed to: the
         // rotating admin signed that list
-        let keys: serde_json::Map<String, Value> = v.keys.iter().filter_map(|(e, by)| by.get(fp).map(|w| (e.clone(), json!({"sealed": w, "holders": by.keys().collect::<Vec<_>>()})))).collect();
+        let keys: serde_json::Map<String, Value> = v.keys.iter().filter_map(|(e, by)| by.get(fp).map(|w| (e.clone(), json!({"sealed": w})))).collect();
         Ok(json!({"vault": {"id": v.id, "name": v.name, "role": role, "me": fp, "members": members, "invites": invites, "epoch": v.epoch, "rekey": v.rekey, "keys": keys}}))
     }
 
@@ -195,7 +200,7 @@ impl Vaults {
             let who = known.clone().unwrap_or_else(|| device_name(&list, name, fp));
             match v.members.iter_mut().find(|m| m.fp == fp) {
                 Some(m) => if inv.role == "admin" { m.role = "admin".into(); },
-                None => v.members.push(Member { fp: fp.into(), name: who.clone(), role: inv.role.clone(), added: now(), pk: String::new(), id: String::new(), sig: String::new(), mac: String::new() }),
+                None => v.members.push(Member { fp: fp.into(), name: who.clone(), role: inv.role.clone(), added: now(), pk: String::new(), id: String::new(), sig: String::new(), mac: String::new(), imac: String::new(), via: inv.id.clone() }),
             }
             // the vault first: a member that is not a client yet cannot connect, a client in no vault could
             save(&self.data, v)?;
@@ -210,19 +215,24 @@ impl Vaults {
     /// An admin removes a member, or a member leaves. Never the last admin while others stay; the last member takes the
     /// vault with it. A vault-only device in no vault any more is unpaired.
     pub fn remove(&self, fp: &str, id: &str, who: &str) -> Result<(), String> {
-        self.with(id, fp, |v, me| {
-            if me != "admin" && fp != who { return Err("only an admin can remove someone else".into()); }
-            if v.role(who).is_none() { return Err("not a member of this vault".into()); }
-            let had_admin = v.has_admin();
-            v.members.retain(|m| m.fp != who);
-            v.invites.retain(|i| i.by != who);
-            if v.members.is_empty() { return fs::remove_dir_all(dir(&self.data).join(&v.id)).map_err(|e| e.to_string()); }
-            if had_admin && !v.has_admin() { return Err("that would leave the vault without an admin".into()); }
-            // they keep the key they had: the next admin round rotates it (docs/workspaces.md, Key rotation)
-            v.rekey = true;
-            save(&self.data, v)
-        })?;
-        // their open stream goes now, not at the next check
+        self.with(id, fp, |v, me| self.drop_member(v, fp, me, who))?;
+        self.removed(id, who)
+    }
+    /// `who` out of `v`, asked by `fp` with role `me`, saved (or the vault gone with its last member).
+    fn drop_member(&self, v: &mut Vault, fp: &str, me: &str, who: &str) -> Result<(), String> {
+        if me != "admin" && fp != who { return Err("only an admin can remove someone else".into()); }
+        if v.role(who).is_none() { return Err("not a member of this vault".into()); }
+        let had_admin = v.has_admin();
+        v.members.retain(|m| m.fp != who);
+        v.invites.retain(|i| i.by != who);
+        if v.members.is_empty() { return fs::remove_dir_all(dir(&self.data).join(&v.id)).map_err(|e| e.to_string()); }
+        if had_admin && !v.has_admin() { return Err("that would leave the vault without an admin".into()); }
+        // they keep the key they had: the next admin round rotates it (docs/workspaces.md, Key rotation)
+        v.rekey = true;
+        save(&self.data, v)
+    }
+    /// After a removal: their open stream goes now, not at the next check; a vault-only device in no vault is unpaired.
+    fn removed(&self, id: &str, who: &str) -> Result<(), String> {
         self.rooms.kick(id, who);
         let _c = CLIENTS.lock().unwrap_or_else(|e| e.into_inner());
         let mut list = clients(&self.data);
@@ -236,26 +246,40 @@ impl Vaults {
     /// A member publishes its own keys (`vault_pk`): checked for shape only, the members check the rest.
     pub fn set_pk(&self, fp: &str, vault: &str, p: &Value) -> Result<(), String> {
         let s = |f: &str| p[f].as_str().unwrap_or_default().to_string();
-        let (pk, id, sig, mac) = (s("pk"), s("id"), s("sig"), s("mac"));
+        let (pk, id, sig, mac, imac) = (s("pk"), s("id"), s("sig"), s("mac"), s("imac"));
         let ok_mac = mac.split_once(':').is_some_and(|(e, h)| e.parse::<u32>().is_ok() && hex(h, 64));
-        if !hex(&pk, 64) || !hex(&id, 64) || !hex(&sig, 128) || !ok_mac { return Err("bad public key".into()); }
+        if !hex(&pk, 64) || !hex(&id, 64) || !hex(&sig, 128) || !ok_mac || !(imac.is_empty() || hex(&imac, 64)) { return Err("bad public key".into()); }
         self.with(vault, fp, |v, _| {
             let m = v.members.iter_mut().find(|m| m.fp == fp).ok_or("no such vault")?;
-            (m.pk, m.id, m.sig, m.mac) = (pk, id, sig, mac);
+            (m.pk, m.id, m.sig, m.mac, m.imac) = (pk, id, sig, mac, imac);
             save(&self.data, v)
         })
     }
     /// An admin makes the next epoch current: its key sealed to every member, each by fingerprint, none left out (a
     /// member without one could read nothing new). In one step, so an interrupted rotation never half happens. Open
     /// invites go: they carry the keys up to the old epoch.
-    pub fn rotate(&self, fp: &str, id: &str, next: u64, keys: &serde_json::Map<String, Value>) -> Result<Value, String> {
+    pub fn rotate(&self, fp: &str, id: &str, next: u64, keys: &serde_json::Map<String, Value>, entry: Option<&Value>) -> Result<Value, String> {
         self.with(id, fp, |v, me| {
             if me != "admin" { return Err("only an admin can change the key".into()); }
             if next != v.epoch as u64 + 1 || next > MAX_EPOCH as u64 { return Err(format!("the key is at epoch {} here", v.epoch)); }
+            // with a member list: the `rekey` entry goes on it in the same write, and the keys are for its members
+            let holders: Vec<String> = match entry {
+                Some(e) => {
+                    let e: members::Entry = serde_json::from_value(e.clone()).map_err(|_| "bad member list entry")?;
+                    if e.kind != "rekey" || e.epoch as u64 != next || e.by != fp { return Err("not this key change's entry".into()); }
+                    let mut log = v.log.clone();
+                    log.push(e);
+                    members::check(&v.id, &log, None)?;
+                    v.log = log;
+                    members::check(&v.id, &v.log, None)?.0.members.into_keys().collect()
+                }
+                None if v.log.is_empty() => v.members.iter().map(|m| m.fp.clone()).collect(),
+                None => return Err("this vault has a member list: the key change goes on it".into()),
+            };
             let mut sealed = BTreeMap::new();
-            for m in &v.members {
-                let w = keys.get(&m.fp).and_then(Value::as_str).filter(|w| !w.is_empty() && w.len() <= MAX_WRAPPED && hex(w, w.len())).ok_or_else(|| format!("no key sealed for {}", m.name))?;
-                sealed.insert(m.fp.clone(), w.to_string());
+            for h in &holders {
+                let w = keys.get(h).and_then(Value::as_str).filter(|w| !w.is_empty() && w.len() <= MAX_WRAPPED && hex(w, w.len())).ok_or_else(|| format!("no key sealed for {h}"))?;
+                sealed.insert(h.clone(), w.to_string());
             }
             if keys.len() != sealed.len() { return Err("a key sealed for someone who is no member".into()); }
             (v.epoch, v.rekey) = (next as u32, false);
@@ -269,6 +293,40 @@ impl Vaults {
     /// Every record: its name, etag, size and meta part (hex). One that cannot be read or is no record is listed too,
     /// with an empty meta (and an empty etag when unreadable): left out, it would read as deleted, and every member would
     /// delete that file. With an empty meta a member's Relay keeps it as it was (`SealedRemote::know`).
+    /// The member list, for a member.
+    pub fn log(&self, fp: &str, id: &str) -> Result<Value, String> { Ok(json!({"entries": self.member(id, fp)?.log})) }
+    /// A member appends an entry it signed (`by` is the caller), only when the whole list then still checks: no member
+    /// can break it for the others. A `remove` or `leave` removes the member here too, in the same write; an `add`
+    /// stores the keys sealed to the new member (`keys`: epoch -> sealed) for the epochs since its invite.
+    pub fn append(&self, fp: &str, id: &str, entry: &Value, keys: &serde_json::Map<String, Value>) -> Result<(), String> {
+        let e: members::Entry = serde_json::from_value(entry.clone()).map_err(|_| "bad member list entry")?;
+        let mut gone = None;
+        self.with(id, fp, |v, me| {
+            if e.by != fp { return Err("an entry signed by someone else".into()); }
+            match e.kind.as_str() {
+                "create" if !v.log.is_empty() || me != "admin" => return Err("this vault has a member list".into()),
+                "rekey" => return Err("a key change goes with vault_rotate".into()),
+                "add" if v.role(&e.fp).is_none() => return Err("only who joined can be added".into()),
+                _ => {}
+            }
+            let mut log = v.log.clone();
+            log.push(e.clone());
+            members::check(&v.id, &log, None)?;
+            v.log = log;
+            if e.kind == "add" {
+                for (ep, w) in keys {
+                    let w = w.as_str().filter(|w| !w.is_empty() && w.len() <= MAX_WRAPPED && hex(w, w.len())).ok_or("bad sealed key")?;
+                    if ep.parse::<u32>().ok().filter(|x| *x >= 1 && *x <= v.epoch).is_none() { return Err("a key of an epoch that is not here".into()); }
+                    v.keys.entry(ep.clone()).or_default().insert(e.fp.clone(), w.into());
+                }
+            }
+            if e.kind == "remove" || e.kind == "leave" { gone = Some(e.fp.clone()); return self.drop_member(v, fp, me, &e.fp); }
+            save(&self.data, v)
+        })?;
+        if let Some(who) = gone { self.removed(id, &who)?; }
+        Ok(())
+    }
+
     /// Besides the blobs, what a member's Relay needs for the keys (`keep_keys`): the epoch, whether a rotation is due,
     /// its role and the public key it registered.
     pub fn manifest(&self, fp: &str, id: &str) -> Result<Value, String> {
@@ -596,19 +654,18 @@ mod tests {
         assert_eq!(info(ADMIN)["rekey"], true);
         let (inv, _) = invite(&s, &id, "member");
         let keys = |fps: &[&str]| fps.iter().map(|f| (f.to_string(), json!("ab".repeat(46)))).collect::<serde_json::Map<_, _>>();
-        assert!(s.rotate(OTHER, &id, 1, &keys(&[ADMIN, OTHER])).unwrap_err().contains("only an admin"));
-        assert!(s.rotate(ADMIN, &id, 2, &keys(&[ADMIN, OTHER])).unwrap_err().contains("epoch 0"), "the next epoch only");
-        assert!(s.rotate(ADMIN, &id, 1, &keys(&[ADMIN])).unwrap_err().contains("no key sealed"), "a member left out");
-        assert!(s.rotate(ADMIN, &id, 1, &keys(&[ADMIN, OTHER, third])).unwrap_err().contains("no member"), "one for who is out");
+        assert!(s.rotate(OTHER, &id, 1, &keys(&[ADMIN, OTHER]), None).unwrap_err().contains("only an admin"));
+        assert!(s.rotate(ADMIN, &id, 2, &keys(&[ADMIN, OTHER]), None).unwrap_err().contains("epoch 0"), "the next epoch only");
+        assert!(s.rotate(ADMIN, &id, 1, &keys(&[ADMIN]), None).unwrap_err().contains("no key sealed"), "a member left out");
+        assert!(s.rotate(ADMIN, &id, 1, &keys(&[ADMIN, OTHER, third]), None).unwrap_err().contains("no member"), "one for who is out");
         // a record under the old key goes in until the rotation, then not any more
         let rec = |e: u32| [&(1u32 | (e << 20)).to_be_bytes()[..], b"m", b"data"].concat();
         let e0 = s.put(OTHER, &id, &name('1'), &rec(0), Some("")).unwrap();
         assert!(s.put(OTHER, &id, &name('2'), &rec(1), Some("")).unwrap_err().contains("no such key epoch"));
-        s.rotate(ADMIN, &id, 1, &keys(&[ADMIN, OTHER])).unwrap();
+        s.rotate(ADMIN, &id, 1, &keys(&[ADMIN, OTHER]), None).unwrap();
         let v = info(OTHER);
         assert_eq!((v["epoch"].as_u64(), v["rekey"].as_bool(), v["keys"].as_object().unwrap().len()), (Some(1), Some(false), 1));
         assert_eq!(v["keys"]["1"]["sealed"], "ab".repeat(46), "its own sealed key only");
-        assert_eq!(v["keys"]["1"]["holders"].as_array().unwrap().len(), 2, "with who it was sealed to");
         assert!(info(ADMIN)["invites"].as_array().unwrap().is_empty() && s.join(third, &id, &inv, "x", "00").is_err(), "invites carried the old keys");
         assert_eq!(s.invite(ADMIN, &id, "member", &"ab".repeat(32), 0).unwrap_err(), "key changed", "an invite with the old keys");
         assert!(s.invite(ADMIN, &id, "member", &"ab".repeat(32), 1).is_ok());

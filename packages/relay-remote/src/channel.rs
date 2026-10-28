@@ -32,7 +32,8 @@ const WRITE: Duration = Duration::from_secs(10);
 /// own counter. `from` is the sender as the server's handshake saw it, bound in the seal: the server cannot change it,
 /// another member (who holds the key too) could.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Frame { pub seq: u64, pub n: u64, pub from: String, pub kind: String, pub doc: String, pub body: Vec<u8> }
+/// `list`: the member list head its sender had seen (`<length>:<hash>`, bound in the seal), to compare with this Mac's.
+pub struct Frame { pub seq: u64, pub n: u64, pub from: String, pub kind: String, pub doc: String, pub body: Vec<u8>, pub list: String }
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     Frame(Frame),
@@ -90,9 +91,9 @@ impl Channel {
         let i = &self.0;
         let n = i.n.fetch_add(1, Ordering::SeqCst);
         // under the newest key here; its epoch goes along so the others open it with the same one
-        let (e, body) = i.key.seal_frame(&i.vault, kind, doc, &i.me, n, plain)?;
+        let (e, l, body) = i.key.seal_frame(&i.vault, kind, doc, &i.me, n, plain)?;
         if body.len() > MAX_BODY { return Err("frame too big".into()); }
-        let line = json!({"t": "frame", "e": e, "kind": kind, "doc": doc, "n": n, "body": hex(&body)}).to_string() + "\n";
+        let line = json!({"t": "frame", "e": e, "l": l, "kind": kind, "doc": doc, "n": n, "body": hex(&body)}).to_string() + "\n";
         let mut w = i.w.lock().unwrap().clone().ok_or("not connected")?;
         w.write_all(line.as_bytes()).map_err(|e| e.to_string())
     }
@@ -157,14 +158,14 @@ impl Channel {
                     // never this device's own (reflected back), never one it saw already (played again)
                     if from == i.me { continue; }
                     // one that does not open (another key, tampered with) is dropped, not passed on
-                    let Some(body) = v["body"].as_str().and_then(unhex).and_then(|b| i.key.open_frame(v["e"].as_u64().unwrap_or(0) as u32, &i.vault, kind, doc, from, n, &b).ok()) else { continue };
+                    let Some(body) = v["body"].as_str().and_then(unhex).and_then(|b| i.key.open_frame(v["e"].as_u64().unwrap_or(0) as u32, v["l"].as_str().unwrap_or(""), &i.vault, kind, doc, from, n, &b).ok()) else { continue };
                     {
                         let mut last = i.last.lock().unwrap();
                         let seen = last.entry((from.into(), doc.into(), kind.into())).or_insert(0);
                         if n <= *seen { continue; }
                         *seen = n;
                     }
-                    (i.on)(Event::Frame(Frame { seq, n, from: from.into(), kind: kind.into(), doc: doc.into(), body }));
+                    (i.on)(Event::Frame(Frame { seq, n, from: from.into(), kind: kind.into(), doc: doc.into(), body, list: v["l"].as_str().unwrap_or("").into() }));
                 }
                 _ => {}
             }

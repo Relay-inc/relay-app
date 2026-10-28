@@ -35,7 +35,10 @@ pub fn vault_join(line: &str, id: &Identity, name: &str) -> Result<(PairLine, Jo
     let v = c.call(json!({"op": "vault_join", "vault": vault, "invite": invite, "name": name, "proof": proof}))?;
     let r: VaultRef = field(v.clone(), "vault")?;
     if r.id != vault { return Err("the server answered for another vault".into()); }
-    let key = vault::unwrap(v["wrapped"].as_str().unwrap_or_default(), &secret, &vault)?;
+    let mut key = vault::unwrap(v["wrapped"].as_str().unwrap_or_default(), &secret, &vault)?;
+    // the member list is checked from the creator the link names, up to the head it named; until an admin adds this
+    // Mac, it proves its keys with the link's secret
+    (key.creator, key.expect, key.joined) = (l.creator.clone(), l.head.clone(), Some(secret.clone()));
     Ok((l, Joined { id: r.id, name: r.name, role: v["role"].as_str().unwrap_or_default().into() }, key))
 }
 
@@ -184,7 +187,8 @@ impl Client {
         // the link pins the certificate this connection checked
         let inv = &v["invite"];
         let s = |k: &str| inv[k].as_str().map(String::from);
-        let l = PairLine { host: host.into(), port, fp: self.fp.clone(), code: s("code").unwrap_or_default(), vault: Some(vault.into()), invite: s("id"), secret: Some(secret), ..Default::default() };
+        let l = PairLine { host: host.into(), port, fp: self.fp.clone(), code: s("code").unwrap_or_default(), vault: Some(vault.into()), invite: s("id"), secret: Some(secret),
+            creator: key.creator.clone(), head: key.head.as_ref().map(|(_, h)| h.clone()), ..Default::default() };
         // parsed back, so a malformed id or code from the server never makes a link that cannot be joined
         let line = l.format();
         PairLine::parse(&line).filter(|p| p.is_invite() && *p == l).ok_or("the server's invite is malformed")?;

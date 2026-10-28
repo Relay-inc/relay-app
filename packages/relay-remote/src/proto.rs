@@ -122,11 +122,12 @@ pub fn read_body<R: BufRead>(r: &mut R, len: u64, max: u64) -> io::Result<Vec<u8
 /// only the laptop and the phone know, `&link=<64 hex>`, with which the phone proves its signing key to the laptop
 /// (share.rs). The server never sees `link`. An invite to a shared vault (docs/workspaces.md) carries the vault,
 /// the invite and the secret that unwraps the vault key, `&vault=<16 hex>&invite=<16 hex>&secret=<64 hex>`; the server
-/// never sees `secret` either.
+/// never sees `secret` either. From key rotation on it also carries the vault creator's identity and the member list's
+/// head at invite time, `&creator=<64 hex>&head=<64 hex>` (members.rs): the joiner checks the list the server gives.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PairLine {
     pub host: String, pub port: u16, pub fp: String, pub code: String, pub key: Option<String>, pub link: Option<String>,
-    pub vault: Option<String>, pub invite: Option<String>, pub secret: Option<String>,
+    pub vault: Option<String>, pub invite: Option<String>, pub secret: Option<String>, pub creator: Option<String>, pub head: Option<String>,
 }
 impl PairLine {
     pub fn parse(s: &str) -> Option<PairLine> {
@@ -135,6 +136,7 @@ impl PairLine {
         let host = host.trim_start_matches('[').trim_end_matches(']');
         let hex = |v: &str, n: usize| v.len() == n && v.chars().all(|c| c.is_ascii_hexdigit());
         let (mut fp, mut code, mut key, mut link, mut vault, mut invite, mut secret) = (None, None, None, None, None, None, None);
+        let (mut creator, mut head) = (None, None);
         for kv in frag.split('&') {
             match kv.split_once('=') {
                 Some(("fp", v)) if hex(v, 64) => fp = Some(v.to_lowercase()),
@@ -144,19 +146,22 @@ impl PairLine {
                 Some(("vault", v)) if hex(v, 16) => vault = Some(v.to_lowercase()),
                 Some(("invite", v)) if hex(v, 16) => invite = Some(v.to_lowercase()),
                 Some(("secret", v)) if hex(v, 64) => secret = Some(v.to_lowercase()),
+                Some(("creator", v)) if hex(v, 64) => creator = Some(v.to_lowercase()),
+                Some(("head", v)) if hex(v, 64) => head = Some(v.to_lowercase()),
                 _ => {}
             }
         }
         let ok_host = !host.is_empty() && host.len() <= 253 && host.chars().all(|c| c.is_ascii_alphanumeric() || ".-:".contains(c));
         ok_host.then_some(())?;
-        Some(PairLine { host: host.into(), port: port.parse().ok()?, fp: fp?, code: code?, key, link, vault, invite, secret })
+        Some(PairLine { host: host.into(), port: port.parse().ok()?, fp: fp?, code: code?, key, link, vault, invite, secret, creator, head })
     }
     pub fn format(&self) -> String {
         let host = if self.host.contains(':') { format!("[{}]", self.host) } else { self.host.clone() };
         let opt = |name: &str, v: &Option<String>| v.as_ref().map(|v| format!("&{name}={v}")).unwrap_or_default();
         let (key, link) = (opt("key", &self.key), opt("link", &self.link));
         let (vault, invite, secret) = (opt("vault", &self.vault), opt("invite", &self.invite), opt("secret", &self.secret));
-        format!("relay://{host}:{}#fp={}&code={}{key}{link}{vault}{invite}{secret}", self.port, self.fp, self.code)
+        let (creator, head) = (opt("creator", &self.creator), opt("head", &self.head));
+        format!("relay://{host}:{}#fp={}&code={}{key}{link}{vault}{invite}{secret}{creator}{head}", self.port, self.fp, self.code)
     }
     /// A line with a vault, an invite and its secret: an invite to a shared vault, not a pairing.
     pub fn is_invite(&self) -> bool { self.vault.is_some() && self.invite.is_some() && self.secret.is_some() }

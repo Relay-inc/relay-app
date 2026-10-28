@@ -79,7 +79,7 @@ const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answ
 /// What a vault-only device may ask: its shared vaults, nothing else. It never runs agents, reads a mirror or pairs
 /// further devices, and makes no vaults of its own. `pair` with a code from the owner makes it a full device.
 const VAULT_OPS: &[&str] = &["pair", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
-    "vault_get", "vault_put", "vault_put_many", "vault_delete", "vault_stream", "vault_pk", "vault_rotate"];
+    "vault_get", "vault_put", "vault_put_many", "vault_delete", "vault_stream", "vault_pk", "vault_rotate", "vault_log", "vault_append"];
 /// What a vault-only device may ask besides, while it is admin of a vault here: it keeps the server, so it sees what
 /// the server is and updates it (`update`, to an official release only: signed with Relay's release key, upgrade.rs).
 /// Never a conversation, the mirror, a phone, GitHub or a vault of its own.
@@ -349,10 +349,15 @@ impl Server {
             }
             "vault_remove" => reply(&mut w, self.vaults.remove(&fp, s("vault"), s("fp")).map(|_| json!({}))),
             "vault_manifest" => reply(&mut w, self.vaults.manifest(&fp, s("vault"))),
+            "vault_log" => reply(&mut w, self.vaults.log(&fp, s("vault"))),
+            "vault_append" => {
+                let keys = req["keys"].as_object().cloned().unwrap_or_default();
+                reply(&mut w, self.vaults.append(&fp, s("vault"), &req["entry"], &keys).map(|_| json!({})))
+            }
             "vault_pk" => reply(&mut w, self.vaults.set_pk(&fp, s("vault"), &req).map(|_| json!({}))),
             "vault_rotate" => {
                 let keys = req["keys"].as_object().cloned().unwrap_or_default();
-                let res = self.vaults.rotate(&fp, s("vault"), req["epoch"].as_u64().unwrap_or(0), &keys);
+                let res = self.vaults.rotate(&fp, s("vault"), req["epoch"].as_u64().unwrap_or(0), &keys, req.get("entry"));
                 // the old key's frames stop here: who reconnects opens with the new one (channel.rs)
                 if res.is_ok() { eprintln!("relay-server: a shared vault's key changed ({peer})"); }
                 reply(&mut w, res)

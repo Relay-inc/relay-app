@@ -232,11 +232,11 @@ fn read_frames(vaults: &Vaults, fp: &str, id: &str, me: u64, heard: &AtomicU64, 
         }
         let (kind, doc, body) = (v["kind"].as_str().unwrap_or(""), v["doc"].as_str().unwrap_or(""), v["body"].as_str().unwrap_or(""));
         let n = v["n"].as_u64().ok_or("frame without n")?;
-        if !KINDS.contains(&kind) || !hex(doc, 64) { return Err("bad frame".into()); }
+        if !KINDS.contains(&kind) || !hex(doc, 64) || v["l"].as_str().is_some_and(|l| l.len() > 100) { return Err("bad frame".into()); }
         if body.len() > MAX_BODY * 2 || body.len() % 2 != 0 || !body.bytes().all(|b| b.is_ascii_hexdigit()) { return Err("frame too big or not hex".into()); }
         // `from`: the sender's device as the TLS handshake proved it; the app binds it in the seal, so the server
         // cannot pass a frame off as another member's (a member, holding the key, could)
-        let mut out = json!({"t": "frame", "seq": 0, "from": &fp[..16], "e": v["e"].as_u64().unwrap_or(0), "kind": kind, "doc": doc, "n": n, "body": body});
+        let mut out = json!({"t": "frame", "seq": 0, "from": &fp[..16], "e": v["e"].as_u64().unwrap_or(0), "l": v["l"].as_str().unwrap_or(""), "kind": kind, "doc": doc, "n": n, "body": body});
         let full = {
             let mut all = rooms.rooms.lock().unwrap();
             let Some(room) = all.get_mut(id) else { return Ok(()) };

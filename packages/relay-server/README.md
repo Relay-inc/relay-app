@@ -236,9 +236,12 @@ device names and fingerprints, open invites) and one record per file in `blobs/`
   reading loses its stream, the others go on.
 - **Removing someone** stops their device here at once, including their open stream. They keep what they already
   synced and the keys they had, so an admin's Relay then changes the workspace key: the new key goes to every member
-  left, sealed to each one's own public key, signed by that admin and vouched for under the old key, and the server
-  refuses writes under the old one. What is written after does not open with what the removed member holds. This
-  server only stores what the Macs make: a key of its own, or a public key it swaps in, every Mac refuses. The last admin cannot leave while others stay. `relay-server
+  left, sealed to each one's own public key, and the server refuses writes under the old one. What is written after
+  does not open with what the removed member holds.
+- **A signed member list.** Who is in a workspace, who is an admin and which key is current come from a hash-chained
+  list of entries each signed by an admin's identity (`vault_log`, `vault_append`); every member's Relay checks it from
+  the creator. This server stores it and takes only entries that keep it valid; it cannot write one, and holding
+  entries back is noticed by the members. The last admin cannot leave while others stay. `relay-server
   revoke` also takes a device out of its workspaces, and the key changes the same way.
 
 `relay-server vaults` lists the workspaces with their members (name, role, fingerprint) and how many invites are open.
