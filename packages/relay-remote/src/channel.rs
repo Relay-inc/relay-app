@@ -8,6 +8,7 @@ use crate::client::Client;
 use crate::tls::{self, hex, unhex};
 use crate::vault::VaultKey;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -24,10 +25,14 @@ const SILENT: Duration = Duration::from_secs(45);
 const BACKOFF_MAX: Duration = Duration::from_secs(60);
 /// A server that does not know the stream is asked again this much later (it may have been updated).
 const OLD_SERVER: Duration = Duration::from_secs(300);
+/// A write to the server that takes longer fails: a send never holds its caller for long.
+const WRITE: Duration = Duration::from_secs(10);
 
-/// A frame from another member, opened. `seq` is the server's order of updates (0 for awareness).
+/// A frame from another member, opened. `seq` is the server's order of updates (0 for awareness), `n` the sender's
+/// own counter. `from` is the sender as the server's handshake saw it, bound in the seal: the server cannot change it,
+/// another member (who holds the key too) could.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Frame { pub seq: u64, pub from: String, pub kind: String, pub doc: String, pub body: Vec<u8> }
+pub struct Frame { pub seq: u64, pub n: u64, pub from: String, pub kind: String, pub doc: String, pub body: Vec<u8> }
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     Frame(Frame),
@@ -42,6 +47,8 @@ type On = Box<dyn Fn(Event) + Send + Sync>;
 struct Inner {
     client: Client, vault: String, key: VaultKey, me: String, on: On,
     n: AtomicU64, w: Mutex<Option<tls::Writer>>, live: AtomicBool, stop: AtomicBool,
+    /// the last `n` seen per (sender, doc, kind): a frame the server plays again is dropped
+    last: Mutex<HashMap<(String, String, String), u64>>,
 }
 #[derive(Clone)]
 pub struct Channel(Arc<Inner>);
@@ -52,15 +59,18 @@ impl Channel {
         let me = client.me()[..16].to_string();
         // the counter starts at the time, so frames of a restarted app never repeat an `n` of before
         let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_micros() as u64);
-        let c = Channel(Arc::new(Inner { client, vault: vault.into(), key, me, on: Box::new(on), n: AtomicU64::new(n), w: Mutex::default(), live: AtomicBool::new(false), stop: AtomicBool::new(false) }));
+        let c = Channel(Arc::new(Inner { client, vault: vault.into(), key, me, on: Box::new(on), n: AtomicU64::new(n), w: Mutex::default(), live: AtomicBool::new(false), stop: AtomicBool::new(false), last: Mutex::default() }));
         let c2 = c.clone();
         thread::spawn(move || c2.run());
         c
     }
     pub fn live(&self) -> bool { self.0.live.load(Ordering::SeqCst) }
+    /// Stop for good; `on` gets `Down` once more. Never waits on the connection.
     pub fn stop(&self) {
         self.0.stop.store(true, Ordering::SeqCst);
+        self.0.live.store(false, Ordering::SeqCst);
         if let Some(w) = self.0.w.lock().unwrap().take() { w.shutdown(); }
+        (self.0.on)(Event::Down("stopped".into()));
     }
     /// Send a frame to the other members: `kind` "update" or "awareness", `doc` a record name (64 hex). Err when not
     /// connected; the caller keeps it for the round (an update) or drops it (awareness).
@@ -83,6 +93,7 @@ impl Channel {
                     let resumed = hello["resumed"] == true;
                     if !resumed { since = hello["seq"].as_u64().unwrap_or(0); }
                     epoch = hello["epoch"].as_str().unwrap_or("").to_string();
+                    w.set_write_timeout(WRITE).ok();
                     *i.w.lock().unwrap() = Some(w.clone());
                     i.live.store(true, Ordering::SeqCst);
                     pause = Duration::from_secs(1);
@@ -94,7 +105,8 @@ impl Channel {
                     if !i.stop.load(Ordering::SeqCst) { (i.on)(Event::Down(why)); }
                 }
                 Err(e) => {
-                    let old = e.contains("unknown request");
+                    // an older server: it does not know the op, or (to a device that only shares vaults) does not allow it
+                    let old = e.contains("unknown request") || e.contains("only shares vaults");
                     (i.on)(Event::Down(if old { "the server has no live channel yet".into() } else { e }));
                     if old { pause = OLD_SERVER; } else if pause == OLD_SERVER { pause = Duration::from_secs(1); }
                 }
@@ -129,9 +141,17 @@ impl Channel {
                     let (kind, doc, from) = (v["kind"].as_str().unwrap_or(""), v["doc"].as_str().unwrap_or(""), v["from"].as_str().unwrap_or(""));
                     let (seq, n) = (v["seq"].as_u64().unwrap_or(0), v["n"].as_u64().unwrap_or(0));
                     if seq > *since { *since = seq; }
+                    // never this device's own (reflected back), never one it saw already (played again)
+                    if from == i.me { continue; }
                     // one that does not open (another key, tampered with) is dropped, not passed on
                     let Some(body) = v["body"].as_str().and_then(unhex).and_then(|b| i.key.open_frame(&i.vault, kind, doc, from, n, &b).ok()) else { continue };
-                    (i.on)(Event::Frame(Frame { seq, from: from.into(), kind: kind.into(), doc: doc.into(), body }));
+                    {
+                        let mut last = i.last.lock().unwrap();
+                        let seen = last.entry((from.into(), doc.into(), kind.into())).or_insert(0);
+                        if n <= *seen { continue; }
+                        *seen = n;
+                    }
+                    (i.on)(Event::Frame(Frame { seq, n, from: from.into(), kind: kind.into(), doc: doc.into(), body }));
                 }
                 _ => {}
             }

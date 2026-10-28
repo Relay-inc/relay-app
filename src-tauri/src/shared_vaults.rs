@@ -264,9 +264,11 @@ impl Hub {
         std::fs::remove_file(key_path(data, id)).ok();
         std::fs::remove_file(base_path(data, id)).ok();
         std::fs::remove_dir_all(trash(data, id)).ok();
+        // stopped first: its last Down would bring the status back
+        let c = self.live.lock().unwrap().remove(id);
+        if let Some(c) = c { c.stop(); }
         self.status.lock().unwrap().remove(id);
         self.vaults.lock().unwrap().remove(id);
-        if let Some(c) = self.live.lock().unwrap().remove(id) { c.stop(); }
     }
 
     /// A live channel for every vault in `list` whose key is here, none for any other. Its state shows in the status
@@ -274,7 +276,8 @@ impl Hub {
     /// use them come next (docs/workspaces.md, Live channel).
     pub fn keep_live(&self, app: &AppHandle, data: &Path, list: &[Shared], me: &Identity) {
         let mut live = self.live.lock().unwrap();
-        live.retain(|id, c| { let keep = list.iter().any(|v| &v.id == id); if !keep { c.stop(); } keep });
+        // a channel of a vault no longer listed stops after this lock is let go (its Down marks it not live)
+        let gone: Vec<Channel> = live.keys().filter(|id| !list.iter().any(|v| &v.id == *id)).cloned().collect::<Vec<_>>().into_iter().filter_map(|id| live.remove(&id)).collect();
         for v in list {
             if live.contains_key(&v.id) { continue; }
             let Ok(key) = load_key(data, &v.id) else { continue };
@@ -288,6 +291,8 @@ impl Hub {
             };
             live.insert(v.id.clone(), Channel::start(client(v, me), &v.id, key, on));
         }
+        drop(live);
+        for c in gone { c.stop(); }
     }
 }
 fn write_base(data: &Path, id: &str, base: &Manifest) -> Result<(), String> {
