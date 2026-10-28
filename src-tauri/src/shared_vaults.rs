@@ -451,8 +451,13 @@ pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String,
     // the member list before anything else reaches the server: its first entry, by this Mac (docs/workspaces.md)
     let (vid, c) = (r.id.clone(), client(&Shared { id: r.id.clone(), name: String::new(), host: m["host"].as_str().unwrap_or("").into(), port: m["port"].as_u64().unwrap_or(0) as u16,
         fp: m["fp"].as_str().unwrap_or("").into(), folder: String::new(), role: String::new() }, &state.machines.id));
-    let k2 = key.clone();
-    tauri::async_runtime::spawn_blocking(move || c.sealed(&vid, k2).start(&|k| save_key(&data, &vid, k))).await.map_err(|e| e.to_string())??;
+    let (k2, me) = (key.clone(), state.machines.id.fingerprint());
+    tauri::async_runtime::spawn_blocking(move || c.sealed(&vid, k2).start(&|k| save_key(&data, &vid, k)).map_err(|e| {
+        // nothing left behind: the workspace on the server (its only member leaving takes it along) and the key file
+        c.vault_remove(&vid, &me).ok();
+        std::fs::remove_file(key_path(&data, &vid)).ok();
+        e
+    })).await.map_err(|e| e.to_string())??;
     let v = Shared { id: r.id.clone(), name: r.name, host: m["host"].as_str().unwrap_or("").into(), port: m["port"].as_u64().unwrap_or(0) as u16,
         fp: m["fp"].as_str().unwrap_or("").into(), folder: at, role: "admin".into() };
     add(&app, &state, &v)?;
@@ -518,9 +523,9 @@ pub async fn shared_vault_invite(app: AppHandle, state: St<'_>, id: String, role
 /// is signed by the member's new identity and vouched for under the newest key (docs/workspaces.md, Key rotation).
 #[tauri::command]
 pub async fn shared_vault_trust(app: AppHandle, state: St<'_>, id: String, fp: String) -> Result<(), String> {
-    let (key, data) = (load_key(&crate::data_dir(&app), &id)?, crate::data_dir(&app));
-    let a = app.clone();
-    on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || c.sealed(&v.id, key).trust(&fp, &|k| save_key(&data, &v.id, k)))).await?;
+    let (data, a) = (crate::data_dir(&app), app.clone());
+    // the key read under the vault's lock: a round saving meanwhile is not overwritten with an older copy
+    on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || c.sealed(&v.id, load_key(&data, &v.id)?).trust(&fp, &|k| save_key(&data, &v.id, k)))).await?;
     if let Some(s) = app.state::<crate::App>().shared.status.lock().unwrap().get_mut(&id) { s.changed.clear(); }
     sync_now();
     Ok(())
@@ -563,12 +568,11 @@ pub async fn shared_vault_remove(app: AppHandle, state: St<'_>, id: String, fp: 
     let who = fp.clone();
     // a signed entry on the member list when the vault has one (the server removes them in the same write), else
     // the server's removal alone; with no key here (a vault that lost it) only the server's
-    let key = load_key(&crate::data_dir(&app), &id);
     let (data, a) = (crate::data_dir(&app), app.clone());
-    let gone = on_server(&state, &id, move |v, c| match key {
-        Ok(k) => a.state::<crate::App>().shared.with_vault(&v.id.clone(), || c.sealed(&v.id, k).remove(&who, &|k| save_key(&data, &v.id, k))),
+    let gone = on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || match load_key(&data, &v.id) {
+        Ok(k) => c.sealed(&v.id, k).remove(&who, &|k| save_key(&data, &v.id, k)),
         Err(_) => c.vault_remove(&v.id, &who),
-    }).await;
+    })).await;
     if fp != me { return gone; }
     // leaving: what the server says when this Mac is out already does not keep the vault here
     if let Err(e) = gone { if !left_already(&e) { return Err(e); } }

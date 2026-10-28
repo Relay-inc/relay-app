@@ -157,6 +157,8 @@ impl Keys {
         if e != self.epoch() { return Err("a frame under another key than the newest".into()); }
         open_frame(self.at(e)?, e, l, vault, kind, doc, from, n, sealed)
     }
+    /// Whether this Mac has seen (or was promised, by an invite) a member list for this vault.
+    pub fn has_list(&self) -> bool { self.head.is_some() || self.expect.is_some() || self.creator.is_some() }
     /// Make this member's secrets where they are missing: true when it made any (save them before a server hears of them).
     pub fn ensure(&mut self) -> bool {
         let made = self.secret.is_none() || self.sign.is_none();
@@ -256,6 +258,8 @@ impl Keys {
 use crate::members::hex64;
 fn pub_msg(vault: &str, fp: &str, pk: &str, id: &str) -> String { format!("pub:{vault}:{fp}:{pk}:{id}") }
 fn create_msg(vault: &str, fp: &str, id: &str, pk: &str) -> String { format!("create:{vault}:{fp}:{id}:{pk}") }
+/// What `start` answers a relay-server that knows no member list.
+pub const OLD_SERVER: &str = "This relay-server needs an update for workspaces with a member list.";
 /// Per vault, the member list as this app last checked it: the next round checks only what is new.
 static CHECKED: std::sync::OnceLock<Mutex<HashMap<String, (List, Vec<String>)>>> = std::sync::OnceLock::new();
 /// A publication proven with an invite link's secret (HKDF info `join`): only the link's holder has it.
@@ -477,7 +481,9 @@ impl SealedRemote {
     pub fn start(&self, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<(), String> {
         let mut k = self.keys();
         if k.ensure() { save(&k)?; }
-        let me = (self.call)(json!({"op": "vault_info", "vault": self.vault}), None, None)?.0["vault"]["me"].as_str().unwrap_or_default().to_string();
+        let v = self.info()?;
+        if v["epoch"].is_null() { return Err(OLD_SERVER.into()); }
+        let me = v["me"].as_str().unwrap_or_default().to_string();
         let e = k.creation(&self.vault, &me);
         self.append(&mut k, &List::default(), &e, json!({}), save)
     }
@@ -497,7 +503,14 @@ impl SealedRemote {
         let keep = |k: &Keys, step: &mut KeyStep| -> Result<(), String> { save(k)?; *lock(&self.keys) = k.clone(); step.keys = Some(k.clone()); Ok(()) };
         if k.ensure() { keep(&k, &mut step)?; }
         let v = self.info()?;
-        if v["epoch"].as_u64().is_none() { return Ok(step); }
+        if v["epoch"].as_u64().is_none() {
+            // a server that stopped reporting the key after this Mac saw a member list: as held back, never skipped
+            if k.has_list() {
+                step.warnings.push("The server stopped reporting the key and the member list: treated as held back, so the key counts as changing.".into());
+                step.rekeying = true;
+            }
+            return Ok(step);
+        }
         let me = v["me"].as_str().unwrap_or_default().to_string();
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
         if k.invites.iter().any(|i| i.expires <= now) { k.invites.retain(|i| i.expires > now); keep(&k, &mut step)?; }
@@ -618,6 +631,8 @@ impl SealedRemote {
         let v = self.info()?;
         let me = v["me"].as_str().unwrap_or_default().to_string();
         let Some((list, _)) = (if v["epoch"].is_null() { None } else { self.list(&k)? }) else {
+            // the server's removal alone only for a vault this Mac never saw a list of
+            if k.has_list() { return Err("The server does not show this workspace's member list: removing someone waits until it does.".into()); }
             return (self.call)(json!({"op": "vault_remove", "vault": self.vault, "fp": fp}), None, None).map(|_| ());
         };
         let kind = if fp == me { "leave" } else { "remove" };
@@ -932,6 +947,27 @@ mod tests {
         assert_eq!(unwrap(&legacy, &secret, vault).unwrap().epoch(), 0);
         let big = hex(&seal(&invite_key(&secret).unwrap(), format!("invite:{vault}").as_bytes(), json!({"keys": {"0": keys.get(0).unwrap().to_hex(), "99999": keys.get(1).unwrap().to_hex()}}).to_string().as_bytes()).unwrap());
         assert!(unwrap(&big, &secret, vault).is_err(), "an epoch past MAX_EPOCH");
+    }
+    /// A server that stops reporting the key (an older one, or one hiding the member list) after this Mac saw a list:
+    /// the key step warns and counts the key as changing, a removal is refused instead of going to the server alone,
+    /// and a new workspace's list says the server needs an update.
+    #[test]
+    fn a_server_that_stops_reporting_the_key_is_held_back() {
+        let calls = Arc::new(Mutex::new(vec![]));
+        let c2 = calls.clone();
+        let old = move |k: Keys| SealedRemote::new("0123456789abcdef", k, Box::new({
+            let c2 = c2.clone();
+            move |req, _, _| { lock(&c2).push(req["op"].as_str().unwrap_or("").to_string()); Ok((json!({"vault": {"me": "a".repeat(64), "members": []}}), vec![])) }
+        }));
+        let mut k = Keys::from(VaultKey::generate());
+        k.head = Some((3, "d".repeat(64)));
+        let st = old(k.clone()).keep_keys(&|_| Ok(())).unwrap();
+        assert!(st.rekeying && st.warnings.iter().any(|w| w.contains("stopped reporting")), "{st:?}");
+        assert!(old(k.clone()).remove(&"b".repeat(64), &|_| Ok(())).unwrap_err().contains("member list"));
+        assert!(!lock(&calls).iter().any(|o| o == "vault_remove"), "never the server's removal alone");
+        assert_eq!(old(Keys::from(VaultKey::generate())).start(&|_| Ok(())).unwrap_err(), OLD_SERVER);
+        // a vault this Mac never saw a list of: nothing to warn about
+        assert!(!old(Keys::from(VaultKey::generate())).keep_keys(&|_| Ok(())).unwrap().rekeying);
     }
     #[test]
     fn from_hex_cases() {

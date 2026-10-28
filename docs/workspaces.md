@@ -303,9 +303,14 @@ What it does not cover:
 - **Holding back, everywhere.** A server that holds the same newest entries back from every member, and drops every
   record and frame that names them, is only noticed by the Mac that wrote them. Nobody takes a key the list does not
   name, so this delays a key change; it does not let anyone read.
-- **Trust on upgrade.** A workspace from before the list takes the first list vouched for under its epoch-0 key. A
-  server colluding with someone who held that key before the upgrade (a member removed then) could start the list
-  with a device of theirs.
+- **A Mac that has no creator pinned yet.** The epoch-0 key never changes (record names stay under it). So anyone who
+  was ever a member, removed at any time, still holds it, and together with the server could serve a first list of
+  their own to a Mac that has no creator pinned yet: a member who updated Relay before the admin started the list, or
+  a joiner whose invite link predates member lists. A Mac that has pinned a creator (every new workspace, every invite
+  from this version) is not affected.
+- **A server that stops reporting the key** after a Mac saw a list is treated as holding the list back: a warning, the
+  key counts as changing, and removals wait. An older relay-server cannot start a new workspace's list ("needs an
+  update"); the workspace is then taken off the server again.
 - **What was read before.** A removed member keeps every key up to their removal and what they synced; a member's Mac
   holds the keys in a file (0600), like the mirror keys.
 
