@@ -97,6 +97,8 @@ export default {
   "mig.teamChats":
     "Ces conversations continuent dans {target}. Leurs transcriptions restent sur ce Mac, mais ce qu'elles contiennent déjà (tout ce qui a été dit et chaque fichier lu) peut finir dans des notes que chaque membre voit :",
   "ws.team": "équipe",
+  "ws.live": "en direct",
+  "ws.rounds": "synchronisé toutes les 10 s",
   "ws.openFolder": "Ouvrir un dossier comme espace de travail…",
   "ws.fromTemplate": "Nouvel espace de travail depuis un modèle…",
   "ws.settings": "Réglages des espaces de travail",

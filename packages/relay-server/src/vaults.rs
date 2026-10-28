@@ -7,6 +7,7 @@
 //! A record is `u32 meta_len || meta || data` (`relay_remote::vault::split`); only `meta_len` is read here, to list `meta`
 //! in the manifest. Every write is a compare-and-swap on the record's etag (sha256 of the file), under a lock per vault.
 
+use crate::channel::Rooms;
 use crate::{clients, device_name, now, save_clients, write_private, Client, CLIENTS};
 use relay_remote::vault::{split, MAX_RECORD};
 use relay_remote::{sync, tls};
@@ -38,7 +39,7 @@ impl Vault {
 }
 
 /// Exactly `n` lowercase hex characters: every id, code and blob name. Anything else never reaches a path.
-fn hex(s: &str, n: usize) -> bool { s.len() == n && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) }
+pub(crate) fn hex(s: &str, n: usize) -> bool { s.len() == n && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) }
 fn dir(data: &Path) -> PathBuf { data.join("vaults") }
 
 /// A vault's file, its expired and used-up invites left out. None when there is no such vault.
@@ -59,6 +60,9 @@ pub(crate) fn all(data: &Path) -> Vec<Vault> {
 }
 /// For the handshake: a device that is not paired gets in while some vault has an invite open (it may then only join).
 pub fn invite_open(data: &Path) -> bool { all(data).iter().any(|v| !v.invites.is_empty()) }
+
+/// Whether `fp` is a member of vault `id` now (channel.rs checks an open stream with it).
+pub(crate) fn is_member(data: &Path, id: &str, fp: &str) -> bool { hex(id, 16) && load(data, id).is_some_and(|v| v.role(fp).is_some()) }
 
 /// Whether `fp` is admin of a vault here: it keeps this server (lib.rs KEEPER_OPS).
 pub(crate) fn keeps(data: &Path, fp: &str) -> bool { all(data).iter().any(|v| v.role(fp) == Some("admin")) }
@@ -89,11 +93,12 @@ type Stamp = (u64, u64, i64, i64);
 type Listed = HashMap<String, (Stamp, Value)>;
 
 /// `fp`: this server's certificate, which an invite's proof is bound to. `locks`: one per vault, for every write.
-/// `seen`: per vault, its records as the last manifest listed them, by name.
-pub struct Vaults { data: PathBuf, fp: String, locks: Mutex<HashMap<String, Arc<Mutex<()>>>>, seen: Mutex<HashMap<String, Listed>> }
+/// `seen`: per vault, its records as the last manifest listed them, by name. `rooms`: the vaults' live streams (channel.rs).
+pub struct Vaults { data: PathBuf, fp: String, locks: Mutex<HashMap<String, Arc<Mutex<()>>>>, seen: Mutex<HashMap<String, Listed>>, pub(crate) rooms: Rooms }
 
 impl Vaults {
-    pub fn new(data: &Path, fp: &str) -> Vaults { Vaults { data: data.into(), fp: fp.into(), locks: Mutex::default(), seen: Mutex::default() } }
+    pub fn new(data: &Path, fp: &str) -> Vaults { Vaults { data: data.into(), fp: fp.into(), locks: Mutex::default(), seen: Mutex::default(), rooms: Rooms::default() } }
+    pub(crate) fn data(&self) -> &Path { &self.data }
     fn blobs(&self, id: &str) -> PathBuf { dir(&self.data).join(id).join("blobs") }
 
     /// Vault `id`, read and changed by `f` without another request in between. A vault that is not there and one the
@@ -109,7 +114,7 @@ impl Vaults {
         self.locked(id, |v| { let role = v.role(fp).ok_or("no such vault")?.to_string(); f(v, &role) })
     }
     /// A read: the caller must be a member now, the blobs it reads are each written whole (temp file and rename).
-    fn member(&self, id: &str, fp: &str) -> Result<Vault, String> {
+    pub(crate) fn member(&self, id: &str, fp: &str) -> Result<Vault, String> {
         let v = if hex(id, 16) { load(&self.data, id) } else { None };
         v.filter(|v| v.role(fp).is_some()).ok_or_else(|| "no such vault".into())
     }
@@ -202,6 +207,8 @@ impl Vaults {
             if had_admin && !v.has_admin() { return Err("that would leave the vault without an admin".into()); }
             save(&self.data, v)
         })?;
+        // their open stream goes now, not at the next check
+        self.rooms.kick(id, who);
         let _c = CLIENTS.lock().unwrap_or_else(|e| e.into_inner());
         let mut list = clients(&self.data);
         if list.iter().any(|c| c.fp == who && c.vaults_only) && !all(&self.data).iter().any(|v| v.role(who).is_some()) {

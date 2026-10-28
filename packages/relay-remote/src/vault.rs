@@ -72,6 +72,18 @@ impl VaultKey {
         open(&self.enc, format!("data:{name}").as_bytes(), data).ok_or_else(|| "content does not open with this vault's key".into())
     }
 }
+impl VaultKey {
+    /// A live frame (channel.rs) sealed for the other members: `nonce || ciphertext+tag`, bound to the vault, the kind,
+    /// the document's name, the sending device (the first 16 hex of its fingerprint) and its own counter `n`. The
+    /// server can neither read it nor pass it off as another vault's, document's or member's.
+    pub fn seal_frame(&self, vault: &str, kind: &str, doc: &str, from: &str, n: u64, plain: &[u8]) -> Result<Vec<u8>, String> {
+        seal(&self.enc, frame_aad(vault, kind, doc, from, n).as_bytes(), plain)
+    }
+    pub fn open_frame(&self, vault: &str, kind: &str, doc: &str, from: &str, n: u64, sealed: &[u8]) -> Result<Vec<u8>, String> {
+        open(&self.enc, frame_aad(vault, kind, doc, from, n).as_bytes(), sealed).ok_or_else(|| "frame does not open with this vault's key".into())
+    }
+}
+fn frame_aad(vault: &str, kind: &str, doc: &str, from: &str, n: u64) -> String { format!("frame:{vault}:{kind}:{doc}:{from}:{n}") }
 fn name(names: &hmac::Key, path: &str) -> String { hex(hmac::sign(names, path.as_bytes()).as_ref()) }
 /// A record's (meta, data): `u32 BE meta_len || meta || data`. None when it is no record, its meta past MAX_META or
 /// past its end. The server lists and checks records with this too.

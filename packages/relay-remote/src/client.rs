@@ -272,6 +272,17 @@ impl Client {
         if v["ok"] != true { return Err(v["error"].as_str().unwrap_or("refused").to_string()); }
         Ok((r, w))
     }
+    /// A shared vault's live stream (channel.rs): the hello line, then the connection both ways. Err with the server's
+    /// own words when it refuses (an older server says `unknown request`).
+    pub fn vault_stream(&self, vault: &str, since: u64, epoch: &str) -> Result<(Value, BufReader<tls::Reader>, tls::Writer), String> {
+        let (mut r, mut w) = self.open()?;
+        proto::write_json(&mut w, &json!({"op": "vault_stream", "vault": vault, "v": crate::channel::VERSION, "since": since, "epoch": epoch})).map_err(|e| e.to_string())?;
+        let v = proto::read_json(&mut r, MAX_REPLY).map_err(|e| e.to_string())?;
+        if v["ok"] != true { w.shutdown(); return Err(v["error"].as_str().unwrap_or("refused").to_string()); }
+        Ok((v, r, w))
+    }
+    /// This device's fingerprint, as the server sees it in the handshake.
+    pub fn me(&self) -> String { self.id.fingerprint() }
     /// The connection for one request of the phone (share::serve): the server passes it through from here.
     pub fn share_open(&self, token: &str) -> Result<(BufReader<tls::Reader>, tls::Writer), String> {
         let (r, mut w) = self.open()?;

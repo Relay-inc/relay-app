@@ -3,6 +3,7 @@
 // The folder is one of the extra vaults (lib.rs `extra_vaults`), so a conversation in it stays in it (lib.rs `fence`).
 // The settings keep the list (`sharedVaults`); only this module writes it, set_settings keeps what is there.
 
+use relay_remote::channel::{Channel, Event};
 use relay_remote::client::Client;
 use relay_remote::sync::{self, Filter, Guard, Manifest, Mode, Walker};
 use relay_remote::tls::Identity;
@@ -12,7 +13,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// A shared vault as the settings keep it: the server it lives on (pinned by its fingerprint), its folder here and this
 /// device's role there ("admin" or "member").
@@ -49,9 +50,10 @@ pub fn keepers(s: &mut Value) -> bool {
 pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter().find(|v| v.id == id).ok_or_else(|| format!("no workspace {id}")) }
 
 /// What the last round of a vault did, for Settings: counts since the app started, the conflict copies made, and the
-/// deletes held for the user (sync::Guard). `bad`: blobs there that did not open with the key (left alone).
+/// deletes held for the user (sync::Guard). `bad`: blobs there that did not open with the key (left alone). `live`: the
+/// vault's live channel is connected (relay_remote::channel), else it syncs by rounds only.
 #[derive(Default, Clone, serde::Serialize)]
-pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub bad: usize }
+pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub bad: usize, pub live: bool }
 
 /// Run the rounds now, without waiting for the interval: a vault was just made or joined.
 static NOW: AtomicBool = AtomicBool::new(false);
@@ -174,8 +176,9 @@ pub fn real_path(p: &str) -> Result<String, String> {
 /// leave of it waits for the round to end.
 #[derive(Default)]
 struct One { walker: Walker, allowed: Vec<String>, moved: Vec<(String, String)> }
+/// `live`: each vault's live channel, kept open next to the rounds (keep_live).
 #[derive(Default)]
-pub struct Hub { vaults: Mutex<HashMap<String, Arc<Mutex<One>>>>, pub status: Mutex<HashMap<String, Status>> }
+pub struct Hub { vaults: Mutex<HashMap<String, Arc<Mutex<One>>>>, pub status: Mutex<HashMap<String, Status>>, live: Mutex<HashMap<String, Channel>> }
 
 impl Hub {
     fn one(&self, id: &str) -> Arc<Mutex<One>> { self.vaults.lock().unwrap().entry(id.into()).or_default().clone() }
@@ -223,7 +226,7 @@ impl Hub {
         let prev = all.remove(&v.id).unwrap_or_default();
         let mut conflicts = prev.conflicts;
         for c in &st.conflicts { if !conflicts.contains(c) { conflicts.push(c.clone()); } }
-        all.insert(v.id.clone(), Status { pushed: prev.pushed + st.pushed, pulled: prev.pulled + st.pulled, conflicts, ..st.clone() });
+        all.insert(v.id.clone(), Status { pushed: prev.pushed + st.pushed, pulled: prev.pulled + st.pulled, conflicts, live: prev.live, ..st.clone() });
         Some(st)
     }
 
@@ -263,6 +266,28 @@ impl Hub {
         std::fs::remove_dir_all(trash(data, id)).ok();
         self.status.lock().unwrap().remove(id);
         self.vaults.lock().unwrap().remove(id);
+        if let Some(c) = self.live.lock().unwrap().remove(id) { c.stop(); }
+    }
+
+    /// A live channel for every vault in `list` whose key is here, none for any other. Its state shows in the status
+    /// (`live`) and reaches the windows as `shared-vaults`. The frames themselves have no reader yet: the documents that
+    /// use them come next (docs/workspaces.md, Live channel).
+    pub fn keep_live(&self, app: &AppHandle, data: &Path, list: &[Shared], me: &Identity) {
+        let mut live = self.live.lock().unwrap();
+        live.retain(|id, c| { let keep = list.iter().any(|v| &v.id == id); if !keep { c.stop(); } keep });
+        for v in list {
+            if live.contains_key(&v.id) { continue; }
+            let Ok(key) = load_key(data, &v.id) else { continue };
+            let (h, id) = (app.clone(), v.id.clone());
+            let on = move |e: Event| {
+                let up = match e { Event::Live { .. } => true, Event::Down(_) => false, Event::Frame(_) => return };
+                let st = h.state::<crate::App>();
+                let mut all = st.shared.status.lock().unwrap();
+                all.entry(id.clone()).or_default().live = up;
+                h.emit("shared-vaults", serde_json::to_value(&*all).unwrap_or_default()).ok();
+            };
+            live.insert(v.id.clone(), Channel::start(client(v, me), &v.id, key, on));
+        }
     }
 }
 fn write_base(data: &Path, id: &str, base: &Manifest) -> Result<(), String> {

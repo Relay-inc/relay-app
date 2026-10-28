@@ -97,6 +97,8 @@ export default {
   "mig.teamChats":
     "Deze gesprekken lopen verder in {target}. Hun transcripten blijven op deze Mac, maar wat ze al bevatten (alles wat gezegd is en elk bestand dat ze lazen) kan in notities belanden die elk lid ziet:",
   "ws.team": "team",
+  "ws.live": "live",
+  "ws.rounds": "synchroniseert elke 10 s",
   "ws.openFolder": "Open een map als workspace…",
   "ws.fromTemplate": "Nieuwe workspace van een sjabloon…",
   "ws.settings": "Workspace-instellingen",

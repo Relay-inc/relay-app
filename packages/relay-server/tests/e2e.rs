@@ -948,3 +948,111 @@ fn two_macs_share_a_vault_through_the_server() {
     std::fs::remove_dir_all(&a).ok();
     std::fs::remove_dir_all(&b).ok();
 }
+
+/// A shared vault's live channel against the real binary (docs/workspaces.md, Live channel): two members get each
+/// other's sealed frames within moments, a short drop resumes from where it was, a restart of the server starts over
+/// and the rounds catch up, the walls hold (an outsider, another version, a frame too big), and a member removed loses
+/// its stream at once.
+#[test]
+fn a_shared_vaults_live_channel() {
+    use relay_remote::channel::{Channel, Event};
+    use relay_remote::vault::VaultKey;
+    use serde_json::json;
+    use std::sync::mpsc;
+    let s = start("channel");
+    let lid = device("chan-laptop");
+    let (l, _) = client::pair(&pair_line(&s), &lid, "laptop").unwrap();
+    let laptop = Client::new(&l.host, l.port, &l.fp, lid.clone());
+    let vault = laptop.vault_create("Team").unwrap().id;
+    let key = VaultKey::generate();
+    let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
+    let cid = device("chan-colleague");
+    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let colleague = Client::new(&line.host, line.port, &line.fp, cid.clone());
+    let doc = key.name("Projects/Acme.md");
+
+    // the walls: another paired device is no member, a stranger gets no further than the handshake, another version
+    // of the stream is refused
+    assert_eq!(paired(&s, "chan-other").vault_stream(&vault, 0, "").err().unwrap(), "no such vault");
+    assert!(laptop.call(json!({"op": "vault_stream", "vault": vault, "v": 2})).unwrap_err().contains("version"));
+    // a phone (a linked device) gets no vault ops at all
+    assert!(linked(&laptop, "chan-phone").vault_stream(&vault, 0, "").err().unwrap().contains("not allowed"));
+
+    let chan = |c: &Client, k: &VaultKey| {
+        let (tx, rx) = mpsc::channel();
+        let ch = Channel::start(c.clone(), &vault, k.clone(), move |e| { tx.send(e).ok(); });
+        (ch, rx)
+    };
+    let wait = |rx: &mpsc::Receiver<Event>, f: &dyn Fn(&Event) -> bool, secs: u64| -> Event {
+        let until = Instant::now() + Duration::from_secs(secs);
+        loop {
+            let left = until.saturating_duration_since(Instant::now());
+            let e = rx.recv_timeout(left).unwrap_or_else(|_| panic!("nothing within {secs} s"));
+            if f(&e) { return e; }
+        }
+    };
+    let live = |e: &Event| matches!(e, Event::Live { .. });
+    let (a, ra) = chan(&laptop, &key);
+    let (b, rb) = chan(&colleague, &theirs);
+    wait(&ra, &live, 10);
+    wait(&rb, &live, 10);
+
+    // an update from the laptop reaches the colleague, opened, within a moment; the laptop does not get its own back
+    let t = Instant::now();
+    a.send("update", &doc, b"first edit").unwrap();
+    let Event::Frame(f) = wait(&rb, &|e| matches!(e, Event::Frame(_)), 5) else { unreachable!() };
+    assert!(t.elapsed() < Duration::from_millis(500), "{:?}", t.elapsed());
+    assert_eq!((f.kind.as_str(), f.doc.as_str(), f.body.as_slice(), f.seq, f.from.as_str()), ("update", doc.as_str(), &b"first edit"[..], 1, &lid.fingerprint()[..16]));
+    b.send("awareness", &doc, b"cursor 12").unwrap();
+    let Event::Frame(f) = wait(&ra, &|e| matches!(e, Event::Frame(_)), 5) else { unreachable!() };
+    assert_eq!((f.kind.as_str(), f.seq, f.body.as_slice()), ("awareness", 0, &b"cursor 12"[..]));
+    assert!(ra.try_recv().is_err(), "nothing else, and never its own frame");
+    // the server keeps none of it on disk
+    let on_disk = |needle: &str| walk(&s.data).iter().any(|p| std::fs::read(p).is_ok_and(|b| String::from_utf8_lossy(&b).contains(needle)));
+    assert!(!on_disk("first edit") && !on_disk(&doc), "frames are never stored");
+    // the one-request mode goes on next to a stream: a round's manifest still answers
+    colleague.call(json!({"op": "vault_manifest", "vault": vault})).unwrap();
+
+    // a short drop: a stream opened again with what it saw last gets what it missed, in order
+    let (hello, _r, w) = colleague.vault_stream(&vault, 0, "").unwrap();
+    let (seq, epoch) = (hello["seq"].as_u64().unwrap(), hello["epoch"].as_str().unwrap().to_string());
+    w.shutdown();
+    a.send("update", &doc, b"second").unwrap();
+    a.send("update", &doc, b"third").unwrap();
+    let (hello, mut r, w) = colleague.vault_stream(&vault, seq, &epoch).unwrap();
+    assert_eq!(hello["resumed"], true);
+    let mut got = vec![];
+    for _ in 0..2 { let mut l = String::new(); r.read_line(&mut l).unwrap(); let v: serde_json::Value = serde_json::from_str(&l).unwrap(); got.push(v["seq"].as_u64().unwrap()); }
+    assert_eq!(got, vec![seq + 1, seq + 2]);
+    w.shutdown();
+    // another epoch (a server restarted since) does not resume
+    assert_eq!(colleague.vault_stream(&vault, seq, "0000000000000000").unwrap().0["resumed"], false);
+
+    // a frame over the limit closes that stream with the reason, the others go on
+    let (_, mut r, mut w) = colleague.vault_stream(&vault, 0, "").unwrap();
+    w.write_all(format!("{}\n", json!({"t": "frame", "kind": "update", "doc": doc, "n": 1, "body": "ab".repeat(relay_remote::channel::MAX_BODY + 1)})).as_bytes()).unwrap();
+    let mut l = String::new();
+    while r.read_line(&mut l).is_ok_and(|n| n > 0) && !l.contains("bye") { l.clear(); }
+    assert!(l.contains("too big"), "{l}");
+    a.send("update", &doc, b"still live").unwrap();
+    wait(&rb, &|e| matches!(e, Event::Frame(f) if f.body == b"still live"), 5);
+
+    // the server restarts: both come back by themselves, told some may be missing, and frames flow again
+    let s = restart(s);
+    wait(&ra, &|e| matches!(e, Event::Live { resumed: false }), 30);
+    wait(&rb, &|e| matches!(e, Event::Live { resumed: false }), 30);
+    a.send("update", &doc, b"after restart").unwrap();
+    wait(&rb, &|e| matches!(e, Event::Frame(f) if f.body == b"after restart" && f.seq == 1), 5);
+
+    // removed: the colleague's stream ends at once, and a new one is refused
+    laptop.vault_remove(&vault, &cid.fingerprint()).unwrap();
+    let Event::Down(why) = wait(&rb, &|e| matches!(e, Event::Down(_)), 5) else { unreachable!() };
+    assert!(why.contains("no longer a member"), "{why}");
+    // (a device that only came in for this vault is not paired here any more at all)
+    assert!(colleague.vault_stream(&vault, 0, "").is_err());
+    assert!(a.live());
+    a.stop();
+    b.stop();
+    drop(s);
+}
+

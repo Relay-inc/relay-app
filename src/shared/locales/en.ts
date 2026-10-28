@@ -96,6 +96,8 @@ const en = {
   "mig.teamChats":
     "These conversations continue in {target}. Their transcripts stay on this Mac, but what they already hold (everything said and every file read in them) can end up in notes every member sees:",
   "ws.team": "team",
+  "ws.live": "live",
+  "ws.rounds": "syncing every 10 s",
   "ws.openFolder": "Open a folder as workspace…",
   "ws.fromTemplate": "New workspace from template…",
   "ws.settings": "Workspace settings",

@@ -13,6 +13,8 @@ type WorkspaceState = {
   notesVersion: number;
   /** No vault yet, or the configured one is gone: the welcome screen shows, starting from this status. */
   onboarding: VaultStatus | null;
+  /** Per shared vault id: its live channel is connected (`shared-vaults` status), else it syncs by rounds only. */
+  live: Record<string, boolean>;
 };
 
 export const useWorkspaceStore = makeStore<WorkspaceState>(() => ({
@@ -22,4 +24,5 @@ export const useWorkspaceStore = makeStore<WorkspaceState>(() => ({
   notes: EMPTY_NOTES,
   notesVersion: 0,
   onboarding: null,
+  live: {},
 }));

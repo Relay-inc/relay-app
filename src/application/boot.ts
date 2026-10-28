@@ -43,6 +43,7 @@ import { loadTodayCards } from "./today/today";
 import { loadTodayTime } from "./time/time";
 import { listenToLinks } from "./deep-links";
 import { listenToFileDrops } from "./conversations/attachments";
+import { watchLive } from "./navigation/workspaces";
 import { loadPhoneShared } from "./conversations/phoneShare";
 import { loadWorkers, onOrchEvent } from "./orchestrator/orchestrator";
 import { onPipelineWorker, runPipelines } from "./pipeline/runner";
@@ -130,6 +131,7 @@ function listenToBackend() {
   });
   backend.onRetry(onRetryEvent);
   backend.onVaultPulled(loadSnapshot); // the team's changes came into a shared vault
+  watchLive(); // a shared vault's live channel, for the workspace menu
   backend.onDictatedChat(chatFromDictation);
   listenToPill(); // the sidebar shows dictation from any app too
   listenToFileDrops();

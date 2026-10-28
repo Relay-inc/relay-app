@@ -1190,6 +1190,12 @@ const VIEWS = {
     await page.getByText("Hiring 2027", { exact: true }).scrollIntoViewIfNeeded();
   },
   // the footer's workspace menu: Personal, the side vault and the workspace Northwind, with the three actions (PR workspace-switcher)
+  // the menu says which shared workspace's live channel is connected: Northwind "team · live"
+  "workspace-menu-live": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await waitText("team · live");
+  },
   "workspace-menu": async () => {
     await open(page, server.url, { fixture: "shared" });
     await page.getByRole("button", { name: /^Switch workspace/ }).click();

@@ -216,6 +216,7 @@ export const sharedStatus = (nowS: number) => ({
     errors: [],
     held: ["Projects/Launch Plan/Documents/Old brief.md", "Projects/Launch Plan/Documents/Old timeline.md"],
     bad: 0,
+    live: true, // its live channel is connected (relay_remote::channel)
   },
 });
 /** This Mac's fingerprint, and the vault's other members: an admin on a Studio Mac, a member on a laptop. */
