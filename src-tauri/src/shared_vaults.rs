@@ -53,8 +53,15 @@ pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter()
 /// deletes held for the user (sync::Guard). `bad`: blobs there that did not open with the key (left alone). `live`: the
 /// vault's live channel is connected (relay_remote::channel), else it syncs by rounds only.
 #[derive(Default, Clone, serde::Serialize)]
-/// `waiting`: the members a due key rotation waits for (no public key from their Relay yet, docs/workspaces.md).
-pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub bad: usize, pub live: bool, pub waiting: Vec<String> }
+/// `waiting`: the members a due key change waits for, with why (`nokey`: their Relay has not sent a key for it yet;
+/// `changed`: their key is not the one this Mac trusts). `changed`: members whose key differs from the one this Mac
+/// pinned, until an admin trusts it again (docs/workspaces.md, Key rotation).
+pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub bad: usize, pub live: bool,
+    pub waiting: Vec<Waiting>, pub changed: Vec<Changed> }
+#[derive(Clone, serde::Serialize)]
+pub struct Waiting { pub name: String, pub why: String }
+#[derive(Clone, serde::Serialize)]
+pub struct Changed { pub fp: String, pub name: String }
 
 /// Run the rounds now, without waiting for the interval: a vault was just made or joined.
 static NOW: AtomicBool = AtomicBool::new(false);
@@ -217,17 +224,21 @@ impl Hub {
                 let keep = |p: &str, d: &[u8]| sync::write_atomic(&to.join(p), d, None);
                 let guard = Guard { allow_deletes: false, allowed: &allowed, moved: &moved, keep: &keep };
                 let remote = client(v, me).sealed(&v.id, key);
-                remote.know(&base);
-                let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, &mut one.walker, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
-                // after the round, from what its manifest said: a new key fetched, this Mac's public key registered, a
-                // due rotation made (admin); writes this round refused for an old key go through on the next
-                match remote.keep_keys() {
+                // the keys first: a new one taken, the members pinned, this Mac's keys sent, a due rotation made
+                // (admin); every change saved before anything goes on (docs/workspaces.md, Key rotation)
+                match remote.keep_keys(&|k| save_key(data, &v.id, k)) {
                     Ok(k) => {
-                        if let Some(keys) = k.keys { if let Err(e) = save_key(data, &v.id, &keys) { st.errors.push(format!("key: {e}")); } }
-                        st.waiting = k.waiting;
+                        st.errors.extend(k.errors.into_iter().map(|e| format!("key: {e}")));
+                        st.waiting = k.waiting.into_iter().map(|(name, why)| Waiting { name, why }).collect();
+                        st.changed = k.changed.into_iter().map(|(fp, name)| Changed { fp, name }).collect();
                     }
                     Err(e) => st.errors.push(format!("key: {e}")),
                 }
+                remote.know(&base);
+                let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, &mut one.walker, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
+                // files still under an older key, sealed again under the newest
+                // ponytail: 100 a round, a big workspace takes a few rounds after a rotation
+                if r.errors.is_empty() { remote.reseal(100); }
                 // a round that failed (the server out of reach) keeps what the user let through for the next one
                 if !r.errors.is_empty() { one.allowed = allowed.clone(); }
                 // the next round plans against this base: one not written is an error, not a quiet success
@@ -294,8 +305,11 @@ impl Hub {
         // a channel of a vault no longer listed, or one still on an older key than the key file's, stops after this
         // lock is let go (its Down marks it not live); the second starts again with the new key
         let epochs: HashMap<String, u32> = list.iter().filter_map(|v| load_key(data, &v.id).ok().map(|k| (v.id.clone(), k.epoch()))).collect();
-        let stale: Vec<String> = live.iter().filter(|(id, (_, e))| epochs.get(*id) != Some(e)).map(|(id, _)| id.clone()).collect();
-        let gone: Vec<Channel> = stale.into_iter().filter_map(|id| live.remove(&id)).map(|(c, _)| c).collect();
+        let gone: Vec<Channel> = live.keys().filter(|id| !epochs.contains_key(*id)).cloned().collect::<Vec<_>>().into_iter().filter_map(|id| live.remove(&id)).map(|(c, _)| c).collect();
+        // one on an older key goes on with the new one, its replay counters kept (Channel::renew)
+        for (id, (c, e)) in live.iter_mut() {
+            if epochs.get(id).is_some_and(|n| n != e) { if let Ok(k) = load_key(data, id) { *e = k.epoch(); *c = c.renew(k); } }
+        }
         for v in list {
             if live.contains_key(&v.id) { continue; }
             let Ok(key) = load_key(data, &v.id) else { continue };
@@ -399,7 +413,10 @@ pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String,
         // the folder first: a vault that could not get its notes is not made on the server at all
         let empty = !std::fs::read_dir(&folder).is_ok_and(|mut d| d.any(|e| e.is_ok_and(|e| e.file_name() != ".DS_Store")));
         if empty { crate::vault::create_team(&template, &overlay, Path::new(&folder))?; }
-        Ok((c.vault_create(&name)?, Keys::from(VaultKey::generate())))
+        // this Mac's own secrets with the key: saved before the server hears of them (the first round sends them)
+        let mut k = Keys::from(VaultKey::generate());
+        k.ensure();
+        Ok((c.vault_create(&name)?, k))
     }).await.map_err(|e| e.to_string())??;
     if !valid_id(&r.id) { return Err(format!("the server answered an invalid workspace id {:?}", r.id)); }
     // keys, bases and trash go by id alone: an id this Mac is in already would overwrite that vault's key
@@ -425,7 +442,8 @@ pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, fold
     // the folder before the single-use invite is spent: one that cannot be made fails here, with the link still good
     std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
     let (me, name) = (state.machines.id.clone(), crate::sys_name());
-    let (line, joined, key) = tauri::async_runtime::spawn_blocking(move || relay_remote::client::vault_join(&link, &me, &name)).await.map_err(|e| e.to_string())??;
+    let (line, joined, mut key) = tauri::async_runtime::spawn_blocking(move || relay_remote::client::vault_join(&link, &me, &name)).await.map_err(|e| e.to_string())??;
+    key.ensure();
     if !valid_id(&joined.id) { return Err(format!("not a workspace id: {:?}", joined.id)); }
     // a vault this Mac had before: its old base would make the new, empty folder look like a mass delete
     let vid = joined.id.clone();
@@ -441,10 +459,29 @@ pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, fold
 /// An invite link for a vault (admins): single use, 24 h. {link, invite: {id, role, expires}}.
 #[tauri::command]
 pub async fn shared_vault_invite(app: AppHandle, state: St<'_>, id: String, role: String) -> Result<Value, String> {
-    let key = load_key(&crate::data_dir(&app), &id)?;
+    let (key, data) = (load_key(&crate::data_dir(&app), &id)?, crate::data_dir(&app));
     let role = if role == "admin" { "admin" } else { "member" };
-    let (link, invite) = on_server(&state, &id, move |v, c| c.vault_invite(&v.id, role, &key, &v.host, v.port)).await?;
+    let (link, invite) = on_server(&state, &id, move |v, c| match c.vault_invite(&v.id, role, &key, &v.host, v.port) {
+        // the key changed since this Mac's last round: take the new one (as a round would) and invite with it
+        Err(e) if e == "key changed" => {
+            let r = c.sealed(&v.id, key);
+            r.keep_keys(&|k| save_key(&data, &v.id, k))?;
+            c.vault_invite(&v.id, role, &load_key(&data, &v.id)?, &v.host, v.port)
+        }
+        other => other,
+    }).await?;
     Ok(serde_json::json!({"link": link, "invite": invite}))
+}
+
+/// An admin trusts a member's new keys (they set Relay up again): this Mac pins what the member publishes now, when it
+/// is signed by the member's new identity and vouched for under the newest key (docs/workspaces.md, Key rotation).
+#[tauri::command]
+pub async fn shared_vault_trust(app: AppHandle, state: St<'_>, id: String, fp: String) -> Result<(), String> {
+    let (key, data) = (load_key(&crate::data_dir(&app), &id)?, crate::data_dir(&app));
+    on_server(&state, &id, move |v, c| c.sealed(&v.id, key).trust(&fp, &|k| save_key(&data, &v.id, k))).await?;
+    if let Some(s) = app.state::<crate::App>().shared.status.lock().unwrap().get_mut(&id) { s.changed.clear(); }
+    sync_now();
+    Ok(())
 }
 
 /// The members and open invites of a vault, and this Mac's fingerprint so the list can mark it: {vault, me}.

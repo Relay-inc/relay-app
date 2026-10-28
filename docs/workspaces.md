@@ -55,7 +55,9 @@ against the server only: every member holds the same key, so a member could seal
 
 **Removing a member** stops their device at the server at once, and closes their live stream. They keep what they
 synced and the keys they had, so the key changes (Key rotation, below): what is written after the change does not open
-with what they hold, also not for whoever gets the server's disk. What they had before stays readable to them.
+with what they hold, also not for whoever gets the server's disk. What they had before stays readable to them. The
+new key comes from an admin's Mac, signed by that admin and vouched for under the old key: the server cannot hand the
+members a key of its own, or slip its own public key in for a member's, without every Mac refusing it.
 
 **The fence is a guard, not a sandbox.** It keeps a conversation in its workspace and Claude Code's file tools and file
 commands out of your vault and the other workspaces. It is not a boundary against a member who sets out to reach your
@@ -135,8 +137,8 @@ blob name 64 lowercase hex. Anything else is refused.
 | Request | Who | Reply |
 |---|---|---|
 | `vault_create {name}` | a full device (not vaults_only, not linked) | `{vault: {id, name}}`, the caller is its admin |
-| `vault_info {vault}` | member | `{vault: {id, name, role, members: [{name, fp, role, added, pk, mac}], invites: [{id, role, expires}], epoch, rekey, keys: {epoch: sealed}}}`, invites only for admins (else `[]`), `keys` only the caller's |
-| `vault_invite {vault, role, wrapped}` | admin | `{invite: {id, code, expires}}`, `role` admin or member, `wrapped` hex at most 8192 chars, expires in 24 h |
+| `vault_info {vault}` | member | `{vault: {id, name, role, me, members: [{name, fp, role, added, pk, id, sig, mac}], invites: [{id, role, expires}], epoch, rekey, keys: {epoch: {sealed, holders}}}}`, invites only for admins (else `[]`), `keys` only the caller's sealed key and who each rotation was sealed to |
+| `vault_invite {vault, role, wrapped, epoch}` | admin | `{invite: {id, code, expires}}`, `role` admin or member, `wrapped` hex at most 256 KiB, expires in 24 h; `epoch` the newest key sealed in, refused (`key changed`) when it is not the current one |
 | `vault_invite_revoke {vault, invite}` | admin | `{}` |
 | `vault_join {vault, invite, name, proof}` | anyone with a valid link | `{vault: {id, name}, role, wrapped}`, `proof` = `tls::proof(code, client_fp, server_fp)`, 5 wrong proofs drop the invite, success consumes it, adds the device to `clients.json` as vaults_only when it is new (name deduplicated as in `pair`) and as a member |
 | `vault_remove {vault, fp}` | admin, or the member itself (leave) | `{}`, refused when it would leave members without an admin, a vaults_only client with no vault left is removed from `clients.json`; sets `rekey` |
@@ -146,7 +148,7 @@ blob name 64 lowercase hex. Anything else is refused.
 | `vault_put_many {vault, files: [{name, len, expect}]}` + the bodies one after the other | member | `{etags: {name: etag}, errors: {name: why}}` |
 | `vault_delete {vault, name, expect}` | member | `{}`, only if the current etag is `expect`, else `changed meanwhile` |
 | `vault_stream {vault, v, since, epoch}` | member | stays open, see Live channel |
-| `vault_pk {vault, pk, mac}` | member, for itself | `{}`, `pk` 64 hex, `mac` `<epoch>:<64 hex>` |
+| `vault_pk {vault, pk, id, sig, mac}` | member, for itself | `{}`, `pk` and `id` 64 hex, `sig` 128 hex, `mac` `<epoch>:<64 hex>`; only the shape is checked here |
 | `vault_rotate {vault, epoch, keys: {fp: sealed}}` | admin | `{epoch}`, only the next epoch, a sealed key for every member and nobody else; clears `rekey` and every open invite |
 
 A `vault_put` (and each file of `vault_put_many`) under another epoch than the current one is refused: `key changed`
@@ -211,44 +213,67 @@ manifest) and the epoch (to refuse a write under an old key), and checks it fits
 
 ## Keys
 
-- Workspace key: 32 random bytes. HKDF-SHA256 with salt `relay shared vault v1` derives `enc` (ChaCha20-Poly1305) and
-  `name` (HMAC-SHA256). `name(path)` = hex HMAC(name, path).
+- Workspace key: 32 random bytes. HKDF-SHA256 with salt `relay shared vault v1` derives `enc` (ChaCha20-Poly1305),
+  `name` (HMAC-SHA256) and `auth` (HMAC-SHA256, Key rotation). `name(path)` = hex HMAC(name, path).
 - Invite: the link secret is 32 random bytes. HKDF-SHA256 with salt `relay vault invite v1` and info `wrap` derives a
-  ChaCha20-Poly1305 key, and `wrapped` = hex(`nonce || seal(aad = "invite:" + vault id, vault key)`).
-- On the Mac the workspace's keys live in Relay's data folder as `shared-<id>.key` (0600), like the mirror keys:
-  epoch 0's key in hex on the first line (before any rotation that is the whole file, as it always was), then
-  `<epoch> <hex>` per later key, `secret <hex>` (this member's X25519 secret) and `pin <fp> <public key>`. The keys
-  alone are the recovery key Relay shows when the workspace is made, and again on its row in Settings › Machines.
-- An invite after a rotation carries every epoch's key (`u32 BE epoch || key` each), so a new member reads what was
-  written before it came; before any rotation it is the one key's 32 bytes, as always.
+  ChaCha20-Poly1305 key, and `wrapped` = hex(`nonce || seal(aad = "invite:" + vault id, plain)`), `plain` JSON
+  `{"keys": {epoch: hex key}, "pins": {fp: {id, pk, admin}}}`: every epoch's key, so a new member reads what was
+  written before it came, and the inviter's pins. An older Relay's invite is the one key's 32 bytes, which this one
+  still takes; an older Relay cannot join from this one's invite.
+- On the Mac the workspace's keys live in Relay's data folder as `shared-<id>.key` (0600), like the mirror keys,
+  written whole (a temp file renamed over it): epoch 0's key in hex on the first line (before rotation existed that
+  was the whole file), then `<epoch> <hex>` per later key, `secret <hex>` (X25519), `sign <hex>` (the Ed25519 seed) and
+  `pin <fp> <identity> <public key> <admin 0|1>`. The keys alone are the recovery key Relay shows when the workspace
+  is made, and again on its row in Settings › Machines.
 
 ## Key rotation
 
 Removing a member, a member leaving, or `revoke` sets `rekey` on the workspace. The next round of an admin's Relay
 rotates: a new random workspace key, epoch + 1, sealed to every member left, made current by `vault_rotate` in one step.
+The server only stores and hands out what the Macs make; every Mac checks what it gets.
 
-- **Each member's public key.** Every Relay makes an X25519 key per workspace (`secret` in its key file) and registers
-  the public half with `vault_pk`, vouched for with `mac` = `epoch:` + hex HMAC-SHA256(auth key of that epoch,
-  `"pk:" + vault + ":" + fp + ":" + pk`) (HKDF info `auth`). It registers again after every rotation, under the new key.
-- **Sealed to each member:** `hex(ephemeral X25519 public (32) || nonce (12) || ChaCha20-Poly1305(k, aad = "rekey:" +
-  vault + ":" + epoch + ":" + fp, new key))`, `k` = HKDF-SHA256(salt `relay vault rekey v1`, the X25519 shared point,
-  info the ephemeral public key). A low-order public key is refused.
-- **Who it waits for.** The admin's Relay seals only to a public key vouched for under the current key, and one that
-  matches what it pinned for that member at an earlier rotation. A member with neither (a Relay that predates rotation,
-  or one not opened since the last rotation) holds it up; Settings › Machines names them, and the workspace keeps
-  working on the old key meanwhile.
-- **Interrupted.** `vault_rotate` is one write on the server: a rotation happened or it did not. An admin that stops
-  after the server took it but before it saved the key gets it back on its next round, sealed to itself like everyone.
-- **The others.** A member's round sees the new epoch in the manifest and fetches its sealed key (`vault_info.keys`). A
-  write it made meanwhile under the old key is refused (`key changed`) and goes through on the next round. Its live
-  channel starts again with the new key.
+- **Each member's keys.** Every Relay makes, per workspace, an X25519 key (`secret`, a rotated key is sealed to it)
+  and an Ed25519 identity (`sign`), both saved in the key file before the server hears of them. It publishes both with
+  `vault_pk`: `sig` = Ed25519(identity, `"pub:" + vault + ":" + fp + ":" + pk + ":" + id`) (it is that device's), and
+  `mac` = `epoch:` + hex HMAC-SHA256(auth key of the newest epoch, the same text) (it is a member's; HKDF info `auth`).
+  It publishes again after every rotation.
+- **Pins.** Every Mac pins every member's identity and X25519 key (`pin` lines) the first time it sees them signed and
+  vouched for, but only while `rekey` is false: nobody has left who could still vouch. A member promoted to admin in
+  that time is pinned as admin. A pinned member whose keys change is not taken: Settings › Machines shows it on every
+  Mac, and an admin can trust the new keys by hand after the member says they set up Relay again (their new
+  publication must be signed by its new identity and vouched for under the newest key). A joiner gets the inviter's
+  pins in the invite (sealed under the link's secret), so it trusts who the inviter trusts.
+- **The rotation, sealed to each member:** `hex(ephemeral X25519 public (32) || nonce (12) || ChaCha20-Poly1305(k,
+  aad = "rekey:" + vault + ":" + epoch + ":" + fp, plain))`, `k` = HKDF-SHA256(salt `relay vault rekey v1`, the shared
+  point, info the ephemeral public key); a low-order public key is refused. `plain` = the new key (32) || HMAC-SHA256
+  (auth key of epoch - 1, `"rotate:" + vault + ":" + epoch + ":" + member fp + ":" + sha256 hex of the new key`) (32) ||
+  the admin's Ed25519 signature over `"rotate:" + vault + ":" + epoch + ":" + every member's fp sorted and
+  comma-joined + ":" + sha256 hex` (64) || the admin's fingerprint (32).
+- **Taking it.** A member takes epoch e only from epoch e - 1, one epoch at a time, and only when the mac opens with the
+  key of e - 1 (it comes from a member) and the signature is by an identity it pinned as admin (it comes from that
+  admin), over the holders the server lists. Anything else is refused, and the workspace waits on the old key: a Mac
+  whose key is behind the server's sends nothing (`key changed`), so nothing goes out under a key the server chose.
+- **Who it waits for.** The admin seals only to members whose publication is signed, vouched for under the current key,
+  and matches its pin. Settings › Machines names who the rotation waits for and why (a Relay that sent no key yet, or
+  a key that is not the pinned one). The workspace keeps working on the old key meanwhile.
+- **Interrupted.** `vault_rotate` is one write on the server. An admin that stops after the server took it, before it
+  saved the key, gets it back on its next round, sealed to itself and signed by itself. Two admins at once: the server
+  takes one, the other's next round takes that key.
+- **Old keys.** A record under an older epoch than the newest is taken only when its content is what this Mac had
+  already (a removed member still holds that key); any member's round seals such records again under the newest key, a
+  hundred a round. A frame is taken only under the newest key; the server drops one under an older key. An invite
+  carries the inviter's epoch; one behind is refused, and the inviter's Relay takes the new key and invites again.
 - **Names stay.** Record names stay HMACs under epoch 0's naming key: renaming every record would rewrite the whole
   workspace, and a removed member who gets the server's disk learns only whether a path it guesses exists.
-- **Nothing is sealed again.** Records written before the rotation stay under their old key: the removed member had
-  read them already. A new member gets every epoch's key in its invite.
-- **What it does not cover.** A server that colludes with a removed member at the first rotation after the removal
-  could slip in its own public key for a member: that member's vouching mac is under a key the removed member still
-  holds. Pins catch it from the next rotation on.
+
+What it does not cover:
+
+- **A server colluding with a removed member before the rotation.** Between a removal and the rotation the removed
+  member still holds the current key. If the server hides `rekey` meanwhile, that member can publish a new device of
+  its own, vouched for under that key; Macs that have not seen anyone leave pin it, as admin if the server says so,
+  and a rotation it signs is then taken. A server alone cannot do this, nor a removed member alone.
+- **What was read before.** A removed member keeps every key up to their removal and what they synced.
+- **A member's own Mac.** A member's Relay holds the keys in a file on that Mac (0600), like the mirror keys.
 
 ## Invite link
 

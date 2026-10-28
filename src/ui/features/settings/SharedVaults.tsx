@@ -10,6 +10,7 @@ import {
   inviteToShared,
   joinSharedVault,
   leaveShared,
+  trustMember,
   openForm,
   pickSharedFolder,
   removeMember,
@@ -73,6 +74,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
   const [inviting, setInviting] = useState(false);
   const [role, setRole] = useState<SharedRole>("member");
   const [leaving, setLeaving] = useState(false);
+  const [trusting, setTrusting] = useState<string | null>(null);
   const [removing, setRemoving] = useState(""); // the member whose Remove asks first, by fingerprint
   // the server's word once read: the backend saves it too, the settings can be older
   const admin = (info?.vault.role ?? vault.role) === "admin";
@@ -151,9 +153,43 @@ function SharedRow({ vault }: { vault: SharedVault }) {
             ))}
             {status.bad ? <StatusLine level="warn">{tn("set.sharedBad", status.bad)}</StatusLine> : null}
             {/* someone left: the key changes once every member left has a Relay that can receive the new one */}
-            {status.waiting?.length ? (
-              <StatusLine level="warn">{t("set.sharedRekeyWaits", { names: status.waiting.join(", ") })}</StatusLine>
-            ) : null}
+            {status.waiting?.map(w => (
+              <StatusLine key={w.name} level="warn">
+                {t(w.why === "changed" ? "set.sharedRekeyChanged" : "set.sharedRekeyNoKey", { name: w.name })}
+              </StatusLine>
+            ))}
+            {/* a member's key is not the one this Mac trusts: they set up Relay again, or someone is in between */}
+            {status.changed?.map(c => (
+              <div key={c.fp} className="grid gap-1">
+                <StatusLine level="warn">{t("set.sharedKeyChanged", { name: c.name })}</StatusLine>
+                {vault.role === "admin" ? (
+                  trusting === c.fp ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-s-muted">{t("set.sharedTrustSure", { name: c.name })}</span>
+                      <button
+                        className={buttonClass("dangerSolid")}
+                        disabled={busy}
+                        onClick={async () => {
+                          await trustMember(vault.id, c.fp);
+                          setTrusting(null);
+                        }}
+                      >
+                        {t("set.sharedTrust")}
+                      </button>
+                      <button className={buttonClass("ghost")} onClick={() => setTrusting(null)}>
+                        {t("mc.cancel")}
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <button className={buttonClass("ghost")} disabled={busy} onClick={() => setTrusting(c.fp)}>
+                        {t("set.sharedTrustAsk", { name: c.name })}
+                      </button>
+                    </div>
+                  )
+                ) : null}
+              </div>
+            ))}
             {status.conflicts.length ? (
               <div className="grid gap-0.5">
                 <span className="text-xs text-s-muted">{tn("set.sharedConflicts", status.conflicts.length)}</span>

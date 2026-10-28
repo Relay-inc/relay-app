@@ -88,7 +88,17 @@ const moved: Record<string, { name: string; vault: string }> = {}; // migrate_pr
 const phoneShared = new Set<string>(); // conversation keys shared with the phone (/share-phone)
 // the shared vaults on a relay-server (fixture "shared"): the last rounds, and the one vault's members and open invites
 let sharedStatus: Record<string, any> = shared ? vault.sharedStatus(Math.floor(Date.now() / 1000)) : {};
-if (fixture === "shared-rekey") for (const s of Object.values(sharedStatus)) Object.assign(s, { waiting: ["Design laptop"], held: [], conflicts: [] });
+if (fixture === "shared-rekey")
+  for (const s of Object.values(sharedStatus))
+    Object.assign(s, {
+      waiting: [
+        { name: "Design laptop", why: "nokey" },
+        { name: "Studio Mac", why: "changed" },
+      ],
+      changed: [{ fp: vault.sharedMembers[1].fp, name: "Studio Mac" }],
+      held: [],
+      conflicts: [],
+    });
 let sharedMembers = structuredClone(vault.sharedMembers);
 let sharedInvites = [{ id: "4d2e8a1b6c3f9e70", role: "member", expires: Math.floor(Date.now() / 1000) + 20 * 3600 }];
 let pendingInvite: string | null = fixture === "shared-invite" ? vault.inviteLink("b81c0e5f2a7d3946") : null;
@@ -367,6 +377,14 @@ function handle(cmd: string, a: Args): unknown {
       return { id, recovery: hex(64, 5) };
     }
     // the key this Mac holds, the same one `shared_vault_create` gave
+    case "shared_vault_trust": {
+      const s = sharedStatus[a.id];
+      if (s) {
+        s.changed = (s.changed ?? []).filter((c: { fp: string }) => c.fp !== a.fp);
+        s.waiting = (s.waiting ?? []).filter((w: { why: string }) => w.why !== "changed");
+      }
+      return null;
+    }
     case "shared_vault_recovery":
       if (!(settings.sharedVaults ?? []).some((x: { id: string }) => x.id === a.id))
         return Promise.reject(`no workspace ${a.id}`);

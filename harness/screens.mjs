@@ -1130,6 +1130,14 @@ const VIEWS = {
     await page.getByText("waits for Design laptop").scrollIntoViewIfNeeded();
     await settle(page);
   },
+  // an admin trusts a member's new key, after a confirm (PR key rotation)
+  "settings-shared-trust": async () => {
+    await VIEWS["settings-shared-rekey"]();
+    await button("Trust Studio Mac's new key…").click();
+    await waitText("Only if Studio Mac told you");
+    await page.getByText("Only if Studio Mac told you").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   "settings-shared-vaults": async () => {
     await settingsPage("Machines", undefined, "shared");
     await page.setViewportSize({ width: 900, height: 1600 });
