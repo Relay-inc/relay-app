@@ -258,7 +258,9 @@ pub struct Report {
 /// folder here (a Replica's remote is only a copy, nothing to brake). Before a file here is deleted, or a pull leaves at
 /// most a fifth of it (of 200 bytes or more), `keep` gets the old content; when that fails the file stays.
 /// `allowed`: deletes the user saw held and let through; they pass the brake, every other delete is still counted.
-pub struct Guard<'a> { pub allow_deletes: bool, pub allowed: &'a [String], pub keep: &'a dyn Fn(&str, &[u8]) -> io::Result<()> }
+/// `moved`: (path, hash) of files the user moved away here on purpose (the Pages tab): only their delete on the other
+/// side passes, and only while that side still has the content they had when moved.
+pub struct Guard<'a> { pub allow_deletes: bool, pub allowed: &'a [String], pub moved: &'a [(String, String)], pub keep: &'a dyn Fn(&str, &[u8]) -> io::Result<()> }
 fn delete_cap(base: &Manifest) -> usize { base.len().div_ceil(5).max(5) }
 fn shrinks(old: &[u8], new: &[u8]) -> bool { old.len() >= 200 && new.len() * 5 <= old.len() }
 
@@ -293,7 +295,12 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
     local.retain(|p, _| !hold.contains(p));
     rm.retain(|p, _| !hold.contains(p));
     let (mut acts, clashes) = plan(mode, base, &local, &rm, copy_name, mergeable);
-    let braked = |a: &Action| match a { Action::DeleteLocal(p) | Action::DeleteRemote(p) => !guard.allowed.contains(p), _ => false };
+    let moved = |p: &String| rm.get(p).is_some_and(|e| guard.moved.iter().any(|(m, h)| m == p && *h == e.hash));
+    let braked = |a: &Action| match a {
+        Action::DeleteRemote(p) if moved(p) => false,
+        Action::DeleteLocal(p) | Action::DeleteRemote(p) => !guard.allowed.contains(p),
+        _ => false,
+    };
     let deletes = acts.iter().filter(|a| braked(a)).count();
     if mode == Mode::TwoWay && !guard.allow_deletes && deletes > delete_cap(base) {
         acts.retain(|a| { if braked(a) { rep.held.push(target(a).into()); } !braked(a) });
@@ -662,7 +669,7 @@ mod tests {
     }
 
     const COPY: &str = "a (conflict srv 2026-10-02 1530).md";
-    const OPEN: &Guard = &Guard { allow_deletes: true, allowed: &[], keep: &|_, _| Ok(()) };
+    const OPEN: &Guard = &Guard { allow_deletes: true, allowed: &[], moved: &[], keep: &|_, _| Ok(()) };
     fn round_with(t: &Tmp, base: &Manifest, w: &mut Walker, mem: &Mem, g: &Guard) -> (Manifest, Report) {
         run(Mode::TwoWay, &t.0, base, w, &Filter::vault_default(), mem, &|p| conflict_copy(p, "srv", "2026-10-02 1530"), &|p| p.ends_with("MEMORY.md"), g, &|_, _| {})
     }
@@ -770,7 +777,7 @@ mod tests {
         let (base, _) = round(&t, &Manifest::new(), &mut w, &mem);
         let kept = RefCell::new(vec![]);
         let keep = |p: &str, d: &[u8]| { kept.borrow_mut().push((p.to_string(), d.to_vec())); Ok(()) };
-        let shut = Guard { allow_deletes: false, allowed: &[], keep: &keep };
+        let shut = Guard { allow_deletes: false, allowed: &[], moved: &[], keep: &keep };
         // 6 of 30 gone there: a fifth, under the cap of 6, goes through, each kept first
         for i in 0..6 { mem.files.borrow_mut().remove(&format!("n/{i:02}.md")); }
         let (base, r) = round_with(&t, &base, &mut w, &mem, &shut);
@@ -786,9 +793,9 @@ mod tests {
         let seen = r.held.clone();
         // the user lets those 7 through; meanwhile 7 more go there: only the ones the user saw pass, the rest stay held
         for i in 13..20 { mem.files.borrow_mut().remove(&format!("n/{i:02}.md")); }
-        let (base, r) = round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: false, allowed: &seen, keep: &keep });
+        let (base, r) = round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: false, allowed: &seen, moved: &[], keep: &keep });
         assert_eq!((r.deleted_local.len(), r.held.len(), t.read("n/06.md"), t.read("n/13.md").is_some()), (7, 7, None, true));
-        let (base, r) = round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: true, allowed: &[], keep: &keep });
+        let (base, r) = round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: true, allowed: &[], moved: &[], keep: &keep });
         assert_eq!((r.deleted_local.len(), r.held.len()), (7, 0));
         noop(&t, &base, &mut w, &mem);
         // a Replica is not braked: its remote is only a copy
@@ -797,12 +804,32 @@ mod tests {
         let (_, r) = run(Mode::Replica, &t.0, &base, &mut w, &Filter::vault_default(), &mem, &|p| p.into(), &|_| false, &shut, &|_, _| {});
         assert_eq!((r.deleted_remote.len(), r.held.len()), (10, 0));
     }
+    #[test] fn moved_files_pass_the_brake_only_as_remote_deletes_of_the_same_content() {
+        let (t, mut w, mem) = (Tmp::new("moved"), Walker::default(), Mem::default());
+        for i in 0..30 { t.put(&format!("n/{i:02}.md"), "x"); }
+        let (base, _) = round(&t, &Manifest::new(), &mut w, &mem);
+        let x = sha256_hex(b"x");
+        // 10 moved here (over the cap of 6), one of them changed there since: that one is held, the 9 go
+        for i in 0..10 { fs::remove_file(t.0.join(format!("n/{i:02}.md"))).unwrap(); }
+        mem.set("n/09.md", "changed there");
+        let moved: Vec<(String, String)> = (0..10).map(|i| (format!("n/{i:02}.md"), x.clone())).collect();
+        let g = Guard { allow_deletes: false, allowed: &[], moved: &moved, keep: &|_, _| Ok(()) };
+        let (base, r) = round_with(&t, &base, &mut w, &mem, &g);
+        assert_eq!((r.deleted_remote.len(), r.held.is_empty()), (9, true));
+        assert_eq!(mem.read("n/09.md").as_deref(), Some("changed there"));
+        // the same list does not let deletes there through here
+        for i in 10..20 { mem.files.borrow_mut().remove(&format!("n/{i:02}.md")); }
+        let moved: Vec<(String, String)> = (10..20).map(|i| (format!("n/{i:02}.md"), x.clone())).collect();
+        let g = Guard { allow_deletes: false, allowed: &[], moved: &moved, keep: &|_, _| Ok(()) };
+        let (_, r) = round_with(&t, &base, &mut w, &mem, &g);
+        assert_eq!((r.deleted_local.len(), r.held.len()), (0, 10));
+    }
     #[test] fn restoring_held_deletes_is_dropping_them_from_the_base() {
         let (t, mut w, mem) = (Tmp::new("restore"), Walker::default(), Mem::default());
         for i in 0..10 { t.put(&format!("{i}.md"), "x"); }
         let (mut base, _) = round(&t, &Manifest::new(), &mut w, &mem);
         for i in 0..8 { mem.files.borrow_mut().remove(&format!("{i}.md")); }
-        let shut = Guard { allow_deletes: false, allowed: &[], keep: &|_, _| Ok(()) };
+        let shut = Guard { allow_deletes: false, allowed: &[], moved: &[], keep: &|_, _| Ok(()) };
         let (b2, r) = round_with(&t, &base, &mut w, &mem, &shut);
         assert_eq!(r.held.len(), 8);
         base = b2;
@@ -819,18 +846,18 @@ mod tests {
         let kept = RefCell::new(vec![]);
         let keep = |p: &str, d: &[u8]| { kept.borrow_mut().push((p.to_string(), d.to_vec())); Ok(()) };
         mem.set("c.md", "short");
-        let (base, r) = round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: false, allowed: &[], keep: &keep });
+        let (base, r) = round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: false, allowed: &[], moved: &[], keep: &keep });
         assert_eq!((r.pulled, t.read("c.md").as_deref()), (vec![s("c.md")], Some("short")));
         assert_eq!(kept.borrow().as_slice(), [(s("c.md"), long.as_bytes().to_vec())]);
         // an ordinary edit there is no reason to keep anything
         mem.set("c.md", "short, and a bit longer");
-        round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: false, allowed: &[], keep: &keep });
+        round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: false, allowed: &[], moved: &[], keep: &keep });
         assert_eq!(kept.borrow().len(), 1);
     }
     #[test] fn a_copy_that_cannot_be_kept_keeps_the_file() {
         let (t, mut w, mem, base) = synced("nokeep");
         mem.files.borrow_mut().remove("c.md");
-        let (b2, r) = round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: false, allowed: &[], keep: &|_, _| Err(io::Error::other("disk full")) });
+        let (b2, r) = round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: false, allowed: &[], moved: &[], keep: &|_, _| Err(io::Error::other("disk full")) });
         assert_eq!((r.errors, t.read("c.md").as_deref()), (vec![s("c.md: keeping the old copy: disk full")], Some("c")));
         assert_eq!(b2["c.md"], base["c.md"], "retried next round");
     }

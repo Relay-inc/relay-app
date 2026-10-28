@@ -173,7 +173,7 @@ pub fn real_path(p: &str) -> Result<String, String> {
 /// its whole round: a slow server holds up only that vault (each round runs on a thread of its own, lib.rs), and a
 /// leave of it waits for the round to end.
 #[derive(Default)]
-struct One { walker: Walker, allowed: Vec<String> }
+struct One { walker: Walker, allowed: Vec<String>, moved: Vec<(String, String)> }
 #[derive(Default)]
 pub struct Hub { vaults: Mutex<HashMap<String, Arc<Mutex<One>>>>, pub status: Mutex<HashMap<String, Status>> }
 
@@ -188,6 +188,9 @@ impl Hub {
         let one = self.one(&v.id);
         let Ok(mut one) = one.try_lock() else { return None };
         if !listed() { return None; }
+        // the user's own moves count for this round only, also when it fails: a later one may meet another server
+        // side by then, where they count as any delete
+        let moved = std::mem::take(&mut one.moved);
         let mut st = Status { at: chrono::Utc::now().timestamp(), ..Default::default() };
         match load_key(data, &v.id).and_then(|k| Ok((k, filter(Path::new(&v.folder))?))) {
             Err(e) => st.errors.push(e),
@@ -203,7 +206,7 @@ impl Hub {
                 let copy = |p: &str| conflict_copy(&f, p, name, &stamp);
                 let to = trash(data, &v.id).join(&stamp);
                 let keep = |p: &str, d: &[u8]| sync::write_atomic(&to.join(p), d, None);
-                let guard = Guard { allow_deletes: false, allowed: &allowed, keep: &keep };
+                let guard = Guard { allow_deletes: false, allowed: &allowed, moved: &moved, keep: &keep };
                 let remote = client(v, me).sealed(&v.id, key);
                 remote.know(&base);
                 let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, &mut one.walker, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
@@ -226,10 +229,21 @@ impl Hub {
 
     /// The held deletes the user saw go through in the next round; any others the brake still holds. Another member
     /// can delete more meanwhile, so it is the list shown, not "everything held next time".
-    pub fn allow_deletes(&self, id: &str, seen: Vec<String>) { self.one(id).lock().unwrap().allowed = seen; }
-    /// Deletes the user made here on purpose (a page moved or put in the trash from the Pages tab) pass the brake in
-    /// the next round, next to what was let through already.
-    pub fn let_through(&self, id: &str, paths: Vec<String>) { self.one(id).lock().unwrap().allowed.extend(paths); }
+    pub fn allow_deletes(&self, id: &str, seen: Vec<String>) {
+        let one = self.one(id);
+        let mut one = one.lock().unwrap();
+        for p in seen { if !one.allowed.contains(&p) { one.allowed.push(p); } }
+    }
+    /// Files the user moved away here (the Pages tab), with the hash they had: in the next round only, their delete on
+    /// the server passes the brake while the server still has that content. A delete from the trash is not one of these.
+    pub fn let_through(&self, id: &str, moved: Vec<(String, String)>) { self.one(id).lock().unwrap().moved.extend(moved); }
+    /// Paths back where they were (Undo): no longer let through.
+    pub fn forget_through(&self, id: &str, paths: &[String]) {
+        let one = self.one(id);
+        let mut one = one.lock().unwrap();
+        one.moved.retain(|(p, _)| !paths.contains(p));
+        one.allowed.retain(|p| !paths.contains(p));
+    }
     /// The held deletes the user saw are undone instead: out of the base (under the vault's lock, as a round writes
     /// it), so the next round copies each file back from the side that still has it.
     pub fn restore_held(&self, data: &Path, id: &str, seen: &[String]) -> Result<(), String> {
@@ -440,6 +454,25 @@ pub async fn shared_vault_held(app: AppHandle, id: String, allow: bool, paths: V
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn moves_count_for_one_round_and_letting_through_adds() {
+        let hub = Hub::default();
+        let data = std::env::temp_dir().join(format!("shared-moves-{}", std::process::id()));
+        std::fs::create_dir_all(&data).unwrap();
+        hub.allow_deletes("v", vec!["a.md".into()]);
+        hub.allow_deletes("v", vec!["b.md".into()]);
+        assert_eq!(hub.one("v").lock().unwrap().allowed, ["a.md", "b.md"]);
+        hub.let_through("v", vec![("c.md".into(), "h".into()), ("d.md".into(), "h".into())]);
+        hub.forget_through("v", &["d.md".into(), "b.md".into()]);
+        assert_eq!(hub.one("v").lock().unwrap().moved, [("c.md".to_string(), "h".to_string())]);
+        assert_eq!(hub.one("v").lock().unwrap().allowed, ["a.md"]);
+        // a round that fails (no key here) still uses up the moves
+        let v = Shared { id: "v".into(), name: "V".into(), host: "127.0.0.1".into(), port: 1, fp: String::new(), folder: data.join("f").to_string_lossy().into(), role: String::new() };
+        let me = relay_remote::tls::Identity::generate().unwrap();
+        let st = hub.round(&data, &v, &me, "mac", &|| true).unwrap();
+        assert!(!st.errors.is_empty());
+        assert!(hub.one("v").lock().unwrap().moved.is_empty());
+    }
     #[test]
     fn the_settings_list_skips_what_does_not_read() {
         let s = json!({"sharedVaults": [{"id": "0123456789abcdef", "name": "Team", "host": "192.168.1.2", "port": 47800, "fp": "ab", "folder": "/Users/me/Team"}, {"id": 3},

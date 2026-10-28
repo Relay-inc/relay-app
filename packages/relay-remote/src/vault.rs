@@ -388,7 +388,7 @@ mod tests {
         fn new(tag: &str, srv: &Arc<Server>, key: &VaultKey) -> Mac { Mac { t: Tmp::new(tag), base: Manifest::new(), w: Walker::default(), r: sealed(srv, key) } }
         fn round(&mut self) -> Report {
             self.r.know(&self.base);
-            let g = Guard { allow_deletes: true, allowed: &[], keep: &|_, _| Ok(()) };
+            let g = Guard { allow_deletes: true, allowed: &[], moved: &[], keep: &|_, _| Ok(()) };
             let (base, rep) = run(Mode::TwoWay, &self.t.0, &self.base, &mut self.w, &Filter::vault_default(), &self.r,
                                   &|p| conflict_copy(p, "mac-b", "2026-10-02 1530"), &|_| false, &g, &|_, _| {});
             self.base = base;
