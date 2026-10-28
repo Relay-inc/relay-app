@@ -1240,6 +1240,25 @@ const VIEWS = {
     await page.getByRole("tab", { name: /^Chats/ }).waitFor();
   },
   // the Pages tab: Recent from the conversations' reads, the contexts with their projects, the folders (PR workspace-pages)
+  // Files off (the app's default): the sidebar is Chats only, no tab row (experimental switch)
+  "sidebar-files-off": async () => {
+    await open(page, server.url, { fixture: "files-off" });
+    await waitText("GENERAL");
+    await settle(page);
+  },
+  // Files on: the Chats and Pages tabs under the search
+  "sidebar-files-on": async () => {
+    await open(page, server.url);
+    await page.getByRole("tab", { name: /^Chats/ }).waitFor();
+    await settle(page);
+  },
+  // Settings › General, the Experimental section at the bottom with the Files switch off
+  "settings-experimental": async () => {
+    await settingsPage("General", undefined, "files-off");
+    await page.setViewportSize({ width: 900, height: 2400 });
+    await page.getByText("Experimental", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   "pages-tab": async () => {
     await open(page, server.url);
     await page.getByRole("tab", { name: /^Pages/ }).click();

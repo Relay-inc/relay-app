@@ -122,6 +122,9 @@ fn norm(mut v: Value) -> Value {
     if !v["mail"]["account"].is_string() { v["mail"]["account"] = json!(""); }
     if !v["mail"]["accounts"].is_array() { v["mail"]["accounts"] = json!([]); }
     if !v["mail"]["experimental"].is_boolean() { v["mail"]["experimental"] = json!(false); }
+    // Files (pages, editing, team documents) is experimental and off until switched on in Settings › General
+    if !v["experimental"].is_object() { v["experimental"] = json!({}); }
+    if !v["experimental"]["files"].is_boolean() { v["experimental"]["files"] = json!(false); }
     // the old himalaya account names are no emails: those fall back to the first account
     let known = v["mail"]["accounts"].as_array().unwrap().iter().any(|a| a["email"] == v["mail"]["account"]);
     if !known { v["mail"]["account"] = json!(""); }
@@ -1250,6 +1253,9 @@ fn env_of(app: &AppHandle, st: &App, p: &dyn AgentProvider) -> EnvBuf {
     }
     EnvBuf { home: home(), vault: s["vault"].as_str().unwrap_or("").into(), path: st.path.clone(), bin: agents::bin(&s, p, &home(), &st.path), pending: pending_dir(app), opts }
 }
+/// Files is on: the Pages tab, a note as a page and what builds on it (Settings › General › Experimental). Team documents
+/// keep syncing without it, so a Mac with it off never lets a workspace's notes go stale.
+pub(crate) fn files_on(s: &Value) -> bool { s["experimental"]["files"] == true }
 fn mail_on(s: &Value) -> bool { s["mail"]["on"] == true && !mail::accounts(&s["mail"]).is_empty() }
 /// A conversation's provider: its session's, else the one asked for when switched on, else the default.
 fn provider_of(st: &App, key: &str, asked: Option<&str>) -> &'static dyn AgentProvider {
@@ -2964,6 +2970,12 @@ mod lang_tests {
         for (k, row) in TEXT { assert!(row.iter().all(|s| !s.is_empty()), "{k}"); }
         assert_eq!(tr("fr", "settings"), "Réglages…");
         assert_eq!(tr_v("de", "err.override", "x"), "Ungültige Zuordnung 'x'");
+    }
+    #[test]
+    fn files_is_off_until_switched_on() {
+        assert!(!files_on(&norm(json!({}))));
+        assert!(!files_on(&norm(json!({"experimental": "yes"}))));
+        assert!(files_on(&norm(json!({"experimental": {"files": true}}))));
     }
     #[test]
     fn language_from_settings_or_system() {

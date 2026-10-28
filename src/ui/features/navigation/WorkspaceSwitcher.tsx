@@ -7,6 +7,7 @@ import {
   type Workspace,
 } from "../../../application/navigation/workspaces";
 import { useDerived } from "../../hooks/useDerived";
+import { filesOn } from "../../../application/settings/settings";
 import { useDismiss } from "../../hooks/useDismiss";
 import { useT } from "../../hooks/useT";
 import { useKeyLabel } from "../../hooks/useKeyLabel";
@@ -75,7 +76,9 @@ export function WorkspaceSwitcher({
   // a team workspace's Inbox (ticket 12): read when it is shown, when the menu opens and when a comment arrives
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [showInbox, setShowInbox] = useState(false);
-  const team = active?.team ? active.folder : "";
+  const files = useDerived(filesOn);
+  // the Inbox is part of Files (experimental): without it a team workspace has none
+  const team = active?.team && files ? active.folder : "";
   const readInbox = () => {
     if (team) void loadInbox(team).then(setInbox, () => setInbox([]));
   };

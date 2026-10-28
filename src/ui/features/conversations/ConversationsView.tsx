@@ -27,6 +27,7 @@ import {
 import { showInBrain } from "../../../application/brain/brain";
 import { boardKey } from "../../../domain/navigation/keys";
 import { useDerived } from "../../hooks/useDerived";
+import { filesOn } from "../../../application/settings/settings";
 import { useUiRequest } from "../../hooks/useUiRequest";
 import { SelectedView } from "../../app/SelectedView";
 import { PullRequestsView } from "../pull-requests/PullRequestsView";
@@ -78,6 +79,7 @@ export function ConversationsView({ className }: { className: string }) {
   const board = boardOf(selected);
   const hasSubagents = useConversationsStore(s => !onView && !!s.subs[selected]?.length);
   const bar = useDerived(() => chatBar(selected));
+  const files = useDerived(filesOn);
   // a worker shown as its page next to the orchestrator's column, and the orchestrator before its first task
   const workerPage = useNavigationStore(s => s.orchDetail);
   // a subagent Claude Code spawned here, shown as its page next to the agents column
@@ -100,7 +102,7 @@ export function ConversationsView({ className }: { className: string }) {
   // a plugin's view is a page of its own in a frame, which scrolls itself
   const plugin = pluginIdOf(selected);
   // a workspace's note as a page: its own bar and scroll
-  const page = pageOf(selected);
+  const page = files ? pageOf(selected) : "";
   const ownScroll =
     !!page ||
     selected === PRS ||

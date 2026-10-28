@@ -1203,6 +1203,12 @@ export default {
   "set.sidebarMore": "Ausgeblendete unter „…“",
   "nav.resetOrder": "Reihenfolge zurücksetzen",
   "nav.sidebarSettings": "Seitenleisten-Einstellungen…",
+  "set.sec.experimental": "Experimentell",
+  "set.experimentalHelp":
+    "Funktionen, die noch erprobt werden. Aus, bis du sie einschaltest; sie können sich noch ändern oder wegfallen.",
+  "set.files": "Dateien: Seiten, Bearbeiten und Team-Dokumente",
+  "set.filesHelp":
+    "Der Reiter Seiten neben Chats, eine Notiz als bearbeitbare Seite, Dateiverwaltung, Verlauf, Kommentare und Erwähnungen. Aus: Notizen öffnen wie bisher in der Seitenleiste.",
   "set.sec.sidebar": "Seitenleiste",
   "perm.title": "Berechtigungen",
   "perm.help": "Was macOS Relay erlaubt. Ein nicht von Apple signierter Build verliert sie bei jedem Update.",

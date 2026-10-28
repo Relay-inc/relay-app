@@ -14,6 +14,7 @@ import {
   removeExtraVault,
   saveFavicons,
   saveKeepAwake,
+  saveFiles,
   saveAutoRetry,
   saveTimeFromSessions,
   saveCaptureOnClose,
@@ -40,6 +41,7 @@ import { PermissionsSection } from "./PermissionsSection";
 import { Section } from "./Section";
 import { Segmented } from "./Segmented";
 import { Switch } from "./Switch";
+import { filesOn } from "../../../domain/settings/types";
 import { VaultSyncSection } from "./VaultSyncSection";
 
 const NONE: string[] = [];
@@ -62,6 +64,7 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
   const more = useSettingsStore(s => s.settings.sidebar?.more !== false);
   const faviconsOn = useSettingsStore(s => s.settings.favicons?.on !== false);
   const keepAwake = useSettingsStore(s => s.settings.keepAwake !== false);
+  const files = useSettingsStore(s => filesOn(s.settings));
   const autoRetry = useSettingsStore(s => s.settings.autoRetry === true);
   const timeFromSessions = useSettingsStore(s => s.settings.timeFromSessions !== false);
   const captureOnClose = useSettingsStore(s => s.settings.captureOnClose !== false);
@@ -300,6 +303,11 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
         </Field>
       </Section>
       <PermissionsSection active={active} />
+      <Section title={t("set.sec.experimental")} desc={t("set.experimentalHelp")} rows>
+        <Field label={t("set.files")} id="files" hint={t("set.filesHelp")}>
+          <Switch id="files" on={files} onToggle={saveFiles} />
+        </Field>
+      </Section>
     </>
   );
 }

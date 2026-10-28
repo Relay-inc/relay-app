@@ -71,6 +71,7 @@ export const saveTimeFromSessions = (timeFromSessions: boolean) => save({ ...cur
 export const saveGitDrawer = (gitDrawer: boolean) => save({ ...current(), gitDrawer });
 export const saveWorkerCrabs = (workerCrabs: boolean) => save({ ...current(), workerCrabs });
 export const saveCaptureOnClose = (captureOnClose: boolean) => save({ ...current(), captureOnClose });
+export const saveFiles = (files: boolean) => save({ ...current(), experimental: { ...current().experimental, files } });
 /** The sidebar's views: the layout, the order, the ones switched off (each patch keeps the rest). */
 export const saveSidebar = (patch: SidebarCfg) => save({ ...current(), sidebar: { ...current().sidebar, ...patch } });
 /** One view on top of the sidebar switched on or off. */

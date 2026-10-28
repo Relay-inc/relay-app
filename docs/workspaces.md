@@ -206,6 +206,8 @@ out). Written whole under the vault's lock; never deleted.
 
 ## Documents
 
+The page features (editing, co-editing, history, comments, mentions) are behind Settings › General › Experimental › Files, off by default. The documents themselves are not: a Mac with Files off still pulls, pushes and writes a workspace's documents every round, so its notes never go stale; only the switch that turns a workspace's notes into documents is hidden there.
+
 A note several members edit at once is a document instead of a file the rounds copy whole: a Yjs document whose
 markdown is one Y.Text, so the `.md` written out is that text and nothing is lost going back and forth to Obsidian or
 an agent. Its edits merge; there are no conflict copies for it.

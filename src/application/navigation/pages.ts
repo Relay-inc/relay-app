@@ -9,7 +9,7 @@ import { storage } from "../../infrastructure/storage";
 import { useConversationsStore } from "../conversations/store";
 import { newChatHere } from "../conversations/chats";
 import { typeInto } from "../conversations/actions";
-import { settings } from "../settings/settings";
+import { filesOn, settings } from "../settings/settings";
 import { useWorkspaceStore } from "../workspace/store";
 import { contexts, loadNotes, loadSnapshot, projectName } from "../workspace/vault";
 import { FILE_TOOLS } from "../../domain/git/git";
@@ -22,7 +22,8 @@ import { activeFolder, workspaces } from "./workspaces";
 // The sidebar's two tabs: Chats (the conversations, as before) and Pages (the notes of the workspace shown).
 const set = useNavigationStore.setState;
 export type SidebarTab = "chats" | "pages";
-export const sidebarTab = (): SidebarTab => useNavigationStore.getState().sidebar.tab;
+/** With Files off there are no tabs: the sidebar is Chats, as before. */
+export const sidebarTab = (): SidebarTab => (filesOn() ? useNavigationStore.getState().sidebar.tab : "chats");
 export function setSidebarTab(tab: SidebarTab) {
   set(draft => {
     draft.sidebar.tab = tab;
@@ -31,7 +32,7 @@ export function setSidebarTab(tab: SidebarTab) {
   if (tab === "pages") void loadRecent();
 }
 /** ⌘.: the other tab. */
-export const swapSidebarTab = () => setSidebarTab(sidebarTab() === "chats" ? "pages" : "chats");
+export const swapSidebarTab = () => filesOn() && setSidebarTab(sidebarTab() === "chats" ? "pages" : "chats");
 
 const isMain = (folder: string) => folder === settings().vault;
 /** The notes of the workspace shown, relative to it (vault_notes gives another vault's absolute). */
@@ -103,7 +104,9 @@ export const togglePage = (path: string, open = !useNavigationStore.getState().s
     else draft.sidebar.pagesOpen.delete(path);
   });
 /** A note of the workspace shown opens as a page in the middle column. */
-export const openPage = (path: string) => select(pageKey(target(path)));
+/** A note as a page in the middle column; with Files off in the side drawer, as before pages. */
+export const openPage = (path: string) =>
+  filesOn() ? select(pageKey(target(path))) : openDetail(noteKey(target(path)));
 /** A page's note as a path of the workspace shown ("" when the open page is another workspace's). */
 export function pagePath(page: string) {
   if (isMain(activeFolder())) return page.startsWith("/") ? "" : page;

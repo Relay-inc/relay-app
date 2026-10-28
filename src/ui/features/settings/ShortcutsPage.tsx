@@ -18,7 +18,7 @@ import {
   WORKSPACE_KEYS,
   type CommandId,
 } from "../../../domain/settings/shortcuts";
-import { mailExperimental } from "../../../domain/settings/types";
+import { filesOn, mailExperimental } from "../../../domain/settings/types";
 import { voiceOf, type ShortcutKey } from "../../../domain/settings/voice";
 import type { Key } from "../../../shared/i18n";
 import { Icon } from "../../components/Icon";
@@ -118,7 +118,7 @@ export function ShortcutsPage() {
         }
         rows
       >
-        {rows(APP)}
+        {rows(filesOn(settings) ? APP : APP.filter(id => id !== "app.sidebarTab"))}
       </Section>
       <Section title={t("keys.sec.workspaces")} rows>
         {rows(WORKSPACE_KEYS)}
