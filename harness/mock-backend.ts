@@ -512,6 +512,32 @@ function handle(cmd: string, a: Args): unknown {
     case "design_opened":
     case "set_design_link":
     case "set_project_icon":
+    // a project moved or copied to another workspace: what goes, a team workspace's warning, and Northwind Portal into
+    // the side vault, which has a project of that name
+    case "migrate_project": {
+      const name = String(a.project).split("\u001f")[0];
+      const team = vault.sharedVaults.some(v => v.folder === a.to);
+      const contexts = team ? ["Team", "Work"] : ["Agency", "Team"];
+      const context = String(a.context) || (contexts.includes("Agency") ? "Agency" : contexts[0]);
+      const base = `Contexts/${context}/${team ? "Projects" : "Portfolio"}/${name}`;
+      const files = [`${base}/Documents/Kick-off.md`, `${base}/Documents/Scope.md`, `${base}/${name}.md`];
+      const clash = a.to === vault.TEAM_VAULT && name === "Northwind Portal";
+      return {
+        files,
+        scratch: 1,
+        skipped: team ? [`Contexts/Agency/Portfolio/${name}/.claude/settings.json`] : [],
+        conflicts: clash ? [name, `${base}/${name}.md`] : [],
+        row: true,
+        card: team,
+        icon: true,
+        design: false,
+        repos: 1,
+        contexts,
+        context,
+        team,
+        key: `${name}\u001f5f2c8e91a7d04b36`,
+      };
+    }
     case "set_project_repos":
     case "ignore_repo":
       return null;

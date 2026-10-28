@@ -908,6 +908,49 @@ const VIEWS = {
       .click({ button: "right" });
     await settle(page);
   },
+  // a project moved to another workspace: what goes and what stays (PR workspace-migrate)
+  "migrate-personal": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await click("GENERAL"); // folded, so the project's menu fits
+    await page
+      .getByRole("navigation")
+      .first()
+      .getByText("Beacon", { exact: true })
+      .first()
+      .click({ button: "right" });
+    await page.getByRole("button", { name: "Side vault" }).first().click();
+    await waitText("1 linked repo");
+    await settle(page);
+  },
+  // into a team workspace: the files are listed and Move waits for the tick
+  "migrate-team": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await click("GENERAL"); // folded, so the project's menu fits
+    await page
+      .getByRole("navigation")
+      .first()
+      .getByText("Beacon", { exact: true })
+      .first()
+      .click({ button: "right" });
+    await page.getByRole("button", { name: "Northwind", exact: true }).first().click();
+    await waitText("team workspace");
+    await page.getByText(/^\d+ files go$/).click();
+    await settle(page);
+  },
+  // a project of that name in the target: nothing is written
+  "migrate-conflict": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await click("GENERAL");
+    await page
+      .getByRole("navigation")
+      .first()
+      .getByText("Northwind Portal", { exact: true })
+      .first()
+      .click({ button: "right" });
+    await page.getByRole("button", { name: "Side vault" }).first().click();
+    await waitText("nothing is written");
+    await settle(page);
+  },
   "closed-toast": async () => {
     await open(page, server.url, { sel: keys.switchTo });
     await waitText(markers.switchEnd);

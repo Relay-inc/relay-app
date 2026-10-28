@@ -39,8 +39,7 @@ pub fn snapshot(vault: &str, work_state: &str, notes: &str, today: chrono::Naive
 
 /// A vault's projects (its work-state rows with their notes' open items and status), and the folder of its notes.
 pub fn vault_projects(vault: &str, work_state: &str, notes: &str) -> Result<(Vec<Value>, PathBuf), String> {
-    let cfg = crate::relay_config::load(vault).unwrap_or_else(|| json!({}));
-    let root = if Path::new(notes).is_dir() { PathBuf::from(notes) } else { PathBuf::from(vault) };
+    let (cfg, root) = cfg_root(vault, notes);
     let (open_h, status_h) = (alt(&list(&cfg, &["headings", "open"], &["Open"])), alt(&list(&cfg, &["headings", "status"], &["Status", "Stand van zaken"])));
     let n = Notes {
         skip: list(&cfg, &["skip"], &["Documents", "Gesprekken", "_archive"]),
@@ -49,13 +48,38 @@ pub fn vault_projects(vault: &str, work_state: &str, notes: &str) -> Result<(Vec
         status_line: rx(&format!(r"(?i)^\*{status_h}[^\n]*\n")),
         root,
     };
-    // a context is a work-state heading the config names, or one named after a folder of the notes (Contexts/Work…)
-    let mut contexts: HashSet<String> = list(&cfg, &["contexts"], &[]).into_iter().collect();
-    for e in fs::read_dir(&n.root).map_err(|e| e.to_string())?.flatten() {
+    let contexts = contexts_in(&cfg, &n.root)?;
+    Ok((projects(work_state, &contexts, &n)?, n.root))
+}
+/// A vault's config and the folder of its notes (the vault itself when the mapped one is not there).
+fn cfg_root(vault: &str, notes: &str) -> (Value, PathBuf) {
+    let cfg = crate::relay_config::load(vault).unwrap_or_else(|| json!({}));
+    (cfg, if Path::new(notes).is_dir() { PathBuf::from(notes) } else { PathBuf::from(vault) })
+}
+/// A context is a work-state heading the config names, or one named after a folder of the notes (Contexts/Work…).
+fn contexts_in(cfg: &Value, root: &Path) -> Result<HashSet<String>, String> {
+    let mut contexts: HashSet<String> = list(cfg, &["contexts"], &[]).into_iter().collect();
+    for e in fs::read_dir(root).map_err(|e| e.to_string())?.flatten() {
         let name = e.file_name().to_string_lossy().into_owned();
         if !name.starts_with('.') && e.path().is_dir() { contexts.insert(name); }
     }
-    Ok((projects(work_state, &contexts, &n)?, n.root))
+    Ok(contexts)
+}
+/// A vault's contexts, sorted.
+pub fn contexts(vault: &str, notes: &str) -> Result<Vec<String>, String> {
+    let (cfg, root) = cfg_root(vault, notes);
+    let mut l: Vec<String> = contexts_in(&cfg, &root)?.into_iter().collect();
+    l.sort();
+    Ok(l)
+}
+/// The note a project's status and open items are read from (note_state): the first `<name>.md`, else `<short>.md`.
+pub fn project_note(vault: &str, notes: &str, name: &str) -> Option<PathBuf> {
+    let (cfg, root) = cfg_root(vault, notes);
+    let skip = list(&cfg, &["skip"], &["Documents", "Gesprekken", "_archive"]);
+    let short = rx(r"\s*\(.*\)$").replace(name, "").into_owned();
+    let mut hits = vec![];
+    for nm in std::iter::once(name).chain((short != name).then_some(short.as_str())) { find_notes(&root, &skip, &format!("{nm}.md"), 0, &mut hits); }
+    hits.into_iter().next()
 }
 
 fn projects(work_state: &str, contexts: &HashSet<String>, n: &Notes) -> Result<Vec<Value>, String> {

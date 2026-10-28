@@ -45,7 +45,9 @@ import { FolderName } from "./FolderName";
 import { useReorder } from "./useReorder";
 import { DROP_LINE_AFTER } from "./rows";
 import { closeWork, openWork } from "../../../application/today/work";
-import { activeFolder } from "../../../application/navigation/workspaces";
+import { activeFolder, workspaces } from "../../../application/navigation/workspaces";
+import { projectVault as homeOf } from "../../../application/navigation/migrate";
+import { MigrateDialog } from "./MigrateDialog";
 import { vaultName } from "../../../application/workspace/vault";
 import "../../styles/navigation.css";
 
@@ -75,6 +77,7 @@ export function NavigationView({ className }: { className: string }) {
   const root = useRef<HTMLDivElement>(null);
   const menuElement = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<MenuTarget | null>(null);
+  const [migrating, setMigrating] = useState<{ project: string; to: string; mode: "move" | "copy" } | null>(null);
   const { press, dropzone, unlessDragged, reordering } = useReorder(root, layout === "icons");
 
   // the selected row stays in sight, also when it is selected from elsewhere
@@ -138,10 +141,17 @@ export function NavigationView({ className }: { className: string }) {
       : [{ id: "", label: t("ctx.none"), head: true }];
     const anyOpen =
       chatsOf(target.project).length > 0 || terminalSessions().some(session => session.project === target.project);
+    // the other workspaces it can move or be copied to
+    const others = target.project ? workspaces().filter(w => w.folder !== homeOf(target.project ?? "")) : [];
+    const to = (mode: "move" | "copy"): MenuItem[] => [
+      { id: "", label: t(mode === "move" ? "mig.moveTo" : "mig.copyTo"), head: true },
+      ...others.map(w => ({ id: `${mode}:${w.folder}`, label: w.name })),
+    ];
     return [
       { id: "new", label: t("nav.newChat") },
       { id: "newfolder", label: t("nav.newFolder") },
       ...(anyOpen ? [{ id: "closeall", label: t("ctx.closeAll") }] : []),
+      ...(others.length ? [...to("move"), ...to("copy")] : []),
       ...recent,
     ];
   };
@@ -158,6 +168,12 @@ export function NavigationView({ className }: { className: string }) {
     else if (itemId === "new") select(newChatHere(target.project));
     else if (itemId === "newfolder") addFolder(target.project ?? "");
     else if (itemId === "closeall") closeAll(target.project);
+    else if (/^(move|copy):/.test(itemId) && target.project)
+      setMigrating({
+        project: target.project,
+        mode: itemId.startsWith("move") ? "move" : "copy",
+        to: itemId.slice(itemId.indexOf(":") + 1),
+      });
     else reopen(itemId.slice("reopen:".length));
   };
 
@@ -403,6 +419,9 @@ export function NavigationView({ className }: { className: string }) {
       />
       {menu ? (
         <SidebarMenu ref={menuElement} x={menu.x} y={menu.y} items={menuItems(menu)} onPick={id => pick(menu, id)} />
+      ) : null}
+      {migrating ? (
+        <MigrateDialog {...migrating} from={homeOf(migrating.project)} onClose={() => setMigrating(null)} />
       ) : null}
     </div>
   );
