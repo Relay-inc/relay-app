@@ -1,4 +1,9 @@
-import { activeWorkspace, vaultChoices } from "../../domain/conversations/rules";
+import { activeWorkspace, chatVault, vaultChoices } from "../../domain/conversations/rules";
+import { opened, panelItem } from "../../domain/navigation/keys";
+import { WAIT } from "../../domain/navigation/views";
+import { isOrchKey } from "../../domain/orchestrator/rules";
+import { useConversationsStore } from "../conversations/store";
+import { terminalOf } from "../conversations/selectors";
 import * as backend from "../../infrastructure/backend";
 import { saveMainSettings, settings } from "../settings/settings";
 import { useWorkspaceStore } from "../workspace/store";
@@ -6,7 +11,8 @@ import { loadSnapshot, vaultName } from "../workspace/vault";
 import { pickVault } from "../workspace/vault-setup";
 import { useNavigationStore } from "./store";
 import { storage } from "../../infrastructure/storage";
-import { toast } from "./navigation";
+import { select, toast } from "./navigation";
+import { projectVault, shownUnder } from "./migrate";
 
 // The workspaces: every vault here (the main one, the folders added, the shared ones), one of them shown in the sidebar.
 /** A workspace in the footer's menu: `notes` counted from the notes index, `team` for one shared on a relay-server,
@@ -67,6 +73,56 @@ export function switchWorkspace(folder: string) {
     draft.sidebar.workspace = workspace;
   });
   storage.set("workspace", workspace);
+}
+
+// The workspace a note path is in: the main vault's are relative, another's absolute ("" for a folder no longer one).
+const noteFolder = (path: string) =>
+  path.startsWith("/")
+    ? (vaultChoices(settings()).find(choice => path.startsWith(choice.folder + "/"))?.folder ?? "")
+    : settings().vault;
+/** The workspace a selection belongs to: a page's, a conversation's or a terminal session's (by its project); "" for
+ *  what every workspace shares (Today, the views, boards, plugins, the orchestrator). */
+export function workspaceOf(key: string): string {
+  const target = opened(key);
+  if (target.kind === "page") return noteFolder(target.target);
+  if (target.kind === "chat" && !isOrchKey(key))
+    return shownUnder(chatVault(useConversationsStore.getState().chats[key], useWorkspaceStore.getState().snap));
+  if (target.kind === "term") {
+    const project = terminalOf(key)?.project;
+    return project ? shownUnder(projectVault(project)) : settings().vault;
+  }
+  return "";
+}
+// what was open in each workspace when the sidebar left it, to come back to; not kept over a restart
+const lastOpen: Record<string, string> = {};
+// The workspaces stay apart: what is open (a page, a conversation, a project's board, a note in the drawer) belongs to
+// the workspace it was opened in. Leaving that workspace puts it away; coming to one opens what was open there, else
+// Today when what is open belongs to another. What every workspace shares stays when the new one had nothing open.
+function leave(from: string, to: string) {
+  const { selected, tool, drawer, panel } = useNavigationStore.getState();
+  const owner = tool ? shownUnder(projectVault(tool.project)) : workspaceOf(selected);
+  if (owner === from) lastOpen[from] = selected;
+  const back = lastOpen[to] ?? "";
+  delete lastOpen[to];
+  if (owner !== to && back && workspaceOf(back) === to) return void select(back);
+  if (owner && owner !== to) return void select(WAIT);
+  const note = drawer === "detail" ? panelItem(panel.open) : null;
+  if (note?.kind === "note" && noteFolder(note.target) !== to)
+    useNavigationStore.setState(draft => {
+      draft.drawer = "";
+      draft.panel.open = "";
+    });
+}
+/** Keep the workspaces apart whichever way the sidebar changes workspace: the menu, ⌃1 to ⌃9, another Relay window. */
+export function keepWorkspacesApart() {
+  let shown = activeFolder();
+  useNavigationStore.subscribe(() => {
+    const now = activeFolder();
+    if (now === shown) return;
+    const from = shown;
+    shown = now;
+    leave(from, now);
+  });
 }
 /** ⌃1 to ⌃9: the workspace at that place, if there is one. */
 export function switchToNth(n: number) {

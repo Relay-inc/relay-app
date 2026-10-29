@@ -569,6 +569,24 @@ const SCENARIOS = {
     s.check("Personal stored as none", (await stored()).at(-1) === "");
   },
 
+  // the workspaces stay apart: a page open in Personal is put away by ⌃2 (Today shows) and comes back with ⌃1
+  async workspacesApart(s) {
+    await s.load({ fixture: "shared" });
+    const { page } = s;
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').first().click();
+    await settle(page);
+    const editor = () => page.locator(".cm-content").count();
+    s.check("the page opens in Personal", (await editor()) === 1);
+    await page.keyboard.press("Control+Digit2");
+    await settle(page);
+    s.check("⌃2 puts it away", (await editor()) === 0);
+    s.check("and shows Today", (await s.local(["sel"])).sel === "__wait");
+    await page.keyboard.press("Control+Digit1");
+    await settle(page);
+    s.check("⌃1 opens it again", (await editor()) === 1);
+  },
+
   // a project moved to another workspace takes its conversations along: they show under it there
   async migrate(s) {
     await s.load({ fixture: "shared" });

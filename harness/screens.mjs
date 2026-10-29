@@ -1270,6 +1270,21 @@ const VIEWS = {
     await waitText("Folders");
     await settle(page);
   },
+  // a page open in Personal, its bar naming Personal (fixture shared, workspaces kept apart)
+  "workspace-page": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').first().click();
+    await page.locator(".cm-content").waitFor();
+    await settle(page);
+  },
+  // ⌃2 from there: the side vault shows Today, Personal's page is put away until ⌃1
+  "workspace-switched": async () => {
+    await VIEWS["workspace-page"]();
+    await page.keyboard.press("Control+Digit2");
+    await page.getByRole("button", { name: "Switch workspace: Side vault" }).waitFor();
+    await settle(page);
+  },
   // the Pages tab's right-click menu on a page: rename, move, duplicate, reveal, copy path, delete (ticket 5)
   "pages-context-menu": async () => {
     await VIEWS["pages-expanded"]();

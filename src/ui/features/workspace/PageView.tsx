@@ -13,7 +13,7 @@ import {
 } from "../../../application/navigation/pages";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { pageKey } from "../../../domain/navigation/keys";
-import { workspaces } from "../../../application/navigation/workspaces";
+import { workspaceOf, workspaces } from "../../../application/navigation/workspaces";
 import { chatsOf } from "../../../application/conversations/selectors";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useWorkspaceStore } from "../../../application/workspace/store";
@@ -50,7 +50,8 @@ export function PageView({ target, className }: { target: string; className: str
   const page = read && !("err" in read) ? read : null;
   const err = read && "err" in read ? read.err : "";
   const path = pagePath(target) || target;
-  const workspace = useDerived(() => workspaces().find(w => w.active)?.name ?? "");
+  // the page's own workspace, not the one the sidebar shows
+  const workspace = useDerived(() => workspaces().find(w => w.folder === workspaceOf(pageKey(target)))?.name ?? "");
   const project = useDerived(() => pageProject(path));
   const icon = useWorkspaceStore(s => (project ? s.icons[project.key] : undefined));
   // the project's conversations, newest first
