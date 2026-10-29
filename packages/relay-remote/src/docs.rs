@@ -246,6 +246,12 @@ impl Docs {
     pub fn set_keys(&self, k: Keys) { *lock(&self.keys) = k; }
     /// A document's name on the server.
     pub fn name(&self, id: &str) -> String { lock(&self.keys).name(&format!("doc:{id}")) }
+    /// The document (a note's, a sidecar or the manifest) whose name on the server is `name`, when this Mac knows it.
+    pub fn id_of(&self, name: &str) -> Option<String> {
+        let mut ids: Vec<String> = self.paths().into_values().flat_map(|id| [format!("{id}#comments"), id]).collect();
+        ids.extend(lock(&self.open).keys().cloned());
+        ids.into_iter().find(|id| self.name(id) == name)
+    }
     /// Called with every update this Mac's editor did not make: another member's, or a change of the note's file taken
     /// in (absorb, export): (document id, Yjs update). Not with what `apply_local` took.
     pub fn subscribe(&self, f: impl Fn(&str, &[u8]) + Send + Sync + 'static) { lock(&self.on).push(Arc::new(f)); }
@@ -759,9 +765,7 @@ impl Docs {
     /// the log, otherwise the log is pulled. Returns the document's id when this Mac knows it. Not on the channel's
     /// own thread: it may pull.
     pub fn take_live(&self, name: &str, seq: u64, from: &str, part: &[u8]) -> Result<Option<String>, String> {
-        let mut ids: Vec<String> = self.paths().into_values().flat_map(|id| [format!("{id}#comments"), id]).collect();
-        ids.extend(lock(&self.open).keys().cloned());
-        let Some(id) = ids.into_iter().find(|id| self.name(id) == name) else { return Ok(None) };
+        let Some(id) = self.id_of(name) else { return Ok(None) };
         let busy = self.busy(&id);
         let _one = lock(&busy);
         let next = lock(&self.open).get(&id).map_or(0, |o| o.c.seq) + 1;
@@ -1014,6 +1018,21 @@ mod tests {
     }
 
     /// Made and edited while the server was out of reach: kept here, sent at the next sync, and the other Mac gets both.
+    /// A live frame names a document by its name on the server (64 hex, what the server's stream takes), and the
+    /// other Mac finds the document back by it.
+    #[test]
+    fn a_document_is_found_back_by_its_name_on_the_server() {
+        let (srv, k) = (Server::default(), Keys::from(VaultKey::generate()));
+        let ((a, _), (b, _)) = (mac(&srv, &k, "name-a", A), mac(&srv, &k, "name-b", B));
+        let id = a.create("Plan.md", "x").unwrap();
+        b.sync().unwrap();
+        let name = a.name(&id);
+        assert!(name.len() == 64 && name.bytes().all(|c| c.is_ascii_hexdigit()), "{name}");
+        assert_eq!(b.id_of(&name), Some(id.clone()));
+        assert_eq!(b.id_of(&a.name(&format!("{id}#comments"))), Some(format!("{id}#comments")));
+        assert_eq!(b.id_of(&"0".repeat(64)), None);
+    }
+
     #[test]
     fn what_was_made_off_line_goes_out_at_the_next_sync() {
         let (srv, k) = (Server::default(), Keys::from(VaultKey::generate()));

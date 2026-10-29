@@ -11,7 +11,7 @@ use std::sync::{mpsc, LazyLock, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::{vault, App};
+use crate::{shared_vaults, vault, App};
 
 // a file's text hash as last known: written by Relay or already announced
 static KNOWN: LazyLock<Mutex<HashMap<PathBuf, String>>> = LazyLock::new(Default::default);
@@ -92,6 +92,10 @@ pub fn start(app: &AppHandle) {
             while let Ok(more) = rx.recv_timeout(Duration::from_millis(300)) { files.extend(more); }
             files.sort();
             files.dedup();
+            // a file in a shared workspace changed (a save, Claude, Obsidian): its round runs now, not at the next 10 s.
+            // ponytail: a round's own pulls land here too and cost one more round that finds nothing
+            let shared: Vec<String> = shared_vaults::list(&app.state::<App>().settings.lock().unwrap()).into_iter().map(|v| vault::canon(&v.folder)).collect();
+            if files.iter().any(|f| shared.iter().any(|c| f.starts_with(c))) { shared_vaults::sync_now(); }
             for f in files {
                 if let Some((path, hash, relinked)) = change(&watched, &f) { app.emit("note-changed", serde_json::json!({"path": path, "hash": hash, "relinked": relinked})).ok(); }
             }
