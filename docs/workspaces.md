@@ -427,7 +427,11 @@ use is empty.
   newest key, and no removal waits). Every other Mac follows the list.
 - **A workspace from before the list** gets one from the first admin on this version, in one round: the `create`, then
   an `add` as member for every member the server lists whose Relay already published keys vouched for under the
-  workspace key. Later rounds add nobody that way; a member updated after that needs an invite. Two admins at once:
+  workspace key. Later rounds add nobody that way: a member whose Relay published its keys after that shows as Not on
+  the list under Members, without a role or Remove, until an admin clicks Add to list there. That writes an `add` as
+  member on the same proof (its keys signed by it and vouched for under the newest key), refused while a removal waits
+  for a new key (the removed member still holds the current one). An invite does not help such a member: the server
+  keeps its old entry and never notes the invite it joined with. Two admins at once:
   the server takes one list, and the other admin takes it on its next round.
 
 ## Key rotation

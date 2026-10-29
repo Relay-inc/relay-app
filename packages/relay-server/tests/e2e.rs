@@ -1414,6 +1414,25 @@ fn an_admin_of_the_list_makes_a_member_admin() {
     assert!(b.remote(&t.vault).set_admin(&b.fp, false, &b.save()).unwrap_err().contains("no admin left"));
 }
 
+/// A member whose Relay publishes its keys only after an admin's upgrade made the list: trust on upgrade skipped it, so
+/// it has no role on the list until an admin adds it, on the same proof (its keys vouched for under the newest key).
+#[test]
+fn an_admin_adds_a_member_that_upgraded_after_the_list() {
+    let t = team("rotate-late");
+    let (a, b) = (Member::new(&t.laptop, &t.lid, &t.key), Member::new(&t.colleague, &t.cid, &t.key));
+    rounds(&t, &[&a], 1);
+    b.step(&t.vault);
+    assert!(!list_of(&t, &a).members.contains_key(&b.fp));
+    assert_eq!(a.step(&t.vault).listed.map(|l| l.contains(&b.fp)), Some(false));
+    assert!(a.remote(&t.vault).set_admin(&b.fp, true, &a.save()).unwrap_err().contains("not on this workspace's member list"));
+    assert!(b.remote(&t.vault).add_listed(&b.fp, &b.save()).unwrap_err().contains("only an admin"));
+    a.remote(&t.vault).add_listed(&b.fp, &a.save()).unwrap();
+    let l = list_of(&t, &b);
+    assert!(l.members.contains_key(&b.fp) && !l.admin(&b.fp));
+    a.remote(&t.vault).set_admin(&b.fp, true, &a.save()).unwrap();
+    assert!(b.step(&t.vault).admin);
+}
+
 /// Two admins upgrade at once: one list wins, the other admin drops its own attempt and takes the winner's.
 #[test]
 fn two_admins_upgrading_at_once_end_on_one_list() {

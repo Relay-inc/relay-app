@@ -64,10 +64,10 @@ pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter()
 /// Relay publishes other keys than the list has (they set it up again), until an admin trusts them.
 /// `rekeying`: someone left and the key has not changed yet (or the member list is held back, which could hide that).
 /// `docs`: an admin turned on making the workspace's notes documents (the member list says so); `admin`: this Mac is
-/// an admin of the list (it may turn that on or off, and make members admins); `admins`: the list's admins, None when the
-/// workspace has no list yet.
+/// an admin of the list (it may turn that on or off, and make members admins); `admins`: the list's admins and `listed`
+/// all its members, None when the workspace has no list yet.
 pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub bad: usize, pub live: bool,
-    pub warnings: Vec<String>, pub changed: Vec<Changed>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>> }
+    pub warnings: Vec<String>, pub changed: Vec<Changed>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>> }
 #[derive(Clone, serde::Serialize)]
 pub struct Changed { pub fp: String, pub name: String }
 
@@ -253,7 +253,7 @@ impl Hub {
                         st.errors.extend(k.errors.into_iter().map(|e| format!("key: {e}")));
                         st.warnings = k.warnings;
                         st.rekeying = k.rekeying;
-                        (st.docs, st.admin, st.admins) = (k.docs, k.admin, k.admins);
+                        (st.docs, st.admin, st.admins, st.listed) = (k.docs, k.admin, k.admins, k.listed);
                         st.changed = k.changed.into_iter().map(|(fp, name)| Changed { fp, name }).collect();
                     }
                     Err(e) => st.errors.push(format!("key: {e}")),
@@ -402,6 +402,10 @@ impl Hub {
     /// An admin makes a member an admin, or an admin a member again (a signed entry in the member list).
     pub fn set_admin(&self, data: &Path, v: &Shared, c: &Client, fp: &str, on: bool) -> Result<(), String> {
         self.with_vault(&v.id, || c.sealed(&v.id, load_key(data, &v.id)?).set_admin(fp, on, &|k| save_key(data, &v.id, k)))
+    }
+    /// An admin adds a member the server has and the member list lacks (a signed `add`, as member).
+    pub fn add_listed(&self, data: &Path, v: &Shared, c: &Client, fp: &str) -> Result<(), String> {
+        self.with_vault(&v.id, || c.sealed(&v.id, load_key(data, &v.id)?).add_listed(fp, &|k| save_key(data, &v.id, k)))
     }
 
     /// `f` while no round of vault `id` runs: the key file it writes is not overwritten by a round's copy.
@@ -719,6 +723,18 @@ pub async fn shared_vault_admin(app: AppHandle, state: St<'_>, id: String, fp: S
     on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.set_admin(&data, &v, &c, &fp, on)).await?;
     if let Some(s) = app.state::<crate::App>().shared.status.lock().unwrap().get_mut(&id) {
         if let Some(admins) = s.admins.as_mut() { admins.retain(|x| *x != who); if on { admins.push(who); } }
+    }
+    sync_now();
+    Ok(())
+}
+/// An admin adds a member the server has and the member list lacks: one whose Relay published its keys only after the
+/// list was made (docs/workspaces.md, Members).
+#[tauri::command]
+pub async fn shared_vault_add(app: AppHandle, state: St<'_>, id: String, fp: String) -> Result<(), String> {
+    let (data, a, who) = (crate::data_dir(&app), app.clone(), fp.clone());
+    on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.add_listed(&data, &v, &c, &fp)).await?;
+    if let Some(s) = app.state::<crate::App>().shared.status.lock().unwrap().get_mut(&id) {
+        if let Some(listed) = s.listed.as_mut() { listed.retain(|x| *x != who); listed.push(who); }
     }
     sync_now();
     Ok(())

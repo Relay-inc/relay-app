@@ -1055,6 +1055,10 @@ export default {
   "set.sharedMember": "Mitglied",
   "set.sharedMakeAdmin": "Zum Admin machen",
   "set.sharedMakeMember": "Zum Mitglied machen",
+  "set.sharedNotListed": "Nicht auf der Liste",
+  "set.sharedAddToList": "Auf die Liste setzen",
+  "set.sharedNotListedHint":
+    "Sein Relay wurde aktualisiert, nachdem dieser Workspace seine Mitgliederliste bekam, deshalb steht er noch nicht darauf. Füge ihn nur hinzu, wenn es der Mac ist, den du kennst.",
   "set.sharedInvite": "Einladen…",
   "set.sharedMembers": "Mitglieder",
   "set.sharedLeave": "Verlassen",

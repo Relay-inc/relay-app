@@ -1043,6 +1043,10 @@ const en = {
   "set.sharedMember": "Member",
   "set.sharedMakeAdmin": "Make admin",
   "set.sharedMakeMember": "Make member",
+  "set.sharedNotListed": "Not on the list",
+  "set.sharedAddToList": "Add to list",
+  "set.sharedNotListedHint":
+    "Their Relay updated after this workspace got its member list, so it is not on it yet. Add it only if it is the Mac you know.",
   "set.sharedInvite": "Invite…",
   "set.sharedMembers": "Members",
   "set.sharedLeave": "Leave",

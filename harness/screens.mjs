@@ -1169,6 +1169,23 @@ const VIEWS = {
     await page.getByText("Design laptop").scrollIntoViewIfNeeded();
     await settle(page);
   },
+  // a member the server has and the list lacks: Not on the list, Add to list and why, no Make admin or Remove
+  "settings-shared-unlisted": async () => {
+    await settingsPage("Machines", undefined, "shared-unlisted");
+    await page.setViewportSize({ width: 900, height: 1200 });
+    await button("Members").first().click();
+    await waitText("Not on the list");
+    await page.getByText("Design laptop").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // after Add to list: Design laptop is a member with Make admin and Remove
+  "settings-shared-added": async () => {
+    await VIEWS["settings-shared-unlisted"]();
+    await button("Add to list").first().click();
+    await waitText("Make admin");
+    await page.getByText("Design laptop").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   "settings-shared-vaults": async () => {
     await settingsPage("Machines", undefined, "shared");
     await page.setViewportSize({ width: 900, height: 1600 });

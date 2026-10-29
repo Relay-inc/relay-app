@@ -574,6 +574,8 @@ export const sharedVaultTrust = (id: string, fp: string) => invoke("shared_vault
 export const sharedVaultDocs = (id: string, on: boolean) => invoke("shared_vault_docs", { id, on });
 /** An admin makes a member an admin (`on`), or an admin a member again: a signed entry in the member list. */
 export const sharedVaultAdmin = (id: string, fp: string, on: boolean) => invoke("shared_vault_admin", { id, fp, on });
+/** An admin adds a member the server has and the member list lacks (a signed entry, as member). */
+export const sharedVaultAdd = (id: string, fp: string) => invoke("shared_vault_add", { id, fp });
 export const sharedVaultInfo = (id: string) => invoke<SharedInfo>("shared_vault_info", { id });
 export const sharedVaultInviteRevoke = (id: string, invite: string) =>
   invoke("shared_vault_invite_revoke", { id, invite });

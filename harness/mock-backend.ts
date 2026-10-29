@@ -62,7 +62,7 @@ const member = fixture === "shared-member" || fixture === "shared-keeper";
 // shared-rekey: someone left the vault, and the key change waits for a member whose Relay has no public key yet
 // shared-live (-dark): "shared", and a page of the side vault is a shared document two mock peers edit (ticket 9)
 const live = fixture === "shared-live" || fixture === "shared-live-dark";
-const shared = fixture === "shared" || fixture === "shared-invite" || fixture === "shared-rekey" || member || live;
+const shared = fixture === "shared" || fixture === "shared-invite" || fixture === "shared-rekey" || fixture === "shared-unlisted" || member || live;
 if (shared)
   settings = {
     ...settings,
@@ -97,6 +97,8 @@ let sharedStatus: Record<string, any> = shared ? vault.sharedStatus(Math.floor(D
 for (const s of Object.values(sharedStatus).slice(0, 1)) {
   s.admin = true;
   s.admins = vault.sharedMembers.filter(m => m.role === "admin").map(m => m.fp);
+  // shared-unlisted: Design laptop's Relay published its keys after the list was made, so the list lacks it
+  s.listed = vault.sharedMembers.map(m => m.fp).filter(fp => fixture !== "shared-unlisted" || fp !== vault.sharedMembers[2].fp);
 }
 if (fixture === "shared-rekey")
   for (const s of Object.values(sharedStatus))
@@ -666,6 +668,12 @@ function handle(cmd: string, a: Args): unknown {
       const s = sharedStatus[a.id];
       if (s?.admins) s.admins = a.on ? [...s.admins, a.fp] : s.admins.filter((fp: string) => fp !== a.fp);
       sharedMembers = sharedMembers.map(m => (m.fp === a.fp ? { ...m, role: a.on ? "admin" : "member" } : m));
+      return null;
+    }
+    case "shared_vault_add": {
+      // an admin's Add to list: the member is on the member list now, as member
+      const s = sharedStatus[a.id];
+      if (s?.listed) s.listed = [...s.listed.filter((fp: string) => fp !== a.fp), a.fp];
       return null;
     }
     case "shared_vault_docs": {
