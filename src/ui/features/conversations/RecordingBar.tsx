@@ -1,10 +1,15 @@
+import { useEffect } from "react";
 import {
   cancelRecording,
   dismissRecordingError,
+  hideKept,
+  keptStart,
+  loadKept,
   retryRecording,
   stopRecording,
   useRecordingStore,
 } from "../../../application/calendar/recording";
+import { sentAt } from "../../../shared/format";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 
@@ -23,9 +28,13 @@ const Meter = ({ label, level }: { label: string; level: number }) => (
 /** The meeting being recorded, on top of Waiting for you: the time, both levels, Stop and Cancel; then the
  *  transcription's progress, or why it failed. */
 export function RecordingBar() {
-  const { t } = useT();
-  const { meeting, phase, secs, me, others, system, heard, why, progress, error, kept } = useRecordingStore();
-  if (phase === "idle" && !error) return null;
+  const { t, locale } = useT();
+  const { meeting, title, phase, secs, me, others, system, heard, why, progress, error, retry, kept } =
+    useRecordingStore();
+  useEffect(() => {
+    loadKept();
+  }, []);
+  if (phase === "idle" && !error && !kept.length) return null;
   return (
     <section className="grid grid-cols-1 gap-2 rounded-xl border border-separator-strong bg-raised p-3.5">
       {phase === "recording" ? (
@@ -55,16 +64,36 @@ export function RecordingBar() {
           </p>
         </>
       ) : phase === "saving" ? (
-        <div className="flex items-center gap-2.5 text-[13px] text-secondary">
-          <Icon name="mic" className="glyph size-4 animate-pulse" />
-          <span className="flex-1 truncate">{t("rec.saving", { title: meeting?.title ?? "" })}</span>
-          <span className="tabular-nums">{Math.round(progress * 100)}%</span>
+        <>
+          <div className="flex items-center gap-2.5 text-[13px] text-secondary">
+            <Icon name="mic" className="glyph size-4 animate-pulse" />
+            <span className="flex-1 truncate">{t("rec.saving", { title: title })}</span>
+            <span className="tabular-nums">{Math.round(progress * 100)}%</span>
+          </div>
+          <p className="text-xs text-secondary">{t("rec.keepOpen")}</p>
+        </>
+      ) : !error ? (
+        <div className="flex items-center gap-2.5 text-xs text-secondary">
+          <Icon name="mic" className="glyph size-4 flex-none" />
+          <span className="min-w-0 flex-1">
+            {t("rec.kept", { time: sentAt(keptStart(kept[0]).getTime(), locale) })}
+          </span>
+          <button className="btn cursor-pointer" onClick={() => retryRecording(kept[0])}>
+            {t("rec.transcribe")}
+          </button>
+          <button
+            className="grid size-5 place-items-center rounded border-0 bg-transparent text-secondary hover:bg-fill-2"
+            aria-label={t("nav.close")}
+            onClick={hideKept}
+          >
+            <Icon name="close" className="glyph size-3" />
+          </button>
         </div>
       ) : (
         <div className="flex items-start gap-2.5 text-xs text-late">
           <span className="min-w-0 flex-1 wrap-anywhere">{t("rec.failed", { error })}</span>
-          {kept ? (
-            <button className="btn cursor-pointer" onClick={retryRecording}>
+          {retry ? (
+            <button className="btn cursor-pointer" onClick={() => retryRecording()}>
               {t("rec.retry")}
             </button>
           ) : null}

@@ -1925,6 +1925,17 @@ const VIEWS = {
     await page.evaluate(() => window.__harness.recordingTick(754, 0.35, 0.25));
     await waitText("12:34");
   },
+  // a recording an earlier failure kept, offered again after a restart; Transcribe, then the hint while it runs
+  "recording-kept-offer": async () => {
+    await open(page, server.url, { fixture: "kept-recording" });
+    await waitText("was never transcribed");
+  },
+  "recording-kept": async () => {
+    await open(page, server.url, { fixture: "kept-recording" });
+    await waitText("was never transcribed");
+    await click("Transcribe");
+    await waitText("Keep the laptop open");
+  },
   // dictation started in a conversation, then on to Reminders: the sidebar's row links back to it (#103)
   "recording-dictation": async () => {
     await open(page, server.url, { sel: keys.switchTo });

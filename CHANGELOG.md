@@ -17,6 +17,13 @@ a PR. Versions follow
 
 - A command's output: click a Bash step open and what it printed shows under the command, live and in older
   conversations (Claude Code).
+- A meeting recording that failed to transcribe is offered again in Waiting for you after a restart, with the time it
+  started, and a hint to keep the laptop open while it transcribes.
+
+### Fixed
+
+- Transcribing a meeting no longer hangs for good when the Mac went to sleep meanwhile: a stretch the speech model
+  does not answer for is tried once more with the model reloaded, then marked as untranscribed in the transcript.
 
 ## [0.0.42] - 2026-10-29
 
