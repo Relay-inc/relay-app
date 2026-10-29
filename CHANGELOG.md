@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.40] - 2026-10-29
+
 ### Added
 
 - **Files is experimental, off until switched on**: Settings › General › Experimental › Files turns on the Pages tab, a note as a page and everything built on it (editing, blocks, properties, managing files, changes from outside merged in, live co-editing, history, comments, mentions and the Inbox). Off, which is the default for everyone, Relay is as before: the sidebar has no tabs and a note opens in the side panel. The switch for making a team workspace's notes documents shows only with Files on; a workspace that already has documents keeps syncing them either way (#331)
@@ -696,7 +698,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.39...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.40...HEAD
+[0.0.40]: https://github.com/Relay-inc/relay-app/compare/v0.0.39...v0.0.40
 [0.0.39]: https://github.com/Relay-inc/relay-app/compare/v0.0.38...v0.0.39
 [0.0.38]: https://github.com/Relay-inc/relay-app/compare/v0.0.37...v0.0.38
 [0.0.37]: https://github.com/Relay-inc/relay-app/compare/v0.0.36...v0.0.37
