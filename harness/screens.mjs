@@ -1401,6 +1401,59 @@ const VIEWS = {
     await waitText("Billing Spec is in the trash");
     await settle(page);
   },
+  // contexts and projects from the Pages tab: New context on the Folders heading
+  "pages-top-menu": async () => {
+    await VIEWS["pages-tab"]();
+    await page.getByText("Folders", { exact: true }).click({ button: "right" });
+    await waitText("New context");
+    await settle(page);
+  },
+  // a new context shows at once, without projects, with New project under it
+  "pages-new-context": async () => {
+    await VIEWS["pages-top-menu"]();
+    await page.getByRole("button", { name: "New context" }).click();
+    await page.getByRole("dialog").locator("input").fill("Home");
+    await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+    await page.getByRole("dialog").waitFor({ state: "detached" });
+    await waitText("New project");
+    await settle(page);
+  },
+  // the right-click menu on a context heading: New project, a page or folder in its folder, reveal, copy path
+  "pages-context-head-menu": async () => {
+    await VIEWS["pages-tab"]();
+    await page.locator('[role="button"]', { hasText: /^Agency$/ }).first().click({ button: "right" });
+    await waitText("New project");
+    await settle(page);
+  },
+  // New project: name, the types the workspace has templates for, and the state
+  "pages-new-project": async () => {
+    await VIEWS["pages-context-head-menu"]();
+    await page.getByRole("button", { name: "New project" }).click();
+    await page.getByRole("dialog").locator("input").fill("Harbor App");
+    await page.waitForFunction(() => document.querySelector("[role=dialog] select")?.value === "Product");
+    await settle(page);
+  },
+  // the right-click menu on a project with one workspace: a page or folder in it, open, chat, its state, delete
+  "pages-project-state-menu": async () => {
+    await VIEWS["pages-tab"]();
+    await page.locator('[data-project="Beacon Billing"]').first().click({ button: "right" });
+    await waitText("Delete project…");
+    await settle(page);
+  },
+  // Delete project asks first, with how many pages go
+  "pages-delete-project": async () => {
+    await VIEWS["pages-project-state-menu"]();
+    await page.getByRole("button", { name: "Delete project…" }).click();
+    await waitText("its conversations stay");
+    await settle(page);
+  },
+  // the Chats tab's context heading: New project and New context, also with Files off
+  "chats-context-menu": async () => {
+    await open(page, server.url, { fixture: "files-off" });
+    await page.locator('[role="button"]', { hasText: /^AGENCY/ }).first().click({ button: "right" });
+    await waitText("New context");
+    await settle(page);
+  },
   // a project unfolded to its folder, its note open in the drawer, and a top folder unfolded (PR workspace-pages)
   "pages-expanded": async () => {
     await open(page, server.url);

@@ -9,9 +9,14 @@ import {
   openPage,
   openPagePath,
   pagesView,
+  projectEntry,
+  PROJECT_STATES,
   revealPage,
+  setProjectState,
   togglePage,
 } from "../../../application/navigation/pages";
+import { newChatHere } from "../../../application/conversations/chats";
+import { select } from "../../../application/navigation/navigation";
 import { toast } from "../../../application/navigation/navigation";
 import { workspaces } from "../../../application/navigation/workspaces";
 import { projectVault as homeOf } from "../../../application/navigation/migrate";
@@ -26,6 +31,7 @@ import { SidebarRow } from "./SidebarRow";
 import { SidebarMenu, type MenuItem } from "./SidebarMenu";
 import { PageFileDialog, type PageFileAsk } from "./PageFileDialog";
 import { MigrateDialog } from "./MigrateDialog";
+import { ProjectDialog, type ProjectAsk } from "./ProjectDialog";
 
 const RECENT = "pages:recent";
 const FOLDERS = "pages:folders";
@@ -35,8 +41,9 @@ const SYSTEM = "pages:system";
 /** The sidebar's Pages tab: the notes of the workspace shown. Recent, its contexts with their projects (a project
  *  unfolds to its folder), then its top folders; the search lists the notes it finds instead. A note opens as a page.
  *  An admin finds the notes the vault runs on (CLAUDE.md, rules, scripts, templates) folded under System, a member not.
- *  Right-click: new page or folder, rename, move, duplicate, delete (to the trash, with Undo); on a project, move or
- *  copy it to another workspace. A page or folder dragged onto a folder moves there. */
+ *  Right-click: new page or folder, rename, move, duplicate, delete (to the trash, with Undo); on a context a new
+ *  project, on the top a new context; on a project its state, a new conversation, a delete, a move or copy to another
+ *  workspace. A context without projects still shows, with New project. A page or folder dragged onto a folder moves there. */
 export function PagesView() {
   const { t } = useT();
   const { model, system, recent, found } = useDerived(() => pagesView());
@@ -44,10 +51,11 @@ export function PagesView() {
   const unfolded = useNavigationStore(s => s.sidebar.pagesOpen);
   const collapsed = useNavigationStore(s => s.sidebar.collapsed);
   const icons = useWorkspaceStore(s => s.icons);
-  type MenuKind = "note" | "folder" | "top" | "project";
-  // `path` is the project's key on a project row
+  type MenuKind = "note" | "folder" | "top" | "project" | "context";
+  // `path` is the project's key on a project row, the context's name on a context heading
   const [menu, setMenu] = useState<{ x: number; y: number; path: string; kind: MenuKind } | null>(null);
   const [ask, setAsk] = useState<PageFileAsk | null>(null);
+  const [projectAsk, setProjectAsk] = useState<ProjectAsk | null>(null);
   const [migrating, setMigrating] = useState<{ project: string; to: string; mode: "move" | "copy" } | null>(null);
   const [dropOn, setDropOn] = useState<string | null>(null);
   const menuElement = useRef<HTMLDivElement>(null);
@@ -56,8 +64,6 @@ export function PagesView() {
   const onMenu = (path: string, kind: MenuKind) => (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // one workspace: a project has nowhere to go
-    if (kind === "project" && !migrateItems(path).length) return;
     setMenu({ x: e.clientX, y: e.clientY, path, kind });
   };
   // a project goes to one of the other workspaces, as on the Chats tab
@@ -87,14 +93,68 @@ export function PagesView() {
         ]
       : []),
   ];
+  const where = (folder: string): MenuItem[] =>
+    [
+      { id: "reveal", label: t("pages.reveal") },
+      { id: "copy", label: t("pages.copyPath") },
+    ].map(item => ({ ...item, id: `${item.id}:${folder}` }));
+  const inFolder = (folder: string): MenuItem[] => [
+    { id: `page:${folder}`, label: t("pages.newPage"), icon: "file" },
+    { id: `folder:${folder}`, label: t("pages.newFolder"), icon: "folder" },
+  ];
+  const contextItems = (name: string): MenuItem[] => {
+    const folder = model.contexts.find(context => context.name === name)?.folder ?? "";
+    return [
+      { id: "project", label: t("pages.newProject") },
+      ...(folder ? [...inFolder(folder), ...where(folder)] : []),
+    ];
+  };
+  const projectItems = (key: string): MenuItem[] => {
+    const project = projectEntry(key);
+    if (!project) return migrateItems(key);
+    const folder = project.folder?.path ?? "";
+    return [
+      ...(folder ? inFolder(folder) : []),
+      { id: "open", label: t("pages.openNote") },
+      { id: "chat", label: t("nav.newChat") },
+      { id: "", label: t("pages.projectState"), head: true },
+      ...PROJECT_STATES.map(state => ({
+        id: `state:${state}`,
+        label: state,
+        // no such icon: an empty one, so the names line up under the check
+        icon: state === project.state ? "check" : "blank",
+      })),
+      { id: "", label: project.label, head: true },
+      ...where(folder || project.note),
+      ...migrateItems(key),
+      { id: "deleteproject", label: t("pages.deleteProject") },
+    ];
+  };
   const menuItems = (kind: MenuKind, path: string): MenuItem[] =>
-    kind === "project" ? migrateItems(path) : fileItems(kind);
+    kind === "project"
+      ? projectItems(path)
+      : kind === "context"
+        ? contextItems(path)
+        : kind === "top"
+          ? [{ id: "context", label: t("pages.newContext") }, ...fileItems(kind)]
+          : fileItems(kind);
   // a project's own note keeps its name and place: the project is known by it
   const guarded = (path: string, then: () => void) => (isProjectNote(path) ? toast(t("pages.projectNote")) : then());
   const pick = (target: { path: string; kind: MenuKind }, id: string) => {
     setMenu(null);
     const { path } = target;
-    if (target.kind === "project") {
+    const arg = id.slice(id.indexOf(":") + 1);
+    if (id.startsWith("page:") || id.startsWith("folder:"))
+      setAsk({ kind: id.startsWith("page:") ? "page" : "folder", folder: arg });
+    else if (id.startsWith("reveal:")) void revealPage(arg);
+    else if (id.startsWith("copy:")) void copyPagePath(arg);
+    else if (id === "context") setProjectAsk({ kind: "context" });
+    else if (id === "project") setProjectAsk({ kind: "project", context: path });
+    else if (target.kind === "project" && id === "open") openPage(projectEntry(path)?.note ?? "");
+    else if (target.kind === "project" && id === "chat") select(newChatHere(path));
+    else if (id.startsWith("state:")) void setProjectState(path, arg);
+    else if (id === "deleteproject") setProjectAsk({ kind: "delete", key: path });
+    else if (target.kind === "project") {
       const mode = id.startsWith("move:") ? "move" : "copy";
       if (id) setMigrating({ project: path, mode, to: id.slice(id.indexOf(":") + 1) });
     } else if (id === "page" || id === "folder") setAsk({ kind: id, folder: path });
@@ -171,7 +231,12 @@ export function PagesView() {
       </div>
     );
   };
-  const head = (id: string, label: string, tint: (typeof CONTEXT_TINTS)[number] | "" = "") => (
+  const head = (
+    id: string,
+    label: string,
+    tint: (typeof CONTEXT_TINTS)[number] | "" = "",
+    onContextMenu?: (e: MouseEvent) => void,
+  ) => (
     <SidebarHead
       label={label}
       tint={tint}
@@ -179,6 +244,7 @@ export function PagesView() {
       collapsed={!!collapsed[id]}
       dropBefore={false}
       onClick={() => toggleSection(id)}
+      onContextMenu={onContextMenu}
     />
   );
 
@@ -194,6 +260,7 @@ export function PagesView() {
         />
       ) : null}
       {ask ? <PageFileDialog ask={ask} onClose={() => setAsk(null)} /> : null}
+      {projectAsk ? <ProjectDialog ask={projectAsk} onClose={() => setProjectAsk(null)} /> : null}
       {migrating ? (
         <MigrateDialog {...migrating} from={homeOf(migrating.project)} onClose={() => setMigrating(null)} />
       ) : null}
@@ -219,34 +286,40 @@ export function PagesView() {
         const tint = CONTEXT_TINTS[context.index % CONTEXT_TINTS.length];
         return (
           <div key={context.name} className="mt-3">
-            {head(id, context.name, tint)}
-            {collapsed[id]
-              ? null
-              : context.projects.map(project => {
-                  const isOpen = !!project.folder && unfolded.has(project.folder.path);
-                  return (
-                    <div key={project.key}>
-                      <SidebarRow
-                        kind="proj"
-                        tint={tint}
-                        aria-expanded={project.folder ? isOpen : undefined}
-                        data-project={project.key}
-                        name={project.label}
-                        img={icons[project.key]?.img ?? null}
-                        emoji={icons[project.key]?.icon ?? ""}
-                        selected={open === project.note}
-                        meta={project.count > 1 ? { kind: "count", n: project.count } : undefined}
-                        // opens its note and unfolds; a click on it open again folds it
-                        onClick={() => {
-                          if (project.folder) togglePage(project.folder.path, !(isOpen && open === project.note));
-                          openPage(project.note);
-                        }}
-                        onContextMenu={onMenu(project.key, "project")}
-                      />
-                      {isOpen && project.folder ? contents(project.folder, project.note) : null}
-                    </div>
-                  );
-                })}
+            {head(id, context.name, tint, onMenu(context.name, "context"))}
+            {collapsed[id] ? null : !context.projects.length ? (
+              <SidebarRow
+                kind="fold"
+                name={t("pages.newProject")}
+                onClick={() => setProjectAsk({ kind: "project", context: context.name })}
+              />
+            ) : (
+              context.projects.map(project => {
+                const isOpen = !!project.folder && unfolded.has(project.folder.path);
+                return (
+                  <div key={project.key}>
+                    <SidebarRow
+                      kind="proj"
+                      tint={tint}
+                      aria-expanded={project.folder ? isOpen : undefined}
+                      data-project={project.key}
+                      name={project.label}
+                      img={icons[project.key]?.img ?? null}
+                      emoji={icons[project.key]?.icon ?? ""}
+                      selected={open === project.note}
+                      meta={project.count > 1 ? { kind: "count", n: project.count } : undefined}
+                      // opens its note and unfolds; a click on it open again folds it
+                      onClick={() => {
+                        if (project.folder) togglePage(project.folder.path, !(isOpen && open === project.note));
+                        openPage(project.note);
+                      }}
+                      onContextMenu={onMenu(project.key, "project")}
+                    />
+                    {isOpen && project.folder ? contents(project.folder, project.note) : null}
+                  </div>
+                );
+              })
+            )}
           </div>
         );
       })}

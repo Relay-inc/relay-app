@@ -44,6 +44,22 @@ test("a project is the folder named like its note, else just its note; a project
   assert.equal(flat.count, 1);
 });
 
+test("a workspace's own contexts show without a project, after the ordered ones, with the folder of their note", () => {
+  const model = pagesModel(
+    [...paths, "Contexts/Agency/Agency.md", "Contexts/Home/Home.md"],
+    [{ key: "Beacon", name: "Beacon", label: "Beacon", context: "Agency" }],
+    ["Agency"],
+    ["Home", "Agency"],
+  );
+  assert.deepEqual(
+    model.contexts.map(context => [context.name, context.index, context.folder, context.projects.length]),
+    [
+      ["Agency", 0, "Contexts/Agency", 1],
+      ["Home", 1, "Contexts/Home", 0],
+    ],
+  );
+});
+
 test("the search matches note names, the recent notes are this workspace's, newest first, once", () => {
   assert.deepEqual(findPages(paths, "spec"), ["Contexts/Agency/Portfolio/Beacon/Documents/Spec.md"]);
   const touches = [

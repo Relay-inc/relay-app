@@ -181,6 +181,15 @@ export const movePath = (from: string, to: string, dry: boolean) =>
 export const trashPath = (target: string) =>
   invoke<{ root: string; trash: string; path: string }>("trash_path", { target });
 export const restorePath = (root: string, trash: string, path: string) => invoke("restore_path", { root, trash, path });
+export const createContext = (workspace: string, name: string) => invoke<string>("create_context", { workspace, name });
+export const createProject = (workspace: string, context: string, name: string, kind: string, status: string) =>
+  invoke<string>("create_project", { workspace, context, name, kind, status });
+export const projectKinds = (workspace: string) => invoke<string[]>("project_kinds", { workspace });
+export const setProjectState = (workspace: string, name: string, status: string) =>
+  invoke("set_project_state", { workspace, name, status });
+/** Without `row`: a project's row out of work-state, returned; with it: that row back in `context`. */
+export const projectRow = (workspace: string, name: string, context: string, row: string | null) =>
+  invoke<string | null>("project_row", { workspace, name, context, row });
 export const propertyValues = (folder: string, key: string) => invoke<string[]>("property_values", { folder, key });
 export const pickFolder = () => invoke<string | null>("pick_folder");
 export const pickPath = (folder: boolean, start: string) => invoke<string | null>("pick_path", { folder, start });
