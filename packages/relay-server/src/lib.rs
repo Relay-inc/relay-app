@@ -372,7 +372,9 @@ impl Server {
             },
             "vault_put" => {
                 let body = proto::read_body(&mut r, req["len"].as_u64().unwrap_or(0), relay_remote::vault::MAX_RECORD)?;
-                reply(&mut w, self.vaults.put(&fp, s("vault"), s("name"), &body, req["expect"].as_str()).map(|etag| json!({"etag": etag})))
+                let r = self.vaults.put(&fp, s("vault"), s("name"), &body, req["expect"].as_str());
+                if r.is_ok() { self.vaults.rooms.files(s("vault"), &fp); }
+                reply(&mut w, r.map(|etag| json!({"etag": etag})))
             }
             "vault_put_many" => {
                 let (mut etags, mut errors) = (serde_json::Map::new(), serde_json::Map::new());
@@ -381,6 +383,7 @@ impl Server {
                     let name = f["name"].as_str().unwrap_or("");
                     match self.vaults.put(&fp, s("vault"), name, &body, f["expect"].as_str()) { Ok(e) => { etags.insert(name.into(), json!(e)); } Err(e) => { errors.insert(name.into(), json!(e)); } }
                 }
+                if !etags.is_empty() { self.vaults.rooms.files(s("vault"), &fp); }
                 reply(&mut w, Ok(json!({"etags": etags, "errors": errors})))
             }
             // a vault's documents (docs.rs): append-only logs of sealed updates, snapshots, never read here
@@ -408,7 +411,11 @@ impl Server {
                 let names: Vec<String> = req["names"].as_array().into_iter().flatten().filter_map(|n| n.as_str().map(String::from)).collect();
                 reply(&mut w, self.vaults.doc_unbind(&fp, s("vault"), &names).map(|_| json!({})))
             }
-            "vault_delete" => reply(&mut w, self.vaults.delete(&fp, s("vault"), s("name"), req["expect"].as_str()).map(|_| json!({}))),
+            "vault_delete" => {
+                let r = self.vaults.delete(&fp, s("vault"), s("name"), req["expect"].as_str());
+                if r.is_ok() { self.vaults.rooms.files(s("vault"), &fp); }
+                reply(&mut w, r.map(|_| json!({})))
+            }
             // stays open: the vault's live frames both ways (channel.rs), sealed by the members, never stored here
             "vault_stream" => channel::stream(&self.vaults, &fp, s("vault"), &req, r, w),
             "share_open" => {

@@ -1179,9 +1179,9 @@ export default {
   "set.timeFromSessions": "Proposer le temps de la journée à partir des conversations",
   "set.timeFromSessionsHelp":
     "À partir de 16:00, Today propose les saisies de temps <b>Productive</b> de la journée selon les moments où vous avez écrit dans vos conversations (Claude Code). Rien n'est saisi sans votre accord. Désactivé : Relay ne lit pas les transcriptions pour cela.",
-  "set.captureOnClose": "Mettre à jour le coffre à la fermeture d'une conversation",
+  "set.captureOnClose": "Mettre à jour le coffre quand une conversation se ferme ou s'arrête",
   "set.captureOnCloseHelp":
-    "Quand vous fermez une conversation, Claude la relit et écrit directement dans le coffre ce qui y a sa place : décisions, état des projets, suivis. Rien n'est affiché ni demandé ; l'historique git du coffre sert de contrôle. Les questions rapides (moins de 3 messages) sont ignorées.",
+    "Quand vous fermez une conversation, ou qu'elle reste 30 minutes sans activité après un tour, Claude la relit et écrit directement dans le coffre ce qui y a sa place : décisions et leur raison, état des projets, suivis datés. Pas d'étapes ni de détails. Rien n'est affiché ni demandé ; l'historique git du coffre sert de contrôle. Les questions rapides (moins de 3 messages) et les conversations sans rien de nouveau depuis la dernière lecture sont ignorées.",
   "set.workerCrabs": "Des crabes pour les workers de l'orchestrateur",
   "set.workerCrabsHelp":
     "Chaque worker de la liste de l'Orchestrateur reçoit un crabe en pixels, costumé selon son modèle, qui marche pendant qu'il travaille. Désactivé : un simple indicateur d'état.",

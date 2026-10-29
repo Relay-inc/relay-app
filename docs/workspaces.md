@@ -172,7 +172,8 @@ Relay never asks and keeps its rounds.
 - **App to server:** `{"t": "frame", "kind", "doc", "n", "body"}` and `{"t": "ping"}`. `kind` `update` or `awareness`,
   `doc` a record name (64 hex), `n` the sender's own counter (it starts at the time in µs, so it never repeats), `body`
   hex of the sealed frame, at most 256 KiB sealed.
-- **Server to app:** `{"t": "frame", "seq", "from", "e", "kind", "doc", "n", "body"}`, `{"t": "ping"}` every 15 s and
+- **Server to app:** `{"t": "frame", "seq", "from", "e", "kind", "doc", "n", "body"}`, `{"t": "files"}` after another
+  member put or deleted a file (the rounds run at once; it names no file), `{"t": "ping"}` every 15 s and
   `{"t": "bye", "why"}` before it closes. `from` is the first 16 hex of the sender's certificate fingerprint, from the
   handshake. An update gets the next `seq` of its workspace, an awareness frame `seq` 0. A sender never gets its own;
   Relay also drops a frame whose `from` is its own device, and one whose `n` is not above the last it took from that

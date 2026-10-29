@@ -227,7 +227,8 @@ impl Hub {
     /// still running, or `listed` says the user left it meanwhile (the caller's settings are a copy).
     pub fn round(&self, data: &Path, v: &Shared, me: &Identity, name: &str, listed: &dyn Fn() -> bool) -> Option<Status> {
         let one = self.one(&v.id);
-        let Ok(mut one) = one.try_lock() else { return None };
+        // a round asked for meanwhile (a nudge, a file saved here) runs once this one ends, not 10 s later
+        let Ok(mut one) = one.try_lock() else { sync_now(); return None };
         if !listed() { return None; }
         // the user's own moves count for this round only, also when it fails: a later one may meet another server
         // side by then, where they count as any delete
@@ -350,7 +351,9 @@ impl Hub {
     pub fn send_awareness(&self, id: &str, doc: &str, body: &str) -> Result<(), String> {
         // the channel cloned out of the lock: a slow write never holds up the rounds
         let c = self.live.lock().unwrap().get(id).map(|(c, _)| c.clone()).ok_or("not live")?;
-        c.send("awareness", doc, body.as_bytes())
+        // a frame names the document by its record name (64 hex): the server closes the stream on anything else
+        let name = self.loaded_docs(id).ok_or("the workspace's documents are not loaded yet")?.name(doc);
+        c.send("awareness", &name, body.as_bytes())
     }
     /// The history of vault `id`'s note `path` when it is a document (`Docs::history`), else None.
     pub fn doc_history(&self, id: &str, path: &str) -> Option<Result<Vec<relay_remote::docs::Version>, String>> {
@@ -480,13 +483,16 @@ impl Hub {
                         });
                         return;
                     }
+                    // another member's file changed on the server: the rounds run now, not at the next 10 s
+                    Event::Files => { sync_now(); return; }
                     Event::Live { .. } => true,
                     Event::Down(_) => false,
                     // a frame written with a longer member list than this Mac holds: the server holds entries back
                     Event::Frame(f) => {
                         // a member's cursor on a page (its editor's awareness), sealed like any frame
                         if f.kind == "awareness" {
-                            h.emit("shared-awareness", serde_json::json!({"vault": id, "doc": f.doc, "from": f.from, "body": String::from_utf8_lossy(&f.body)})).ok();
+                            let doc = h.state::<crate::App>().shared.loaded_docs(&vid).and_then(|d| d.id_of(&f.doc));
+                            if let Some(doc) = doc { h.emit("shared-awareness", serde_json::json!({"vault": id, "doc": doc, "from": f.from, "body": String::from_utf8_lossy(&f.body)})).ok(); }
                         }
                         let theirs = f.list.split_once(':').and_then(|(n, _)| n.parse::<u64>().ok()).unwrap_or(0);
                         let mine = load_key(&d, &vid).ok().and_then(|k| k.head).map_or(0, |(n, _)| n);

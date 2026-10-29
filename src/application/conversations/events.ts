@@ -10,6 +10,7 @@ import { useConversationsStore } from "./store";
 import { label } from "./selectors";
 import { saveChats } from "./chats";
 import { imageUrl } from "./images";
+import { captureWhenIdle } from "../today/capture";
 
 // The agent processes' events, through the pure reducer (domain/conversations/events.ts). Stream deltas are the hot
 // path: the text deltas of one animation frame go into the store as one update, so a delta redraws the streaming
@@ -75,4 +76,6 @@ export function onAgentEvent(key: string, event: AgentEvent, provider = "claude"
   }
   flush();
   apply([[key, event, provider]]);
+  // a conversation left alone after a turn is read for the vault (application/today/capture)
+  captureWhenIdle(key, event.type === "turn_end");
 }
