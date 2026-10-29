@@ -2689,6 +2689,8 @@ pub fn run() {
                 let mut next = std::time::Instant::now();
                 loop {
                     std::thread::sleep(std::time::Duration::from_secs(1));
+                    // the live channels follow the list at once (a workspace made, joined or left)
+                    { let st = h.state::<App>(); let list = shared_vaults::list(&st.settings.lock().unwrap()); st.shared.keep_live(&h, &data_dir(&h), &list, &st.machines.id); }
                     if !shared_vaults::asked() && std::time::Instant::now() < next { continue; }
                     next = std::time::Instant::now() + std::time::Duration::from_secs(10);
                     let s = h.state::<App>().settings.lock().unwrap().clone();

@@ -9,13 +9,15 @@ import { storage } from "../../infrastructure/storage";
 import { toast } from "./navigation";
 
 // The workspaces: every vault here (the main one, the folders added, the shared ones), one of them shown in the sidebar.
-/** A workspace in the footer's menu: `notes` counted from the notes index, `team` for one shared on a relay-server. */
+/** A workspace in the footer's menu: `notes` counted from the notes index, `team` for one shared on a relay-server,
+ *  `live` when that one's live channel is connected (else it syncs every 10 s). */
 export type Workspace = {
   folder: string;
   name: string;
   initials: string;
   notes: number;
   team: boolean;
+  live: boolean;
   active: boolean;
 };
 
@@ -34,17 +36,29 @@ const notesIn = (folder: string, main: boolean) =>
 export function workspaces(): Workspace[] {
   const active = activeFolder();
   const shared = settings().sharedVaults ?? [];
+  const live = useWorkspaceStore.getState().live;
   return vaultChoices(settings()).map(choice => {
     const name = vaultName(choice.folder);
+    const team = shared.find(vault => vault.folder === choice.folder);
     return {
       folder: choice.folder,
       name,
       initials: initials(name),
       notes: notesIn(choice.folder, choice.main),
-      team: shared.some(vault => vault.folder === choice.folder),
+      team: !!team,
+      live: !!team && !!live[team.id],
       active: choice.folder === active,
     };
   });
+}
+/** The shared vaults' live channels, as the backend reports them: now and on every change. */
+export function watchLive() {
+  const set = (status: Record<string, { live?: boolean }>) =>
+    useWorkspaceStore.setState(draft => {
+      draft.live = Object.fromEntries(Object.entries(status).map(([id, s]) => [id, !!s.live]));
+    });
+  void backend.sharedVaultsStatus().then(set);
+  void backend.onSharedVaults(set);
 }
 /** The sidebar shows another workspace; the main vault is stored as none. */
 export function switchWorkspace(folder: string) {

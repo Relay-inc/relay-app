@@ -46,7 +46,14 @@ a removal counts at once. In Relay the server then shows under Settings › Mach
 `auto` in the settings (`shared_vaults::keepers`), with no Forget and no New workspace: it goes again when this Mac is
 admin of no workspace there. A machine the user paired is never touched.
 
-**Removing a member** stops their device at the server at once. They keep what they synced and the key: v1 has no key
+**The live channel** passes frames, not files: sealed under the workspace key on the sender's Mac, passed to the
+other members, never written to disk. The server sees which workspace and which record name (an HMAC) a frame is for,
+its size, its kind (`update` or `awareness`) and who sent it, as with records. It could drop or delay one, not read,
+forge or move one: the seal binds the workspace, the kind, the record name, the sender's device and the sender's own
+counter, and Relay drops a frame it saw already (by that counter) and one that claims to be its own. That guarantee is
+against the server only: every member holds the same key, so a member could seal a frame in another member's name.
+
+**Removing a member** stops their device at the server at once, and closes their live stream. They keep what they synced and the key: v1 has no key
 rotation (it needs a static X25519 key per device, `ring` has only ephemeral agreement).
 
 **The fence is a guard, not a sandbox.** It keeps a conversation in its workspace and Claude Code's file tools and file
@@ -117,7 +124,7 @@ Handshake: a device is accepted when it is in `clients.json`, or a pairing code 
 
 A device that came in through an invite is a *vault-only* client (`Client.vaults_only = true`): it may only send
 `VAULT_OPS` = `pair` (a code from the owner makes it a full device), `vault_info`, `vault_invite`, `vault_invite_revoke`, `vault_join`, `vault_remove`,
-`vault_manifest`, `vault_get`, `vault_put`, `vault_put_many`, `vault_delete`. It never runs agents, reads a mirror or pairs
+`vault_manifest`, `vault_get`, `vault_put`, `vault_put_many`, `vault_delete`, `vault_stream`. It never runs agents, reads a mirror or pairs
 further devices. While it is admin of a vault here it also gets `KEEPER_OPS` = `info` (the server's paths and version)
 and `update` (with `signature`, the release's `.sig` of the binary), nothing more. A linked device (a phone) gets no vault ops.
 
@@ -137,8 +144,43 @@ blob name 64 lowercase hex. Anything else is refused.
 | `vault_put {vault, name, len, expect}` + `len` bytes | member | `{etag}`, written only if the current record's etag is `expect` (`""`: it must not exist), else `changed meanwhile` |
 | `vault_put_many {vault, files: [{name, len, expect}]}` + the bodies one after the other | member | `{etags: {name: etag}, errors: {name: why}}` |
 | `vault_delete {vault, name, expect}` | member | `{}`, only if the current etag is `expect`, else `changed meanwhile` |
+| `vault_stream {vault, v, since, epoch}` | member | stays open, see Live channel |
 
 `revoke` of a client also removes its memberships.
+
+## Live channel
+
+Next to its rounds, Relay keeps one `vault_stream` connection per workspace open (`relay_remote::channel`, the server's
+side `relay-server/src/channel.rs`). It carries frames between members within moments instead of at the next 10 s
+round. Nothing uses the frames yet: the documents edited together come next. The workspace menu says per team
+workspace whether it is live or syncing every 10 s. An older server answers `unknown request` (to a device that only
+shares vaults: `"vault_stream" is not allowed …`); Relay then stays on rounds and asks again every 5 minutes. An older
+Relay never asks and keeps its rounds.
+
+- **Open:** `{"op": "vault_stream", "vault", "v": 1, "since", "epoch"}`. Another `v` is refused. The reply line is
+  `{ok, v, epoch, seq, resumed}`: `epoch` is new at every start of the server, `seq` the last update it passed on for
+  this workspace. `resumed`: the stream asked with this `epoch` and a `since` the server still has everything after;
+  those updates follow at once, in order. Not resumed: some may be missing, and the rounds bring them.
+- **App to server:** `{"t": "frame", "kind", "doc", "n", "body"}` and `{"t": "ping"}`. `kind` `update` or `awareness`,
+  `doc` a record name (64 hex), `n` the sender's own counter (it starts at the time in µs, so it never repeats), `body`
+  hex of the sealed frame, at most 256 KiB sealed.
+- **Server to app:** `{"t": "frame", "seq", "from", "kind", "doc", "n", "body"}`, `{"t": "ping"}` every 15 s and
+  `{"t": "bye", "why"}` before it closes. `from` is the first 16 hex of the sender's certificate fingerprint, from the
+  handshake. An update gets the next `seq` of its workspace, an awareness frame `seq` 0. A sender never gets its own;
+  Relay also drops a frame whose `from` is its own device, and one whose `n` is not above the last it took from that
+  sender for that document and kind.
+- **Seal:** `nonce (12) || ChaCha20-Poly1305(enc_key, aad = "frame:" + vault + ":" + kind + ":" + doc + ":" + from + ":" + n,
+  plaintext)`. A frame that does not open is dropped.
+- **Members:** checked when the stream opens and on every frame, against the workspace's members as vault.json last
+  said (re-read when it changes, every 2 s by the workspace's one checker). A removal by an admin closes the stream at
+  once, a `revoke` by the CLI (another process) within 2 s.
+- **Limits:** 100 lines a second (frames and pings), 300 at once. At most 4 streams per device per workspace; a fifth
+  closes the oldest. Each stream has a queue of 4 MiB and a write timeout of 10 s: a member that stops reading loses its
+  stream (it catches up through rounds) and never holds up the others; streams are closed outside the server's lock.
+  The server closes a stream that sent nothing for 45 s; the app does the same for a server silent that long.
+- **Memory:** the last 512 updates or 2 MiB per workspace, shared by every stream (a resume sends from it), nothing on
+  disk. A workspace nobody streams for 10 minutes is freed, its updates with it; so is one whose last member left.
+- **Reconnect:** after 1 s, doubling up to 60 s.
 
 ## Storage on the server
 

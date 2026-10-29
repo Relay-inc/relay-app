@@ -4,6 +4,7 @@
 //! shared through such a server, sealed with a key only the members hold (vault).
 
 pub mod broker;
+pub mod channel;
 pub mod client;
 pub mod proto;
 pub mod share;

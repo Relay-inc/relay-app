@@ -119,9 +119,11 @@ export function WorkspaceSwitcher({
                 <span className="truncate text-[13px] font-medium text-label">{workspace.name}</span>
                 <span className="truncate text-[11px] text-tertiary">
                   {[
-                    workspace.folder.replace(/^\/Users\/[^/]+/, "~"),
-                    tn("ws.notes", workspace.notes),
+                    // a team workspace says first how it syncs; the path, the longest, last where it may be cut
                     workspace.team ? t("ws.team") : "",
+                    workspace.team ? t(workspace.live ? "ws.live" : "ws.rounds") : "",
+                    tn("ws.notes", workspace.notes),
+                    workspace.folder.replace(/^\/Users\/[^/]+/, "~"),
                   ]
                     .filter(Boolean)
                     .join(" · ")}

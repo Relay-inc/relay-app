@@ -227,7 +227,14 @@ device names and fingerprints, open invites) and one record per file in `blobs/`
   and send an `update`, to an official release only: a binary without Relay's release signature, or with a bad one, is
   refused. Conversations, the mirror, phones and GitHub stay refused. It is read from the workspaces at every request,
   so a promotion or a removal counts at once.
-- **Removing someone** stops their device here at once. They keep what they already synced and the key (no key rotation
+- **A live channel.** A member's Relay keeps one `vault_stream` connection per workspace open next to its rounds; the
+  server passes the frames members send (sealed with the workspace key, so unreadable here) to the other members at
+  once. It stores none of them: only the last updates per workspace stay in memory for a short reconnect, gone at a
+  restart, after which the rounds catch up. Members only, checked when the stream opens, on every frame and every 2 s;
+  a frame is at most 256 KiB and a connection may send 100 lines a second (300 at once), past that its stream is closed.
+  At most 4 streams per device and workspace, a 4 MiB queue and a 10 s write timeout per stream: a member that stops
+  reading loses its stream, the others go on.
+- **Removing someone** stops their device here at once, including their open stream. They keep what they already synced and the key (no key rotation
   yet). The last admin cannot leave while others stay. `relay-server revoke` also takes a device out of its workspaces.
 
 `relay-server vaults` lists the workspaces with their members (name, role, fingerprint) and how many invites are open.

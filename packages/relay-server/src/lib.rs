@@ -15,6 +15,7 @@
 //! port the running server listens on), pending/, per device its sealed mirror and GitHub token (mirror/<device>/), and
 //! per shared vault its members, invites and records (vaults/<id>/).
 
+pub mod channel;
 pub mod cli;
 pub mod github;
 pub mod mirror;
@@ -78,7 +79,7 @@ const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answ
 /// What a vault-only device may ask: its shared vaults, nothing else. It never runs agents, reads a mirror or pairs
 /// further devices, and makes no vaults of its own. `pair` with a code from the owner makes it a full device.
 const VAULT_OPS: &[&str] = &["pair", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
-    "vault_get", "vault_put", "vault_put_many", "vault_delete"];
+    "vault_get", "vault_put", "vault_put_many", "vault_delete", "vault_stream"];
 /// What a vault-only device may ask besides, while it is admin of a vault here: it keeps the server, so it sees what
 /// the server is and updates it (`update`, to an official release only: signed with Relay's release key, upgrade.rs).
 /// Never a conversation, the mirror, a phone, GitHub or a vault of its own.
@@ -366,6 +367,8 @@ impl Server {
                 reply(&mut w, Ok(json!({"etags": etags, "errors": errors})))
             }
             "vault_delete" => reply(&mut w, self.vaults.delete(&fp, s("vault"), s("name"), req["expect"].as_str()).map(|_| json!({}))),
+            // stays open: the vault's live frames both ways (channel.rs), sealed by the members, never stored here
+            "vault_stream" => channel::stream(&self.vaults, &fp, s("vault"), &req, r, w),
             "share_open" => {
                 let token = req["token"].as_str().unwrap_or("");
                 let open = self.opens.lock().unwrap().remove(token);

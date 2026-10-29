@@ -130,6 +130,7 @@ export type SharedStatus = {
   errors: string[];
   held: string[];
   bad: number;
+  live?: boolean; // the live channel is connected; false or missing: rounds every 10 s only
 };
 /** An open invite of a shared vault: single use, `expires` in epoch seconds. */
 export type SharedInvite = { id: string; role: SharedRole; expires: number };
