@@ -374,6 +374,7 @@ export default {
   "usage.all": "Tout {name}",
   "usage.vault": "Dans ce coffre",
   "usage.details": "Détails",
+  "usage.viewDetails": "Voir les détails",
   "usage.tightest": "Limite la plus proche",
   "usage.usedWord": "utilisés",
   "usage.todayAll": "Aujourd’hui · tous les agents",
