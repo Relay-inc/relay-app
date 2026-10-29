@@ -1,11 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   addComment,
   loadComments,
   onComments,
   type PageComments as Comments,
 } from "../../../application/navigation/pages";
-import type { CommentThread, Span } from "../../../domain/workspace/comments";
+import {
+  membersFor,
+  mentionQuery,
+  mentionsIn,
+  type CommentThread,
+  type Member,
+  type Span,
+} from "../../../domain/workspace/comments";
 import { agoOf } from "../brain/ago";
 import { useT } from "../../hooks/useT";
 import { Note } from "../../components/Note";
@@ -71,8 +78,10 @@ export function PageComments({
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => api.current?.mark([], null), [api]);
 
-  const act = (kind: string, on: string, text = "") =>
-    addComment(page, kind, on, text).then(reload, e => setErr(String(e)));
+  const act = (kind: string, on: string, text = "", mentions: string[] = []) =>
+    addComment(page, kind, on, text, "", null, mentions).then(reload, e => setErr(String(e)));
+  // who an @ may name: a shared document's other members (none on a note of this Mac's own)
+  const members = data?.members ?? [];
 
   return (
     <aside className="w-80 flex-none min-h-0 overflow-y-auto border-l border-separator flex flex-col">
@@ -92,11 +101,20 @@ export function PageComments({
         <Composer
           className="mx-3 mb-2"
           quote={draft.quote}
-          placeholder={t("page.commentPlaceholder")}
+          placeholder={t(members.length ? "page.commentPlaceholderTeam" : "page.commentPlaceholder")}
           send={t("page.comment")}
+          members={members}
           onCancel={() => setDraft(null)}
-          onSend={text =>
-            addComment(page, "comment", "", text, draft.quote, api.current?.anchor(draft.from, draft.to)).then(
+          onSend={(text, mentions) =>
+            addComment(
+              page,
+              "comment",
+              "",
+              text,
+              draft.quote,
+              api.current?.anchor(draft.from, draft.to),
+              mentions,
+            ).then(
               id => {
                 setDraft(null);
                 onOpen(id);
@@ -129,6 +147,7 @@ export function PageComments({
                 if (s) api.current?.reveal(s.from, s.to);
               }}
               act={act}
+              members={members}
             />
           ))}
           {resolved.length ? (
@@ -149,6 +168,7 @@ export function PageComments({
                   open={open === th.id}
                   onOpen={() => onOpen(th.id)}
                   act={act}
+                  members={members}
                 />
               ))
             : null}
@@ -165,12 +185,14 @@ function Thread({
   open,
   onOpen,
   act,
+  members,
 }: {
   thread: CommentThread;
   span: Span;
   open: boolean;
   onOpen: () => void;
-  act: (kind: string, on: string, text?: string) => Promise<void>;
+  act: (kind: string, on: string, text?: string, mentions?: string[]) => Promise<void>;
+  members: Member[];
 }) {
   const { t } = useT();
   const [replying, setReplying] = useState(false);
@@ -199,8 +221,9 @@ function Thread({
         <Composer
           placeholder={t("page.replyPlaceholder")}
           send={t("page.reply")}
+          members={members}
           onCancel={() => setReplying(false)}
-          onSend={text => act("reply", thread.id, text).then(() => setReplying(false))}
+          onSend={(text, mentions) => act("reply", thread.id, text, mentions).then(() => setReplying(false))}
         />
       ) : (
         <div className="flex items-center gap-3 text-xs">
@@ -219,12 +242,14 @@ function Thread({
   );
 }
 
-/** A comment or reply being written: ⌘↩ sends it, Escape cancels. */
+/** A comment or reply being written: ⌘↩ sends it, Escape cancels. On a shared document @ lists the members whose name
+ *  starts with what follows it (↑↓ and ↩ or Tab, or a click, picks one); the members still named go with the text. */
 function Composer({
   quote,
   className = "",
   placeholder,
   send,
+  members = [],
   onSend,
   onCancel,
 }: {
@@ -232,29 +257,76 @@ function Composer({
   className?: string;
   placeholder: string;
   send: string;
-  onSend: (text: string) => Promise<unknown>;
+  members?: Member[];
+  onSend: (text: string, mentions: string[]) => Promise<unknown>;
   onCancel: () => void;
 }) {
   const { t } = useT();
   const [text, setText] = useState("");
+  const [caret, setCaret] = useState(0);
+  const [picked, setPicked] = useState<Member[]>([]);
+  const [hi, setHi] = useState(0);
+  const box = useRef<HTMLTextAreaElement>(null);
+  const query = members.length ? mentionQuery(text, caret) : null;
+  const matches = query === null ? [] : membersFor(query, members);
   const go = () => {
-    if (text.trim()) void onSend(text.trim());
+    if (text.trim()) void onSend(text.trim(), mentionsIn(text, picked));
+  };
+  const pick = (m: Member) => {
+    const start = caret - (query ?? "").length - 1;
+    const next = `${text.slice(0, start)}@${m.name} ${text.slice(caret)}`;
+    const at = start + m.name.length + 2;
+    setText(next);
+    setCaret(at);
+    setPicked(p => (p.some(x => x.fp === m.fp) ? p : [...p, m]));
+    setHi(0);
+    requestAnimationFrame(() => box.current?.setSelectionRange(at, at));
   };
   return (
     <div className={`flex flex-col gap-2 ${className}`}>
       {quote ? <p className="text-xs text-secondary italic line-clamp-2">“{quote}”</p> : null}
       <textarea
+        ref={box}
         autoFocus
         rows={3}
         className="w-full px-2.5 py-2 rounded-md border border-separator bg-bg text-[13px] text-label resize-none focus:outline-none focus:border-accent"
         placeholder={placeholder}
         value={text}
-        onChange={e => setText(e.target.value)}
+        onChange={e => {
+          setText(e.target.value);
+          setCaret(e.target.selectionStart);
+          setHi(0);
+        }}
+        onSelect={e => setCaret(e.currentTarget.selectionStart)}
         onKeyDown={e => {
-          if (e.key === "Enter" && e.metaKey) go();
-          if (e.key === "Escape") onCancel();
+          if (matches.length && ["ArrowDown", "ArrowUp"].includes(e.key)) {
+            e.preventDefault();
+            setHi(i => (i + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);
+          } else if (matches.length && !e.metaKey && (e.key === "Enter" || e.key === "Tab")) {
+            e.preventDefault();
+            pick(matches[hi] ?? matches[0]);
+          } else if (e.key === "Enter" && e.metaKey) go();
+          else if (e.key === "Escape") onCancel();
         }}
       />
+      {matches.length ? (
+        <div role="listbox" className="-mt-1 flex flex-col p-1 rounded-md border border-separator bg-bg shadow-sm">
+          {matches.map((m, i) => (
+            <button
+              key={m.fp}
+              role="option"
+              aria-selected={i === hi}
+              className={`px-2 py-1 rounded text-left text-[13px] text-label cursor-default ${i === hi ? "bg-fill-2" : "hover:bg-fill"}`}
+              onMouseDown={e => {
+                e.preventDefault();
+                pick(m);
+              }}
+            >
+              {`@${m.name}`}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <div className="flex justify-end gap-2">
         <button className="h-7 px-2.5 rounded-md text-[13px] text-secondary hover:bg-fill" onClick={onCancel}>
           {t("page.commentCancel")}

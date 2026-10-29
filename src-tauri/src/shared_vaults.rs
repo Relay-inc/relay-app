@@ -526,6 +526,17 @@ async fn on_server<T: Send + 'static>(state: &St<'_>, id: &str, call: impl FnOnc
     let c = client(&v, &state.machines.id);
     tauri::async_runtime::spawn_blocking(move || call(v, c)).await.map_err(|e| e.to_string())?
 }
+/// member_names on this thread (a round's): the server's member list, empty when it does not answer.
+pub fn member_names_now(state: &crate::App, id: &str) -> std::collections::BTreeMap<String, String> {
+    let Ok(v) = find(&state.settings.lock().unwrap(), id) else { return Default::default() };
+    client(&v, &state.machines.id).vault_info(&v.id).map(|i| i.members.into_iter().map(|m| (m.fp, m.name)).collect()).unwrap_or_default()
+}
+/// A member's name from `names` (member_names) for a fingerprint in full or its first 16 hex (how an author and a
+/// mention name one); the first 8 hex when the member list has nobody of that fingerprint.
+pub fn name_of(names: &std::collections::BTreeMap<String, String>, fp: &str) -> String {
+    let short = |x: &str| x.chars().take(16).collect::<String>();
+    names.iter().find(|(f, _)| !fp.is_empty() && short(f) == short(fp)).map(|(_, n)| n.clone()).unwrap_or_else(|| fp.chars().take(8).collect())
+}
 /// Vault `id`'s members as the server lists them: fingerprint → name (who an update in a document's history is by).
 pub async fn member_names(state: &St<'_>, id: &str) -> std::collections::BTreeMap<String, String> {
     on_server(state, id, |v, c| c.vault_info(&v.id)).await.map(|i| i.members.into_iter().map(|m| (m.fp, m.name)).collect()).unwrap_or_default()
@@ -771,6 +782,16 @@ pub async fn shared_vault_held(app: AppHandle, id: String, allow: bool, paths: V
 
 #[cfg(test)]
 mod tests {
+    /// A name for a member's full fingerprint or its first 16 hex (an author, a mention); 8 hex for someone unlisted.
+    #[test]
+    fn a_member_is_named_by_full_or_short_fingerprint() {
+        let full = format!("{}{}", "ab".repeat(8), "cd".repeat(24));
+        let names: std::collections::BTreeMap<String, String> = [(full.clone(), "Ann".to_string())].into();
+        assert_eq!(super::name_of(&names, &full), "Ann");
+        assert_eq!(super::name_of(&names, &full[..16]), "Ann");
+        assert_eq!(super::name_of(&names, "0123456789abcdef"), "01234567");
+        assert_eq!(super::name_of(&names, ""), "");
+    }
     use super::*;
     use serde_json::json;
     #[test]

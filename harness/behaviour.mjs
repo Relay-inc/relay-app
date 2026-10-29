@@ -660,6 +660,49 @@ const SCENARIOS = {
     );
   },
 
+  // ticket 12: @ names a member in a comment; the team workspace's Inbox counts a thread that mentions you, opens its
+  // page on it, and resolving it there takes it out
+  async pageMentions(s) {
+    await s.load({ fixture: "shared" });
+    const { page } = s;
+    await page.evaluate(() => window.__harness.teamComments());
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    await click(page.locator('[data-project="Northwind Portal"]').first());
+    await click(page.getByRole("button", { name: "Comments", exact: true }));
+    await waitText(page, "Is this still the first thing to do?");
+    await page.locator(".cm-content").getByText("Second open loop").dblclick();
+    await click(page.getByRole("button", { name: "Comment", exact: true }));
+    await page.getByPlaceholder("Add a comment… @ names a member").pressSequentially("Over to you @Be");
+    s.check(
+      "@ lists the members by what is typed",
+      await page.getByRole("option", { name: "@Ben Lauwers" }).isVisible(),
+    );
+    await page.keyboard.press("Enter");
+    await click(page.getByRole("button", { name: "Comment", exact: true }).last());
+    const made = (await s.calls("page_comment")).pop();
+    s.check("the comment carries who it mentions", JSON.stringify(made?.args.mentions) === '["bbbbbbbbbbbbbbbb"]');
+    s.check("the text names them", /@Ben Lauwers/.test(made?.args.text ?? ""));
+    await page.keyboard.press("Control+Digit3");
+    await click(page.getByRole("button", { name: /^Switch workspace/ }));
+    const inbox = page.getByRole("button", { name: /^Inbox/ });
+    s.check("the Inbox counts the thread that mentions you", (await inbox.textContent())?.trim() === "Inbox1");
+    await click(inbox);
+    await click(page.getByRole("button", { name: /Northwind Portal/ }).first());
+    s.check("its page opens on that thread", await waitText(page, "Is this still the first thing to do?"));
+    await click(page.getByRole("button", { name: "Resolve", exact: true }).first());
+    await click(page.getByRole("button", { name: /^Switch workspace/ }));
+    s.check(
+      "resolving takes it out of the Inbox",
+      await page
+        .getByRole("button", { name: /^Inbox$/ })
+        .waitFor({ timeout: 3000 })
+        .then(
+          () => true,
+          () => false,
+        ),
+    );
+  },
+
   // managing files in the Pages tab (ticket 5): a new page opens, a rename says how many links follow and the tree
   // follows it, a page in the trash comes back with Undo
   async pageFiles(s) {

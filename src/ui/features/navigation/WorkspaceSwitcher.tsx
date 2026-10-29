@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   openFolderAsWorkspace,
   openWorkspaceSettings,
@@ -13,6 +13,8 @@ import { useKeyLabel } from "../../hooks/useKeyLabel";
 import { useSettingsStore } from "../../../application/settings/store";
 import { WORKSPACE_KEYS, workspaceKeyLabel } from "../../../domain/settings/shortcuts";
 import { Icon } from "../../components/Icon";
+import { loadInbox, onAnyComments, openPageThread, type InboxItem } from "../../../application/navigation/pages";
+import { noteName } from "../../../domain/navigation/pages";
 
 // a workspace's square in the context tints, by its place in the list
 const TINTS = ["text-ctx-a", "text-ctx-m", "text-ctx-p"];
@@ -70,6 +72,20 @@ export function WorkspaceSwitcher({
     list.findIndex(workspace => workspace.active),
   );
   const active = list[index];
+  // a team workspace's Inbox (ticket 12): read when it is shown, when the menu opens and when a comment arrives
+  const [inbox, setInbox] = useState<InboxItem[]>([]);
+  const [showInbox, setShowInbox] = useState(false);
+  const team = active?.team ? active.folder : "";
+  const readInbox = () => {
+    if (team) void loadInbox(team).then(setInbox, () => setInbox([]));
+  };
+  useEffect(readInbox, [team, open]);
+  const items = team ? inbox : [];
+  useEffect(() => {
+    if (!team) return;
+    const stop = onAnyComments(readInbox);
+    return () => void stop.then(f => f());
+  }, [team]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!active) return <span className="flex-1" />;
   const run = (action: () => unknown) => {
     setOpen(false);
@@ -83,7 +99,10 @@ export function WorkspaceSwitcher({
         aria-expanded={open}
         title={t("ws.switch")}
         aria-label={`${t("ws.switch")}: ${active.name}`}
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          setOpen(!open);
+          setShowInbox(false);
+        }}
       >
         <span className="relative flex-none">
           <Square workspace={active} index={index} size="size-7" />
@@ -102,10 +121,19 @@ export function WorkspaceSwitcher({
           role="menu"
           className="absolute z-20 bottom-full left-0 mb-2 w-80 flex flex-col p-1.5 bg-bg border border-separator rounded-xl shadow-lg"
         >
-          <div className="px-2 pt-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-tertiary">
+          {showInbox ? (
+            <Inbox
+              items={items}
+              onBack={() => setShowInbox(false)}
+              onPick={i => run(() => openPageThread(i.page, i.thread.id))}
+            />
+          ) : null}
+          <div
+            className={`px-2 pt-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-tertiary ${showInbox ? "hidden" : ""}`}
+          >
             {t("ws.title")}
           </div>
-          {list.map((workspace, i) => (
+          {(showInbox ? [] : list).map((workspace, i) => (
             <button
               key={workspace.folder}
               role="menuitemradio"
@@ -136,6 +164,15 @@ export function WorkspaceSwitcher({
               />
             </button>
           ))}
+          {team && !showInbox ? (
+            <button className={APP_ACTION} onClick={() => setShowInbox(true)}>
+              <Icon name="mail" className={GLYPH} />
+              <span className="flex-1">{t("ws.inbox")}</span>
+              {items.length ? (
+                <span className="flex-none text-xs tabular-nums text-secondary">{items.length}</span>
+              ) : null}
+            </button>
+          ) : null}
           <div className="my-1.5 mx-2 border-t border-separator" />
           <button className={ACTION} onClick={() => run(openFolderAsWorkspace)}>
             {t("ws.openFolder")}
@@ -176,6 +213,48 @@ export function WorkspaceSwitcher({
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** The Inbox's list in the menu: each open thread for you with its page, quote and newest words; a click opens the page
+ *  with that thread. */
+function Inbox({ items, onBack, onPick }: { items: InboxItem[]; onBack: () => void; onPick: (i: InboxItem) => void }) {
+  const { t } = useT();
+  return (
+    <div className="flex flex-col">
+      <button className={`${APP_ACTION} text-secondary`} onClick={onBack}>
+        <Icon name="chevron" className="glyph size-3 flex-none stroke-2 rotate-90" />
+        <span className="flex-1">{t("ws.inboxBack")}</span>
+      </button>
+      <div className="px-2 pt-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-tertiary">
+        {t("ws.inbox")}
+      </div>
+      {items.length ? (
+        <div className="max-h-80 overflow-y-auto flex flex-col">
+          {items.map(i => {
+            const last = i.thread.replies[i.thread.replies.length - 1] ?? i.thread;
+            return (
+              <button
+                key={i.thread.id}
+                className="flex flex-col gap-0.5 px-2 py-1.5 rounded-lg text-left cursor-default hover:bg-fill-2"
+                onClick={() => onPick(i)}
+              >
+                <span className="flex items-center gap-1.5 text-[13px] font-medium text-label">
+                  {i.thread.mentionsMe ? <span className="size-1.5 flex-none rounded-full bg-accent" /> : null}
+                  <span className="truncate">{noteName(i.page)}</span>
+                </span>
+                <span className="truncate text-xs text-secondary italic">“{i.thread.quote}”</span>
+                <span className="truncate text-xs text-tertiary">
+                  {last.by}: {last.text}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="px-2 py-1.5 text-xs text-tertiary">{t("ws.inboxEmpty")}</p>
+      )}
     </div>
   );
 }

@@ -334,6 +334,21 @@ delete (`src-tauri/src/comments.rs`).
   `relay comments.reply path=… id=… text=…` replies as the user (asks first). A path outside that workspace, or
   through a link out of it, is refused.
 
+### Mentions and the Inbox
+
+- **@ in a comment or reply** on a document lists the workspace's other members (from the server's member list) whose
+  name starts with what is typed. The entry keeps who it mentions as the first 16 hex of their fingerprint (`m`, at most
+  20), never names; what is not a member's 16 hex is left out when it is read. A note of the user's own has no `@`.
+- **A banner, once.** After each round Relay looks for comments and replies that mention this Mac's member, written by
+  someone else and not deleted, and shows a banner for each it has not told yet. The keys told are kept in
+  `shared-docs/<vault>/mentions-seen.json`, so a restart tells nothing again and a member who was offline is told on
+  their first round back. The very first look at a workspace only notes what is there, so updating Relay tells nothing
+  old. With a phone paired, a push goes to its ntfy topic too, without a name or text (ntfy.sh is public).
+- **The Inbox** in the workspace menu of a team workspace lists its open threads that mention you or are on a page this
+  Mac edited, newest first; a click opens the page with that thread. Resolving a thread takes it out.
+- **Names** of authors and mentions come from the server's member list (`shared_vaults::name_of`, full or 16-hex
+  fingerprint); the signed member list holds no names, so the server could show another name for a member.
+
 ## Record
 
 `u32 big endian (meta_len | epoch << 20) || meta (meta_len bytes, at most 64 KiB) || data`

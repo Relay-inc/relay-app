@@ -298,7 +298,7 @@ fn comments(app: &AppHandle, key: &str, name: &str, args: &Value) -> Result<Valu
     // a link inside the workspace does not lead an agent into another one
     if !std::fs::canonicalize(&target).is_ok_and(|real| real.starts_with(&root)) { return Err(format!("not a note of this workspace: {path}")); }
     if name == "list" { return tauri::async_runtime::block_on(crate::comments_of(&st, &target)).map(|v| v["threads"].clone()); }
-    let id = crate::comment_add(&st, &target, "reply", &a("id"), &a("text"), "", &Value::Null)?;
+    let id = crate::comment_add(&st, &target, "reply", &a("id"), &a("text"), "", &Value::Null, &[])?;
     Ok(json!({ "id": id }))
 }
 

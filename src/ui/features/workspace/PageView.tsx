@@ -9,6 +9,7 @@ import {
   type Page,
   type PageHistory as History,
   type PageVersion,
+  usePageThread,
 } from "../../../application/navigation/pages";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { pageKey } from "../../../domain/navigation/keys";
@@ -81,6 +82,14 @@ export function PageView({ target, className }: { target: string; className: str
   const [openThread, setOpenThread] = useState<string | null>(null);
   const [edits, setEdits] = useState(0);
   const showComments = () => setView({ on: target, side: "comments", picked: null });
+  // a thread the Inbox opened this page on: the comments beside it, that thread open
+  const asked = usePageThread(s => s);
+  const [took, setTook] = useState(0);
+  if (asked.n !== took && asked.page === target) {
+    setTook(asked.n);
+    setView({ on: target, side: "comments", picked: null });
+    setOpenThread(asked.thread);
+  }
   const { title, head, body } = page ? pageParts(path, page.text) : { ...noteTitle(path, noteName(path)), head: "" };
   const folders = path.split("/").slice(0, -1);
 
