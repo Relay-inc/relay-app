@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.42] - 2026-10-29
+
 ### Added
 
 - Pages tab: add a context or a project from a right-click menu, without Obsidian. New context sits on the Folders heading,
