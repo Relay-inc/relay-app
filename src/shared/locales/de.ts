@@ -828,8 +828,8 @@ export default {
   "today.editBriefing": "Bearbeiten",
   "today.saveBriefing": "Speichern",
   "today.cancelEdit": "Abbrechen",
-  "today.briefingEdited": "bearbeitet",
-  "today.briefingEmpty": "Leer speichern stellt die Antwort von Claude wieder her",
+  "today.briefingGone": "Die Meeting-Notiz oder ihr Briefing gibt es nicht mehr.",
+  "today.openNote": "Notiz öffnen",
   "today.briefingHint":
     "Claude liest die Projektnotiz, die letzten Meeting-Notizen und was in deiner Warteschlange offen ist, und schreibt, was du vorher wissen solltest.",
   "today.noteHint": "Claude macht aus dem Meeting eine Notiz im Vault, mit Entscheidungen und To-dos.",

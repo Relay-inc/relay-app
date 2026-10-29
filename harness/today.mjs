@@ -133,10 +133,10 @@ try {
   // the next meeting, named in the header, opens too
   await page.locator("button", { hasText: /· then / }).first().click();
   await shot("13-next-meeting-in-header");
-  // a meeting with a briefing already asked: the briefing itself, not the Write briefing button
+  // a meeting whose note has a briefing: the briefing itself, not the Write briefing button
   await byText(page, "Lunch with the accountant", true).click();
   await shot("13b-meeting-briefing");
-  // edited there: the text in a field, saved with Cmd-Enter, shown with "edited"
+  // edited there: the section in a field, saved into the note with Cmd-Enter
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await shot("13c-briefing-editing");
   await page.keyboard.type("\n\n- Ask about the car lease");

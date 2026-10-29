@@ -603,7 +603,8 @@ function handle(cmd: string, a: Args): unknown {
       const team = shared && vault.teamNotes.find(n => n.endsWith(`/${String(a.target).replace(/\.md$/, "")}.md`));
       const modified = Date.now() - 2 * 3600_000; // a page reads "Edited 2 h ago"
       lastPage = String(a.target);
-      const read = { ...vault.noteText(a.target), modified, ...written.get(String(a.target)) };
+      const note = vault.noteText(a.target);
+      const read = { ...note, modified, ...written.get(String(a.target)), ...written.get(note.path) };
       return team ? { ...read, path: team, hash: "h0" } : { hash: "h0", ...read };
     }
     case "property_values":
