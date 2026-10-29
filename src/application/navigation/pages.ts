@@ -102,6 +102,7 @@ function build(): Built {
     paths.filter(path => !isSystemPage(path)),
     projects,
     contexts(),
+    snap.contexts?.[workspace] ?? [],
   );
   built = {
     notes,
@@ -415,3 +416,84 @@ export async function trashPage(path: string) {
 const noteLabel = (path: string) => path.split("/").pop()!.replace(/\.md$/i, "");
 export const revealPage = (path: string) => backend.openFile(abs(path), true).catch(fail);
 export const copyPagePath = (path: string) => copy(abs(path));
+
+// ---------- contexts and projects: a new context, a new project, a project's state, a project deleted with Undo
+export const PROJECT_STATES = ["Active", "Blocked", "Quiet", "Paused"] as const;
+/** The note types New project offers in the workspace shown (its templates). */
+export const projectKinds = () => backend.projectKinds(activeFolder()).catch(() => ["Project"]);
+/** A project of the workspace shown, by its key: where it sits in the Pages tree and its state. */
+export function projectEntry(key: string) {
+  for (const context of build().model.contexts) {
+    const project = context.projects.find(p => p.key === key);
+    if (project) {
+      const state = useWorkspaceStore.getState().snap.projects.find(p => p.name === key)?.state ?? "";
+      return { ...project, context: context.name, state };
+    }
+  }
+  return null;
+}
+// another vault's project key is "name␟vault id": its note, its row and its card go by the first part
+const nameOf = (key: string) => key.split("\u001f")[0];
+/** A new context in the workspace shown; its note opens. */
+export async function createContext(name: string) {
+  try {
+    const path = await backend.createContext(activeFolder(), name);
+    await loadSnapshot();
+    openPage(path);
+  } catch (e) {
+    fail(e);
+  }
+}
+/** A new project in `context` of the workspace shown; its note opens. Returns its key, "" when it failed. */
+export async function createProject(context: string, name: string, kind: string, state: string) {
+  try {
+    const path = await backend.createProject(activeFolder(), context, name, kind, state);
+    await loadSnapshot();
+    openPage(path);
+    return pageProject(path)?.key ?? "";
+  } catch (e) {
+    fail(e);
+    return "";
+  }
+}
+export async function setProjectState(key: string, state: string) {
+  try {
+    await backend.setProjectState(activeFolder(), nameOf(key), state);
+    await loadSnapshot();
+  } catch (e) {
+    fail(e);
+  }
+}
+/** A project's folder (or its note, when it has no folder of its own) into the trash and its row out of work-state,
+ *  with one Undo for both. Its conversations stay. */
+export async function deleteProject(key: string) {
+  const project = projectEntry(key);
+  if (!project) return;
+  const workspace = activeFolder();
+  // a project named like its context would take the context's folder: then only its note goes
+  const own = project.folder && !build().model.contexts.some(context => context.folder === project.folder?.path);
+  const path = own ? project.folder!.path : project.note;
+  const open = openPagePath();
+  try {
+    const gone = await backend.trashPath(abs(path));
+    const row = await backend.projectRow(workspace, nameOf(key), project.context, null);
+    await loadSnapshot();
+    if (open === path || open.startsWith(`${path}/`)) select(VIEW.wait);
+    const shared = sharedWorkspace();
+    toast(
+      shared
+        ? t("pages.trashedShared", { name: project.label, workspace: shared })
+        : t("pages.trashed", { name: project.label }),
+      () => {
+        void backend
+          .restorePath(gone.root, gone.trash, gone.path)
+          // "" puts nothing back but reads the index again (a vault of cards)
+          .then(() => backend.projectRow(workspace, nameOf(key), project.context, row ?? ""))
+          .then(loadSnapshot)
+          .catch(fail);
+      },
+    );
+  } catch (e) {
+    fail(e);
+  }
+}

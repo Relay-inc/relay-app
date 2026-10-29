@@ -13,6 +13,13 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- Pages tab: add a context or a project from a right-click menu, without Obsidian. New context sits on the Folders heading,
+  New project on a context's heading (also on the Chats tab). A project gets its note from the vault's template of
+  the type picked and a row in work-state. A project's menu sets its state (Active, Blocked, Quiet, Paused), starts a
+  conversation, opens its note, and deletes it with Undo. A context without projects shows with New project under it.
+
 ### Fixed
 
 - **A member who updated late can join the member list**: a member of a team workspace whose Relay updated after the workspace got its member list was never on it, so Make admin failed with "not on this workspace's member list" and Remove couldn't work either. Members now shows such a member as Not on the list, and an admin adds it with Add to list, on the same proof as the upgrade used

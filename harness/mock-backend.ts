@@ -62,7 +62,13 @@ const member = fixture === "shared-member" || fixture === "shared-keeper";
 // shared-rekey: someone left the vault, and the key change waits for a member whose Relay has no public key yet
 // shared-live (-dark): "shared", and a page of the side vault is a shared document two mock peers edit (ticket 9)
 const live = fixture === "shared-live" || fixture === "shared-live-dark";
-const shared = fixture === "shared" || fixture === "shared-invite" || fixture === "shared-rekey" || fixture === "shared-unlisted" || member || live;
+const shared =
+  fixture === "shared" ||
+  fixture === "shared-invite" ||
+  fixture === "shared-rekey" ||
+  fixture === "shared-unlisted" ||
+  member ||
+  live;
 if (shared)
   settings = {
     ...settings,
@@ -98,7 +104,9 @@ for (const s of Object.values(sharedStatus).slice(0, 1)) {
   s.admin = true;
   s.admins = vault.sharedMembers.filter(m => m.role === "admin").map(m => m.fp);
   // shared-unlisted: Design laptop's Relay published its keys after the list was made, so the list lacks it
-  s.listed = vault.sharedMembers.map(m => m.fp).filter(fp => fixture !== "shared-unlisted" || fp !== vault.sharedMembers[2].fp);
+  s.listed = vault.sharedMembers
+    .map(m => m.fp)
+    .filter(fp => fixture !== "shared-unlisted" || fp !== vault.sharedMembers[2].fp);
 }
 if (fixture === "shared-rekey")
   for (const s of Object.values(sharedStatus))
@@ -499,7 +507,14 @@ function handle(cmd: string, a: Args): unknown {
     case "open_file":
       return String(a.path).includes("missing") ? Promise.reject("not found") : null;
     case "snapshot": {
-      const snap = vault.snapshot(reminders);
+      const base = vault.snapshot(reminders);
+      // with the contexts and projects made from the Pages tab, and the states set there
+      const all = [...base.projects, ...madeProjects].map(p => (states[p.name] ? { ...p, state: states[p.name] } : p));
+      const snap = {
+        ...base,
+        projects: all,
+        contexts: { [vault.VAULT]: [...new Set([...all.map(p => p.context), ...madeContexts])].sort() },
+      };
       if (!shared) return snap;
       // a project moved by migrate_project lives in its new vault under its new key
       const own = snap.projects.map(p =>
@@ -527,6 +542,36 @@ function handle(cmd: string, a: Args): unknown {
       if (!a.folder) pages = [...pageList(), path];
       return path;
     }
+    // contexts and projects from the Pages tab: a project's note goes to Contexts/<context>/Projects/<name>/
+    case "create_context": {
+      const path = `Contexts/${String(a.name)}/${String(a.name)}.md`;
+      madeContexts.push(String(a.name));
+      pages = [...pageList(), path];
+      return path;
+    }
+    case "create_project": {
+      const path = `Contexts/${String(a.context)}/Projects/${String(a.name)}/${String(a.name)}.md`;
+      pages = [...pageList(), path];
+      madeProjects.push({
+        ...vault.snapshot().projects[0],
+        name: String(a.name),
+        context: String(a.context),
+        state: String(a.status),
+        summary: "",
+        open: null,
+        open_items: [],
+        stand: null,
+        aliases: [],
+      });
+      return path;
+    }
+    case "project_kinds":
+      return ["Product", "Initiative", "Platform"];
+    case "set_project_state":
+      states[String(a.name)] = String(a.status);
+      return null;
+    case "project_row":
+      return a.row == null ? `| [[${String(a.name)}]] | Active | 2026-10-29 |  |` : null;
     case "free_page_name":
       return pageList().includes(`${pageRel(a.parent) ? `${pageRel(a.parent)}/` : ""}${String(a.name)}.md`)
         ? `${String(a.name)} 1`
@@ -1481,6 +1526,9 @@ async function stream({
 
 // the main vault's notes after the Pages tab's file operations (null: the fixture's), and what went into the trash
 let pages: string[] | null = null;
+const madeContexts: string[] = [];
+const madeProjects: ReturnType<typeof vault.snapshot>["projects"] = [];
+const states: Record<string, string> = {};
 const trashed = new Map<string, string[]>();
 const pageList = () => pages ?? vault.notes;
 const pageRel = (p: unknown) => String(p).replace(vault.VAULT, "").replace(/^\//, "");

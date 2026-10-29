@@ -27,6 +27,7 @@ export type Snapshot = {
   sessions: { error?: string | null; items: SessionItem[] };
   reminders: Reminder[];
   vault?: VaultStatus;
+  contexts?: Record<string, string[]>; // per workspace folder its contexts, also those without a project
 };
 /** An extra vault folder as the last snapshot read it: why it could not be read. */
 export type ExtraVault = { vault: string; error: string | null };

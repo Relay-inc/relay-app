@@ -5,8 +5,10 @@
 export type PageFolder = { name: string; path: string; folders: PageFolder[]; notes: string[]; count: number };
 /** A project in the tree: its note, and the folder named like it that holds that note, if there is one. */
 export type PageProject = { key: string; label: string; note: string; folder: PageFolder | null; count: number };
-/** `index`: the context's place among all of them, which picks its colour as in the Chats tab. */
-export type PagesModel = { contexts: { name: string; index: number; projects: PageProject[] }[]; top: PageFolder };
+/** `index`: the context's place among all of them, which picks its colour as in the Chats tab; `folder` the folder of
+ *  its note (`<folder>/<name>.md`), "" when it has none. */
+export type PageContext = { name: string; index: number; folder: string; projects: PageProject[] };
+export type PagesModel = { contexts: PageContext[]; top: PageFolder };
 
 const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true });
 export const noteName = (path: string) => path.split("/").pop()!.replace(/\.md$/i, "");
@@ -51,17 +53,20 @@ export function projectPage(root: PageFolder, paths: string[], name: string) {
   return { note: home ?? notes[0] ?? "", folder: folder ?? null };
 }
 
-/** The tree of a workspace: per context its projects (`name` is the note's name, `key` the project's), and the top. */
+/** The tree of a workspace: per context its projects (`name` is the note's name, `key` the project's), and the top.
+ *  `listed`: the workspace's own contexts, shown also without a project (after the ordered ones). */
 export function pagesModel(
   paths: string[],
   projects: { key: string; name: string; label: string; context: string }[],
   contextOrder: string[],
+  listed: string[] = [],
 ): PagesModel {
   const top = pageTree(paths);
-  const contexts = contextOrder
+  const contexts = [...contextOrder, ...listed.filter(name => !contextOrder.includes(name))]
     .map((name, index) => ({
       name,
       index,
+      folder: parentOf(paths.find(path => path === `${name}/${name}.md` || path.endsWith(`/${name}/${name}.md`)) ?? ""),
       projects: projects
         .filter(project => project.context === name)
         .map(project => {
@@ -71,7 +76,7 @@ export function pagesModel(
         .filter(project => project.note)
         .sort((a, b) => byName(a.label, b.label)),
     }))
-    .filter(context => context.projects.length);
+    .filter(context => context.projects.length || listed.includes(context.name));
   return { contexts, top };
 }
 

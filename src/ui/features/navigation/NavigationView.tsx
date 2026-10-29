@@ -50,6 +50,7 @@ import { closeWork, openWork } from "../../../application/today/work";
 import { activeFolder, workspaces } from "../../../application/navigation/workspaces";
 import { projectVault as homeOf } from "../../../application/navigation/migrate";
 import { MigrateDialog } from "./MigrateDialog";
+import { ProjectDialog, type ProjectAsk } from "./ProjectDialog";
 import { chatCount, pagesView, setSidebarTab, sidebarTab } from "../../../application/navigation/pages";
 import { PagesView } from "./PagesView";
 import { vaultName } from "../../../application/workspace/vault";
@@ -61,7 +62,7 @@ type MenuTarget = {
   y: number;
   chatKey: string;
   project: string | null;
-  kind: "conv" | "proj" | "folder" | "view" | "more";
+  kind: "conv" | "proj" | "folder" | "view" | "more" | "ctx"; // ctx: a context's heading, `chatKey` its name
 };
 
 /** The whole left sidebar: search, the sections with their conversations, the footer buttons and the right-click menu.
@@ -87,6 +88,7 @@ export function NavigationView({ className }: { className: string }) {
   const menuElement = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<MenuTarget | null>(null);
   const [migrating, setMigrating] = useState<{ project: string; to: string; mode: "move" | "copy" } | null>(null);
+  const [projectAsk, setProjectAsk] = useState<ProjectAsk | null>(null);
   const { press, dropzone, unlessDragged, reordering } = useReorder(root, layout === "icons");
 
   // the selected row stays in sight, also when it is selected from elsewhere
@@ -127,6 +129,11 @@ export function NavigationView({ className }: { className: string }) {
   };
   const menuItems = (target: MenuTarget): MenuItem[] => {
     if (target.kind === "view") return viewMenuItems(target);
+    if (target.kind === "ctx")
+      return [
+        { id: "newproject", label: t("pages.newProject") },
+        { id: "newcontext", label: t("pages.newContext") },
+      ];
     if (target.kind === "more")
       return hidden.map(view => ({ id: view.key, label: view.name, icon: view.icon, mark: view.mark }));
     if (target.kind === "folder")
@@ -167,6 +174,10 @@ export function NavigationView({ className }: { className: string }) {
   const pick = async (target: MenuTarget, itemId: string) => {
     setMenu(null);
     if (target.kind === "view") pickView(target, itemId);
+    else if (itemId === "newproject")
+      // the new project shows in Chats by its first conversation
+      setProjectAsk({ kind: "project", context: target.chatKey, then: key => select(newChatHere(key)) });
+    else if (itemId === "newcontext") setProjectAsk({ kind: "context" });
     else if (target.kind === "more") select(itemId);
     else if (target.kind === "folder") pickFolder(target, itemId);
     else if (itemId === "assign") {
@@ -377,7 +388,11 @@ export function NavigationView({ className }: { className: string }) {
           dropBefore={drop === "before"}
           onPointerDown={press("sec", section.id)}
           onClick={unlessDragged(() => toggleSection(section.id))}
-          onContextMenu={section.id === GENERAL ? openMenu({ chatKey: "", project: null, kind: "proj" }) : undefined}
+          onContextMenu={openMenu(
+            section.id === GENERAL
+              ? { chatKey: "", project: null, kind: "proj" }
+              : { chatKey: section.id, project: null, kind: "ctx" },
+          )}
           onAdd={section.add === undefined ? undefined : unlessDragged(() => select(newChatHere(section.add || null)))}
         />
         {section.open ? (
@@ -456,6 +471,7 @@ export function NavigationView({ className }: { className: string }) {
       {migrating ? (
         <MigrateDialog {...migrating} from={homeOf(migrating.project)} onClose={() => setMigrating(null)} />
       ) : null}
+      {projectAsk ? <ProjectDialog ask={projectAsk} onClose={() => setProjectAsk(null)} /> : null}
     </div>
   );
 }

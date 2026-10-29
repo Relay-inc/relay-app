@@ -40,7 +40,7 @@ pub fn cards(side: &Side) -> bool {
         || fs::read_to_string(&side.work_state).is_ok_and(|t| t.contains("build-index.py"))
 }
 /// One folder or file name: no separator, no `..`, not hidden.
-fn plain(s: &str) -> bool { !s.is_empty() && !s.starts_with('.') && !s.contains(['/', '\\']) && s != ".." }
+pub fn plain(s: &str) -> bool { !s.is_empty() && !s.starts_with('.') && !s.contains(['/', '\\']) && s != ".." }
 fn rel(p: &Path, root: &Path) -> String { p.strip_prefix(root).unwrap_or(p).to_string_lossy().into_owned() }
 
 /// Every file under `p` (or `p` itself), links listed apart and never followed.
@@ -66,7 +66,7 @@ fn through_link(vault: &Path, p: &Path) -> bool {
 }
 
 /// The project's row in a work-state table: the line whose first cell is `[[name]]` or `name`.
-fn row_of(work_state: &str, name: &str) -> Option<String> {
+pub fn row_of(work_state: &str, name: &str) -> Option<String> {
     let row = Regex::new(&format!(r"^\| (?:\[\[{0}(?:\|[^\]]*)?\]\][^|]*|{0}) \| ", regex::escape(name))).unwrap();
     fs::read_to_string(work_state).ok()?.lines().find(|l| row.is_match(l)).map(String::from)
 }
@@ -88,7 +88,7 @@ pub fn add_row(text: &str, ctx: &str, line: &str) -> String {
     format!("{}\n\n### {ctx}\n\n| Project | State | Last Touched | Left Off |\n|---|---|---|---|\n{line}\n", text.trim_end())
 }
 /// `text` without `line` (once).
-fn drop_row(text: &str, line: &str) -> String {
+pub fn drop_row(text: &str, line: &str) -> String {
     let mut gone = false;
     let kept: Vec<&str> = text.lines().filter(|l| { let x = !gone && *l == line; gone |= x; !x }).collect();
     kept.join("\n") + "\n"
