@@ -604,6 +604,67 @@ const SCENARIOS = {
     s.check("its conversations show under it there", await navHas(page, "Billing sync double balances"));
   },
 
+  // Notion-like editing on a page (ticket 3): /to + Enter makes a to-do, its box toggles the file, a heading dragged
+  // above the text before it takes its section along
+  async pageBlocks(s) {
+    await s.load();
+    const { page } = s;
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator(".cm-content").waitFor();
+    const written = async () => (await page.evaluate(() => window.__harness.written())) ?? ""; // calls() shortens long args
+    const saved = async re => {
+      for (let i = 0; i < 20 && !re.test(await written()); i++) await page.waitForTimeout(200);
+      return re.test(await written());
+    };
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("\n/to");
+    await page.locator(".cm-tooltip-autocomplete").waitFor();
+    s.check(
+      "/to offers To-do first",
+      (await page.locator(".cm-tooltip-autocomplete li").first().textContent())?.startsWith("To-do"),
+    );
+    // CodeMirror takes Enter as a pick only 75 ms after the list opened, by Date.now, which the harness pins: move it on
+    await page.clock.setFixedTime(await page.evaluate(() => Date.now() + 1000));
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Call the client");
+    s.check("the to-do is saved as markdown", await saved(/\n- \[ \] Call the client$/));
+    // typed Enter would continue the to-do list; WebKit's insertText takes one line at a time
+    for (const part of ["\n", "\n", "## Later", "\n", "After the demo"]) await page.keyboard.insertText(part);
+    await page.locator(".cm-line", { hasText: "Call the client" }).locator(".cm-task").click();
+    s.check("its box ticks it in the file", await saved(/- \[x\] Call the client\n[\s\S]*## Later\nAfter the demo/));
+    // drag the Later heading (its section) above the first line
+    const heading = page.locator(".cm-line", { hasText: "Later" });
+    const box = await heading.boundingBox();
+    await page.mouse.move(box.x + 20, box.y + box.height / 2);
+    // the drop goes on the page's first line: scrolled into view, the handle still holds the Later section
+    await page.locator(".cm-line", { hasText: "Archive: old repo" }).scrollIntoViewIfNeeded();
+    const first = await page.locator(".cm-line", { hasText: "Archive: old repo" }).boundingBox();
+    await page.evaluate(
+      ({ y }) => {
+        const handle = document.querySelector(".cm-block-handle");
+        const content = document.querySelector(".cm-content");
+        const data = new DataTransfer();
+        handle.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer: data }));
+        const over = content.dispatchEvent(
+          new DragEvent("dragover", { bubbles: true, cancelable: true, clientY: y, dataTransfer: data }),
+        );
+        const dropped = content.dispatchEvent(
+          new DragEvent("drop", { bubbles: true, cancelable: true, clientY: y, dataTransfer: data }),
+        );
+        handle.dispatchEvent(new DragEvent("dragend", { bubbles: true, dataTransfer: data }));
+        if (over || dropped) throw new Error("the editor did not take the drag");
+      },
+      { y: first.y + 2 },
+    );
+    s.check(
+      "the heading moved with its section",
+      await saved(/# Northwind Portal\n\n## Later\nAfter the demo\n\n> \[!note\]/),
+    );
+    s.check("and nothing else changed", /```\n\n- \[x\] Call the client/.test(await written()));
+  },
+
   async mail(s) {
     await s.load();
     const { page, keys } = s;

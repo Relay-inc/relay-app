@@ -118,3 +118,114 @@
 .page-editor .cm-hr {
   color: var(--tertiary);
 }
+
+/* Notion-like editing (blocks.ts): the handle left of the block under the pointer, its menu, the line where a dragged
+   block lands, and the / and [[ completion lists */
+.page-editor .cm-block-handle {
+  position: absolute;
+  left: -28px;
+  width: 20px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  font-size: 11px;
+  letter-spacing: -2px;
+  color: var(--tertiary);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 120ms var(--ease);
+}
+.page-editor .cm-editor:hover .cm-block-handle {
+  opacity: 1;
+}
+.page-editor .cm-block-handle:hover {
+  background: var(--fill-2);
+  color: var(--secondary);
+}
+.page-editor .cm-drop-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--accent);
+  border-radius: 1px;
+  display: none;
+  pointer-events: none;
+}
+.page-editor .cm-block-menu {
+  position: absolute;
+  left: -28px;
+  margin-top: 26px;
+  z-index: 20;
+  width: 200px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  background: var(--bg);
+  border: 1px solid var(--separator);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  font-size: 13px;
+}
+.page-editor .cm-block-menu.cm-block-menu-up {
+  margin-top: 0;
+  transform: translateY(calc(-100% - 4px));
+}
+.page-editor .cm-block-menu-head {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tertiary);
+}
+.page-editor .cm-block-menu button {
+  padding: 5px 8px;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--label);
+  cursor: default;
+}
+.page-editor .cm-block-menu button:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.page-editor .cm-block-menu-sep {
+  margin: 6px 8px;
+  border: 0;
+  border-top: 1px solid var(--separator);
+}
+.page-editor .cm-tooltip.cm-tooltip-autocomplete {
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--separator);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+.page-editor .cm-tooltip.cm-tooltip-autocomplete > ul {
+  font-family: var(--sans);
+  font-size: 13px;
+  max-height: 280px;
+}
+.page-editor .cm-tooltip.cm-tooltip-autocomplete > ul > li {
+  padding: 4px 8px !important;
+  border-radius: 6px;
+  color: var(--label);
+}
+.page-editor .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.page-editor .cm-completionDetail {
+  margin-left: 12px;
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  opacity: 0.6;
+}
+.page-editor .cm-completionMatchedText {
+  text-decoration: none;
+  font-weight: 600;
+}

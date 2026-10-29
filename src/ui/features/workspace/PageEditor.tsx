@@ -3,9 +3,10 @@ import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, drawSelection } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { followPageLink, loadPage, savePage } from "../../../application/navigation/pages";
+import { followPageLink, loadPage, savePage, workspacePaths } from "../../../application/navigation/pages";
 import { useT } from "../../hooks/useT";
 import { livePreview } from "./livePreview";
+import { blockEditing, type BlockWords } from "./blocks";
 import "../../styles/page-editor.css";
 
 const SAVE_AFTER = 1000; // ms after the last keystroke
@@ -69,6 +70,15 @@ function Editor(props: {
   const host = useRef<HTMLDivElement>(null);
   const [first] = useState(props); // what the editor was made from
   const label = t("page.editor");
+  const [words] = useState<BlockWords>(() => ({
+    kind: kind => t(`block.${kind}`),
+    turnInto: t("block.turnInto"),
+    duplicate: t("block.duplicate"),
+    remove: t("block.delete"),
+    addRow: t("block.addRow"),
+    addColumn: t("block.addColumn"),
+    handle: t("block.handle"),
+  }));
   useEffect(() => {
     const { page, head, body, onReady, onChanged, onFailed } = first;
     let saved = body;
@@ -103,6 +113,7 @@ function Editor(props: {
           EditorView.lineWrapping,
           markdown({ base: markdownLanguage }),
           livePreview((link, drawer) => void followPageLink(link, drawer)),
+          blockEditing(words, () => workspacePaths()), // before the keymap below: Tab in a table moves between cells
           keymap.of([
             {
               key: "Mod-s",
@@ -130,6 +141,6 @@ function Editor(props: {
       void write(); // leaving the page saves what was typed
       view.destroy();
     };
-  }, [first, label]);
+  }, [first, label, words]);
   return <div ref={host} className="page-editor" />;
 }
