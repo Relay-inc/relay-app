@@ -45,6 +45,8 @@ pub enum Event {
     /// A document update another member pushed (docs.rs): its name on the server, its place in that document's log,
     /// the sender, and the sealed part, which `Docs::take_live` opens.
     Doc { doc: String, seq: u64, from: String, body: Vec<u8> },
+    /// Another member put or deleted a file on the server: a round now brings it (an older server never says so).
+    Files,
 }
 type On = Arc<dyn Fn(Event) + Send + Sync>;
 
@@ -153,6 +155,7 @@ impl Channel {
             *heard.lock().unwrap() = Instant::now();
             match v["t"].as_str() {
                 Some("ping") => {}
+                Some("files") => (i.on)(Event::Files),
                 Some("bye") => return v["why"].as_str().unwrap_or("closed by the server").to_string(),
                 Some("doc") => {
                     let (doc, from) = (v["doc"].as_str().unwrap_or(""), v["from"].as_str().unwrap_or(""));

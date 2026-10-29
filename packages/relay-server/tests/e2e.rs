@@ -1117,6 +1117,28 @@ fn trio(tag: &str, b_role: &str) -> (Team, Member, Member, Member) {
     (t, a, b, c)
 }
 
+/// A file put or deleted on the server tells the other members' live streams, so their Relay runs a round at once;
+/// the member who wrote it hears nothing.
+#[test]
+fn a_file_written_wakes_the_other_members_rounds() {
+    use relay_remote::channel::Event;
+    use relay_remote::sync::Remote;
+    let (t, a, b, _c) = trio("files", "member");
+    let (_ca, ra) = events(&t.laptop, &t.vault, &a.keys());
+    let (_cb, rb) = events(&b.c, &t.vault, &b.keys());
+    wait_for(&ra, 10, |e| matches!(e, Event::Live { .. }));
+    wait_for(&rb, 10, |e| matches!(e, Event::Live { .. }));
+    let r = a.remote(&t.vault);
+    r.manifest().unwrap();
+    r.put("Projects/Plan.md", b"one", 1, "").unwrap();
+    wait_for(&rb, 5, |e| *e == Event::Files);
+    let etag = r.manifest().unwrap()["Projects/Plan.md"].hash.clone();
+    r.delete("Projects/Plan.md", &etag).unwrap();
+    wait_for(&rb, 5, |e| *e == Event::Files);
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(!ra.try_iter().any(|e| e == Event::Files), "never its own");
+}
+
 /// Key rotation on the member list, with the app's own calls against the real binary (docs/workspaces.md): the third
 /// member is removed (a signed entry), the admin's round rotates for exactly the members the list has, the colleague
 /// (offline meanwhile) is refused with the old key, takes the new one and goes on. The removed member cannot open what

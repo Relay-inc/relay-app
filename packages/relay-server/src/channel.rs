@@ -120,6 +120,18 @@ impl Rooms {
         };
         close(full, "not reading");
     }
+    /// A file of vault `id` changed here (`fp` put or deleted one): every other member's open stream gets
+    /// `{t:"files"}`, so its Relay runs a round now instead of at the next 10 s. It names no file; the round finds it.
+    pub fn files(&self, id: &str, fp: &str) {
+        let line: Line = json!({"t": "files"}).to_string().into();
+        let full = {
+            let mut all = self.rooms.lock().unwrap();
+            let Some(room) = all.get_mut(id) else { return };
+            let members = room.members.clone();
+            room.take(|s| s.fp != fp && members.contains(&s.fp) && !s.send(&line))
+        };
+        close(full, "not reading");
+    }
 }
 
 fn vault_file(data: &Path, id: &str) -> PathBuf { data.join("vaults").join(id).join("vault.json") }

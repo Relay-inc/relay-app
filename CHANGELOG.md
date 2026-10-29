@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- **Editing a shared page together is live again**: moving the cursor on a shared page closed the workspace's live connection, so the other members never saw your cursor and your edits reached them only at the next 10 s round. Cursors now show, and a file saved in a team workspace goes out at once; with relay-server updated too, the other members' Relay fetches it at once instead of within 10 s (#337)
 - **Settings › Machines reads clearer**: a machine's workspaces sit in its own row now, under "Workspaces on <machine>" in a card of their own like its repos, instead of in an indented strip between the machines. The buttons of a machine or a workspace stay together on the right and move under the name as a group when the window is narrow, instead of one at a time
 ### Changed
 
