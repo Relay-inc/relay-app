@@ -14,6 +14,7 @@ export default {
   "nav.tabPages": "Pagina's",
   "pages.recent": "Recent",
   "pages.folders": "Mappen",
+  "pages.system": "Systeem",
   "pages.none": "Geen pagina met die naam",
   "pages.untitled": "Naamloos",
   "pages.deleteTitle": "{name} verwijderen?",

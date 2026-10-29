@@ -14,6 +14,7 @@ export default {
   "nav.tabPages": "Seiten",
   "pages.recent": "Zuletzt",
   "pages.folders": "Ordner",
+  "pages.system": "System",
   "pages.none": "Keine Seite mit diesem Namen",
   "pages.untitled": "Unbenannt",
   "pages.deleteTitle": "{name} löschen?",

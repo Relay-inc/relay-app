@@ -1,4 +1,12 @@
-import { findPages, pagesModel, recentPages, type PagesModel } from "../../domain/navigation/pages";
+import {
+  findPages,
+  isSystemPage,
+  pagesModel,
+  pageTree,
+  recentPages,
+  type PageFolder,
+  type PagesModel,
+} from "../../domain/navigation/pages";
 import { noteKey, pageKey, VIEW } from "../../domain/navigation/keys";
 import { pageOf } from "../../domain/navigation/views";
 import { ORCH } from "../../domain/orchestrator/rules";
@@ -59,17 +67,28 @@ type Built = {
   notes: unknown;
   snap: unknown;
   workspace: string;
+  shared: unknown;
   paths: string[];
   exists: Set<string>;
   model: PagesModel;
+  system: PageFolder | null;
 };
+/** Admin of the workspace shown: always of one's own vault and the folders added, of a shared one when its role says. */
+const isAdmin = (workspace: string) =>
+  settings().sharedVaults?.find(vault => vault.folder === workspace)?.role !== "member";
 let built: Built | null = null;
 // the tree is built again only when the notes, the projects or the workspace changed, not on every click
 function build(): Built {
   const workspace = activeFolder();
   const { snap, notes } = useWorkspaceStore.getState();
-  if (built?.notes === notes && built.snap === snap && built.workspace === workspace) return built;
-  const paths = workspacePaths(workspace);
+  const shared = settings().sharedVaults;
+  if (built?.notes === notes && built.snap === snap && built.workspace === workspace && built.shared === shared)
+    return built;
+  // the notes the vault runs on stay out of the tree; an admin finds them under System and in the search, a member not
+  const all = workspacePaths(workspace);
+  const admin = isAdmin(workspace);
+  const system = all.filter(isSystemPage);
+  const paths = admin ? all : all.filter(path => !isSystemPage(path));
   const projects = snap.projects
     .filter(project => (project.vault || snap.vault?.vault) === workspace)
     // another vault's project key is "name␟vault id" (policy.rs `project_key`): its note is named by the first part
@@ -79,20 +98,42 @@ function build(): Built {
       label: projectName(project.name),
       context: project.context,
     }));
-  built = { notes, snap, workspace, paths, exists: new Set(paths), model: pagesModel(paths, projects, contexts()) };
+  const model = pagesModel(
+    paths.filter(path => !isSystemPage(path)),
+    projects,
+    contexts(),
+  );
+  built = {
+    notes,
+    snap,
+    workspace,
+    shared,
+    paths,
+    exists: new Set(paths),
+    model,
+    system: admin && system.length ? pageTree(system) : null,
+  };
   return built;
 }
-/** The Pages tab: the workspace's contexts with their projects, its top folders, the recent notes, or the search's. */
-export function pagesView(): { model: PagesModel; recent: string[]; found: string[] | null; total: number } {
-  const { workspace, paths, exists, model } = build();
+/** The Pages tab: the workspace's contexts with their projects, its top folders, the notes the vault runs on (for an
+ *  admin, else null), the recent notes, or the search's. */
+export function pagesView(): {
+  model: PagesModel;
+  system: PageFolder | null;
+  recent: string[];
+  found: string[] | null;
+  total: number;
+} {
+  const { workspace, paths, exists, model, system } = build();
   const { find, touches } = useNavigationStore.getState().sidebar;
   const root = isMain(workspace) ? useWorkspaceStore.getState().notes.root : workspace;
   const query = find.trim().toLowerCase();
   return {
     model,
+    system,
     recent: recentPages(touches, root, path => exists.has(path)),
     found: query ? findPages(paths, query) : null,
-    total: paths.length,
+    total: model.top.count, // the pages people write in: System not counted, for an admin either
   };
 }
 

@@ -1,5 +1,6 @@
 import { activeWorkspace, chatVault, vaultChoices } from "../../domain/conversations/rules";
 import { opened, panelItem } from "../../domain/navigation/keys";
+import { isSystemPage } from "../../domain/navigation/pages";
 import { WAIT } from "../../domain/navigation/views";
 import { isOrchKey } from "../../domain/orchestrator/rules";
 import { useConversationsStore } from "../conversations/store";
@@ -32,10 +33,13 @@ const initials = (name: string) => {
   const letters = name.replace(/[^\p{L}\p{N}]/gu, "");
   return letters.charAt(0).toUpperCase() + letters.charAt(1).toLowerCase();
 };
-// the main vault's notes are relative to it, another vault's absolute (lib.rs `vault_notes`)
+// the main vault's notes are relative to it, another vault's absolute (lib.rs `vault_notes`); the notes the vault runs
+// on not counted, as in the Pages tab
 const notesIn = (folder: string, main: boolean) =>
   [...useWorkspaceStore.getState().notes.paths].filter(path =>
-    main ? !path.startsWith("/") : path.startsWith(folder + "/"),
+    main
+      ? !path.startsWith("/") && !isSystemPage(path)
+      : path.startsWith(folder + "/") && !isSystemPage(path.slice(folder.length + 1)),
   ).length;
 
 /** Every workspace, the main one first, in the order ⌃1 to ⌃9 pick them. */

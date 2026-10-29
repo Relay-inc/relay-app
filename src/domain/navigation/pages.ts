@@ -75,6 +75,14 @@ export function pagesModel(
   return { contexts, top };
 }
 
+// the notes the vault runs on rather than ones people write in: an agent's instructions, its rules, hooks and scripts,
+// the templates. ponytail: one list for every vault, a `system` key in .relay/config.json when a vault lays them out apart
+const SYSTEM_FILES = ["CLAUDE.md", "AGENTS.md"];
+const SYSTEM_FOLDERS = ["System/", "scripts/", "Resources/Meta/", "Resources/Templates/"];
+/** A note the vault runs on (a path relative to the workspace): in the Pages tab only an admin sees it, apart. */
+export const isSystemPage = (path: string) =>
+  SYSTEM_FILES.includes(path) || SYSTEM_FOLDERS.some(folder => path.startsWith(folder));
+
 /** The notes whose name holds the search text, by name, at most `max`. */
 export const findPages = (paths: string[], query: string, max = 50) =>
   paths
