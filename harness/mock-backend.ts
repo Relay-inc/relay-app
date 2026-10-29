@@ -486,6 +486,15 @@ function handle(cmd: string, a: Args): unknown {
       const read = { ...vault.noteText(a.target), modified, ...written.get(String(a.target)) };
       return team ? { ...read, path: team, hash: "h0" } : { hash: "h0", ...read };
     }
+    case "property_values":
+      return (
+        (
+          { status: ["Active", "Blocked", "Quiet", "Paused"], type: ["Document", "Product", "Meeting"] } as Record<
+            string,
+            string[]
+          >
+        )[String(a.key)] ?? []
+      );
     case "write_note": {
       // a file changed on disk since the page read it (set with __harness.changeOnDisk): refused unless forced
       if (diskChanged && !a.force) return Promise.reject("changed");

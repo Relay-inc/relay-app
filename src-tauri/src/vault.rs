@@ -105,6 +105,28 @@ pub fn write_note(roots: &[String], target: &str, text: &str, expect: &str, forc
     Ok(text_hash(text))
 }
 
+/// The values a frontmatter key has across a workspace's notes, most used first (at most 40): what a page's property
+/// offers to pick from. Only one-line `key: value` scalars count; quotes are taken off.
+pub fn property_values(root: &str, key: &str) -> Vec<String> {
+    let root = PathBuf::from(canon(root));
+    let prefix = format!("{key}:");
+    let mut count: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    walk(&root, |p, n| {
+        if !n.ends_with(".md") { return false; }
+        let Ok(text) = fs::read_to_string(p) else { return false };
+        let Some(fm) = text.strip_prefix("---\n").and_then(|t| t.split_once("\n---").map(|(f, _)| f)) else { return false };
+        for line in fm.lines() {
+            let Some(v) = line.strip_prefix(&prefix) else { continue };
+            let v = v.trim().trim_matches(|c| c == '"' || c == '\'').trim();
+            if !v.is_empty() && !v.starts_with('[') && !v.starts_with('<') { *count.entry(v.to_string()).or_default() += 1; }
+        }
+        false
+    });
+    let mut values: Vec<(String, usize)> = count.into_iter().collect();
+    values.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    values.into_iter().take(40).map(|(v, _)| v).collect()
+}
+
 /// Guess the mapping of a vault: the known layouts first, then a search for the files by name.
 /// Returns the canonical vault path and the mapping ("" where nothing was found).
 pub fn detect(vault: &str) -> (String, Value) {
@@ -452,6 +474,18 @@ mod tests {
         place_skills(&tpl, &team, &l).unwrap();
         assert_eq!(fs::read_to_string(out.join("target")).unwrap(), "untouched");
         assert!(!out.join("SKILL.md").exists() && !out.join(".relay-skill").exists());
+    }
+
+    #[test]
+    fn property_values_counts_a_keys_scalar_values() {
+        let d = tmp("propvalues");
+        fs::create_dir_all(d.join("a")).unwrap();
+        fs::write(d.join("a/one.md"), "---\nstatus: Active\n---\n").unwrap();
+        fs::write(d.join("a/two.md"), "---\nstatus: \"Active\"\nproduct-status: Paused\n---\nstatus: Body\n").unwrap();
+        fs::write(d.join("three.md"), "---\nstatus: Blocked\n---\n").unwrap();
+        fs::write(d.join("four.md"), "---\nstatus:\n---\n").unwrap();
+        assert_eq!(property_values(d.to_str().unwrap(), "status"), vec!["Active", "Blocked"]);
+        fs::remove_dir_all(&d).ok();
     }
 
     #[test]

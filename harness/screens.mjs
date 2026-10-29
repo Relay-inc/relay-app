@@ -1267,6 +1267,43 @@ const VIEWS = {
     await VIEWS["page-view-dark"]();
     await settle(page);
   },
+  // the page's properties as editable rows (ticket 4), in dark: text, a [[link]], a date, a list, a checkbox
+  "page-properties": async () => {
+    await VIEWS["page-view-dark"]();
+    await page.getByLabel("status", { exact: true }).hover();
+    await settle(page);
+  },
+  // status changed from the header: only that line of the file changes, saved with the body's text
+  "page-properties-edit": async () => {
+    await VIEWS["page-view"]();
+    const status = page.getByLabel("status", { exact: true });
+    await status.fill("Blocked");
+    await status.press("Enter");
+    await page.waitForFunction(() => /\nstatus: Blocked\n/.test(window.__harness.written() ?? ""), null, {
+      timeout: 4000,
+    });
+    await page.getByRole("button", { name: "Remove: archive" }).click();
+    await page.waitForFunction(() => !/archive:/.test(window.__harness.written() ?? "archive:"), null, {
+      timeout: 4000,
+    });
+    await settle(page);
+  },
+  // a property added: a link to a note, written as key: "[[Note]]"
+  "page-properties-add": async () => {
+    await VIEWS["page-view"]();
+    await page.getByRole("button", { name: "Add property" }).click();
+    await page.getByRole("textbox", { name: "Property name" }).fill("reviewer");
+    await page.getByRole("combobox", { name: "Type" }).selectOption("link");
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    const reviewer = page.getByLabel("reviewer", { exact: true });
+    await reviewer.fill("Billing Spec");
+    await reviewer.press("Enter");
+    await page.waitForFunction(() => /reviewer: "\[\[Billing Spec\]\]"/.test(window.__harness.written() ?? ""), null, {
+      timeout: 4000,
+    });
+    await page.getByRole("button", { name: "Add property" }).click();
+    await settle(page);
+  },
   // the file changed on disk since the page read it: the save is refused, the bar offers Reload and Keep mine
   "page-editor-changed-on-disk": async () => {
     await VIEWS["page-view"]();
