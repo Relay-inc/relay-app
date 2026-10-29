@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Changed
 
-- **Usage is back next to the workspace**: the gauge sits beside the workspace in the sidebar's footer again, with its dot when a limit gets close, instead of inside the workspace menu. A click opens a summary above it: each agent's plan limits with when they reset, and the tokens and cost today and this week. View details opens the Usage view (#PR)
+- **Usage is back next to the workspace**: the gauge sits beside the workspace in the sidebar's footer again, with its dot when a limit gets close, instead of inside the workspace menu. A click opens a summary above it: each agent's plan limits with when they reset, and the tokens and cost today and this week. View details opens the Usage view (#334)
 
 ## [0.0.40] - 2026-10-29
 
