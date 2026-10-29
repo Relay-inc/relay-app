@@ -284,6 +284,11 @@ export const liveTail = (): Ev[] => [
   },
   { type: "tool_call", id: "toolu_live_err", name: "Bash", input: { command: "php bin/console app:sync --dry-run" } },
   { type: "tool_result", id: "toolu_live_err", error: true },
+  {
+    type: "tool_output",
+    id: "toolu_live_err",
+    text: "Exit code 1\nSyncing 42 invoices (dry run)\n\n  [Doctrine\\DBAL\\Exception\\ConnectionException]\n  SQLSTATE[08006] connection to staging database refused",
+  },
   { type: "error", text: "Process exited with code 1: SQLSTATE[08006] connection to staging database refused" },
   { type: "draft_saved", folder: "Drafts", to: ["finance@beacon.example"], cc: ["pm@acme.example"] },
   { type: "tool_call", id: "toolu_live_run", name: "Grep", input: { pattern: "replace\\(" } },

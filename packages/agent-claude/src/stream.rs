@@ -51,6 +51,23 @@ fn tool_images(content: &Value, out: &mut Vec<Event>) {
     }
 }
 
+/// The text of a tool result: a string, or its text blocks.
+fn text_of(content: &Value) -> String {
+    if let Some(s) = content.as_str() { return s.into(); }
+    content.as_array().into_iter().flatten().filter_map(|x| x["text"].as_str()).collect::<Vec<_>>().join("\n")
+}
+
+/// What the commands in a message's tool results printed, for the results `bash` says belong to a Bash call: a Read's
+/// file or a search's matches stay out, Claude has them, the conversation does not need them twice.
+// ponytail: the whole output as Claude got it (Claude Code caps it at ~30k characters), cap it here if that weighs
+fn tool_output(content: &Value, mut bash: impl FnMut(&str) -> bool) -> Vec<Event> {
+    content.as_array().into_iter().flatten().filter(|c| c["type"] == "tool_result").filter_map(|r| {
+        let id = r["tool_use_id"].as_str().filter(|id| bash(id))?;
+        let text = text_of(&r["content"]);
+        (!text.trim().is_empty()).then(|| Event::ToolOutput { id: id.into(), text })
+    }).collect()
+}
+
 /// The parser of one process. With `--include-partial-messages` text and thinking arrive as `stream_event` deltas
 /// first (the first piece of a block starts it, the next ones append), then the whole `assistant` message: its text
 /// is skipped for a message that streamed, or it would show twice.
@@ -63,6 +80,8 @@ pub struct State {
     fresh: bool,
     /// `total_cost_usd` at the last turn end: Claude Code counts it over the process, not per turn
     spent: f64,
+    /// the Bash calls of the conversation whose result has not come yet
+    bash: HashSet<String>,
 }
 
 impl State {
@@ -104,7 +123,10 @@ impl State {
             "assistant" => {
                 let streamed = ev["message"]["id"].as_str().is_some_and(|id| self.streamed.contains(id));
                 assistant(&ev["message"]["content"], streamed, &mut out);
-                if ev["parent_tool_use_id"].is_null() { out.extend(context(&ev["message"]["usage"])); }
+                if ev["parent_tool_use_id"].is_null() {
+                    out.extend(context(&ev["message"]["usage"]));
+                    self.bash.extend(out.iter().filter_map(|e| match e { Event::ToolCall { id, name, .. } if name == "Bash" => Some(id.clone()), _ => None }));
+                }
             }
             _ => {
                 let mut evs = parse(&ev);
@@ -114,6 +136,9 @@ impl State {
                     }
                 }
                 out.extend(evs);
+                if ev["type"] == "user" && ev["parent_tool_use_id"].is_null() {
+                    out.extend(tool_output(&ev["message"]["content"], |id| self.bash.remove(id)));
+                }
             }
         }
         out
@@ -201,6 +226,10 @@ pub fn history_line(e: &Value, out: &mut Vec<Event>) {
     if e["type"] == "assistant" { assistant(c, false, out); out.extend(context(&e["message"]["usage"])); return; }
     patch(c, &e["toolUseResult"], out);
     tool_images(c, out);
+    // the call is a line or two up, in this read of the transcript
+    let bash = |id: &str| out.iter().rev().find_map(|e| match e { Event::ToolCall { id: i, name, .. } if i == id => Some(name == "Bash"), _ => None }) == Some(true);
+    let printed = tool_output(c, bash);
+    out.extend(printed);
     if let Some(s) = c.as_str().map(strip) { if !harness(s) { out.push(Event::User { text: s.into(), images: vec![] }); } return; }
     let Some(blocks) = c.as_array() else { return };
     let texts: Vec<&str> = blocks.iter().filter(|x| x["type"] == "text").filter_map(|x| x["text"].as_str()).map(strip).filter(|t| !harness(t)).collect();
@@ -340,6 +369,23 @@ mod tests {
     }
 
     #[test]
+    fn a_command_gives_what_it_printed_to_its_step_and_a_read_does_not() {
+        let mut st = State::default();
+        let call = |id: &str, name: &str| json!({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": id, "name": name, "input": {}}]}});
+        let result = |id: &str, content: Value| json!({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": id, "content": content}]}});
+        let lines = [call("b1", "Bash"), result("b1", json!("a\nb")), call("r1", "Read"), result("r1", json!("file")),
+            call("b2", "Bash"), result("b2", json!([{"type": "text", "text": "Exit code 1"}, {"type": "text", "text": "boom"}])), call("b3", "Bash"), result("b3", json!(""))];
+        let outputs = |ev: &[Event]| ev.iter().filter_map(|e| match e { Event::ToolOutput { id, text } => Some((id.clone(), text.clone())), _ => None }).collect::<Vec<_>>();
+        let want = vec![("b1".to_string(), "a\nb".to_string()), ("b2".into(), "Exit code 1\nboom".into())];
+        let live: Vec<Event> = lines.iter().flat_map(|l| st.parse(&l.to_string())).collect();
+        assert_eq!(outputs(&live), want);
+        assert!(st.bash.is_empty());
+        let mut out = vec![];
+        for l in &lines { history_line(l, &mut out); }
+        assert_eq!(outputs(&out), want);
+    }
+
+    #[test]
     fn a_tool_result_with_an_image_gives_it_to_its_step() {
         let mut st = State::default();
         let png = json!({"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "AA=="}});
@@ -471,11 +517,12 @@ mod tests {
         assert_eq!(ev[1], Event::User { text: "en dit".into(), images: vec![Some(Image { media_type: "image/png".into(), data: "AA==".into() }), None] });
         assert_eq!(ev[2], Event::Text { text: "Drie dingen.".into(), delta: false });
         assert!(matches!(&ev[3], Event::ToolCall { name, .. } if name == "Bash"));
-        assert!(matches!(&ev[4], Event::ToolCall { name, .. } if name == "Edit"));
-        let Event::Patch { id, hunks } = &ev[5] else { panic!("{:?}", ev[5]) };
+        assert_eq!(ev[4], Event::ToolOutput { id: "toolu_9".into(), text: "a".into() });
+        assert!(matches!(&ev[5], Event::ToolCall { name, .. } if name == "Edit"));
+        let Event::Patch { id, hunks } = &ev[6] else { panic!("{:?}", ev[6]) };
         assert_eq!((id.as_str(), hunks.len(), hunks[0].old_start, hunks[1].new_start), ("toolu_10", 2, 40, 90));
         assert_eq!(hunks[0].lines[3], "-Contract until Q3.");
-        assert_eq!(ev.len(), 6); // no <command>, meta or teammate lines, other tool results, sidechains or other types
+        assert_eq!(ev.len(), 7); // no <command>, meta or teammate lines, other tool results, sidechains or other types
         assert_eq!(history(&p, next).0.len(), 0);
         std::fs::remove_file(p).ok();
     }

@@ -13,6 +13,11 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- A command's output: click a Bash step open and what it printed shows under the command, live and in older
+  conversations (Claude Code).
+
 ## [0.0.42] - 2026-10-29
 
 ### Added
