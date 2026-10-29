@@ -17,6 +17,11 @@ a PR. Versions follow
 
 - **Usage is back next to the workspace**: the gauge sits beside the workspace in the sidebar's footer again, with its dot when a limit gets close, instead of inside the workspace menu. A click opens a summary above it: each agent's plan limits with when they reset, and the tokens and cost today and this week. View details opens the Usage view (#334)
 
+### Added
+
+- **Move or copy a project from the Pages tab**: right-click a project there for the same Move to / Copy to workspace
+  as on the Chats tab.
+
 ## [0.0.40] - 2026-10-29
 
 ### Added
