@@ -13,6 +13,11 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Move or copy a project from the Pages tab**: right-click a project there for the same Move to / Copy to workspace
+  as on the Chats tab.
+
 ## [0.0.40] - 2026-10-29
 
 ### Added

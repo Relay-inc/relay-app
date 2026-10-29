@@ -1274,6 +1274,21 @@ const VIEWS = {
     await waitText("Move to…");
     await settle(page);
   },
+  // the Pages tab's right-click menu on a project: move or copy it to another workspace, as on the Chats tab
+  "pages-project-menu": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Beacon Billing"]').first().click({ button: "right" });
+    await waitText("Move to workspace");
+    await settle(page);
+  },
+  // and from there the same dialog as on the Chats tab
+  "pages-project-migrate": async () => {
+    await VIEWS["pages-project-menu"]();
+    await page.getByRole("button", { name: "Side vault" }).first().click();
+    await waitText("1 linked repo");
+    await settle(page);
+  },
   // New page from the Folders heading: the name field with Untitled selected
   "pages-new-page": async () => {
     await open(page, server.url);
