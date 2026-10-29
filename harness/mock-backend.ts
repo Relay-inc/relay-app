@@ -94,7 +94,10 @@ const phoneShared = new Set<string>(); // conversation keys shared with the phon
 // the shared vaults on a relay-server (fixture "shared"): the last rounds, and the one vault's members and open invites
 let sharedStatus: Record<string, any> = shared ? vault.sharedStatus(Math.floor(Date.now() / 1000)) : {};
 // this Mac is an admin of the first shared vault's member list: Settings › Machines offers the documents switch
-for (const s of Object.values(sharedStatus).slice(0, 1)) s.admin = true;
+for (const s of Object.values(sharedStatus).slice(0, 1)) {
+  s.admin = true;
+  s.admins = vault.sharedMembers.filter(m => m.role === "admin").map(m => m.fp);
+}
 if (fixture === "shared-rekey")
   for (const s of Object.values(sharedStatus))
     Object.assign(s, {
@@ -651,6 +654,13 @@ function handle(cmd: string, a: Args): unknown {
       const hash = `h${++writes}`;
       written.set(String(a.target), { text: String(a.text), hash });
       return { hash };
+    }
+    case "shared_vault_admin": {
+      // an admin's Make admin / Make member: the member list, and the server's role that follows it
+      const s = sharedStatus[a.id];
+      if (s?.admins) s.admins = a.on ? [...s.admins, a.fp] : s.admins.filter((fp: string) => fp !== a.fp);
+      sharedMembers = sharedMembers.map(m => (m.fp === a.fp ? { ...m, role: a.on ? "admin" : "member" } : m));
+      return null;
     }
     case "shared_vault_docs": {
       // an admin's switch: the member list now says the notes are documents (or not)

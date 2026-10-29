@@ -1057,6 +1057,8 @@ export default {
     "Les espaces de travail qu'une équipe partage avec vous sur un relay-server qui n'est pas une de vos machines. Le serveur ne garde que des fichiers chiffrés. Chaque Mac synchronise l'espace de travail dans son propre dossier. Un espace de travail sur une de vos machines s'affiche sous cette machine.",
   "set.sharedAdmin": "Admin",
   "set.sharedMember": "Membre",
+  "set.sharedMakeAdmin": "Rendre admin",
+  "set.sharedMakeMember": "Rendre membre",
   "set.sharedInvite": "Inviter…",
   "set.sharedMembers": "Membres",
   "set.sharedLeave": "Quitter",

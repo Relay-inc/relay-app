@@ -572,6 +572,8 @@ export const sharedVaultRecovery = (id: string) => invoke<string>("shared_vault_
 /** An admin trusts a member's new key (they set up Relay again): this Mac pins what the member publishes now. */
 export const sharedVaultTrust = (id: string, fp: string) => invoke("shared_vault_trust", { id, fp });
 export const sharedVaultDocs = (id: string, on: boolean) => invoke("shared_vault_docs", { id, on });
+/** An admin makes a member an admin (`on`), or an admin a member again: a signed entry in the member list. */
+export const sharedVaultAdmin = (id: string, fp: string, on: boolean) => invoke("shared_vault_admin", { id, fp, on });
 export const sharedVaultInfo = (id: string) => invoke<SharedInfo>("shared_vault_info", { id });
 export const sharedVaultInviteRevoke = (id: string, invite: string) =>
   invoke("shared_vault_invite_revoke", { id, invite });

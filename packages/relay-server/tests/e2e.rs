@@ -1390,6 +1390,30 @@ fn an_existing_workspace_gets_a_member_list() {
     assert!(a.remote(&t.vault).remove(&a.fp, &a.save()).unwrap_err().contains("no admin left"));
 }
 
+/// An admin on the server before the list, whom another admin's upgrade added as a member (trust on upgrade): only an
+/// admin of the list makes it an admin again, and the server's role follows. The last admin is never demoted.
+#[test]
+fn an_admin_of_the_list_makes_a_member_admin() {
+    let t = team("rotate-promote");
+    let (a, b) = (Member::new(&t.laptop, &t.lid, &t.key), Member::new(&t.colleague, &t.cid, &t.key));
+    // b publishes its keys first, then is made admin on the server; a's round starts the list
+    b.step(&t.vault);
+    edit_vault(&t, |v| { for m in v["members"].as_array_mut().unwrap() { m["role"] = serde_json::json!("admin"); } });
+    rounds(&t, &[&a, &b], 1);
+    let role = |fp: &str| t.laptop.vault_info(&t.vault).unwrap().members.into_iter().find(|m| m.fp == fp).unwrap().role;
+    assert!(!list_of(&t, &a).admin(&b.fp));
+    assert_eq!(role(&b.fp), "member", "the server followed the list");
+    assert!(b.remote(&t.vault).set_admin(&b.fp, true, &b.save()).unwrap_err().contains("only an admin"));
+    a.remote(&t.vault).set_admin(&b.fp, true, &a.save()).unwrap();
+    assert!(list_of(&t, &b).admin(&b.fp));
+    assert_eq!(role(&b.fp), "admin");
+    // b's own round sees it, and b may now demote a; demoting the last admin is refused
+    assert!(b.step(&t.vault).admin);
+    b.remote(&t.vault).set_admin(&a.fp, false, &b.save()).unwrap();
+    assert_eq!(role(&a.fp), "member");
+    assert!(b.remote(&t.vault).set_admin(&b.fp, false, &b.save()).unwrap_err().contains("no admin left"));
+}
+
 /// Two admins upgrade at once: one list wins, the other admin drops its own attempt and takes the winner's.
 #[test]
 fn two_admins_upgrading_at_once_end_on_one_list() {

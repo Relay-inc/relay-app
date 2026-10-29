@@ -15,6 +15,7 @@ import {
   openForm,
   pickSharedFolder,
   removeMember,
+  setMemberAdmin,
   setSharedDocs,
   settleShared,
   showRecovery,
@@ -85,8 +86,11 @@ function SharedRow({ vault }: { vault: SharedVault }) {
   const [leaving, setLeaving] = useState(false);
   const [trusting, setTrusting] = useState<string | null>(null);
   const [removing, setRemoving] = useState(""); // the member whose Remove asks first, by fingerprint
-  // the server's word once read: the backend saves it too, the settings can be older
-  const admin = (info?.vault.role ?? vault.role) === "admin";
+  // the member list decides once there is one; before it, the server's word once read (the settings can be older)
+  const admins = status?.admins;
+  const roleOf = (fp: string, server: SharedRole) => (admins ? (admins.includes(fp) ? "admin" : "member") : server);
+  const mine: SharedRole = admins ? (status?.admin ? "admin" : "member") : (info?.vault.role ?? vault.role);
+  const admin = mine === "admin";
   const ago = status ? agoParts(status.at) : null;
   const roleName = (role: string) => t(role === "admin" ? "set.sharedAdmin" : "set.sharedMember");
   const until = (expires: number) => sentAt(expires * 1000, locale);
@@ -95,7 +99,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
       <div className={ROW_HEAD}>
         <div className={ROW_DETAILS}>
           <span className="text-[13px] font-semibold text-s-fg">{vault.name}</span>
-          <span className={PILL}>{roleName(vault.role)}</span>
+          <span className={PILL}>{roleName(mine)}</span>
           <span className="font-mono text-xs text-s-muted">{vault.host}</span>
         </div>
         <div className={ROW_ACTIONS}>
@@ -327,8 +331,17 @@ function SharedRow({ vault }: { vault: SharedVault }) {
                     {member.name}
                     {member.fp === info.me ? <span className="text-s-muted"> · {t("set.sharedThisMac")}</span> : null}
                   </span>
-                  <span className={PILL}>{roleName(member.role)}</span>
+                  <span className={PILL}>{roleName(roleOf(member.fp, member.role))}</span>
                   <span className="flex-1"></span>
+                  {status?.admin && admins && member.fp !== info.me && removing !== member.fp ? (
+                    <button
+                      className={buttonClass("ghost")}
+                      disabled={busy}
+                      onClick={() => setMemberAdmin(vault.id, member.fp, !admins.includes(member.fp))}
+                    >
+                      {t(admins.includes(member.fp) ? "set.sharedMakeMember" : "set.sharedMakeAdmin")}
+                    </button>
+                  ) : null}
                   {!admin || member.fp === info.me ? null : removing === member.fp ? (
                     <>
                       <span className="text-xs text-s-muted">{t("set.sharedRemoveSure")}</span>

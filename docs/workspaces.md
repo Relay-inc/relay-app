@@ -396,6 +396,9 @@ use is empty.
   `demote`, `device` (a member's new keys) are signed by an admin of the list as it stood just before; `leave` by the
   member itself; `rekey` (epoch `epoch` is current, the sha256 of its key `h`) by an admin. No entry may leave the list
   without an admin, and none may leave it empty.
+- **Roles** change with `promote` and `demote`, which an admin of the list writes from Members (Make admin, Make
+  member); the server's role follows. A member who was admin on the server before the list came in as a member (trust
+  on upgrade only adds members) and is made admin this way.
 - A `remove` or `leave` leaves the list waiting for a `rekey`; a `device` entry is refused while it waits (the new keys
   could be the removed member's).
 - **A new workspace** gets its list right away: Relay writes the `create` before anything else reaches the server.

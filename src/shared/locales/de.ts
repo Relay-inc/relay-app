@@ -1052,6 +1052,8 @@ export default {
     "Workspaces, die ein Team mit dir auf einem relay-server teilt, der keine deiner Maschinen ist. Der Server speichert nur verschlüsselte Dateien. Jeder Mac synchronisiert den Workspace in einen eigenen Ordner. Ein Workspace auf einer deiner Maschinen steht unter dieser Maschine.",
   "set.sharedAdmin": "Admin",
   "set.sharedMember": "Mitglied",
+  "set.sharedMakeAdmin": "Zum Admin machen",
+  "set.sharedMakeMember": "Zum Mitglied machen",
   "set.sharedInvite": "Einladen…",
   "set.sharedMembers": "Mitglieder",
   "set.sharedLeave": "Verlassen",
