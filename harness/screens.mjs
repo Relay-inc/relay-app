@@ -1090,6 +1090,11 @@ const VIEWS = {
     await open(page, server.url, { fixture: "orch-plain", sel: keys.orch });
     await waitText("Open worker");
   },
+  // Settings › General › Write vault updates when a conversation closes or goes quiet (PR capture-on-idle)
+  "settings-capture": async () => {
+    await settingsPage("General");
+    await intoView("Write vault updates when a conversation closes or goes quiet");
+  },
   "settings-crabs": async () => {
     await settingsPage("General");
     await intoView("Crabs for the orchestrator's workers");

@@ -1168,9 +1168,9 @@ export default {
   "set.timeFromSessions": "De dagtijd voorstellen uit gesprekken",
   "set.timeFromSessionsHelp":
     "Vanaf 16:00 stelt Today de <b>Productive</b>-tijdsregistraties van de dag voor, op basis van wanneer je in je gesprekken schreef (Claude Code). Niets wordt geboekt zonder jouw akkoord. Uit: Relay leest de transcripten hiervoor niet.",
-  "set.captureOnClose": "Vault bijwerken als een gesprek sluit",
+  "set.captureOnClose": "Vault bijwerken als een gesprek sluit of stilvalt",
   "set.captureOnCloseHelp":
-    "Als je een gesprek sluit, leest Claude het nog eens en schrijft wat in de vault hoort er meteen in: beslissingen, projectstatus, opvolging. Er wordt niets getoond of gevraagd; de git-geschiedenis van de vault is de controle. Korte vragen (minder dan 3 berichten) worden overgeslagen.",
+    "Als je een gesprek sluit, of het 30 minuten stil ligt na een beurt, leest Claude het nog eens en schrijft wat in de vault hoort er meteen in: beslissingen en waarom, waar een project staat, opvolging met een datum. Geen stappen of details. Er wordt niets getoond of gevraagd; de git-geschiedenis van de vault is de controle. Korte vragen (minder dan 3 berichten) en gesprekken zonder iets nieuws sinds de vorige keer worden overgeslagen.",
   "set.workerCrabs": "Krabben voor de workers van de orchestrator",
   "set.workerCrabsHelp":
     "Elke worker in de lijst van de Orchestrator krijgt een pixelkrab, verkleed volgens zijn model, die loopt zolang hij werkt. Uit: een gewone statusmarkering.",

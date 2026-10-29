@@ -1176,9 +1176,9 @@ export default {
   "set.timeFromSessions": "Die Tageszeit aus Gesprächen vorschlagen",
   "set.timeFromSessionsHelp":
     "Ab 16:00 schlägt Today die <b>Productive</b>-Zeiteinträge des Tages vor, danach, wann du in deinen Gesprächen geschrieben hast (Claude Code). Nichts wird ohne deine Zustimmung gebucht. Aus: Relay liest die Transkripte dafür nicht.",
-  "set.captureOnClose": "Vault aktualisieren, wenn eine Unterhaltung schließt",
+  "set.captureOnClose": "Vault aktualisieren, wenn eine Unterhaltung schließt oder ruht",
   "set.captureOnCloseHelp":
-    "Wenn du eine Unterhaltung schließt, liest Claude sie noch einmal und schreibt, was in den Vault gehört, direkt hinein: Entscheidungen, Projektstand, Folgeaufgaben. Nichts wird angezeigt oder gefragt; die Git-Historie des Vaults ist die Kontrolle. Kurze Fragen (weniger als 3 Nachrichten) werden übersprungen.",
+    "Wenn du eine Unterhaltung schließt oder sie nach einer Antwort 30 Minuten ruht, liest Claude sie noch einmal und schreibt, was in den Vault gehört, direkt hinein: Entscheidungen und warum, Projektstand, Folgeaufgaben mit Datum. Keine Schritte oder Details. Nichts wird angezeigt oder gefragt; die Git-Historie des Vaults ist die Kontrolle. Kurze Fragen (weniger als 3 Nachrichten) und Unterhaltungen ohne Neues seit dem letzten Lesen werden übersprungen.",
   "set.workerCrabs": "Krabben für die Worker des Orchestrators",
   "set.workerCrabsHelp":
     "Jeder Worker in der Liste des Orchestrators bekommt eine Pixelkrabbe im Kostüm seines Modells, die läuft, solange er arbeitet. Aus: eine einfache Statusmarke.",

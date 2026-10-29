@@ -19,6 +19,7 @@ a PR. Versions follow
 - **Settings › Machines reads clearer**: a machine's workspaces sit in its own row now, under "Workspaces on <machine>" in a card of their own like its repos, instead of in an indented strip between the machines. The buttons of a machine or a workspace stay together on the right and move under the name as a group when the window is narrow, instead of one at a time
 ### Changed
 
+- **The vault keeps up with conversations you never close**: a conversation that sits for 30 minutes after a turn is read for the vault too, not only one you close, and a conversation already read is read again only when something new was said. What gets written is held to decisions and their reason, where a project stands and dated follow-ups, without the steps or detail, and a conversation is asked to update its project note itself when it settles something (#336)
 - **Usage is back next to the workspace**: the gauge sits beside the workspace in the sidebar's footer again, with its dot when a limit gets close, instead of inside the workspace menu. A click opens a summary above it: each agent's plan limits with when they reset, and the tokens and cost today and this week. View details opens the Usage view (#334)
 
 ### Added
