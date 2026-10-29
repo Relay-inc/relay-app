@@ -37,6 +37,7 @@ mod explorer;
 mod mail;
 mod meeting;
 mod migrate;
+mod pagefiles;
 pub mod notify;
 mod permissions;
 mod orch;
@@ -863,6 +864,74 @@ fn write_note(state: State<App>, target: String, text: String, expect: String, f
     let roots: Vec<String> = std::iter::once(v).chain(extra_vaults(&state.settings.lock().unwrap())).collect();
     let hash = vault::write_note(&roots, &target, &text, &expect, force)?;
     Ok(json!({"hash": hash}))
+}
+
+/// The workspace roots the Pages tab's file operations may touch: the main vault, then the other workspace folders.
+fn page_roots(state: &State<App>) -> Result<Vec<String>, String> {
+    let v = need_vault(state)?;
+    Ok(std::iter::once(v).chain(extra_vaults(&state.settings.lock().unwrap())).collect())
+}
+/// The shared vault whose folder `root` is, if any.
+fn shared_at(state: &State<App>, root: &std::path::Path) -> Option<String> {
+    let s = state.settings.lock().unwrap().clone();
+    shared_vaults::list(&s).into_iter().find(|v| vault::canon(&v.folder) == root.to_string_lossy()).map(|v| v.id)
+}
+/// A file operation off the main thread: a workspace with thousands of notes is read and written whole.
+async fn on_files<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())?
+}
+/// A new empty page `name`.md, or with `folder` a folder, in `parent` (absolute: a workspace folder or one in it).
+/// Returns its path relative to the workspace.
+#[tauri::command]
+async fn create_note(state: State<'_, App>, parent: String, name: String, folder: bool) -> Result<String, String> {
+    let roots = page_roots(&state)?;
+    on_files(move || pagefiles::create(&roots, &parent, &name, folder)).await
+}
+/// The name a new page in `parent` gets: `name`, else `name 1`… when taken.
+#[tauri::command]
+async fn free_page_name(state: State<'_, App>, parent: String, name: String) -> Result<String, String> {
+    let roots = page_roots(&state)?;
+    on_files(move || pagefiles::free_name(&roots, &parent, &name)).await
+}
+/// A copy of a page next to it ("Name copy.md"), its path relative to the workspace.
+#[tauri::command]
+async fn duplicate_note(state: State<'_, App>, target: String) -> Result<String, String> {
+    let roots = page_roots(&state)?;
+    on_files(move || pagefiles::duplicate(&roots, &target)).await
+}
+/// Rename or move a page or folder within its workspace (absolute paths), rewriting the links to it. `dry`: only
+/// count them. Returns {links, notes, path} (path relative to the workspace). In a shared workspace the files that
+/// left their place pass the next round's delete brake as deletes on the server, while it still has what they held.
+#[tauri::command]
+async fn move_path(app: AppHandle, state: State<'_, App>, from: String, to: String, dry: bool) -> Result<Value, String> {
+    let roots = page_roots(&state)?;
+    let plan = on_files(move || pagefiles::plan(&roots, &from, &to).and_then(|p| if dry { Ok(p) } else { pagefiles::apply(&p).map(|_| p) })).await?;
+    if !dry { if let Some(id) = shared_at(&state, &plan.root) { app.state::<App>().shared.let_through(&id, plan.gone.clone()); } }
+    Ok(json!({"links": plan.links, "notes": plan.edits.len(), "path": plan.rel_to}))
+}
+/// A page or folder into its workspace's .trash/. Returns {root, trash, path}: what `restore_path` takes for Undo. In a
+/// shared workspace this is a delete like any other: the sync's brake counts it.
+#[tauri::command]
+async fn trash_path(state: State<'_, App>, target: String) -> Result<Value, String> {
+    let roots = page_roots(&state)?;
+    let (root, trash, path) = on_files(move || {
+        let (root, _, _) = pagefiles::locate(&roots, &target)?;
+        pagefiles::trash(&roots, &target).map(|(t, p)| (root, t, p))
+    }).await?;
+    Ok(json!({"root": root, "trash": trash, "path": path}))
+}
+/// Undo of `trash_path`; whatever was let through for those paths no longer is.
+#[tauri::command]
+async fn restore_path(app: AppHandle, state: State<'_, App>, root: String, trash: String, path: String) -> Result<(), String> {
+    let roots = page_roots(&state)?;
+    let (r, p) = (root.clone(), path.clone());
+    on_files(move || pagefiles::restore(&roots, &r, &trash, &p)).await?;
+    let root = std::path::PathBuf::from(vault::canon(&root));
+    if let Some(id) = shared_at(&state, &root) {
+        let back = pagefiles::files(&root, &root.join(&path));
+        app.state::<App>().shared.forget_through(&id, &back);
+    }
+    Ok(())
 }
 
 /// The values `key` has in the frontmatter of the workspace folder's notes, most used first, for a page's property to
@@ -2648,7 +2717,7 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, migrate_project, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, write_note, property_values, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_pending_invite, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
+        .invoke_handler(tauri::generate_handler![snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, migrate_project, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, write_note, property_values, create_note, free_page_name, duplicate_note, move_path, trash_path, restore_path, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_pending_invite, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the window used last back (the main one may be hidden)

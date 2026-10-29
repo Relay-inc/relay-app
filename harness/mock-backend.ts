@@ -479,7 +479,46 @@ function handle(cmd: string, a: Args): unknown {
       return { ...snap, projects: [...own, ...vault.teamProjects] };
     }
     case "vault_notes":
-      return { root: vault.VAULT, notes: shared ? [...vault.notes, ...vault.teamNotes] : vault.notes };
+      return {
+        root: vault.VAULT,
+        notes: shared
+          ? [...pageList(), ...vault.teamNotes, "/Users/me/Shared/Northwind/Clients/Northwind.md"]
+          : pageList(),
+      };
+    // the Pages tab's file operations, on the main vault's list (a move counts 3 links in 2 notes)
+    case "create_note": {
+      const folder = pageRel(a.parent);
+      const path = `${folder ? `${folder}/` : ""}${String(a.name)}${a.folder ? "" : ".md"}`;
+      if (!a.folder) pages = [...pageList(), path];
+      return path;
+    }
+    case "free_page_name":
+      return pageList().includes(`${pageRel(a.parent) ? `${pageRel(a.parent)}/` : ""}${String(a.name)}.md`)
+        ? `${String(a.name)} 1`
+        : String(a.name);
+    case "duplicate_note": {
+      const path = pageRel(a.target).replace(/\.md$/, " copy.md");
+      pages = [...pageList(), path];
+      return path;
+    }
+    case "move_path": {
+      const [from, to] = [pageRel(a.from), pageRel(a.to)];
+      if (!a.dry)
+        pages = pageList().map(p => (p === from ? to : p.startsWith(`${from}/`) ? to + p.slice(from.length) : p));
+      return { links: 3, notes: 2, path: to };
+    }
+    case "trash_path": {
+      const path = pageRel(a.target);
+      trashed.set(
+        path,
+        pageList().filter(p => p === path || p.startsWith(`${path}/`)),
+      );
+      pages = pageList().filter(p => !trashed.get(path)!.includes(p));
+      return { root: vault.VAULT, trash: `.trash/${path.split("/").pop()}`, path };
+    }
+    case "restore_path":
+      pages = [...pageList(), ...(trashed.get(String(a.path)) ?? [])];
+      return null;
     case "read_note": {
       const team = shared && vault.teamNotes.find(n => n.endsWith(`/${String(a.target).replace(/\.md$/, "")}.md`));
       const modified = Date.now() - 2 * 3600_000; // a page reads "Edited 2 h ago"
@@ -1285,6 +1324,11 @@ async function stream({
   return { perDelta, total: renderedAt - start, renderedAt };
 }
 
+// the main vault's notes after the Pages tab's file operations (null: the fixture's), and what went into the trash
+let pages: string[] | null = null;
+const trashed = new Map<string, string[]>();
+const pageList = () => pages ?? vault.notes;
+const pageRel = (p: unknown) => String(p).replace(vault.VAULT, "").replace(/^\//, "");
 // the page editor's saves (write_note), and whether a note changed on disk since it was read
 const written = new Map<string, { text: string; hash: string }>();
 let writes = 0;

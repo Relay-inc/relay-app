@@ -604,6 +604,54 @@ const SCENARIOS = {
     s.check("its conversations show under it there", await navHas(page, "Billing sync double balances"));
   },
 
+  // managing files in the Pages tab (ticket 5): a new page opens, a rename says how many links follow and the tree
+  // follows it, a page in the trash comes back with Undo
+  async pageFiles(s) {
+    await s.load();
+    const { page } = s;
+    const row = path => page.locator(`[data-page="${path}"]`);
+    const spec = "Contexts/Agency/Projects/Beacon Billing/Documents/Billing Spec.md";
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    await click(page.locator('[data-project="Beacon Billing"]'));
+    await click(page.locator('[data-folder="Contexts/Agency/Projects/Beacon Billing/Documents"]'));
+    await row(spec).click({ button: "right" });
+    await click(page.getByRole("button", { name: "Rename…" }));
+    await page.getByRole("dialog").locator("input").fill("Billing Rules");
+    await page.getByText("Update 3 links in 2 notes").waitFor();
+    s.check("the rename counts the links first", true);
+    await click(page.getByRole("dialog").getByRole("button", { name: "Rename" }));
+    s.check(
+      "the tree shows the new name",
+      await row("Contexts/Agency/Projects/Beacon Billing/Documents/Billing Rules.md").isVisible(),
+    );
+    await row("Contexts/Agency/Projects/Beacon Billing/Documents/Billing Rules.md").click({ button: "right" });
+    await click(page.getByRole("button", { name: "Delete" }));
+    s.check("Delete asks first", await page.getByText("Delete Billing Rules?").isVisible());
+    await click(page.getByRole("dialog").getByRole("button", { name: "Delete" }));
+    s.check(
+      "Delete takes it out of the tree",
+      (await row("Contexts/Agency/Projects/Beacon Billing/Documents/Billing Rules.md").count()) === 0,
+    );
+    await click(page.getByRole("button", { name: "Undo" }));
+    await page.waitForTimeout(300);
+    s.check(
+      "Undo brings it back",
+      (await row("Contexts/Agency/Projects/Beacon Billing/Documents/Billing Rules.md").count()) === 1,
+    );
+    await page.getByText("Folders", { exact: true }).click({ button: "right" });
+    await click(page.getByRole("button", { name: "New page" }));
+    await click(page.getByRole("dialog").getByRole("button", { name: "Create" }));
+    s.check("a new page opens", await page.getByText("Untitled", { exact: true }).first().isVisible());
+    // a project's own note (in Recent) keeps its name
+    await row("Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md").first().click({ button: "right" });
+    await click(page.getByRole("button", { name: "Rename…" }));
+    s.check(
+      "a project's own note is not renamed here",
+      (await page.getByRole("dialog").count()) === 0 &&
+        (await page.getByText("rename the project from the sidebar", { exact: false }).count()) > 0,
+    );
+  },
+
   // Notion-like editing on a page (ticket 3): /to + Enter makes a to-do, its box toggles the file, a heading dragged
   // above the text before it takes its section along
   async pageBlocks(s) {

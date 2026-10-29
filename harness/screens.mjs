@@ -1215,6 +1215,57 @@ const VIEWS = {
     await waitText("Folders");
     await settle(page);
   },
+  // the Pages tab's right-click menu on a page: rename, move, duplicate, reveal, copy path, delete (ticket 5)
+  "pages-context-menu": async () => {
+    await VIEWS["pages-expanded"]();
+    await page
+      .locator('[data-page="Contexts/Agency/Projects/Beacon Billing/Documents/Billing Spec.md"]')
+      .click({ button: "right" });
+    await waitText("Move to…");
+    await settle(page);
+  },
+  // New page from the Folders heading: the name field with Untitled selected
+  "pages-new-page": async () => {
+    await open(page, server.url);
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.getByText("Folders", { exact: true }).click({ button: "right" });
+    await page.getByRole("button", { name: "New page" }).click();
+    await waitText("Name");
+    await settle(page);
+  },
+  // a rename that would change links says how many before it goes
+  "pages-rename-confirm": async () => {
+    await VIEWS["pages-expanded"]();
+    await page
+      .locator('[data-page="Contexts/Agency/Projects/Beacon Billing/Documents/Billing Spec.md"]')
+      .click({ button: "right" });
+    await page.getByRole("button", { name: "Rename…" }).click();
+    await page.getByRole("dialog").locator("input").fill("Billing Rules");
+    await waitText("Update 3 links in 2 notes");
+    await settle(page);
+  },
+  // Delete in a shared workspace asks first and says it deletes for every member (review of #304)
+  "pages-delete-confirm-shared": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await page.getByRole("menuitemradio", { name: /Northwind/ }).click();
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-folder="Clients"]').click({ button: "right" });
+    await page.getByRole("button", { name: "Delete" }).click();
+    await waitText("deletes it for every member");
+    await settle(page);
+  },
+  // a page put in the trash: gone from the tree, Undo in the bar
+  "pages-trash-undo": async () => {
+    await VIEWS["pages-expanded"]();
+    await page
+      .locator('[data-page="Contexts/Agency/Projects/Beacon Billing/Documents/Billing Spec.md"]')
+      .click({ button: "right" });
+    await page.getByRole("button", { name: "Delete" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+    await waitText("Billing Spec is in the trash");
+    await settle(page);
+  },
   // a project unfolded to its folder, its note open in the drawer, and a top folder unfolded (PR workspace-pages)
   "pages-expanded": async () => {
     await open(page, server.url);

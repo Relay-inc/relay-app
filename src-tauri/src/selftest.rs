@@ -503,7 +503,7 @@ fn vaults_run(app: &AppHandle, ev: &Events, r: &mut Report) {
     let (mut base, mut w) = (sync::Manifest::new(), Walker::default());
     let keep = |_: &str, _: &[u8]| Ok(());
     let mut round = || {
-        let guard = Guard { allow_deletes: false, allowed: &[], keep: &keep };
+        let guard = Guard { allow_deletes: false, allowed: &[], moved: &[], keep: &keep };
         let (next, rep) = sync::run(Mode::TwoWay, &b, &base, &mut w, &Filter::vault_default(), &c2.sealed(&id, key2.clone()), &|p| sync::conflict_copy(p, "colleague", "now"), &|_| false, &guard, &|_, _| {});
         base = next;
         rep

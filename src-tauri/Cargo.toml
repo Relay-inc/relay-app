@@ -31,6 +31,7 @@ tauri-plugin-dialog = "2"
 sys-locale = "0.3.2"
 chrono = "0.4"
 regex = "1"
+libc = "0.2"
 sha1_smol = "1"
 # the favicon run (src/favicon.rs): domains in notes, accents folded, icon links resolved
 unicode-normalization = "0.1"

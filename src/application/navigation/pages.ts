@@ -1,20 +1,21 @@
 import { findPages, pagesModel, recentPages, type PagesModel } from "../../domain/navigation/pages";
-import { noteKey, pageKey } from "../../domain/navigation/keys";
+import { noteKey, pageKey, VIEW } from "../../domain/navigation/keys";
 import { pageOf } from "../../domain/navigation/views";
 import { ORCH } from "../../domain/orchestrator/rules";
 import { chatVault, inWorkspace } from "../../domain/conversations/rules";
 import * as backend from "../../infrastructure/backend";
+import { t } from "../../shared/i18n";
 import { storage } from "../../infrastructure/storage";
 import { useConversationsStore } from "../conversations/store";
 import { newChatHere } from "../conversations/chats";
 import { typeInto } from "../conversations/actions";
 import { settings } from "../settings/settings";
 import { useWorkspaceStore } from "../workspace/store";
-import { contexts, projectName } from "../workspace/vault";
-import { select } from "./navigation";
+import { contexts, loadSnapshot, projectName } from "../workspace/vault";
+import { copy, select, toast } from "./navigation";
 import { openDetail } from "./panel";
 import { useNavigationStore } from "./store";
-import { activeFolder } from "./workspaces";
+import { activeFolder, workspaces } from "./workspaces";
 
 // The sidebar's two tabs: Chats (the conversations, as before) and Pages (the notes of the workspace shown).
 const set = useNavigationStore.setState;
@@ -185,3 +186,81 @@ export async function loadRecent() {
     console.error(e);
   }
 }
+
+// ---------- managing files: new page or folder, rename and move (links to it follow), duplicate, trash with Undo
+/** The workspace shown's folder, and a path of it as an absolute one ("" is the folder itself). */
+const rootOf = () => (isMain(activeFolder()) ? useWorkspaceStore.getState().notes.root : activeFolder());
+const abs = (path: string) => (path ? `${rootOf()}/${path}` : rootOf());
+/** The workspace shown is shared on a relay-server: a delete there deletes for every member. */
+export const sharedWorkspace = () => workspaces().find(workspace => workspace.active && workspace.team)?.name ?? "";
+/** How many pages a folder of the workspace shown holds, at any depth (what Delete names). */
+export const pagesIn = (folder: string) => workspacePaths().filter(path => path.startsWith(`${folder}/`)).length;
+/** The name New page offers in `folder`: Untitled, or Untitled 1… when that one is there. */
+export const freePageName = (folder: string) =>
+  backend.freePageName(abs(folder), t("pages.untitled")).catch(() => t("pages.untitled"));
+/** A project's own note can't be renamed or moved here: the project is keyed by its name. */
+export const isProjectNote = (path: string) => !!pageProject(path);
+/** Every folder of the workspace shown, for Move to…. */
+export function pageFolders() {
+  const all = new Set<string>();
+  for (const path of workspacePaths())
+    for (let at = path.lastIndexOf("/"); at > 0; at = path.lastIndexOf("/", at - 1)) all.add(path.slice(0, at));
+  return [...all].sort((a, b) => a.localeCompare(b));
+}
+const fail = (e: unknown) => toast(String(e));
+/** A new page (or folder) `name` in `folder` ("" the top); a page opens. */
+export async function createPage(folder: string, name: string, isFolder: boolean) {
+  try {
+    const path = await backend.createNote(abs(folder), name, isFolder);
+    await loadSnapshot();
+    if (folder) togglePage(folder, true);
+    if (!isFolder) openPage(path);
+  } catch (e) {
+    fail(e);
+  }
+}
+export async function duplicatePage(path: string) {
+  try {
+    openPage(await backend.duplicateNote(abs(path)));
+    await loadSnapshot();
+  } catch (e) {
+    fail(e);
+  }
+}
+/** How many links a move would rewrite, before asking. */
+export const countLinks = (from: string, to: string) => backend.movePath(abs(from), abs(to), true);
+/** Rename or move a page or folder within the workspace shown; the open page follows it. */
+export async function movePage(from: string, to: string) {
+  const open = openPagePath();
+  try {
+    const { path } = await backend.movePath(abs(from), abs(to), false);
+    await loadSnapshot();
+    if (open === from) openPage(path);
+    else if (open.startsWith(`${from}/`)) openPage(path + open.slice(from.length));
+  } catch (e) {
+    fail(e);
+  }
+}
+/** A page or folder into the workspace's .trash/, with Undo. */
+export async function trashPage(path: string) {
+  const open = openPagePath();
+  try {
+    const gone = await backend.trashPath(abs(path));
+    await loadSnapshot();
+    if (open === path || open.startsWith(`${path}/`)) select(VIEW.wait);
+    const shared = sharedWorkspace();
+    toast(
+      shared
+        ? t("pages.trashedShared", { name: noteLabel(path), workspace: shared })
+        : t("pages.trashed", { name: noteLabel(path) }),
+      () => {
+        void backend.restorePath(gone.root, gone.trash, gone.path).then(loadSnapshot).catch(fail);
+      },
+    );
+  } catch (e) {
+    fail(e);
+  }
+}
+const noteLabel = (path: string) => path.split("/").pop()!.replace(/\.md$/i, "");
+export const revealPage = (path: string) => backend.openFile(abs(path), true).catch(fail);
+export const copyPagePath = (path: string) => copy(abs(path));

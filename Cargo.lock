@@ -4173,6 +4173,7 @@ dependencies = [
  "integration-linear",
  "integration-productive",
  "integration-trello",
+ "libc",
  "mac-notification-sys",
  "mail-parser",
  "muda",

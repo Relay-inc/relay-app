@@ -9,6 +9,22 @@ and the shared workspaces. The sidebar shows one workspace at a time, picked in 
 The protocol and the code call a workspace a vault: the server ops are `vault_*`, the Tauri commands `shared_vault_*`,
 the settings key `sharedVaults`, the Rust module `shared_vaults.rs`. Only the app and these docs say workspace.
 
+## Deletes
+
+A round that would delete more than max(5, a fifth of the files) holds those deletes until the user lets them through
+in Settings (both directions): an agent's `rm -rf` or a checkout here must not empty everyone's folder. What a round
+deletes here is kept in `shared-trash/<id>/` for 30 days.
+
+The Pages tab makes deletes on purpose too:
+
+- **A move or rename** takes files away from their old place. Those pass the brake in the next round only, only as
+  deletes on the server, and only while the server still has the content each file had when it was moved (its hash).
+  A member who changed it meanwhile keeps it; a failed round drops the allowance, so a later one counts them like any
+  delete.
+- **Delete** (into the workspace's `.trash/`, which does not sync) is a delete like any other: the brake counts it, and
+  it deletes for every member, who keep it 30 days in their `shared-trash`. The app asks first and says so. Undo puts
+  it back here and it syncs again.
+
 ## Trust
 
 **What the server sees:** workspace ids and names, member device names and fingerprints, blob names (HMACs of paths)
