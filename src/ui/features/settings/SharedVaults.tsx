@@ -23,7 +23,7 @@ import {
 } from "../../../application/settings/shared-vaults";
 import { relativeFormat, sentAt } from "../../../shared/format";
 import { useT } from "../../hooks/useT";
-import { buttonClass, ERROR_MESSAGE, FIELD, HINT_IN_ROW, PILL } from "./blocks";
+import { buttonClass, ERROR_MESSAGE, FIELD, HINT_IN_ROW, PILL, ROW_ACTIONS, ROW_DETAILS, ROW_HEAD } from "./blocks";
 import { Field } from "./Field";
 import { Footer } from "./Footer";
 import { CommandBlock } from "./MachineSetup";
@@ -51,16 +51,21 @@ export function SharedVaults({ vaults }: { vaults: SharedVault[] }) {
   );
 }
 
-/** Under a machine's row on Settings › Machines: the workspaces it keeps, then New workspace on this machine… or
- *  its form, set off from the machines by an indent. Not on a server this Mac only keeps as a vault's admin: it may
- *  not make vaults there. */
-export function MachineVaults({ machine, vaults }: { machine: Machine; vaults: SharedVault[] }) {
+/** In a machine's row on Settings › Machines, like its repos: a title, then a card with the workspaces it keeps and
+ *  New workspace on this machine… or its form. Not on a server this Mac only keeps as a vault's admin: it may not make
+ *  vaults there, so without workspaces there is nothing to show. */
+export function MachineVaults({ machine, vaults = [] }: { machine: Machine; vaults?: SharedVault[] }) {
+  const { t } = useT();
+  if (machine.auto && !vaults.length) return null;
   return (
-    <div className="grid min-w-0 grid-cols-1 border-b border-s-border pl-6 last:border-b-0 [&>*]:border-l">
-      {vaults.map(vault => (
-        <SharedRow key={vault.id} vault={vault} />
-      ))}
-      {machine.auto ? null : <SharedForm machine={machine.id} />}
+    <div className="grid gap-1.5">
+      <span className={LABEL}>{t("mc.workspaces", { name: machine.name })}</span>
+      <div className="grid min-w-0 grid-cols-1 rounded-lg border border-s-border">
+        {vaults.map(vault => (
+          <SharedRow key={vault.id} vault={vault} />
+        ))}
+        {machine.auto ? null : <SharedForm machine={machine.id} />}
+      </div>
     </div>
   );
 }
@@ -87,46 +92,49 @@ function SharedRow({ vault }: { vault: SharedVault }) {
   const until = (expires: number) => sentAt(expires * 1000, locale);
   return (
     <div className={ROW}>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="text-[13px] font-semibold text-s-fg">{vault.name}</span>
-        <span className={PILL}>{roleName(vault.role)}</span>
-        <span className="font-mono text-xs text-s-muted">{vault.host}</span>
-        <span className="flex-1"></span>
-        {admin && !inviting && !link ? (
-          <button className={buttonClass("ghost")} onClick={() => setInviting(true)}>
-            {t("set.sharedInvite")}
+      <div className={ROW_HEAD}>
+        <div className={ROW_DETAILS}>
+          <span className="text-[13px] font-semibold text-s-fg">{vault.name}</span>
+          <span className={PILL}>{roleName(vault.role)}</span>
+          <span className="font-mono text-xs text-s-muted">{vault.host}</span>
+        </div>
+        <div className={ROW_ACTIONS}>
+          {admin && !inviting && !link ? (
+            <button className={buttonClass("ghost")} onClick={() => setInviting(true)}>
+              {t("set.sharedInvite")}
+            </button>
+          ) : null}
+          <button
+            className={buttonClass("ghost")}
+            aria-expanded={membersOpen}
+            disabled={busy}
+            onClick={() => toggleMembers(vault.id)}
+          >
+            {t("set.sharedMembers")}
           </button>
-        ) : null}
-        <button
-          className={buttonClass("ghost")}
-          aria-expanded={membersOpen}
-          disabled={busy}
-          onClick={() => toggleMembers(vault.id)}
-        >
-          {t("set.sharedMembers")}
-        </button>
-        {leaving ? (
-          <>
-            <span className="text-xs text-s-muted">{t("set.sharedLeaveSure")}</span>
-            <button
-              className={buttonClass("dangerSolid")}
-              disabled={busy}
-              onClick={async () => {
-                await leaveShared(vault.id);
-                setLeaving(false);
-              }}
-            >
+          {leaving ? (
+            <>
+              <span className="text-xs text-s-muted">{t("set.sharedLeaveSure")}</span>
+              <button
+                className={buttonClass("dangerSolid")}
+                disabled={busy}
+                onClick={async () => {
+                  await leaveShared(vault.id);
+                  setLeaving(false);
+                }}
+              >
+                {t("set.sharedLeave")}
+              </button>
+              <button className={buttonClass("ghost")} onClick={() => setLeaving(false)}>
+                {t("mc.cancel")}
+              </button>
+            </>
+          ) : (
+            <button className={buttonClass("danger")} disabled={busy} onClick={() => setLeaving(true)}>
               {t("set.sharedLeave")}
             </button>
-            <button className={buttonClass("ghost")} onClick={() => setLeaving(false)}>
-              {t("mc.cancel")}
-            </button>
-          </>
-        ) : (
-          <button className={buttonClass("danger")} disabled={busy} onClick={() => setLeaving(true)}>
-            {t("set.sharedLeave")}
-          </button>
-        )}
+          )}
+        </div>
       </div>
       <div className="flex min-w-0 items-center gap-2">
         <code className="min-w-0 flex-1 truncate font-mono text-xs text-s-fg" title={vault.folder}>

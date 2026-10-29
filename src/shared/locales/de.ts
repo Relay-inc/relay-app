@@ -1933,6 +1933,7 @@ export default {
   "mc.ghCommits": "Commits als {name}",
   "mc.ghDisconnect": "Trennen",
   "mc.ghDisconnectSure": "Das Token von der Maschine löschen?",
+  "mc.workspaces": "Workspaces auf {name}",
   "mc.repos": "Repos auf {name}",
   "mc.reposEmpty": "Noch keine Repos hier. Ein Gespräch über ein Projekt mit Repo klont es hierher.",
   "mc.repoClean": "sauber",
