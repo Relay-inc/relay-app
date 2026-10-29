@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **Settings › Machines reads clearer**: a machine's workspaces sit in its own row now, under "Workspaces on <machine>" in a card of their own like its repos, instead of in an indented strip between the machines. The buttons of a machine or a workspace stay together on the right and move under the name as a group when the window is narrow, instead of one at a time
+
 ## [0.0.40] - 2026-10-29
 
 ### Added

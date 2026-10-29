@@ -1914,6 +1914,7 @@ export default {
   "mc.ghCommits": "Commit als {name}",
   "mc.ghDisconnect": "Loskoppelen",
   "mc.ghDisconnectSure": "Het token van de machine wissen?",
+  "mc.workspaces": "Workspaces op {name}",
   "mc.repos": "Repo's op {name}",
   "mc.reposEmpty": "Nog geen repo's hier. Een gesprek over een project met een repo kloont die hier.",
   "mc.repoClean": "schoon",

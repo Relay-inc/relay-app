@@ -1940,6 +1940,7 @@ export default {
   "mc.ghCommits": "Commits au nom de {name}",
   "mc.ghDisconnect": "Déconnecter",
   "mc.ghDisconnectSure": "Effacer le jeton de la machine ?",
+  "mc.workspaces": "Espaces de travail sur {name}",
   "mc.repos": "Dépôts sur {name}",
   "mc.reposEmpty": "Aucun dépôt ici pour l'instant. Une conversation sur un projet avec un dépôt le clone ici.",
   "mc.repoClean": "propre",

@@ -51,16 +51,21 @@ export function SharedVaults({ vaults }: { vaults: SharedVault[] }) {
   );
 }
 
-/** Under a machine's row on Settings › Machines: the workspaces it keeps, then New workspace on this machine… or
- *  its form, set off from the machines by an indent. Not on a server this Mac only keeps as a vault's admin: it may
- *  not make vaults there. */
-export function MachineVaults({ machine, vaults }: { machine: Machine; vaults: SharedVault[] }) {
+/** In a machine's row on Settings › Machines, like its repos: a title, then a card with the workspaces it keeps and
+ *  New workspace on this machine… or its form. Not on a server this Mac only keeps as a vault's admin: it may not make
+ *  vaults there, so without workspaces there is nothing to show. */
+export function MachineVaults({ machine, vaults = [] }: { machine: Machine; vaults?: SharedVault[] }) {
+  const { t } = useT();
+  if (machine.auto && !vaults.length) return null;
   return (
-    <div className="grid min-w-0 grid-cols-1 border-b border-s-border pl-6 last:border-b-0 [&>*]:border-l">
-      {vaults.map(vault => (
-        <SharedRow key={vault.id} vault={vault} />
-      ))}
-      {machine.auto ? null : <SharedForm machine={machine.id} />}
+    <div className="grid gap-1.5">
+      <span className={LABEL}>{t("mc.workspaces", { name: machine.name })}</span>
+      <div className="grid min-w-0 grid-cols-1 rounded-lg border border-s-border">
+        {vaults.map(vault => (
+          <SharedRow key={vault.id} vault={vault} />
+        ))}
+        {machine.auto ? null : <SharedForm machine={machine.id} />}
+      </div>
     </div>
   );
 }

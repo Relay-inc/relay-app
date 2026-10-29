@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Machine, SharedVault } from "../../../domain/settings/types";
 import { vaultsByMachine } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
@@ -18,7 +18,7 @@ import { MachineHost } from "./MachineHost";
 import { MachineRow } from "./MachineRow";
 import { MachineSetup } from "./MachineSetup";
 import { Section } from "./Section";
-import { MachineVaults, SharedVaults } from "./SharedVaults";
+import { SharedVaults } from "./SharedVaults";
 
 const NO_MACHINES: Machine[] = [];
 const NO_VAULTS: SharedVault[] = [];
@@ -133,12 +133,7 @@ export function MachinesPage({ active }: { active: boolean }) {
         }
       >
         {machines.length ? (
-          machines.map(machine => (
-            <Fragment key={machine.id}>
-              <MachineRow machine={machine} />
-              <MachineVaults machine={machine} vaults={vaults.on[machine.id]} />
-            </Fragment>
-          ))
+          machines.map(machine => <MachineRow key={machine.id} machine={machine} vaults={vaults.on[machine.id]} />)
         ) : (
           <div className={`${EMPTY_LIST} px-3.5`}>{t("mc.empty")}</div>
         )}

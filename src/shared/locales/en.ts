@@ -1906,6 +1906,7 @@ const en = {
   "mc.ghCommits": "Commits as {name}",
   "mc.ghDisconnect": "Disconnect",
   "mc.ghDisconnectSure": "Remove the token from the machine?",
+  "mc.workspaces": "Workspaces on {name}",
   "mc.repos": "Repos on {name}",
   "mc.reposEmpty": "No repos here yet. A conversation about a project with a repo clones it here.",
   "mc.repoClean": "clean",
