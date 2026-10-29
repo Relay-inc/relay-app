@@ -18,6 +18,7 @@ const BOARD_PREFIX = "__board:";
 const PLUGIN_PREFIX = "__plugin:";
 const TERM_PREFIX = "t:";
 const WORK_PREFIX = "work:";
+const PAGE_PREFIX = "page:";
 /** What Today has in progress, shown in the sidebar under its project (domain/today/work.ts). */
 export type WorkKind = "review" | "mail" | "meeting";
 
@@ -29,6 +30,8 @@ export const pluginKey = (id: string) => `${PLUGIN_PREFIX}${id}`;
 export const termKey = (sid: string) => `${TERM_PREFIX}${sid}`;
 /** Work in progress on Today: `work:<kind>:<id>` (a review's item, a mail's key, a meeting's id). */
 export const workKey = (kind: WorkKind, id: string) => `${WORK_PREFIX}${kind}:${id}`;
+/** A workspace's note read as a page in the middle column: `page:<path>` (the main vault's relative, another's absolute). */
+export const pageKey = (target: string) => `${PAGE_PREFIX}${target}`;
 /** A new app conversation: `c:<time in base 36>`. Older ones are `general:<id>` or a project's name. */
 export const newChatKey = (now: number) => `c:${now.toString(36)}`;
 /** When an app conversation was made, from its key; 0 when the key does not say. */
@@ -44,6 +47,7 @@ type Opened =
   | { kind: "plugin"; id: string }
   | { kind: "term"; sid: string }
   | { kind: "work"; work: WorkKind; id: string }
+  | { kind: "page"; target: string }
   | { kind: "chat"; key: string };
 /** What a selection key opens. */
 export function opened(key: string): Opened {
@@ -51,6 +55,7 @@ export function opened(key: string): Opened {
   if (key.startsWith(BOARD_PREFIX)) return { kind: "board", provider: key.slice(BOARD_PREFIX.length) };
   if (key.startsWith(PLUGIN_PREFIX)) return { kind: "plugin", id: key.slice(PLUGIN_PREFIX.length) };
   if (key.startsWith(TERM_PREFIX)) return { kind: "term", sid: key.slice(TERM_PREFIX.length) };
+  if (key.startsWith(PAGE_PREFIX)) return { kind: "page", target: key.slice(PAGE_PREFIX.length) };
   const work = /^work:(review|mail|meeting):(.+)$/.exec(key);
   if (work) return { kind: "work", work: work[1] as WorkKind, id: work[2] };
   return { kind: "chat", key };

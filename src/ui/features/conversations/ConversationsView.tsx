@@ -1,5 +1,16 @@
 import { useEffect, useRef } from "react";
-import { isView, pluginIdOf, BRAIN, MAIL, PRS, REM, USAGE, WAIT, reviewOf } from "../../../domain/navigation/views";
+import {
+  isView,
+  pageOf,
+  pluginIdOf,
+  BRAIN,
+  MAIL,
+  PRS,
+  REM,
+  USAGE,
+  WAIT,
+  reviewOf,
+} from "../../../domain/navigation/views";
 import { boardOf } from "../../../application/navigation/navigation";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useNavigationStore } from "../../../application/navigation/store";
@@ -24,6 +35,7 @@ import { MailView } from "../mail/MailView";
 import { TodayView } from "../today/TodayView";
 import { ReviewView } from "../today/ReviewView";
 import { PluginView } from "../plugins/PluginView";
+import { PageView } from "../workspace/PageView";
 import { ChatBar } from "./ChatBar";
 import { ProjectPanel } from "./ProjectPanel";
 import { Subagents } from "./Subagents";
@@ -87,7 +99,10 @@ export function ConversationsView({ className }: { className: string }) {
   const review = reviewOf(selected);
   // a plugin's view is a page of its own in a frame, which scrolls itself
   const plugin = pluginIdOf(selected);
+  // a workspace's note as a page: its own bar and scroll
+  const page = pageOf(selected);
   const ownScroll =
+    !!page ||
     selected === PRS ||
     selected === MAIL ||
     selected === BRAIN ||
@@ -165,6 +180,7 @@ export function ConversationsView({ className }: { className: string }) {
       onShowInBrain={bar.renamable && !bar.session ? () => showInBrain(selected).then(() => select(BRAIN)) : undefined}
     />
   );
+  if (page) return <PageView key={page} target={page} className={`${className} relative bg-bg`} />;
   if (ownScroll)
     return (
       <div className={`${className} flex flex-col relative bg-bg`}>

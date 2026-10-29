@@ -17,9 +17,9 @@ import { Note } from "../../components/Note";
 
 type NoteText = { path: string; text: string };
 
-const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
+export const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
 // shown above the body, not among the properties
-const LEAD = ["description", "title"];
+export const LEAD = ["description", "title"];
 
 /** A vault note in the right drawer as a document: one bar (where it lives, copy, open, close), the title and its
  *  description, the frontmatter folded into one quiet line, the body, then the notes it links to. Links open the next
@@ -202,11 +202,11 @@ export function NoteDetail({ panelKey }: { panelKey: string }) {
 }
 
 /** A property's [[link]] as its label, the rest as written. */
-const linkLabel = (value: string) =>
+export const linkLabel = (value: string) =>
   value.replace(/\[\[([^\]\n]+)\]\]/g, (_, inner: string) => inner.split("|").pop()!.trim());
 
 /** A property's value: a [[link]] in it opens the note when it exists, the rest as written. */
-function PropertyValue({ value }: { value: string }) {
+export function PropertyValue({ value }: { value: string }) {
   return value.split(/(\[\[[^\]\n]+\]\])/).map((part, i) => {
     const link = /^\[\[([^\]\n]+)\]\]$/.exec(part);
     if (!link) return part;

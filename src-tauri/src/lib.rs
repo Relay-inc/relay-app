@@ -836,7 +836,7 @@ fn scratch_save(state: State<App>, project: String, id: Option<String>, text: St
 #[tauri::command]
 fn scratch_delete(state: State<App>, project: String, id: String) -> Result<(), String> { let (v, n) = project_home(&state, &project)?; scratch::delete(&v, &n, &id) }
 
-/// A vault note a conversation links to, for the right panel: {path (relative to the vault), text}.
+/// A vault note a conversation links to, for the right panel or a page: {path (relative to the vault), text, modified}.
 #[tauri::command]
 fn read_note(state: State<App>, target: String) -> Result<Value, String> {
     let v = need_vault(&state)?;
@@ -844,7 +844,13 @@ fn read_note(state: State<App>, target: String) -> Result<Value, String> {
     let found = vault::note(&v, &target).or_else(|| extra_vaults(&state.settings.lock().unwrap()).iter().find_map(|e| {
         vault::note(e, &target).map(|(path, text)| (vault::resolve(&vault::canon(e), &path).to_string_lossy().into_owned(), text))
     }));
-    found.map(|(path, text)| json!({"path": path, "text": text}))
+    // when it was last changed, for a page's "Edited 2 h ago" (ms since the epoch, 0 when the file system does not say)
+    let modified = |path: &str| {
+        let abs = if path.starts_with('/') { PathBuf::from(path) } else { PathBuf::from(vault::canon(&v)).join(path) };
+        fs::metadata(abs).and_then(|m| m.modified()).ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis() as u64)
+    };
+    found.map(|(path, text)| json!({"modified": modified(&path), "path": path, "text": text}))
         .ok_or_else(|| tr_v(ui_lang_of(&state.settings.lock().unwrap()), "err.note", &target))
 }
 
