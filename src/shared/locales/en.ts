@@ -1187,6 +1187,11 @@ const en = {
   "set.sidebarMore": "Hidden items under “…”",
   "nav.resetOrder": "Reset order",
   "nav.sidebarSettings": "Sidebar settings…",
+  "set.sec.experimental": "Experimental",
+  "set.experimentalHelp": "Features still being tried out. Off until you switch them on, and they may change or go.",
+  "set.files": "Files: pages, editing and team documents",
+  "set.filesHelp":
+    "The Pages tab next to Chats, a note opened as a page you can edit, file management, history, comments and mentions. Off: notes open in the side panel, as before.",
   "set.sec.sidebar": "Sidebar",
   "perm.title": "Permissions",
   "perm.help": "What macOS lets Relay do. A build that is not signed by Apple loses these with every update.",

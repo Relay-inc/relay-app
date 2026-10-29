@@ -53,6 +53,8 @@ document.head.append(material);
 let settings = vault.settings(fixture);
 // orch-plain: the orchestrator with the workers' crabs switched off (Settings › General)
 if (fixture === "orch-plain") settings = { ...settings, workerCrabs: false };
+// Files is experimental and off in the app until switched on; the harness shows it on, except for `files-off`
+settings = { ...settings, experimental: { files: fixture !== "files-off" } };
 // shared-invite: the same, opened by an invite link (shared_vault_pending_invite); shared-member: a Mac that joined
 // the vault with a link, its server not one of its machines; shared-keeper: that member, made admin on the server,
 // which Members (shared_vault_info) finds: the backend then keeps the server under Machines
@@ -1660,6 +1662,11 @@ const harness = {
       emit("orch", event);
       await nextTask();
     }
+  },
+  /** Settings › General › Experimental › Files switched (fixture "files-off"), as the settings window's save emits it */
+  setFiles: (files: boolean) => {
+    settings = { ...settings, experimental: { ...settings.experimental, files } };
+    emit("settings-changed", structuredClone(settings));
   },
 };
 (window as any).__harness = harness;

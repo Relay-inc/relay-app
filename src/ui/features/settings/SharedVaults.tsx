@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Machine, SharedRole, SharedVault } from "../../../domain/settings/types";
 import { agoParts } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
+import { filesOn } from "../../../domain/settings/types";
 import {
   closeInvite,
   createSharedVault,
@@ -67,6 +68,7 @@ export function MachineVaults({ machine, vaults }: { machine: Machine; vaults: S
 function SharedRow({ vault }: { vault: SharedVault }) {
   const { t, tn, locale } = useT();
   const status = useSettingsStore(s => s.shared.status[vault.id]);
+  const files = useSettingsStore(s => filesOn(s.settings));
   const info = useSettingsStore(s => s.shared.info[vault.id]);
   const membersOpen = useSettingsStore(s => vault.id in s.shared.info);
   const link = useSettingsStore(s => s.shared.links[vault.id]);
@@ -155,7 +157,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
             ))}
             {status.bad ? <StatusLine level="warn">{tn("set.sharedBad", status.bad)}</StatusLine> : null}
             {/* making the notes documents: off until an admin turns it on; every member sees which */}
-            {status.admin || status.docs ? (
+            {files && (status.admin || status.docs) ? (
               <div className="flex items-start gap-3 py-1">
                 <div className="grid flex-1 gap-0.5">
                   <label htmlFor={`docs-${vault.id}`} className="text-xs text-s-fg">

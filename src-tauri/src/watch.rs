@@ -64,6 +64,7 @@ fn change(roots: &[(String, String)], file: &Path) -> Option<(String, String, bo
 
 fn roots(app: &AppHandle) -> Vec<(String, String)> {
     let s = app.state::<App>().settings.lock().unwrap().clone();
+    if !crate::files_on(&s) { return vec![]; } // Files off: nothing is open as a page, the watcher has nobody to tell
     let main = s["vault"].as_str().unwrap_or("").to_string();
     std::iter::once(main).chain(crate::policy::extra_vaults(&s)).filter(|r| !r.is_empty()).map(|r| { let c = vault::canon(&r); (r, c) }).collect()
 }

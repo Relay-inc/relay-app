@@ -182,6 +182,7 @@ export type Settings = {
   plugins?: Plugin[]; // the MCP servers (domain/plugins), their secrets are in the keychain
   sidebar?: SidebarCfg;
   machines?: Machine[];
+  experimental?: { files?: boolean }; // features to try first, off by default (Settings › General › Experimental)
   machines_default?: string; // where new conversations run without a pick: "" this Mac, or a machine id
 };
 
@@ -200,6 +201,9 @@ export const EMPTY_SETTINGS: Settings = {
 export const ghOn = (settings: Settings) => !!settings.github?.on;
 export const mailOn = (settings: Settings) => !!settings.mail?.on;
 export const mailExperimental = (settings: Settings) => mailOn(settings) && !!settings.mail?.experimental;
+/** Files: the Pages tab, a note as a page and what builds on it (Settings › General › Experimental), off until switched
+ *  on. Team documents keep syncing in the backend either way. */
+export const filesOn = (settings: Settings) => !!settings.experimental?.files;
 /** Commonwealth, on unless switched off in Settings › Integrations (it needs its plugin too, application/brain). */
 export const cwOn = (settings: Settings) => settings.integrations?.commonwealth?.on !== false;
 export const calendarOn = (settings: Settings) => !!settings.calendar?.on && !!settings.calendar.feeds?.length;

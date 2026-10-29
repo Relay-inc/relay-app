@@ -103,7 +103,7 @@ fn ready(app: &AppHandle, ext: &str) -> bool {
         "mail" => crate::mail_on(&s),
         "reminders" => crate::vault_of(&s)["ok"] == true,
         "calendar" => !crate::calendar::feeds(&s).is_empty(),
-        "comments" => true,
+        "comments" => crate::files_on(&s),
         id => providers::get(id).is_ok_and(|p| (p.ready)(&s["integrations"][p.id]) && providers::token(p).is_some()),
     }
 }

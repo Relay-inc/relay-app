@@ -1195,6 +1195,12 @@ export default {
   "set.sidebarMore": "Verborgen items onder “…”",
   "nav.resetOrder": "Volgorde herstellen",
   "nav.sidebarSettings": "Zijbalkinstellingen…",
+  "set.sec.experimental": "Experimenteel",
+  "set.experimentalHelp":
+    "Functies die nog uitgeprobeerd worden. Uit tot je ze aanzet, en ze kunnen nog veranderen of verdwijnen.",
+  "set.files": "Bestanden: pagina's, bewerken en teamdocumenten",
+  "set.filesHelp":
+    "Het tabblad Pagina's naast Chats, een note als pagina die je kunt bewerken, bestandsbeheer, geschiedenis, opmerkingen en vermeldingen. Uit: notes openen in het zijpaneel, zoals voorheen.",
   "set.sec.sidebar": "Zijbalk",
   "perm.title": "Toestemmingen",
   "perm.help":

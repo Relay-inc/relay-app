@@ -1206,6 +1206,12 @@ export default {
   "set.sidebarMore": "Éléments masqués sous « … »",
   "nav.resetOrder": "Rétablir l'ordre",
   "nav.sidebarSettings": "Réglages de la barre latérale…",
+  "set.sec.experimental": "Expérimental",
+  "set.experimentalHelp":
+    "Des fonctions encore à l'essai. Désactivées tant que tu ne les actives pas, elles peuvent encore changer ou disparaître.",
+  "set.files": "Fichiers : pages, édition et documents d'équipe",
+  "set.filesHelp":
+    "L'onglet Pages à côté de Chats, une note ouverte comme page modifiable, la gestion des fichiers, l'historique, les commentaires et les mentions. Désactivé : les notes s'ouvrent dans le panneau latéral, comme avant.",
   "set.sec.sidebar": "Barre latérale",
   "perm.title": "Autorisations",
   "perm.help": "Ce que macOS permet à Relay. Une version non signée par Apple les perd à chaque mise à jour.",

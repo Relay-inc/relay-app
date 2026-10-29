@@ -705,6 +705,39 @@ const SCENARIOS = {
 
   // managing files in the Pages tab (ticket 5): a new page opens, a rename says how many links follow and the tree
   // follows it, a page in the trash comes back with Undo
+  // Files is experimental and off by default: no tab row, no page view; switching it on shows the tabs without a
+  // restart, switching it off again takes them and the open page away
+  async filesSwitch(s) {
+    await s.load({ fixture: "files-off" });
+    const { page } = s;
+    const tabs = () => page.getByRole("tab", { name: /^Pages/ }).count();
+    s.check("off: no Pages tab", (await tabs()) === 0);
+    s.check("off: the chats show", await waitText(page, "GENERAL"));
+    await page.evaluate(() => window.__harness.setFiles(true));
+    await settle(page);
+    s.check("on: the Pages tab shows without a restart", (await tabs()) === 1);
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    await click(page.locator('[data-project="Beacon Billing"]'));
+    s.check(
+      "on: a note opens as a page",
+      await page
+        .getByRole("button", { name: /History|Geschiedenis/ })
+        .first()
+        .isVisible(),
+    );
+    await page.evaluate(() => window.__harness.setFiles(false));
+    await settle(page);
+    s.check("off again: no tabs", (await tabs()) === 0);
+    s.check(
+      "off again: the page is gone",
+      !(await page
+        .getByRole("button", { name: /History|Geschiedenis/ })
+        .first()
+        .isVisible()
+        .catch(() => false)),
+    );
+  },
+
   async pageFiles(s) {
     await s.load();
     const { page } = s;
