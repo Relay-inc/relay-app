@@ -105,6 +105,23 @@ impl Rooms {
     }
 }
 
+impl Rooms {
+    /// A document update `fp` pushed (docs.rs): to every other member's open stream, as `{t:"doc", doc, seq, from,
+    /// e, body}` with its place in the document's log. Not kept in the ring: the log has it. One too big for a frame
+    /// is left to the next pull.
+    pub fn doc(&self, id: &str, fp: &str, name: &str, seq: u64, part: &[u8]) {
+        if part.len() > MAX_BODY { return; }
+        let line: Line = json!({"t": "doc", "doc": name, "seq": seq, "from": &fp[..16], "body": relay_remote::tls::hex(part)}).to_string().into();
+        let full = {
+            let mut all = self.rooms.lock().unwrap();
+            let Some(room) = all.get_mut(id) else { return };
+            let members = room.members.clone();
+            room.take(|s| s.fp != fp && members.contains(&s.fp) && !s.send(&line))
+        };
+        close(full, "not reading");
+    }
+}
+
 fn vault_file(data: &Path, id: &str) -> PathBuf { data.join("vaults").join(id).join("vault.json") }
 /// The room's members as vault.json says now, re-read only when the file changed. None: the vault is gone.
 fn refresh(data: &Path, id: &str, room: &mut Room) -> Option<()> {

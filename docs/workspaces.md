@@ -200,6 +200,66 @@ Expired invites are dropped whenever the file is read.
 `<data>/vaults/<id>/blobs/<name>`: one record per file, written to a temp file and renamed, under a per-vault lock so
 the compare-and-swap holds. A record at most `mirror::MAX_FILE` plus 64 KiB.
 
+`<data>/vaults/<id>/docs/<name>/log/<seq>` (and `<seq>.from`, the device that pushed it) and `.../snap/<upto>`: a
+document's sealed updates, numbered from 1 with no gap, and any snapshots members stored (see Documents, not handed
+out). Written whole under the vault's lock; never deleted.
+
+## Documents
+
+A note several members edit at once is a document instead of a file the rounds copy whole: a Yjs document whose
+markdown is one Y.Text, so the `.md` written out is that text and nothing is lost going back and forth to Obsidian or
+an agent. Its edits merge; there are no conflict copies for it.
+
+- **Which note.** The workspace's manifest document (id `manifest`) maps each path to a random document id (32 hex) in
+  its map `paths`. A rename changes only the manifest, so a document keeps its history across renames. A document's
+  name on the server is the epoch-0 naming key over `doc:<id>`; a sidecar (comments) is `doc:<id>#<what>`. Paths
+  compare as APFS does (case, normalization): a second note at a taken path is refused here, and two keys that are one
+  name on disk (made apart) keep the first in order, the other moved to `<name> (conflict <first 8 of its id>).md`.
+  Two members who make a note at the same path while apart both keep theirs: the manifest keeps one and the other is
+  put back under that conflict name. Both are the same name on every Mac.
+- **On the server**, per document an append-only log of sealed updates, each with the device that pushed it. Nothing
+  there is read, merged or deleted: the log is the document's history, kept for good. Ops (members only, `vault_*`'s
+  rules): `doc_push {vault, doc, updates: [len…]}` with the parts after the line (each at most 4 MiB, one push at
+  most 16 MiB, under the vault's current key, else `key changed` / `no such key epoch`), answers `{seq, seqs}`;
+  `doc_pull {vault, doc, since, limit}` answers a page of the updates after `since` (at most 1000 and 32 MiB, `more`
+  past either), each with `from`; `doc_list {vault}`. `doc_snapshot_put {vault, doc, upto, len}` stores a member's
+  snapshot (a place the log has, at least 200 updates past the last, none replaced) as an unchecked hint for the
+  history to come: no pull hands one out, and Relay writes none yet. Limits: 10 000 documents a workspace, 512 MiB a
+  member may push into a workspace a day (counted in memory, so a restart starts the day over). A push also goes at
+  once to the other members' live streams as `{t:"doc", doc, seq, from, body}` when it fits a frame; one that does
+  not waits for a pull.
+- **A part** is laid out like a record: `u32 BE (meta_len | epoch << 20) || meta || body`, each `nonce ||
+  ChaCha20-Poly1305(enc_key, aad, …)`. The meta's aad is `"docmeta:" + epoch + ":" + vault + ":" + name + ":" + kind +
+  ":" + upto + ":" + author`, the body's `"docbody:" + … + ":" + author + ":" + n`, so a part opens only as the
+  device that sealed it and a body only with its own meta. The meta is JSON: `a` the author device (16 hex), `t` ms,
+  `l` its member list head, `n` the author's own counter for this document. The body is the Yjs update (v1). An
+  update's seq is the server's, given after it is sealed, so it is not in the aad.
+- **What a Mac checks.** A Mac builds a document from the log alone, a page at a time. A part is opened as the device
+  the server says pushed it; one that does not open (another author, another key, tampered with) or does not apply is
+  left out with a warning naming its place, and the next is taken. An update under an older key than the Mac's newest,
+  past where it had the log when it took that key, is left out (a removed member still holds the old key); before a
+  Mac's first pull on the new key it cannot tell, as with records. A gap in an author's counter is warned ("held
+  back"). A meta naming a longer member list than the Mac's is warned, as for records and frames. Edits Yjs cannot
+  place, because they build on an update the Mac left out or never got, make it read the log again from the start once
+  per sync; while they stay missing, every round warns which author's edits are missing.
+- **What the server can still do.** It cannot read a part, forge one, or pass one off as another member's. It can
+  delay or withhold updates: a Mac notices when a later update of the same author, or one building on it, comes, not
+  when nobody ever gets it. It can reorder or repeat updates: Yjs applies them in any order and more than once, so the
+  text is the same. A member, holding the key, can write anything another member could, including a part sealed as
+  another device (the server's `from` is what tells them apart).
+- **On each Mac**, per workspace, each document's state and cursor (`shared-docs/<id>/`). Every round pulls the
+  documents the server has further (the manifest first; one that fails is warned and the others go on), sends what the
+  server has not taken from this Mac yet (an edit made off line goes then; what was pulled counts as held, so a push
+  is only this Mac's own edits), and writes the notes whose text changed (temp file and rename): never where the file
+  rounds keep files out (System/ outside its allowed folders, hidden), never through a symlink. A file it replaces that
+  is not what Relay last wrote goes to the workspace trash first; a renamed note's old file goes once it is as Relay
+  wrote it (to the trash first otherwise), unless another note has that place now or the file rounds keep it out. A
+  note that is a document, and its old path until that file is gone, stay out of the file rounds. A live update is
+  taken on a thread of its own, under the same lock as the rounds.
+- **Not yet** (8b): a note becomes a document only through `Docs::create` (no UI), an existing file is not turned
+  into one, an edit made to the `.md` on disk does not go into its document (the next change from the document
+  writes over it, the old content to the trash), and an older Relay still syncs that note as a file.
+
 ## Record
 
 `u32 big endian (meta_len | epoch << 20) || meta (meta_len bytes, at most 64 KiB) || data`

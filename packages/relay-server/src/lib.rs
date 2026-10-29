@@ -16,6 +16,7 @@
 //! per shared vault its members, invites and records (vaults/<id>/).
 
 pub mod channel;
+pub mod docs;
 pub mod cli;
 pub mod github;
 pub mod mirror;
@@ -79,7 +80,8 @@ const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answ
 /// What a vault-only device may ask: its shared vaults, nothing else. It never runs agents, reads a mirror or pairs
 /// further devices, and makes no vaults of its own. `pair` with a code from the owner makes it a full device.
 const VAULT_OPS: &[&str] = &["pair", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
-    "vault_get", "vault_put", "vault_put_many", "vault_delete", "vault_stream", "vault_pk", "vault_rotate", "vault_log", "vault_append"];
+    "vault_get", "vault_put", "vault_put_many", "vault_delete", "vault_stream", "vault_pk", "vault_rotate", "vault_log", "vault_append",
+    "doc_push", "doc_pull", "doc_snapshot_put", "doc_list"];
 /// What a vault-only device may ask besides, while it is admin of a vault here: it keeps the server, so it sees what
 /// the server is and updates it (`update`, to an official release only: signed with Relay's release key, upgrade.rs).
 /// Never a conversation, the mirror, a phone, GitHub or a vault of its own.
@@ -381,6 +383,23 @@ impl Server {
                 }
                 reply(&mut w, Ok(json!({"etags": etags, "errors": errors})))
             }
+            // a vault's documents (docs.rs): append-only logs of sealed updates, snapshots, never read here
+            "doc_push" => {
+                let lens: Vec<u64> = req["updates"].as_array().into_iter().flatten().filter_map(Value::as_u64).collect();
+                if lens.is_empty() || lens.iter().sum::<u64>() > docs::MAX_PUSH { return reply(&mut w, Err("push too big".into())); }
+                let mut parts = vec![];
+                for l in lens { parts.push(proto::read_body(&mut r, l, relay_remote::docs::MAX_UPDATE)?); }
+                reply(&mut w, self.vaults.doc_push(&fp, s("vault"), s("doc"), parts).map(|seqs| json!({"seq": seqs.last(), "seqs": seqs})))
+            }
+            "doc_pull" => match self.vaults.doc_pull(&fp, s("vault"), s("doc"), req["since"].as_u64().unwrap_or(0), req["limit"].as_u64().unwrap_or(0)) {
+                Ok((mut v, b)) => { v["ok"] = json!(true); proto::write_json(&mut w, &v)?; w.write_all(&b)?; w.shutdown(); Ok(()) }
+                Err(e) => reply(&mut w, Err(e)),
+            },
+            "doc_snapshot_put" => {
+                let body = proto::read_body(&mut r, req["len"].as_u64().unwrap_or(0), relay_remote::vault::MAX_RECORD)?;
+                reply(&mut w, self.vaults.doc_snapshot(&fp, s("vault"), s("doc"), req["upto"].as_u64().unwrap_or(0), &body).map(|_| json!({})))
+            }
+            "doc_list" => reply(&mut w, self.vaults.doc_list(&fp, s("vault"))),
             "vault_delete" => reply(&mut w, self.vaults.delete(&fp, s("vault"), s("name"), req["expect"].as_str()).map(|_| json!({}))),
             // stays open: the vault's live frames both ways (channel.rs), sealed by the members, never stored here
             "vault_stream" => channel::stream(&self.vaults, &fp, s("vault"), &req, r, w),

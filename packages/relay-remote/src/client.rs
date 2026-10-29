@@ -210,6 +210,13 @@ impl Client {
         }))
     }
 
+    /// A shared vault's documents (docs.rs), their state kept in `dir` on this Mac; `me` this device's fingerprint.
+    pub fn docs(&self, vault: &str, key: impl Into<Keys>, dir: &std::path::Path, me: &str) -> crate::docs::Docs {
+        let c = self.clone();
+        let longer = |req: &Value| if req["op"] == "doc_pull" { Duration::from_secs(300) } else { Duration::ZERO };
+        crate::docs::Docs::new(vault, key.into(), Box::new(move |req, body, want| { let l = longer(&req); c.call_bin(req, body, want, l) }), dir, &me[..16.min(me.len())])
+    }
+
     pub fn info(&self) -> Result<Info, String> {
         let info = self.info_any()?;
         if info.proto != PROTO { return Err(format!("relay-server {} speaks protocol {}, this Relay {PROTO}: update one of them", info.version, info.proto)); }

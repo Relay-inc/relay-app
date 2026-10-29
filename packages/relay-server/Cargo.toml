@@ -17,3 +17,5 @@ minisign-verify = "0.2"
 base64 = "0.23"
 
 [dev-dependencies]
+# the e2e test edits a shared vault document the way an editor would (docs.rs)
+yrs = "0.28"

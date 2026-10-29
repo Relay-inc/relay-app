@@ -42,6 +42,9 @@ pub enum Event {
     Live { resumed: bool },
     /// Not connected, and why.
     Down(String),
+    /// A document update another member pushed (docs.rs): its name on the server, its place in that document's log,
+    /// the sender, and the sealed part, which `Docs::take_live` opens.
+    Doc { doc: String, seq: u64, from: String, body: Vec<u8> },
 }
 type On = Arc<dyn Fn(Event) + Send + Sync>;
 
@@ -151,6 +154,12 @@ impl Channel {
             match v["t"].as_str() {
                 Some("ping") => {}
                 Some("bye") => return v["why"].as_str().unwrap_or("closed by the server").to_string(),
+                Some("doc") => {
+                    let (doc, from) = (v["doc"].as_str().unwrap_or(""), v["from"].as_str().unwrap_or(""));
+                    if from == i.me { continue; }
+                    let Some(body) = v["body"].as_str().and_then(unhex) else { continue };
+                    (i.on)(Event::Doc { doc: doc.into(), seq: v["seq"].as_u64().unwrap_or(0), from: from.into(), body });
+                }
                 Some("frame") => {
                     let (kind, doc, from) = (v["kind"].as_str().unwrap_or(""), v["doc"].as_str().unwrap_or(""), v["from"].as_str().unwrap_or(""));
                     let (seq, n) = (v["seq"].as_u64().unwrap_or(0), v["n"].as_u64().unwrap_or(0));

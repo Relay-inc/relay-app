@@ -6,6 +6,7 @@
 pub mod broker;
 pub mod channel;
 pub mod client;
+pub mod docs;
 pub mod members;
 pub mod proto;
 pub mod share;
