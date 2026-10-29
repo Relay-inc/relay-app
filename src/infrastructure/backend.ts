@@ -520,6 +520,8 @@ export const sharedVaultInvite = (id: string, role: SharedRole) =>
   invoke<{ link: string; invite: SharedInvite }>("shared_vault_invite", { id, role });
 /** The vault's key as this Mac holds it (64 hex), for any member: what the create gave. */
 export const sharedVaultRecovery = (id: string) => invoke<string>("shared_vault_recovery", { id });
+/** An admin trusts a member's new key (they set up Relay again): this Mac pins what the member publishes now. */
+export const sharedVaultTrust = (id: string, fp: string) => invoke("shared_vault_trust", { id, fp });
 export const sharedVaultInfo = (id: string) => invoke<SharedInfo>("shared_vault_info", { id });
 export const sharedVaultInviteRevoke = (id: string, invite: string) =>
   invoke("shared_vault_invite_revoke", { id, invite });

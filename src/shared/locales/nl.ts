@@ -1026,6 +1026,14 @@ export default {
   "set.sharedCounts": "{sent} verstuurd, {received} ontvangen",
   "set.sharedBad_one": "{n} bestand daar opent niet met deze sleutel.",
   "set.sharedBad_other": "{n} bestanden daar openen niet met deze sleutel.",
+  "set.sharedRekeying":
+    "Iemand is vertrokken: de sleutel verandert bij de volgende ronde van een admin. Tot dan is wat je schrijft nog leesbaar met de oude sleutel.",
+  "set.sharedKeyChanged":
+    "De sleutel van {name} is niet de sleutel die deze Mac vertrouwt. Misschien heeft die Relay opnieuw ingesteld, of zit er iemand tussen.",
+  "set.sharedTrustAsk": "De nieuwe sleutel van {name} vertrouwen…",
+  "set.sharedTrustSure":
+    "Alleen als {name} je zei dat die Relay opnieuw heeft ingesteld. Een sleutel die je hier vertrouwt, krijgt voortaan elke nieuwe sleutel.",
+  "set.sharedTrust": "Nieuwe sleutel vertrouwen",
   "set.sharedConflicts_one": "{n} conflict. Beide versies zijn bewaard:",
   "set.sharedConflicts_other": "{n} conflicten. Beide versies zijn bewaard:",
   "set.sharedHeld_one":

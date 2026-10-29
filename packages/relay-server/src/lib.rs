@@ -79,7 +79,7 @@ const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answ
 /// What a vault-only device may ask: its shared vaults, nothing else. It never runs agents, reads a mirror or pairs
 /// further devices, and makes no vaults of its own. `pair` with a code from the owner makes it a full device.
 const VAULT_OPS: &[&str] = &["pair", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
-    "vault_get", "vault_put", "vault_put_many", "vault_delete", "vault_stream"];
+    "vault_get", "vault_put", "vault_put_many", "vault_delete", "vault_stream", "vault_pk", "vault_rotate", "vault_log", "vault_append"];
 /// What a vault-only device may ask besides, while it is admin of a vault here: it keeps the server, so it sees what
 /// the server is and updates it (`update`, to an official release only: signed with Relay's release key, upgrade.rs).
 /// Never a conversation, the mirror, a phone, GitHub or a vault of its own.
@@ -110,7 +110,9 @@ pub fn revoke(data: &Path, who: &str) -> io::Result<Vec<Client>> {
     let hit: Vec<String> = all.iter().filter(|c| c.name == who || (who.len() >= 8 && c.fp.starts_with(&who.to_lowercase()))).map(|c| c.fp.clone()).collect();
     let (gone, keep): (Vec<Client>, Vec<Client>) = all.into_iter().partition(|c| hit.contains(&c.fp) || c.parent.as_ref().is_some_and(|p| hit.contains(p)));
     if !gone.is_empty() { save_clients(data, &keep)?; }
-    vaults::forget(data, &gone.iter().map(|c| c.fp.clone()).collect::<Vec<_>>());
+    for name in vaults::forget(data, &gone.iter().map(|c| c.fp.clone()).collect::<Vec<_>>()) {
+        eprintln!("{name}: this workspace has a member list. The device cannot connect any more, but it stays a member until an admin removes it in Relay (Settings › Machines › Members), which changes the key.");
+    }
     // a revoked device's mirror goes too (a linked one has none of its own); a running server also drops its key and
     // working copy (see Server::run)
     for c in gone.iter().filter(|c| c.parent.is_none()) { fs::remove_dir_all(data.join("mirror").join(&c.fp[..16])).ok(); }
@@ -340,7 +342,7 @@ impl Server {
             // shared vaults (vaults.rs): only ciphertext passes here, by member
             "vault_create" => reply(&mut w, self.vaults.create(&fp, &my_name, s("name"))),
             "vault_info" => reply(&mut w, self.vaults.info(&fp, s("vault"))),
-            "vault_invite" => reply(&mut w, self.vaults.invite(&fp, s("vault"), s("role"), s("wrapped"))),
+            "vault_invite" => reply(&mut w, self.vaults.invite(&fp, s("vault"), s("role"), s("wrapped"), req["epoch"].as_u64().unwrap_or(0))),
             "vault_invite_revoke" => reply(&mut w, self.vaults.invite_revoke(&fp, s("vault"), s("invite")).map(|_| json!({}))),
             "vault_join" => {
                 let res = self.vaults.join(&fp, s("vault"), s("invite"), s("name"), s("proof"));
@@ -348,7 +350,20 @@ impl Server {
                 reply(&mut w, res)
             }
             "vault_remove" => reply(&mut w, self.vaults.remove(&fp, s("vault"), s("fp")).map(|_| json!({}))),
-            "vault_manifest" => reply(&mut w, self.vaults.manifest(&fp, s("vault")).map(|b| json!({"blobs": b}))),
+            "vault_manifest" => reply(&mut w, self.vaults.manifest(&fp, s("vault"))),
+            "vault_log" => reply(&mut w, self.vaults.log(&fp, s("vault"), req["from"].as_u64().unwrap_or(0))),
+            "vault_append" => {
+                let keys = req["keys"].as_object().cloned().unwrap_or_default();
+                reply(&mut w, self.vaults.append(&fp, s("vault"), &req["entry"], &keys).map(|_| json!({})))
+            }
+            "vault_pk" => reply(&mut w, self.vaults.set_pk(&fp, s("vault"), &req).map(|_| json!({}))),
+            "vault_rotate" => {
+                let keys = req["keys"].as_object().cloned().unwrap_or_default();
+                let res = self.vaults.rotate(&fp, s("vault"), req["epoch"].as_u64().unwrap_or(0), &keys, req.get("entry"));
+                // the old key's frames stop here: who reconnects opens with the new one (channel.rs)
+                if res.is_ok() { eprintln!("relay-server: a shared vault's key changed ({peer})"); }
+                reply(&mut w, res)
+            }
             "vault_get" => match self.vaults.get(&fp, s("vault"), s("name")) {
                 Ok((b, etag)) => { proto::write_json(&mut w, &json!({"ok": true, "len": b.len(), "etag": etag}))?; w.write_all(&b)?; w.shutdown(); Ok(()) }
                 Err(e) => reply(&mut w, Err(e)),

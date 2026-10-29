@@ -160,6 +160,15 @@ export const withdrawInvite = (id: string, invite: string) =>
     });
     await loadInfo(id);
   });
+/** An admin trusts a member's new key, after they said they set up Relay again (docs/workspaces.md, Key rotation). */
+export const trustMember = (id: string, fp: string) =>
+  run(id, async () => {
+    await backend.sharedVaultTrust(id, fp);
+    change(draft => {
+      const s = draft.status[id];
+      if (s) s.changed = (s.changed ?? []).filter(c => c.fp !== fp);
+    });
+  });
 export const removeMember = (id: string, fp: string) =>
   run(id, async () => {
     await backend.sharedVaultRemove(id, fp);

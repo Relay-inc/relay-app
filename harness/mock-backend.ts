@@ -56,7 +56,8 @@ if (fixture === "orch-plain") settings = { ...settings, workerCrabs: false };
 // the vault with a link, its server not one of its machines; shared-keeper: that member, made admin on the server,
 // which Members (shared_vault_info) finds: the backend then keeps the server under Machines
 const member = fixture === "shared-member" || fixture === "shared-keeper";
-const shared = fixture === "shared" || fixture === "shared-invite" || member;
+// shared-rekey: someone left the vault, and the key change waits for a member whose Relay has no public key yet
+const shared = fixture === "shared" || fixture === "shared-invite" || fixture === "shared-rekey" || member;
 if (shared)
   settings = {
     ...settings,
@@ -87,6 +88,15 @@ const moved: Record<string, { name: string; vault: string }> = {}; // migrate_pr
 const phoneShared = new Set<string>(); // conversation keys shared with the phone (/share-phone)
 // the shared vaults on a relay-server (fixture "shared"): the last rounds, and the one vault's members and open invites
 let sharedStatus: Record<string, any> = shared ? vault.sharedStatus(Math.floor(Date.now() / 1000)) : {};
+if (fixture === "shared-rekey")
+  for (const s of Object.values(sharedStatus))
+    Object.assign(s, {
+      warnings: ["Someone left over an hour ago, and the key has not changed since."],
+      rekeying: true,
+      changed: [{ fp: vault.sharedMembers[1].fp, name: "Studio Mac" }],
+      held: [],
+      conflicts: [],
+    });
 let sharedMembers = structuredClone(vault.sharedMembers);
 let sharedInvites = [{ id: "4d2e8a1b6c3f9e70", role: "member", expires: Math.floor(Date.now() / 1000) + 20 * 3600 }];
 let pendingInvite: string | null = fixture === "shared-invite" ? vault.inviteLink("b81c0e5f2a7d3946") : null;
@@ -365,6 +375,13 @@ function handle(cmd: string, a: Args): unknown {
       return { id, recovery: hex(64, 5) };
     }
     // the key this Mac holds, the same one `shared_vault_create` gave
+    case "shared_vault_trust": {
+      const s = sharedStatus[a.id];
+      if (s) {
+        s.changed = (s.changed ?? []).filter((c: { fp: string }) => c.fp !== a.fp);
+      }
+      return null;
+    }
     case "shared_vault_recovery":
       if (!(settings.sharedVaults ?? []).some((x: { id: string }) => x.id === a.id))
         return Promise.reject(`no workspace ${a.id}`);

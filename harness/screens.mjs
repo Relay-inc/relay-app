@@ -1122,6 +1122,22 @@ const VIEWS = {
   // Settings › Machines of the workspace's admin: Team server, paired for workspaces only, with the workspace under it: its
   // last round (a conflict copy, two deletes held), the members open (this Mac, an admin, a member, an open invite), a
   // new invite link made and the recovery key shown again
+  // a member left: the workspace's key changes once the remaining members' Relay can receive it (PR key rotation)
+  "settings-shared-rekey": async () => {
+    await settingsPage("Machines", undefined, "shared-rekey");
+    await page.setViewportSize({ width: 900, height: 1000 });
+    await waitText("the key has not changed since");
+    await page.getByText("the key has not changed since").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // an admin trusts a member's new key, after a confirm (PR key rotation)
+  "settings-shared-trust": async () => {
+    await VIEWS["settings-shared-rekey"]();
+    await button("Trust Studio Mac's new key…").click();
+    await waitText("Only if Studio Mac told you");
+    await page.getByText("Only if Studio Mac told you").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   "settings-shared-vaults": async () => {
     await settingsPage("Machines", undefined, "shared");
     await page.setViewportSize({ width: 900, height: 1600 });
