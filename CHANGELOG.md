@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- **Workspaces stay apart**: switching workspace puts away the page, conversation or project board that belongs to the one you left, and the note in the drawer, and opens what was open in the new one, else Today. Coming back opens it again. A page names its own workspace in its bar, not the one the sidebar shows
 - **Settings › Machines reads clearer**: a machine's workspaces sit in its own row now, under "Workspaces on <machine>" in a card of their own like its repos, instead of in an indented strip between the machines. The buttons of a machine or a workspace stay together on the right and move under the name as a group when the window is narrow, instead of one at a time
 ### Changed
 
