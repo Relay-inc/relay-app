@@ -363,6 +363,7 @@ const en = {
   "usage.all": "All of {name}",
   "usage.vault": "In this vault",
   "usage.details": "Details",
+  "usage.viewDetails": "View details",
   "usage.tightest": "Tightest limit",
   "usage.usedWord": "used",
   "usage.todayAll": "Today · all agents",

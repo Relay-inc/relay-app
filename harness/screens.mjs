@@ -826,13 +826,16 @@ const VIEWS = {
     await page.mouse.move(720, 890); // off the row that moved up under the pointer
     await settle(page);
   },
-  usage: async () => {
+  // the footer's usage button opens its summary, View details the view
+  "usage-popover": async () => {
     await open(page, server.url);
-    await page.getByRole("button", { name: /^Switch workspace/ }).click(); // usage sits in the workspace menu
-    await page
-      .getByRole("button", { name: /^(Usage|Claude Code)/ })
-      .first()
-      .click();
+    await page.getByRole("button", { name: /^Usage/ }).click();
+    await waitText("View details");
+    await settle(page);
+  },
+  usage: async () => {
+    await VIEWS["usage-popover"]();
+    await page.getByRole("button", { name: "View details" }).click();
     await waitText("All of Claude Code", 10000);
     await settle(page);
   },
@@ -856,11 +859,8 @@ const VIEWS = {
   // the usage redesign in dark mode (#105)
   "dark-usage": async () => {
     await open(page, server.url, { fixture: "dark" });
-    await page.getByRole("button", { name: /^Switch workspace/ }).click(); // usage sits in the workspace menu
-    await page
-      .getByRole("button", { name: /^(Usage|Claude Code)/ })
-      .first()
-      .click();
+    await page.getByRole("button", { name: /^Usage/ }).click();
+    await page.getByRole("button", { name: "View details" }).click();
     await waitText("All of Claude Code", 10000);
     await settle(page);
   },
