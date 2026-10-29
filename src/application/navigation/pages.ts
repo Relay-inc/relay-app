@@ -191,6 +191,14 @@ export async function noteChanged({ path, hash, relinked }: backend.NoteChange) 
     /* gone meanwhile: the next save says so */
   }
 }
+/** A shared document's page holds `text` now (its head changed in the document): the properties above follow it. Its
+ *  file is written by the Mac's documents, not by a save, so the hash stays. */
+export function pageTextIs(page: string, text: string) {
+  set(draft => {
+    const read = draft.panel.detail[pageKey(page)] as Page | undefined;
+    if (read && !("err" in read)) draft.panel.detail[pageKey(page)] = { ...read, text, modified: Date.now() };
+  });
+}
 /** The page now holds the file's text and hash (merged in by its editor): the next save checks against these. */
 export function adoptPage(page: string, text: string, hash: string) {
   set(draft => {

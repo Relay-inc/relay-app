@@ -178,7 +178,7 @@ fn merge3(base: &[char], cur: &[char], disk: &[char]) -> Vec<(usize, usize, Stri
     edits
 }
 /// The edits of `merge3` made on a document whose text is `cur`, as one change (Y.Text counts UTF-8 bytes).
-fn make_edits(doc: &Doc, cur: &str, edits: &[(usize, usize, String)]) {
+fn make_edits(doc: &Doc, cur: &str, edits: &[(usize, usize, String)]) -> Vec<u8> {
     let at: Vec<u32> = cur.char_indices().map(|(i, _)| i as u32).chain([cur.len() as u32]).collect();
     change(doc, |d| {
         let t = d.get_or_insert_text("md");
@@ -187,7 +187,7 @@ fn make_edits(doc: &Doc, cur: &str, edits: &[(usize, usize, String)]) {
             if *del > 0 { t.remove_range(&mut txn, at[*p], at[p + del] - at[*p]); }
             if !ins.is_empty() { t.insert(&mut txn, at[*p], ins); }
         }
-    });
+    })
 }
 /// A note's conflict name: "Plan.md" -> "Plan (conflict 1a2b3c4d).md", the same on every Mac for the same document.
 fn conflict_path(path: &str, id: &str) -> String { format!("{} (conflict {}).md", path.trim_end_matches(".md"), &id[..8]) }
@@ -210,7 +210,8 @@ impl Docs {
     pub fn set_keys(&self, k: Keys) { *lock(&self.keys) = k; }
     /// A document's name on the server.
     pub fn name(&self, id: &str) -> String { lock(&self.keys).name(&format!("doc:{id}")) }
-    /// Called with every update another member made: (document id, Yjs update).
+    /// Called with every update this Mac's editor did not make: another member's, or a change of the note's file taken
+    /// in (absorb, export): (document id, Yjs update). Not with what `apply_local` took.
     pub fn subscribe(&self, f: impl Fn(&str, &[u8]) + Send + Sync + 'static) { lock(&self.on).push(Arc::new(f)); }
     /// What went wrong or looked wrong since the last call (a part that did not open, updates held back), for the user.
     pub fn take_warnings(&self) -> Vec<String> { std::mem::take(&mut *lock(&self.warnings)) }
@@ -677,14 +678,16 @@ impl Docs {
             (text_of(&o.doc), b)
         };
         let Some((edits, disk)) = self.disk_edits(&id, &cur, &b) else { return Ok(false) };
+        let mut u = vec![];
         {
             let mut open = lock(&self.open);
             let Some(o) = open.get_mut(&id) else { return Ok(false) };
-            if !edits.is_empty() { make_edits(&o.doc, &cur, &edits); (o.c.pending, o.c.via) = (true, by.into()); }
+            if !edits.is_empty() { u = make_edits(&o.doc, &cur, &edits); (o.c.pending, o.c.via) = (true, by.into()); }
             o.c.out = sync::sha256_hex(&b);
             self.save(&open, &id)?;
         }
         self.set_base(&id, &disk)?;
+        if !u.is_empty() { for f in lock(&self.on).clone() { f(&id, &u); } }
         if !edits.is_empty() { if let Err(e) = self.push(&id) { self.warn(format!("not sent yet, again at the next sync: {e}")); } }
         Ok(!edits.is_empty())
     }
@@ -749,10 +752,12 @@ impl Docs {
                         if let Some((edits, disk)) = self.disk_edits(&id, &cur, b) {
                             let mut open = lock(&self.open);
                             let Some(o) = open.get_mut(&id) else { continue };
-                            if !edits.is_empty() { make_edits(&o.doc, &cur, &edits); (o.c.pending, o.c.via) = (true, "disk".into()); taken.push(id.clone()); }
+                            let u = if edits.is_empty() { vec![] } else { taken.push(id.clone()); make_edits(&o.doc, &cur, &edits) };
+                            if !u.is_empty() { (o.c.pending, o.c.via) = (true, "disk".into()); }
                             o.c.out = sync::sha256_hex(b);
                             if let Err(e) = self.save(&open, &id) { errors.push(e); continue; }
                             drop(open);
+                            if !u.is_empty() { for f in lock(&self.on).clone() { f(&id, &u); } }
                             if let Err(e) = self.set_base(&id, &disk) { errors.push(e); continue; }
                         }
                     }
@@ -1142,6 +1147,31 @@ mod tests {
     /// an edit (tagged "claude"); after both sync, both have both. Then B adds another while A's Claude writes from the
     /// file it read before: A's export takes it in on top, nothing of B's lost. Relay's own export is no change; a file
     /// with a byte-order mark and CRLF goes in as plain text; a deleted file is written back, warned.
+    #[test]
+    fn an_open_editor_hears_of_a_file_change_taken_in_but_not_of_its_own_edit() {
+        let (srv, k) = (Server::default(), Keys::from(VaultKey::generate()));
+        let (a, _) = mac(&srv, &k, "editor-a", A);
+        let root = tmp("editor-root");
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::create_dir_all(&root).unwrap();
+        let f = Filter::vault_default();
+        let id = a.create("Plan.md", "one\n").unwrap();
+        a.export(&root, &f, &|_: &str, _: &[u8]| panic!("nothing is replaced"));
+        let heard = Arc::new(Mutex::new(vec![]));
+        { let h = heard.clone(); a.subscribe(move |d, u| h.lock().unwrap().push((d.to_string(), u.to_vec()))); }
+        // the editor's own edit: taken, not echoed back to it
+        append(&a, &id, "two\n");
+        assert!(heard.lock().unwrap().is_empty());
+        // Claude writes the file: the editor gets the change as an update that brings its copy to the document's text
+        let editor = Doc::new();
+        apply(&editor, &a.diff(&id, &[0]).unwrap()).unwrap();
+        std::fs::write(root.join("Plan.md"), "ONE\n").unwrap();
+        assert!(a.absorb(&root, &f, "Plan.md", "claude").unwrap());
+        let got = heard.lock().unwrap().clone();
+        assert_eq!(got.len(), 1);
+        apply(&editor, &got[0].1).unwrap();
+        assert_eq!((got[0].0.as_str(), text_of(&editor)), (id.as_str(), a.text(&id)));
+    }
     #[test]
     fn claude_rewriting_the_file_and_a_members_edit_both_stay() {
         let (srv, k) = (Server::default(), Keys::from(VaultKey::generate()));

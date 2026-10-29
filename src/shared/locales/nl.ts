@@ -424,6 +424,7 @@ export default {
   "drawer.detail": "Details",
   "page.edited": "Bewerkt {ago}",
   "page.ask": "Vraag Claude",
+  "page.peers": "Op deze pagina: {names}",
   "page.editor": "Tekst van de pagina",
   "page.updatedLinks": "Links bijgewerkt",
   "page.updatedByClaude": "Aangepast door Claude",

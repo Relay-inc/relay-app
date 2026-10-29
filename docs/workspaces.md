@@ -295,6 +295,24 @@ an agent. Its edits merge; there are no conflict copies for it.
   history), its file goes from every Mac (kept as a conflict copy where it was changed), and Undo puts it back. A
   note's file deleted any other way is written back, warned.
 
+### A page open on a document
+
+When a note that is a document is open as a page, its editor binds to the document instead of saving the file:
+
+- **Open.** `shared_doc_open` gives the page everything this Mac has of the document; the page holds it as its own
+  Y.Doc while it is open. Its editor shows the body; the head (frontmatter, the title's heading) is the start of the
+  same Y.Text, edited through the properties above it.
+- **Typing.** What is typed goes into that Y.Text and, every 300 ms, to the Mac's documents (`shared_doc_edit`,
+  `Docs::apply_local`), which send it and write the `.md` out. No `write_note` for such a page.
+- **What others do.** Another member's edit, and a change of the note's file taken in (Claude, Obsidian), reach the page
+  as `shared-doc` events (`Docs::subscribe`) and land in the editor without moving the cursor.
+- **⌘Z** undoes only what was typed on this Mac (a Y.UndoManager on this Mac's own edits).
+- **Cursors.** Each Mac sends its cursor and selection as an `awareness` frame on the live channel (sealed like any
+  frame), at most 10 a second and again every 10 s while it stays put; a member not heard from for 30 s has left the
+  page. The others' cursors show with their name, their avatars in the page's bar. The name is the one the sender
+  gives (its Mac's), so a member can show another name; it is not a proof of who is typing.
+- **Closed.** The page's Y.Doc goes; the Mac's documents keep syncing, so another Mac's typing keeps the file current.
+
 ## Record
 
 `u32 big endian (meta_len | epoch << 20) || meta (meta_len bytes, at most 64 KiB) || data`

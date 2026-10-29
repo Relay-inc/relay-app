@@ -652,6 +652,47 @@ const SCENARIOS = {
     );
   },
 
+  // ticket 9: a shared document's page; a peer's line and cursor show, what is typed here reaches the document, and
+  // ⌘Z undoes only this Mac's text
+  async pageCoEdit(s) {
+    await s.load({ fixture: "shared-live" });
+    const { page } = s;
+    await page.keyboard.press("Control+Digit2");
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    for (const folder of ["Contexts", "Contexts/Team", "Contexts/Team/Projects"])
+      await page.locator(`[data-folder="${folder}"]`).click();
+    await page.locator('[data-page="Contexts/Team/Projects/Team Handbook.md"]').click();
+    await page.waitForFunction(() => window.__harness.liveText().length > 0, null, { timeout: 4000 });
+    const doc = () => page.evaluate(() => window.__harness.liveText());
+    const editor = () => page.locator(".cm-content").textContent();
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("Mine here");
+    for (let i = 0; i < 20 && !(await doc()).includes("Mine here"); i++) await page.waitForTimeout(100);
+    s.check("what is typed reaches the document", (await doc()).endsWith("Mine here"));
+    s.check("and no file is written", (await page.evaluate(() => window.__harness.written())) === null);
+    await page.evaluate(() => window.__harness.peerType("- [ ] First open loop", " (Laurent)"));
+    s.check("a peer's text appears", (await editor()).includes("First open loop (Laurent)"));
+    s.check("the head stays out of the editor", !(await editor()).includes("type: Document"));
+    await page.evaluate(() => window.__harness.peerCursor("a1b2c3d4e5f6a7b8", "Laurent Meersman", "(Laurent)"));
+    s.check(
+      "a peer's cursor shows with their name",
+      (await page.locator(".cm-peer-name", { hasText: "Laurent Meersman" }).count()) === 1,
+    );
+    s.check("and their avatar in the bar", (await page.getByRole("img", { name: /Laurent Meersman/ }).count()) === 1);
+    s.check(
+      "this Mac's cursor was sent",
+      (await page.evaluate(() => window.__harness.liveCursors())).some(c => c.includes("Kristof")),
+    );
+    await page.keyboard.press("Meta+z");
+    for (let i = 0; i < 20 && (await doc()).includes("Mine here"); i++) await page.waitForTimeout(100);
+    s.check(
+      "⌘Z undoes this Mac's text",
+      !(await editor()).includes("Mine here") && !(await doc()).includes("Mine here"),
+    );
+    s.check("but not the peer's", (await editor()).includes("(Laurent)") && (await doc()).includes("(Laurent)"));
+  },
+
   // Notion-like editing on a page (ticket 3): /to + Enter makes a to-do, its box toggles the file, a heading dragged
   // above the text before it takes its section along
   // ticket 6: the file changes outside Relay while the page has unsaved typing; apart, both stay, on one line, the bar

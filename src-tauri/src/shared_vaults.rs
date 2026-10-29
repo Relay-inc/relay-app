@@ -14,7 +14,12 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use base64::Engine;
 use tauri::{AppHandle, Emitter, Manager};
+
+/// The app, for what reaches the windows from the documents (their editors): set when the live channels start.
+static APP: std::sync::OnceLock<AppHandle> = std::sync::OnceLock::new();
+fn b64(b: &[u8]) -> String { base64::engine::general_purpose::STANDARD.encode(b) }
 
 /// A shared vault as the settings keep it: the server it lives on (pinned by its fingerprint), its folder here and this
 /// device's role there ("admin" or "member").
@@ -204,7 +209,13 @@ pub struct Hub { vaults: Mutex<HashMap<String, Arc<Mutex<One>>>>, pub status: Mu
 impl Hub {
     /// Vault `v`'s documents, loaded once, on its newest key.
     fn docs(&self, data: &Path, v: &Shared, me: &Identity, key: Keys) -> Arc<Docs> {
-        let d = self.docs.lock().unwrap().entry(v.id.clone()).or_insert_with(|| Arc::new(client(v, me).docs(&v.id, key.clone(), &docs_dir(data, &v.id), &me.fingerprint()))).clone();
+        let d = self.docs.lock().unwrap().entry(v.id.clone()).or_insert_with(|| {
+            let d = Arc::new(client(v, me).docs(&v.id, key.clone(), &docs_dir(data, &v.id), &me.fingerprint()));
+            // what an open page's editor did not make reaches it: another member's edit, a file change taken in
+            let vid = v.id.clone();
+            d.subscribe(move |id, u| { if let Some(h) = APP.get() { h.emit("shared-doc", serde_json::json!({"vault": vid, "id": id, "update": b64(u)})).ok(); } });
+            d
+        }).clone();
         d.set_keys(key);
         d
     }
@@ -307,6 +318,40 @@ impl Hub {
         let (folder, path, by) = (folder.to_string(), path.to_string(), by.to_string());
         std::thread::spawn(move || { if let Ok(f) = filter(Path::new(&folder)) { docs.absorb(Path::new(&folder), &f, &path, &by).ok(); } });
     }
+    /// Vault `id`'s notes written out from their documents now, under its round lock (after a live update or an
+    /// edit in a page): a file a note replaces stays next to it, visible, as in a round.
+    pub fn export_now(&self, id: &str, folder: &str) {
+        self.with_vault(id, || {
+            let Some(docs) = self.loaded_docs(id) else { return };
+            let Ok(f) = filter(Path::new(folder)) else { return };
+            let stamp = chrono::Local::now().format("%Y-%m-%d %H%M").to_string();
+            let root = Path::new(folder);
+            let keep = |p: &str, b: &[u8]| { sync::write_atomic(&root.join(conflict_copy(&f, p, &crate::sys_name(), &stamp)), b, None).ok(); };
+            for p in docs.export(root, &f, &keep).0 { crate::watch::exported(&root.join(&p)); }
+        });
+    }
+    /// The note `path` of vault `id` when it is a document: its id and everything this Mac has of it (an editor opens
+    /// on that and takes the rest from `shared-doc`).
+    pub fn doc_open(&self, id: &str, path: &str) -> Option<(String, Vec<u8>)> {
+        let docs = self.loaded_docs(id)?;
+        let doc = docs.paths().get(path)?.clone();
+        let state = docs.diff(&doc, &[0]).ok()?; // [0]: an empty state vector, so everything
+        Some((doc, state))
+    }
+    /// An edit made in a page's editor: into the document and sent, then the note written out on a thread of its own.
+    pub fn doc_edit(&self, id: &str, folder: &str, doc: &str, update: &[u8]) -> Result<(), String> {
+        let docs = self.loaded_docs(id).ok_or("the workspace's documents are not loaded yet")?;
+        docs.apply_local(doc, update)?;
+        let (id, folder) = (id.to_string(), folder.to_string());
+        if let Some(h) = APP.get().cloned() { std::thread::spawn(move || h.state::<crate::App>().shared.export_now(&id, &folder)); }
+        Ok(())
+    }
+    /// This Mac's cursor on a page, to the other members on the live channel (nothing when it is not live).
+    pub fn send_awareness(&self, id: &str, doc: &str, body: &str) -> Result<(), String> {
+        // the channel cloned out of the lock: a slow write never holds up the rounds
+        let c = self.live.lock().unwrap().get(id).map(|(c, _)| c.clone()).ok_or("not live")?;
+        c.send("awareness", doc, body.as_bytes())
+    }
     /// Vault `id`'s documents, when its rounds loaded them.
     pub fn loaded_docs(&self, id: &str) -> Option<Arc<Docs>> { self.docs.lock().unwrap().get(id).cloned() }
     /// Notes of vault `id` moved (the Pages tab, `moves`: from, to; the files are there already): each that is a
@@ -389,6 +434,7 @@ impl Hub {
     /// (`live`) and reaches the windows as `shared-vaults`. The frames themselves have no reader yet: the documents that
     /// use them come next (docs/workspaces.md, Live channel).
     pub fn keep_live(&self, app: &AppHandle, data: &Path, list: &[Shared], me: &Identity) {
+        APP.set(app.clone()).ok();
         let mut live = self.live.lock().unwrap();
         // a channel of a vault no longer listed, or one still on an older key than the key file's, stops after this
         // lock is let go (its Down marks it not live); the second starts again with the new key
@@ -413,17 +459,8 @@ impl Hub {
                         let (h, vid, folder) = (h.clone(), vid.clone(), folder.clone());
                         std::thread::spawn(move || {
                             let st = h.state::<crate::App>();
-                            st.shared.with_vault(&vid, || {
-                                let Some(docs) = st.shared.docs.lock().unwrap().get(&vid).cloned() else { return };
-                                let Ok(f) = filter(Path::new(&folder)) else { return };
-                                let stamp = chrono::Local::now().format("%Y-%m-%d %H%M").to_string();
-                                let root = Path::new(&folder);
-                                // as in a round: a file a note replaces stays next to it, visible
-                                let keep = |p: &str, b: &[u8]| { sync::write_atomic(&root.join(conflict_copy(&f, p, &crate::sys_name(), &stamp)), b, None).ok(); };
-                                if docs.take_live(&doc, seq, &from, &body).is_ok_and(|x| x.is_some()) {
-                                    for p in docs.export(root, &f, &keep).0 { crate::watch::exported(&root.join(&p)); }
-                                }
-                            });
+                            let docs = st.shared.docs.lock().unwrap().get(&vid).cloned();
+                            if docs.is_some_and(|d| d.take_live(&doc, seq, &from, &body).is_ok_and(|x| x.is_some())) { st.shared.export_now(&vid, &folder); }
                         });
                         return;
                     }
@@ -431,6 +468,10 @@ impl Hub {
                     Event::Down(_) => false,
                     // a frame written with a longer member list than this Mac holds: the server holds entries back
                     Event::Frame(f) => {
+                        // a member's cursor on a page (its editor's awareness), sealed like any frame
+                        if f.kind == "awareness" {
+                            h.emit("shared-awareness", serde_json::json!({"vault": id, "doc": f.doc, "from": f.from, "body": String::from_utf8_lossy(&f.body)})).ok();
+                        }
                         let theirs = f.list.split_once(':').and_then(|(n, _)| n.parse::<u64>().ok()).unwrap_or(0);
                         let mine = load_key(&d, &vid).ok().and_then(|k| k.head).map_or(0, |(n, _)| n);
                         if theirs <= mine { return; }

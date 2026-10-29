@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|brain|plugins|plugins-dark|shared|shared-invite|shared-member|shared-keeper, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|brain|plugins|plugins-dark|shared|shared-invite|shared-member|shared-keeper|shared-live|shared-live-dark, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
@@ -12,6 +12,7 @@ import * as orch from "./fixtures/orchestrator";
 import * as brain from "./fixtures/brain";
 import * as git from "./fixtures/git";
 import * as files from "./fixtures/files";
+import * as Y from "yjs";
 // the example plugin's real view: the harness serves it from a blob, where the app has the relay-plugin:// scheme
 import diceView from "../packages/plugin-example/view.html?raw";
 
@@ -57,7 +58,9 @@ if (fixture === "orch-plain") settings = { ...settings, workerCrabs: false };
 // which Members (shared_vault_info) finds: the backend then keeps the server under Machines
 const member = fixture === "shared-member" || fixture === "shared-keeper";
 // shared-rekey: someone left the vault, and the key change waits for a member whose Relay has no public key yet
-const shared = fixture === "shared" || fixture === "shared-invite" || fixture === "shared-rekey" || member;
+// shared-live (-dark): "shared", and a page of the side vault is a shared document two mock peers edit (ticket 9)
+const live = fixture === "shared-live" || fixture === "shared-live-dark";
+const shared = fixture === "shared" || fixture === "shared-invite" || fixture === "shared-rekey" || member || live;
 if (shared)
   settings = {
     ...settings,
@@ -568,6 +571,18 @@ function handle(cmd: string, a: Args): unknown {
       if (s) s.docs = !!a.on;
       return null;
     }
+    case "shared_doc_open": {
+      // shared-live: an absolute page (another workspace's note) is a document, seeded once from the note's text
+      if (!live || !String(a.path).startsWith("/")) return null;
+      if (!liveDoc.getText("md").length) liveDoc.getText("md").insert(0, vault.noteText(String(a.path)).text);
+      return { vault: "v1", doc: "d1", state: b64(Y.encodeStateAsUpdate(liveDoc)), me: "me", name: "Kristof" };
+    }
+    case "shared_doc_edit":
+      Y.applyUpdate(liveDoc, unb64(String(a.update)), "editor");
+      return null;
+    case "shared_awareness":
+      liveCursors.push(String(a.body));
+      return null;
     case "shared_doc_absorb":
       // a shared workspace's document taking a file change: nothing to show in the harness
       return null;
@@ -1358,6 +1373,17 @@ let pages: string[] | null = null;
 const trashed = new Map<string, string[]>();
 const pageList = () => pages ?? vault.notes;
 const pageRel = (p: unknown) => String(p).replace(vault.VAULT, "").replace(/^\//, "");
+// shared-live: the Mac's document of the page, which the editor and the mock peers share, and the cursors sent
+const liveDoc = new Y.Doc();
+const liveCursors: string[] = [];
+const b64 = (u: Uint8Array) => btoa(Array.from(u, b => String.fromCharCode(b)).join(""));
+const unb64 = (s: string) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+// the index just after `after` in the document's text (its end when not found)
+const liveAt = (after: string) => {
+  const text = liveDoc.getText("md").toString();
+  const i = text.indexOf(after);
+  return i < 0 ? text.length : i + after.length;
+};
 // the page editor's saves (write_note), and whether a note changed on disk since it was read
 const written = new Map<string, { text: string; hash: string }>();
 let writes = 0;
@@ -1449,6 +1475,27 @@ const harness = {
     written.set(lastPage, { text: now.replace(find, put), hash });
     emit("note-changed", { path: lastPage, hash, relinked: false });
   },
+  /** shared-live: a peer types `put` after `after` in the page's document (as another member's update reaches it) */
+  peerType: (after: string, put: string) => {
+    const peer = new Y.Doc();
+    Y.applyUpdate(peer, Y.encodeStateAsUpdate(liveDoc));
+    const before = Y.encodeStateVector(peer);
+    peer.getText("md").insert(liveAt(after), put);
+    const update = Y.encodeStateAsUpdate(peer, before);
+    Y.applyUpdate(liveDoc, update, "peer");
+    emit("shared-doc", { vault: "v1", id: "d1", update: b64(update) });
+  },
+  /** shared-live: a peer's cursor (from: their device) after `after`, selecting `select` characters before it */
+  peerCursor: (from: string, name: string, after: string, select = 0) => {
+    const text = liveDoc.getText("md");
+    const pos = (i: number) => Y.relativePositionToJSON(Y.createRelativePositionFromTypeIndex(text, i));
+    const head = liveAt(after);
+    const body = JSON.stringify({ name, anchor: pos(head - select), head: pos(head) });
+    emit("shared-awareness", { vault: "v1", doc: "d1", from, body });
+  },
+  /** shared-live: the page's document as the Mac holds it now, and the cursors the editor sent */
+  liveText: () => liveDoc.getText("md").toString(),
+  liveCursors: () => [...liveCursors],
   /** the board pipeline's calls so far */
   pipelineCalls: () => structuredClone(pipelineCalls),
   /** what gh says about the pipeline's PRs from now on */

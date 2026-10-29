@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { diffLines, lineChanges, merge3 } from "./merge.ts";
+import { diffLines, headAfter, lineChanges, merge3, oneChange } from "./merge.ts";
 
 const base = "# Title\n\none\ntwo\nthree\nfour\n";
 
@@ -62,4 +62,17 @@ test("lineChanges applied in order give the new text", () => {
   ];
   for (const [before, after] of cases)
     assert.equal(apply(before, lineChanges(before, after)), after, JSON.stringify(before));
+});
+
+test("oneChange keeps what both texts share at the start and the end", () => {
+  assert.deepEqual(oneChange("one two three", "one 2 three"), { from: 4, to: 7, insert: "2" });
+  assert.deepEqual(oneChange("aaa", "aaaa"), { from: 3, to: 3, insert: "a" });
+  assert.deepEqual(oneChange("same", "same"), { from: 4, to: 4, insert: "" });
+});
+
+test("headAfter moves the head's end with what changed before it, not after it", () => {
+  assert.equal(headAfter([{ retain: 2 }, { insert: "xy" }], 10), 12, "typed in the head");
+  assert.equal(headAfter([{ retain: 10 }, { insert: "xy" }], 10), 10, "at the end: the body's");
+  assert.equal(headAfter([{ retain: 8 }, { delete: 5 }], 10), 8, "a removal across the end");
+  assert.equal(headAfter([{ retain: 12 }, { delete: 3 }], 10), 10, "in the body");
 });

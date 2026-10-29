@@ -419,6 +419,7 @@ const en = {
   "drawer.detail": "Details",
   "page.edited": "Edited {ago}",
   "page.ask": "Ask Claude",
+  "page.peers": "On this page: {names}",
   "page.editor": "Page text",
   "page.updatedLinks": "Links updated",
   "page.updatedByClaude": "Updated by Claude",
