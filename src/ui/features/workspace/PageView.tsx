@@ -29,7 +29,8 @@ import { Icon } from "../../components/Icon";
 import { Note } from "../../components/Note";
 import { ProjectImg } from "../../components/ProjectImg";
 import { FRONTMATTER } from "./NoteDetail";
-import { PageEditor, type HeadWriter } from "./PageEditor";
+import { PageEditor, type CommentsApi, type HeadWriter } from "./PageEditor";
+import { PageComments } from "./PageComments";
 import type { Peer } from "../../../application/workspace/coedit";
 import { Properties } from "./Properties";
 import { PageHistory, VersionDiff } from "./PageHistory";
@@ -57,20 +58,29 @@ export function PageView({ target, className }: { target: string; className: str
 
   const headRef = useRef<HeadWriter["current"]>(null);
   const [peers, setPeers] = useState<Peer[]>([]); // who else is on a shared document's page
-  // the history beside the page, and a version picked in it (what changed since shows in the page's place); both
-  // belong to the page they were opened on
+  // what is beside the page (its history or its comments, one at a time), and a version picked in the history (what
+  // changed since shows in the page's place); both belong to the page they were opened on
   const [view, setView] = useState<{
     on: string;
-    history: boolean;
+    side: "history" | "comments" | null;
     picked: { v: PageVersion; kind: History["kind"] } | null;
   }>({
     on: target,
-    history: false,
+    side: null,
     picked: null,
   });
-  const history = view.on === target && view.history;
+  const side = view.on === target ? view.side : null;
+  const history = side === "history";
   const picked = view.on === target ? view.picked : null;
-  const setPicked = (p: typeof picked) => setView({ on: target, history, picked: p });
+  const setPicked = (p: typeof picked) => setView({ on: target, side, picked: p });
+  // the comments' side of the editor, and what it tells them
+  const commentsApi = useRef<CommentsApi | null>(null);
+  const [selected, setSelected] = useState(false);
+  // ⌘⌥M: the selection it was pressed on, as a new comment's draft (`n` tells one press from the next)
+  const [compose, setCompose] = useState<{ n: number; sel: ReturnType<CommentsApi["selection"]> }>({ n: 0, sel: null });
+  const [openThread, setOpenThread] = useState<string | null>(null);
+  const [edits, setEdits] = useState(0);
+  const showComments = () => setView({ on: target, side: "comments", picked: null });
   const { title, head, body } = page ? pageParts(path, page.text) : { ...noteTitle(path, noteName(path)), head: "" };
   const folders = path.split("/").slice(0, -1);
 
@@ -110,9 +120,18 @@ export function PageView({ target, className }: { target: string; className: str
           title={t("page.history")}
           aria-label={t("page.history")}
           aria-pressed={history}
-          onClick={() => setView({ on: target, history: !history, picked: null })}
+          onClick={() => setView({ on: target, side: history ? null : "history", picked: null })}
         >
           <Icon name="clock" className="glyph size-4" />
+        </button>
+        <button
+          className={`size-7 grid place-items-center rounded-md text-secondary hover:bg-fill hover:text-label ${side === "comments" ? "bg-fill-2 text-label" : ""}`}
+          title={t("page.comments")}
+          aria-label={t("page.comments")}
+          aria-pressed={side === "comments"}
+          onClick={() => setView({ on: target, side: side === "comments" ? null : "comments", picked: null })}
+        >
+          <Icon name="talk" className="glyph size-4" />
         </button>
         <button
           className="flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-separator text-[13px] text-label hover:bg-fill"
@@ -208,11 +227,39 @@ export function PageView({ target, className }: { target: string; className: str
                   headRef={headRef}
                   split={text => pageParts(path, text)}
                   onPeers={setPeers}
+                  comments={{
+                    onApi: api => {
+                      commentsApi.current = api;
+                    },
+                    onSelect: setSelected,
+                    onKey: () => {
+                      showComments();
+                      const sel = commentsApi.current?.selection() ?? null;
+                      setCompose(c => ({ n: c.n + 1, sel }));
+                    },
+                    onOpen: id => {
+                      showComments();
+                      setOpenThread(id);
+                    },
+                    onEdited: () => setEdits(n => n + 1),
+                  }}
                 />
               )}
             </article>
           )}
         </div>
+        {side === "comments" && page ? (
+          <PageComments
+            key={target}
+            page={target}
+            api={commentsApi}
+            hasSelection={selected}
+            compose={compose}
+            open={openThread}
+            onOpen={setOpenThread}
+            edits={edits}
+          />
+        ) : null}
         {history && page ? (
           <PageHistory
             page={target}

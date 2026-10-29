@@ -313,6 +313,27 @@ When a note that is a document is open as a page, its editor binds to the docume
   gives (its Mac's), so a member can show another name; it is not a proof of who is typing.
 - **Closed.** The page's Y.Doc goes; the Mac's documents keep syncing, so another Mac's typing keeps the file current.
 
+### Comments on a page
+
+A page's comments (the speech bubble in its bar, or ⌥⌘M on a selection) never touch its `.md`. Each thread is a log of
+entries that are never rewritten: a comment (its text, the quoted text and an anchor), replies, resolve, reopen and
+delete (`src-tauri/src/comments.rs`).
+
+- **On a document.** The entries live in the note's sidecar document `<id>#comments` (map `c`, one key per entry),
+  sealed and synced like the note, live on the channel. Who wrote an entry is the author of the sealed update that last
+  wrote it (`Docs::comments`, the `owners` in its cursor), never what the entry says of itself: an entry another member
+  overwrites counts as theirs from then on. A comment's anchor is two Yjs relative positions in the note's text, so it
+  stays on its words whatever anyone types around it; once they are deleted the thread says "On deleted text".
+- **Anyone** replies, resolves and reopens; **only an entry's author deletes it**: a delete by someone else is left out
+  when the threads are read. A modified Relay can still remove a key from the sidecar itself; the document's history
+  keeps what it held.
+- **Any other note** (a workspace of the user's own, a shared one whose notes are not documents) keeps its comments in
+  `<workspace>/.relay/comments/<path>.json` on this Mac only (hidden, so no round syncs it), anchored by the quoted text
+  and where it began.
+- **Agents.** `relay comments.list path=…` reads a page's threads in the conversation's own workspace (runs);
+  `relay comments.reply path=… id=… text=…` replies as the user (asks first). A path outside that workspace, or
+  through a link out of it, is refused.
+
 ## Record
 
 `u32 big endian (meta_len | epoch << 20) || meta (meta_len bytes, at most 64 KiB) || data`

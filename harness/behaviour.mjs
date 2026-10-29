@@ -619,10 +619,45 @@ const SCENARIOS = {
     s.check("the diff shows with Restore", await waitText(page, "Restore this version"));
     await click(page.getByRole("button", { name: "Restore this version" }));
     const restore = (await s.calls("page_restore")).pop();
-    s.check("restore was asked for the oldest version", !!restore?.args.text && /Stand van zaken/.test(restore.args.text));
+    s.check(
+      "restore was asked for the oldest version",
+      !!restore?.args.text && /Stand van zaken/.test(restore.args.text),
+    );
     s.check("the toast says so", await waitText(page, "Restored the version of"));
     const now = await page.evaluate(() => window.__harness.written());
     s.check("the page's note holds that version", now === restore?.args.text);
+  },
+
+  // comments on a page (ticket 11): a word selected gets a comment, the thread a reply, then it is resolved
+  async pageComments(s) {
+    await s.load();
+    const { page } = s;
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText(page, "Stand van zaken");
+    await click(page.getByRole("button", { name: "Comments", exact: true }));
+    s.check("the threads load", await waitText(page, "Is this still the first thing to do?"));
+    s.check("the commented text is marked in the page", (await page.locator(".cm-comment").count()) > 0);
+    await page.locator(".cm-content").getByText("Second open loop").dblclick();
+    await click(page.getByRole("button", { name: "Comment", exact: true }));
+    await page.getByPlaceholder("Add a comment…").fill("Who picks this up?");
+    await click(page.getByRole("button", { name: "Comment", exact: true }).last());
+    const made = (await s.calls("page_comment")).pop();
+    s.check(
+      "a comment on the selection was made",
+      made?.args.kind === "comment" && /Second|open|loop/.test(made.args.quote),
+    );
+    s.check("it shows as a thread", await waitText(page, "Who picks this up?"));
+    await click(page.getByRole("button", { name: "Reply", exact: true }).last());
+    await page.getByPlaceholder("Reply…").fill("Ben does");
+    await click(page.getByRole("button", { name: "Reply", exact: true }).last());
+    s.check("the reply shows", await waitText(page, "Ben does"));
+    await click(page.getByRole("button", { name: "Resolve", exact: true }).last());
+    s.check("resolved goes under Resolved", await waitText(page, "Resolved (2)"));
+    s.check(
+      "the note's file is untouched by comments",
+      !(await s.calls("write_note")).some(c => /Who picks this up/.test(c.args.text)),
+    );
   },
 
   // managing files in the Pages tab (ticket 5): a new page opens, a rename says how many links follow and the tree

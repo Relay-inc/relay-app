@@ -29,7 +29,7 @@ pub fn sock() -> PathBuf { crate::broker::dir().join("relay.sock") }
 
 /// One command: where it runs and what the user decides about it.
 struct Item { ext: &'static str, id: &'static str, about: &'static str, args: &'static [(&'static str, &'static str)], write: bool, default: Policy, run: Run }
-enum Run { Board(&'static Provider, &'static Action), Mail, Reminders, Calendar }
+enum Run { Board(&'static Provider, &'static Action), Mail, Reminders, Calendar, Comments }
 
 const MAIL: &[(&str, &str, &[(&str, &str)], bool)] = &[
     ("search", "Search Gmail (All Mail) with Gmail search syntax, newest first: ids, senders, subjects, dates.", &[("query", "Gmail search"), ("account?", "account email"), ("limit?", "1 to 50, default 20")], false),
@@ -53,6 +53,9 @@ fn items() -> Vec<Item> {
     // the vault's own file, every change is in its git history: runs without a card, like a mail draft
     out.extend(REMINDERS.iter().map(|(id, about, args)| Item { ext: "reminders", id, about, args, write: *id != "list",
         default: Policy::Auto, run: Run::Reminders }));
+    // the conversation's own workspace's pages: reading runs, a reply is the user's word under their name, so it asks
+    out.push(Item { ext: "comments", id: "list", about: "The open comment threads on a page of this conversation's workspace (resolved ones marked), with their ids, quotes and replies.", args: &[("path", "the note's path in the workspace, e.g. Clients/o2o.md")], write: false, default: Policy::Auto, run: Run::Comments });
+    out.push(Item { ext: "comments", id: "reply", about: "Reply to a comment thread on a page of this conversation's workspace, as the user.", args: &[("path", "the note's path in the workspace"), ("id", "the thread's id from comments.list"), ("text", "the reply")], write: true, default: Policy::Ask, run: Run::Comments });
     out.push(Item { ext: "calendar", id: "meetings", about: "Meetings on the user's calendars from an hour ago to 12 hours ahead, or of one whole day, with errors per calendar.", args: &[("date?", "YYYY-MM-DD, a whole local day")], write: false, default: Policy::Auto, run: Run::Calendar });
     out
 }
@@ -100,6 +103,7 @@ fn ready(app: &AppHandle, ext: &str) -> bool {
         "mail" => crate::mail_on(&s),
         "reminders" => crate::vault_of(&s)["ok"] == true,
         "calendar" => !crate::calendar::feeds(&s).is_empty(),
+        "comments" => true,
         id => providers::get(id).is_ok_and(|p| (p.ready)(&s["integrations"][p.id]) && providers::token(p).is_some()),
     }
 }
@@ -219,6 +223,7 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, known: bool, action: &str, a
         }
         Run::Mail => mail(app, key, &provider, it.id, args),
         Run::Reminders => reminder(app, it.id, args),
+        Run::Comments => comments(app, key, it.id, args),
         Run::Calendar => {
             let s = app.state::<crate::App>().settings.lock().unwrap().clone();
             match args["date"].as_str() {
@@ -278,6 +283,23 @@ fn mail(app: &AppHandle, key: &str, provider: &str, name: &str, args: &Value) ->
         app.emit("agent", json!({"project": key, "provider": provider, "event": {"type": "draft_saved", "folder": v["folder"], "to": v["to"], "cc": v["cc"], "bcc": v["bcc"]}})).ok();
     }
     Ok(v)
+}
+
+/// A page's comments in the conversation's own workspace (the vault it runs in), never another's.
+fn comments(app: &AppHandle, key: &str, name: &str, args: &Value) -> Result<Value, String> {
+    let st = app.state::<crate::App>();
+    let a = |k: &str| board_core::arg(args, k).unwrap_or_default();
+    let path = a("path");
+    if path.starts_with('/') || path.split('/').any(|p| p == "..") { return Err("path is relative to the conversation's workspace".into()); }
+    let ws = st.sids.lock().unwrap().get(key).map(|s| s.vault.clone()).filter(|v| !v.is_empty());
+    let folder = match ws { Some(v) => v, None => crate::need_vault(&st)? };
+    let root = std::path::PathBuf::from(crate::vault::canon(&folder));
+    let target = root.join(&path).to_string_lossy().into_owned();
+    // a link inside the workspace does not lead an agent into another one
+    if !std::fs::canonicalize(&target).is_ok_and(|real| real.starts_with(&root)) { return Err(format!("not a note of this workspace: {path}")); }
+    if name == "list" { return tauri::async_runtime::block_on(crate::comments_of(&st, &target)).map(|v| v["threads"].clone()); }
+    let id = crate::comment_add(&st, &target, "reply", &a("id"), &a("text"), "", &Value::Null)?;
+    Ok(json!({ "id": id }))
 }
 
 fn reminder(app: &AppHandle, name: &str, args: &Value) -> Result<Value, String> {
