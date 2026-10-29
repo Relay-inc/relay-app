@@ -1,1 +1,1 @@
-This conversation is about the vault project "{{project}}"{{context}}. Read its project note before answering.
+This conversation is about the vault project "{{project}}"{{context}}. Read its project note before answering. When the conversation settles a decision or changes where the project stands, update that note: the decision and its reason in a line, the state and next step rewritten in place, no steps or detail.

@@ -1160,9 +1160,9 @@ const en = {
   "set.timeFromSessions": "Propose the day's time from conversations",
   "set.timeFromSessionsHelp":
     "From 16:00, Today proposes the day's <b>Productive</b> time entries from when you wrote in your conversations (Claude Code). Nothing is booked without your approval. Off: Relay doesn't read the transcripts for this.",
-  "set.captureOnClose": "Write vault updates when a conversation closes",
+  "set.captureOnClose": "Write vault updates when a conversation closes or goes quiet",
   "set.captureOnCloseHelp":
-    "When you close a conversation, Claude reads it once more and writes what belongs in the vault straight in: decisions, project state, follow-ups. Nothing is shown or asked; the vault's git history is the review. Skips quick questions (fewer than 3 messages).",
+    "When you close a conversation, or it sits for 30 minutes after a turn, Claude reads it once more and writes what belongs in the vault straight in: decisions and why, where a project stands, follow-ups with a date. No steps or detail. Nothing is shown or asked; the vault's git history is the review. Skips quick questions (fewer than 3 messages) and conversations with nothing new since the last read.",
   "set.workerCrabs": "Crabs for the orchestrator's workers",
   "set.workerCrabsHelp":
     "Each worker in the Orchestrator's list gets a pixel crab dressed for its model, walking while it works. Off: a plain status mark.",
