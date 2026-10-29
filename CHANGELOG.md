@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.41] - 2026-10-29
+
 ### Added
 
 - **Make a member an admin of a workspace**: an admin sees Make admin / Make member next to each member under Members, a signed entry in the member list that the server's role follows. A workspace's role badge and the Members list read the member list now, so an admin whom another admin's upgrade to 0.0.40 added as a member no longer shows Admin while the documents switch stays out of reach
