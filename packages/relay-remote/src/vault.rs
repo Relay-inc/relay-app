@@ -473,8 +473,9 @@ impl SealedRemote {
 #[derive(Debug, Default)]
 /// `rekeying`: someone left and the key has not changed yet, or the member list is held back (it could hold a removal).
 /// `docs`: an admin turned on making the workspace's notes documents (the member list's `docs-on`); `admin`: this Mac
-/// is an admin of the list; `admins`: the list's admins (fingerprints), None when there is no list yet.
-pub struct KeyStep { pub keys: Option<Keys>, pub warnings: Vec<String>, pub changed: Vec<(String, String)>, pub errors: Vec<String>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>> }
+/// is an admin of the list; `admins`: the list's admins and `listed` all its members (fingerprints), None when there
+/// is no list yet.
+pub struct KeyStep { pub keys: Option<Keys>, pub warnings: Vec<String>, pub changed: Vec<(String, String)>, pub errors: Vec<String>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>> }
 use crate::members::{self, List};
 impl SealedRemote {
     fn info(&self) -> Result<Value, String> { Ok((self.call)(json!({"op": "vault_info", "vault": self.vault}), None, None)?.0["vault"].take()) }
@@ -597,6 +598,7 @@ impl SealedRemote {
         step.rekeying = list.pending.is_some();
         (step.docs, step.admin) = (list.docs, list.admin(&me));
         step.admins = Some(list.members.iter().filter(|(_, m)| m.admin).map(|(fp, _)| fp.clone()).collect());
+        step.listed = Some(list.members.keys().cloned().collect());
         if list.pending.is_some_and(|at| now.saturating_sub(at) > 3600) { step.warnings.push("Someone left over an hour ago, and the key has not changed since.".into()); }
         let before = k.epoch();
         while k.epoch() < list.epoch {
@@ -713,6 +715,24 @@ impl SealedRemote {
         if !list.members.contains_key(fp) { return Err("not on this workspace's member list".into()); }
         if list.admin(fp) == on { return Ok(()); }
         let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: if on { "promote" } else { "demote" }.into(), fp: fp.into(), ..Default::default() });
+        self.append(&mut k, &list, &e, json!({}), save)
+    }
+    /// An admin adds a member the server has and the list lacks (its Relay published keys only after the list was made,
+    /// so trust on upgrade skipped it): an `add` as member, on the same proof as trust on upgrade, its keys signed by it
+    /// and vouched for under the newest key. Refused while a removal waits: until the key changes, the removed member
+    /// still holds it and could vouch.
+    pub fn add_listed(&self, fp: &str, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<(), String> {
+        let mut k = self.keys();
+        let v = self.info()?;
+        let me = v["me"].as_str().unwrap_or_default().to_string();
+        let (list, _) = self.list(&k)?.ok_or("this workspace has no member list yet")?;
+        if !list.admin(&me) { return Err("only an admin can add a member to the list".into()); }
+        if list.members.contains_key(fp) { return Ok(()); }
+        if list.pending.is_some() { return Err("someone left and the key has not changed yet: add a member after that".into()); }
+        if k.epoch() != list.epoch { return Err("this Mac does not have the newest key yet".into()); }
+        let m = v["members"].as_array().into_iter().flatten().find(|m| m["fp"] == fp).ok_or("not a member of this workspace")?;
+        let (id, pk) = k.proven(&self.vault, m, None).ok_or("its keys are not vouched for under the newest key: it needs an invite")?;
+        let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "add".into(), fp: fp.into(), id, pk, role: "member".into(), ..Default::default() });
         self.append(&mut k, &list, &e, json!({}), save)
     }
     /// An admin trusts a member's new keys (it set up Relay again): a `device` entry with what the member publishes now,

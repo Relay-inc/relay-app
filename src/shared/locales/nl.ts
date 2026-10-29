@@ -1050,6 +1050,10 @@ export default {
   "set.sharedMember": "Lid",
   "set.sharedMakeAdmin": "Maak beheerder",
   "set.sharedMakeMember": "Maak lid",
+  "set.sharedNotListed": "Niet op de lijst",
+  "set.sharedAddToList": "Zet op de lijst",
+  "set.sharedNotListedHint":
+    "Die Relay werd bijgewerkt nadat deze workspace zijn ledenlijst kreeg, dus die Mac staat er nog niet op. Voeg hem alleen toe als het de Mac is die je kent.",
   "set.sharedInvite": "Uitnodigen…",
   "set.sharedMembers": "Leden",
   "set.sharedLeave": "Verlaten",

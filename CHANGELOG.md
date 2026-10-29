@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **A member who updated late can join the member list**: a member of a team workspace whose Relay updated after the workspace got its member list was never on it, so Make admin failed with "not on this workspace's member list" and Remove couldn't work either. Members now shows such a member as Not on the list, and an admin adds it with Add to list, on the same proof as the upgrade used
+
 ## [0.0.41] - 2026-10-29
 
 ### Added

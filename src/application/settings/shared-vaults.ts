@@ -188,6 +188,16 @@ export const setMemberAdmin = (id: string, fp: string, on: boolean) =>
     });
     await loadInfo(id);
   });
+/** An admin adds a member the server has and the member list lacks: its Relay published keys after the list was made. */
+export const addToList = (id: string, fp: string) =>
+  run(id, async () => {
+    await backend.sharedVaultAdd(id, fp);
+    change(draft => {
+      const s = draft.status[id];
+      if (s?.listed) s.listed = [...s.listed.filter(l => l !== fp), fp];
+    });
+    await loadInfo(id);
+  });
 export const removeMember = (id: string, fp: string) =>
   run(id, async () => {
     await backend.sharedVaultRemove(id, fp);
