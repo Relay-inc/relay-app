@@ -29,14 +29,17 @@ import { MigrateDialog } from "./MigrateDialog";
 
 const RECENT = "pages:recent";
 const FOLDERS = "pages:folders";
+// unfolded like a folder (pagesOpen), so it starts folded on every start
+const SYSTEM = "pages:system";
 
 /** The sidebar's Pages tab: the notes of the workspace shown. Recent, its contexts with their projects (a project
  *  unfolds to its folder), then its top folders; the search lists the notes it finds instead. A note opens as a page.
+ *  An admin finds the notes the vault runs on (CLAUDE.md, rules, scripts, templates) folded under System, a member not.
  *  Right-click: new page or folder, rename, move, duplicate, delete (to the trash, with Undo); on a project, move or
  *  copy it to another workspace. A page or folder dragged onto a folder moves there. */
 export function PagesView() {
   const { t } = useT();
-  const { model, recent, found } = useDerived(() => pagesView());
+  const { model, system, recent, found } = useDerived(() => pagesView());
   const open = useDerived(() => openPagePath());
   const unfolded = useNavigationStore(s => s.sidebar.pagesOpen);
   const collapsed = useNavigationStore(s => s.sidebar.collapsed);
@@ -141,14 +144,15 @@ export function PagesView() {
     />
   );
   // a folder's subfolders, then its notes, one step in; `skip` is the note its project row already opens
-  const contents = (folder: PageFolder, skip = "") => (
+  // `scope` keeps a folder's unfolding apart when System shows a folder the tree has too (Resources)
+  const contents = (folder: PageFolder, skip = "", scope = "") => (
     <div className="ml-4">
-      {folder.folders.map(sub => renderFolder(sub))}
+      {folder.folders.map(sub => renderFolder(sub, scope))}
       {folder.notes.filter(path => path !== skip).map(path => note(path))}
     </div>
   );
-  const renderFolder = (folder: PageFolder) => {
-    const isOpen = unfolded.has(folder.path);
+  const renderFolder = (folder: PageFolder, scope = "") => {
+    const isOpen = unfolded.has(scope + folder.path);
     return (
       <div key={folder.path} className={dropOn === folder.path ? "rounded-md ring-2 ring-accent" : ""}>
         <SidebarRow
@@ -158,12 +162,12 @@ export function PagesView() {
           data-folder={folder.path}
           name={folder.name}
           meta={{ kind: "count", n: folder.count }}
-          onClick={() => togglePage(folder.path)}
+          onClick={() => togglePage(scope + folder.path)}
           onContextMenu={onMenu(folder.path, "folder")}
           {...drag(folder.path)}
           {...drop(folder.path)}
         />
-        {isOpen ? contents(folder) : null}
+        {isOpen ? contents(folder, "", scope) : null}
       </div>
     );
   };
@@ -254,11 +258,29 @@ export function PagesView() {
         {head(FOLDERS, t("pages.folders"))}
         {collapsed[FOLDERS] ? null : (
           <>
-            {model.top.folders.map(renderFolder)}
+            {model.top.folders.map(folder => renderFolder(folder))}
             {model.top.notes.map(path => note(path))}
           </>
         )}
       </div>
+      {system ? (
+        <div className="mt-3" data-section={SYSTEM}>
+          <SidebarHead
+            label={t("pages.system")}
+            tint=""
+            count={0}
+            collapsed={!unfolded.has(SYSTEM)}
+            dropBefore={false}
+            onClick={() => togglePage(SYSTEM)}
+          />
+          {unfolded.has(SYSTEM) ? (
+            <>
+              {system.folders.map(folder => renderFolder(folder, `${SYSTEM}/`))}
+              {system.notes.map(path => note(path))}
+            </>
+          ) : null}
+        </div>
+      ) : null}
       {overlays}
     </>
   );

@@ -1270,6 +1270,22 @@ const VIEWS = {
     await waitText("Folders");
     await settle(page);
   },
+  // the admin's Pages tab: the notes the vault runs on (CLAUDE.md, rules, templates) under System, unfolded
+  "pages-system": async () => {
+    await VIEWS["pages-tab"]();
+    await page.locator('[data-section="pages:system"] [role="button"]').first().click();
+    await page.locator('[data-folder="Resources"]').last().click();
+    await page.locator('[data-page="CLAUDE.md"]').scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // a member's Pages tab of the shared workspace: no System section, its CLAUDE.md nowhere
+  "pages-system-member": async () => {
+    await open(page, server.url, { fixture: "shared-member" });
+    await page.keyboard.press("Control+Digit3");
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await waitText("Folders");
+    await settle(page);
+  },
   // a page open in Personal, its bar naming Personal (fixture shared, workspaces kept apart)
   "workspace-page": async () => {
     await open(page, server.url, { fixture: "shared" });

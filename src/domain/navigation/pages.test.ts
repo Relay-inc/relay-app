@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findPages, pagesModel, pageTree, recentPages } from "./pages.ts";
+import { findPages, isSystemPage, pagesModel, pageTree, recentPages } from "./pages.ts";
 
 const paths = [
   "Contexts/Agency/Portfolio/Beacon/Beacon.md",
@@ -57,4 +57,18 @@ test("the search matches note names, the recent notes are this workspace's, newe
     recentPages(touches, "/v", path => paths.includes(path)),
     ["README.md", "Calendar/2026-10-01.md"],
   );
+});
+
+test("the notes the vault runs on are system pages, the ones people write in are not", () => {
+  for (const path of [
+    "CLAUDE.md",
+    "AGENTS.md",
+    "System/rules/core/memory.md",
+    "scripts/x.md",
+    "Resources/Meta/Claude/a.md",
+    "Resources/Templates/Meeting.md",
+  ])
+    assert.equal(isSystemPage(path), true, path);
+  for (const path of ["README.md", "Resources/Reference/Article.md", "Contexts/Work/CLAUDE.md", "Systems.md"])
+    assert.equal(isSystemPage(path), false, path);
 });

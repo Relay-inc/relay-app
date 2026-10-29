@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- **Pages tab keeps the vault's own files apart**: CLAUDE.md, AGENTS.md and the `System`, `scripts`, `Resources/Meta` and `Resources/Templates` folders no longer sit between your notes. An admin of the workspace (always, in your own vault) finds them folded under System at the bottom and in the search; a member of a shared workspace doesn't see them in the tab, and the note counts leave them out
+
 ### Fixed
 
 - **Workspaces stay apart**: switching workspace puts away the page, conversation or project board that belongs to the one you left, and the note in the drawer, and opens what was open in the new one, else Today. Coming back opens it again. A page names its own workspace in its bar, not the one the sidebar shows

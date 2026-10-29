@@ -50,7 +50,7 @@ import { closeWork, openWork } from "../../../application/today/work";
 import { activeFolder, workspaces } from "../../../application/navigation/workspaces";
 import { projectVault as homeOf } from "../../../application/navigation/migrate";
 import { MigrateDialog } from "./MigrateDialog";
-import { chatCount, setSidebarTab, sidebarTab, workspacePaths } from "../../../application/navigation/pages";
+import { chatCount, pagesView, setSidebarTab, sidebarTab } from "../../../application/navigation/pages";
 import { PagesView } from "./PagesView";
 import { vaultName } from "../../../application/workspace/vault";
 import "../../styles/navigation.css";
@@ -78,7 +78,7 @@ export function NavigationView({ className }: { className: string }) {
   const tab = useDerived(() => sidebarTab());
   const files = useDerived(filesOn);
   const chatsN = useDerived(() => chatCount());
-  const pagesN = useDerived(() => workspacePaths().length);
+  const pagesN = useDerived(() => pagesView().total);
   const tabKey = useKeyLabel("app.sidebarTab");
   const selected = useNavigationStore(s => s.selected);
   const update = useNavigationStore(s => s.update);

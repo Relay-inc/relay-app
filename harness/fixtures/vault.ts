@@ -243,6 +243,10 @@ export const notes = [
   "Contexts/Agency/Projects/Northwind Portal/Documents/Portal Architecture.md",
   "Resources/Frameworks/Feasibility Analysis.md",
   "Calendar/2026-10-01.md",
+  // the notes the vault runs on: the Pages tab shows them to an admin under System
+  "CLAUDE.md",
+  "Resources/Templates/Meeting.md",
+  "System/rules/core/memory.md",
 ];
 export const noteText = (target: string) => {
   const name = target.split("/").pop()!.replace(/\.md$/, "");

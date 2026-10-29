@@ -506,7 +506,13 @@ function handle(cmd: string, a: Args): unknown {
       return {
         root: vault.VAULT,
         notes: shared
-          ? [...pageList(), ...vault.teamNotes, "/Users/me/Shared/Northwind/Clients/Northwind.md"]
+          ? [
+              ...pageList(),
+              ...vault.teamNotes,
+              "/Users/me/Shared/Northwind/Clients/Northwind.md",
+              "/Users/me/Shared/Northwind/CLAUDE.md",
+              "/Users/me/Shared/Northwind/System/rules/team.md",
+            ]
           : pageList(),
       };
     // the Pages tab's file operations, on the main vault's list (a move counts 3 links in 2 notes)

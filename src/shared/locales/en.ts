@@ -13,6 +13,7 @@ const en = {
   "nav.tabPages": "Pages",
   "pages.recent": "Recent",
   "pages.folders": "Folders",
+  "pages.system": "System",
   "pages.none": "No page with that name",
   "pages.untitled": "Untitled",
   "pages.deleteTitle": "Delete {name}?",
