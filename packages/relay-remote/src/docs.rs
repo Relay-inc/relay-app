@@ -192,6 +192,26 @@ fn make_edits(doc: &Doc, cur: &str, edits: &[(usize, usize, String)]) -> Vec<u8>
 /// A note's conflict name: "Plan.md" -> "Plan (conflict 1a2b3c4d).md", the same on every Mac for the same document.
 fn conflict_path(path: &str, id: &str) -> String { format!("{} (conflict {}).md", path.trim_end_matches(".md"), &id[..8]) }
 
+/// One editing session of a document as history shows it: the updates `from`..=`to` (log seqs), all by `author` with
+/// less than SESSION_GAP between them; `by` what made them ("claude", "disk", "relay", "restore", "" typed in a page);
+/// `start`, `end` (ms) the first and last update's time; `text` the note after the session, `added`/`removed` its lines
+/// against the session before.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Version { pub from: u64, pub to: u64, pub author: String, pub by: Vec<String>, pub start: u64, pub end: u64, pub text: String, pub added: usize, pub removed: usize }
+/// A document's history as far as this Mac read its log: the next seq to read, the text so far (Yjs state, hex) and
+/// the sessions.
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct History { seq: u64, state: String, versions: Vec<Version> }
+/// Two updates of one author further apart than this are two sessions.
+const SESSION_GAP: u64 = 10 * 60 * 1000;
+/// Lines `b` adds and removes against `a`.
+fn line_counts(a: &str, b: &str) -> (usize, usize) {
+    similar::TextDiff::from_lines(a, b).iter_all_changes().fold((0, 0), |(p, m), c| match c.tag() {
+        similar::ChangeTag::Insert => (p + 1, m), similar::ChangeTag::Delete => (p, m + 1), similar::ChangeTag::Equal => (p, m) })
+}
+
 impl Docs {
     pub(crate) fn new(vault: &str, keys: Keys, call: Call, dir: &Path, me: &str) -> Docs {
         let index: BTreeMap<String, Cursor> = std::fs::read_to_string(dir.join("index.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
@@ -485,6 +505,74 @@ impl Docs {
         let theirs = p.list.split_once(':').and_then(|(n, _)| n.parse::<u64>().ok()).unwrap_or(0);
         if theirs > keys.head.as_ref().map_or(0, |(n, _)| *n) { self.warn("Another member has seen a newer member list than the server gives this Mac.".into()); }
         Ok(p.body)
+    }
+
+    /// A document's history, oldest session first: its whole log read from the server (only what this Mac did not
+    /// read before, the rest kept in `history/`), every part opened as its author and replayed into a document of
+    /// its own, never a snapshot. A part that does not open is left out of the history (the live document warns of
+    /// it). Nothing here touches the document itself.
+    pub fn history(&self, id: &str) -> Result<Vec<Version>, String> {
+        if !note_id(id) { return Err("not a note's document".into()); }
+        let file = self.dir.join("history").join(format!("{id}.json"));
+        let mut h: History = std::fs::read_to_string(&file).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        let doc = Doc::new();
+        if let Some(b) = unhex(&h.state).filter(|b| !b.is_empty()) { apply(&doc, &b)?; }
+        let name = self.name(id);
+        loop {
+            let since = h.seq;
+            let (v, body) = (self.call)(json!({"op": "doc_pull", "vault": self.vault, "doc": name, "since": since, "limit": PULL_LIMIT}), None, Some(MAX_PULL + MAX_UPDATE))?;
+            let keys = lock(&self.keys).clone();
+            let mut at = 0usize;
+            for u in v["updates"].as_array().into_iter().flatten() {
+                let (Some(seq), Some(len)) = (u["seq"].as_u64(), u["len"].as_u64()) else { break };
+                let Some(part) = body.get(at..at + len as usize) else { break };
+                at += len as usize;
+                if seq != h.seq + 1 { break; }
+                h.seq = seq;
+                let from = u["from"].as_str().unwrap_or("");
+                let Ok(p) = keys.open_doc(&self.vault, &name, "u", 0, from, part) else { continue };
+                if apply(&doc, &p.body).is_err() { continue; }
+                let (t, by, text) = (p.meta["t"].as_u64().unwrap_or(0), p.meta["o"].as_str().unwrap_or("").to_string(), text_of(&doc));
+                let n = h.versions.len();
+                let same = h.versions.last().is_some_and(|l| l.author == p.author && t.saturating_sub(l.end) < SESSION_GAP);
+                if !same { h.versions.push(Version { from: seq, author: p.author.clone(), start: t, ..Default::default() }); }
+                let before = if same { n.checked_sub(2) } else { n.checked_sub(1) }.map(|i| h.versions[i].text.clone()).unwrap_or_default();
+                let l = h.versions.last_mut().unwrap();
+                (l.added, l.removed) = line_counts(&before, &text);
+                (l.to, l.end, l.text) = (seq, t, text);
+                if !l.by.contains(&by) { l.by.push(by); }
+            }
+            let more = v["more"] == true && h.seq > since && h.seq < v["seq"].as_u64().unwrap_or(0);
+            if !more { break; }
+        }
+        h.state = hex(&doc.transact().encode_state_as_update_v1(&StateVector::default()));
+        // ponytail: every session's whole text is kept; a note with thousands of long sessions makes a big file, keep
+        // texts only at every Nth session and replay between them if that bites
+        if let Some(dir) = file.parent() { std::fs::create_dir_all(dir).ok(); }
+        sync::write_atomic(&file, serde_json::to_string(&h).map_err(|e| e.to_string())?.as_bytes(), None).map_err(|e| format!("{id}: {e}"))?;
+        Ok(h.versions)
+    }
+    /// A document's text made `text` again (a version from its history), as this Mac's edit made by `by`, on top of
+    /// whatever it holds now: only what differs changes, and it is sent and passed on like any edit.
+    pub fn set_text(&self, id: &str, text: &str, by: &str) -> Result<(), String> {
+        if !note_id(id) { return Err("not a note's document".into()); }
+        let busy = self.busy(id);
+        let _one = lock(&busy);
+        let u = {
+            let mut open = lock(&self.open);
+            let o = open.get_mut(id).ok_or("no such document here")?;
+            let cur = text_of(&o.doc);
+            let (a, b): (Vec<char>, Vec<char>) = (cur.chars().collect(), text.chars().collect());
+            let edits: Vec<(usize, usize, String)> = diff(&a, &b).into_iter().rev().map(|(s, e, t, u)| (s, e - s, b[t..u].iter().collect())).collect();
+            if edits.is_empty() { return Ok(()); }
+            let u = make_edits(&o.doc, &cur, &edits);
+            (o.c.pending, o.c.via) = (true, by.into());
+            self.save(&open, id)?;
+            u
+        };
+        for f in lock(&self.on).clone() { f(id, &u); }
+        if let Err(e) = self.push(id) { self.warn(format!("not sent yet, again at the next sync: {e}")); }
+        Ok(())
     }
 
     /// Every document whose log the server has further than this Mac, the manifest first (it names the others), then
@@ -887,6 +975,35 @@ mod tests {
         assert_eq!((b.paths().get("Plan.md"), b.text(&id).as_str()), (Some(&id), "one two"));
         std::fs::remove_dir_all(tmp("off-a")).ok();
         std::fs::remove_dir_all(tmp("off-b")).ok();
+    }
+
+    /// Three sessions by two authors (A, B, A again) read from the log as three versions with their texts; a version
+    /// restored is an edit like any other: the other Mac gets it, and history shows the restore as a session of its own.
+    #[test]
+    fn history_lists_each_authors_sessions_and_a_restore_goes_to_everyone() {
+        let (srv, k) = (Server::default(), Keys::from(VaultKey::generate()));
+        let ((a, _), (b, _)) = (mac(&srv, &k, "hist-a", A), mac(&srv, &k, "hist-b", B));
+        let id = a.create("Plan.md", "one\n").unwrap();
+        append(&a, &id, "two\n");
+        b.sync().unwrap();
+        append(&b, &id, "three\n");
+        a.sync().unwrap();
+        append(&a, &id, "four\n");
+        let v = a.history(&id).unwrap();
+        let got: Vec<(&str, &str, usize, usize)> = v.iter().map(|v| (v.author.as_str(), v.text.as_str(), v.added, v.removed)).collect();
+        assert_eq!(got, [(A, "one\ntwo\n", 2, 0), (B, "one\ntwo\nthree\n", 1, 0), (A, "one\ntwo\nthree\nfour\n", 1, 0)]);
+        // B restores the first version: B's text and, after a sync, A's are that version again
+        b.sync().unwrap();
+        b.set_text(&id, &v[0].text, "restore").unwrap();
+        assert_eq!(b.text(&id), "one\ntwo\n");
+        a.sync().unwrap();
+        assert_eq!(a.text(&id), "one\ntwo\n");
+        let v2 = a.history(&id).unwrap();
+        assert_eq!(v2.len(), 4, "read on from where it was, the restore a session of its own");
+        let last = v2.last().unwrap();
+        assert_eq!((last.author.as_str(), last.by.as_slice(), last.text.as_str(), last.removed), (B, &["restore".to_string()][..], "one\ntwo\n", 2));
+        std::fs::remove_dir_all(tmp("hist-a")).ok();
+        std::fs::remove_dir_all(tmp("hist-b")).ok();
     }
 
     /// A part in the log that does not open (a member's broken write, a server's): left out, warned, the cursor moves

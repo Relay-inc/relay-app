@@ -604,6 +604,27 @@ const SCENARIOS = {
     s.check("its conversations show under it there", await navHas(page, "Billing sync double balances"));
   },
 
+  // a page's history (ticket 10): the versions listed with who made them, the oldest picked shows what changed since,
+  // and Restore makes it the page's text again
+  async pageHistory(s) {
+    await s.load();
+    const { page } = s;
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText(page, "Stand van zaken");
+    await click(page.getByRole("button", { name: "History", exact: true }));
+    s.check("three versions with their authors", await waitText(page, "Ben Lauwers"));
+    s.check("what made one is said", await hasText(page, "on disk"));
+    await click(page.getByRole("button", { name: /^Ana Vos.*disk/ }));
+    s.check("the diff shows with Restore", await waitText(page, "Restore this version"));
+    await click(page.getByRole("button", { name: "Restore this version" }));
+    const restore = (await s.calls("page_restore")).pop();
+    s.check("restore was asked for the oldest version", !!restore?.args.text && /Stand van zaken/.test(restore.args.text));
+    s.check("the toast says so", await waitText(page, "Restored the version of"));
+    const now = await page.evaluate(() => window.__harness.written());
+    s.check("the page's note holds that version", now === restore?.args.text);
+  },
+
   // managing files in the Pages tab (ticket 5): a new page opens, a rename says how many links follow and the tree
   // follows it, a page in the trash comes back with Undo
   async pageFiles(s) {

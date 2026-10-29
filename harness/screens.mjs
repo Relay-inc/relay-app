@@ -1357,6 +1357,24 @@ const VIEWS = {
     await waitText("Stand van zaken");
     await settle(page);
   },
+  // a page's history beside it (ticket 10): three sessions, who and when, what made them, lines added and removed
+  "page-history": async () => {
+    await VIEWS["page-view"]();
+    await page.getByRole("button", { name: "History", exact: true }).click();
+    await waitText("Ben Lauwers");
+    await settle(page);
+  },
+  // the oldest version picked: what changed since, green and red, with Restore
+  "page-history-diff": async () => {
+    await open(page, server.url, { fixture: "dark" });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText("Stand van zaken");
+    await page.getByRole("button", { name: "History", exact: true }).click();
+    await page.getByRole("button", { name: /^Ana Vos.*disk/ }).click();
+    await waitText("Restore this version");
+    await settle(page);
+  },
   // the page as an editor (ticket 2): a to-do ticked, a line typed at the end, saved a second later; the cursor's line
   // shows its markdown, the others the live preview
   "page-editor": async () => {
