@@ -23,7 +23,7 @@ a PR. Versions follow
 - **Pages tab keeps the vault's own files apart**: CLAUDE.md, AGENTS.md and the `System`, `scripts`, `Resources/Meta` and `Resources/Templates` folders no longer sit between your notes. An admin of the workspace (always, in your own vault) finds them folded under System at the bottom and in the search; a member of a shared workspace doesn't see them in the tab, and the note counts leave them out
 - **The vault keeps up with conversations you never close**: a conversation that sits for 30 minutes after a turn is read for the vault too, not only one you close, and a conversation already read is read again only when something new was said. What gets written is held to decisions and their reason, where a project stands and dated follow-ups, without the steps or detail, and a conversation is asked to update its project note itself when it settles something (#336)
 - **Usage is back next to the workspace**: the gauge sits beside the workspace in the sidebar's footer again, with its dot when a limit gets close, instead of inside the workspace menu. A click opens a summary above it: each agent's plan limits with when they reset, and the tokens and cost today and this week. View details opens the Usage view (#334)
-- 
+
 ### Fixed
 
 - **Workspaces stay apart**: switching workspace puts away the page, conversation or project board that belongs to the one you left, and the note in the drawer, and opens what was open in the new one, else Today. Coming back opens it again. A page names its own workspace in its bar, not the one the sidebar shows
