@@ -21,7 +21,7 @@ const kindOf = (name: string) =>
         : "file";
 
 /** One tool call, a line with its icon, and the change it made when the call carries one. A Read or Edit on a note
- *  that exists opens it in the right panel; a command opens in full under its line; the images a result held (a Read
+ *  that exists opens it in the right panel; a command opens in full under its line, with what it printed; the images a result held (a Read
  *  of a picture, a screenshot) show on hover and open in the zoom. */
 export function ToolStep({ item }: { item: Item }) {
   // re-read when the notes index changes, so a note written later links
@@ -100,9 +100,16 @@ export function ToolStep({ item }: { item: Item }) {
         </div>
       ) : null}
       {open && command ? (
-        <pre className="my-1 px-3 py-2 bg-well border border-separator rounded-lg font-mono text-xs leading-[1.6] text-label whitespace-pre-wrap wrap-anywhere select-text max-h-60 overflow-y-auto">
-          <Highlighted code={command} lang="bash" />
-        </pre>
+        <div className="my-1 bg-well border border-separator rounded-lg overflow-hidden font-mono text-xs leading-[1.6] whitespace-pre-wrap wrap-anywhere select-text">
+          <pre className="px-3 py-2 text-label max-h-60 overflow-y-auto">
+            <Highlighted code={command} lang="bash" />
+          </pre>
+          {item.output ? (
+            <pre className="px-3 py-2 border-t border-separator text-secondary max-h-80 overflow-y-auto">
+              {item.output}
+            </pre>
+          ) : null}
+        </div>
       ) : null}
       {rows?.length ? (
         <div className={box}>

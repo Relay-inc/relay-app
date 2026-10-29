@@ -144,6 +144,11 @@ export function applyAgentEvent(
       if (item) item.imgs = toolImgs(event, env.imageUrl);
       return [];
     }
+    case "tool_output": {
+      const item = state.messages[key]?.find(x => x.id === event.id);
+      if (item) item.output = event.text;
+      return [];
+    }
     case "turn_end":
       return onTurnEnd(state, key, event, env);
     case "error":
@@ -316,6 +321,9 @@ export function toItems(
     } else if (entry.type === "tool_images") {
       const tool = items.find(x => x.id === entry.id);
       if (tool) tool.imgs = toolImgs(entry, imageUrl);
+    } else if (entry.type === "tool_output") {
+      const tool = items.find(x => x.id === entry.id);
+      if (tool) tool.output = entry.text;
     }
   }
   settle();

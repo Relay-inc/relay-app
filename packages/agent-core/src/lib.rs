@@ -157,6 +157,8 @@ pub enum Event {
     Patch { id: String, hunks: Vec<Hunk> },
     /// The images a tool returned (a Read of a picture, a screenshot), inline as base64, when the provider keeps them.
     ToolImages { id: String, images: Vec<Image> },
+    /// What a command printed, as the agent got it back (Claude Code, Bash only).
+    ToolOutput { id: String, text: String },
     /// A permission request or question raised in the provider's own protocol. The app writes it to the
     /// pending folder; the answer comes back through [`AgentProvider::respond`].
     Permission { request: pending::Request },

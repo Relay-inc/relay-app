@@ -56,6 +56,8 @@ export type Item = {
   end?: number;
   /** the change a file tool made, with line numbers, when the provider reports it (Claude Code) */
   hunks?: Hunk[];
+  /** what a command printed, when the provider reports it (Claude Code) */
+  output?: string;
   /** the end of a turn: what the turn did, and what it cost when the provider says (USD) */
   receipt?: { edits: number; errors: number; agents: number; cost?: number };
 };

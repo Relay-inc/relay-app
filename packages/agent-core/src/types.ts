@@ -35,6 +35,7 @@ export type AgentEvent =
   | { type: "tool_result"; id: string; error: boolean }
   | { type: "patch"; id: string; hunks: Hunk[] } // the change a file tool made, when the provider reports it
   | { type: "tool_images"; id: string; images: Image[] } // the images a tool returned (a Read of a picture, a screenshot)
+  | { type: "tool_output"; id: string; text: string } // what a command printed (Claude Code, Bash only)
   | { type: "permission"; request: PermissionRequest }
   | { type: "turn_end"; ok: boolean; error?: string | null; usage?: TurnUsage | null; duration_ms?: number | null }
   | { type: "time"; at: string }       // history only: when the transcript line after it was written

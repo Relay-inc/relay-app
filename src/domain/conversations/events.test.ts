@@ -76,6 +76,7 @@ test("a tool starts running and ends ok or with an error", () => {
     { type: "tool_result", id: "t2", error: true },
     { type: "patch", id: "t1", hunks: [{ oldStart: 3, newStart: 3, lines: ["-a", "+b"] }] },
     { type: "tool_images", id: "t1", images: [{ media_type: "image/png", data: "AA==" }] },
+    { type: "tool_output", id: "t2", text: "boom" },
   );
   assert.deepEqual(
     done.messages["c:1"].map(item => item.state),
@@ -83,6 +84,7 @@ test("a tool starts running and ends ok or with an error", () => {
   );
   assert.equal(done.messages["c:1"][0].hunks?.[0].oldStart, 3);
   assert.deepEqual(done.messages["c:1"][0].imgs, ["image/png;AA=="]);
+  assert.equal(done.messages["c:1"][1].output, "boom");
 });
 
 test("a mail tool marks the conversation as touching mail, once", () => {
@@ -255,11 +257,14 @@ test("a transcript's tool step shows the images its result held", () => {
     [
       { type: "tool_call", id: "t1", name: "Read", input: { file_path: "/v/shot.png" } },
       { type: "tool_images", id: "t1", images: [{ media_type: "image/png", data: "AA==" }] },
+      { type: "tool_call", id: "t2", name: "Bash", input: { command: "ls" } },
+      { type: "tool_output", id: "t2", text: "a.md" },
     ],
     (mt, data) => `${mt};${data}`,
     t,
   );
   assert.deepEqual(items[0].imgs, ["image/png;AA=="]);
+  assert.equal(items[1].output, "a.md");
 });
 
 // two messages sent to Claude Code, neither read yet
