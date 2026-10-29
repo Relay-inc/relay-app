@@ -826,13 +826,16 @@ const VIEWS = {
     await page.mouse.move(720, 890); // off the row that moved up under the pointer
     await settle(page);
   },
-  usage: async () => {
+  // the footer's usage button opens its summary, View details the view
+  "usage-popover": async () => {
     await open(page, server.url);
-    await page.getByRole("button", { name: /^Switch workspace/ }).click(); // usage sits in the workspace menu
-    await page
-      .getByRole("button", { name: /^(Usage|Claude Code)/ })
-      .first()
-      .click();
+    await page.getByRole("button", { name: /^Usage/ }).click();
+    await waitText("View details");
+    await settle(page);
+  },
+  usage: async () => {
+    await VIEWS["usage-popover"]();
+    await page.getByRole("button", { name: "View details" }).click();
     await waitText("All of Claude Code", 10000);
     await settle(page);
   },
@@ -856,11 +859,8 @@ const VIEWS = {
   // the usage redesign in dark mode (#105)
   "dark-usage": async () => {
     await open(page, server.url, { fixture: "dark" });
-    await page.getByRole("button", { name: /^Switch workspace/ }).click(); // usage sits in the workspace menu
-    await page
-      .getByRole("button", { name: /^(Usage|Claude Code)/ })
-      .first()
-      .click();
+    await page.getByRole("button", { name: /^Usage/ }).click();
+    await page.getByRole("button", { name: "View details" }).click();
     await waitText("All of Claude Code", 10000);
     await settle(page);
   },
@@ -1272,6 +1272,21 @@ const VIEWS = {
       .locator('[data-page="Contexts/Agency/Projects/Beacon Billing/Documents/Billing Spec.md"]')
       .click({ button: "right" });
     await waitText("Move to…");
+    await settle(page);
+  },
+  // the Pages tab's right-click menu on a project: move or copy it to another workspace, as on the Chats tab
+  "pages-project-menu": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Beacon Billing"]').first().click({ button: "right" });
+    await waitText("Move to workspace");
+    await settle(page);
+  },
+  // and from there the same dialog as on the Chats tab
+  "pages-project-migrate": async () => {
+    await VIEWS["pages-project-menu"]();
+    await page.getByRole("button", { name: "Side vault" }).first().click();
+    await waitText("1 linked repo");
     await settle(page);
   },
   // New page from the Folders heading: the name field with Untitled selected

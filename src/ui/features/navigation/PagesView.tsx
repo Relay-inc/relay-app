@@ -13,6 +13,8 @@ import {
   togglePage,
 } from "../../../application/navigation/pages";
 import { toast } from "../../../application/navigation/navigation";
+import { workspaces } from "../../../application/navigation/workspaces";
+import { projectVault as homeOf } from "../../../application/navigation/migrate";
 import { toggleSection } from "../../../application/navigation/sidebar";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { useWorkspaceStore } from "../../../application/workspace/store";
@@ -23,14 +25,15 @@ import { SidebarHead } from "./SidebarHead";
 import { SidebarRow } from "./SidebarRow";
 import { SidebarMenu, type MenuItem } from "./SidebarMenu";
 import { PageFileDialog, type PageFileAsk } from "./PageFileDialog";
+import { MigrateDialog } from "./MigrateDialog";
 
 const RECENT = "pages:recent";
 const FOLDERS = "pages:folders";
 
 /** The sidebar's Pages tab: the notes of the workspace shown. Recent, its contexts with their projects (a project
  *  unfolds to its folder), then its top folders; the search lists the notes it finds instead. A note opens as a page.
- *  Right-click: new page or folder, rename, move, duplicate, delete (to the trash, with Undo); a page or folder
- *  dragged onto a folder moves there. */
+ *  Right-click: new page or folder, rename, move, duplicate, delete (to the trash, with Undo); on a project, move or
+ *  copy it to another workspace. A page or folder dragged onto a folder moves there. */
 export function PagesView() {
   const { t } = useT();
   const { model, recent, found } = useDerived(() => pagesView());
@@ -38,20 +41,32 @@ export function PagesView() {
   const unfolded = useNavigationStore(s => s.sidebar.pagesOpen);
   const collapsed = useNavigationStore(s => s.sidebar.collapsed);
   const icons = useWorkspaceStore(s => s.icons);
-  const [menu, setMenu] = useState<{ x: number; y: number; path: string; kind: "note" | "folder" | "top" } | null>(
-    null,
-  );
+  type MenuKind = "note" | "folder" | "top" | "project";
+  // `path` is the project's key on a project row
+  const [menu, setMenu] = useState<{ x: number; y: number; path: string; kind: MenuKind } | null>(null);
   const [ask, setAsk] = useState<PageFileAsk | null>(null);
+  const [migrating, setMigrating] = useState<{ project: string; to: string; mode: "move" | "copy" } | null>(null);
   const [dropOn, setDropOn] = useState<string | null>(null);
   const menuElement = useRef<HTMLDivElement>(null);
   useDismiss(menuElement, !!menu, () => setMenu(null));
 
-  const onMenu = (path: string, kind: "note" | "folder" | "top") => (e: MouseEvent) => {
+  const onMenu = (path: string, kind: MenuKind) => (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    // one workspace: a project has nowhere to go
+    if (kind === "project" && !migrateItems(path).length) return;
     setMenu({ x: e.clientX, y: e.clientY, path, kind });
   };
-  const menuItems = (kind: "note" | "folder" | "top"): MenuItem[] => [
+  // a project goes to one of the other workspaces, as on the Chats tab
+  const migrateItems = (project: string): MenuItem[] => {
+    const others = workspaces().filter(w => w.folder !== homeOf(project));
+    if (!others.length) return [];
+    return (["move", "copy"] as const).flatMap(mode => [
+      { id: "", label: t(mode === "move" ? "mig.moveTo" : "mig.copyTo"), head: true },
+      ...others.map(w => ({ id: `${mode}:${w.folder}`, label: w.name })),
+    ]);
+  };
+  const fileItems = (kind: "note" | "folder" | "top"): MenuItem[] => [
     ...(kind !== "note"
       ? [
           { id: "page", label: t("pages.newPage"), icon: "file" },
@@ -69,12 +84,17 @@ export function PagesView() {
         ]
       : []),
   ];
+  const menuItems = (kind: MenuKind, path: string): MenuItem[] =>
+    kind === "project" ? migrateItems(path) : fileItems(kind);
   // a project's own note keeps its name and place: the project is known by it
   const guarded = (path: string, then: () => void) => (isProjectNote(path) ? toast(t("pages.projectNote")) : then());
-  const pick = (target: { path: string }, id: string) => {
+  const pick = (target: { path: string; kind: MenuKind }, id: string) => {
     setMenu(null);
     const { path } = target;
-    if (id === "page" || id === "folder") setAsk({ kind: id, folder: path });
+    if (target.kind === "project") {
+      const mode = id.startsWith("move:") ? "move" : "copy";
+      if (id) setMigrating({ project: path, mode, to: id.slice(id.indexOf(":") + 1) });
+    } else if (id === "page" || id === "folder") setAsk({ kind: id, folder: path });
     else if (id === "rename") guarded(path, () => setAsk({ kind: "rename", path }));
     else if (id === "move") guarded(path, () => setAsk({ kind: "move", path }));
     else if (id === "duplicate") void duplicatePage(path);
@@ -165,11 +185,14 @@ export function PagesView() {
           ref={menuElement}
           x={menu.x}
           y={menu.y}
-          items={menuItems(menu.kind)}
+          items={menuItems(menu.kind, menu.path)}
           onPick={id => pick(menu, id)}
         />
       ) : null}
       {ask ? <PageFileDialog ask={ask} onClose={() => setAsk(null)} /> : null}
+      {migrating ? (
+        <MigrateDialog {...migrating} from={homeOf(migrating.project)} onClose={() => setMigrating(null)} />
+      ) : null}
     </>
   );
   if (found)
@@ -214,6 +237,7 @@ export function PagesView() {
                           if (project.folder) togglePage(project.folder.path, !(isOpen && open === project.note));
                           openPage(project.note);
                         }}
+                        onContextMenu={onMenu(project.key, "project")}
                       />
                       {isOpen && project.folder ? contents(project.folder, project.note) : null}
                     </div>

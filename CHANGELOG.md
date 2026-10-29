@@ -16,6 +16,14 @@ a PR. Versions follow
 ### Fixed
 
 - **Settings › Machines reads clearer**: a machine's workspaces sit in its own row now, under "Workspaces on <machine>" in a card of their own like its repos, instead of in an indented strip between the machines. The buttons of a machine or a workspace stay together on the right and move under the name as a group when the window is narrow, instead of one at a time
+### Changed
+
+- **Usage is back next to the workspace**: the gauge sits beside the workspace in the sidebar's footer again, with its dot when a limit gets close, instead of inside the workspace menu. A click opens a summary above it: each agent's plan limits with when they reset, and the tokens and cost today and this week. View details opens the Usage view (#334)
+
+### Added
+
+- **Move or copy a project from the Pages tab**: right-click a project there for the same Move to / Copy to workspace
+  as on the Chats tab.
 
 ## [0.0.40] - 2026-10-29
 

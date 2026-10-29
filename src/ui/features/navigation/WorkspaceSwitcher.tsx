@@ -23,7 +23,6 @@ const ACTION =
   "w-full px-2 py-1.5 rounded-md text-left text-[13px] text-label hover:bg-accent hover:text-on-accent cursor-default";
 const APP_ACTION = `${ACTION} flex items-center gap-2.5`;
 const GLYPH = "glyph size-4 flex-none";
-const DOT = { "": "bg-ok", soon: "bg-soon", late: "bg-late" };
 
 function Square({ workspace, index, size }: { workspace: Workspace; index: number; size: string }) {
   return (
@@ -37,24 +36,16 @@ function Square({ workspace, index, size }: { workspace: Workspace; index: numbe
 
 /** The footer's workspace: its square, name and note count; a click opens the menu above it with every workspace
  *  (⌃1 to ⌃9, a tick on the one shown), Open a folder as workspace…, New workspace from template… and Workspace
- *  settings, then the app's own items: usage (with its status dot), light/dark and settings (with a dot when there is
- *  a Relay update). A usage warning or an update also puts a dot on the square, so it shows with the menu closed. */
+ *  settings, then the app's own items: light/dark and settings (with a dot when there is a Relay update). An update
+ *  also puts a dot on the square, so it shows with the menu closed. Usage has its own button next to it. */
 export function WorkspaceSwitcher({
-  usageOpen,
-  usageTip,
-  level,
   dark,
   update,
-  onUsage,
   onTheme,
   onSettings,
 }: {
-  usageOpen: boolean; // the usage view is open
-  usageTip: string; // the usage item's text
-  level: "" | "soon" | "late"; // "" shows no dot
   dark: boolean; // the page is dark: the toggle offers light
   update: string; // a newer Relay version, "" for none
-  onUsage: () => void;
   onTheme: () => void;
   onSettings: () => void;
 }) {
@@ -110,7 +101,7 @@ export function WorkspaceSwitcher({
         <span className="relative flex-none">
           <Square workspace={active} index={index} size="size-7" />
           <span
-            className={`absolute -top-0.5 -right-0.5 size-2 rounded-full ring-2 ring-sidebar ${level || update ? "opacity-100" : "opacity-0"} ${level ? DOT[level] : "bg-accent"}`}
+            className={`absolute -top-0.5 -right-0.5 size-2 rounded-full bg-accent ring-2 ring-sidebar ${update ? "opacity-100" : "opacity-0"}`}
           />
         </span>
         <span className="min-w-0 flex-1 grid">
@@ -190,15 +181,6 @@ export function WorkspaceSwitcher({
             {t("ws.settings")}
           </button>
           <div className="my-1.5 mx-2 border-t border-separator" />
-          <button
-            className={`${APP_ACTION} ${usageOpen ? "bg-fill-2" : ""}`}
-            title={usageTip}
-            onClick={() => run(onUsage)}
-          >
-            <Icon name="gauge" className={GLYPH} />
-            <span className="min-w-0 flex-1 truncate">{usageTip}</span>
-            {level ? <span className={`size-1.5 flex-none rounded-full ${DOT[level]}`} /> : null}
-          </button>
           <button className={APP_ACTION} onClick={() => run(onTheme)}>
             <Icon name={dark ? "sun" : "moon"} className={GLYPH} />
             <span className="flex-1">{t(dark ? "nav.themeLight" : "nav.themeDark")}</span>

@@ -368,6 +368,7 @@ export default {
   "usage.all": "Heel {name}",
   "usage.vault": "In deze vault",
   "usage.details": "Details",
+  "usage.viewDetails": "Details bekijken",
   "usage.tightest": "Krapste limiet",
   "usage.usedWord": "gebruikt",
   "usage.todayAll": "Vandaag · alle agents",

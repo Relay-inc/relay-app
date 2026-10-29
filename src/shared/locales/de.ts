@@ -367,6 +367,7 @@ export default {
   "usage.all": "Ganz {name}",
   "usage.vault": "In diesem Vault",
   "usage.details": "Details",
+  "usage.viewDetails": "Details ansehen",
   "usage.tightest": "Engstes Limit",
   "usage.usedWord": "verbraucht",
   "usage.todayAll": "Heute · alle Agenten",
