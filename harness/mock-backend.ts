@@ -88,6 +88,8 @@ const moved: Record<string, { name: string; vault: string }> = {}; // migrate_pr
 const phoneShared = new Set<string>(); // conversation keys shared with the phone (/share-phone)
 // the shared vaults on a relay-server (fixture "shared"): the last rounds, and the one vault's members and open invites
 let sharedStatus: Record<string, any> = shared ? vault.sharedStatus(Math.floor(Date.now() / 1000)) : {};
+// this Mac is an admin of the first shared vault's member list: Settings › Machines offers the documents switch
+for (const s of Object.values(sharedStatus).slice(0, 1)) s.admin = true;
 if (fixture === "shared-rekey")
   for (const s of Object.values(sharedStatus))
     Object.assign(s, {
@@ -560,6 +562,15 @@ function handle(cmd: string, a: Args): unknown {
       written.set(String(a.target), { text: String(a.text), hash });
       return { hash };
     }
+    case "shared_vault_docs": {
+      // an admin's switch: the member list now says the notes are documents (or not)
+      const s = sharedStatus[a.id];
+      if (s) s.docs = !!a.on;
+      return null;
+    }
+    case "shared_doc_absorb":
+      // a shared workspace's document taking a file change: nothing to show in the harness
+      return null;
     case "project_icons":
       return vault.projectIcons();
     case "project_repos":

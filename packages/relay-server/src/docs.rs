@@ -123,6 +123,40 @@ impl Vaults {
         })
     }
 
+    /// Record names that are documents now (`names`, as the members name a note's file): a write or delete of one by
+    /// the file rounds is refused from then on (`bound`), so a Relay from before documents does not keep a second,
+    /// stale copy of the note in sync as a file. Each name remembers who bound it. A name with a record already (an
+    /// existing note) only an admin binds; a name bound already stays as it is. At most MAX_DOCS names per member.
+    pub fn doc_bind(&self, fp: &str, id: &str, names: &[String]) -> Result<(), String> {
+        if names.len() > 1000 || names.iter().any(|n| !hex(n, 64)) { return Err("bad names".into()); }
+        self.with(id, fp, |_, role| {
+            let d = dir(self.data()).join(id).join("bound");
+            fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+            let mine = fs::read_dir(&d).into_iter().flatten().flatten().filter(|e| fs::read_to_string(e.path()).is_ok_and(|b| b == fp)).count();
+            let new: Vec<&String> = names.iter().filter(|n| !d.join(n).exists()).collect();
+            if mine + new.len() > MAX_DOCS { return Err("too many documents bound by this member".into()); }
+            if role != "admin" && new.iter().any(|n| self.blobs(id).join(n).exists()) { return Err("only an admin makes an existing note a document".into()); }
+            for n in new { sync::write_atomic(&d.join(n), fp.as_bytes(), None).map_err(|e| e.to_string())?; }
+            Ok(())
+        })
+    }
+    /// Names that are no document's any more (a note moved or deleted): its file rounds may write them again. Only by
+    /// who bound a name, or an admin; a name not bound is skipped.
+    pub fn doc_unbind(&self, fp: &str, id: &str, names: &[String]) -> Result<(), String> {
+        if names.len() > 1000 || names.iter().any(|n| !hex(n, 64)) { return Err("bad names".into()); }
+        self.with(id, fp, |_, role| {
+            let d = dir(self.data()).join(id).join("bound");
+            for n in names {
+                let Ok(by) = fs::read_to_string(d.join(n)) else { continue };
+                if by != fp && role != "admin" { return Err("only who made it a document, or an admin, lets it go".into()); }
+                fs::remove_file(d.join(n)).map_err(|e| e.to_string())?;
+            }
+            Ok(())
+        })
+    }
+    /// Whether record `name` of vault `id` is a document's (`doc_bind`).
+    pub(crate) fn bound(&self, id: &str, name: &str) -> bool { hex(name, 64) && dir(self.data()).join(id).join("bound").join(name).exists() }
+
     /// The vault's documents: each one's name, log length and last snapshot.
     pub fn doc_list(&self, fp: &str, id: &str) -> Result<Value, String> {
         self.member(id, fp)?;
@@ -177,6 +211,21 @@ mod tests {
         assert_eq!((v["updates"].as_array().unwrap().len(), v["more"].as_bool(), v["updates"][0]["seq"].as_u64()), (5, Some(false), Some(201)));
         assert_eq!(vs.doc_list(&me, &id).unwrap()["docs"], json!([{"doc": name, "seq": 205, "snap": 200}]));
         assert_eq!(numbered(&vs.doc(&id, &name).join("log")), (1..=205).collect::<Vec<_>>(), "nothing deleted");
+        // a note made a document: the file rounds may no longer write or delete its record (an older Relay's)
+        let rec = |e: u32| { let mut r = (4u32 | (e << 20)).to_be_bytes().to_vec(); r.extend([1u8; 4 + 40]); r };
+        let note = "e".repeat(64);
+        let etag = vs.put(&me, &id, &note, &rec(1), Some("")).unwrap();
+        vs.doc_bind(&me, &id, &[note.clone()]).unwrap();
+        assert!(vs.put(&me, &id, &note, &rec(1), Some(&etag)).unwrap_err().contains("update Relay"));
+        assert!(vs.delete(&me, &id, &note, Some(&etag)).unwrap_err().contains("update Relay"));
+        assert_eq!(vs.doc_bind(&"b".repeat(64), &id, &[note.clone()]).unwrap_err(), "no such vault", "not a member");
+        assert_eq!(vs.doc_bind(&me, &id, &["x".into()]).unwrap_err(), "bad names");
+        // let go by who bound it: the file rounds write it again
+        vs.doc_unbind(&me, &id, &[note.clone()]).unwrap();
+        assert!(vs.put(&me, &id, &note, &rec(1), Some(&etag)).is_ok());
+        assert!(vs.manifest(&me, &id).unwrap()["blobs"].as_array().unwrap().iter().all(|b| b["bound"].is_null()));
+        vs.doc_bind(&me, &id, &[note.clone()]).unwrap();
+        assert_eq!(vs.manifest(&me, &id).unwrap()["blobs"][0]["bound"], json!(true), "said in the manifest");
         fs::remove_dir_all(&data).ok();
     }
 }

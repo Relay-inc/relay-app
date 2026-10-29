@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// One entry. `kind`: `create`, `add`, `remove`, `leave`, `promote`, `demote`, `rekey` (epoch `epoch` is current, its
-/// key's sha256 `h`) or `device` (the member `fp` set up Relay again: new `id` and `pk`). `fp`: the member it is about;
+/// key's sha256 `h`), `device` (the member `fp` set up Relay again: new `id` and `pk`), or `docs-on` / `docs-off` (an
+/// admin turns the making of the workspace's notes into documents on or off; no other field). `fp`: the member it is about;
 /// `id`, `pk`: its Ed25519 identity and X25519 key (create, add, device); `role`: admin or member (create, add); `at`:
 /// epoch seconds; `by`: the signer's fingerprint; `sig`: its signature over `msg`.
 /// `mac` (create only): the creator's identity vouched for under the vault's epoch-0 key, which the server never has:
@@ -42,6 +43,8 @@ pub struct Member { pub id: String, pub pk: String, pub admin: bool }
 pub struct List {
     pub members: BTreeMap<String, Member>, pub epoch: u32, pub epochs: BTreeMap<u32, (String, Vec<String>)>,
     pub pending: Option<u64>, pub len: u64, pub head: String, pub creator: String,
+    /// The workspace's notes are made documents (`docs-on`, by an admin).
+    pub docs: bool,
 }
 impl List {
     pub fn admin(&self, fp: &str) -> bool { self.members.get(fp).is_some_and(|m| m.admin) }
@@ -82,6 +85,7 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
             "remove" | "leave" | "promote" | "demote" => uses(true, false, false, false, false),
             "rekey" => uses(false, false, false, true, false),
             "device" => uses(true, true, false, false, false),
+            "docs-on" | "docs-off" => uses(false, false, false, false, false),
             _ => false,
         };
         if !shape { return bad(&format!("a {} with the wrong fields", e.kind)); }
@@ -102,6 +106,7 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
                 "add" if !member => { l.members.insert(e.fp.clone(), Member { id: e.id.clone(), pk: e.pk.clone(), admin: e.role == "admin" }); }
                 "remove" if member => { l.members.remove(&e.fp); l.pending = Some(e.at); }
                 "promote" | "demote" if member => { l.members.get_mut(&e.fp).unwrap().admin = e.kind == "promote"; }
+                "docs-on" | "docs-off" => l.docs = e.kind == "docs-on",
                 "rekey" if e.epoch == l.epoch + 1 => {
                     l.epoch = e.epoch;
                     l.epochs.insert(e.epoch, (e.h.clone(), l.members.keys().cloned().collect()));

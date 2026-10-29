@@ -1032,6 +1032,10 @@ export default {
   "set.sharedCounts": "{sent} gesendet, {received} empfangen",
   "set.sharedBad_one": "{n} Datei dort lässt sich mit diesem Schlüssel nicht öffnen.",
   "set.sharedBad_other": "{n} Dateien dort lassen sich mit diesem Schlüssel nicht öffnen.",
+  "set.sharedDocs": "Notizen als gemeinsame Dokumente",
+  "set.sharedDocsHelp":
+    "Änderungen der Mitglieder an den Notizen des Workspace werden beim Tippen zusammengeführt, statt Konfliktkopien anzulegen. Das Relay eines Admins wandelt die Notizen nach und nach um; ein älteres Relay synchronisiert die übrigen Dateien weiter.",
+  "set.sharedDocsOn": "An",
   "set.sharedRekeying":
     "Jemand ist gegangen: der Schlüssel ändert sich in der nächsten Runde eines Admins. Bis dahin ist, was du schreibst, noch mit dem alten Schlüssel lesbar.",
   "set.sharedKeyChanged":

@@ -160,6 +160,15 @@ export const withdrawInvite = (id: string, invite: string) =>
     });
     await loadInfo(id);
   });
+/** An admin turns making the workspace's notes documents on or off (docs/workspaces.md, Documents). */
+export const setSharedDocs = (id: string, on: boolean) =>
+  run(id, async () => {
+    await backend.sharedVaultDocs(id, on);
+    change(draft => {
+      const s = draft.status[id];
+      if (s) s.docs = on;
+    });
+  });
 /** An admin trusts a member's new key, after they said they set up Relay again (docs/workspaces.md, Key rotation). */
 export const trustMember = (id: string, fp: string) =>
   run(id, async () => {

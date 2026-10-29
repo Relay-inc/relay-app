@@ -1036,6 +1036,10 @@ export default {
   "set.sharedCounts": "{sent} envoyés, {received} reçus",
   "set.sharedBad_one": "{n} fichier là-bas ne s'ouvre pas avec cette clé.",
   "set.sharedBad_other": "{n} fichiers là-bas ne s'ouvrent pas avec cette clé.",
+  "set.sharedDocs": "Notes en documents partagés",
+  "set.sharedDocsHelp":
+    "Les modifications des membres sur les notes de l'espace de travail fusionnent pendant la frappe, au lieu de créer des copies de conflit. Le Relay d'un administrateur convertit les notes petit à petit ; un Relay plus ancien continue de synchroniser les autres fichiers.",
+  "set.sharedDocsOn": "Activé",
   "set.sharedRekeying":
     "Quelqu'un est parti : la clé change au prochain tour d'un admin. D'ici là, ce que vous écrivez reste lisible avec l'ancienne clé.",
   "set.sharedKeyChanged":

@@ -53,6 +53,9 @@ impl Vault {
 
 /// Exactly `n` lowercase hex characters: every id, code and blob name. Anything else never reaches a path.
 pub(crate) fn hex(s: &str, n: usize) -> bool { s.len() == n && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) }
+/// The file rounds' answer for a note that is a document now (docs.rs, `doc_bind`): only a Relay from before documents
+/// writes one as a file.
+const BOUND: &str = "this note is a shared document now: update Relay to change it";
 pub(crate) fn dir(data: &Path) -> PathBuf { data.join("vaults") }
 
 /// A vault's file, its expired and used-up invites left out. None when there is no such vault.
@@ -121,7 +124,7 @@ pub struct Vaults { data: PathBuf, fp: String, locks: Mutex<HashMap<String, Arc<
 impl Vaults {
     pub fn new(data: &Path, fp: &str) -> Vaults { Vaults { data: data.into(), fp: fp.into(), locks: Mutex::default(), seen: Mutex::default(), rooms: Rooms::default(), docs: Default::default() } }
     pub(crate) fn data(&self) -> &Path { &self.data }
-    fn blobs(&self, id: &str) -> PathBuf { dir(&self.data).join(id).join("blobs") }
+    pub(crate) fn blobs(&self, id: &str) -> PathBuf { dir(&self.data).join(id).join("blobs") }
 
     /// Vault `id`, read and changed by `f` without another request in between. A vault that is not there and one the
     /// caller is not a member of answer the same.
@@ -366,7 +369,9 @@ impl Vaults {
         let v = self.member(id, fp)?;
         let m = v.members.iter().find(|m| m.fp == fp).ok_or("no such vault")?;
         let state = json!({"epoch": v.epoch, "rekey": v.rekey, "role": m.role, "me": {"fp": fp, "pk": m.pk, "mac": m.mac}});
-        let blobs = self.blobs_listed(id)?;
+        let mut blobs = self.blobs_listed(id)?;
+        // a record that is a document's now (docs.rs, `doc_bind`): said, so a Relay does not seal it again either
+        for b in &mut blobs { if b["name"].as_str().is_some_and(|n| self.bound(id, n)) { b["bound"] = json!(true); } }
         let mut out = state;
         out["blobs"] = json!(blobs);
         Ok(out)
@@ -416,6 +421,7 @@ impl Vaults {
                 std::cmp::Ordering::Greater => return Err("no such key epoch".into()),
                 std::cmp::Ordering::Equal => {}
             }
+            if self.bound(id, name) { return Err(BOUND.into()); }
             let p = self.blobs(id).join(name);
             if etag_at(&p)? != expect { return Err("changed meanwhile".into()); }
             sync::write_atomic(&p, record, None).map_err(|e| e.to_string())?;
@@ -427,6 +433,7 @@ impl Vaults {
         if !hex(name, 64) { return Err("bad name".into()); }
         let expect = expect.ok_or("expect missing")?;
         self.with(id, fp, |_, _| {
+            if self.bound(id, name) { return Err(BOUND.into()); }
             let p = self.blobs(id).join(name);
             if etag_at(&p)? != expect { return Err("changed meanwhile".into()); }
             if !expect.is_empty() { fs::remove_file(&p).map_err(|e| e.to_string())?; }

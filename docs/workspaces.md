@@ -256,9 +256,44 @@ an agent. Its edits merge; there are no conflict copies for it.
   wrote it (to the trash first otherwise), unless another note has that place now or the file rounds keep it out. A
   note that is a document, and its old path until that file is gone, stay out of the file rounds. A live update is
   taken on a thread of its own, under the same lock as the rounds.
-- **Not yet** (8b): a note becomes a document only through `Docs::create` (no UI), an existing file is not turned
-  into one, an edit made to the `.md` on disk does not go into its document (the next change from the document
-  writes over it, the old content to the trash), and an older Relay still syncs that note as a file.
+- **Which notes are documents.** None until an admin turns it on (Settings › Machines, "Notes as shared
+  documents"): a `docs-on` entry in the member list, signed like any other, which every member checks; `docs-off`
+  turns it off again. Then each round on an admin's Mac makes up to 50 notes documents: `.md` files the file rounds
+  would sync, not through a link, no conflict copy, at most 2 MiB, and only once the last file round left the file the
+  same here and on the server; never past 10 000 documents. A note's text goes to the server before its place in the
+  manifest, so no Mac learns of a note it cannot read yet, and a Mac that has the place but not the text writes nothing
+  for it. Two admins' Macs doing it for the same note at once: the manifest keeps one and the other Mac drops its own
+  (its file, when it differs, stays next to the note as a conflict copy).
+- **Older Relays.** Each document's record name (the file rounds' name for the path) is told to the server
+  (`doc_bind {vault, names}`, at most 1000 a call); the server remembers who bound each and refuses a file-round write
+  or delete of that record from then on. A name with a record already (an existing note) only an admin binds; each
+  member binds at most 10 000. A moved or deleted note's old name is let go again (`doc_unbind`, by who bound it or an
+  admin). The manifest says which records are bound, and a Relay does not seal those again after a key change. A
+  Relay from before documents keeps syncing every other file and gets "this note is a shared document now: update
+  Relay to change it" for a document's note; the copy it has stays as it was (the record is not deleted, or it would
+  delete its file). A Relay with documents that meets the error (it had not learned of the document yet) says the note
+  became a shared document and takes it on its next round.
+- **A change on disk.** When the note's file changes outside the document (Claude, Obsidian, a page's save, git), the
+  change is what differs from the text Relay last wrote there or took from it (kept per document, `<id>.out`, written
+  after the cursor that names it), never the file over the document: lines matched (Myers), then the chars that
+  differ, made on top of what others changed meanwhile as diff3 does (a change both made alike counts once, text others
+  removed stays removed, text both put at one place stays, theirs first). It goes out as this Mac's update, with who
+  made it in the meta (`o`: `claude` when a conversation's file tool wrote it in the last seconds, `relay` for a page's
+  save or a link a move rewrote, else `disk`). The mtime and hash only notice the change; nothing is decided by which
+  is newer. It is taken when the watcher hears of it, when a page saves, and at the latest by the next export, which
+  takes a changed file in before it writes and leaves a file that changes while it writes for the next one. Relay's
+  own writes are told to the watcher, so an open page takes them in without counting them as a change. A byte-order
+  mark and CRLF line ends do not go into the document. With no text to measure against (a document from before this
+  kept one), the file is not diffed: it stays as a conflict copy when it differs, and the document is written.
+- **A program that writes back an old copy** of a note (an editor with a stale buffer, a script) undoes the others'
+  edits in it, as any edit would; the history keeps them.
+- **Moves and deletes.** A note moved in the Pages tab keeps its document: the move and the manifest change happen
+  under the workspace's round lock, a manifest change that fails moves the files back, and links the move rewrote in
+  the note go in as an edit. A note moved outside Relay (Finder, git) is a new note at its new place (the old one is
+  written back). One document moved to two places at once on two Macs ends at the path that sorts first, on every
+  Mac. A note deleted in the Pages tab leaves the manifest (map `gone`; the document and its log stay on the server for
+  history), its file goes from every Mac (kept as a conflict copy where it was changed), and Undo puts it back. A
+  note's file deleted any other way is written back, warned.
 
 ## Record
 

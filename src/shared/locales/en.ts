@@ -1019,6 +1019,10 @@ const en = {
   "set.sharedCounts": "{sent} sent, {received} received",
   "set.sharedBad_one": "{n} file there does not open with this key.",
   "set.sharedBad_other": "{n} files there do not open with this key.",
+  "set.sharedDocs": "Notes as shared documents",
+  "set.sharedDocsHelp":
+    "Members' edits to the workspace's notes merge as they type, instead of making conflict copies. An admin's Relay turns the notes into documents a few at a time; a Relay from before this keeps syncing the other files.",
+  "set.sharedDocsOn": "On",
   "set.sharedRekeying":
     "Someone left: the key changes on an admin's next round. Until then, what you write can still be read with the old key.",
   "set.sharedKeyChanged":

@@ -58,8 +58,10 @@ pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter()
 /// another member who saw a newer one, a removal that waits too long for its key change. `changed`: members whose
 /// Relay publishes other keys than the list has (they set it up again), until an admin trusts them.
 /// `rekeying`: someone left and the key has not changed yet (or the member list is held back, which could hide that).
+/// `docs`: an admin turned on making the workspace's notes documents (the member list says so); `admin`: this Mac is
+/// an admin of the list (it may turn that on or off).
 pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub bad: usize, pub live: bool,
-    pub warnings: Vec<String>, pub changed: Vec<Changed>, pub rekeying: bool }
+    pub warnings: Vec<String>, pub changed: Vec<Changed>, pub rekeying: bool, pub docs: bool, pub admin: bool }
 #[derive(Clone, serde::Serialize)]
 pub struct Changed { pub fp: String, pub name: String }
 
@@ -85,6 +87,8 @@ pub fn load_key(data: &Path, id: &str) -> Result<Keys, String> {
 /// Where a round keeps what it deletes or mostly empties here: <data>/shared-trash/<id>/<round's minute>/<path>.
 fn trash(data: &Path, id: &str) -> PathBuf { data.join("shared-trash").join(id) }
 const TRASH_DAYS: i64 = 30;
+/// Notes made documents in one round at most (docs/workspaces.md, Documents): a big workspace takes a few rounds.
+const SEED: usize = 50;
 /// The vault's documents on this Mac (docs/workspaces.md, Documents).
 fn docs_dir(data: &Path, id: &str) -> PathBuf { data.join("shared-docs").join(id) }
 fn base_path(data: &Path, id: &str) -> PathBuf { data.join("shared-base").join(format!("{id}.json")) }
@@ -236,6 +240,7 @@ impl Hub {
                         st.errors.extend(k.errors.into_iter().map(|e| format!("key: {e}")));
                         st.warnings = k.warnings;
                         st.rekeying = k.rekeying;
+                        (st.docs, st.admin) = (k.docs, k.admin);
                         st.changed = k.changed.into_iter().map(|(fp, name)| Changed { fp, name }).collect();
                     }
                     Err(e) => st.errors.push(format!("key: {e}")),
@@ -243,15 +248,17 @@ impl Hub {
                 // the documents: every log the server has further, the notes they changed written out; a note that is a
                 // document stays out of the file rounds, so it never has two writers (docs/workspaces.md, Documents)
                 let docs = self.docs(data, v, me, load_key(data, &v.id).unwrap_or_else(|_| key.clone()));
-                match docs.sync() {
-                    Ok(_) => {}
+                let has_docs = match docs.sync() {
+                    Ok(_) => true,
                     // a relay-server from before documents: none there, nothing to say every round
-                    Err(e) if e.contains("unknown request") || e.contains("is not allowed") => {}
-                    Err(e) => st.errors.push(format!("documents: {e}")),
-                }
-                // written even when some documents failed; a file a note replaces goes to the trash first
-                let kept = trash(data, &v.id).join(&stamp);
-                let (_, errors) = docs.export(Path::new(&v.folder), &f, &|p, b| { sync::write_atomic(&kept.join(p), b, None).ok(); });
+                    Err(e) if e.contains("unknown request") || e.contains("is not allowed") => false,
+                    Err(e) => { st.errors.push(format!("documents: {e}")); false }
+                };
+                // written even when some documents failed; a file a note replaces (one that was a plain note here,
+                // changed before this Mac knew it is a document) stays next to it as a conflict copy
+                let folder = Path::new(&v.folder);
+                let (wrote, errors) = docs.export(folder, &f, &|p, b| { sync::write_atomic(&folder.join(conflict_copy(&f, p, name, &stamp)), b, None).ok(); });
+                for p in wrote { crate::watch::exported(&folder.join(&p)); }
                 st.errors.extend(errors.into_iter().map(|e| format!("document: {e}")));
                 st.warnings.extend(docs.take_warnings());
                 f.prefixes.extend(docs.excluded(&f));
@@ -269,6 +276,15 @@ impl Hub {
                 for w in remote.list_warnings() { if !st.warnings.contains(&w) { st.warnings.push(w); } }
                 // a round that failed (the server out of reach) keeps what the user let through for the next one
                 if !r.errors.is_empty() { one.allowed = allowed.clone(); }
+                // the workspace's notes made documents, SEED a round, on an admin's Mac once an admin turned it on: only
+                // notes this round left the same here and on the server (the rest stay on the file rounds until then)
+                if has_docs && st.docs && st.admin && r.errors.is_empty() {
+                    let agreed = |p: &str, h: &str| next.get(p).is_some_and(|e| e.hash == h) && !r.conflicts.iter().any(|c| c == p);
+                    docs.seed(folder, &f, SEED, &agreed);
+                    st.warnings.extend(docs.take_warnings());
+                }
+                // a write refused because the note became a document on another Mac meanwhile: the next round takes it
+                let r = sync::Report { errors: r.errors.into_iter().map(|e| if e.contains("shared document now") { format!("{}: this note became a shared document; Relay takes it on its next round", e.split(':').next().unwrap_or("")) } else { e }).collect(), ..r };
                 // the next round plans against this base: one not written is an error, not a quiet success
                 if next != base { if let Err(e) = write_base(data, &v.id, &next) { st.errors.push(format!("base: {e}")); } }
                 st = Status { pushed: r.pushed.len() + r.deleted_remote.len(), pulled: r.pulled.len() + r.deleted_local.len(),
@@ -282,6 +298,41 @@ impl Hub {
         for c in &st.conflicts { if !conflicts.contains(c) { conflicts.push(c.clone()); } }
         all.insert(v.id.clone(), Status { pushed: prev.pushed + st.pushed, pulled: prev.pulled + st.pulled, conflicts, live: prev.live, ..st.clone() });
         Some(st)
+    }
+
+    /// A note of vault `id` (in `folder`, `path` relative) changed on disk, by `by` ("claude", "disk", "relay"): taken
+    /// into its document when it is one (Docs::absorb), on a thread of its own (it sends).
+    pub fn absorb(&self, id: &str, folder: &str, path: &str, by: &str) {
+        let Some(docs) = self.docs.lock().unwrap().get(id).cloned() else { return };
+        let (folder, path, by) = (folder.to_string(), path.to_string(), by.to_string());
+        std::thread::spawn(move || { if let Ok(f) = filter(Path::new(&folder)) { docs.absorb(Path::new(&folder), &f, &path, &by).ok(); } });
+    }
+    /// Vault `id`'s documents, when its rounds loaded them.
+    pub fn loaded_docs(&self, id: &str) -> Option<Arc<Docs>> { self.docs.lock().unwrap().get(id).cloned() }
+    /// Notes of vault `id` moved (the Pages tab, `moves`: from, to; the files are there already): each that is a
+    /// document follows in the manifest, keeping its history, and the links the move rewrote in it are taken in as
+    /// an edit. The caller holds the vault's round lock. A rename that fails is returned (the caller moves back).
+    pub fn moved_notes(&self, id: &str, folder: &str, moves: &[(String, String)]) -> Result<(), String> {
+        let Some(docs) = self.loaded_docs(id) else { return Ok(()) };
+        let paths = docs.paths();
+        let mut done: Vec<(String, String)> = vec![];
+        for (from, to) in moves {
+            if !paths.contains_key(from) { continue; }
+            if let Err(e) = docs.rename(from, to) {
+                for (f, t) in done.iter().rev() { docs.rename(t, f).ok(); }
+                return Err(e);
+            }
+            docs.file_moved(to);
+            done.push((from.clone(), to.clone()));
+        }
+        let f = filter(Path::new(folder))?;
+        for (_, to) in &done { docs.absorb(Path::new(folder), &f, to, "relay").ok(); }
+        Ok(())
+    }
+
+    /// An admin turns making the workspace's notes documents on or off (a signed entry in the member list).
+    pub fn set_docs(&self, data: &Path, v: &Shared, c: &Client, on: bool) -> Result<(), String> {
+        self.with_vault(&v.id, || c.sealed(&v.id, load_key(data, &v.id)?).set_docs(on, &|k| save_key(data, &v.id, k)))
     }
 
     /// `f` while no round of vault `id` runs: the key file it writes is not overwritten by a round's copy.
@@ -359,15 +410,19 @@ impl Hub {
                     // another member's edit to a document: taken (or its log pulled) and the note written out, on a
                     // thread of its own (the channel's reader never waits on the server) under the vault's round lock
                     Event::Doc { doc, seq, from, body } => {
-                        let (h, vid, folder, data) = (h.clone(), vid.clone(), folder.clone(), d.clone());
+                        let (h, vid, folder) = (h.clone(), vid.clone(), folder.clone());
                         std::thread::spawn(move || {
                             let st = h.state::<crate::App>();
                             st.shared.with_vault(&vid, || {
                                 let Some(docs) = st.shared.docs.lock().unwrap().get(&vid).cloned() else { return };
                                 let Ok(f) = filter(Path::new(&folder)) else { return };
-                                let kept = trash(&data, &vid).join(chrono::Local::now().format("%Y-%m-%d %H%M").to_string());
-                                let keep = |p: &str, b: &[u8]| { sync::write_atomic(&kept.join(p), b, None).ok(); };
-                                if docs.take_live(&doc, seq, &from, &body).is_ok_and(|x| x.is_some()) { docs.export(Path::new(&folder), &f, &keep); }
+                                let stamp = chrono::Local::now().format("%Y-%m-%d %H%M").to_string();
+                                let root = Path::new(&folder);
+                                // as in a round: a file a note replaces stays next to it, visible
+                                let keep = |p: &str, b: &[u8]| { sync::write_atomic(&root.join(conflict_copy(&f, p, &crate::sys_name(), &stamp)), b, None).ok(); };
+                                if docs.take_live(&doc, seq, &from, &body).is_ok_and(|x| x.is_some()) {
+                                    for p in docs.export(root, &f, &keep).0 { crate::watch::exported(&root.join(&p)); }
+                                }
                             });
                         });
                         return;
@@ -565,6 +620,15 @@ pub async fn shared_vault_invite(app: AppHandle, state: St<'_>, id: String, role
     Ok(serde_json::json!({"link": link, "invite": invite}))
 }
 
+/// An admin turns making the workspace's notes documents on or off (docs/workspaces.md, Documents).
+#[tauri::command]
+pub async fn shared_vault_docs(app: AppHandle, state: St<'_>, id: String, on: bool) -> Result<(), String> {
+    let (data, a) = (crate::data_dir(&app), app.clone());
+    on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.set_docs(&data, &v, &c, on)).await?;
+    if let Some(s) = app.state::<crate::App>().shared.status.lock().unwrap().get_mut(&id) { s.docs = on; }
+    sync_now();
+    Ok(())
+}
 /// An admin trusts a member's new keys (they set Relay up again): this Mac pins what the member publishes now, when it
 /// is signed by the member's new identity and vouched for under the newest key (docs/workspaces.md, Key rotation).
 #[tauri::command]
