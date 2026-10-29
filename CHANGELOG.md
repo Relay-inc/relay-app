@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- **Make a member an admin of a workspace**: an admin sees Make admin / Make member next to each member under Members, a signed entry in the member list that the server's role follows. A workspace's role badge and the Members list read the member list now, so an admin whom another admin's upgrade to 0.0.40 added as a member no longer shows Admin while the documents switch stays out of reach
 - **Move or copy a project from the Pages tab**: right-click a project there for the same Move to / Copy to workspace
   as on the Chats tab.
 

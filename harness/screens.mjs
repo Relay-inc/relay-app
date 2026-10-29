@@ -1152,6 +1152,23 @@ const VIEWS = {
     await page.getByText("Notes as shared documents").first().scrollIntoViewIfNeeded();
     await settle(page);
   },
+  // the member list's roles in Members, with Make admin / Make member for a list admin (PR member roles)
+  "settings-shared-members": async () => {
+    await settingsPage("Machines", undefined, "shared");
+    await page.setViewportSize({ width: 900, height: 1200 });
+    await button("Members").first().click();
+    await waitText("Design laptop");
+    await page.getByText("Design laptop").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // after Make admin on Design laptop: its pill says Admin, its button Make member
+  "settings-shared-promote": async () => {
+    await VIEWS["settings-shared-members"]();
+    await button("Make admin").first().click();
+    await waitText("Make member");
+    await page.getByText("Design laptop").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   "settings-shared-vaults": async () => {
     await settingsPage("Machines", undefined, "shared");
     await page.setViewportSize({ width: 900, height: 1600 });

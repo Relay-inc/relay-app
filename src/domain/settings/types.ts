@@ -137,7 +137,8 @@ export type SharedStatus = {
   rekeying?: boolean; // someone left and the key has not changed yet
   changed?: { fp: string; name: string }[]; // members whose Relay publishes other keys than the member list has
   docs?: boolean; // an admin turned on making the workspace's notes documents (the member list says so)
-  admin?: boolean; // this Mac is an admin of the member list: it may turn that on or off
+  admin?: boolean; // this Mac is an admin of the member list: it may turn that on or off, and make members admins
+  admins?: string[] | null; // the member list's admins (fingerprints); null while the workspace has no list
 };
 /** An open invite of a shared vault: single use, `expires` in epoch seconds. */
 export type SharedInvite = { id: string; role: SharedRole; expires: number };

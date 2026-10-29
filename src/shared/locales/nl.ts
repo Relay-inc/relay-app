@@ -1048,6 +1048,8 @@ export default {
     "Workspaces die een team met je deelt op een relay-server die niet een van je machines is. De server bewaart enkel versleutelde bestanden. Elke Mac synchroniseert de workspace naar een eigen map. Een workspace op een van je machines staat onder die machine.",
   "set.sharedAdmin": "Beheerder",
   "set.sharedMember": "Lid",
+  "set.sharedMakeAdmin": "Maak beheerder",
+  "set.sharedMakeMember": "Maak lid",
   "set.sharedInvite": "Uitnodigen…",
   "set.sharedMembers": "Leden",
   "set.sharedLeave": "Verlaten",

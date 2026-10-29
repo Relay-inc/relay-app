@@ -1041,6 +1041,8 @@ const en = {
     "Workspaces a team shares with you on a relay-server that is not one of your machines. The server only keeps encrypted files. Each Mac syncs the workspace into a folder of its own. A workspace on one of your machines shows under that machine.",
   "set.sharedAdmin": "Admin",
   "set.sharedMember": "Member",
+  "set.sharedMakeAdmin": "Make admin",
+  "set.sharedMakeMember": "Make member",
   "set.sharedInvite": "Invite…",
   "set.sharedMembers": "Members",
   "set.sharedLeave": "Leave",
