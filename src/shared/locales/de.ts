@@ -386,6 +386,12 @@ export default {
   "drawer.detail": "Details",
   "page.edited": "Bearbeitet {ago}",
   "page.ask": "Claude fragen",
+  "page.editor": "Text der Seite",
+  "page.changedOnDisk":
+    "Diese Notiz wurde auf der Festplatte geändert, seit du sie geöffnet hast. Nichts wurde gespeichert.",
+  "page.reload": "Neu laden",
+  "page.keepMine": "Meine behalten",
+  "page.tooBig": "Diese Notiz ist größer als 1 MB: sie ist nur lesbar.",
   "page.conversations": "Unterhaltungen",
   "page.latest": "{n} · zuletzt {time}",
   "note.copyPath": "Pfad kopieren",

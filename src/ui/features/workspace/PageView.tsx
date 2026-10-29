@@ -18,6 +18,9 @@ import { Icon } from "../../components/Icon";
 import { Note } from "../../components/Note";
 import { ProjectImg } from "../../components/ProjectImg";
 import { FRONTMATTER, LEAD, PropertyValue } from "./NoteDetail";
+import { PageEditor } from "./PageEditor";
+
+const EDIT_MAX = 1_000_000; // characters: a bigger note is shown read-only
 
 /** A workspace's note as a page in the middle column (the A6 design): a bar with where it lives, when it was edited and
  *  Ask Claude, then its folders, icon and title, its properties, the project's conversations and the body. */
@@ -40,6 +43,8 @@ export function PageView({ target, className }: { target: string; className: str
   const match = page ? FRONTMATTER.exec(page.text) : null;
   const properties = match ? noteProperties(match[1]) : [];
   const { title, body } = noteTitle(path, page ? page.text.slice(match ? match[0].length : 0) : noteName(path));
+  // what comes before the body in the file (frontmatter, the title's heading): the editor writes it back unchanged
+  const head = page ? page.text.slice(0, page.text.length - body.length) : "";
   const folders = path.split("/").slice(0, -1);
 
   return (
@@ -132,7 +137,14 @@ export function PageView({ target, className }: { target: string; className: str
               ) : null}
             </header>
             <div className="h-px bg-separator" />
-            <PageBody text={body} />
+            {page.text.length > EDIT_MAX ? (
+              <>
+                <Note>{t("page.tooBig")}</Note>
+                <PageBody text={body} />
+              </>
+            ) : (
+              <PageEditor key={target} page={target} head={head} body={body} />
+            )}
           </article>
         )}
       </div>
@@ -140,7 +152,7 @@ export function PageView({ target, className }: { target: string; className: str
   );
 }
 
-/** A page's text: rendered markdown, where ticket 2's editor goes. */
+/** A page's text read-only: rendered markdown, for a note too big to edit. */
 function PageBody({ text }: { text: string }) {
   return (
     <Markdown

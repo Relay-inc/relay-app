@@ -483,7 +483,16 @@ function handle(cmd: string, a: Args): unknown {
     case "read_note": {
       const team = shared && vault.teamNotes.find(n => n.endsWith(`/${String(a.target).replace(/\.md$/, "")}.md`));
       const modified = Date.now() - 2 * 3600_000; // a page reads "Edited 2 h ago"
-      return team ? { ...vault.noteText(a.target), path: team, modified } : { ...vault.noteText(a.target), modified };
+      const read = { ...vault.noteText(a.target), modified, ...written.get(String(a.target)) };
+      return team ? { ...read, path: team, hash: "h0" } : { hash: "h0", ...read };
+    }
+    case "write_note": {
+      // a file changed on disk since the page read it (set with __harness.changeOnDisk): refused unless forced
+      if (diskChanged && !a.force) return Promise.reject("changed");
+      diskChanged = false;
+      const hash = `h${++writes}`;
+      written.set(String(a.target), { text: String(a.text), hash });
+      return { hash };
     }
     case "project_icons":
       return vault.projectIcons();
@@ -1267,6 +1276,10 @@ async function stream({
   return { perDelta, total: renderedAt - start, renderedAt };
 }
 
+// the page editor's saves (write_note), and whether a note changed on disk since it was read
+const written = new Map<string, { text: string; hash: string }>();
+let writes = 0;
+let diskChanged = false;
 const harness = {
   // the app has asked for the orchestrator's workers (orchestrator-closed-empty waits for it)
   workersRead: false,
@@ -1342,6 +1355,10 @@ const harness = {
     emitAgent(key, { type: "resolved", model, effort, default_model: true, default_effort: true }),
   /** the live events after the long conversation opened: running and failed tools, an error, a draft note */
   liveTail: (key = conv.LONG_KEY) => conv.liveTail().forEach(event => emitAgent(key, event)),
+  /** what the page editor saved last (write_note) */
+  written: () => [...written.values()].pop()?.text ?? null,
+  /** someone changed a note on disk: the next save without force is refused */
+  changeOnDisk: () => void (diskChanged = true),
   /** the board pipeline's calls so far */
   pipelineCalls: () => structuredClone(pipelineCalls),
   /** what gh says about the pipeline's PRs from now on */
