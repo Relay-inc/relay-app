@@ -654,6 +654,45 @@ const SCENARIOS = {
 
   // Notion-like editing on a page (ticket 3): /to + Enter makes a to-do, its box toggles the file, a heading dragged
   // above the text before it takes its section along
+  // ticket 6: the file changes outside Relay while the page has unsaved typing; apart, both stay, on one line, the bar
+  async pageMerge(s) {
+    await s.load();
+    const { page } = s;
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("\nMy line");
+    await page.evaluate(() =>
+      window.__harness.editOutside("- [ ] First open loop", "- [ ] First open loop, by Claude"),
+    );
+    await page
+      .locator(".cm-outside")
+      .first()
+      .waitFor({ timeout: 3000 })
+      .catch(() => {});
+    const text = await page.locator(".cm-content").textContent();
+    s.check("Claude's change is in the editor", text.includes("First open loop, by Claude"));
+    s.check("what was typed is still there", text.includes("My line"));
+    s.check("the changed line is marked", (await page.locator(".cm-outside").count()) > 0);
+    const written = async () => (await page.evaluate(() => window.__harness.written())) ?? "";
+    for (let i = 0; i < 20 && !/My line/.test(await written()); i++) await page.waitForTimeout(200);
+    s.check("the save keeps both", /First open loop, by Claude[\s\S]*My line/.test(await written()));
+    await page.locator(".cm-line", { hasText: "Second open loop" }).click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" today");
+    await page.evaluate(() => window.__harness.editOutside("- [ ] Second open loop", "- [ ] Second open loop, moved"));
+    s.check(
+      "the same line changed both ways shows the bar",
+      await page
+        .getByText("Keep mine")
+        .waitFor({ timeout: 3000 })
+        .then(
+          () => true,
+          () => false,
+        ),
+    );
+  },
   async pageBlocks(s) {
     await s.load();
     const { page } = s;

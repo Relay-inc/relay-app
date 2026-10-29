@@ -532,6 +532,11 @@ export const sharedVaultHeld = (id: string, allow: boolean, paths: string[]) =>
 export const sharedVaultPendingInvite = () => invoke<string | null>("shared_vault_pending_invite");
 /** A new invite link waits in the backend (`sharedVaultPendingInvite`): a ping, no payload. */
 export const onVaultInvite = (handler: () => void) => listen("vault-invite", () => handler());
+/** A note changed outside Relay (watch.rs): its page path, its text's hash ("" when it is gone), and whether it was a
+ *  move of Relay's own that rewrote its links. */
+export type NoteChange = { path: string; hash: string; relinked: boolean };
+export const onNoteChanged = (handler: (change: NoteChange) => void) =>
+  listen<NoteChange>("note-changed", e => handler(e.payload));
 /** The team's changes came into a shared vault's folder. */
 export const onVaultPulled = (handler: () => void) => listen("vault-pulled", () => handler());
 

@@ -229,3 +229,15 @@
   text-decoration: none;
   font-weight: 600;
 }
+
+/* lines a change made outside Relay touched (Claude, Obsidian, a shared round): marked for a moment, with who made it */
+.page-editor .cm-outside {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  transition: background-color 600ms ease-out;
+}
+.page-editor .cm-outside::after {
+  content: attr(data-by);
+  float: right;
+  font-size: 11px;
+  color: var(--tertiary);
+}

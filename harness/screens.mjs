@@ -1365,6 +1365,30 @@ const VIEWS = {
     await waitText("Keep mine", 4000);
     await settle(page);
   },
+  // typing at the end of a page while Claude changes a line above: both land, Claude's line marked for a moment (ticket 6)
+  "page-merged-outside": async () => {
+    await VIEWS["page-view"]();
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("\nMy line");
+    await page.evaluate(() =>
+      window.__harness.editOutside("- [ ] Second open loop", "- [ ] Second open loop, moved to Friday"),
+    );
+    await page.locator(".cm-outside").first().waitFor();
+    await settle(page);
+  },
+  // both sides changed the same line: the bar, nothing merged (ticket 6)
+  "page-merge-conflict": async () => {
+    await VIEWS["page-view"]();
+    await page.locator(".cm-line", { hasText: "Second open loop" }).click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" today");
+    await page.evaluate(() =>
+      window.__harness.editOutside("- [ ] Second open loop", "- [ ] Second open loop, moved to Friday"),
+    );
+    await waitText("Keep mine", 4000);
+    await settle(page);
+  },
   // the / menu on a new line of a page, filtered by "/to" (ticket 3)
   "editor-slash-menu": async () => {
     await VIEWS["page-view"]();

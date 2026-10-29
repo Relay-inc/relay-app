@@ -522,6 +522,7 @@ function handle(cmd: string, a: Args): unknown {
     case "read_note": {
       const team = shared && vault.teamNotes.find(n => n.endsWith(`/${String(a.target).replace(/\.md$/, "")}.md`));
       const modified = Date.now() - 2 * 3600_000; // a page reads "Edited 2 h ago"
+      lastPage = String(a.target);
       const read = { ...vault.noteText(a.target), modified, ...written.get(String(a.target)) };
       return team ? { ...read, path: team, hash: "h0" } : { hash: "h0", ...read };
     }
@@ -1333,6 +1334,7 @@ const pageRel = (p: unknown) => String(p).replace(vault.VAULT, "").replace(/^\//
 const written = new Map<string, { text: string; hash: string }>();
 let writes = 0;
 let diskChanged = false;
+let lastPage = ""; // the page read_note last read, which __harness.editOutside changes
 const harness = {
   // the app has asked for the orchestrator's workers (orchestrator-closed-empty waits for it)
   workersRead: false,
@@ -1412,6 +1414,13 @@ const harness = {
   written: () => [...written.values()].pop()?.text ?? null,
   /** someone changed a note on disk: the next save without force is refused */
   changeOnDisk: () => void (diskChanged = true),
+  // the page last read changed outside Relay: its text through `edit`, then the file watcher's event (watch.rs)
+  editOutside: (find: string, put: string) => {
+    const now = written.get(lastPage)?.text ?? vault.noteText(lastPage).text;
+    const hash = `h${++writes}`;
+    written.set(lastPage, { text: now.replace(find, put), hash });
+    emit("note-changed", { path: lastPage, hash, relinked: false });
+  },
   /** the board pipeline's calls so far */
   pipelineCalls: () => structuredClone(pipelineCalls),
   /** what gh says about the pipeline's PRs from now on */
