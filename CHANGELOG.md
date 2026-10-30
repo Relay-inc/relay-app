@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.43] - 2026-10-30
+
 ### Added
 
 - `relay://meeting?do=prep|record|note&uid=…&start=…` (from Keel's calendar): Relay finds the meeting by `uid@start`, or
