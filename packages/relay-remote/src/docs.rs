@@ -695,6 +695,15 @@ impl Docs {
             v.extend(gone.keys().filter_map(|id| open.get(id).filter(|o| !o.c.bound_as.is_empty()).map(|o| (id.clone(), String::new(), o.c.bound_as.clone()))));
             v
         };
+        // kept before the server is asked: a member's Mac cannot let go, yet must not pull the old record back either
+        let left: Vec<String> = todo.iter().map(|t| t.2.clone()).filter(|p| !p.is_empty()).collect();
+        if !left.is_empty() {
+            let mut all = self.let_go();
+            all.extend(left);
+            all.sort();
+            all.dedup();
+            self.save_let_go(&all);
+        }
         for chunk in todo.chunks(1000) {
             let bind: Vec<String> = chunk.iter().filter(|t| !t.1.is_empty()).map(|t| keys.name(&t.1)).collect();
             let unbind: Vec<String> = chunk.iter().filter(|t| !t.2.is_empty()).map(|t| keys.name(&t.2)).collect();
@@ -711,6 +720,19 @@ impl Docs {
                 Err(e) => { self.warn(format!("notes not marked as documents on the server yet: {e}")); return; }
             }
         }
+    }
+    /// The paths documents left (deleted, moved away) whose file record from before they were documents may still be
+    /// on the server: a file round deletes that record instead of pulling it back (shared_vaults::round).
+    pub fn let_go(&self) -> Vec<String> {
+        std::fs::read_to_string(self.dir.join("let-go.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    }
+    /// `done` needs no file round's delete any more.
+    pub fn forget_let_go(&self, done: &[String]) {
+        let all = self.let_go();
+        if done.iter().any(|d| all.contains(d)) { self.save_let_go(&all.into_iter().filter(|p| !done.contains(p)).collect::<Vec<_>>()); }
+    }
+    fn save_let_go(&self, all: &[String]) {
+        if let Err(e) = sync::write_atomic(&self.dir.join("let-go.json"), serde_json::to_string(all).unwrap().as_bytes(), None) { self.warn(format!("let-go.json: {e}")); }
     }
     /// Two manifest keys that are one name on a Mac's disk (case, normalization; two members made them apart): the
     /// first in order keeps it, the others move to a conflict name, the same on every Mac.
@@ -1498,6 +1520,7 @@ mod tests {
         assert!(!root.join("Old/Plan.md").exists() && std::fs::read_to_string(root.join("New/Plan.md")).unwrap() == "text");
         let bound = srv.lock().unwrap().bound.clone();
         assert!(bound.contains(&k.name("New/Plan.md")) && !bound.contains(&k.name("Old/Plan.md")), "the old name let go");
+        assert_eq!(a.let_go(), vec!["Old/Plan.md".to_string()], "its old file record is the file rounds' to delete");
         for t in ["mv-a", "mv-root"] { std::fs::remove_dir_all(tmp(t)).ok(); }
     }
 
@@ -1586,6 +1609,10 @@ mod tests {
         assert!(!rb.join("Plan.md").exists(), "gone on B too");
         assert!(!srv.lock().unwrap().bound.contains(&k.name("Plan.md")), "its name let go");
         assert!(b.paths().is_empty() && b.gone().contains_key(&id));
+        // the note's file record from before it was a document is the file rounds' to delete, on both Macs
+        assert_eq!((a.let_go(), b.let_go()), (vec!["Plan.md".to_string()], vec!["Plan.md".to_string()]));
+        b.forget_let_go(&["Plan.md".to_string()]);
+        assert!(b.let_go().is_empty());
         // Undo on A: back on both
         std::fs::write(ra.join("Plan.md"), "text").unwrap();
         assert!(a.restore("Plan.md").unwrap());

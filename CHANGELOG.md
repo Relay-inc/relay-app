@@ -35,6 +35,8 @@ a PR. Versions follow
 
 - Transcribing a meeting no longer hangs for good when the Mac went to sleep meanwhile: a stretch the speech model
   does not answer for is tried once more with the model reloaded, then marked as untranscribed in the transcript.
+- A note deleted or moved in a shared workspace stays gone: once it had been a shared document, its old file on the
+  relay-server came back on every Mac within a minute or two, and a moved folder kept its old copy.
 
 ## [0.0.42] - 2026-10-29
 

@@ -275,13 +275,30 @@ impl Hub {
                 st.errors.extend(errors.into_iter().map(|e| format!("document: {e}")));
                 st.warnings.extend(docs.take_warnings());
                 f.prefixes.extend(docs.excluded(&f));
+                remote.know(&base);
+                // a note that stopped being a document here (deleted, moved away) leaves its file record from before it
+                // was one on the server: it reads as deleted here, so the round deletes it instead of pulling it back on
+                // every Mac. Still bound (only who bound it, or an admin, lets go): left alone until it is not.
+                let let_go: Vec<String> = { let now = docs.paths(); docs.let_go().into_iter().filter(|p| !now.contains_key(p)).collect() };
+                let (mut base, mut moved, mut looked) = (base, moved, false);
+                if !let_go.is_empty() {
+                    if let Ok(rm) = sync::Remote::manifest(&remote) {
+                        looked = true;
+                        for p in &let_go {
+                            let Some(e) = rm.get(p) else { continue };
+                            if remote.bound(p) { f.prefixes.push(p.clone()); }
+                            else if !base.contains_key(p) && !folder.join(p).exists() { moved.push((p.clone(), e.hash.clone())); base.insert(p.clone(), e.clone()); }
+                        }
+                    }
+                }
                 let allowed = std::mem::take(&mut one.allowed);
                 let copy = |p: &str| conflict_copy(&f, p, name, &stamp);
                 let to = trash(data, &v.id).join(&stamp);
                 let keep = |p: &str, d: &[u8]| sync::write_atomic(&to.join(p), d, None);
                 let guard = Guard { allow_deletes: false, allowed: &allowed, moved: &moved, keep: &keep };
-                remote.know(&base);
                 let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, &mut one.walker, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
+                // ponytail: any error keeps the whole list for the next round, which only looks again
+                if looked && r.errors.is_empty() { docs.forget_let_go(&let_go.into_iter().filter(|p| !f.prefixes.contains(p)).collect::<Vec<_>>()); }
                 // files still under an older key, sealed again under the newest
                 // ponytail: 100 a round, a big workspace takes a few rounds after a rotation
                 if r.errors.is_empty() { remote.reseal(100); }

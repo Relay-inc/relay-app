@@ -446,6 +446,8 @@ impl SealedRemote {
     /// The last round's base, so a record that will not open under a known path's name reads as that path unchanged:
     /// left out, it would read as deleted there and be deleted on every member's Mac. A new write over it still goes
     /// through (its etag is the broken record's).
+    /// Whether the last manifest said `path`'s record is a document's (`doc_bind`): no file round writes or deletes it.
+    pub fn bound(&self, path: &str) -> bool { lock(&self.bound).contains(&self.keys().name(path)) }
     pub fn know(&self, base: &Manifest) {
         let k = self.keys();
         *lock(&self.known) = base.values().map(|e| (k.name(&e.path), e.clone())).collect();
