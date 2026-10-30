@@ -124,6 +124,7 @@ export default {
   "mig.moved": "Nach {name} verschoben",
   "mig.copied": "Nach {name} kopiert",
   "mig.came": "Mit dem Projekt nach {name} verschoben: es geht dort weiter",
+  "mig.chatCame": "Nach {name} verschoben: es geht dort weiter",
   "mig.chatsGo_one": "{n} Gespräch geht mit und läuft dort weiter",
   "mig.chatsGo_other": "{n} Gespräche gehen mit und laufen dort weiter",
   "mig.whyProvider": "kein Claude Code: andere Agents laufen nur in deinem eigenen Vault",

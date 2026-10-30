@@ -239,6 +239,9 @@ export const migrateProject = (
   dry: boolean,
   chats: { key: string; title: string; mail: boolean }[],
 ) => invoke<MigratePlan>("migrate_project", { project, to, context, mode, dry, chats });
+/** One conversation to the workspace `to` with its transcript (src-tauri `move_chat_workspace`). */
+export const moveChatWorkspace = (key: string, title: string, mail: boolean, to: string) =>
+  invoke("move_chat_workspace", { key, title, mail, to });
 /** The Design drawer's native claude.ai webview (design.rs), placed by the drawer's bounds in logical px. */
 export const designShow = (url: string, r: DOMRect) =>
   invoke("design_show", { url, x: r.x, y: r.y, w: r.width, h: r.height });

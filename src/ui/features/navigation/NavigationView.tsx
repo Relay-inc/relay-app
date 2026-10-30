@@ -9,7 +9,7 @@ import {
 } from "../../../domain/navigation/sidebar";
 import { USAGE } from "../../../domain/navigation/views";
 import { useNavigationStore } from "../../../application/navigation/store";
-import { select, openProject, openProjectPanel, openSettings } from "../../../application/navigation/navigation";
+import { select, openProject, openProjectPanel, openSettings, toast } from "../../../application/navigation/navigation";
 import {
   sidebarModel,
   setFind,
@@ -47,8 +47,8 @@ import { FolderName } from "./FolderName";
 import { useReorder } from "./useReorder";
 import { DROP_LINE_AFTER } from "./rows";
 import { closeWork, openWork } from "../../../application/today/work";
-import { activeFolder, workspaces } from "../../../application/navigation/workspaces";
-import { projectVault as homeOf } from "../../../application/navigation/migrate";
+import { activeFolder, workspaceOf, workspaces } from "../../../application/navigation/workspaces";
+import { moveChatTo, projectVault as homeOf } from "../../../application/navigation/migrate";
 import { MigrateDialog } from "./MigrateDialog";
 import { ProjectDialog, type ProjectAsk } from "./ProjectDialog";
 import { chatCount, pagesView, setSidebarTab, sidebarTab } from "../../../application/navigation/pages";
@@ -142,12 +142,22 @@ export function NavigationView({ className }: { className: string }) {
         { id: "renamefolder", label: t("nav.renameFolder") },
         { id: "deletefolder", label: t("nav.deleteFolder") },
       ];
-    if (target.kind === "conv")
+    if (target.kind === "conv") {
+      // the other workspaces it can move to, with its transcript; none for a terminal session or the orchestrator's
+      const here = workspaceOf(target.chatKey);
+      const others = here ? workspaces().filter(w => w.folder !== here) : [];
       return [
         { id: "assign", label: t("ctx.assign") },
         ...(sessionIdOf(target.chatKey) ? [{ id: "copyid", label: t("ctx.copyId") }] : []),
         { id: "close", label: t("nav.close") },
+        ...(others.length
+          ? [
+              { id: "", label: t("mig.moveTo"), head: true },
+              ...others.map(w => ({ id: `chatto:${w.folder}`, label: w.name })),
+            ]
+          : []),
       ];
+    }
     const closed = closedOf(target.project);
     const recent: MenuItem[] = closed.length
       ? [
@@ -185,7 +195,10 @@ export function NavigationView({ className }: { className: string }) {
       openProjectPanel();
     } else if (itemId === "copyid") copyText(sessionIdOf(target.chatKey));
     else if (itemId === "close") closeChat(target.chatKey);
-    else if (itemId === "new") select(newChatHere(target.project));
+    else if (itemId.startsWith("chatto:")) {
+      const error = await moveChatTo(target.chatKey, itemId.slice("chatto:".length));
+      if (error) toast(error);
+    } else if (itemId === "new") select(newChatHere(target.project));
     else if (itemId === "newfolder") addFolder(target.project ?? "");
     else if (itemId === "closeall") closeAll(target.project);
     else if (/^(move|copy):/.test(itemId) && target.project)

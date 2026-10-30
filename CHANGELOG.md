@@ -15,6 +15,9 @@ a PR. Versions follow
 
 ### Added
 
+- Move a conversation to another workspace from its right-click menu: it continues there as a general conversation,
+  with its transcript. Refused while it runs or waits on a card, runs on a work machine or is shared with the phone,
+  when it is not Claude Code, and when it read mail and the target is a team workspace.
 - Check workspace… (workspace menu, and the Folders heading in Pages) lists what a workspace lacks for Claude to work
   in it: files of the starter, a context's note or rule, its table in work-state, notes that name another context,
   project cards without `status` or `last`, rules for a folder that is gone, rows without a note. Repair (an admin's,

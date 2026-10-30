@@ -124,6 +124,7 @@ export default {
   "mig.moved": "Déplacé vers {name}",
   "mig.copied": "Copié vers {name}",
   "mig.came": "Déplacée avec son projet vers {name} : elle continue là-bas",
+  "mig.chatCame": "Déplacée vers {name} : elle continue là-bas",
   "mig.chatsGo_one": "{n} conversation suit et continue là-bas",
   "mig.chatsGo_other": "{n} conversations suivent et continuent là-bas",
   "mig.whyProvider": "pas Claude Code : les autres agents tournent uniquement dans votre propre coffre",
