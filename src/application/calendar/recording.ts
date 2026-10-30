@@ -51,8 +51,9 @@ export const useRecordingStore = makeStore<RecordingState>(() => ({
 const set = (patch: Partial<RecordingState>) => useRecordingStore.setState(patch);
 const rec = () => useRecordingStore.getState();
 
-export async function startRecording(id: string) {
-  const meeting = useCalendarStore.getState().list.find(x => x.id === id);
+/** `fallback`: the meeting a relay://meeting link described, when the calendar does not have it. */
+export async function startRecording(id: string, fallback?: Meeting) {
+  const meeting = useCalendarStore.getState().list.find(x => x.id === id) ?? fallback;
   if (!meeting || rec().phase !== "idle") return;
   set({ meeting, phase: "recording", secs: 0, me: 0, others: 0, heard: false, progress: 0, error: "", retry: "" });
   try {
