@@ -2,7 +2,10 @@ import { currentLocale, t } from "../../shared/i18n";
 import { clockTime } from "../../shared/format";
 import {
   bannerDue,
-  briefingOf,
+  prepChatOf,
+  briefingIn,
+  meetingNoteName,
+  withBriefing,
   joinable,
   meetingPrompt,
   soon,
@@ -19,7 +22,7 @@ import { findProjects } from "../workspace/vault";
 import { select, toast } from "../navigation/navigation";
 import { useAgentsStore } from "../agents/store";
 import { agentOf } from "../agents/agents";
-import { saveChats, startChat } from "../conversations/chats";
+import { startChat } from "../conversations/chats";
 import { useConversationsStore } from "../conversations/store";
 import { sendMsg } from "../conversations/actions";
 import { useCalendarStore } from "./store";
@@ -103,20 +106,29 @@ export const joinMeeting = (link: string) => joinable(link) && backend.openUrl(l
  *  start. */
 export async function meetingChat(id: string, how: MeetingChat) {
   // a briefing asked before opens again instead of a second one
-  const briefing = how === "prep" ? briefingOf(useConversationsStore.getState().chats, id) : null;
-  if (briefing) return select(briefing);
+  const prep = how === "prep" ? prepChatOf(useConversationsStore.getState().chats, id) : null;
+  if (prep) return select(prep);
   const meeting = cal().list.find(x => x.id === id);
   if (meeting) await chatAbout(meeting, how);
 }
-/** The briefing as rewritten under Today; empty goes back to the agent's answer. */
-export function editBriefing(key: string, text: string) {
-  useConversationsStore.setState(draft => {
-    const chat = draft.chats[key];
-    if (!chat) return;
-    if (text.trim()) chat.briefing = text;
-    else delete chat.briefing;
-  });
-  saveChats();
+/** A meeting's note, when the vault has it (read fresh: the note may change in Obsidian or by an agent at any time). */
+export async function meetingNote(meeting: Meeting) {
+  const note = (await backend.readNote(meetingNoteName(meeting)).catch(() => null)) as {
+    path: string;
+    text: string;
+    hash: string;
+  } | null;
+  return note && typeof note.text === "string" ? note : null;
+}
+/** The briefing in the meeting's note replaced by `body`, the note read again right before so an edit elsewhere is not
+ *  lost outside the section. The note as written, or null when it is gone or has no briefing any more; a note changed
+ *  in between throws "changed" (nothing written). */
+export async function saveBriefing(meeting: Meeting, body: string) {
+  const note = await meetingNote(meeting);
+  if (!note || briefingIn(note.text) === null) return null;
+  const text = withBriefing(note.text, body);
+  const { hash } = await backend.writeNote(note.path, text, note.hash, false);
+  return { path: note.path, text, hash };
 }
 /** The same for a meeting already in hand: a recording outlives the meeting's place in the list. */
 export async function chatAbout(meeting: Meeting, how: MeetingChat, recording?: Recording) {

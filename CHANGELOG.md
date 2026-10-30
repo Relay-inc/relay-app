@@ -27,6 +27,10 @@ a PR. Versions follow
 - Today shows the meetings that already ended: "1 earlier" on top of the queue folds them open, dimmed, with when
   they ended. A click opens the meeting's note item while it is in the queue.
 
+### Changed
+
+- **A meeting's briefing is written into its note in the vault**: Prepare has Claude put the briefing under `## Briefing` in the meeting's note (`YYYY-MM-DD Title`, made if it isn't there yet), and opening the meeting under Today shows that section, with Edit (saved back into the note, ⌘↵), Open the note and Open the conversation. Prepare still opens the earlier conversation instead of starting a second one, and the meeting note made after the meeting keeps the briefing. Before, the briefing only lived in Relay (the conversation's answer, or what you rewrote under Today)
+
 ### Fixed
 
 - Transcribing a meeting no longer hangs for good when the Mac went to sleep meanwhile: a stretch the speech model

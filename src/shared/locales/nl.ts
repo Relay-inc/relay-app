@@ -847,8 +847,8 @@ export default {
   "today.editBriefing": "Bewerken",
   "today.saveBriefing": "Bewaren",
   "today.cancelEdit": "Annuleren",
-  "today.briefingEdited": "aangepast",
-  "today.briefingEmpty": "Leeg bewaren zet het antwoord van Claude terug",
+  "today.briefingGone": "De meeting note of haar briefing bestaat niet meer.",
+  "today.openNote": "Open de note",
   "today.briefingHint":
     "Claude leest de projectnote, de laatste meeting notes en wat er openstaat in je wachtrij, en schrijft wat je moet weten voor het begint.",
   "today.noteHint": "Claude maakt van de meeting een note in de vault, met de beslissingen en to-do's.",
