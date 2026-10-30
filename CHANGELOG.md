@@ -17,6 +17,8 @@ a PR. Versions follow
 
 - A command's output: click a Bash step open and what it printed shows under the command, live and in older
   conversations (Claude Code).
+- Today shows the meetings that already ended: "1 earlier" on top of the queue folds them open, dimmed, with when
+  they ended. A click opens the meeting's note item while it is in the queue.
 
 ## [0.0.42] - 2026-10-29
 
