@@ -15,6 +15,9 @@ a PR. Versions follow
 
 ### Added
 
+- `relay://meeting?do=prep|record|note&uid=…&start=…` (from Keel's calendar): Relay finds the meeting by `uid@start`, or
+  takes it as the link describes it, and offers Prepare, Record or Make the note in a toast. The link never starts a
+  conversation or the microphone by itself.
 - Move a conversation to another workspace from its right-click menu: it continues there as a general conversation,
   with its transcript. Refused while it runs or waits on a card, runs on a work machine or is shared with the phone,
   when it is not Claude Code, and when it read mail and the target is a team workspace.
