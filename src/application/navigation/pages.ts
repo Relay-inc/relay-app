@@ -74,7 +74,7 @@ type Built = {
   system: PageFolder | null;
 };
 /** Admin of the workspace shown: always of one's own vault and the folders added, of a shared one when its role says. */
-const isAdmin = (workspace: string) =>
+export const isAdmin = (workspace: string) =>
   settings().sharedVaults?.find(vault => vault.folder === workspace)?.role !== "member";
 let built: Built | null = null;
 // the tree is built again only when the notes, the projects or the workspace changed, not on every click

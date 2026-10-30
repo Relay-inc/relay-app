@@ -16,7 +16,7 @@ const TABLE: &str = "| Project | State | Last Touched | Left Off |\n|---|---|---
 
 fn err(e: impl ToString) -> String { e.to_string() }
 /// The folder contexts live in: the mapped notes folder, else the vault.
-fn notes_root(side: &Side) -> PathBuf {
+pub(crate) fn notes_root(side: &Side) -> PathBuf {
     if !side.notes.is_empty() && Path::new(&side.notes).is_dir() { PathBuf::from(&side.notes) } else { PathBuf::from(&side.vault) }
 }
 fn rel(side: &Side, p: &Path) -> String {
@@ -29,7 +29,7 @@ fn named(name: &str) -> Result<&str, String> {
     if migrate::plain(name) && !name.contains(['[', ']', '|', '#', '^']) { Ok(name) } else { Err(format!("not a usable name: {name}")) }
 }
 /// A new file with `text`, never over one that is there.
-fn write_new(p: &Path, text: &str) -> Result<(), String> {
+pub(crate) fn write_new(p: &Path, text: &str) -> Result<(), String> {
     fs::create_dir_all(p.parent().unwrap()).map_err(err)?;
     let mut f = fs::OpenOptions::new().write(true).create_new(true).open(p)
         .map_err(|e| if e.kind() == std::io::ErrorKind::AlreadyExists { format!("already there: {}", p.display()) } else { e.to_string() })?;
@@ -101,6 +101,23 @@ pub fn add_context(text: &str, ctx: &str, known: &[String]) -> String {
     if rest.is_empty() { before } else { format!("{before}\n{rest}\n") }
 }
 
+/// A context's note: the vault's Context template filled in, else the type, alias and date.
+pub(crate) fn context_text(vault: &str, name: &str, today: &str) -> String {
+    template(vault, "Context", name, "", today).unwrap_or_else(|| format!("---\ntype: Context\naliases:\n  - \"{name}\"\ncreated: {today}\n---\n"))
+}
+/// The folder of the vault's rules, `<config>/rules` (`.claude` resolved, else System/), when the vault keeps rules.
+pub(crate) fn rules_dir(side: &Side) -> Option<PathBuf> {
+    let vault = fs::canonicalize(&side.vault).ok()?;
+    let config = fs::canonicalize(vault.join(".claude")).ok().filter(|c| c.starts_with(&vault)).unwrap_or_else(|| vault.join("System"));
+    Some(config.join("rules")).filter(|r| r.is_dir())
+}
+/// A context's rule folder name: `Client Work` → `client-work`.
+pub(crate) fn slug(name: &str) -> String { name.trim().to_lowercase().replace(' ', "-") }
+/// A context's rule, loaded only for its folder (`rel`, relative to the vault), as the starter's Work rule.
+pub(crate) fn rule_text(rel: &str, name: &str) -> String {
+    format!("---\npaths:\n  - \"{rel}/**\"\n---\n\n# {name} Context\n\nLoads only when Claude works on files in `{rel}/`. Describe this context so Claude behaves right here.\n\n- What belongs in this context?\n- Who are the people and organizations around it?\n- Which tone, tools and habits apply?\n- What should Claude never do here?\n")
+}
+
 /// A new context: `<notes>/<name>/<name>.md`, its table in work-state, and in the config's `contexts` when the config
 /// lists them. A vault of cards gets its Projects/ folder. Returns the note, relative to the vault.
 pub fn create_context(side: &Side, name: &str, today: &str) -> Result<String, String> {
@@ -109,9 +126,8 @@ pub fn create_context(side: &Side, name: &str, today: &str) -> Result<String, St
     let dir = notes_root(side).join(name);
     if known.iter().any(|c| c.eq_ignore_ascii_case(name)) || fs::symlink_metadata(&dir).is_ok() { return Err(format!("already there: {name}")); }
     let note = dir.join(format!("{name}.md"));
-    let text = template(&side.vault, "Context", name, "", today)
-        .unwrap_or_else(|| format!("---\ntype: Context\naliases:\n  - \"{name}\"\ncreated: {today}\n---\n"));
-    write_new(&note, &text)?;
+    write_new(&note, &context_text(&side.vault, name, today))?;
+    if let Some(rules) = rules_dir(side) { write_new(&rules.join(slug(name)).join("context.md"), &rule_text(&rel(side, &dir), name)).ok(); }
     if migrate::cards(side) { fs::create_dir_all(dir.join("Projects")).map_err(err)?; } else {
         let ws = fs::read_to_string(&side.work_state).map_err(err)?;
         fs::write(&side.work_state, add_context(&ws, name, &known)).map_err(err)?;
@@ -271,6 +287,7 @@ mod tests {
         let s = side(&v, "System/rules/core/work-state.md");
         assert_eq!(create_context(&s, "Home", "2026-10-29").unwrap(), "Contexts/Home/Home.md");
         assert!(v.join("Contexts/Home/Projects").is_dir());
+        assert!(r(&v, "System/rules/home/context.md").contains("  - \"Contexts/Home/**\""));
         let p = create_project(&s, "Home", "Garden", "Project", "Quiet", "2026-10-29").unwrap();
         assert_eq!(p, "Contexts/Home/Projects/Garden/Garden.md");
         assert_eq!(r(&v, &p), "---\ntype: Project\ncontext: \"[[Home]]\"\nstatus: Quiet\nlast: 2026-10-29\nrepos: []\n---\n\n## Status\n*2026-10-29*\n");

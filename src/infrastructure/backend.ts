@@ -190,6 +190,11 @@ export const setProjectState = (workspace: string, name: string, status: string)
 /** Without `row`: a project's row out of work-state, returned; with it: that row back in `context`. */
 export const projectRow = (workspace: string, name: string, context: string, row: string | null) =>
   invoke<string | null>("project_row", { workspace, name, context, row });
+/** A finding of the workspace check (vaultcheck.rs): `kind` what, `context` and `path` where, `paths` the notes (or
+ *  for `card_fields` the fields) it is about, `fix` whether Repair puts it right. */
+export type VaultFinding = { id: string; kind: string; context: string; path: string; paths: string[]; fix: boolean };
+export const vaultCheck = (workspace: string) => invoke<VaultFinding[]>("vault_check", { workspace });
+export const vaultRepair = (workspace: string, ids: string[]) => invoke<number>("vault_repair", { workspace, ids });
 export const propertyValues = (folder: string, key: string) => invoke<string[]>("property_values", { folder, key });
 export const pickFolder = () => invoke<string | null>("pick_folder");
 export const pickPath = (folder: boolean, start: string) => invoke<string | null>("pick_path", { folder, start });
