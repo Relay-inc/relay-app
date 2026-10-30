@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.43] - 2026-10-30
+
 ### Added
 
 - Move a conversation to another workspace from its right-click menu: it continues there as a general conversation,
