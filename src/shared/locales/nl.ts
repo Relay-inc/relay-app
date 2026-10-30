@@ -124,6 +124,7 @@ export default {
   "mig.moved": "Verplaatst naar {name}",
   "mig.copied": "Gekopieerd naar {name}",
   "mig.came": "Mee verplaatst met het project naar {name}: het gaat daar verder",
+  "mig.chatCame": "Verplaatst naar {name}: het gaat daar verder",
   "mig.chatsGo_one": "{n} gesprek gaat mee en loopt daar verder",
   "mig.chatsGo_other": "{n} gesprekken gaan mee en lopen daar verder",
   "mig.whyProvider": "geen Claude Code: andere agents lopen enkel in je eigen vault",

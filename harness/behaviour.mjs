@@ -588,6 +588,21 @@ const SCENARIOS = {
   },
 
   // a project moved to another workspace takes its conversations along: they show under it there
+  // one conversation moved to another workspace from its menu: it shows there, as a general conversation
+  async chatmigrate(s) {
+    await s.load({ fixture: "shared" });
+    const { page } = s;
+    await nav(page).getByText("Billing sync double balances", { exact: true }).first().click({ button: "right" });
+    await click(page.getByRole("button", { name: "Side vault", exact: true }).first());
+    s.check("done", await waitText(page, "Moved to Side vault"));
+    const run = (await s.calls("move_chat_workspace")).at(-1);
+    s.check("move_chat_workspace to the side vault", run?.args.to === "/Users/me/Side vault");
+    s.check("gone from Personal", !(await navHas(page, "Billing sync double balances")));
+    await page.keyboard.press("Control+Digit2");
+    await settle(page);
+    s.check("it shows in the side vault", await navHas(page, "Billing sync double balances"));
+  },
+
   async migrate(s) {
     await s.load({ fixture: "shared" });
     const { page } = s;

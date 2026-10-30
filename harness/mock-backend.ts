@@ -781,6 +781,7 @@ function handle(cmd: string, a: Args): unknown {
     case "design_opened":
     case "set_design_link":
     case "set_project_icon":
+    case "move_chat_workspace":
     // a project moved or copied to another workspace: what goes, a team workspace's warning, and Northwind Portal into
     // the side vault, which has a project of that name
     case "migrate_project": {

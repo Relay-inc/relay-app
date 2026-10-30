@@ -74,3 +74,27 @@ export async function migrate(project: string, to: string, mode: "move" | "copy"
   toast(t(mode === "move" ? "mig.moved" : "mig.copied", { name: vaultName(to) }));
   return "";
 }
+
+/** One conversation moved to the workspace `to` with its transcript, as a general conversation there; one that never
+ *  started just goes. The error's text, else "". */
+export async function moveChatTo(key: string, to: string) {
+  const chat = useConversationsStore.getState().chats[key];
+  if (!chat) return "";
+  try {
+    await backend.moveChatWorkspace(key, chat.title, !!chat.fromMail, to);
+  } catch (e) {
+    return String(e);
+  }
+  const main = useWorkspaceStore.getState().snap.vault?.vault ?? "";
+  useConversationsStore.setState(draft => {
+    const moved = draft.chats[key];
+    moved.project = null;
+    delete moved.folder;
+    if (to === main) delete moved.vault;
+    else moved.vault = to;
+    if (hasStarted(draft, key)) push(draft, key, { kind: "note", text: t("mig.chatCame", { name: vaultName(to) }) });
+  });
+  saveChats();
+  toast(t("mig.moved", { name: vaultName(to) }));
+  return "";
+}

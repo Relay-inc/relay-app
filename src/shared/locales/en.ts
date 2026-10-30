@@ -123,6 +123,7 @@ const en = {
   "mig.moved": "Moved to {name}",
   "mig.copied": "Copied to {name}",
   "mig.came": "Moved with its project to {name}: it continues there",
+  "mig.chatCame": "Moved to {name}: it continues there",
   "mig.chatsGo_one": "{n} conversation goes along and continues there",
   "mig.chatsGo_other": "{n} conversations go along and continue there",
   "mig.whyProvider": "not Claude Code: other agents run in your own vault only",

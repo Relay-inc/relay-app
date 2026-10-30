@@ -908,6 +908,18 @@ const VIEWS = {
       .click({ button: "right" });
     await settle(page);
   },
+  // a conversation's menu: the other workspaces it can move to
+  "chat-migrate-menu": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page
+      .getByRole("navigation")
+      .first()
+      .getByText("Billing sync double balances", { exact: true })
+      .first()
+      .click({ button: "right" });
+    await waitText("Move to workspace");
+    await settle(page);
+  },
   // a project moved to another workspace: what goes and what stays (PR workspace-migrate)
   "migrate-personal": async () => {
     await open(page, server.url, { fixture: "shared" });
