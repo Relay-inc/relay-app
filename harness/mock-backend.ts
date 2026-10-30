@@ -1102,6 +1102,11 @@ function handle(cmd: string, a: Args): unknown {
         transcript: "Attachments/2026-10-01 0930 Meeting.md",
         seconds: 60,
       };
+    case "meeting_kept":
+      return fixture === "kept-recording" ? ["20260930-152600"] : [];
+    case "meeting_record_retry": // in the kept-recording fixture it never ends, to look at the saving state
+      if (fixture === "kept-recording") return new Promise(() => {});
+      return { audio: null, transcript: "Attachments/2026-09-30 1526 Meeting.md", seconds: 60 };
     case "meeting_record_cancel":
       meetingTicks = null;
       return null;

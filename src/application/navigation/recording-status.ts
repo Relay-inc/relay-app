@@ -14,7 +14,7 @@ export type RecordingNow = { label: string; since?: number; progress?: number; o
 export function recordingNow(): RecordingNow {
   const meeting = useRecordingStore.getState();
   if (meeting.phase !== "idle") {
-    const title = meeting.meeting?.title || t("wait.meetingUntitled");
+    const title = meeting.title || meeting.meeting?.title || t("wait.meetingUntitled");
     return {
       label: title,
       ...(meeting.phase === "saving" ? { progress: meeting.progress } : { since: Date.now() - meeting.secs * 1000 }),

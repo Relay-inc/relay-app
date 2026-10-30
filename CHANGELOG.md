@@ -22,8 +22,15 @@ a PR. Versions follow
   context's rule.
 - A command's output: click a Bash step open and what it printed shows under the command, live and in older
   conversations (Claude Code).
+- A meeting recording that failed to transcribe is offered again in Waiting for you after a restart, with the time it
+  started, and a hint to keep the laptop open while it transcribes.
 - Today shows the meetings that already ended: "1 earlier" on top of the queue folds them open, dimmed, with when
   they ended. A click opens the meeting's note item while it is in the queue.
+
+### Fixed
+
+- Transcribing a meeting no longer hangs for good when the Mac went to sleep meanwhile: a stretch the speech model
+  does not answer for is tried once more with the model reloaded, then marked as untranscribed in the transcript.
 
 ## [0.0.42] - 2026-10-29
 

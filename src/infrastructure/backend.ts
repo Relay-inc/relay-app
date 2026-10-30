@@ -694,11 +694,19 @@ export const meetingRecordStop = (title: string, me: string, others: string, onP
   channel.onmessage = onProgress;
   return invoke<Recording>("meeting_record_stop", { title, me, others, onProgress: channel });
 };
-/** Writes out the newest recording a failed stop kept, as `meetingRecordStop`. */
-export const meetingRecordRetry = (title: string, me: string, others: string, onProgress: (done: number) => void) => {
+/** The folders of recordings a failure kept, newest first; their names are their start times (20261029-152600). */
+export const meetingKept = () => invoke<string[]>("meeting_kept");
+/** Writes out one of those recordings, as `meetingRecordStop`. */
+export const meetingRecordRetry = (
+  folder: string,
+  title: string,
+  me: string,
+  others: string,
+  onProgress: (done: number) => void,
+) => {
   const channel = new Channel<number>();
   channel.onmessage = onProgress;
-  return invoke<Recording>("meeting_record_retry", { title, me, others, onProgress: channel });
+  return invoke<Recording>("meeting_record_retry", { folder, title, me, others, onProgress: channel });
 };
 export const meetingRecordCancel = () => invoke("meeting_record_cancel");
 
