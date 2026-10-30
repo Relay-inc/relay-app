@@ -32,6 +32,7 @@ import { SidebarMenu, type MenuItem } from "./SidebarMenu";
 import { PageFileDialog, type PageFileAsk } from "./PageFileDialog";
 import { MigrateDialog } from "./MigrateDialog";
 import { ProjectDialog, type ProjectAsk } from "./ProjectDialog";
+import { VaultCheckDialog } from "./VaultCheckDialog";
 
 const RECENT = "pages:recent";
 const FOLDERS = "pages:folders";
@@ -56,6 +57,7 @@ export function PagesView() {
   const [menu, setMenu] = useState<{ x: number; y: number; path: string; kind: MenuKind } | null>(null);
   const [ask, setAsk] = useState<PageFileAsk | null>(null);
   const [projectAsk, setProjectAsk] = useState<ProjectAsk | null>(null);
+  const [checking, setChecking] = useState(false);
   const [migrating, setMigrating] = useState<{ project: string; to: string; mode: "move" | "copy" } | null>(null);
   const [dropOn, setDropOn] = useState<string | null>(null);
   const menuElement = useRef<HTMLDivElement>(null);
@@ -136,7 +138,7 @@ export function PagesView() {
       : kind === "context"
         ? contextItems(path)
         : kind === "top"
-          ? [{ id: "context", label: t("pages.newContext") }, ...fileItems(kind)]
+          ? [{ id: "context", label: t("pages.newContext") }, ...fileItems(kind), { id: "check", label: t("vc.menu") }]
           : fileItems(kind);
   // a project's own note keeps its name and place: the project is known by it
   const guarded = (path: string, then: () => void) => (isProjectNote(path) ? toast(t("pages.projectNote")) : then());
@@ -149,6 +151,7 @@ export function PagesView() {
     else if (id.startsWith("reveal:")) void revealPage(arg);
     else if (id.startsWith("copy:")) void copyPagePath(arg);
     else if (id === "context") setProjectAsk({ kind: "context" });
+    else if (id === "check") setChecking(true);
     else if (id === "project") setProjectAsk({ kind: "project", context: path });
     else if (target.kind === "project" && id === "open") openPage(projectEntry(path)?.note ?? "");
     else if (target.kind === "project" && id === "chat") select(newChatHere(path));
@@ -261,6 +264,9 @@ export function PagesView() {
       ) : null}
       {ask ? <PageFileDialog ask={ask} onClose={() => setAsk(null)} /> : null}
       {projectAsk ? <ProjectDialog ask={projectAsk} onClose={() => setProjectAsk(null)} /> : null}
+      {checking ? (
+        <VaultCheckDialog workspace={workspaces().find(w => w.active)?.name ?? ""} onClose={() => setChecking(false)} />
+      ) : null}
       {migrating ? (
         <MigrateDialog {...migrating} from={homeOf(migrating.project)} onClose={() => setMigrating(null)} />
       ) : null}

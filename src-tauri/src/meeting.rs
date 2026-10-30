@@ -77,7 +77,7 @@ pub fn meeting_record_start(app: AppHandle, state: State<MeetingRec>, on_tick: C
     let mut session = state.session.lock().unwrap();
     if session.is_some() { return Err("already recording".into()); }
     super::dictation::meeting_model_ready(&app)?;
-    let dir =app.path().app_data_dir().map_err(|e| e.to_string())?.join("recordings").join(chrono::Local::now().format("%Y%m%d-%H%M%S").to_string());
+    let dir = recordings(&app)?.join(chrono::Local::now().format("%Y%m%d-%H%M%S").to_string());
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let mic = cpal::default_host().default_input_device().ok_or("no microphone")?;
     let mut tracks = vec![("me", track(mic, dir.join("me.wav"))?)];
@@ -126,15 +126,40 @@ pub async fn meeting_record_stop(app: AppHandle, state: State<'_, MeetingRec>, t
     save(app, dir, title, me, others, on_progress).await
 }
 
-/// Writes out the newest recording a failure kept (one that worked or was cancelled is gone), as `meeting_record_stop`.
+/// The folders of recordings a failure kept (one that worked or was cancelled is gone), newest first: what a restart
+/// finds again. Not the one being recorded.
 #[tauri::command]
-pub async fn meeting_record_retry(app: AppHandle, state: State<'_, MeetingRec>, title: String, me: String, others: String, on_progress: Channel<f64>) -> Result<Value, String> {
+pub fn meeting_kept(app: AppHandle, state: State<MeetingRec>) -> Result<Vec<String>, String> {
+    let busy = state.session.lock().unwrap().as_ref().map(|s| s.dir.clone());
+    Ok(kept(&recordings(&app)?, busy.as_deref()))
+}
+
+fn recordings(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app.path().app_data_dir().map_err(|e| e.to_string())?.join("recordings"))
+}
+
+fn kept(root: &Path, busy: Option<&Path>) -> Vec<String> {
+    // the folders are named by their start time, so by name is by age
+    let mut all: Vec<String> = std::fs::read_dir(root).into_iter().flatten().flatten()
+        .filter(|e| e.path().join("me.wav").is_file() && Some(e.path().as_path()) != busy)
+        .filter_map(|e| e.file_name().into_string().ok()).collect();
+    all.sort_by(|a, b| b.cmp(a));
+    all
+}
+
+/// Writes out the recording a failure kept, `folder` one of `meeting_kept`'s, as `meeting_record_stop`.
+#[tauri::command]
+pub async fn meeting_record_retry(app: AppHandle, state: State<'_, MeetingRec>, folder: String, title: String, me: String, others: String, on_progress: Channel<f64>) -> Result<Value, String> {
     if state.session.lock().unwrap().is_some() { return Err("already recording".into()); }
-    let root = app.path().app_data_dir().map_err(|e| e.to_string())?.join("recordings");
-    // the folders are named by their start time, so the last one by name is the newest
-    let dir = std::fs::read_dir(&root).map_err(|e| e.to_string())?.flatten().map(|e| e.path())
-        .filter(|p| p.join("me.wav").is_file()).max().ok_or("no kept recording")?;
+    let dir = recordings(&app)?.join(&folder);
+    // only a folder this app made: its name is a start time, no path
+    if started(&dir).is_none() || !dir.join("me.wav").is_file() { return Err("no kept recording".into()); }
     save(app, dir, title, me, others, on_progress).await
+}
+
+/// When a recording started: its folder's name.
+fn started(dir: &Path) -> Option<chrono::NaiveDateTime> {
+    chrono::NaiveDateTime::parse_from_str(&dir.file_name()?.to_string_lossy(), "%Y%m%d-%H%M%S").ok()
 }
 
 async fn save(app: AppHandle, dir: PathBuf, title: String, me: String, others: String, on_progress: Channel<f64>) -> Result<Value, String> {
@@ -156,6 +181,34 @@ fn afconvert(args: &[&str], from: &Path, to: &Path) -> Result<(), String> {
     if ok { Ok(()) } else { Err(format!("afconvert could not convert {}", from.display())) }
 }
 
+/// What the transcript says where a stretch could not be transcribed.
+const SKIPPED: &str = "[this stretch could not be transcribed]";
+/// A stretch is at most 25 s of audio: a few seconds on Metal, so this is a call that will not return.
+const STALL: Duration = Duration::from_secs(120);
+
+/// `f` on a thread of its own; None when it did not answer within `limit`. The thread is left behind: whisper.cpp
+/// waits on a Metal command buffer that never completes after a sleep, and nothing aborts that (transcribe-rs does
+/// not expose whisper's abort callback, which only the CPU backend polls anyway). It keeps the model it holds, a few
+/// hundred MB, until Relay quits; a wake does not free it.
+fn within<T: Send + 'static>(limit: Duration, f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || { tx.send(f()).ok(); });
+    rx.recv_timeout(limit).ok()
+}
+
+/// The text of one stretch. When the call stalls the model is dropped from its slot (see `with_meeting_model`), so
+/// the second try loads a fresh one; None when that stalls too.
+fn region_text(app: &AppHandle, samples: &[f32]) -> Result<Option<String>, String> {
+    for _ in 0..2 {
+        let (app, samples) = (app.clone(), samples.to_vec());
+        let done = within(STALL, move || super::dictation::with_meeting_model(&app, |model, options|
+            model.transcribe(&samples, options).map(|r| r.text).map_err(|e| e.to_string())));
+        if let Some(done) = done { return done.map(Some); }
+        eprintln!("meeting: a stretch did not transcribe within {STALL:?}");
+    }
+    Ok(None)
+}
+
 fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, speakers: [&str; 2], keep_audio: bool, progress: &Channel<f64>) -> Result<Value, String> {
     // each track as Parakeet takes it: 16 kHz mono 16-bit
     let mut tracks = vec![];
@@ -169,21 +222,23 @@ fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, speakers: [
     let folder = attachments(vault);
     std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
     // named by when the recording started (its folder's name), so a retry later in the day keeps the meeting's time
-    let started = dir.file_name().and_then(|n| chrono::NaiveDateTime::parse_from_str(&n.to_string_lossy(), "%Y%m%d-%H%M%S").ok())
-        .unwrap_or_else(|| chrono::Local::now().naive_local());
+    let started = started(dir).unwrap_or_else(|| chrono::Local::now().naive_local());
     let stem = free_stem(&folder, &format!("{} {}", started.format("%Y-%m-%d %H%M"), safe_name(title)));
     // every stretch of speech of both tracks, transcribed in turn
     let regions: Vec<(usize, (usize, usize))> = tracks.iter().enumerate().flat_map(|(t, (_, s))| speech_regions(s).into_iter().map(move |r| (t, r))).collect();
     let mut lines = vec![];
-    super::dictation::with_meeting_model(app, |model, options| {
-        for (n, (t, (a, b))) in regions.iter().enumerate() {
-            let text = model.transcribe(&tracks[*t].1[*a..*b], options).map_err(|e| e.to_string())?.text;
-            let secs = |i: usize| i as f32 / RATE as f32;
-            if !text.trim().is_empty() { lines.push(Line { at: secs(*a), end: secs(*b), mic: *t == 0, who: tracks[*t].0, text: text.trim().to_string() }); }
-            progress.send((n + 1) as f64 / regions.len() as f64).ok();
-        }
-        Ok(())
-    })?;
+    let mut stalled = 0;
+    for (n, (t, (a, b))) in regions.iter().enumerate() {
+        let secs = |i: usize| i as f32 / RATE as f32;
+        let text = match region_text(app, &tracks[*t].1[*a..*b])? {
+            Some(text) => { stalled = 0; text }
+            // two stretches in a row means the model is gone, not one unlucky call: keep the recording, try later
+            None if stalled >= 1 => return Err("the speech model stopped answering, try again later".into()),
+            None => { stalled += 1; SKIPPED.into() }
+        };
+        if !text.trim().is_empty() { lines.push(Line { at: secs(*a), end: secs(*b), mic: *t == 0, who: tracks[*t].0, text: text.trim().to_string() }); }
+        progress.send((n + 1) as f64 / regions.len() as f64).ok();
+    }
     // the audio only once the transcript worked, so a failure leaves nothing in the vault and a retry no second copy
     let audio = if keep_audio {
         let mixed = dir.join("mixed.wav");
@@ -416,6 +471,23 @@ mod tests {
         // one long stretch is cut at 25 s
         assert_eq!(speech_regions(&tone(60.0)).len(), 3);
         assert!(speech_regions(&quiet(5.0)).is_empty());
+    }
+
+    #[test]
+    fn a_stalled_call_gives_up_and_a_quick_one_answers() {
+        assert_eq!(within(Duration::from_secs(5), || 7), Some(7));
+        assert_eq!(within(Duration::from_millis(50), || std::thread::sleep(Duration::from_secs(2))), None);
+    }
+
+    #[test]
+    fn kept_recordings_come_newest_first_without_the_one_in_progress() {
+        let root = std::env::temp_dir().join(format!("relay-kept-{}", std::process::id()));
+        for d in ["20261005-101200", "20261029-152600", "20261030-090000", "empty"] { std::fs::create_dir_all(root.join(d)).unwrap(); }
+        for d in ["20261005-101200", "20261029-152600", "20261030-090000"] { std::fs::write(root.join(d).join("me.wav"), "").unwrap(); }
+        assert_eq!(kept(&root, Some(&root.join("20261030-090000"))), ["20261029-152600", "20261005-101200"]);
+        assert!(started(&root.join("..")).is_none());
+        assert!(started(&root.join("20261029-152600")).is_some());
+        std::fs::remove_dir_all(&root).ok();
     }
 
     fn line(at: f32, mic: bool, text: &str) -> Line<'static> {

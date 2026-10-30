@@ -1421,7 +1421,10 @@ const VIEWS = {
   // the right-click menu on a context heading: New project, a page or folder in its folder, reveal, copy path
   "pages-context-head-menu": async () => {
     await VIEWS["pages-tab"]();
-    await page.locator('[role="button"]', { hasText: /^Agency$/ }).first().click({ button: "right" });
+    await page
+      .locator('[role="button"]', { hasText: /^Agency$/ })
+      .first()
+      .click({ button: "right" });
     await waitText("New project");
     await settle(page);
   },
@@ -1450,8 +1453,37 @@ const VIEWS = {
   // the Chats tab's context heading: New project and New context, also with Files off
   "chats-context-menu": async () => {
     await open(page, server.url, { fixture: "files-off" });
-    await page.locator('[role="button"]', { hasText: /^AGENCY/ }).first().click({ button: "right" });
+    await page
+      .locator('[role="button"]', { hasText: /^AGENCY/ })
+      .first()
+      .click({ button: "right" });
     await waitText("New context");
+    await settle(page);
+  },
+  // the workspace check from the workspace menu: findings per context, Repair, Repair all
+  "vault-check": async () => {
+    await open(page, server.url);
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await page.getByRole("button", { name: "Check workspace…" }).click();
+    await waitText("Repair all (4)");
+    await page.locator("[data-finding=context_mismatch] summary").click();
+    await settle(page);
+  },
+  // after Repair all: what needs a person stays
+  "vault-check-repaired": async () => {
+    await VIEWS["vault-check"]();
+    await page.getByRole("button", { name: "Repair all (4)" }).click();
+    await waitText("Repaired 4 findings");
+    await settle(page);
+  },
+  // a member of a shared workspace sees the findings, not the Repair buttons
+  "vault-check-member": async () => {
+    await open(page, server.url, { fixture: "shared-member" });
+    await page.keyboard.press("Control+Digit3");
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.getByText("Folders", { exact: true }).click({ button: "right" });
+    await page.getByRole("button", { name: "Check workspace…" }).click();
+    await waitText("Only an admin");
     await settle(page);
   },
   // a project unfolded to its folder, its note open in the drawer, and a top folder unfolded (PR workspace-pages)
@@ -1924,6 +1956,17 @@ const VIEWS = {
     await page.locator("section", { hasText: "Daily standup" }).last().getByRole("button", { name: "Record" }).click();
     await page.evaluate(() => window.__harness.recordingTick(754, 0.35, 0.25));
     await waitText("12:34");
+  },
+  // a recording an earlier failure kept, offered again after a restart; Transcribe, then the hint while it runs
+  "recording-kept-offer": async () => {
+    await open(page, server.url, { fixture: "kept-recording" });
+    await waitText("was never transcribed");
+  },
+  "recording-kept": async () => {
+    await open(page, server.url, { fixture: "kept-recording" });
+    await waitText("was never transcribed");
+    await click("Transcribe");
+    await waitText("Keep the laptop open");
   },
   // dictation started in a conversation, then on to Reminders: the sidebar's row links back to it (#103)
   "recording-dictation": async () => {

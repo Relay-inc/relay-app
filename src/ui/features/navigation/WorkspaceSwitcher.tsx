@@ -16,6 +16,7 @@ import { WORKSPACE_KEYS, workspaceKeyLabel } from "../../../domain/settings/shor
 import { Icon } from "../../components/Icon";
 import { loadInbox, onAnyComments, openPageThread, type InboxItem } from "../../../application/navigation/pages";
 import { noteName } from "../../../domain/navigation/pages";
+import { VaultCheckDialog } from "./VaultCheckDialog";
 
 // a workspace's square in the context tints, by its place in the list
 const TINTS = ["text-ctx-a", "text-ctx-m", "text-ctx-p"];
@@ -57,6 +58,7 @@ export function WorkspaceSwitcher({
   ).split("\n");
   const list = useDerived(() => workspaces());
   const [open, setOpen] = useState(false);
+  const [checking, setChecking] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   useDismiss(root, open, () => setOpen(false));
   const index = Math.max(
@@ -180,6 +182,9 @@ export function WorkspaceSwitcher({
           >
             {t("ws.settings")}
           </button>
+          <button className={`${ACTION} text-secondary`} onClick={() => run(() => setChecking(true))}>
+            {t("vc.menu")}
+          </button>
           <div className="my-1.5 mx-2 border-t border-separator" />
           <button className={APP_ACTION} onClick={() => run(onTheme)}>
             <Icon name={dark ? "sun" : "moon"} className={GLYPH} />
@@ -198,6 +203,7 @@ export function WorkspaceSwitcher({
           </button>
         </div>
       ) : null}
+      {checking ? <VaultCheckDialog workspace={active.name} onClose={() => setChecking(false)} /> : null}
     </div>
   );
 }

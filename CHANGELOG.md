@@ -13,9 +13,28 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- Check workspace… (workspace menu, and the Folders heading in Pages) lists what a workspace lacks for Claude to work
+  in it: files of the starter, a context's note or rule, its table in work-state, notes that name another context,
+  project cards without `status` or `last`, rules for a folder that is gone, rows without a note. Repair (an admin's,
+  in a shared workspace) writes what is missing and never overwrites a file. New context now also writes the
+  context's rule.
+- A command's output: click a Bash step open and what it printed shows under the command, live and in older
+  conversations (Claude Code).
+- A meeting recording that failed to transcribe is offered again in Waiting for you after a restart, with the time it
+  started, and a hint to keep the laptop open while it transcribes.
+- Today shows the meetings that already ended: "1 earlier" on top of the queue folds them open, dimmed, with when
+  they ended. A click opens the meeting's note item while it is in the queue.
+
 ### Changed
 
 - **A meeting's briefing is written into its note in the vault**: Prepare has Claude put the briefing under `## Briefing` in the meeting's note (`YYYY-MM-DD Title`, made if it isn't there yet), and opening the meeting under Today shows that section, with Edit (saved back into the note, ⌘↵), Open the note and Open the conversation. Prepare still opens the earlier conversation instead of starting a second one, and the meeting note made after the meeting keeps the briefing. Before, the briefing only lived in Relay (the conversation's answer, or what you rewrote under Today)
+
+### Fixed
+
+- Transcribing a meeting no longer hangs for good when the Mac went to sleep meanwhile: a stretch the speech model
+  does not answer for is tried once more with the model reloaded, then marked as untranscribed in the transcript.
 
 ## [0.0.42] - 2026-10-29
 

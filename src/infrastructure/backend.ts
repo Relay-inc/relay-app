@@ -190,6 +190,11 @@ export const setProjectState = (workspace: string, name: string, status: string)
 /** Without `row`: a project's row out of work-state, returned; with it: that row back in `context`. */
 export const projectRow = (workspace: string, name: string, context: string, row: string | null) =>
   invoke<string | null>("project_row", { workspace, name, context, row });
+/** A finding of the workspace check (vaultcheck.rs): `kind` what, `context` and `path` where, `paths` the notes (or
+ *  for `card_fields` the fields) it is about, `fix` whether Repair puts it right. */
+export type VaultFinding = { id: string; kind: string; context: string; path: string; paths: string[]; fix: boolean };
+export const vaultCheck = (workspace: string) => invoke<VaultFinding[]>("vault_check", { workspace });
+export const vaultRepair = (workspace: string, ids: string[]) => invoke<number>("vault_repair", { workspace, ids });
 export const propertyValues = (folder: string, key: string) => invoke<string[]>("property_values", { folder, key });
 export const pickFolder = () => invoke<string | null>("pick_folder");
 export const pickPath = (folder: boolean, start: string) => invoke<string | null>("pick_path", { folder, start });
@@ -689,11 +694,19 @@ export const meetingRecordStop = (title: string, me: string, others: string, onP
   channel.onmessage = onProgress;
   return invoke<Recording>("meeting_record_stop", { title, me, others, onProgress: channel });
 };
-/** Writes out the newest recording a failed stop kept, as `meetingRecordStop`. */
-export const meetingRecordRetry = (title: string, me: string, others: string, onProgress: (done: number) => void) => {
+/** The folders of recordings a failure kept, newest first; their names are their start times (20261029-152600). */
+export const meetingKept = () => invoke<string[]>("meeting_kept");
+/** Writes out one of those recordings, as `meetingRecordStop`. */
+export const meetingRecordRetry = (
+  folder: string,
+  title: string,
+  me: string,
+  others: string,
+  onProgress: (done: number) => void,
+) => {
   const channel = new Channel<number>();
   channel.onmessage = onProgress;
-  return invoke<Recording>("meeting_record_retry", { title, me, others, onProgress: channel });
+  return invoke<Recording>("meeting_record_retry", { folder, title, me, others, onProgress: channel });
 };
 export const meetingRecordCancel = () => invoke("meeting_record_cancel");
 

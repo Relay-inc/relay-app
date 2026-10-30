@@ -35,6 +35,10 @@ const context = async value => {
 try {
   await open(page, server.url, { fixture: "calendar", sel: "__wait" });
   await shot("01-overview");
+  // the meetings that ended fold away on top; a click shows them
+  await page.getByRole("button", { name: /1 earlier/ }).click();
+  await shot("01a-earlier");
+  await page.getByRole("button", { name: /1 earlier/ }).click();
   await context("Agency");
   await shot("01b-context");
   await context("-");
