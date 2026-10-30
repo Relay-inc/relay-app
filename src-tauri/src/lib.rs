@@ -1223,17 +1223,26 @@ async fn move_path(app: AppHandle, state: State<'_, App>, from: String, to: Stri
 #[tauri::command]
 async fn trash_path(app: AppHandle, state: State<'_, App>, target: String) -> Result<Value, String> {
     let roots = page_roots(&state)?;
+    let shared = pagefiles::locate(&roots, &target).ok().and_then(|(root, _, _)| shared_at(&state, std::path::Path::new(&vault::canon(&root.to_string_lossy()))));
+    let a = app.clone();
     let (root, trash, path) = on_files(move || {
-        let (root, _, _) = pagefiles::locate(&roots, &target)?;
-        pagefiles::trash(&roots, &target).map(|(t, p)| (root, t, p))
+        let go = || {
+            let (root, _, _) = pagefiles::locate(&roots, &target)?;
+            pagefiles::trash(&roots, &target).map(|(t, p)| (root, t, p))
+        };
+        let Some(id) = shared else { return go() };
+        // in a shared workspace, under its round lock: a round between the two would write the notes that are
+        // documents back from the manifest. Each one goes out of it too, so its file goes from every Mac.
+        let hub = &a.state::<App>().shared;
+        hub.with_vault(&id, || {
+            let (root, trash, path) = go()?;
+            if let Some(docs) = hub.loaded_docs(&id) {
+                let under = format!("{path}/");
+                for rel in docs.paths().into_keys().filter(|p| *p == path || p.starts_with(&under)) { docs.remove(&rel).ok(); }
+            }
+            Ok((root, trash, path))
+        })
     }).await?;
-    // a shared workspace's note that is a document: out of the manifest too, so its file goes from every Mac
-    if let Some(id) = shared_at(&state, std::path::Path::new(&vault::canon(&root.to_string_lossy()))) {
-        if let Some(docs) = app.state::<App>().shared.loaded_docs(&id) {
-            let under = format!("{path}/");
-            for rel in docs.paths().into_keys().filter(|p| *p == path || p.starts_with(&under)) { docs.remove(&rel).ok(); }
-        }
-    }
     Ok(json!({"root": root, "trash": trash, "path": path}))
 }
 /// Undo of `trash_path`; whatever was let through for those paths no longer is.
