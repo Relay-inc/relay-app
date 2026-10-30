@@ -29,6 +29,7 @@ export function TodayQueue({ model }: { model: TodayModel }) {
   const { t, locale } = useT();
   const pins = useTodayStore(s => s.pins);
   const [opened, setOpened] = useState<string[]>([]);
+  const [showPast, setShowPast] = useState(false);
   const { queue, slots, placed, tomorrow, selected, meetings, now, done, snoozed } = model;
 
   const meta = (entry: Entry) =>
@@ -155,7 +156,8 @@ export function TodayQueue({ model }: { model: TodayModel }) {
     const start = Date.parse(meeting.start);
     const end = Date.parse(meeting.end);
     const live = start <= now && now < end;
-    const soon = !live && start - now < 15 * MIN;
+    const past = end <= now;
+    const soon = !live && !past && start - now < 15 * MIN;
     const on = !!selected && selected.id === model.meetingItems[meeting.id];
     const where = meeting.location && !/^https?:/.test(meeting.location) ? meeting.location : "";
     const sub = [
@@ -164,9 +166,11 @@ export function TodayQueue({ model }: { model: TodayModel }) {
       meeting.people.length > 1 ? t("today.people", { n: meeting.people.length }) : "",
       live
         ? `${t("today.meetingNow")} · ${t("today.until", { time: timeOf(meeting.end) })}`
-        : soon
-          ? t("today.inMin", { n: Math.max(0, Math.round((start - now) / MIN)) })
-          : t("today.until", { time: timeOf(meeting.end) }),
+        : past
+          ? t("today.ended", { time: timeOf(meeting.end) })
+          : soon
+            ? t("today.inMin", { n: Math.max(0, Math.round((start - now) / MIN)) })
+            : t("today.until", { time: timeOf(meeting.end) }),
     ]
       .filter(Boolean)
       .join(" · ");
@@ -174,7 +178,7 @@ export function TodayQueue({ model }: { model: TodayModel }) {
       <div
         key={`meet:${meeting.id}`}
         onClick={() => openMeeting(meeting.id)}
-        className={`flex items-center gap-3 min-h-13 my-2 px-3 py-1.5 rounded-xl bg-raised ${on ? "shadow-[inset_0_0_0_1.5px_var(--color-accent)]" : "shadow-[inset_0_0_0_1px_var(--color-separator-strong)] hover:bg-fill"} ${model.meetingItems[meeting.id] ? "cursor-pointer" : ""}`}
+        className={`flex items-center gap-3 min-h-13 my-2 px-3 py-1.5 rounded-xl bg-raised ${on ? "shadow-[inset_0_0_0_1.5px_var(--color-accent)]" : "shadow-[inset_0_0_0_1px_var(--color-separator-strong)] hover:bg-fill"} ${model.meetingItems[meeting.id] ? "cursor-pointer" : ""} ${past && !on ? "opacity-60" : ""}`}
       >
         <span className="w-11 flex-none text-sm font-semibold tabular-nums">{timeOf(meeting.start)}</span>
         <span className="flex-1 min-w-0 flex flex-col leading-snug">
@@ -198,8 +202,9 @@ export function TodayQueue({ model }: { model: TodayModel }) {
     );
   };
 
-  // the slots and the meetings that are not over, in the order of the day
+  // the slots and the meetings that are not over, in the order of the day; the ones that ended fold away on top
   const ahead = meetings.filter(meeting => Date.parse(meeting.end) > now);
+  const past = meetings.filter(meeting => Date.parse(meeting.end) <= now);
   const parts: [number, ReactNode][] = [
     ...slots.map((slot): [number, ReactNode] => [slot.start, slotGroup(slot)]),
     ...ahead.map((meeting): [number, ReactNode] => [Date.parse(meeting.start) - 0.5, meetingCard(meeting)]),
@@ -217,13 +222,21 @@ export function TodayQueue({ model }: { model: TodayModel }) {
   return (
     <div className="min-h-0 overflow-y-auto border-r border-separator px-3 pt-2 pb-6">
       <RecordingBar />
-      {!ahead.length && meetings.length ? (
-        <div className="flex items-center gap-2 h-8 mt-1 px-3 rounded-lg bg-fill text-xs text-secondary">
+      {past.length ? (
+        <button
+          className="flex items-center gap-2 w-full h-8 mt-1 px-3 rounded-lg bg-fill text-xs text-secondary cursor-pointer hover:text-label"
+          onClick={() => setShowPast(!showPast)}
+        >
           <Icon name="cal" className="glyph size-3.5 text-tertiary" />
-          {t("today.noMoreMeetings")}
-          <span className="text-tertiary">· {t("today.earlier", { n: meetings.length })}</span>
-        </div>
+          {ahead.length ? null : <span>{t("today.noMoreMeetings")} ·</span>}
+          <span className="text-tertiary">{t("today.earlier", { n: past.length })}</span>
+          <Icon
+            name="chevron"
+            className={`glyph size-3 ml-auto text-tertiary transition-transform duration-150 ease-out ${showPast ? "" : "-rotate-90"}`}
+          />
+        </button>
       ) : null}
+      {showPast ? past.map(meetingCard) : null}
       {asks.length ? (
         <div>
           {heading(t("today.agentsNeedYou"), String(asks.length))}
