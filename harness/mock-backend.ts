@@ -570,6 +570,12 @@ function handle(cmd: string, a: Args): unknown {
     case "set_project_state":
       states[String(a.name)] = String(a.status);
       return null;
+    // the workspace check: a few of each kind, gone once repaired
+    case "vault_check":
+      return VAULT_FINDINGS.filter(f => !repaired.has(f.id));
+    case "vault_repair":
+      (a.ids as string[]).forEach(id => repaired.add(id));
+      return (a.ids as string[]).length;
     case "project_row":
       return a.row == null ? `| [[${String(a.name)}]] | Active | 2026-10-29 |  |` : null;
     case "free_page_name":
@@ -1529,6 +1535,26 @@ let pages: string[] | null = null;
 const madeContexts: string[] = [];
 const madeProjects: ReturnType<typeof vault.snapshot>["projects"] = [];
 const states: Record<string, string> = {};
+const repaired = new Set<string>();
+const finding = (kind: string, context: string, path: string, paths: string[] = [], fix = true) => ({
+  id: `${kind}:${context}:${path}`,
+  kind,
+  context,
+  path,
+  paths,
+  fix,
+});
+const VAULT_FINDINGS = [
+  finding("missing_file", "", "System/rules/core/team.md"),
+  finding("orphan_rule", "", "System/rules/gone/context.md", ["Contexts/Gone"], false),
+  finding("context_rule", "Agency", "System/rules/agency/context.md"),
+  finding("card_fields", "Agency", "Contexts/Agency/Projects/Beacon Billing/Beacon Billing.md", ["status", "last"]),
+  finding("row_without_note", "Agency", "Old Lead", [], false),
+  finding("context_mismatch", "Studio", "Contexts/Studio", [
+    "Contexts/Studio/Projects/Side Studio/Documents/Brief.md",
+    "Contexts/Studio/People/Ana.md",
+  ]),
+];
 const trashed = new Map<string, string[]>();
 const pageList = () => pages ?? vault.notes;
 const pageRel = (p: unknown) => String(p).replace(vault.VAULT, "").replace(/^\//, "");

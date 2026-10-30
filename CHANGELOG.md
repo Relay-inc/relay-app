@@ -15,6 +15,11 @@ a PR. Versions follow
 
 ### Added
 
+- Check workspace… (workspace menu, and the Folders heading in Pages) lists what a workspace lacks for Claude to work
+  in it: files of the starter, a context's note or rule, its table in work-state, notes that name another context,
+  project cards without `status` or `last`, rules for a folder that is gone, rows without a note. Repair (an admin's,
+  in a shared workspace) writes what is missing and never overwrites a file. New context now also writes the
+  context's rule.
 - A command's output: click a Bash step open and what it printed shows under the command, live and in older
   conversations (Claude Code).
 
