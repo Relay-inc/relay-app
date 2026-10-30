@@ -104,11 +104,11 @@ export const joinMeeting = (link: string) => joinable(link) && backend.openUrl(l
  *  is from whoever sent it, so the conversation is marked like one about a mail (fromMail, see mark_tainted in
  *  src-tauri/src/lib.rs). It always starts on Claude, whatever the default agent; with Claude switched off it does not
  *  start. */
-export async function meetingChat(id: string, how: MeetingChat) {
+export async function meetingChat(id: string, how: MeetingChat, fallback?: Meeting) {
   // a briefing asked before opens again instead of a second one
   const prep = how === "prep" ? prepChatOf(useConversationsStore.getState().chats, id) : null;
   if (prep) return select(prep);
-  const meeting = cal().list.find(x => x.id === id);
+  const meeting = cal().list.find(x => x.id === id) ?? fallback;
   if (meeting) await chatAbout(meeting, how);
 }
 /** A meeting's note, when the vault has it (read fresh: the note may change in Obsidian or by an agent at any time). */
