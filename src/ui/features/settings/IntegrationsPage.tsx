@@ -21,6 +21,7 @@ import { ActionsSection } from "./ActionsSection";
 import { BUTTON_GLYPH, buttonClass, TILE } from "./blocks";
 import { BoardSettings } from "./BoardSettings";
 import { BuddySettings } from "./BuddySettings";
+import { BUDDY_LOGO } from "../buddy/mark";
 import { CalendarSettings } from "./CalendarSettings";
 import { CommonwealthSettings } from "./CommonwealthSettings";
 import { Footer } from "./Footer";
@@ -112,7 +113,7 @@ export function IntegrationsPage({ active }: { active: boolean }) {
     })),
     {
       id: "buddy",
-      icon: <Icon name="workflow" className={TILE} />,
+      icon: <Glyph svg={BUDDY_LOGO} className="size-4" viewBox="0 0 24 24" />,
       name: "Buddy",
       status: <StatusLine level={buddyToken ? "ok" : "off"}>{buddyToken ? t("int.set") : t("int.notSet")}</StatusLine>,
       on: buddyOn,

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { worst, type Tone } from "../../../domain/buddy/rules";
 import { buddyOf, loadPipes, loadRuns, openInBuddy, useBuddyStore } from "../../../application/buddy/buddy";
+import { Glyph } from "../../components/Glyph";
 import { Icon } from "../../components/Icon";
 import { useDerived } from "../../hooks/useDerived";
 import { useDismiss } from "../../hooks/useDismiss";
 import { useT } from "../../hooks/useT";
 import { PopHeading } from "../board/PopHeading";
 import { POPOVER, POP_ROW } from "../board/toolbar";
+import { BUDDY_MARK } from "./mark";
 
 const TONE_TEXT: Record<Tone, string> = { ok: "text-ok", fail: "text-late", busy: "text-soon", none: "text-tertiary" };
 const when = (iso: string) =>
@@ -43,7 +45,7 @@ export function BuddyButton({ project }: { project: string }) {
         aria-expanded={open}
         onClick={toggle}
       >
-        <Icon name="workflow" className="glyph size-4" />
+        <Glyph svg={BUDDY_MARK} className="size-4" viewBox="0 0 24 24" />
         {tone !== "none" && (
           <span className={`absolute right-1 bottom-1 size-1.5 rounded-full bg-current ${TONE_TEXT[tone]}`}></span>
         )}
