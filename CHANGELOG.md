@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- A zoomed image taller than the window now starts at the top and scrolls, a smaller one stays centred.
+
 ## [0.0.43] - 2026-10-30
 
 ### Added
