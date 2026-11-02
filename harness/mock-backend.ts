@@ -76,6 +76,13 @@ if (shared)
     machines: member ? [] : structuredClone(vault.hubMachines),
     sharedVaults: structuredClone(member ? vault.memberVaults : vault.sharedVaults),
   };
+// buddy: Buddy switched on, the first project linked to a Buddy project (fixtures/integrations buddy)
+if (fixture === "buddy")
+  settings = {
+    ...settings,
+    integrations: { ...settings.integrations, buddy: { on: true, host: "api.eu.buddy.works" } },
+    buddy: { [vault.projectNames[0]]: { workspace: "acme", project: "web-shop" } },
+  };
 let vaultOk = !onboarding;
 let pending = [...conv.pending];
 const gitRepos = structuredClone(git.repos);
@@ -1427,13 +1434,18 @@ function handle(cmd: string, a: Args): unknown {
       };
     case "integration_status":
     case "integration_has_token":
-      return a.provider === "productive" || (fixture === "linear" && a.provider === "linear");
+      return (
+        a.provider === "productive" ||
+        (fixture === "linear" && a.provider === "linear") ||
+        (fixture === "buddy" && a.provider === "buddy")
+      );
     case "integration_mcp":
       return { supported: a.provider === "productive", found: false };
     case "integration_token":
       return null;
     case "integration_call":
       if (fixture === "linear" && a.provider === "linear") return integ.linear(a.body);
+      if (fixture === "buddy" && a.provider === "buddy") return integ.buddy(a.path);
       if (a.provider !== "productive") throw new Error(`${a.provider} is not set up in the harness`);
       return integ.productive(a.method, a.path, a.body);
     case "integration_upload":

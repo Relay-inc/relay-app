@@ -1,4 +1,5 @@
 import type { BoardRef } from "../board/types";
+import type { BuddyRef } from "../buddy/rules";
 import type { VoiceCfg } from "./voice";
 import type { VaultMap } from "../workspace/types";
 import type { Pipeline } from "../pipeline/types";
@@ -164,6 +165,7 @@ export type Settings = {
   integrations: Record<string, IntegrationConfig>;
   boards: Record<string, BoardRef>; // the board linked to a vault project
   pipelines?: Record<string, Pipeline>; // the board pipeline of a vault project (domain/pipeline)
+  buddy?: Record<string, BuddyRef>; // the Buddy project linked to a vault project (domain/buddy)
   github: { on: boolean; owners: string };
   mail: MailCfg;
   calendar: CalendarCfg;

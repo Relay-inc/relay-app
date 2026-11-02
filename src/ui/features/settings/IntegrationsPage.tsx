@@ -20,6 +20,8 @@ import { useT } from "../../hooks/useT";
 import { ActionsSection } from "./ActionsSection";
 import { BUTTON_GLYPH, buttonClass, TILE } from "./blocks";
 import { BoardSettings } from "./BoardSettings";
+import { BuddySettings } from "./BuddySettings";
+import { BUDDY_LOGO } from "../buddy/mark";
 import { CalendarSettings } from "./CalendarSettings";
 import { CommonwealthSettings } from "./CommonwealthSettings";
 import { Footer } from "./Footer";
@@ -63,6 +65,8 @@ export function IntegrationsPage({ active }: { active: boolean }) {
   const calendarCount = useSettingsStore(s => s.settings.calendar?.feeds.length ?? 0);
   const calendarOn = useSettingsStore(s => !!s.settings.calendar?.on);
   const cwPlugin = useBrainStore(s => s.status?.plugin);
+  const buddyOn = useSettingsStore(s => s.settings.integrations.buddy?.on === true);
+  const buddyToken = useSettingsStore(s => !!s.integrations.tokens.buddy);
   const cwSwitched = useSettingsStore(s => cwOn(s.settings));
   // per provider: set up, and in the list
   const boardsState = useDerived(() =>
@@ -107,6 +111,15 @@ export function IntegrationsPage({ active }: { active: boolean }) {
         </>
       ),
     })),
+    {
+      id: "buddy",
+      icon: <Glyph svg={BUDDY_LOGO} className="size-4" viewBox="0 0 24 24" />,
+      name: "Buddy",
+      status: <StatusLine level={buddyToken ? "ok" : "off"}>{buddyToken ? t("int.set") : t("int.notSet")}</StatusLine>,
+      on: buddyOn,
+      // read-only, so no actions for the agent and no access section
+      page: () => <BuddySettings />,
+    },
     {
       id: "github",
       icon: GITHUB_MARK,

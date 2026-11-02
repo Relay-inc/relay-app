@@ -1353,6 +1353,17 @@ export default {
   "gh.help":
     "Toont je open PR's en die waar je review gevraagd wordt, per project gekoppeld via de repos op de projectkaart. Enkel lezen, een klik opent de PR op GitHub. De app gebruikt de login van de GitHub CLI, er staat geen token in de app. Niet ingelogd: voer <code>gh auth login</code> uit in de terminal.",
   "gh.recheck": "Opnieuw nakijken",
+  "bd.help":
+    "Toont de pipelines van een Buddy-project in de titelbalk van het vaultproject waaraan het gekoppeld is (Instellingen › Projecten): de status van hun laatste run, een klik opent de pipeline in Buddy. Enkel lezen: maak in Buddy een personal access token met enkel <code>WORKSPACE_READ</code>, <code>PROJECT_READ</code> en <code>PIPELINE_READ</code>. Relay stuurt zelf enkel leesvragen naar Buddy, wat het token ook toelaat.",
+  "bd.region": "Regio:",
+  "bd.connected": "Verbonden, workspaces: {list}",
+  "bd.projectHelp": "De pipelines verschijnen in de titelbalk van het project.",
+  "bd.none": "Geen",
+  "bd.empty": "Geen pipelines in dit project.",
+  "bd.tone.ok": "Buddy: laatste runs geslaagd",
+  "bd.tone.fail": "Buddy: een pipeline faalde",
+  "bd.tone.busy": "Buddy: een pipeline loopt",
+  "bd.tone.none": "Buddy: geen runs",
   "int.tokenStored": "Opgeslagen in de sleutelhanger",
   "int.tokenPaste": "Plak je token",
   "kb.prio1": "Dringend",

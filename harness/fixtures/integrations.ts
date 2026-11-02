@@ -937,22 +937,88 @@ const LINEAR_ISSUES = [
   ["Archive paid invoices after a year", 4, "Backlog", null],
 ].map(([title, priority, state, who], i) => {
   const s = LINEAR_STATES.find(x => x.name === state)!;
-  return { id: `f0000000-0000-4000-8000-00000000000${i + 1}`, identifier: `BEA-${41 + i}`, title, priority, sortOrder: i,
-    url: `https://linear.app/example/issue/BEA-${41 + i}`, dueDate: null, updatedAt: "2026-10-27T09:00:00Z",
-    state: { id: s.id, name: s.name, type: s.type }, labels: { nodes: [] },
-    assignee: who ? { name: who, displayName: String(who).split(" ")[0].toLowerCase() } : null };
+  return {
+    id: `f0000000-0000-4000-8000-00000000000${i + 1}`,
+    identifier: `BEA-${41 + i}`,
+    title,
+    priority,
+    sortOrder: i,
+    url: `https://linear.app/example/issue/BEA-${41 + i}`,
+    dueDate: null,
+    updatedAt: "2026-10-27T09:00:00Z",
+    state: { id: s.id, name: s.name, type: s.type },
+    labels: { nodes: [] },
+    assignee: who ? { name: who, displayName: String(who).split(" ")[0].toLowerCase() } : null,
+  };
 });
 export function linear(body: unknown): unknown {
   const q = String((body as { query?: string })?.query ?? "");
   const op = q.match(/^\s*(?:query|mutation)\s+(\w+)/)?.[1];
   if (op === "Teams")
-    return { data: { teams: { nodes: [{ id: LINEAR_TEAM, name: "Beacon", key: "BEA", cyclesEnabled: true,
-      cycles: { nodes: [{ id: "c0000000-0000-4000-8000-000000000042", number: 42, name: null },
-        { id: "c0000000-0000-4000-8000-000000000041", number: 41, name: null }] },
-      projects: { nodes: [{ id: "d0000000-0000-4000-8000-000000000001", name: "Billing API" },
-        { id: "d0000000-0000-4000-8000-000000000002", name: "Onboarding" }] } }] } } };
+    return {
+      data: {
+        teams: {
+          nodes: [
+            {
+              id: LINEAR_TEAM,
+              name: "Beacon",
+              key: "BEA",
+              cyclesEnabled: true,
+              cycles: {
+                nodes: [
+                  { id: "c0000000-0000-4000-8000-000000000042", number: 42, name: null },
+                  { id: "c0000000-0000-4000-8000-000000000041", number: 41, name: null },
+                ],
+              },
+              projects: {
+                nodes: [
+                  { id: "d0000000-0000-4000-8000-000000000001", name: "Billing API" },
+                  { id: "d0000000-0000-4000-8000-000000000002", name: "Onboarding" },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    };
   if (op === "States") return { data: { team: { states: { nodes: LINEAR_STATES } } } };
-  if (op === "Issues") return { data: { issues: { nodes: LINEAR_ISSUES, pageInfo: { hasNextPage: false, endCursor: null } } } };
+  if (op === "Issues")
+    return { data: { issues: { nodes: LINEAR_ISSUES, pageInfo: { hasNextPage: false, endCursor: null } } } };
   if (op === "Viewer") return { data: { viewer: { id: "v1", name: "Demo User", displayName: "demo" } } };
   throw new Error(`Linear query ${op} is not set up in the harness`);
+}
+
+// ---------- Buddy (fixture "buddy"): one linked project, three pipelines, read-only GETs as packages/integration-buddy allows them
+const BUDDY = "https://eu.buddy.works/acme/web-shop/pipelines/pipeline";
+export function buddy(path: string): unknown {
+  if (path === "/workspaces") return { workspaces: [{ domain: "acme", name: "Acme" }] };
+  if (path.startsWith("/workspaces/acme/projects?"))
+    return {
+      projects: [
+        { name: "web-shop", display_name: "Web shop" },
+        { name: "api", display_name: "API" },
+      ],
+    };
+  const pipelines = [
+    { id: 11, name: "Deploy production", html_url: `${BUDDY}/11`, last_execution_status: "FAILED" },
+    { id: 12, name: "Deploy staging", html_url: `${BUDDY}/12`, last_execution_status: "INPROGRESS" },
+    { id: 13, name: "Tests", html_url: `${BUDDY}/13`, last_execution_status: "SUCCESSFUL" },
+  ];
+  if (path.startsWith("/workspaces/acme/projects/web-shop/pipelines?")) return { pipelines };
+  const run = path.match(/pipelines\/(\d+)\/executions/);
+  if (run) {
+    const id = Number(run[1]);
+    return {
+      executions: [
+        {
+          start_date: "2026-10-01T06:55:00Z",
+          finish_date: id === 12 ? "" : "2026-10-01T07:02:00Z",
+          branch: { name: id === 12 ? "develop" : "main" },
+          creator: { name: "Ada Lovelace" },
+          html_url: `${BUDDY}/${id}/execution/1`,
+        },
+      ],
+    };
+  }
+  throw new Error(`Buddy 404: ${path}`);
 }

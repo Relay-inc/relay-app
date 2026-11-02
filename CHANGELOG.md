@@ -13,6 +13,13 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- Buddy pipelines in a project's title bar: link a Buddy project to a vault project (Settings › Projects) and a button
+  shows the worst status of its pipelines, with each pipeline's last run in its menu; a click opens it in Buddy. Set up
+  in Settings › Integrations › Buddy with a region and a personal access token. Read-only: the backend only lets GET
+  through on workspaces, projects, pipelines and executions, whatever the token allows (#356).
+
 ### Fixed
 
 - A zoomed image taller than the window now starts at the top and scrolls, a smaller one stays centred.

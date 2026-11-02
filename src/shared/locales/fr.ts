@@ -1368,6 +1368,17 @@ export default {
   "gh.help":
     "Affiche vos PR ouvertes et celles où votre revue est demandée, reliées à chaque projet via les dépôts de la fiche projet. Lecture seule, un clic ouvre la PR sur GitHub. L'app utilise la connexion de la GitHub CLI, aucun jeton n'est stocké dans l'app. Pas connecté : lancez <code>gh auth login</code> dans le terminal.",
   "gh.recheck": "Vérifier à nouveau",
+  "bd.help":
+    "Affiche les pipelines d'un projet Buddy dans la barre de titre du projet du coffre auquel il est lié (Réglages › Projets) : le statut de leur dernière exécution, un clic ouvre le pipeline dans Buddy. Lecture seule : créez dans Buddy un jeton d'accès personnel avec seulement <code>WORKSPACE_READ</code>, <code>PROJECT_READ</code> et <code>PIPELINE_READ</code>. Relay n'envoie lui-même que des lectures à Buddy, quoi que le jeton permette.",
+  "bd.region": "Région :",
+  "bd.connected": "Connecté, espaces de travail : {list}",
+  "bd.projectHelp": "Ses pipelines s'affichent dans la barre de titre du projet.",
+  "bd.none": "Aucun",
+  "bd.empty": "Aucun pipeline dans ce projet.",
+  "bd.tone.ok": "Buddy : dernières exécutions réussies",
+  "bd.tone.fail": "Buddy : un pipeline a échoué",
+  "bd.tone.busy": "Buddy : un pipeline tourne",
+  "bd.tone.none": "Buddy : aucune exécution",
   "int.tokenStored": "Enregistré dans le trousseau",
   "int.tokenPaste": "Collez votre jeton",
   "kb.prio1": "Urgent",

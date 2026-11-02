@@ -1343,6 +1343,17 @@ const en = {
   "gh.help":
     "Shows your open PRs and the ones where your review is requested, linked per project through the repos on the project card. Read-only, a click opens the PR on GitHub. The app uses the GitHub CLI login, no token is stored in the app. Not signed in: run <code>gh auth login</code> in the terminal.",
   "gh.recheck": "Check again",
+  "bd.help":
+    "Shows the pipelines of a Buddy project in the title bar of the vault project it is linked to (Settings › Projects): the status of their last run, a click opens the pipeline in Buddy. Read-only: create a personal access token in Buddy with only <code>WORKSPACE_READ</code>, <code>PROJECT_READ</code> and <code>PIPELINE_READ</code>. Relay itself sends nothing but reads to Buddy, whatever the token allows.",
+  "bd.region": "Region:",
+  "bd.connected": "Connected, workspaces: {list}",
+  "bd.projectHelp": "Its pipelines show in the project's title bar.",
+  "bd.none": "None",
+  "bd.empty": "No pipelines in this project.",
+  "bd.tone.ok": "Buddy: last runs passed",
+  "bd.tone.fail": "Buddy: a pipeline failed",
+  "bd.tone.busy": "Buddy: a pipeline is running",
+  "bd.tone.none": "Buddy: no runs",
   "int.tokenStored": "Stored in the keychain",
   "int.tokenPaste": "Paste your token",
   "kb.prio1": "Urgent",

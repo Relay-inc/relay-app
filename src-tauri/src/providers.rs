@@ -5,6 +5,8 @@
 // `secrets`), go to `security` and curl over stdin, never as an argument (visible in the process list), and
 // never go back to a webview. The rest of a provider's config is in settings.json under `integrations.<id>`.
 // Listing, moving and mapping cards is the webview's side (the same packages, src/providers/index.ts).
+// Buddy (packages/integration-buddy) is registered here too for its keychain and allowlist, but is no board: it only
+// reads pipelines, and its webview side is src/application/buddy.
 
 use serde_json::{json, Value};
 use std::io::Write;
@@ -19,6 +21,7 @@ pub const PROVIDERS: &[&Provider] = &[
     &integration_productive::PROVIDER,
     &integration_trello::PROVIDER,
     &integration_linear::PROVIDER,
+    &integration_buddy::PROVIDER,
 ];
 
 pub fn get(id: &str) -> Result<&'static Provider, String> {

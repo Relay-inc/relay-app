@@ -16,6 +16,7 @@ import { useT } from "../../hooks/useT";
 import { BUTTON_GLYPH, buttonClass, FIELD, FIELD_CHIP, FIELD_ICON } from "./blocks";
 import { ChangeInput } from "./ChangeInput";
 import { Field } from "./Field";
+import { BuddyProject } from "./BuddyProject";
 import { PipelineSettings } from "./PipelineSettings";
 import { ProjectIcon } from "./ProjectIcon";
 
@@ -116,6 +117,7 @@ export function ProjectSettings({ name, icon }: { name: string; icon: Icon | und
           />
         </span>
       </Field>
+      <BuddyProject name={name} />
       <PipelineSettings name={name} />
     </>
   );
