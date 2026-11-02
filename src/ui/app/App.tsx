@@ -262,10 +262,11 @@ export function App() {
       {quickAsk ? <QuickAskView key={quickText} /> : null}
       {zoomed ? (
         <div
-          className="fixed inset-0 z-30 grid place-items-center p-10 bg-black/55 cursor-zoom-out"
+          className="fixed inset-0 z-30 flex overflow-auto p-10 bg-black/55 cursor-zoom-out"
           onClick={() => zoom("")}
         >
-          <img className="max-w-full max-h-full rounded-lg shadow-2xl bg-bg" alt="" src={zoomed} />
+          {/* m-auto centres a short image and lets a tall one start at the top and scroll */}
+          <img className="m-auto max-w-full rounded-lg shadow-2xl bg-bg" alt="" src={zoomed} />
         </div>
       ) : null}
       <WorkspaceView />
