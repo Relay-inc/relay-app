@@ -31,9 +31,10 @@ const fail = (error: unknown): Message => ({ text: String(error), ok: false });
 
 /** When the page is first shown: which providers have a token, and GitHub's login. */
 export async function loadIntegrations() {
+  // Buddy is no board, but its token sits in the keychain the same way (packages/integration-buddy)
   const entries = await Promise.all(
-    PROVIDERS.map(
-      async provider => [provider.id, await backend.integrationHasToken(provider.id).catch(() => false)] as const,
+    [...PROVIDERS.map(provider => provider.id), "buddy"].map(
+      async id => [id, await backend.integrationHasToken(id).catch(() => false)] as const,
     ),
   );
   change(draft => {

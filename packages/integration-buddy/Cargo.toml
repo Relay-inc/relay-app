@@ -1,0 +1,9 @@
+[package]
+name = "integration-buddy"
+version = "0.1.0"
+edition = "2021"
+description = "Buddy pipelines on the backend: a read-only allowlist, headers, errors and the token"
+
+[dependencies]
+board-core.workspace = true
+serde_json.workspace = true

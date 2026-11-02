@@ -9,9 +9,11 @@ import { boardOf } from "../../../application/navigation/navigation";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { BoardCrumb } from "../board/BoardCrumb";
 import { BoardActions } from "../board/BoardActions";
+import { BuddyButton } from "../buddy/BuddyButton";
 
 /** What the bar offers for a project: its tools, the one that is open lit. */
 export type BarTools = {
+  project: string; // the vault project the tools are of
   board: { name: string; mark: string } | null; // the board linked to the project
   github: boolean; // GitHub is on: the PRs button shows
   repos: boolean; // the project has repos; without them the button offers to link one
@@ -210,6 +212,7 @@ export function ChatBar({
               icon={<Icon name="github" className="glyph size-4" />}
             />
           ) : null}
+          <BuddyButton project={tools.project} />
           {/* the project's git repos, with the worktrees of the open conversation: only a conversation has them; its
               folders as a tree next to them */}
           {(renamable && tools.git
