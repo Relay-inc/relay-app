@@ -4305,7 +4305,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "relay"
-version = "0.0.43"
+version = "0.0.44"
 dependencies = [
  "agent-claude",
  "agent-codex",
@@ -4365,7 +4365,7 @@ dependencies = [
 
 [[package]]
 name = "relay-mobile"
-version = "0.0.43"
+version = "0.0.44"
 dependencies = [
  "agent-claude",
  "agent-core",
@@ -4398,7 +4398,7 @@ dependencies = [
 
 [[package]]
 name = "relay-server"
-version = "0.0.43"
+version = "0.0.44"
 dependencies = [
  "agent-claude",
  "agent-core",
