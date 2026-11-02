@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.44] - 2026-11-02
+
 ### Added
 
 - Buddy pipelines in a project's title bar: link a Buddy project to a vault project (Settings › Projects) and a button
@@ -22,7 +24,7 @@ a PR. Versions follow
 
 ### Fixed
 
-- A zoomed image taller than the window now starts at the top and scrolls, a smaller one stays centred.
+- A zoomed image taller than the window now starts at the top and scrolls, a smaller one stays centred (#354).
 
 ## [0.0.43] - 2026-10-30
 
