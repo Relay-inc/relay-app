@@ -777,6 +777,23 @@ const VIEWS = {
     await click("Current cycle");
     await waitText("Cycle 42");
   },
+  // a project's Buddy pipelines in its title bar, the menu open: failed, running and passed, each with its last run (PR buddy)
+  "buddy-menu": async () => {
+    await open(page, server.url, { fixture: "buddy", sel: keys.switchTo });
+    await page.getByRole("button", { name: "Buddy: a pipeline failed" }).click();
+    await waitText("Deploy production");
+    await waitText("Ada Lovelace");
+  },
+  // Buddy's page in Integrations (region, read-only token) and its Buddy project in Settings › Projects (PR buddy)
+  "settings-integration-buddy": () => settingsPage("Integrations", "Buddy", "buddy"),
+  "settings-project-buddy": async () => {
+    await settingsPage("Projects", undefined, "buddy");
+    await unfold("Northwind Portal");
+    const field = page.getByRole("combobox", { name: "Buddy", exact: true }).first();
+    await page.waitForFunction(() => document.body.innerText.includes("Web shop · acme"));
+    await field.scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   "board-list": async () => {
     await VIEWS.board();
     await button("List").click();
