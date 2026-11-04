@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- The briefing of a meeting has a fixed shape (goal, people, what is left from last time, mail threads, my points) that Prep writes in the meeting's language and the Meeting view draws as blocks: a thread opens in Mail, my points can be typed in, and prepping again keeps your points and the steps you ticked (#PR).
 - After a meeting is wrapped up you can draft a follow-up mail from its summary: Claude writes a short recap with the next steps, addressed to everyone invited, which you edit and save as a draft in your mail account. Relay never sends it; the meeting note records that it was drafted (#377).
 - A meeting has a Wrap-up step: after Stop (or from the stepper) Claude drafts the summary from your notes, the transcript and the briefing, in the vault's shape (summary, bullets, Next Steps). You edit or regenerate it, route each of your next steps to a reminder or a ticket, add a decision to the project's note with one click, and Accept writes it into the meeting note (#376).
 - A meeting has its own view, opened from Today, the recording bar, Cmd-K or a `relay://meeting` link: its briefing, a notes editor that stamps every line with the time (⌘1 marks an action, ⌘2 a decision, ⌘3 a question) saved into the meeting note, the live transcript next to it with a click to quote a line, and a language pick for the transcription (#363).

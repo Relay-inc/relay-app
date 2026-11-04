@@ -11,12 +11,13 @@ import {
   type MeetingStage,
   meetingStage,
 } from "../../domain/calendar/rules";
+import { mergePrep } from "../../domain/calendar/briefing";
 import { cleanNotes, newMeetingNote, notesIn, toggleTask, withNotes } from "../../domain/calendar/meeting-view";
 import type { Meeting } from "../../domain/calendar/types";
 import * as backend from "../../infrastructure/backend";
 import { select } from "../navigation/navigation";
 import { useWorkspaceStore } from "../workspace/store";
-import { meetingNote } from "./calendar";
+import { meetingNote, takePrepBefore } from "./calendar";
 import { useRecordingStore } from "./recording";
 import { useCalendarStore } from "./store";
 
@@ -161,3 +162,21 @@ export async function saveBriefing(meeting: Meeting, body: string | ((now: strin
 /** A task of the briefing ticked or unticked (the `n`th `- [ ]`): My points on the Live step, the lists of the briefing. */
 export const toggleBriefingTask = (meeting: Meeting, n: number) =>
   saveBriefing(meeting, now => toggleTask(now, n)).catch(error => set(draft => void (draft.error = String(error))));
+
+/** After a prep wrote the briefing again: the user's own parts of the one it replaced (their points, the steps they ticked)
+ *  come back into it. Nothing to do when no prep is waiting or it changed nothing. */
+export async function finishPrep(meeting: Meeting) {
+  const before = takePrepBefore(meeting.id);
+  if (before === undefined) return;
+  const note = await meetingNote(meeting).catch(() => null);
+  const now = note ? briefingIn(note.text) : null;
+  if (now === null || now === before) return;
+  const merged = mergePrep(before, now);
+  if (merged !== now)
+    await saveBriefing(meeting, merged).catch(error => set(draft => void (draft.error = String(error))));
+  else if (note) remember(meeting, note);
+}
+/** A point of My points added after `after` (its task number), the text of one changed, one taken out: written into the
+ *  briefing section only, the note read again right before. */
+export const changeBriefing = (meeting: Meeting, edit: (briefing: string) => string) =>
+  saveBriefing(meeting, edit).catch(error => set(draft => void (draft.error = String(error))));

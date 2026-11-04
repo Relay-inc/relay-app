@@ -1,4 +1,5 @@
 import type { Meeting } from "./types";
+import { isPointsHeading } from "./briefing.ts";
 import { meetingDay, type MeetingStage } from "./rules.ts";
 
 // The Meeting view's rules: which step it is on, the typed notes (`## Notes` of the meeting note, one timestamped line
@@ -152,8 +153,7 @@ export function tasksIn(markdown: string): Task[] {
     .map((task, n) => ({ ...task, n }));
 }
 /** The tasks under a "My points" heading. */
-export const pointsIn = (briefing: string) =>
-  tasksIn(briefing).filter(task => /^(my points|mijn punten)$/i.test(task.section));
+export const pointsIn = (briefing: string) => tasksIn(briefing).filter(task => isPointsHeading(task.section));
 /** The markdown with its `n`th task ticked or unticked, the rest as it was. */
 export function toggleTask(markdown: string, n: number) {
   let at = -1;
