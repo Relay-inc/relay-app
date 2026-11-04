@@ -46,7 +46,7 @@ export function ChatBar({
   onOpenBoard,
   onOpenPrs,
   onToggleDrawer,
-  onShowInBrain,
+  onShowInGraph,
 }: {
   heading: string;
   img: string; // the project's icon, an image data url
@@ -69,7 +69,7 @@ export function ChatBar({
   onOpenBoard: () => void;
   onOpenPrs: () => void;
   onToggleDrawer: (tool: "terminal" | "notes" | "design" | "git" | "files") => void;
-  onShowInBrain?: () => void;
+  onShowInGraph?: () => void;
 }) {
   const { t } = useT();
   // a board: its crumb (switch board or project) and its buttons (BoardCrumb, BoardActions)
@@ -168,15 +168,15 @@ export function ChatBar({
           >
             <Icon name="term" className="glyph size-4" />
           </button>
-          {/* the notes this conversation read and wrote, lit in the Brain graph */}
-          {onShowInBrain ? (
+          {/* the notes this conversation read and wrote, lit in the Pages graph */}
+          {onShowInGraph ? (
             <button
               className="btn-icon"
-              title={t("brain.showInTitle")}
-              aria-label={t("brain.showIn")}
-              onClick={onShowInBrain}
+              title={t("graph.showInTitle")}
+              aria-label={t("graph.showIn")}
+              onClick={onShowInGraph}
             >
-              <Icon name="brain" className="glyph size-4" />
+              <Icon name="graph" className="glyph size-4" />
             </button>
           ) : null}
         </>

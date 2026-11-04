@@ -54,11 +54,11 @@ and a review by Claude Code or Codex (or both) with findings on the lines they'r
 
 <img src="docs/images/pr-detail.jpg" alt="A pull request with its checks, linked ticket and review button">
 
-**Your vault as a brain.** Browse, search and graph your notes, and see which ones your agents read and wrote. The
+**Your vault as pages.** Browse, search and edit your notes, draw them as a graph, and see which ones your agents read and wrote. The
 vault keeps up by itself: a conversation that settles down is read for decisions, where a project stands and dated
 follow-ups, and those go into the vault.
 
-<img src="docs/images/brain-graph.jpg" alt="The Brain view: a graph of notes coloured by kind">
+<img src="docs/images/brain-graph.jpg" alt="The Pages graph: notes coloured by kind">
 
 **Workspaces for a team.** Your own vault is your Personal workspace. Next to it you add other vault folders and team
 workspaces that a relay-server syncs to every member's Mac, end-to-end encrypted: the server only stores what each Mac

@@ -25,11 +25,3 @@
   min-height: 0;
   background: var(--bg);
 }
-/* a note in the Brain view looks like one in a conversation: md-defaults' link colour would win otherwise */
-.relay-brain-note.md-panel a.vlink {
-  color: var(--accent);
-  text-decoration-color: var(--separator);
-}
-.relay-brain-note.md-panel a.vlink:hover {
-  text-decoration-color: currentColor;
-}

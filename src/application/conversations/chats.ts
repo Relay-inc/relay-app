@@ -17,7 +17,7 @@ export const saveChats = () =>
     chatsToStore({ chats: useConversationsStore.getState().chats, typed: useDraftsStore.getState().typed }),
   );
 /** A new draft conversation under a project (null: general, in the main vault), in one of its sidebar folders when
- *  `folder` is given; its key. It is stored once something is typed. Reminders, boards, the Brain and a forked terminal
+ *  `folder` is given; its key. It is stored once something is typed. Reminders, boards, the graph and a forked terminal
  *  session start here: what they hand over is the main vault's. */
 export function newChat(project: string | null, folder = ""): string {
   const now = Date.now();

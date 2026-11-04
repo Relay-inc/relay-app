@@ -9,7 +9,7 @@ import * as vault from "./fixtures/vault";
 import * as conv from "./fixtures/conversations";
 import * as integ from "./fixtures/integrations";
 import * as orch from "./fixtures/orchestrator";
-import * as brain from "./fixtures/brain";
+import * as graph from "./fixtures/graph";
 import * as git from "./fixtures/git";
 import * as files from "./fixtures/files";
 import * as Y from "yjs";
@@ -135,7 +135,7 @@ const orchOn = fixture === "orch" || fixture === "orch-plain" || fixture === "or
 const orchEmpty = fixture === "orch-empty";
 // orch-closed: an empty conversation, and workers the backend still reports whose conversations were all closed
 const orchClosed = fixture === "orch-closed";
-// Commonwealth installed, with one brain (the Brain view's tabs)
+// Commonwealth installed, with one brain (Settings › Integrations)
 const brainOn = fixture === "brain";
 // plugins (fixture "plugins"): the secrets in the keychain, per plugin id; the tools the example server has
 const pluginSecrets = new Map<string, Set<string>>(
@@ -1187,29 +1187,14 @@ function handle(cmd: string, a: Args): unknown {
     case "usage_tokens":
       return integ.usageTokens();
 
-    // Commonwealth, the team brain: not installed, except in fixture "brain" (one brain, two staged notes)
+    // Commonwealth, the team brain: not installed, except in fixture "brain" (one brain)
     case "commonwealth_status":
       return {
         plugin: brainOn,
         cli: brainOn ? "/usr/local/bin/commonwealth" : null,
         hint: "npm i -g @cmnwlth/cli",
-        projects: brainOn ? [{ project: "Northwind Portal", brain: brain.BRAIN, name: "team-brain" }] : [],
+        projects: brainOn ? [{ project: "Northwind Portal", brain: graph.BRAIN, name: "team-brain" }] : [],
       };
-    case "commonwealth_notes":
-      return brainOn
-        ? ["Retry only idempotent export calls", "Deploys go through the staging gate"].map((title, i) => ({
-            brain: brain.BRAIN,
-            id: `2026-09-30-staged-${i + 1}`,
-            kind: i ? "decision" : "memory",
-            title,
-            created: "2026-09-30",
-            author: "Lena",
-            source: "northwind-portal",
-            body: `${title}. Learned while fixing the export job.`,
-          }))
-        : [];
-    case "commonwealth_act":
-      return null;
     case "commonwealth_join":
       return [
         `Brain: /Users/you/.commonwealth/brains/${String(a.remote).replace(/^.*[:/]([^/]+)\/([^/]+?)(\.git)?$/, "$1-$2")} (cloned)`,
@@ -1217,17 +1202,11 @@ function handle(cmd: string, a: Args): unknown {
         "Next: install the plugin (`claude plugin install commonwealth@commonwealth`) and start a new session.",
       ].join("\n");
 
-    // the Brain view: the vault, and the team brain in fixture "brain"
-    case "brain_roots":
-      return brain.roots(brainOn);
-    case "brain_graph":
-      return brain.graph(a.root);
-    case "brain_search":
-      return brain.search(a.root, a.query);
-    case "brain_note":
-      return brain.note(a.root, a.path);
-    case "brain_touches":
-      return brain.touches();
+    // the Pages graph and Recent
+    case "notes_graph":
+      return graph.graph();
+    case "note_touches":
+      return graph.touches();
 
     // GitHub, mail, boards
     case "github_status":

@@ -10,8 +10,8 @@ import {
   loadIntegrations,
   switchIntegration,
 } from "../../../application/settings/integrations";
-import { useBrainStore } from "../../../application/brain/store";
-import { loadBrainStatus } from "../../../application/brain/brain";
+import { useCommonwealthStore } from "../../../application/settings/commonwealth-store";
+import { loadCommonwealthStatus } from "../../../application/settings/commonwealth";
 import { Glyph } from "../../components/Glyph";
 import { Html } from "../../components/Html";
 import { Icon } from "../../components/Icon";
@@ -64,7 +64,7 @@ export function IntegrationsPage({ active }: { active: boolean }) {
   const mailOn = useSettingsStore(s => !!s.settings.mail?.on);
   const calendarCount = useSettingsStore(s => s.settings.calendar?.feeds.length ?? 0);
   const calendarOn = useSettingsStore(s => !!s.settings.calendar?.on);
-  const cwPlugin = useBrainStore(s => s.status?.plugin);
+  const cwPlugin = useCommonwealthStore(s => s.status?.plugin);
   const buddyOn = useSettingsStore(s => s.settings.integrations.buddy?.on === true);
   const buddyToken = useSettingsStore(s => !!s.integrations.tokens.buddy);
   const cwSwitched = useSettingsStore(s => cwOn(s.settings));
@@ -78,7 +78,7 @@ export function IntegrationsPage({ active }: { active: boolean }) {
   const [detail, setDetail] = useState<string | null>(null);
   useEffect(() => {
     loadIntegrations();
-    loadBrainStatus();
+    loadCommonwealthStatus();
   }, []);
   useEffect(() => {
     if (active) askMcp();

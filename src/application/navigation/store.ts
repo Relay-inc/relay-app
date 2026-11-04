@@ -1,6 +1,6 @@
 import type { BoardRef } from "../../domain/board/types";
 import type { Folder } from "../../domain/navigation/sidebar-folders";
-import type { Touch } from "../../domain/brain/types";
+import type { Touch } from "../../domain/graph/types";
 import { WAIT, type Drawer, type Tool, type Toast } from "../../domain/navigation/views";
 import { storage } from "../../infrastructure/storage";
 import { isPrimary } from "../../infrastructure/window";

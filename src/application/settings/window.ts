@@ -3,7 +3,6 @@ import type { Settings } from "../../domain/settings/types";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
 import { applyTheme, closeWindow, setTitle } from "../../infrastructure/window";
-import { loadBrainStatus } from "../brain/brain";
 import { initLanguage } from "./settings";
 import { watchUpdates } from "./updates-page";
 import { watchVaultSync } from "./vault-sync";
@@ -47,8 +46,6 @@ export async function initSettingsWindow() {
     draft.integrations.mail.edit = { ...saved.mail, accounts: saved.mail?.accounts ?? [] };
     draft.loaded = true;
   });
-  // General's sidebar views list Brain once the plugin is known, also before Integrations was opened
-  void loadBrainStatus();
   void watchUpdates();
   void watchVaultSync();
   // an invite link that opened Relay: the join form (the backend opens the window on Machines)

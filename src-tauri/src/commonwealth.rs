@@ -6,7 +6,7 @@
 // registry rule; a project without repos, or whose repos match nothing (or a deny), gets none. Never the defaultBrain
 // on its own: Commonwealth itself treats that as the target of a matched rule, not as a catch-all.
 
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
@@ -102,47 +102,11 @@ pub fn install(claude: &str, path: &str) -> Result<(), String> {
     run(&["plugin", "install", PLUGIN]).map_err(|e| match added { Err(a) => format!("{a}\n{e}"), Ok(()) => e })
 }
 
-// ---------- the review queue
-
-/// A staged note (<brain>/staging/**/<id>.md): frontmatter `key: value` lines, then the body.
-// ponytail: reads the files instead of `commonwealth pending` (which prints id, kind and title only, no body); a
-// plain line parser, not YAML. Ceiling: a title in a block scalar. Upgrade: a `pending --json`.
-fn read_note(brain: &str, p: &Path) -> Option<Value> {
-    let text = fs::read_to_string(p).ok()?;
-    let rest = text.strip_prefix("---\n")?;
-    let (head, body) = rest.split_once("\n---")?;
-    let get = |k: &str| head.lines().find_map(|l| l.strip_prefix(k)?.strip_prefix(':')).map(|v| unquote(v.trim())).unwrap_or_default();
-    let id = get("id");
-    if id.is_empty() { return None; }
-    Some(json!({"brain": brain, "id": id, "kind": get("kind"), "title": get("title"), "created": get("created"), "author": get("author"),
-        "source": get("source"), "body": body.trim()}))
-}
+/// A frontmatter value without its YAML quotes.
 pub(crate) fn unquote(v: &str) -> String {
     if v.len() >= 2 && v.starts_with('\'') && v.ends_with('\'') { v[1..v.len() - 1].replace("''", "'") }
     else if v.len() >= 2 && v.starts_with('"') && v.ends_with('"') { v[1..v.len() - 1].replace("\\\"", "\"") }
     else { v.to_string() }
-}
-fn md_files(d: &Path, out: &mut Vec<std::path::PathBuf>) {
-    for e in fs::read_dir(d).into_iter().flatten().flatten() {
-        let p = e.path();
-        if p.is_dir() { md_files(&p, out); } else if p.extension().is_some_and(|x| x == "md") { out.push(p); }
-    }
-}
-/// Every staged note of a brain, newest first.
-pub fn staged(brain: &str) -> Vec<Value> {
-    let mut files = vec![];
-    md_files(&Path::new(brain).join("staging"), &mut files);
-    let mut notes: Vec<Value> = files.iter().filter_map(|f| read_note(brain, f)).collect();
-    notes.sort_by(|a, b| b["created"].as_str().cmp(&a["created"].as_str()));
-    notes
-}
-
-/// `commonwealth promote|reject <ids>` for a brain; its failure text comes back verbatim.
-pub fn act(cli: &str, path: &str, brain: &str, verb: &str, ids: &[String]) -> Result<(), String> {
-    let o = Command::new(cli).arg(verb).args(ids).current_dir(brain).env("PATH", path).env("COMMONWEALTH_BRAIN_DIR", brain)
-        .stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
-    if o.status.success() { return Ok(()); }
-    Err(format!("commonwealth {verb}: {}", format!("{}\n{}", String::from_utf8_lossy(&o.stderr).trim(), String::from_utf8_lossy(&o.stdout).trim()).trim()))
 }
 
 /// `commonwealth join <remote>`: clone a team brain and route the orgs its project list names to it (Commonwealth 0.8).
@@ -161,6 +125,7 @@ pub fn join(cli: &str, path: &str, remote: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     #[test]
     fn join_refuses_what_is_not_a_remote() {
         for bad in ["", "  ", "--brain=/x", "git@host:a/b.git extra", "a\nb"] {
@@ -199,14 +164,6 @@ mod tests {
         assert_eq!(resolve(&r, &repos(&["acme/web", "acme/secret"])), None);
         let tie = reg(json!({"rules": [{"repo": "a/b", "brain": "/b/x"}, {"repo": "a/b", "deny": true}]}));
         assert_eq!(resolve(&tie, &repos(&["a/b"])), None);
-    }
-    #[test]
-    fn a_staged_note_reads_with_its_body() {
-        let dir = std::env::temp_dir().join(format!("cw-staged-{}", std::process::id()));
-        fs::create_dir_all(dir.join("staging/p/decisions")).unwrap();
-        fs::write(dir.join("staging/p/decisions/x.md"), "---\nid: x-1\nkind: decision\ntitle: 'It''s done'\ncreated: '2026-09-03'\n---\nBody line\n").unwrap();
-        let n = staged(dir.to_str().unwrap());
-        assert_eq!((n[0]["id"].as_str(), n[0]["title"].as_str(), n[0]["body"].as_str(), n[0]["created"].as_str()), (Some("x-1"), Some("It's done"), Some("Body line"), Some("2026-09-03")));
     }
     /// cargo test real_mapping -- --ignored --nocapture: the user's own registry against the user's own vault
     #[test]

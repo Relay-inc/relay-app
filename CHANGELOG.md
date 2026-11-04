@@ -25,11 +25,13 @@ a PR. Versions follow
 
 ### Changed
 
+- The notes graph moved from the Brain view into Pages: Graph at the top of the Pages tab draws the notes of the workspace you're in, a click opens the note as a page, and the conversation glow and "Show in graph" on a conversation still light up what it read and wrote (#381).
 - Fictional data in tests, fixtures and examples: the repository is public, so names of real clients, companies and colleagues are gone from fixtures, mocks, comments and this changelog.
 - The vault's meeting notes have one shape: Summary with bullets and **Next Steps**, no separate Decisions, Actions and Open sections. Recording a meeting no longer opens a conversation to write the note; the draft is in the meeting's Wrap-up (#376).
 
 ### Removed
 
+- The Brain view and its sidebar item are gone, Pages covers browsing and searching the vault. With it went reviewing a Commonwealth brain's staged notes in Relay (promote and reject them with the `commonwealth` CLI); installing Commonwealth and joining a team brain stay in Settings › Integrations (#381).
 - Meetings are no longer items in Today's queue, and the folded "earlier" meetings are gone: the strip shows the whole day. The Today count no longer counts a meeting about to start (#379).
 
 ### Fixed
