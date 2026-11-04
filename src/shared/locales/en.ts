@@ -1794,6 +1794,11 @@ const en = {
   "rec.consent": "Let everyone in the meeting know you are recording.",
   "rec.liveUpto": "Transcribed up to {time}, the rest follows as you talk",
   "rec.liveStopped": "Live transcript paused: the rest is transcribed after Stop",
+  "rec.recording": "Recording",
+  "rec.transcribingRest": "Transcribing the rest",
+  "rec.listening": "Listening. The first lines show up about 20 seconds after someone speaks.",
+  "rec.showTranscript": "Show the live transcript",
+  "rec.lines": "{n} lines",
   "rec.noSystem":
     "Only your microphone is recorded, the Mac's audio is not: {why}. Allow Relay in System Settings › Privacy & Security › Screen & System Audio Recording.",
   "rec.silentMac":

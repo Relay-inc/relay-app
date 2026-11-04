@@ -40,18 +40,28 @@ try {
   await shot("01a-earlier");
   await page.getByRole("button", { name: /Record a meeting now/ }).click();
   await shot("01d-record-now");
-  // live transcription: the latest lines and how far it got
+  // live transcription in the big pane: the turns so far and how far it got
   await page.evaluate(() =>
     window.__harness.recordingTick(754, 0.35, 0.25, {
       upto: 731,
       lines: [
+        { at: 688, track: 1, text: "Shall we start with the export? That is the one the partners asked about." },
         { at: 702, track: 1, text: "So the export runs every night and the partners pick it up in the morning." },
         { at: 715, track: 0, text: "Right, and when it fails nobody hears about it until a partner calls." },
+        { at: 719, track: 0, text: "That happened twice last month." },
         { at: 724, track: 1, text: "Exactly. A mail to the team when the export fails would already help." },
       ],
     }),
   );
   await shot("01e-live-transcript");
+  // another item takes the pane back; the bar stays, and a click on it opens the transcript again
+  await page.getByRole("button", { name: /1 earlier/ }).click();
+  await page.getByText("Allow relay").first().click();
+  await shot("01f-recording-in-bar");
+  await page
+    .getByRole("button", { name: /Meeting \d\d:\d\d/ })
+    .first()
+    .click();
   await page.getByRole("button", { name: "Cancel" }).first().click();
   await page.getByRole("button", { name: /1 earlier/ }).click();
   await context("Agency");

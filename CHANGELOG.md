@@ -15,8 +15,8 @@ a PR. Versions follow
 
 ### Added
 
-- A meeting is transcribed while you record it: the recording bar shows the latest lines and how far the transcript
-  got, and after Stop only the last few seconds are left to do.
+- A meeting is transcribed while you record it: the transcript grows live in Today's big pane (opened when you press
+  Record, or by clicking the recording bar), and after Stop only the last few seconds are left to do.
 - Record a meeting that is not in your calendar: "Record a meeting now" on top of Today starts recording at once,
   and the transcript and meeting note follow as for any recorded meeting.
 

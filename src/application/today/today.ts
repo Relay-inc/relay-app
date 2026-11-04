@@ -17,6 +17,7 @@ import { contextTint } from "../navigation/sidebar";
 import { contexts, project as projectOf, projectLabel, loadSnapshot } from "../workspace/vault";
 import { useWorkspaceStore } from "../workspace/store";
 import { useCalendarStore } from "../calendar/store";
+import { showRecording } from "../calendar/recording";
 import { loadMeetings } from "../calendar/calendar";
 import { loadPrs } from "../pull-requests/prs";
 import { usePullRequestsStore } from "../pull-requests/store";
@@ -302,10 +303,12 @@ export function focusEntry(id: string) {
   if (item && !inContext(useTodayStore.getState().context, projectOf(item.project)?.context)) setContext("");
   selectEntry(id);
 }
-export const selectEntry = (id: string) =>
+export function selectEntry(id: string) {
+  showRecording(false); // another item takes the big pane from a recording
   useTodayStore.setState(draft => {
     draft.selected = id;
   });
+}
 export const dismiss = (id: string) =>
   changeDay(day => {
     if (!day.dismissed.includes(id)) day.dismissed.push(id);

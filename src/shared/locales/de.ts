@@ -1817,6 +1817,11 @@ export default {
   "rec.consent": "Sag allen im Meeting, dass du aufnimmst.",
   "rec.liveUpto": "Transkribiert bis {time}, der Rest folgt, während ihr sprecht",
   "rec.liveStopped": "Live-Transkript pausiert: der Rest wird nach Stopp transkribiert",
+  "rec.recording": "Aufnahme",
+  "rec.transcribingRest": "Der Rest wird transkribiert",
+  "rec.listening": "Hört zu. Die ersten Zeilen erscheinen etwa 20 Sekunden, nachdem jemand spricht.",
+  "rec.showTranscript": "Live-Transkript zeigen",
+  "rec.lines": "{n} Zeilen",
   "rec.noSystem":
     "Nur dein Mikrofon wird aufgenommen, der Ton des Mac nicht: {why}. Erlaube Relay in Systemeinstellungen › Datenschutz & Sicherheit › Bildschirm- & Systemaudioaufnahme.",
   "rec.silentMac":

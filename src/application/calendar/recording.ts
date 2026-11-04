@@ -9,6 +9,7 @@ import {
   meetingRecordStop,
 } from "../../infrastructure/backend";
 import type { LiveLine } from "../../infrastructure/backend";
+export type { LiveLine };
 import { settings } from "../settings/settings";
 import { makeStore } from "../make-store";
 import { toast } from "../navigation/navigation";
@@ -36,6 +37,7 @@ type RecordingState = {
   lines: LiveLine[]; // what live transcription heard so far, the latest ones
   upto: number; // seconds of the recording it transcribed
   live: boolean; // false once the model stalled: the rest is transcribed after Stop
+  shown: boolean; // open in Today's big pane (from Record, or a click on the bar), until another item is picked
 };
 export const useRecordingStore = makeStore<RecordingState>(() => ({
   meeting: null,
@@ -54,6 +56,7 @@ export const useRecordingStore = makeStore<RecordingState>(() => ({
   lines: [],
   upto: 0,
   live: true,
+  shown: false,
 }));
 const set = (patch: Partial<RecordingState>) => useRecordingStore.setState(patch);
 const rec = () => useRecordingStore.getState();
@@ -75,6 +78,7 @@ export async function startRecording(id: string, fallback?: Meeting) {
     lines: [],
     upto: 0,
     live: true,
+    shown: true,
   });
   try {
     const { system, why } = await meetingRecordStart(({ secs, me = 0, others = 0, lines, upto, live }) =>
@@ -83,8 +87,7 @@ export async function startRecording(id: string, fallback?: Meeting) {
         me,
         others,
         heard: rec().heard || others > 0,
-        // the bar shows a few; the transcript in the vault has them all
-        ...(lines?.length ? { lines: [...rec().lines, ...lines].sort((a, b) => a.at - b.at).slice(-20) } : {}),
+        ...(lines?.length ? { lines: [...rec().lines, ...lines].sort((a, b) => a.at - b.at) } : {}),
         ...(upto !== undefined ? { upto } : {}),
         ...(live === false ? { live: false } : {}),
       }),
@@ -113,6 +116,9 @@ export function recordNow() {
     people: [],
   });
 }
+
+/** The recording in Today's big pane: its live transcript, Stop and Cancel. */
+export const showRecording = (shown = true) => set({ shown });
 
 export async function stopRecording() {
   if (rec().phase === "recording") await save(meetingRecordStop);
