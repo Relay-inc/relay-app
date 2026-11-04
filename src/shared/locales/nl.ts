@@ -1790,6 +1790,8 @@ export default {
   "voice.summarizeHelp":
     "Na de transcriptie maakt een gesprek de meeting note en vat ze samen, zoals de vault meeting notes maakt.",
   "rec.record": "Opnemen",
+  "rec.now": "Nu een meeting opnemen",
+  "rec.nowTitle": "Meeting {time}",
   "rec.recordHelp": "Neemt je microfoon en wat de Mac afspeelt op, en schrijft het uit op deze Mac",
   "rec.stop": "Stoppen",
   "rec.cancel": "Annuleren",

@@ -67,6 +67,24 @@ export async function startRecording(id: string, fallback?: Meeting) {
   }
 }
 
+/** A meeting that is not in the calendar: recorded now, named after the time it started, nobody invited. */
+export function recordNow() {
+  const now = new Date();
+  const start = Math.floor(now.getTime() / 1000);
+  const time = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return startRecording(`now@${start}`, {
+    id: `now@${start}`,
+    feed: "now",
+    title: t("rec.nowTitle", { time }),
+    start: now.toISOString(),
+    end: new Date(now.getTime() + 3600e3).toISOString(),
+    location: "",
+    join: "",
+    organizer: "",
+    people: [],
+  });
+}
+
 export async function stopRecording() {
   if (rec().phase === "recording") await save(meetingRecordStop);
 }

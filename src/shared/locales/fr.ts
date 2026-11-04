@@ -1814,6 +1814,8 @@ export default {
   "voice.summarizeHelp":
     "Après la transcription, une conversation crée la note de réunion et la résume, comme le coffre fait ses notes de réunion.",
   "rec.record": "Enregistrer",
+  "rec.now": "Enregistrer une réunion maintenant",
+  "rec.nowTitle": "Réunion {time}",
   "rec.recordHelp": "Enregistre votre micro et ce que joue le Mac, puis le transcrit sur ce Mac",
   "rec.stop": "Arrêter",
   "rec.cancel": "Annuler",

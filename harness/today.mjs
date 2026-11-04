@@ -38,6 +38,9 @@ try {
   // the meetings that ended fold away on top; a click shows them
   await page.getByRole("button", { name: /1 earlier/ }).click();
   await shot("01a-earlier");
+  await page.getByRole("button", { name: /Record a meeting now/ }).click();
+  await shot("01d-record-now");
+  await page.getByRole("button", { name: "Cancel" }).first().click();
   await page.getByRole("button", { name: /1 earlier/ }).click();
   await context("Agency");
   await shot("01b-context");

@@ -17,6 +17,7 @@ import { useTodayStore } from "../../../application/today/store";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
 import { RecordingBar } from "../conversations/RecordingBar";
+import { recordNow, useRecordingStore } from "../../../application/calendar/recording";
 import { StatusDot, minutes } from "./parts";
 
 const iso = (at: number) => new Date(at).toISOString();
@@ -30,6 +31,7 @@ export function TodayQueue({ model }: { model: TodayModel }) {
   const pins = useTodayStore(s => s.pins);
   const [opened, setOpened] = useState<string[]>([]);
   const [showPast, setShowPast] = useState(false);
+  const recordingIdle = useRecordingStore(s => s.phase === "idle");
   const { queue, slots, placed, tomorrow, selected, meetings, now, done, snoozed } = model;
 
   const meta = (entry: Entry) =>
@@ -222,6 +224,16 @@ export function TodayQueue({ model }: { model: TodayModel }) {
   return (
     <div className="min-h-0 overflow-y-auto border-r border-separator px-3 pt-2 pb-6">
       <RecordingBar />
+      {recordingIdle ? (
+        <button
+          className="flex items-center gap-2 w-full h-8 mt-1 px-3 rounded-lg text-xs text-secondary cursor-pointer hover:bg-fill hover:text-label"
+          title={t("rec.recordHelp")}
+          onClick={() => void recordNow()}
+        >
+          <Icon name="mic" className="glyph size-3.5 text-tertiary" />
+          {t("rec.now")}
+        </button>
+      ) : null}
       {past.length ? (
         <button
           className="flex items-center gap-2 w-full h-8 mt-1 px-3 rounded-lg bg-fill text-xs text-secondary cursor-pointer hover:text-label"

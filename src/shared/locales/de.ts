@@ -1806,6 +1806,8 @@ export default {
   "voice.summarizeHelp":
     "Nach dem Transkript erstellt eine Unterhaltung die Meeting-Notiz und fasst sie zusammen, wie der Vault Meeting-Notizen macht.",
   "rec.record": "Aufnehmen",
+  "rec.now": "Jetzt ein Meeting aufnehmen",
+  "rec.nowTitle": "Meeting {time}",
   "rec.recordHelp": "Nimmt dein Mikrofon und das, was der Mac abspielt, auf und transkribiert es auf diesem Mac",
   "rec.stop": "Stoppen",
   "rec.cancel": "Abbrechen",
