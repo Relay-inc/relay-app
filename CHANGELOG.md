@@ -13,9 +13,18 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- Recent in Pages: hover a note and click × (or press Delete on it) to take it off the list, and Clear on the header empties it. The note itself is untouched, it comes back only when a conversation reads or writes it again, and the list stays as you left it after a restart (#406)
+
+### Changed
+
+- Pages: under every context and every project one "Collections" folder (closed until you open it, remembered) replaces the "linked here" divider and the separate Collections rows, so nothing shows twice. A context lists Meetings, Documents, People, Projects and Threads, a project Meetings, Documents, Threads and People, each with its count, the newest four and Show all, which opens the collection filtered on that context or project. A context's saved views are in its folder (#406)
+
 ### Fixed
 
 - A page's Changes panel scrolls again when a run's changes are longer than the panel: the open entry was squeezed to the panel's height and its lower diffs were cut off (#405)
+
 
 ## [0.0.47] - 2026-11-04
 

@@ -1123,7 +1123,7 @@ function handle(cmd: string, a: Args): unknown {
       // file), on top of what the harness seeded
       if (keepState) {
         const seeded = Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage.getItem(key) ?? ""]));
-        const kept = ["pagesOpen", "pagesSort", "railClosed"].flatMap(k => {
+        const kept = ["pagesOpen", "pagesSort", "railClosed", "recentRemoved"].flatMap(k => {
           const v = sessionStorage.getItem(`mockUi:${k}`);
           return v == null ? [] : [[k, v]];
         });

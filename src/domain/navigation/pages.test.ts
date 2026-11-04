@@ -75,6 +75,20 @@ test("the search matches note names, the recent notes are this workspace's, newe
   );
 });
 
+test("a note taken off Recent stays off until a conversation touches it again", () => {
+  const touch = (path: string, at: number) => ({ root: "/v", path, at });
+  const touches = [touch("README.md", 5), touch("Calendar/2026-10-01.md", 3)];
+  const removed = { "README.md": 5 };
+  assert.deepEqual(
+    recentPages(touches, "/v", () => true, 5, removed),
+    ["Calendar/2026-10-01.md"],
+  );
+  assert.deepEqual(
+    recentPages([...touches, touch("README.md", 9)], "/v", () => true, 5, removed),
+    ["README.md", "Calendar/2026-10-01.md"],
+  );
+});
+
 test("the notes the vault runs on are system pages, the ones people write in are not", () => {
   for (const path of [
     "CLAUDE.md",

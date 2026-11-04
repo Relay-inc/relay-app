@@ -627,19 +627,46 @@ const linkedList: Linked[] = [
 ];
 /** The notes the fixture adds to the vault, and what notes_linked tells of them (related.rs `linked`). */
 export const linkedPaths = linkedList.map(n => n.p);
-export const linkedNotes = () =>
-  linkedList.map(n => ({
-    p: n.p,
-    t: n.p.split("/").pop()!.replace(/\.md$/, ""),
-    k: n.k,
-    at: Math.floor((NOW - (n.daysAgo ?? 3) * DAY) / 1000),
-    about: n.about ?? [],
-    context: n.context ?? [],
-    with: n.with ?? [],
-    date: n.date ?? "",
-    stage: n.stage ?? "",
-    role: n.role ?? "",
-  }));
+const linkedRow = (
+  n: { p: string; k: string; at: number; about: string[]; context: string[]; with: string[] } & Partial<Linked>,
+) => ({
+  t: n.p.split("/").pop()!.replace(/\.md$/, ""),
+  date: "",
+  stage: "",
+  role: "",
+  ...n,
+});
+const projectNote = (p: P) =>
+  p.name === "Delmas Bakery"
+    ? "Contexts/Agency/Projects/Delmas Bakery.md"
+    : `Contexts/${p.context}/Projects/${p.name}/${p.name}.md`;
+/** What the index lists as pointing somewhere: the notes above (a meeting sits in the Agency context too, as its
+ *  frontmatter says in collections.ts) and each project's own note, which names its context. */
+export const linkedNotes = () => [
+  ...linkedList.map(n =>
+    linkedRow({
+      p: n.p,
+      k: n.k,
+      at: Math.floor((NOW - (n.daysAgo ?? 3) * DAY) / 1000),
+      about: n.about ?? [],
+      context: n.k === "Meeting" ? ["Agency", ...(n.context ?? [])] : (n.context ?? []),
+      with: n.with ?? [],
+      date: n.date ?? "",
+      stage: n.stage ?? "",
+      role: n.role ?? "",
+    }),
+  ),
+  ...P.map(p =>
+    linkedRow({
+      p: projectNote(p),
+      k: "Project",
+      at: Math.floor((NOW - p.daysAgo * DAY) / 1000),
+      about: [],
+      context: [p.context],
+      with: [],
+    }),
+  ),
+];
 /** In the linked fixtures Delmas Bakery is a flat project: its note alone, no folder of its own. */
 export const flat = (p: string) => (p.startsWith("Contexts/Agency/Projects/Delmas Bakery/") ? "" : p);
 export const FLAT_NOTE = "Contexts/Agency/Projects/Delmas Bakery.md";

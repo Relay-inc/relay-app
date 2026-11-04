@@ -2119,18 +2119,39 @@ const VIEWS = {
     await waitText("Stand van zaken");
     await settle(page);
   },
-  // the Pages tab under a project: its folder, then below "linked here" the notes that point at it (about:, context:,
-  // with:) as Meetings, Threads and People that unfold to the newest four, the same notes nowhere else (K1)
+  // the Pages tab under a project: its folder, then its Collections folder with the notes that point at it (about:,
+  // context:, with:) as Meetings, Threads and People that unfold to the newest four, the same notes nowhere else (K1)
   "pages-virtual-groups": async (fixture = "linked") => {
     await open(page, server.url, { fixture });
     await page.getByRole("tab", { name: /^Pages/ }).click();
     await page.locator('[data-project="Northwind Portal"]').click();
-    await waitText("linked here");
-    await page.locator('[data-linked-group="meetings"]').click();
+    const folder = page.locator('[data-collections^="Contexts/Agency/Projects/Northwind Portal"]');
+    await folder.locator("[aria-expanded]").first().click();
+    await folder.locator('[data-linked-group="meetings"]').click();
     await waitText("Show all 6");
     await page.getByText("Show all 6").scrollIntoViewIfNeeded();
     await settle(page);
   },
+  // a context's Collections folder open: Meetings, Documents, People, Projects, Threads with their counts, one unfolded
+  "pages-collections-context": async (fixture = "linked") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    const folder = page.locator('[data-collections="ctx:Agency"]');
+    await folder.locator("[aria-expanded]").first().click();
+    await folder.locator('[data-linked-group="projects"]').click();
+    await folder.scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  "pages-collections-context-dark": async () => VIEWS["pages-collections-context"]("linked-dark"),
+  // Recent with the × showing on the hovered row and Clear on the header
+  "pages-recent-close": async (fixture = "default") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    const recent = page.locator('[data-section="pages:recent"]');
+    await recent.locator("[data-page]").nth(1).hover();
+    await settle(page);
+  },
+  "pages-recent-close-dark": async () => VIEWS["pages-recent-close"]("dark"),
   "pages-virtual-groups-dark": async () => VIEWS["pages-virtual-groups"]("linked-dark"),
   // a collection (K8, K9): the Meetings of a context as a table with the filter chip, the about: cell open on its
   // listbox; as a board by stage; the Projects board with a card in the air over the lane it sets
@@ -2173,9 +2194,14 @@ const VIEWS = {
   "collection-open": async (fixture, collection) => {
     await open(page, server.url, { fixture });
     await page.getByRole("tab", { name: /^Pages/ }).click();
-    const folder = page.locator('[data-collections="Agency"]');
+    const folder = page.locator('[data-collections="ctx:Agency"]');
     await folder.locator("[aria-expanded]").first().click();
-    await folder.locator(`[data-collection="${collection}"]`).click();
+    const group = folder.locator(`[data-linked-group="${collection}"]`);
+    await group.click();
+    await group
+      .locator("xpath=..")
+      .getByText(/^Show all \d+$/)
+      .click();
     await waitText("match this view");
     await settle(page);
   },
