@@ -652,7 +652,13 @@ const SCENARIOS = {
     await note.getByRole("button", { name: "Open" }).click();
     s.check("Open shows the note", await waitText(page, "retried twice"));
     const opened = await page.locator(".cm-content").innerText();
-    s.check("at the section's heading", opened.includes("## Rate limits"));
+    // the heading's ## is hidden now (#392): its line used to show it as raw text with the cursor on it
+    s.check(
+      "at the section's heading",
+      opened.includes("Rate limits") &&
+        (await page.locator(".cm-h2", { hasText: /^Rate limits$/ }).isVisible()) &&
+        !opened.includes("##"),
+    );
   },
   async send(s) {
     await s.load(); // a first load reads the fixture keys
@@ -1317,6 +1323,146 @@ const SCENARIOS = {
     s.check("and nothing else changed", /```\n\n- \[x\] Call the client/.test(await written()));
   },
 
+  // the page editor writes markdown without showing it (#392): typing, ⌘B and the toolbar, a link's address, the cursor
+  // and Backspace at hidden marks, ⌘K as the link key and as the palette, Show markdown; each asserts the file's text
+  async pageHiddenMarkdown(s) {
+    await s.load();
+    const { page } = s;
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    const editor = page.locator(".cm-content");
+    await editor.waitFor();
+    const written = async () => (await page.evaluate(() => window.__harness.written())) ?? "";
+    const saved = async re => {
+      for (let i = 0; i < 20 && !re.test(await written()); i++) await page.waitForTimeout(200);
+      return re.test(await written());
+    };
+    const shown = () => editor.innerText();
+    await editor.click();
+    await page.keyboard.press("Meta+End");
+    // a new line without the list continuation Enter would add
+    const line = async text => {
+      await page.keyboard.insertText("\n");
+      await page.keyboard.type(text);
+    };
+    await line("## Title");
+    s.check(
+      "## Title is a heading as soon as it is typed",
+      await page.locator(".cm-h2", { hasText: /^Title$/ }).isVisible(),
+    );
+    s.check("the file has ## Title", await saved(/\n## Title$/));
+    await line("**bold**");
+    s.check(
+      "**bold** is bold, its asterisks hidden",
+      await page.locator(".cm-strong", { hasText: /^bold$/ }).isVisible(),
+    );
+    s.check("the file has **bold**", await saved(/\n## Title\n\*\*bold\*\*$/));
+    await line("**clos");
+    s.check("unclosed syntax stays visible", (await shown()).includes("**clos"));
+    await page.keyboard.type("ed**");
+    s.check("and hides when it closes", !(await shown()).includes("**clos") && (await shown()).includes("closed"));
+    await line("- item");
+    s.check(
+      "- item is a bullet",
+      (await page.locator(".cm-bullet").count()) > 0 && !(await shown()).includes("- item"),
+    );
+    s.check("the file has - item", await saved(/\n- item$/));
+    await line("[] task");
+    s.check(
+      "[] task is a to-do with its box",
+      (await page
+        .locator(".cm-line", { hasText: /^\s*task$/ })
+        .locator(".cm-task")
+        .count()) === 1,
+    );
+    s.check("the file has - [ ] task", await saved(/\n- \[ \] task$/));
+    // ⌘B on a selection, and the toolbar's buttons
+    await line("");
+    await page.keyboard.type("make me bold");
+    await page.keyboard.press("Shift+Home");
+    s.check("the toolbar shows over a selection", await page.locator(".cm-format-bar").isVisible());
+    await page.keyboard.press("Meta+b");
+    s.check("⌘B makes it bold in the file", await saved(/\n\*\*make me bold\*\*$/));
+    await page.locator(".cm-format-italic").click();
+    s.check("the toolbar's I adds italic", await saved(/\n\*\*\*make me bold\*\*\*$/));
+    await page.locator(".cm-format-bold").click();
+    s.check("and its B takes the bold off again", await saved(/\n\*make me bold\*$/));
+    // a link: ⌘K over a selection is the link key, the address is typed in the popover
+    await page.keyboard.press("End");
+    await line("go here");
+    await page.keyboard.press("Shift+Home");
+    await page.keyboard.press("Meta+k");
+    s.check("⌘K on a selection opens the link popover", await page.locator(".cm-link-input").isVisible());
+    s.check("and not the palette", !/ask a question/i.test((await focusedPlaceholder(page)) ?? ""));
+    await page.keyboard.type("https://example.com/a");
+    await page.keyboard.press("Enter");
+    s.check(
+      "the file has [go here](https://example.com/a)",
+      await saved(/\n\[go here\]\(https:\/\/example\.com\/a\)$/),
+    );
+    s.check(
+      "the editor shows the link's text only",
+      (await shown()).includes("go here") &&
+        !(await shown()).includes("](") &&
+        !(await shown()).includes("example.com"),
+    );
+    // the address changed without seeing the markdown: the cursor in the link brings its popover
+    const link = page.locator(".cm-link", { hasText: "go here" });
+    const box = await link.boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    const input = page.locator(".cm-link-input");
+    await input.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+    s.check(
+      "a click in a link shows its address",
+      (await input.inputValue().catch(() => "")) === "https://example.com/a",
+    );
+    await input.fill("https://example.com/b");
+    await page.keyboard.press("Enter");
+    s.check("changing it changes the file", await saved(/\n\[go here\]\(https:\/\/example\.com\/b\)$/));
+    // ⌘K with nothing selected is the palette's
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    s.check("⌘K without a selection is the palette", /ask a question/i.test((await focusedPlaceholder(page)) ?? ""));
+    await page.keyboard.press("Escape");
+    await settle(page, 200);
+    // arrows and Backspace step over hidden marks
+    await editor.click();
+    await page.keyboard.press("Meta+End");
+    await line("**solid**");
+    await page.keyboard.press("Home");
+    for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowRight");
+    await page.keyboard.type("X");
+    s.check("→ steps over the hidden ** to the letters", await saved(/\n\*\*solXid\*\*$/));
+    await page.keyboard.press("End");
+    await page.keyboard.press("Backspace");
+    s.check("Backspace takes the last letter, not the hidden marks", await saved(/\n\*\*solXi\*\*$/));
+    await page.locator(".cm-line", { hasText: /^Title$/ }).click();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Backspace");
+    s.check("Backspace at the start of a heading makes it plain text", await saved(/\nTitle\n\*\*bold\*\*/));
+    // Show markdown: the page menu and its key, remembered
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await page.getByRole("button", { name: "Show markdown" }).click();
+    s.check(
+      "Show markdown shows the syntax",
+      (await shown()).includes("**bold**") && (await shown()).includes("](https://example.com/b)"),
+    );
+    const remembered = async on =>
+      page
+        .waitForFunction(on => localStorage.getItem("showMarkdown") === on, String(on), { timeout: 3000 })
+        .then(
+          () => true,
+          () => false,
+        );
+    s.check("it is remembered", await remembered(true));
+    await page.keyboard.press("Shift+Meta+m");
+    s.check("its key hides it again", !(await shown()).includes("**bold**") && !(await shown()).includes("](https://"));
+    s.check("and that is remembered too", await remembered(false));
+    s.check(
+      "the file kept every character of it",
+      /\*\*bold\*\*/.test(await written()) && /\[go here\]\(https:\/\/example\.com\/b\)/.test(await written()),
+    );
+  },
   async mail(s) {
     await s.load();
     const { page, keys } = s;
