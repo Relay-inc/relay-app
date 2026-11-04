@@ -20,6 +20,7 @@ import { settings } from "../settings/settings";
 import { toast } from "../navigation/navigation";
 import { meetingNote } from "./calendar";
 import { noteFor, remember } from "./meeting-view";
+import { recordWrite } from "../navigation/changes";
 
 // The follow-up mail of a meeting: written by one run of the agent (backend.aiWrite) from the accepted summary, shown
 // as a composer the user edits, and saved as a draft in the mail account's Drafts (the same save_draft Today's replies
@@ -140,6 +141,9 @@ export async function saveFollowup(meeting: Meeting) {
     if (text !== note.text) {
       const { hash } = await backend.writeNote(note.path, text, note.hash, false);
       remember(meeting, { path: note.path, text, hash });
+      await recordWrite("wrap-up", meeting.title, t("changes.reasonFollowup", { title: meeting.title }), [
+        { path: note.path, before: note.text, after: text },
+      ]);
     }
   } catch (error) {
     toast(String(error)); // the draft is saved, the note will not say so

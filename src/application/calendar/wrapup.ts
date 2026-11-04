@@ -27,6 +27,7 @@ import { toast } from "../navigation/navigation";
 import { addReminder } from "../reminders/reminders";
 import { meetingNote, meetingProjectOf } from "./calendar";
 import { noteFor, remember } from "./meeting-view";
+import { recordWrite } from "../navigation/changes";
 
 // The wrap-up of a meeting: a draft written by one run of the agent (backend.aiWrite: no tools, no conversation) from the
 // notes, the transcript and the briefing; what the user makes of it (edits the summary and the steps, picks where each
@@ -232,6 +233,9 @@ export async function acceptDraft(meeting: Meeting) {
     const text = withEvent(withSummary(note.text, section), meeting.id);
     const { hash } = await backend.writeNote(note.path, text, note.hash, false);
     remember(meeting, { path: note.path, text, hash });
+    await recordWrite("wrap-up", meeting.title, t("changes.reasonSummary", { title: meeting.title }), [
+      { path: note.path, before: note.text, after: text },
+    ]);
   } catch (error) {
     change(meeting.id, d => {
       d.phase = "ready";
@@ -267,7 +271,12 @@ export async function addDecision(meeting: Meeting, i: number) {
     const read = (await backend.readNote(project)) as { path: string; text: string; hash: string };
     const text = withDecision(read.text, today(), decision.text, meetingNoteName(meeting));
     if (text === null) throw new Error(t("meet.wrap.noDecisions", { project }));
-    if (text !== read.text) await backend.writeNote(read.path, text, read.hash, false);
+    if (text !== read.text) {
+      await backend.writeNote(read.path, text, read.hash, false);
+      await recordWrite("wrap-up", meeting.title, t("changes.reasonDecision", { title: meeting.title, project }), [
+        { path: read.path, before: read.text, after: text },
+      ]);
+    }
     mark("done");
     toast(t("meet.wrap.decisionAdded", { project }));
   } catch (error) {

@@ -1268,6 +1268,45 @@ function handle(cmd: string, a: Args): unknown {
       }
       return path;
     }
+    case "changes_list":
+      return structuredClone(changes);
+    case "change_keep":
+      for (const e of changes.filter(e => e.id === a.id))
+        for (const f of e.files) if ((!a.path || f.path === a.path) && f.state === "open") f.state = "kept";
+      return null;
+    case "change_undo": {
+      const f = changes.find(e => e.id === a.id)?.files.find(f => f.path === a.path && f.state === "open");
+      if (!f) return Promise.reject("already reviewed");
+      const current = noteNow(f.path);
+      if (current !== f.after) return { merge: true, current, before: f.before, after: f.after };
+      putNote(f.path, f.before);
+      f.state = "undone";
+      return { merge: false };
+    }
+    case "change_resolve": {
+      const f = changes.find(e => e.id === a.id)?.files.find(f => f.path === a.path && f.state === "open");
+      if (!f) return Promise.reject("already reviewed");
+      if (noteNow(f.path) !== a.expect) return Promise.reject("changed");
+      putNote(f.path, String(a.text));
+      f.state = "undone";
+      return null;
+    }
+    case "page_action": {
+      const [reason, edits] = mockAction(String(a.action), String(a.path), (a.selection as string | null) ?? null);
+      recordChange(`action:${a.action}`, String(a.path).split("/").pop()!.replace(/\.md$/, ""), reason, edits);
+      return null;
+    }
+    case "change_record": {
+      const files = (a.files as { path: string; before: string | null; after: string | null }[]).filter(f => f.before !== f.after);
+      if (files.length) {
+        changes = [{ id: `${Date.now()}-${changes.length}`, at: Date.now(), source: String(a.source), subject: String(a.subject), reason: String(a.reason), files: files.map(f => ({ ...f, state: "open" })) }, ...changes];
+        emit("changes-changed", null);
+      }
+      return null;
+    }
+    case "capture_vault":
+      recordChange("capture", String(a.title ?? ""), kb.capture.reason, kb.capture.files.map(f => [f.path, f.after]));
+      return null;
     case "favourites":
       return kbOn ? favourites : [];
     case "set_favourites":
@@ -1709,13 +1748,16 @@ const linkedOn = fixture.startsWith("linked");
 const embedsOn = fixture.startsWith("embeds");
 // fixture kb (K5, K1): notes with content to search, templates, favourites
 const kbOn = fixture.startsWith("kb");
+const changesOn = fixture.startsWith("kb-changes");
+// kb-sketch: the same notes without a feed, and the one note that has no type: (Fix properties)
+const sketchOn = changesOn || fixture === "kb-sketch";
 const keepState = query.get("keep") === "1";
 let favourites: string[] = keepState ? JSON.parse(sessionStorage.getItem("mockFavourites") || "[]") : [];
 if (!keepState) for (const k of Object.keys(sessionStorage)) if (k.startsWith("mock")) sessionStorage.removeItem(k);
 const pageList = () =>
   pages ??
   (kbOn
-    ? [...vault.notes, ...kb.paths]
+    ? [...vault.notes, ...kb.paths, ...(sketchOn ? [kb.untyped.path] : [])]
     : linkedOn
       ? [...vault.notes.filter(n => vault.flat(n)), vault.FLAT_NOTE, ...vault.linkedPaths]
       : embedsOn
@@ -1783,6 +1825,42 @@ const written = new Map<string, { text: string; hash: string }>(
       ? Object.entries(kb.texts).map(([path, text]) => [path, { text, hash: "h0" }])
       : [],
 );
+// the Changes feed (K6, issue 371): the real one is src-tauri/src/changes.rs, which has its own tests. Kept in memory.
+type Change = { id: string; at: number; source: string; subject: string; reason: string; files: { path: string; before: string | null; after: string | null; state: string }[] };
+let changes: Change[] = changesOn ? kb.seedChanges() : [];
+if (sketchOn) written.set(kb.untyped.path, { text: kb.untyped.text, hash: "h0" });
+if (changesOn) {
+  for (const e of changes) for (const f of e.files) if (f.after !== null) written.set(f.path, { text: f.after, hash: "h0" });
+}
+const noteKey = (path: string) => [...written.keys()].find(k => k === path || k.endsWith(`/${path}`)) ?? path;
+const noteNow = (path: string) => written.get(noteKey(path))?.text ?? null;
+const putNote = (path: string, text: string | null) => {
+  if (text === null) written.delete(noteKey(path));
+  else written.set(noteKey(path), { text, hash: `h${++writes}` });
+};
+/** A job's writes as one entry, as changes.rs records them: the notes that differ from `before`. */
+function recordChange(source: string, subject: string, reason: string, edits: [string, string | null][]) {
+  const files = edits.map(([path, after]) => ({ path, before: noteNow(path), after, state: "open" })).filter(f => f.before !== f.after);
+  for (const f of files) putNote(f.path, f.after);
+  if (!files.length) return;
+  changes = [{ id: `${Date.now()}-${changes.length}`, at: Date.now(), source, subject, reason, files }, ...changes];
+  emit("changes-changed", null);
+}
+/** What Claude does for a page action here, in a line each: enough to show the result in the feed. */
+function mockAction(action: string, path: string, selection: string | null): [string, [string, string | null][]] {
+  const text = noteNow(path) ?? "";
+  if (action === "properties") {
+    const has = /^---\n[\s\S]*?\btype:/.test(text);
+    const next = has ? text : /^---\n/.test(text) ? text.replace("---\n", "---\ntype: Document\n") : `---\ntype: Document\ncontext: "[[Agency]]"\n---\n${text}`;
+    return [has ? "Nothing to change" : "Added type: Document and context: Agency", [[path, next]]];
+  }
+  if (action === "summarise") {
+    const at = text.indexOf("\n", text.indexOf("# ")) + 1;
+    const about = selection ? "the selected text" : "the note";
+    return [`Summarised ${about} in a Summary section`, [[path, `${text.slice(0, at)}\n## Summary\nA short summary of ${about}.\n${text.slice(at)}`]]];
+  }
+  return [`Ran ${action}`, [[path, `${text}\n<!-- ${action} -->\n`]]];
+}
 // the files added to a page (attach_copy, attach_save), for the checks
 const attached: { page: string; name: string; bytes?: number }[] = [];
 const eventNotes = new Map<string, string>(); // a calendar event's id -> the note that holds it (`event:`)
@@ -1882,6 +1960,12 @@ const harness = {
   /** how a meeting's wrap-up draft goes: written, never finishing (the skeleton), or failing */
   wrapupMode: (mode: "ok" | "slow" | "fail") => void (wrapupMode = mode),
   followupMode: (mode: "ok" | "slow" | "fail") => void (followupMode = mode),
+  /** a capture run finished (what capture_vault does): two notes edited, one entry in the Changes feed */
+  capture: () => recordChange("capture", kb.capture.subject, kb.capture.reason, kb.capture.files.map(f => [f.path, f.after])),
+  /** a note's text now, as the backend has it (a page's saves and a job's writes) */
+  noteText: (path: string) => noteNow(path),
+  /** a note's text typed by the user outside the editor flow: what an Undo finds when the note was edited since the run */
+  typeInto: (path: string, text: string) => putNote(path, text),
   /** a note in the vault with this text (a project's, with its decisions) */
   setNote: (path: string, text: string) => void written.set(path, { text, hash: `h${++writes}` }),
   /** a meeting note in the vault: its text, found by the event it belongs to */

@@ -1,3 +1,4 @@
+import { reloadChanges } from "./navigation/changes";
 import {
   opened,
   chatTime,
@@ -167,6 +168,7 @@ async function loadSettingsAndVault() {
   await refreshIcons();
   backend.onIconsChanged(reloadIcons);
   backend.onReposChanged(loadProjectRepos);
+  backend.onChangesChanged(reloadChanges);
   backend.onRepoUnlinked(askRepo);
   watchDesign();
 }

@@ -39,6 +39,7 @@ mod mail;
 mod meeting;
 mod migrate;
 mod attach;
+mod changes;
 mod pagefiles;
 mod homes;
 mod projects;
@@ -638,29 +639,20 @@ async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Va
         .filter_map(|(n, d)| Some((n, json!(relay_config::site_of(d.as_str()?)?)))).collect()))
 }
 const CAPTURE_PROMPT: &str = agent_core::prompt::text(include_str!("../../prompts/conversation/vault-capture.md"));
-/// What a closed conversation leaves for the vault, written straight in: one Sonnet call that resumes a fork of its
-/// session (not kept), in the vault with its CLAUDE.md, rules and hooks but no MCP, allowed to read, edit and write.
-/// Nothing is shown or asked; the vault's git history is the review. Only a Claude session of this Mac: a work
-/// machine's transcript is not here.
+/// Claude, run once in `eb.vault` with its CLAUDE.md, rules and hooks but no MCP, allowed to read, edit and write notes
+/// (a capture's resumed fork, a page action): fenced in like a conversation of that vault (it runs unasked, on what was
+/// said or written there), and started under the vault lock like a conversation: a vault change waits for it or stops
+/// it. `resume`: the session whose fork it is. Returns what Claude answered.
 /// ponytail: no timeout on the run; a hung one holds the queue (application/capture) until Relay quits
-#[tauri::command]
-async fn capture_vault(app: AppHandle, state: State<'_, App>, key: String) -> Result<(), String> {
-    let sid = state.sids.lock().unwrap().get(&key).filter(|s| s.provider == "claude").map(|s| s.sid.clone());
-    let p = agents::enabled(&state.settings.lock().unwrap()).into_iter().find(|p| p.id() == "claude");
-    let (Some(sid), Some(p)) = (sid, p) else { return Ok(()) };
-    if !p.valid_session(&sid) || state.machines.bind_of(&key).is_some() { return Ok(()); }
-    let mut eb = env_for(&app, &state, p, &key);
-    if eb.vault.is_empty() { return Ok(()); }
-    // on the account the session was recorded on, its transcript is there
-    let account = account_of(&state, p, &key, "sonnet");
-    // fenced in like the conversation it closes (it runs unasked, in that conversation's vault, on what was said
-    // there), and started under the vault lock like a conversation: a vault change waits for it or stops it
+async fn claude_job(app: &AppHandle, state: &State<'_, App>, mut eb: EnvBuf, account: String, resume: Option<String>, prompt: String) -> Result<String, String> {
     let mut child = {
         let _gate = state.vault_gate.lock().unwrap();
-        fence_in(&app, &state, &mut eb);
+        fence_in(app, state, &mut eb);
         let deny: Vec<String> = eb.opts["deny"].as_array().into_iter().flatten().filter_map(Value::as_str).map(String::from).collect();
         let mut c = Command::new(&eb.bin);
-        c.args(["-p", "--resume", &sid, "--fork-session", "--no-session-persistence", "--model", "sonnet", "--strict-mcp-config",
+        c.arg("-p");
+        if let Some(sid) = &resume { c.args(["--resume", sid, "--fork-session"]); }
+        c.args(["--no-session-persistence", "--model", "sonnet", "--strict-mcp-config",
                 "--tools", "Read,Glob,Grep,Edit,Write", "--allowedTools", "Read,Glob,Grep,Edit,Write"])
             .args(if deny.is_empty() { vec![] } else { std::iter::once("--disallowedTools".to_string()).chain(deny).collect() })
             // in a shared vault no hook runs here either, as in the conversation it closes
@@ -674,12 +666,137 @@ async fn capture_vault(app: AppHandle, state: State<'_, App>, key: String) -> Re
     };
     let pid = child.id();
     let out = tauri::async_runtime::spawn_blocking(move || -> std::io::Result<std::process::Output> {
-        child.stdin.take().unwrap().write_all(CAPTURE_PROMPT.as_bytes())?;
+        child.stdin.take().unwrap().write_all(prompt.as_bytes())?;
         child.wait_with_output()
     }).await;
     policy::CAPTURES.lock().unwrap().retain(|p| *p != pid);
     let out = out.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
     if !out.status.success() { return Err(String::from_utf8_lossy(&out.stderr).trim().chars().take(300).collect()); }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+/// A job's writes as one entry of the Changes feed (changes.rs): `run` is the job, `source` and `subject` say what it
+/// was. The notes it changed are recorded even when the job failed halfway. The webview hears of a new entry.
+async fn recorded(app: &AppHandle, root: &str, source: String, subject: String, run: impl std::future::Future<Output = Result<String, String>>) -> Result<(), String> {
+    let root = PathBuf::from(vault::canon(root));
+    let before = on_files({ let root = root.clone(); move || Ok(changes::snap(&root)) }).await?;
+    let ran = run.await;
+    let reason = ran.as_ref().ok().and_then(|t| t.lines().rev().find_map(|l| l.trim().strip_prefix("Reason:").map(|r| r.trim().to_string()))).unwrap_or_default();
+    let made = on_files(move || changes::record(&root, &before, &source, &subject, &reason)).await;
+    if matches!(made, Ok(Some(_))) { app.emit("changes-changed", ()).ok(); }
+    ran.map(|_| ())?;
+    made.map(|_| ())
+}
+/// What a closed conversation leaves for the vault, written straight in: one Sonnet call that resumes a fork of its
+/// session (not kept), in the vault with its CLAUDE.md, rules and hooks but no MCP. What it wrote is reviewable in the
+/// Changes feed, one entry per run, with Undo. Only a Claude session of this Mac: a work machine's transcript is not here.
+#[tauri::command]
+async fn capture_vault(app: AppHandle, state: State<'_, App>, key: String, title: Option<String>) -> Result<(), String> {
+    let sid = state.sids.lock().unwrap().get(&key).filter(|s| s.provider == "claude").map(|s| s.sid.clone());
+    let p = agents::enabled(&state.settings.lock().unwrap()).into_iter().find(|p| p.id() == "claude");
+    let (Some(sid), Some(p)) = (sid, p) else { return Ok(()) };
+    if !p.valid_session(&sid) || state.machines.bind_of(&key).is_some() { return Ok(()); }
+    let eb = env_for(&app, &state, p, &key);
+    if eb.vault.is_empty() { return Ok(()); }
+    // on the account the session was recorded on, its transcript is there
+    let account = account_of(&state, p, &key, "sonnet");
+    let vault = eb.vault.clone();
+    recorded(&app, &vault, "capture".into(), title.unwrap_or_default(), claude_job(&app, &state, eb, account, Some(sid), CAPTURE_PROMPT.into())).await
+}
+const ACTION_PROMPTS: [(&str, &str); 5] = [
+    ("summarise", agent_core::prompt::text(include_str!("../../prompts/conversation/page-action-summarise.md"))),
+    ("next-steps", agent_core::prompt::text(include_str!("../../prompts/conversation/page-action-next-steps.md"))),
+    ("link", agent_core::prompt::text(include_str!("../../prompts/conversation/page-action-link.md"))),
+    ("properties", agent_core::prompt::text(include_str!("../../prompts/conversation/page-action-properties.md"))),
+    ("split", agent_core::prompt::text(include_str!("../../prompts/conversation/page-action-split.md"))),
+];
+/// A page action: Claude does one job on a note in the background (`action`: summarise, next-steps, link, properties
+/// or split; `selection`: only the text the user selected). The result lands in the Changes feed. `path` is the note
+/// in the workspace `workspace`.
+#[tauri::command]
+async fn page_action(app: AppHandle, state: State<'_, App>, workspace: String, path: String, action: String, selection: Option<String>) -> Result<(), String> {
+    let job = ACTION_PROMPTS.iter().find(|(k, _)| *k == action).map(|(_, v)| *v).ok_or("unknown action")?;
+    let (s, _) = workspace_side(&state, &workspace)?;
+    let root = PathBuf::from(vault::canon(&workspace));
+    changes::note_in(&root, &path)?;
+    let p = agents::enabled(&s).into_iter().find(|p| p.id() == "claude").ok_or_else(|| trc("err.icons_no_claude"))?;
+    let eb = in_vault(env_of(&app, &state, p), workspace.clone());
+    let account = account_of(&state, p, "", "sonnet");
+    let abs = root.join(&path).to_string_lossy().into_owned();
+    let mut prompt = format!("{job}\n\nThe note: {abs}");
+    if let Some(sel) = selection.filter(|t| !t.trim().is_empty()) {
+        prompt = format!("{prompt}\n\nOnly this part of the note, which the user selected, is meant. {}\n\n{}", agent_core::prompt::untrusted_note(&["selection"]), agent_core::prompt::untrusted("selection", &sel));
+    }
+    let subject = path.rsplit('/').next().unwrap_or(&path).trim_end_matches(".md").to_string();
+    recorded(&app, &workspace, format!("action:{action}"), subject, claude_job(&app, &state, eb, account, None, prompt)).await
+}
+/// The workspace folder (as the webview names it) of a Changes call, checked to be one of this Mac's.
+fn changes_root(state: &State<App>, workspace: &str) -> Result<PathBuf, String> {
+    workspace_side(state, workspace)?;
+    Ok(PathBuf::from(vault::canon(workspace)))
+}
+/// An entry for notes the app wrote itself, for the Changes feed (a meeting's prep and wrap-up, written from the
+/// webview): `files` is `[{path, before, after}]`, a path relative to the main vault or absolute in a workspace of
+/// this Mac; one entry per workspace the notes are in.
+#[tauri::command]
+async fn change_record(app: AppHandle, state: State<'_, App>, source: String, subject: String, reason: String, files: Vec<Value>) -> Result<(), String> {
+    let roots = note_roots(&state)?;
+    let mut by: Vec<(PathBuf, Vec<(String, Option<String>, Option<String>)>)> = vec![];
+    for f in &files {
+        let path = f["path"].as_str().unwrap_or("");
+        let (root, rel) = match path.strip_prefix('/') {
+            None => (roots[0].clone(), path.to_string()),
+            Some(_) => {
+                let best = roots.iter().filter(|r| path.strip_prefix(r.as_str()).is_some_and(|x| x.starts_with('/'))).max_by_key(|r| r.len()).ok_or("not a note of this Mac's workspaces")?;
+                (best.clone(), path[best.len() + 1..].to_string())
+            }
+        };
+        let text = |k: &str| f[k].as_str().map(String::from);
+        let row = (rel, text("before"), text("after"));
+        match by.iter_mut().find(|(r, _)| *r == PathBuf::from(&root)) { Some((_, v)) => v.push(row), None => by.push((PathBuf::from(&root), vec![row])) }
+    }
+    let made = on_files(move || {
+        let mut any = false;
+        for (root, notes) in by { any |= changes::record_files(&root, &source, &subject, &reason, &notes)?.is_some(); }
+        Ok(any)
+    }).await?;
+    if made { app.emit("changes-changed", ()).ok(); }
+    Ok(())
+}
+/// The Changes feed of a workspace (changes.rs): this Mac's jobs only, newest first.
+#[tauri::command]
+async fn changes_list(state: State<'_, App>, workspace: String) -> Result<Vec<Value>, String> {
+    let root = changes_root(&state, &workspace)?;
+    on_files(move || Ok(changes::list(&root))).await
+}
+/// Notes of a change marked as read: one (`path`), or every open one.
+#[tauri::command]
+async fn change_keep(state: State<'_, App>, workspace: String, id: String, path: Option<String>) -> Result<(), String> {
+    let root = changes_root(&state, &workspace)?;
+    on_files(move || changes::keep(&root, &id, path.as_deref())).await
+}
+/// A shared workspace's note a change wrote: the document takes the file as an edit.
+fn absorb_change(state: &State<App>, root: &std::path::Path, path: &str) {
+    if let Some((id, folder, rel)) = shared_note(state, &root.join(path).to_string_lossy()) { state.shared.absorb(&id, &folder, &rel, "relay"); }
+}
+/// Undo one note of a change: `{merge: false}` when it is back as it was, else `{merge: true, current, before, after}`
+/// (null for a missing note) and nothing written, for the page to merge and `change_resolve` to write.
+#[tauri::command]
+async fn change_undo(state: State<'_, App>, workspace: String, id: String, path: String) -> Result<Value, String> {
+    let root = changes_root(&state, &workspace)?;
+    let (r, p) = (root.clone(), path.clone());
+    let out = on_files(move || changes::undo(&r, &id, &p)).await?;
+    Ok(match out {
+        changes::Undone::Done => { absorb_change(&state, &root, &path); json!({"merge": false}) }
+        changes::Undone::Merge { current, before, after } => json!({"merge": true, "current": current, "before": before, "after": after}),
+    })
+}
+/// Write the merge of a note's later edit with its undo, while the note still is `expect` (null: still missing).
+#[tauri::command]
+async fn change_resolve(state: State<'_, App>, workspace: String, id: String, path: String, expect: Option<String>, text: String) -> Result<(), String> {
+    let root = changes_root(&state, &workspace)?;
+    let (r, p) = (root.clone(), path.clone());
+    on_files(move || changes::resolve(&r, &id, &p, expect.as_deref(), &text)).await?;
+    absorb_change(&state, &root, &path);
     Ok(())
 }
 /// The project index of a vault with a System/scripts/build-index.py, rebuilt at start. Errors are logged.
@@ -1098,6 +1215,7 @@ fn write_note(state: State<App>, target: String, text: String, expect: String, f
     let v = need_vault(&state)?;
     let roots: Vec<String> = std::iter::once(v).chain(extra_vaults(&state.settings.lock().unwrap())).collect();
     let hash = vault::write_note(&roots, &target, &text, &expect, force)?;
+    changes::typed(&vault::resolve(&vault::canon(&roots[0]), &target), &hash);
     watch::wrote(&roots[0], &target, &hash); // not an outside change: the watcher stays quiet about it
     // a shared workspace's note that is a document: the page's save becomes an edit of it
     if let Some((id, folder, rel)) = shared_note(&state, &target) { state.shared.absorb(&id, &folder, &rel, "relay"); }
@@ -3231,7 +3349,7 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![shared_doc_absorb, shared_doc_open, page_history, page_restore, page_comments, page_comment, workspace_inbox, shared_doc_edit, shared_awareness, shared_vaults::shared_vault_docs, snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, migrate_project, move_chat_workspace, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, note_by_event, note_home, write_note, property_values, create_note, create_context, create_project, project_kinds, set_project_state, project_row, vault_check, vault_repair, tidy_preview, tidy_apply, tidy_undo, free_page_name, attach_copy, attach_save, attach_dest, embed_info, duplicate_note, move_path, trash_path, restore_path, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_trust, shared_vaults::shared_vault_admin, shared_vaults::shared_vault_add, shared_vaults::shared_vault_pending_invite, notes_graph, notes_linked, note_rail, find_notes, note_times, note_templates, new_from_template, daily_note, favourites, set_favourites, note_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_kept, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
+        .invoke_handler(tauri::generate_handler![shared_doc_absorb, shared_doc_open, page_history, page_restore, page_comments, page_comment, workspace_inbox, shared_doc_edit, shared_awareness, shared_vaults::shared_vault_docs, snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, page_action, change_record, changes_list, change_keep, change_undo, change_resolve, project_repos, set_project_repos, migrate_project, move_chat_workspace, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, note_by_event, note_home, write_note, property_values, create_note, create_context, create_project, project_kinds, set_project_state, project_row, vault_check, vault_repair, tidy_preview, tidy_apply, tidy_undo, free_page_name, attach_copy, attach_save, attach_dest, embed_info, duplicate_note, move_path, trash_path, restore_path, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_trust, shared_vaults::shared_vault_admin, shared_vaults::shared_vault_add, shared_vaults::shared_vault_pending_invite, notes_graph, notes_linked, note_rail, find_notes, note_times, note_templates, new_from_template, daily_note, favourites, set_favourites, note_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_kept, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the window used last back (the main one may be hidden)
