@@ -6,6 +6,8 @@ import {
   editPoint,
   isPointsHeading,
   keepFrom,
+  prepState,
+  sectionHash,
   mergePrep,
   parseBriefing,
   partOf,
@@ -180,4 +182,14 @@ test("merging twice is the same as once, so a trigger that fires again changes n
   assert.equal(mergePrep(keep, nl), nl);
   // what the user changed since the snapshot is not undone for items the prep did keep
   assert.equal(parseBriefing(mergePrep(keep, once))!.points.length, 2);
+});
+
+test("a turn that has not rewritten the briefing keeps the snapshot, one that did merges it", () => {
+  const keep = keepFrom(nl, meeting)!;
+  assert.equal(keep.hash, sectionHash(nl));
+  assert.equal(prepState(keep, nl), "wait", "still the old briefing: Claude may be asking something");
+  assert.equal(prepState(keep, nl + "\n"), "merge", "any change counts as written");
+  assert.equal(prepState(keep, fresh), "merge");
+  assert.equal(prepState(keep, null), "clear", "no briefing: nothing to merge into");
+  assert.notEqual(sectionHash(nl), sectionHash(fresh));
 });

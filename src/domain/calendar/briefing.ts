@@ -226,14 +226,27 @@ export type PrepRun = {
   meeting: { id: string; title: string; start: string };
   points: { text: string; done: boolean }[];
   ticked: string[];
+  hash: string; // of the briefing it replaces: while the section still has it, the prep has not written yet
 };
+/** A short hash of a briefing's text (djb2), to tell whether a prep has rewritten it. */
+export function sectionHash(briefing: string) {
+  let h = 5381;
+  for (let i = 0; i < briefing.length; i++) h = ((h << 5) + h + briefing.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(16);
+}
+/** What a prep's turn end means for its snapshot: `wait` while the briefing is still the one it was asked about (it
+ *  has not written yet, it may be asking something), `clear` when the note has no briefing, `merge` once it differs. */
+export function prepState(run: Pick<PrepRun, "hash">, now: string | null): "wait" | "clear" | "merge" {
+  if (now === null) return "clear";
+  return sectionHash(now) === run.hash ? "wait" : "merge";
+}
 /** What of a briefing is the user's, for a prep to keep; null when the briefing has none of it (or no shape). */
 export function keepFrom(briefing: string, meeting: PrepRun["meeting"]): PrepRun | null {
   const shaped = parseBriefing(briefing);
   if (!shaped) return null;
   const points = shaped.points.filter(p => p.text.trim()).map(p => ({ text: p.text, done: p.done }));
   const ticked = shaped.since.steps.filter(s => s.done).map(s => s.text);
-  return points.length || ticked.length ? { meeting, points, ticked } : null;
+  return points.length || ticked.length ? { meeting, points, ticked, hash: sectionHash(briefing) } : null;
 }
 
 /** The briefing a prep wrote, with what the user owned put back: their points as they were (the new empty list is
