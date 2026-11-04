@@ -1,6 +1,6 @@
-import { useBrainStore } from "../../../application/brain/store";
+import { useCommonwealthStore } from "../../../application/settings/commonwealth-store";
 import { useState } from "react";
-import { installCommonwealth, joinTeamBrain } from "../../../application/brain/brain";
+import { installCommonwealth, joinTeamBrain } from "../../../application/settings/commonwealth";
 import { Html } from "../../components/Html";
 import { useT } from "../../hooks/useT";
 import { buttonClass, ERROR_MESSAGE, FIELD, FOOTER_IN_ROW, HINT_IN_ROW, OK_MESSAGE } from "./blocks";
@@ -10,12 +10,12 @@ import { StatusLine } from "./StatusLine";
 /** Commonwealth's body on its page in Integrations: what was detected, and joining a team brain. */
 export function CommonwealthSettings() {
   const { t, th } = useT();
-  const status = useBrainStore(s => s.status);
-  const installing = useBrainStore(s => s.installing);
-  const message = useBrainStore(s => s.installErr);
-  const joining = useBrainStore(s => s.joining);
-  const joined = useBrainStore(s => s.joined);
-  const joinErr = useBrainStore(s => s.joinErr);
+  const status = useCommonwealthStore(s => s.status);
+  const installing = useCommonwealthStore(s => s.installing);
+  const message = useCommonwealthStore(s => s.installErr);
+  const joining = useCommonwealthStore(s => s.joining);
+  const joined = useCommonwealthStore(s => s.joined);
+  const joinErr = useCommonwealthStore(s => s.joinErr);
   const [remote, setRemote] = useState("");
   const routed = (status?.projects ?? []).filter(row => row.name);
   return (

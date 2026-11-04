@@ -9,8 +9,8 @@ import {
   type Simulation,
   type SimulationNodeDatum,
 } from "d3-force";
-import type { BrainGraph, Glow } from "../../../domain/brain/types";
-import { adjacency, glowLevel } from "../../../domain/brain/rules";
+import type { NotesGraph, Glow } from "../../../domain/graph/types";
+import { adjacency, glowLevel } from "../../../domain/graph/rules";
 
 type Dot = SimulationNodeDatum & { i: number };
 type View = { k: number; x: number; y: number };
@@ -43,7 +43,7 @@ export function GraphCanvas({
   tooltip,
 }: {
   root: string;
-  graph: BrainGraph;
+  graph: NotesGraph;
   hideHubs: boolean;
   kinds: string[];
   glow: Map<string, Glow> | null;
@@ -532,4 +532,4 @@ export function GraphCanvas({
   );
 }
 
-const focusIndex = (graph: BrainGraph, path: string) => (path ? graph.nodes.findIndex(n => n.p === path) : -1);
+const focusIndex = (graph: NotesGraph, path: string) => (path ? graph.nodes.findIndex(n => n.p === path) : -1);

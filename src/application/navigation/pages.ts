@@ -330,7 +330,7 @@ export function askAboutPage(path: string) {
 /** The notes Relay's conversations read and wrote this week: Recent in the Pages tab. */
 export async function loadRecent() {
   try {
-    const touches = await backend.brainTouches(7);
+    const touches = await backend.noteTouches(7);
     set(draft => {
       draft.sidebar.touches = touches;
     });

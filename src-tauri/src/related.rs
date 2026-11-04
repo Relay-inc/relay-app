@@ -1,5 +1,5 @@
-// The full-text index of a folder of notes (SQLite FTS5, one file per folder in the app's data folder): the vault,
-// and every Commonwealth brain the Brain view shows. Related notes for a conversation, search, and each note's
+// The full-text index of a folder of notes (SQLite FTS5, one file per folder in the app's data folder): the vault
+// and the other workspaces. Related notes for a conversation, and each note's
 // title, kind, tags and links for the graph. The index follows the folder by mtime on every query, so no watcher.
 
 use crate::vault;
@@ -138,11 +138,6 @@ fn search(c: &Connection, q: &str, limit: usize) -> rusqlite::Result<Vec<Value>>
     rows.collect()
 }
 
-/// What someone typed as an FTS5 query: every word must be there, the last one may be half typed.
-pub fn typed_query(text: &str) -> String {
-    text.split(|ch: char| !ch.is_alphanumeric()).filter(|w| !w.is_empty()).map(|w| format!("\"{w}\"*")).collect::<Vec<_>>().join(" ")
-}
-
 /// Run `f` on the index of `root`, brought up to date first. The index files live in `dir`, one per folder.
 fn with<T>(dir: &Path, root: &str, f: impl FnOnce(&Connection) -> rusqlite::Result<T>) -> Result<T, String> {
     let mut g = INDEX.lock().unwrap();
@@ -161,12 +156,6 @@ fn with<T>(dir: &Path, root: &str, f: impl FnOnce(&Connection) -> rusqlite::Resu
 pub fn related(dir: &Path, vault: &str, text: &str, limit: usize) -> Result<Vec<Value>, String> {
     let q = query_of(text);
     with(dir, vault, |c| search(c, &q, limit))
-}
-
-/// The notes in `root` that match what someone typed, [{path, title, snippet}].
-pub fn find(dir: &Path, root: &str, text: &str, limit: usize) -> Result<Vec<Value>, String> {
-    let q = typed_query(text);
-    with(dir, root, |c| search(c, &q, limit))
 }
 
 /// Every note of `root` and the links between them: {nodes: [{p, t, k, g, h}], edges: [from, to, from, to, …]}
@@ -281,12 +270,6 @@ mod tests {
     }
 
     #[test]
-    fn typed_words_must_all_match_the_last_may_be_half() {
-        assert_eq!(typed_query("spardex dm"), "\"spardex\"* \"dm\"*");
-        assert_eq!(typed_query("  \"; "), "");
-    }
-
-    #[test]
     fn the_graph_links_by_path_and_by_name_and_leaves_staging_out() {
         let d = std::env::temp_dir().join(format!("relay-graph-{}", std::process::id()));
         fs::remove_dir_all(&d).ok();
@@ -301,6 +284,5 @@ mod tests {
         let names: Vec<&str> = g["nodes"].as_array().unwrap().iter().map(|n| n["p"].as_str().unwrap()).collect();
         assert_eq!(names, vec!["Two.md", "a/One.md", "a/Three.md"]);
         assert_eq!(g["edges"], json!([0, 1, 1, 2])); // One-Two once, One-Three; Nowhere dropped
-        assert_eq!(find(&d.join(".idx"), &root, "alo", 5).unwrap()[0]["path"], "a/Three.md");
     }
 }

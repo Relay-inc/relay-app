@@ -13,7 +13,7 @@ import {
   type Member,
   type Span,
 } from "../../../domain/workspace/comments";
-import { agoOf } from "../brain/ago";
+import { agoOf } from "./ago";
 import { useT } from "../../hooks/useT";
 import { Note } from "../../components/Note";
 import type { CommentsApi } from "./PageEditor";

@@ -1,61 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  adjacency,
-  brainKey,
-  brainName,
-  byBrain,
-  folderSize,
-  folderTree,
-  glowLevel,
-  glowOf,
-  topKinds,
-  touchedKeys,
-} from "./rules.ts";
-import type { BrainNote } from "./types.ts";
-
-const note = (brain: string, id: string): BrainNote => ({
-  brain,
-  id,
-  kind: "memory",
-  title: id,
-  created: "2026-10-01",
-  author: "k",
-  source: "",
-  body: "",
-});
-
-test("a brain is named by its last folder", () => {
-  assert.equal(brainName("/Users/k/brains/team/"), "team");
-  assert.equal(brainName("/"), "/");
-});
-
-test("the same id in two brains gives two keys", () => {
-  assert.notEqual(brainKey(note("/a", "1")), brainKey(note("/b", "1")));
-});
-
-test("notes are grouped per brain in order of appearance", () => {
-  const groups = byBrain([note("/b", "1"), note("/a", "2"), note("/b", "3")]);
-  assert.deepEqual(
-    groups.map(([brain, rows]) => [brain, rows.map(row => row.id)]),
-    [
-      ["/b", ["1", "3"]],
-      ["/a", ["2"]],
-    ],
-  );
-});
+import { adjacency, glowLevel, glowOf, topKinds, touchedKeys } from "./rules.ts";
 
 const node = (p: string, k = "", h = false) => ({ p, t: p.split("/").pop()!.replace(/\.md$/, ""), k, g: [], h });
-
-test("the folder tree nests notes under their folders, by name", () => {
-  const nodes = [node("b/Z.md"), node("A.md"), node("b/c/Y.md"), node("b/X.md")];
-  const tree = folderTree(nodes);
-  assert.deepEqual(tree.notes, [1]);
-  assert.equal(tree.folders[0].path, "b");
-  assert.deepEqual(tree.folders[0].notes, [3, 0]);
-  assert.equal(tree.folders[0].folders[0].path, "b/c");
-  assert.equal(folderSize(tree), 4);
-});
 
 test("adjacency goes both ways", () => {
   assert.deepEqual(adjacency({ nodes: [node("a"), node("b"), node("c")], edges: [0, 1, 1, 2] }), [[1], [0, 2], [1]]);

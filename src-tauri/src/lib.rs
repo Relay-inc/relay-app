@@ -19,7 +19,7 @@ mod actions;
 mod agents;
 mod watch;
 mod anywhere;
-mod brain;
+mod touches;
 mod awake;
 pub use relay_remote::broker;
 mod calendar;
@@ -2350,7 +2350,7 @@ fn checkouts_in(named: &[(String, String)]) -> HashMap<String, (String, String)>
     out
 }
 
-// ---------- the Brain view: the vault and the Commonwealth brains, browsed, searched and drawn (related.rs, brain.rs)
+// ---------- the Pages graph and Recent: the notes of the vault and the other workspaces (related.rs, touches.rs)
 
 /// Where the note indexes live, one file per folder. The single related.db of older versions goes.
 fn index_dir(app: &AppHandle) -> PathBuf {
@@ -2358,51 +2358,27 @@ fn index_dir(app: &AppHandle) -> PathBuf {
     fs::remove_file(d.join("related.db")).ok();
     d.join("index")
 }
-/// The folders the Brain view may read: the vault, then every brain the vault's projects resolve to (none when
-/// Commonwealth is off). [(canonical path, name, "vault" | "brain")]; the frontend names a root by its path.
-fn brain_roots_of(state: &App) -> Result<Vec<(String, String, &'static str)>, String> {
-    let v = vault::canon(&need_vault(state)?);
-    let name = commonwealth::brain_name(&v).to_string();
-    let mut brains: Vec<String> = cw_brains(state).into_values().flatten().map(|b| vault::canon(&b)).collect();
-    brains.sort();
-    brains.dedup();
-    Ok(std::iter::once((v, name, "vault")).chain(brains.into_iter().map(|b| { let n = commonwealth::brain_name(&b).to_string(); (b, n, "brain") })).collect())
+/// The folders Pages shows: the vault, then the other workspaces, canonical. Nothing else is read.
+fn note_roots(state: &App) -> Result<Vec<String>, String> {
+    let mut roots = vec![vault::canon(&need_vault(state)?)];
+    roots.extend(extra_vaults(&state.settings.lock().unwrap()).iter().map(|e| vault::canon(e)));
+    Ok(roots)
 }
-/// A root the frontend sent, if it is one of brain_roots_of: nothing else is read.
-fn brain_root(state: &App, root: &str) -> Result<String, String> {
-    brain_roots_of(state)?.into_iter().map(|r| r.0).find(|r| r == root).ok_or_else(|| "not a brain of this vault".into())
-}
+/// Every note of a workspace's folder and the links between them (related::graph), with the folder canonical.
 #[tauri::command]
-fn brain_roots(state: State<App>) -> Result<Value, String> {
-    Ok(json!(brain_roots_of(&state)?.into_iter().map(|(id, name, kind)| json!({"id": id, "name": name, "kind": kind})).collect::<Vec<_>>()))
-}
-/// Every note of a root and the links between them (related::graph).
-#[tauri::command]
-async fn brain_graph(app: AppHandle, state: State<'_, App>, root: String) -> Result<Value, String> {
-    let root = brain_root(&state, &root)?;
+async fn notes_graph(app: AppHandle, state: State<'_, App>, folder: String) -> Result<Value, String> {
+    let root = vault::canon(&folder);
+    if !note_roots(&state)?.contains(&root) { return Err("not a workspace of this Mac".into()); }
     let dir = index_dir(&app);
-    tauri::async_runtime::spawn_blocking(move || related::graph(&dir, &root)).await.map_err(|e| e.to_string())?
+    let mut graph = tauri::async_runtime::spawn_blocking({ let root = root.clone(); move || related::graph(&dir, &root) }).await.map_err(|e| e.to_string())??;
+    graph["root"] = json!(root);
+    Ok(graph)
 }
-/// The notes of a root that match what was typed, [{path, title, snippet}].
-#[tauri::command]
-async fn brain_search(app: AppHandle, state: State<'_, App>, root: String, query: String) -> Result<Value, String> {
-    let root = brain_root(&state, &root)?;
-    let dir = index_dir(&app);
-    tauri::async_runtime::spawn_blocking(move || related::find(&dir, &root, &query, 60)).await.map_err(|e| e.to_string())?.map(Value::from)
-}
-/// One note of a root, {path, text}; vault::note keeps the read inside the root.
-#[tauri::command]
-fn brain_note(state: State<App>, root: String, path: String) -> Result<Value, String> {
-    let root = brain_root(&state, &root)?;
-    vault::note(&root, &path).map(|(path, text)| json!({"path": path, "text": text})).ok_or_else(|| tr_v(ui_lang_of(&state.settings.lock().unwrap()), "err.note", &path))
-}
-/// The notes Relay's Claude Code conversations read and wrote in the last `days`, in every root:
+/// The notes Relay's Claude Code conversations read and wrote in the last `days`, in every workspace:
 /// [{key, root, path, at, kind}]. Only transcripts written in that window are opened.
 #[tauri::command]
-async fn brain_touches(app: AppHandle, state: State<'_, App>, days: u32) -> Result<Value, String> {
-    let mut roots: Vec<String> = brain_roots_of(&state)?.into_iter().map(|r| r.0).collect();
-    // the other vaults too: the sidebar's Pages tab lists a workspace's recent notes from them
-    roots.extend(extra_vaults(&state.settings.lock().unwrap()).iter().map(|e| vault::canon(e)));
+async fn note_touches(app: AppHandle, state: State<'_, App>, days: u32) -> Result<Value, String> {
+    let roots = note_roots(&state)?;
     let since = chrono::Utc::now().timestamp_millis() - days.min(60) as i64 * 86_400_000;
     let p: &'static dyn AgentProvider = &agent_claude::PROVIDER;
     let env = env_of(&app, &state, p);
@@ -2414,7 +2390,7 @@ async fn brain_touches(app: AppHandle, state: State<'_, App>, days: u32) -> Resu
             let fresh = fs::metadata(&f).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).is_some_and(|d| d.as_millis() as i64 >= since);
             if !fresh { continue; }
             let Ok(text) = fs::read_to_string(&f) else { continue };
-            out.extend(brain::touches(&text, &roots, since).iter().map(|t| brain::touch_json(&key, t)));
+            out.extend(touches::touches(&text, &roots, since).iter().map(|t| touches::touch_json(&key, t)));
         }
         Value::from(out)
     }).await.map_err(|e| e.to_string())
@@ -2423,9 +2399,9 @@ async fn brain_touches(app: AppHandle, state: State<'_, App>, days: u32) -> Resu
 // ---------- Commonwealth (commonwealth.rs): detected, never configured; on when the Claude Code plugin is installed
 
 fn claude_bin(app: &AppHandle, state: &App) -> String { env_of(app, state, &agent_claude::PROVIDER).bin }
-/// Switched off in Settings › Integrations: no brain for a session, no review queue. On unless set to false.
+/// Switched off in Settings › Integrations: no brain for a session. On unless set to false.
 fn cw_on(state: &App) -> bool { state.settings.lock().unwrap()["integrations"]["commonwealth"]["on"] != false }
-/// The brains the vault's projects resolve to, by project; the only ones the review queue touches. None when off.
+/// The brains the vault's projects resolve to, by project. None when off.
 fn cw_brains(state: &App) -> std::collections::BTreeMap<String, Option<String>> {
     if !cw_on(state) { return Default::default(); }
     commonwealth::brains(&home(), &repo_projects(&vault(state)))
@@ -2444,24 +2420,6 @@ async fn commonwealth_install(app: AppHandle, state: State<'_, App>) -> Result<(
     let (bin, path) = (claude_bin(&app, &state), state.path.clone());
     tauri::async_runtime::spawn_blocking(move || commonwealth::install(&bin, &path)).await.map_err(|e| e.to_string())?
 }
-/// The staged notes of every brain a project resolves to, each with its brain.
-#[tauri::command]
-fn commonwealth_notes(state: State<App>) -> Value {
-    let mut brains: Vec<String> = cw_brains(&state).into_values().flatten().collect();
-    brains.sort();
-    brains.dedup();
-    json!(brains.iter().flat_map(|b| commonwealth::staged(b)).collect::<Vec<_>>())
-}
-/// Promote or reject staged notes of a brain, through the CLI. Only for a brain the vault's projects resolve to.
-#[tauri::command]
-async fn commonwealth_act(state: State<'_, App>, brain: String, verb: String, ids: Vec<String>) -> Result<(), String> {
-    if !["promote", "reject"].contains(&verb.as_str()) || ids.is_empty() || !ids.iter().all(|i| !i.starts_with('-') && i.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')) { return Err("bad request".into()); }
-    if !cw_brains(&state).values().flatten().any(|b| *b == brain) { return Err("not a brain of this vault".into()); }
-    let cli = in_path(&state, "commonwealth").ok_or_else(|| format!("commonwealth not found: {}", commonwealth::CLI_HINT))?;
-    let path = state.path.clone();
-    tauri::async_runtime::spawn_blocking(move || commonwealth::act(&cli, &path, &brain, &verb, &ids)).await.map_err(|e| e.to_string())?
-}
-
 /// Join a team brain: `commonwealth join <remote>`, its report or its error.
 #[tauri::command]
 async fn commonwealth_join(state: State<'_, App>, remote: String) -> Result<String, String> {
@@ -3085,7 +3043,7 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![shared_doc_absorb, shared_doc_open, page_history, page_restore, page_comments, page_comment, workspace_inbox, shared_doc_edit, shared_awareness, shared_vaults::shared_vault_docs, snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, migrate_project, move_chat_workspace, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, note_by_event, write_note, property_values, create_note, create_context, create_project, project_kinds, set_project_state, project_row, vault_check, vault_repair, free_page_name, duplicate_note, move_path, trash_path, restore_path, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_trust, shared_vaults::shared_vault_admin, shared_vaults::shared_vault_add, shared_vaults::shared_vault_pending_invite, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_kept, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
+        .invoke_handler(tauri::generate_handler![shared_doc_absorb, shared_doc_open, page_history, page_restore, page_comments, page_comment, workspace_inbox, shared_doc_edit, shared_awareness, shared_vaults::shared_vault_docs, snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, migrate_project, move_chat_workspace, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, note_by_event, write_note, property_values, create_note, create_context, create_project, project_kinds, set_project_state, project_row, vault_check, vault_repair, free_page_name, duplicate_note, move_path, trash_path, restore_path, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_trust, shared_vaults::shared_vault_admin, shared_vaults::shared_vault_add, shared_vaults::shared_vault_pending_invite, commonwealth_status, commonwealth_install, commonwealth_join, notes_graph, note_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_kept, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the window used last back (the main one may be hidden)

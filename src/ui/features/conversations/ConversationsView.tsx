@@ -3,7 +3,7 @@ import {
   isView,
   pageOf,
   pluginIdOf,
-  BRAIN,
+  GRAPH,
   MAIL,
   PRS,
   REM,
@@ -22,17 +22,16 @@ import {
   openProjectPanel,
   openSettings,
   openTool,
-  select,
   toggleDrawer,
 } from "../../../application/navigation/navigation";
-import { showInBrain } from "../../../application/brain/brain";
+import { showInGraph } from "../../../application/navigation/graph";
 import { boardKey } from "../../../domain/navigation/keys";
 import { useDerived } from "../../hooks/useDerived";
 import { filesOn } from "../../../application/settings/settings";
 import { useUiRequest } from "../../hooks/useUiRequest";
 import { SelectedView } from "../../app/SelectedView";
 import { PullRequestsView } from "../pull-requests/PullRequestsView";
-import { BrainView } from "../brain/BrainView";
+import { GraphView } from "../workspace/GraphView";
 import { MailView } from "../mail/MailView";
 import { TodayView } from "../today/TodayView";
 import { ReviewView } from "../today/ReviewView";
@@ -111,7 +110,7 @@ export function ConversationsView({ className }: { className: string }) {
     !!page ||
     selected === PRS ||
     selected === MAIL ||
-    selected === BRAIN ||
+    selected === GRAPH ||
     selected === WAIT ||
     !!review ||
     !!meeting ||
@@ -184,7 +183,7 @@ export function ConversationsView({ className }: { className: string }) {
       // a project without repos sends you to the settings to link one
       onOpenPrs={() => (bar.tools?.repos ? openTool(bar.tools.project, PRS) : openSettings())}
       onToggleDrawer={toggleDrawer}
-      onShowInBrain={bar.renamable && !bar.session ? () => showInBrain(selected).then(() => select(BRAIN)) : undefined}
+      onShowInGraph={bar.renamable && !bar.session ? () => showInGraph(selected) : undefined}
     />
   );
   // a meeting brings its own title bar (back to Today, the recording's controls)
@@ -196,8 +195,8 @@ export function ConversationsView({ className }: { className: string }) {
         {chatBarEl}
         {selected === PRS ? (
           <PullRequestsView className="flex-1" />
-        ) : selected === BRAIN ? (
-          <BrainView className="flex-1" />
+        ) : selected === GRAPH ? (
+          <GraphView className="flex-1" />
         ) : selected === WAIT ? (
           <TodayView className="flex-1" />
         ) : review ? (

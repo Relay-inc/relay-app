@@ -8,7 +8,7 @@ import {
   boardKey,
 } from "../domain/navigation/keys";
 import { finishPendingPreps } from "./calendar/prep";
-import { WAIT, PRS, MAIL, BRAIN, isView, pluginIdOf } from "../domain/navigation/views";
+import { WAIT, PRS, MAIL, isView, pluginIdOf } from "../domain/navigation/views";
 import { shownPlugins } from "../domain/plugins/rules";
 import type { Settings } from "../domain/settings/types";
 import * as backend from "../infrastructure/backend";
@@ -35,7 +35,6 @@ import { select, newHere, watchUpdate } from "./navigation/navigation";
 import { closeDrawer } from "./navigation/panel";
 import { useBoardStore } from "./board/store";
 import { checkBoards, resetBoard } from "./board/board";
-import { loadBrain } from "./brain/brain";
 import { loadPrs, resetPrs, loadProjectRepos, askRepo } from "./pull-requests/prs";
 import { loadMails, resetMail, mailLinkClicked } from "./mail/mail";
 import { startUsage, reloadUsage } from "./usage/usage";
@@ -280,9 +279,6 @@ function startPolls() {
   startUsage(); // plan limits for the sidebar, tokens while the view is open
   if (selected() !== MAIL) loadMails();
   setInterval(loadMails, 5 * 60000);
-  if (selected() !== BRAIN) loadBrain();
-  setInterval(loadBrain, 5 * 60000);
-  window.addEventListener("focus", loadBrain);
   // the Pages tab's Recent: the notes conversations touched this week, read while that tab shows
   if (sidebarTab() === "pages") loadRecent();
   setInterval(() => sidebarTab() === "pages" && loadRecent(), 5 * 60000);

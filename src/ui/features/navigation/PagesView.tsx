@@ -17,6 +17,7 @@ import {
 } from "../../../application/navigation/pages";
 import { newChatHere } from "../../../application/conversations/chats";
 import { select } from "../../../application/navigation/navigation";
+import { GRAPH } from "../../../domain/navigation/views";
 import { toast } from "../../../application/navigation/navigation";
 import { workspaces } from "../../../application/navigation/workspaces";
 import { projectVault as homeOf } from "../../../application/navigation/migrate";
@@ -40,7 +41,8 @@ const FOLDERS = "pages:folders";
 const SYSTEM = "pages:system";
 
 /** The sidebar's Pages tab: the notes of the workspace shown. Recent, its contexts with their projects (a project
- *  unfolds to its folder), then its top folders; the search lists the notes it finds instead. A note opens as a page.
+ *  unfolds to its folder), then its top folders; the search lists the notes it finds instead. A note opens as a page,
+ *  and Graph on top draws them all with their links.
  *  An admin finds the notes the vault runs on (CLAUDE.md, rules, scripts, templates) folded under System, a member not.
  *  Right-click: new page or folder, rename, move, duplicate, delete (to the trash, with Undo); on a context a new
  *  project, on the top a new context; on a project its state, a new conversation, a delete, a move or copy to another
@@ -52,6 +54,7 @@ export function PagesView() {
   const unfolded = useNavigationStore(s => s.sidebar.pagesOpen);
   const collapsed = useNavigationStore(s => s.sidebar.collapsed);
   const icons = useWorkspaceStore(s => s.icons);
+  const selected = useNavigationStore(s => s.selected);
   type MenuKind = "note" | "folder" | "top" | "project" | "context";
   // `path` is the project's key on a project row, the context's name on a context heading
   const [menu, setMenu] = useState<{ x: number; y: number; path: string; kind: MenuKind } | null>(null);
@@ -281,6 +284,14 @@ export function PagesView() {
     );
   return (
     <>
+      <SidebarRow
+        kind="view"
+        data-graph
+        icon="graph"
+        name={t("nav.graph")}
+        selected={selected === GRAPH}
+        onClick={() => select(GRAPH)}
+      />
       {recent.length ? (
         <div className="mt-3">
           {head(RECENT, t("pages.recent"))}

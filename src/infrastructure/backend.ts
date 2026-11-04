@@ -40,6 +40,7 @@ import type {
   SharedInvite,
   SharedRole,
   SharedStatus,
+  CommonwealthStatus,
 } from "../domain/settings/types";
 import type {
   ExtraVault,
@@ -53,7 +54,7 @@ import type {
 import type { Mail, MailBody } from "../domain/mail/types";
 import type { Meeting, Meetings } from "../domain/calendar/types";
 import type { PrDetail, PRs } from "../domain/pull-requests/types";
-import type { BrainGraph, BrainNote, BrainRoot, BrainStatus, SearchHit, Touch } from "../domain/brain/types";
+import type { NotesGraph, Touch } from "../domain/graph/types";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
 import type { OrchEvent, Worker } from "../domain/orchestrator/types";
 import type { PrStatus, Ticket } from "../domain/pipeline/types";
@@ -468,19 +469,12 @@ export const githubPrReview = (
 export const githubStatus = () => invoke<string>("github_status");
 
 // ---------- Commonwealth, the team brain
-export const commonwealthStatus = () => invoke<BrainStatus>("commonwealth_status");
+export const commonwealthStatus = () => invoke<CommonwealthStatus>("commonwealth_status");
 export const commonwealthInstall = () => invoke<void>("commonwealth_install");
 export const commonwealthJoin = (remote: string) => invoke<string>("commonwealth_join", { remote });
-export const commonwealthNotes = () => invoke<BrainNote[]>("commonwealth_notes");
-export const commonwealthAct = (brain: string, verb: "promote" | "reject", ids: string[]) =>
-  invoke<void>("commonwealth_act", { brain, verb, ids });
-// ---------- the Brain view: the vault and the brains, browsed, searched and drawn
-export const brainRoots = () => invoke<BrainRoot[]>("brain_roots");
-export const brainGraph = (root: string) => invoke<BrainGraph>("brain_graph", { root });
-export const brainSearch = (root: string, query: string) => invoke<SearchHit[]>("brain_search", { root, query });
-export const brainNote = (root: string, path: string) =>
-  invoke<{ path: string; text: string }>("brain_note", { root, path });
-export const brainTouches = (days: number) => invoke<Touch[]>("brain_touches", { days });
+// ---------- the Pages graph and Recent
+export const notesGraph = (folder: string) => invoke<NotesGraph>("notes_graph", { folder });
+export const noteTouches = (days: number) => invoke<Touch[]>("note_touches", { days });
 
 // ---------- mail
 export const mailList = (account: string, page: number) => invoke<Mail[]>("mail_list", { account, page });

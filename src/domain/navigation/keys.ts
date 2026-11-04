@@ -7,7 +7,7 @@ export const VIEW = {
   reminders: "__rem",
   prs: "__prs",
   mail: "__mail",
-  brain: "__brain",
+  graph: "__brain", // the Brain view had it: a stored selection opens the Pages graph
   usage: "__usage",
 } as const;
 type ViewKey = (typeof VIEW)[keyof typeof VIEW];

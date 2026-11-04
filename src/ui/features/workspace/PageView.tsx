@@ -22,7 +22,7 @@ import { frontmatterOf, withFrontmatter } from "../../../domain/workspace/proper
 import { noteName } from "../../../domain/navigation/pages";
 import { clockTime } from "../../../shared/format";
 import { isImg } from "../../../shared/icons";
-import { agoOf } from "../brain/ago";
+import { agoOf } from "./ago";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Markdown } from "../../components/Markdown";
