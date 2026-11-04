@@ -583,10 +583,12 @@ const meet = (
   stage: "planned" | "briefed" | "wrapped",
   who: string[],
   about = ["Northwind Portal"],
+  context?: string[],
 ): Linked => ({
   p: `Calendar/Meetings/2026/${day} ${title}.md`,
   k: "Meeting",
   about,
+  context,
   with: who,
   date: day,
   stage,
@@ -602,7 +604,8 @@ const linkedList: Linked[] = [
     [people[0], people[3]],
     ["Northwind Portal", "Atlas Logistics"],
   ),
-  meet("2026-09-10", "Northwind Portal design review", "wrapped", [people[1]]),
+  // this one points at the project through context: only, which a group counts and an about: filter does not
+  meet("2026-09-10", "Northwind Portal design review", "wrapped", [people[1]], [], ["Northwind Portal"]),
   meet("2026-09-03", "Northwind Portal kickoff", "wrapped", people),
   meet("2026-09-30", "Atlas Logistics sync", "wrapped", [people[3]], ["Atlas Logistics"]),
   meet("2026-09-30", "Delmas Bakery opening hours", "wrapped", [people[2]], ["Delmas Bakery"]),
@@ -640,3 +643,6 @@ export const linkedNotes = () =>
 /** In the linked fixtures Delmas Bakery is a flat project: its note alone, no folder of its own. */
 export const flat = (p: string) => (p.startsWith("Contexts/Agency/Projects/Delmas Bakery/") ? "" : p);
 export const FLAT_NOTE = "Contexts/Agency/Projects/Delmas Bakery.md";
+/** For collections.ts: the fixture's projects and linked notes, as the notes they are. */
+export const projectsList = P;
+export const linkedEntries = linkedList;

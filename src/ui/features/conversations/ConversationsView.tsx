@@ -3,6 +3,7 @@ import {
   isView,
   pageOf,
   pluginIdOf,
+  COLLECTION_VIEW,
   GRAPH,
   INBOX_VIEW,
   MAIL,
@@ -34,6 +35,7 @@ import { SelectedView } from "../../app/SelectedView";
 import { PullRequestsView } from "../pull-requests/PullRequestsView";
 import { GraphView } from "../workspace/GraphView";
 import { InboxView } from "../inbox/InboxView";
+import { CollectionView } from "../collections/CollectionView";
 import { MailView } from "../mail/MailView";
 import { TodayView } from "../today/TodayView";
 import { ReviewView } from "../today/ReviewView";
@@ -114,6 +116,7 @@ export function ConversationsView({ className }: { className: string }) {
     selected === MAIL ||
     selected === GRAPH ||
     selected === INBOX_VIEW ||
+    selected === COLLECTION_VIEW ||
     selected === WAIT ||
     !!review ||
     !!meeting ||
@@ -202,6 +205,8 @@ export function ConversationsView({ className }: { className: string }) {
           <GraphView className="flex-1" />
         ) : selected === INBOX_VIEW ? (
           <InboxView className="flex-1" />
+        ) : selected === COLLECTION_VIEW ? (
+          <CollectionView className="flex-1" />
         ) : selected === WAIT ? (
           <TodayView className="flex-1" />
         ) : review ? (

@@ -7,11 +7,11 @@ export function StageGlyph({
   glyph,
   className = "",
 }: {
-  glyph: Pick<Glyph, "stage" | "followed">;
+  glyph: Pick<Glyph, "stage" | "followed"> & { dashed?: boolean };
   className?: string;
 }) {
   const { t } = useT();
-  const { stage, followed } = glyph;
+  const { stage, followed, dashed } = glyph;
   return (
     <span className={`inline-flex items-center gap-1 ${className}`}>
       {stage === "live" ? (
@@ -30,7 +30,7 @@ export function StageGlyph({
           role="img"
           aria-label={t(`meet.stageName.${stage}`)}
         >
-          <circle cx="6" cy="6" r="4.3" />
+          <circle cx="6" cy="6" r="4.3" strokeDasharray={dashed ? "2 1.6" : undefined} />
           {stage === "briefed" ? <path d="M6 1.7a4.3 4.3 0 0 1 0 8.6z" fill="currentColor" stroke="none" /> : null}
           {stage === "wrapped" ? <path d="M4 6.2 5.4 7.5 8 4.6" /> : null}
         </svg>

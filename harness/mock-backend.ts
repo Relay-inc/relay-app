@@ -15,6 +15,7 @@ import * as git from "./fixtures/git";
 import * as files from "./fixtures/files";
 import * as kb from "./fixtures/kb";
 import * as inbox from "./fixtures/inbox";
+import * as coll from "./fixtures/collections";
 import * as Y from "yjs";
 // the example plugin's real view: the harness serves it from a blob, where the app has the relay-plugin:// scheme
 import diceView from "../packages/plugin-example/view.html?raw";
@@ -1349,6 +1350,20 @@ function handle(cmd: string, a: Args): unknown {
         : { backlinks: [], mentions: [], related: [] };
     case "notes_linked":
       return linkedOn ? vault.linkedNotes() : [];
+    // the collections (issue 373): every note with its frontmatter values, read from the note's text as related.rs does;
+    // the saved views are in sessionStorage with ?keep=1 (a restart), else in memory
+    case "notes_collection":
+      return pageList().map(path => collectionRow(path, textOfNote(path)));
+    case "views_list":
+      return savedViews();
+    case "view_save": {
+      const list = savedViews().filter(v => v.name !== a.name);
+      keptViews([...list, { name: String(a.name), view: a.view }]);
+      return null;
+    }
+    case "view_delete":
+      keptViews(savedViews().filter(v => v.name !== a.name));
+      return null;
 
     // the knowledge base (K5, K1): ⌘K's search, templates, today's note and the pinned notes. The favourites are kept in
     // sessionStorage with ?keep=1, so a reload shows them back the way `.relay/config.json` does after a restart.
@@ -1895,6 +1910,49 @@ const pageList = () =>
       : embedsOn
         ? [...vault.notes, embeds.FINDINGS_NOTE]
         : vault.notes);
+// the saved collection views, kept over a reload with ?keep=1 like the favourites
+let viewsMem: { name: string; view: unknown }[] = keepState
+  ? JSON.parse(sessionStorage.getItem("mockViews") || "[]")
+  : [];
+const savedViews = () => viewsMem;
+const keptViews = (list: { name: string; view: unknown }[]) => {
+  viewsMem = list;
+  if (keepState) sessionStorage.setItem("mockViews", JSON.stringify(list));
+};
+// a note's text: what was written, else the fixture's own (collections.ts), else the generic note
+const textOfNote = (path: string): string =>
+  written.get(path)?.text ?? coll.texts[path] ?? String(vault.noteText(path).text);
+/** The index's row for a note (related.rs `collection`): its type, date, stage and every frontmatter key's values. */
+function collectionRow(path: string, text: string) {
+  const head = /^---\n([\s\S]*?)\n---/.exec(text)?.[1] ?? "";
+  const props: Record<string, string[]> = {};
+  const lines = head.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^([^\s#\-][^:]*):(.*)$/.exec(lines[i]);
+    if (!m) continue;
+    const raw = [m[2].trim()];
+    while (i + 1 < lines.length && /^(\s+|- )/.test(lines[i + 1])) raw.push(lines[++i].trim().replace(/^- /, ""));
+    const values = raw
+      .flatMap(r =>
+        r.includes("[[") ? [...r.matchAll(/\[\[([^\]|#]+)/g)].map(x => x[1].trim()) : [r.replace(/^["']|["']$/g, "")],
+      )
+      .filter(Boolean);
+    if (values.length) props[m[1].trim()] = values;
+  }
+  const body = text.slice(text.indexOf("\n---", 3) + 4);
+  const kind = props.type?.[0] ?? "";
+  const stem = path.split("/").pop()!.replace(/\.md$/, "");
+  const date = props.date?.[0] ?? (/^\d{4}-\d\d-\d\d/.test(stem) ? stem.slice(0, 10) : "");
+  const stage =
+    kind.toLowerCase() !== "meeting"
+      ? ""
+      : /^## Summary\s*$/m.test(body)
+        ? "wrapped"
+        : /\n## Briefing\n[^\n#]*\S/.test(`\n${body}`)
+          ? "briefed"
+          : "planned";
+  return { p: path, t: stem, k: kind, at: Math.floor(NOW_S - 3 * 86400), date, stage, props };
+}
 const pageRel = (p: unknown) => String(p).replace(vault.VAULT, "").replace(/^\//, "");
 // shared-live: the Mac's document of the page, which the editor and the mock peers share, and the cursors sent
 const liveDoc = new Y.Doc();
@@ -1951,14 +2009,16 @@ function threadsOf(all: Comment[]) {
 }
 
 const written = new Map<string, { text: string; hash: string }>(
-  embedsOn
-    ? Object.entries(embeds.texts).map(([path, text]) => [path, { text, hash: "h0" }])
-    : kbOn
-      ? [...Object.entries(kb.texts), ...(inboxOn ? Object.entries(inbox.texts) : [])].map(([path, text]) => [
-          path,
-          { text, hash: "h0" },
-        ])
-      : [],
+  fixture.startsWith("linked-collections")
+    ? Object.entries(coll.texts).map(([path, text]) => [path, { text, hash: "h0" }])
+    : embedsOn
+      ? Object.entries(embeds.texts).map(([path, text]) => [path, { text, hash: "h0" }])
+      : kbOn
+        ? [...Object.entries(kb.texts), ...(inboxOn ? Object.entries(inbox.texts) : [])].map(([path, text]) => [
+            path,
+            { text, hash: "h0" },
+          ])
+        : [],
 );
 // the Changes feed (K6, issue 371): the real one is src-tauri/src/changes.rs, which has its own tests. Kept in memory.
 type Change = {

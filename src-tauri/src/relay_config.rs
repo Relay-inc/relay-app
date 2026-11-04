@@ -120,6 +120,42 @@ pub fn set_favourites(vault: &str, paths: &[String]) -> Result<Vec<String>, Stri
     Ok(list)
 }
 
+// ---------- saved collection views
+
+/// `.relay/views`: one JSON file per saved view of the collections. Hidden, so no sync round carries it: a view is
+/// this Mac's, as a page's comments are.
+fn views_dir(vault: &str) -> PathBuf { Path::new(vault).join(".relay/views") }
+/// A view's file name from its name; refused when it would leave the folder or hide itself.
+fn view_file(vault: &str, name: &str) -> Result<PathBuf, String> {
+    let name = name.trim();
+    if name.is_empty() || name.len() > 80 || name.starts_with('.') || name.chars().any(|c| c == '/' || c == '\\' || c.is_control()) {
+        return Err(format!("not a name for a view: {name}"));
+    }
+    Ok(views_dir(vault).join(format!("{name}.json")))
+}
+/// The saved views, by name: [{name, view}].
+pub fn views(vault: &str) -> Vec<Value> {
+    let mut out: Vec<(String, Value)> = fs::read_dir(views_dir(vault)).into_iter().flatten().flatten().filter_map(|e| {
+        let p = e.path();
+        let name = p.file_stem()?.to_str()?.to_string();
+        if p.extension()? != "json" { return None; }
+        Some((name, serde_json::from_str::<Value>(&fs::read_to_string(&p).ok()?).ok().filter(Value::is_object)?))
+    }).collect();
+    out.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+    out.into_iter().map(|(name, view)| json!({"name": name, "view": view})).collect()
+}
+/// A view saved under `name` (a new one, or the same name again).
+pub fn save_view(vault: &str, name: &str, view: &Value) -> Result<(), String> {
+    if !view.is_object() { return Err("a view is an object".into()); }
+    let p = view_file(vault, name)?;
+    fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
+    let tmp = p.with_extension("json.tmp");
+    fs::write(&tmp, serde_json::to_string_pretty(view).unwrap() + "\n").and_then(|_| fs::rename(&tmp, &p)).map_err(|e| e.to_string())
+}
+pub fn delete_view(vault: &str, name: &str) -> Result<(), String> {
+    fs::remove_file(view_file(vault, name)?).map_err(|e| e.to_string())
+}
+
 // ---------- actions
 
 /// The agent access and policies per extension, `{}` when there are none.
@@ -346,6 +382,22 @@ fn repos(vault: &str, projects: &[String]) -> Map<String, Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn saved_views_round_trip_and_refuse_names_that_leave_the_folder() {
+        let d = std::env::temp_dir().join(format!("relay-views-{}", std::process::id()));
+        fs::remove_dir_all(&d).ok();
+        let v = d.to_str().unwrap();
+        assert!(views(v).is_empty());
+        let view = json!({"collection": "meetings", "filters": [{"key": "about", "is": "Beacon"}], "sort": {"key": "date", "dir": "desc"}});
+        save_view(v, "Beacon meetings", &view).unwrap();
+        save_view(v, "Another", &json!({"collection": "people"})).unwrap();
+        assert_eq!(views(v)[1], json!({"name": "Beacon meetings", "view": view}));
+        assert!(d.join(".relay/views/Beacon meetings.json").is_file());
+        for bad in ["", "../x", "a/b", ".hidden"] { assert!(save_view(v, bad, &view).is_err(), "{bad}"); }
+        delete_view(v, "Another").unwrap();
+        assert_eq!(views(v).len(), 1);
+        fs::remove_dir_all(&d).ok();
+    }
     #[test]
     fn favourites_are_kept_in_the_config_in_order() {
         let v = std::env::temp_dir().join(format!("relay-fav-{}", std::process::id()));

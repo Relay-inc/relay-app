@@ -41,6 +41,10 @@ fn open(db: &Path) -> rusqlite::Result<Connection> {
     if c.prepare("SELECT refs FROM meta LIMIT 0").is_err() {
         c.execute_batch("ALTER TABLE meta ADD COLUMN refs TEXT; DELETE FROM docs;")?;
     }
+    // an index made before `props` existed: the same
+    if c.prepare("SELECT props FROM meta LIMIT 0").is_err() {
+        c.execute_batch("ALTER TABLE meta ADD COLUMN props TEXT; DELETE FROM docs;")?;
+    }
     Ok(c)
 }
 
@@ -137,6 +141,51 @@ pub fn refs(rel: &str, text: &str) -> String {
     json!({"about": key("about"), "context": key("context"), "with": key("with"), "date": date, "stage": stage, "role": get("role")}).to_string()
 }
 
+/// Every frontmatter key of a note with its values, for the collections' columns and filters: JSON `{key: [value]}`.
+/// A scalar is one value, a list its items, a `[[Beacon|alias]]` link the name it links by; an empty key is left out.
+// ponytail: a line scanner like `refs`, not YAML. Ceiling: a nested mapping (its lines are skipped), a plain scalar
+// with `[[` in the middle of a sentence (read as links).
+pub fn props(text: &str) -> String {
+    let head = text.strip_prefix("---\n").and_then(|r| r.split_once("\n---")).map_or("", |(h, _)| h);
+    let mut out = serde_json::Map::new();
+    let mut lines = head.lines().peekable();
+    while let Some(line) = lines.next() {
+        if line.starts_with([' ', '\t', '-', '#']) { continue; }
+        let Some((key, first)) = line.split_once(':') else { continue };
+        let key = key.trim();
+        if key.is_empty() { continue; }
+        let mut block = vec![];
+        while let Some(next) = lines.peek() {
+            if !(next.starts_with([' ', '\t']) || next.starts_with("- ")) { break; }
+            block.push(next.trim_start().trim_start_matches("- ").trim().to_string());
+            lines.next();
+        }
+        let first = first.trim();
+        let mut values: Vec<String> = vec![];
+        let mut add = |raw: &str| {
+            if raw.contains("[[") {
+                let mut rest = raw;
+                while let Some(i) = rest.find("[[") {
+                    rest = &rest[i + 2..];
+                    let Some(j) = rest.find("]]") else { break };
+                    let target = rest[..j].split(['|', '#']).next().unwrap_or("").trim();
+                    if !target.is_empty() { values.push(target.to_string()); }
+                    rest = &rest[j + 2..];
+                }
+            } else {
+                let v = vault::unquote(raw.trim());
+                if !v.is_empty() { values.push(v); }
+            }
+        };
+        if let Some(inner) = first.strip_prefix('[').filter(|f| !f.starts_with('[')).and_then(|f| f.strip_suffix(']')) {
+            for item in inner.split(',') { add(item); }
+        } else if !first.is_empty() { add(first); }
+        for item in &block { add(item); }
+        if !values.is_empty() { out.insert(key.to_string(), json!(values)); }
+    }
+    Value::Object(out).to_string()
+}
+
 /// Bring the index in line with the folder: new and changed notes in, deleted ones out. Returns how many changed.
 /// A brain's staging/ is its review queue, not its notes, so it stays out.
 fn sync(c: &mut Connection, root: &str) -> rusqlite::Result<usize> {
@@ -155,9 +204,10 @@ fn sync(c: &mut Connection, root: &str) -> rusqlite::Result<usize> {
         let body = fs::read_to_string(&p).unwrap_or_default();
         let (title, kind, tags, links, hub) = parse(&rel, &body);
         let refs = refs(&rel, &body);
+        let props = props(&body);
         tx.execute("DELETE FROM docs WHERE path = ?1", [&rel])?;
         tx.execute("INSERT INTO docs (path, mtime, title, body) VALUES (?1, ?2, ?3, ?4)", params![rel, m, title, body])?;
-        tx.execute("INSERT OR REPLACE INTO meta (path, title, kind, tags, links, hub, refs) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", params![rel, title, kind, tags, links, hub, refs])?;
+        tx.execute("INSERT OR REPLACE INTO meta (path, title, kind, tags, links, hub, refs, props) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)", params![rel, title, kind, tags, links, hub, refs, props])?;
         n += 1;
     }
     for gone in known.keys() {
@@ -272,6 +322,26 @@ pub fn linked(dir: &Path, root: &str) -> Result<Value, String> {
             if ["about", "context", "with"].iter().all(|key| v[key].as_array().is_none_or(|a| a.is_empty())) { continue; }
             v["p"] = json!(p); v["t"] = json!(t); v["k"] = json!(k); v["at"] = json!(at);
             out.push(v);
+        }
+        Ok(Value::from(out))
+    })
+}
+
+/// Every note of `root` with what the collections show: [{p, t, k, at, date, stage, props}], `props` as `props()` gives
+/// them. A note without a `type:` has `k` "", so the views can say so. The query itself runs on the frontend
+/// (domain/collections/rules.ts) over these rows, so a filter chip answers without a round trip.
+pub fn collection(dir: &Path, root: &str) -> Result<Value, String> {
+    with(dir, root, |c| {
+        let mut st = c.prepare(
+            "SELECT m.path, m.title, m.kind, d.mtime, m.refs, m.props FROM meta m JOIN docs d ON d.path = m.path ORDER BY m.path",
+        )?;
+        let rows = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, i64>(3)?, r.get::<_, Option<String>>(4)?, r.get::<_, Option<String>>(5)?)))?;
+        let mut out = vec![];
+        for row in rows {
+            let (p, t, k, at, refs, props) = row?;
+            let refs: Value = refs.and_then(|r| serde_json::from_str(&r).ok()).unwrap_or(Value::Null);
+            let props: Value = props.and_then(|r| serde_json::from_str(&r).ok()).unwrap_or_else(|| json!({}));
+            out.push(json!({"p": p, "t": t, "k": k, "at": at, "date": refs["date"], "stage": refs["stage"], "props": props}));
         }
         Ok(Value::from(out))
     })
@@ -567,6 +637,39 @@ pub fn times(dir: &Path, root: &str) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn props_reads_every_key_scalars_lists_and_links() {
+        let note = "---\ntype: Meeting\nabout: \"[[Northwind Portal|the portal]]\"\nwith:\n  - \"[[Sofie Claes]]\"\n  - \"[[Tom Willems]]\"\ntags: [a, \"b c\"]\ntitle: Hello, world\nempty:\nlang: en\n---\n# Body\nabout: not this\n";
+        let v: Value = serde_json::from_str(&props(note)).unwrap();
+        assert_eq!(v["type"], json!(["Meeting"]));
+        assert_eq!(v["about"], json!(["Northwind Portal"]));
+        assert_eq!(v["with"], json!(["Sofie Claes", "Tom Willems"]));
+        assert_eq!(v["tags"], json!(["a", "b c"]));
+        assert_eq!(v["title"], json!(["Hello, world"])); // a plain scalar is not split on commas
+        assert!(v.get("empty").is_none());
+        assert_eq!(v["lang"], json!(["en"]));
+        assert_eq!(props("no frontmatter"), "{}");
+    }
+
+    #[test]
+    fn collection_lists_every_note_with_its_props_and_empty_kind_for_an_untyped_one() {
+        let d = std::env::temp_dir().join(format!("relay-collection-{}", std::process::id()));
+        fs::remove_dir_all(&d).ok();
+        fs::create_dir_all(d.join("Calendar/Meetings/2026")).unwrap();
+        let v = vault::canon(d.to_str().unwrap());
+        let db = d.join("index");
+        fs::write(d.join("Calendar/Meetings/2026/2026-10-08 Sync.md"), "---\ntype: Meeting\ncontext: \"[[Agency]]\"\nabout: \"[[Northwind Portal]]\"\n---\n## Summary\nx\n").unwrap();
+        fs::write(d.join("Loose.md"), "just text").unwrap();
+        let rows = collection(&db, &v).unwrap();
+        let rows = rows.as_array().unwrap();
+        let sync = rows.iter().find(|r| r["p"] == "Calendar/Meetings/2026/2026-10-08 Sync.md").unwrap();
+        assert_eq!((sync["k"].as_str(), sync["date"].as_str(), sync["stage"].as_str()), (Some("Meeting"), Some("2026-10-08"), Some("wrapped")));
+        assert_eq!(sync["props"]["about"], json!(["Northwind Portal"]));
+        assert_eq!(sync["props"]["context"], json!(["Agency"]));
+        assert_eq!(rows.iter().find(|r| r["p"] == "Loose.md").unwrap()["k"], "");
+        fs::remove_dir_all(&d).ok();
+    }
 
     #[test]
     fn query_keeps_topic_words() {
