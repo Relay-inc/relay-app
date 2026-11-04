@@ -296,13 +296,31 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
     rm.retain(|p, _| !hold.contains(p));
     let (mut acts, clashes) = plan(mode, base, &local, &rm, copy_name, mergeable);
     let moved = |p: &String| rm.get(p).is_some_and(|e| guard.moved.iter().any(|(m, h)| m == p && *h == e.hash));
-    // a delete whose content arrives at another path in this same round is a move (a rename, Tidy structure), not a loss
+    // a delete whose content arrives at another path in this same round is a move (a rename, Tidy structure), not a loss:
+    // matched one to one (each arrival covers one delete of that content), and never for empty or blank content
     let hash_of = |m: &Manifest, p: &String| m.get(p).map(|e| e.hash.clone());
-    let arriving: HashSet<String> = acts.iter().filter_map(|a| match a { Action::Pull(p) => hash_of(&rm, p), Action::Push(p) => hash_of(&local, p), _ => None }).collect();
+    let blank = |p: &String| fs::read(root.join(p)).map_or(true, |d| d.iter().all(|b| b.is_ascii_whitespace()));
+    let mut arriving: HashMap<String, usize> = HashMap::new();
+    for a in &acts {
+        match a {
+            Action::Pull(p) => if let Some(h) = hash_of(&rm, p) { *arriving.entry(h).or_default() += 1; },
+            Action::Push(p) if !blank(p) => if let Some(h) = hash_of(&local, p) { *arriving.entry(h).or_default() += 1; },
+            _ => {}
+        }
+    }
+    let mut renamed: HashSet<String> = HashSet::new();
+    for a in &acts {
+        let (p, h) = match a {
+            Action::DeleteLocal(p) if !blank(p) => (p, hash_of(&local, p)),
+            Action::DeleteRemote(p) => (p, hash_of(&rm, p)),
+            _ => continue,
+        };
+        if let Some(n) = h.and_then(|h| arriving.get_mut(&h)).filter(|n| **n > 0) { *n -= 1; renamed.insert(p.clone()); }
+    }
+    let moved = |p: &String| rm.get(p).is_some_and(|e| guard.moved.iter().any(|(m, h)| m == p && *h == e.hash));
     let braked = |a: &Action| match a {
         Action::DeleteRemote(p) if moved(p) => false,
-        Action::DeleteLocal(p) if hash_of(&local, p).is_some_and(|h| arriving.contains(&h)) => false,
-        Action::DeleteRemote(p) if hash_of(&rm, p).is_some_and(|h| arriving.contains(&h)) => false,
+        Action::DeleteLocal(p) | Action::DeleteRemote(p) if renamed.contains(p) => false,
         Action::DeleteLocal(p) | Action::DeleteRemote(p) => !guard.allowed.contains(p),
         _ => false,
     };
@@ -825,6 +843,18 @@ mod tests {
         for i in 0..10 { mem2.files.borrow_mut().remove(&format!("n/{i:02}.md")); }
         let (_, r) = round_with(&t2, &base2, &mut w2, &mem2, &shut);
         assert_eq!((r.deleted_local.len(), r.held.len()), (0, 10));
+        // one arrival covers one delete: 3 identical deletes and 1 arrival leave 2 held; blank content is never a move
+        let (t3, mut w3, mem3) = (Tmp::new("one-to-one"), Walker::default(), Mem::default());
+        for i in 0..30 { let text = if i < 3 { "same".to_string() } else if i < 5 { "  \n".to_string() } else { format!("note {i}") }; t3.put(&format!("n/{i:02}.md"), &text); }
+        let (base3, _) = round(&t3, &Manifest::new(), &mut w3, &mem3);
+        // 8 deleted there (cap 6): the 3 identical, the 2 blank, 3 others; "same" arrives once, a blank once
+        for i in 0..8 { mem3.files.borrow_mut().remove(&format!("n/{i:02}.md")); }
+        mem3.set("m/a.md", "same");
+        mem3.set("m/b.md", "  \n");
+        let (_, r) = round_with(&t3, &base3, &mut w3, &mem3, &shut);
+        // one of the 3 identical goes as the move, the other 2 and both blank ones are held with the 3 others
+        assert_eq!((r.pulled.len(), r.deleted_local.len(), r.held.len()), (2, 1, 7), "{r:?}");
+        assert!(r.held.contains(&"n/03.md".to_string()) && r.held.contains(&"n/04.md".to_string()), "blank content is never a move: {r:?}");
     }
     #[test] fn moved_files_pass_the_brake_only_as_remote_deletes_of_the_same_content() {
         let (t, mut w, mem) = (Tmp::new("moved"), Walker::default(), Mem::default());
