@@ -511,6 +511,25 @@ export const githubStatus = () => invoke<string>("github_status");
 export const notesGraph = (folder: string) => invoke<NotesGraph>("notes_graph", { folder });
 /** The notes of a workspace that point at another through `about:`, `context:` or `with:`. */
 export const notesLinked = (folder: string) => invoke<LinkedNote[]>("notes_linked", { folder });
+/** One line of ⌘K's content matches: `line` counts from the top of the note, `hit` the matched words. */
+export type ContentHit = { path: string; title: string; line: number; before: string; hit: string; after: string };
+export type NameHit = { path: string; title: string; type: string };
+/** ⌘K over a workspace's notes: names and content for a typed query (`type:`, `in:`, `#tag` and words). */
+export const findNotes = (folder: string, query: string) =>
+  invoke<{ names: NameHit[]; content: ContentHit[] }>("find_notes", { folder, query });
+/** When each note of a workspace last changed (seconds), for a folder sorted by modified. */
+export const noteTimes = (folder: string) => invoke<Record<string, number>>("note_times", { folder });
+/** The templates New ▸ offers in a workspace. */
+export const noteTemplates = (workspace: string) => invoke<string[]>("note_templates", { workspace });
+/** A new note from a template, saved in its type's home or in `folder`; returns its path in the workspace. */
+export const newFromTemplate = (workspace: string, template: string, folder: string, about: string, context: string) =>
+  invoke<string>("new_from_template", { workspace, template, folder, about, context });
+/** Today's note of a workspace, made once; returns its path in the workspace. */
+export const dailyNote = (workspace: string) => invoke<string>("daily_note", { workspace });
+/** The notes pinned above Recent, kept in the workspace's `.relay/config.json`. */
+export const favourites = (workspace: string) => invoke<string[]>("favourites", { workspace });
+export const setFavourites = (workspace: string, paths: string[]) =>
+  invoke<string[]>("set_favourites", { workspace, paths });
 export const noteTouches = (days: number) => invoke<Touch[]>("note_touches", { days });
 
 // ---------- mail

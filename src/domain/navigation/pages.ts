@@ -110,3 +110,22 @@ export function recentPages(
     .filter(path => !seen.has(path) && seen.add(path))
     .slice(0, max);
 }
+
+/** How a folder lists its notes: by name, or the last changed first. */
+export type PageSort = "name" | "modified";
+/** `paths` in a folder's order; `times` is when each note last changed (seconds). */
+export const sortPages = (paths: string[], sort: PageSort, times: Record<string, number>) =>
+  sort === "modified"
+    ? [...paths].sort((a, b) => (times[b] ?? 0) - (times[a] ?? 0) || byName(noteName(a), noteName(b)))
+    : paths;
+
+/** Where a new note is asked for, from a folder of the workspace: the project whose note that folder holds (`about`)
+ *  and the context it sits in, "" for none of them. */
+export function placeOf(model: PagesModel, folder: string) {
+  const inside = (outer: string) => outer !== "" && (folder === outer || folder.startsWith(`${outer}/`));
+  for (const context of model.contexts) {
+    const project = context.projects.find(p => (p.folder ? inside(p.folder.path) : parentOf(p.note) === folder));
+    if (project) return { folder, about: noteName(project.note), context: context.name };
+  }
+  return { folder, about: "", context: model.contexts.find(c => inside(c.folder))?.name ?? "" };
+}

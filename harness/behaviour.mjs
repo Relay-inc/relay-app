@@ -59,6 +59,10 @@ const READS = new Set([
   "detect_vault",
   "check_vault",
   "plugin:window|theme",
+  "find_notes",
+  "note_times",
+  "note_templates",
+  "favourites",
 ]);
 const isIgnored = c => IGNORED.has(c.cmd) || c.cmd.startsWith("plugin:event|");
 const isRead = c => READS.has(c.cmd) || (c.cmd === "integration_call" && c.args.method === "GET");
@@ -348,7 +352,9 @@ const SCENARIOS = {
     s.check("its width is the |560", (await image.evaluate(i => Math.round(i.parentElement.clientWidth))) === 560);
     s.check(
       "its caption is the alt text",
-      ((await page.locator(".cm-embed-caption").first().textContent()) ?? "").includes("Configurator traffic, last 7 days"),
+      ((await page.locator(".cm-embed-caption").first().textContent()) ?? "").includes(
+        "Configurator traffic, last 7 days",
+      ),
     );
     const content = await page.locator(".cm-content").innerText();
     s.check("no embed markdown shows", !content.includes("![[") && !content.includes("|560"));
@@ -361,14 +367,18 @@ const SCENARIOS = {
     await card.getByRole("button", { name: "Open" }).click();
     s.check(
       "Open opens the PDF from where it is",
-      (await s.calls("open_file")).some(c => String(c.args.path).endsWith("Attachments/2026/Hosting quote cluster 2026.pdf")),
+      (await s.calls("open_file")).some(c =>
+        String(c.args.path).endsWith("Attachments/2026/Hosting quote cluster 2026.pdf"),
+      ),
     );
     const player = page.locator('.cm-embed[data-kind="audio"]');
     await player.getByRole("button", { name: "Play" }).click();
     s.check(
       "the audio plays",
       await page
-        .waitForFunction(() => document.querySelector(".cm-embed-audio audio")?.currentTime > 0.2, null, { timeout: 4000 })
+        .waitForFunction(() => document.querySelector(".cm-embed-audio audio")?.currentTime > 0.2, null, {
+          timeout: 4000,
+        })
         .then(
           () => true,
           () => false,
@@ -380,18 +390,28 @@ const SCENARIOS = {
     const noteText = (await note.textContent()) ?? "";
     s.check(
       "an embedded section shows only that section",
-      noteText.includes("60 requests per minute") && !noteText.includes("An API key per client") && !noteText.includes("retried twice"),
+      noteText.includes("60 requests per minute") &&
+        !noteText.includes("An API key per client") &&
+        !noteText.includes("retried twice"),
     );
     // the picture selected: a ring and two handles; dragging one writes |<width>
     await image.click();
-    s.check("a click selects the picture", (await page.locator(".cm-embed-selected .cm-embed-grip-right").count()) === 1);
+    s.check(
+      "a click selects the picture",
+      (await page.locator(".cm-embed-selected .cm-embed-grip-right").count()) === 1,
+    );
     const grip = await page.locator(".cm-embed-grip-right").boundingBox();
     await page.mouse.move(grip.x + 3, grip.y + 14);
     await page.mouse.down();
     await page.mouse.move(grip.x - 197, grip.y + 14, { steps: 6 });
     await page.mouse.up();
-    await page.waitForFunction(() => /\|360\]\]/.test(window.__harness.written() ?? ""), null, { timeout: 4000 }).catch(() => {});
-    s.check("the width handle writes |360", /\|a?[^|\]]*\|360\]\]/.test((await page.evaluate(() => window.__harness.written())) ?? ""));
+    await page
+      .waitForFunction(() => /\|360\]\]/.test(window.__harness.written() ?? ""), null, { timeout: 4000 })
+      .catch(() => {});
+    s.check(
+      "the width handle writes |360",
+      /\|a?[^|\]]*\|360\]\]/.test((await page.evaluate(() => window.__harness.written())) ?? ""),
+    );
     // a screenshot pasted at the end of the page
     await page.locator(".cm-content").click();
     await page.keyboard.press("Meta+End");
@@ -402,29 +422,58 @@ const SCENARIOS = {
       );
       const data = new DataTransfer();
       data.items.add(new File([png], "image.png", { type: "image/png" }));
-      document.querySelector(".cm-content").dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+      document
+        .querySelector(".cm-content")
+        .dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
     });
     const stamped = /^Pasted image \d{14}\.png$/;
     await page.waitForFunction(() => window.__harness.attached().length > 0, null, { timeout: 4000 });
-    s.check("a pasted screenshot is saved as Pasted image <stamp>.png", (await page.evaluate(() => window.__harness.attached())).every(a => stamped.test(a.name)));
-    await page.waitForFunction(() => /!\[\[Pasted image \d{14}\.png\]\]/.test(window.__harness.written() ?? ""), null, { timeout: 4000 }).catch(() => {});
-    s.check("and embedded where the cursor was", /!\[\[Pasted image \d{14}\.png\]\]\s*$/.test((await page.evaluate(() => window.__harness.written())) ?? ""));
+    s.check(
+      "a pasted screenshot is saved as Pasted image <stamp>.png",
+      (await page.evaluate(() => window.__harness.attached())).every(a => stamped.test(a.name)),
+    );
+    await page
+      .waitForFunction(() => /!\[\[Pasted image \d{14}\.png\]\]/.test(window.__harness.written() ?? ""), null, {
+        timeout: 4000,
+      })
+      .catch(() => {});
+    s.check(
+      "and embedded where the cursor was",
+      /!\[\[Pasted image \d{14}\.png\]\]\s*$/.test((await page.evaluate(() => window.__harness.written())) ?? ""),
+    );
     s.check("it shows as a picture", (await page.locator('.cm-embed[data-kind="image"]').count()) === 2);
     // files hovering: the insertion line between two lines, then dropped there
     const target = await page.locator('.cm-embed[data-kind="pdf"]').boundingBox();
     const at = { x: target.x + 40, y: target.y + 4 };
-    await page.evaluate(([paths, at]) => window.__harness.dropHover(paths, at), [["/Users/me/Downloads/dealer-portal-error.png"], at]);
+    await page.evaluate(
+      ([paths, at]) => window.__harness.dropHover(paths, at),
+      [["/Users/me/Downloads/dealer-portal-error.png"], at],
+    );
     const mark = page.locator(".cm-file-drop");
-    s.check("the drop shows its line and what happens", await mark.isVisible() && ((await mark.textContent()) ?? "").includes("Copy to Attachments/2026 and embed"));
-    await page.evaluate(([paths, at]) => window.__harness.dropPaths(paths, at), [["/Users/me/Downloads/dealer-portal-error.png"], at]);
-    await page.waitForFunction(() => /dealer-portal-error\.png/.test(window.__harness.written() ?? ""), null, { timeout: 4000 }).catch(() => {});
+    s.check(
+      "the drop shows its line and what happens",
+      (await mark.isVisible()) && ((await mark.textContent()) ?? "").includes("Copy to Attachments/2026 and embed"),
+    );
+    await page.evaluate(
+      ([paths, at]) => window.__harness.dropPaths(paths, at),
+      [["/Users/me/Downloads/dealer-portal-error.png"], at],
+    );
+    await page
+      .waitForFunction(() => /dealer-portal-error\.png/.test(window.__harness.written() ?? ""), null, { timeout: 4000 })
+      .catch(() => {});
     const written = (await page.evaluate(() => window.__harness.written())) ?? "";
-    s.check("a drop is embedded on its own line before the line it landed on", /!\[\[dealer-portal-error\.png\]\]\n!\[\[Hosting quote cluster 2026\.pdf\]\]/.test(written));
+    s.check(
+      "a drop is embedded on its own line before the line it landed on",
+      /!\[\[dealer-portal-error\.png\]\]\n!\[\[Hosting quote cluster 2026\.pdf\]\]/.test(written),
+    );
     s.check("the line is gone after the drop", !(await mark.isVisible()));
     // 312 MB: refused, the toast says so, nothing is embedded
     await page.evaluate(() => window.__harness.dropPaths(["/Users/me/Downloads/configurator-db-dump.sql.gz"]));
     s.check("a file over 25 MB gets the toast", await waitText(page, "Too large: 25 MB max per file"));
-    s.check("and no embed", !((await page.evaluate(() => window.__harness.written())) ?? "").includes("configurator-db-dump"));
+    s.check(
+      "and no embed",
+      !((await page.evaluate(() => window.__harness.written())) ?? "").includes("configurator-db-dump"),
+    );
     // Open on the section: the note opens with the cursor on its heading
     await note.getByRole("button", { name: "Open" }).click();
     s.check("Open shows the note", await waitText(page, "retried twice"));
@@ -559,7 +608,11 @@ const SCENARIOS = {
     );
     const changes = await s.chatChanges();
     const created = Object.values(changes).filter(c => c !== "removed");
-    s.check("new conversation routed to the project", created.length === 1 && created[0].project === "Harbor CRM");
+    // Cmd-K always starts a general conversation and only offers the named project (e5c162bc)
+    s.check(
+      "new general conversation (no project, not a draft)",
+      created.length === 1 && created[0].project === null && !created[0].draft,
+    );
     s.check("open view unchanged", (await s.local(["sel"])).sel === s.keys.switchTo);
     s.check("started toast", await hasText(page, `Started: ${text}`));
     s.fact("chat changes", changes);
@@ -1881,7 +1934,6 @@ const SCENARIOS = {
 
   async cmdkProject(s) {
     await s.load();
-    await s.load({ sel: s.keys.switchTo });
     const { page } = s;
     await page.keyboard.press("Meta+k");
     await settle(page, 300);
@@ -1893,11 +1945,259 @@ const SCENARIOS = {
     await settle(page, 300);
     s.check("Enter on a picked project sends nothing", (await s.calls("send")).length === 0);
     s.check(
-      "the project opens",
-      (await s.local(["sel"])).sel !== s.keys.switchTo && (await hasText(page, "Contact sync testen op staging")),
+      "the project opens on its latest conversation",
+      (await s.local(["sel"])).sel !== "__wait" && (await hasText(page, "Contact sync strategy")),
     );
     s.fact("sel", (await s.local(["sel"])).sel);
     s.fact("chat changes", await s.chatChanges());
+  },
+
+  // K5, issue 369: ⌘K over names and content. Typing finds notes by name and lines of content with the match marked,
+  // `type:` and `in:` become pills that narrow what the backend is asked, ↵ opens, ⌘↵ opens beside the chat, ⌘O opens it
+  async quickSwitcher(s) {
+    const kb = { fixture: "kb" };
+    await s.load(kb);
+    await s.load({ ...kb, sel: s.keys.switchTo });
+    const { page } = s;
+    const searches = async () => (await s.calls("find_notes")).map(c => c.args.query);
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    s.check("opening ⌘K warms the index (an empty search)", (await searches()).includes(""));
+    await page.keyboard.type("rate limit");
+    s.check("a content match shows", await waitText(page, "Content matches"));
+    s.check("a name group shows", await waitText(page, "Notes by name"));
+    const hit = visible(page.locator("[data-option=content] mark")).first();
+    s.check("the matched words are marked", (await hit.textContent())?.toLowerCase().startsWith("rate limit"));
+    s.check("a content match names its line", /line \d+/.test(await page.locator("#quick-options").innerText()));
+    s.check("the query reached the backend as typed", (await searches()).includes("rate limit"));
+    // pills: typed as text, a space finishes them
+    await page.keyboard.press("Meta+a");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.type("type:Document in:Agency rate limit");
+    await settle(page, 300);
+    const pills = await visible(page.locator("[data-filter]")).evaluateAll(els => els.map(e => e.dataset.filter));
+    s.check("type: and in: become pills", pills.join(",") === "type:Document,in:Agency");
+    s.check(
+      "the backend gets the pills with the words",
+      (await searches()).includes("type:Document in:Agency rate limit"),
+    );
+    s.check("the meeting is narrowed away", !(await hasText(page, "Portal sync")));
+    s.check("the other context is narrowed away", !(await hasText(page, "Rate card")));
+    s.check("a Document of the context stays", await hasText(page, "Rate limit findings"));
+    s.fact(
+      "results with the filters",
+      await visible(page.locator("[data-option]")).evaluateAll(els => els.map(e => e.textContent.slice(0, 60))),
+    );
+    // a pill comes off with Backspace on the empty field
+    await page.keyboard.press("Meta+a");
+    await page.keyboard.press("Backspace");
+    await settle(page);
+    await page.keyboard.press("Backspace");
+    await settle(page);
+    s.check(
+      "Backspace on the empty field takes the last pill off",
+      (await visible(page.locator("[data-filter]")).count()) === 1,
+    );
+    await page.keyboard.type("rate limit");
+    await settle(page, 300);
+    s.check(
+      "a pill still narrows after one is taken off",
+      (await visible(page.locator("[data-filter]")).count()) === 1,
+    );
+    // ↵ opens the first result (with a filter on, nothing is asked)
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    const sel = (await s.local(["sel"])).sel;
+    s.check("↵ opens a note as a page", String(sel).startsWith("page:") && (await s.calls("send")).length === 0);
+    s.check("the note is shown", await waitText(page, "Rate limit"));
+    s.fact("sel", sel);
+    // a content match opens at its line: the cursor stands on it
+    await s.load({ ...kb, sel: s.keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    await page.keyboard.type("retry-after");
+    await waitText(page, "Content matches");
+    const line = /line (\d+)/.exec(await page.locator("#quick-options").innerText())?.[1];
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 600);
+    const active = await page.evaluate(
+      () =>
+        (getSelection()?.anchorNode instanceof Node
+          ? getSelection().anchorNode.parentElement?.closest(".cm-line")?.textContent
+          : "") ?? "",
+    );
+    s.check("↵ on a content match puts the cursor on its line", !!line && active.includes("Retry-After"));
+    s.fact("line asked, line under the cursor", [line, active]);
+    // ⌘↵: beside the conversation, which stays
+    await s.load({ ...kb, sel: s.keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    await page.keyboard.type("retry-after");
+    await waitText(page, "Content matches");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Meta+Enter");
+    await settle(page, 500);
+    s.check("⌘↵ leaves the conversation open", (await s.local(["sel"])).sel === s.keys.switchTo);
+    s.check("⌘↵ shows the note beside it", await waitText(page, "429 with Retry-After"));
+    // ⌘O is the same switcher
+    await s.load(kb);
+    await page.keyboard.press("Meta+o");
+    await settle(page, 300);
+    s.check("⌘O opens the switcher", /search notes/i.test((await focusedPlaceholder(page)) ?? ""));
+    // an action: Today's note, made once
+    await page.keyboard.type("today");
+    await waitText(page, "Actions");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 500);
+    s.check("the action makes today's note", (await s.calls("daily_note")).length === 1);
+    s.check("and opens it", String((await s.local(["sel"])).sel).includes("2026-10-01.md"));
+    // New <template> from the open page's project
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    await page.keyboard.type("new meeting");
+    await waitText(page, "Actions");
+    await click(page.getByRole("option", { name: /New Meeting/ }));
+    await settle(page, 500);
+    const made = await s.calls("new_from_template");
+    s.check("New Meeting asks for a meeting from a template", made.length === 1 && made[0].args.template === "Meeting");
+    s.fact("new from template", made[0]?.args ?? null);
+  },
+
+  // ⇥ in ⌘K searches the other workspace; its note opens by its absolute path
+  async quickSwitcherWorkspace(s) {
+    const kb = { fixture: "kb-shared" };
+    await s.load(kb);
+    await s.load({ ...kb, sel: s.keys.switchTo });
+    const { page } = s;
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    await page.keyboard.type("policy");
+    await s.waitCall("find_notes", 2);
+    await settle(page, 200);
+    const folders = async () => [...new Set((await s.calls("find_notes")).map(c => c.args.folder))];
+    s.check("it searches the workspace shown first", (await folders()).length === 1);
+    s.check("nothing of the other workspace yet", !(await hasText(page, "Rate policy")));
+    await page.keyboard.press("Tab");
+    await settle(page, 300);
+    s.check("⇥ names the other workspace", await hasText(page, "in Side vault"));
+    s.check("it searches that workspace", (await folders()).length === 2);
+    s.check("its note is listed", await waitText(page, "Rate policy"));
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check(
+      "its note opens by its absolute path",
+      String((await s.local(["sel"])).sel).startsWith("page:/Users/me/Side vault/"),
+    );
+    s.fact("sel", (await s.local(["sel"])).sel);
+  },
+
+  // K1, issue 369: a note pinned from its menu stands under Favourites above Recent, and is still there after a
+  // restart (the backend keeps it in .relay/config.json); unfolded folders and a folder's sort are remembered too
+  async favourites(s) {
+    const kb = { fixture: "kb", keep: true }; // the mock keeps what the app saved over a reload, as a restart does
+    await s.load(kb);
+    const { page } = s;
+    const findings = "Contexts/Agency/Projects/Northwind Portal/Documents/Rate limit findings.md";
+    const row = path => page.locator(`[data-page="${path}"]`);
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    await click(page.locator('[data-project="Northwind Portal"]'));
+    await click(page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]'));
+    s.check(
+      "no Favourites before anything is pinned",
+      (await visible(page.locator('[data-section="pages:favourites"]')).count()) === 0,
+    );
+    await row(findings).click({ button: "right" });
+    await click(button(page, "Add to favourites"));
+    const set = await s.calls("set_favourites");
+    s.check("pinning is saved by the backend", set.length === 1 && set[0].args.paths.join() === findings);
+    const fav = page.locator('[data-section="pages:favourites"]');
+    s.check(
+      "the note stands under Favourites",
+      (await visible(fav.locator(`[data-page="${findings}"]`)).count()) === 1,
+    );
+    // above Recent
+    const order = await page.evaluate(() => {
+      const heads = [...document.querySelectorAll("[data-section], nav *")].filter(e =>
+        /^(Favourites|Recent)$/.test(e.textContent?.trim() ?? ""),
+      );
+      return heads.map(e => e.textContent.trim());
+    });
+    s.fact("section order", order);
+    // sort the folder by last changed (its notes' times come from the index)
+    await page
+      .locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]')
+      .click({ button: "right" });
+    await click(button(page, "Sort by last changed"));
+    s.check("the sort is asked for the times", (await s.calls("note_times")).length >= 1);
+    await settle(page, 500); // the app's UI state is written a quarter second after the last change
+    // restart: the same workspace read again, the pin, the unfolded folders and the sort come back
+    await s.load(kb);
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    s.check(
+      "after a restart the pin is still there",
+      (await visible(page.locator('[data-section="pages:favourites"] [data-page]')).count()) === 1,
+    );
+    s.check("the folder is still unfolded", (await row(findings).count()) >= 1);
+    await page
+      .locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]')
+      .click({ button: "right" });
+    s.check("the folder's sort is kept", await hasText(page, "Sort by name"));
+    await page.keyboard.press("Escape");
+    await settle(page);
+    await row(findings).first().click({ button: "right" });
+    await click(button(page, "Remove from favourites"));
+    s.check(
+      "unpinning leaves Favourites",
+      (await visible(page.locator('[data-section="pages:favourites"]')).count()) === 0,
+    );
+    s.check("and is saved", (await s.calls("set_favourites")).pop()?.args.paths.length === 0);
+  },
+
+  // New ▸ from template on a folder and Today's note in the Pages tab: a Meeting in a project is saved in its home
+  // with about: set, Today's note is made once
+  async newFromTemplate(s) {
+    await s.load({ fixture: "kb" });
+    const { page } = s;
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    await click(page.locator('[data-project="Northwind Portal"]'));
+    await page.locator('[data-project="Northwind Portal"]').click({ button: "right" });
+    s.check("the project's menu lists the templates", await hasText(page, "New from template"));
+    await click(button(page, "Meeting"));
+    const made = await s.calls("new_from_template");
+    s.check(
+      "New Meeting in the project: template, folder, about and context",
+      made.length === 1 &&
+        made[0].args.template === "Meeting" &&
+        made[0].args.about === "Northwind Portal" &&
+        made[0].args.context === "Agency" &&
+        made[0].args.folder === "Contexts/Agency/Projects/Northwind Portal",
+    );
+    await settle(page, 400);
+    s.check("the note opens", String((await s.local(["sel"])).sel).includes("Calendar/Meetings/2026/"));
+    s.fact("new from template", made[0]?.args ?? null);
+    // a document goes to the folder asked in
+    await page
+      .locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]')
+      .click({ button: "right" });
+    await click(button(page, "Document"));
+    const second = await s.calls("new_from_template");
+    s.check(
+      "a Document is made in the folder it was asked in",
+      second[1]?.args.folder === "Contexts/Agency/Projects/Northwind Portal/Documents",
+    );
+    // Today's note
+    await click(page.locator("[data-today-note]"));
+    await click(page.locator("[data-today-note]"));
+    await settle(page, 400);
+    s.check("Today's note opens", String((await s.local(["sel"])).sel).includes("Calendar/Daily/2026/2026-10-01.md"));
+    s.check(
+      "asking twice leaves one note",
+      (await s.calls("daily_note")).length === 2 &&
+        (await page.evaluate(() => window.__harness.calls.filter(c => c.cmd === "daily_note").length)) === 2,
+    );
   },
 
   // relay:// links: the one the app was launched with (get_current) and one while it runs (deep-link://new-url)

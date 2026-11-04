@@ -62,7 +62,7 @@ test("saved bindings replace the defaults, the defaults drop out of the settings
   const moved = withBindings(none, "app.quickAsk", ["meta+KeyJ"]);
   assert.ok(pressed(moved, "app.quickAsk", key("j", "KeyJ", { meta: true })));
   assert.ok(!pressed(moved, "app.quickAsk", key("k", "KeyK", { meta: true })));
-  assert.deepEqual(withBindings(moved, "app.quickAsk", ["meta+KeyK"]).shortcuts, {});
+  assert.deepEqual(withBindings(moved, "app.quickAsk", ["meta+KeyK", "meta+KeyO"]).shortcuts, {});
 });
 
 test("a binding is refused where it would type, belongs to macOS, or another command has it", () => {

@@ -17,7 +17,7 @@ pub struct Tidy { pub moves: Vec<Move>, pub stay: usize }
 
 /// The home a type goes to (a key of homes.rs), None for a type without one. A transcript sits with its meeting; a
 /// journal is a daily note when it is named for a day.
-fn home_of(kind: &str, stem: &str) -> Option<&'static str> {
+pub(crate) fn home_of(kind: &str, stem: &str) -> Option<&'static str> {
     match kind.to_lowercase().as_str() {
         "meeting" | "transcript" => Some("meeting"),
         "thread" => Some("thread"),
@@ -27,7 +27,7 @@ fn home_of(kind: &str, stem: &str) -> Option<&'static str> {
     }
 }
 /// A name or value that starts with a day, YYYY-MM-DD.
-fn dated(s: &str) -> bool {
+pub(crate) fn dated(s: &str) -> bool {
     let b = s.as_bytes();
     b.len() >= 10 && b[..10].iter().enumerate().all(|(i, c)| if i == 4 || i == 7 { *c == b'-' } else { c.is_ascii_digit() })
 }

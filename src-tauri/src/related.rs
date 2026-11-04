@@ -261,6 +261,162 @@ pub fn linked(dir: &Path, root: &str) -> Result<Value, String> {
     })
 }
 
+/// A typed ⌘K query: `type:Document`, `in:Studio` (`in:"Client Work"`) and `#tag` narrow the notes, the rest is the text.
+/// A filter without a value yet (`type:`) is dropped, so typing it does not change the results.
+#[derive(Debug, Default, PartialEq)]
+pub struct Query { pub text: String, pub kind: Option<String>, pub within: Option<String>, pub tags: Vec<String> }
+pub fn parse_query(q: &str) -> Query {
+    let (mut out, mut words, mut tok, mut quoted) = (Query::default(), vec![], String::new(), false);
+    let mut chars = q.chars().peekable();
+    loop {
+        let c = chars.next();
+        match c {
+            Some('"') => quoted = !quoted,
+            Some(c) if quoted || !c.is_whitespace() => tok.push(c),
+            _ => {
+                let t = std::mem::take(&mut tok);
+                let lower = t.to_lowercase();
+                if let Some(v) = lower.strip_prefix("type:") { if !v.is_empty() { out.kind = Some(v.to_string()); } }
+                else if let Some(v) = lower.strip_prefix("in:") { if !v.is_empty() { out.within = Some(v.to_string()); } }
+                else if let Some(v) = lower.strip_prefix('#').filter(|v| !v.is_empty()) { out.tags.push(v.to_string()); }
+                else if !t.is_empty() { words.push(t); }
+                if c.is_none() { break; }
+            }
+        }
+    }
+    out.text = words.join(" ");
+    out
+}
+
+/// The words of a text as FTS5 prefix terms ("pricewise rate" finds "Pricewise rates").
+fn terms(text: &str) -> Vec<String> {
+    text.split(|ch: char| !ch.is_alphanumeric()).filter(|w| !w.is_empty()).map(str::to_lowercase).collect()
+}
+fn fts(column: &str, terms: &[String]) -> String {
+    format!("{column} : ({})", terms.iter().map(|t| format!("\"{t}\"*")).collect::<Vec<_>>().join(" "))
+}
+
+/// The first line of `body` with the most terms, as (its number in the file, before, hit, after): the hit is the
+/// first run of matching words, the line cut to a window around it. A match the line scan can't find (the index folds
+/// accents) gives the first body line with no hit.
+fn hit_line(body: &str, terms: &[String]) -> Option<(usize, String, String, String)> {
+    // the words of a line as (start, end, lowercase), in chars
+    let words = |line: &str| -> Vec<(usize, usize, String)> {
+        let chars: Vec<char> = line.chars().collect();
+        let (mut out, mut i) = (vec![], 0);
+        while i < chars.len() {
+            if !chars[i].is_alphanumeric() { i += 1; continue; }
+            let start = i;
+            while i < chars.len() && chars[i].is_alphanumeric() { i += 1; }
+            out.push((start, i, chars[start..i].iter().flat_map(|c| c.to_lowercase()).collect()));
+        }
+        out
+    };
+    // a word matches when a term is its prefix, as FTS5 reads "rate"*
+    let hit = |w: &(usize, usize, String)| terms.iter().any(|t| w.2.starts_with(t.as_str()));
+    let skip = if body.starts_with("---\n") { body.find("\n---").map_or(0, |i| body[..i].lines().count() + 1) } else { 0 };
+    let lines: Vec<&str> = body.lines().collect();
+    let mut best: Option<(usize, usize)> = None;
+    for (i, l) in lines.iter().enumerate().skip(skip) {
+        let w = words(l);
+        let n = terms.iter().filter(|t| w.iter().any(|x| x.2.starts_with(t.as_str()))).count();
+        if n > best.map_or(0, |b| b.1) { best = Some((i, n)); }
+    }
+    let at = best.map(|b| b.0).or_else(|| lines.iter().enumerate().skip(skip).find(|(_, l)| !l.trim().is_empty()).map(|(i, _)| i))?;
+    let line = lines[at].trim_end();
+    let chars: Vec<char> = line.chars().collect();
+    let w = words(line);
+    let (from, to) = match w.iter().position(&hit) {
+        Some(i) => {
+            let mut j = i;
+            while j + 1 < w.len() && hit(&w[j + 1]) && w[j + 1].0 <= w[j].1 + 1 { j += 1; }
+            (w[i].0, w[j].1)
+        }
+        None => (0, 0),
+    };
+    let lead = chars.iter().take_while(|c| c.is_whitespace()).count().min(from);
+    let start = from.saturating_sub(40).max(lead);
+    let end = chars.len().min(to + 100);
+    let cut = |a: usize, b: usize| chars[a..b].iter().collect::<String>();
+    let before = format!("{}{}", if start > lead { "…" } else { "" }, cut(start, from));
+    let after = format!("{}{}", cut(to, end), if end < chars.len() { "…" } else { "" });
+    Some((at + 1, before, cut(from, to), after))
+}
+
+/// A note's kind, tags, refs and path against the query's filters.
+fn keeps(q: &Query, path: &str, kind: &str, tags: &str, refs: &str) -> bool {
+    if q.kind.as_ref().is_some_and(|k| !kind.eq_ignore_ascii_case(k)) { return false; }
+    if q.tags.iter().any(|t| !tags.lines().any(|x| x.trim_start_matches('#').eq_ignore_ascii_case(t))) { return false; }
+    let Some(w) = &q.within else { return true };
+    let dirs = path.rsplit_once('/').map_or("", |(d, _)| d);
+    dirs.split('/').any(|d| d.eq_ignore_ascii_case(w))
+        || serde_json::from_str::<Value>(refs).ok().is_some_and(|v| v["context"].as_array().is_some_and(|a| a.iter().any(|c| c.as_str().is_some_and(|c| c.eq_ignore_ascii_case(w)))))
+}
+
+/// The filters as SQL over `meta m` (an AND per filter) and their parameters, numbered from ?2 (?1 is the match). The
+/// folder/context test is a superset here (`keeps` makes it exact): it only has to keep the candidates few.
+fn filters_sql(q: &Query) -> (String, Vec<String>) {
+    let (mut sql, mut args) = (String::new(), vec![]);
+    let mut add = |clause: &str, v: String| { args.push(v); sql += &clause.replace('?', &format!("?{}", args.len() + 1)); };
+    if let Some(k) = &q.kind { add(" AND lower(m.kind) = ?", k.clone()); }
+    for t in &q.tags { add(" AND (char(10) || lower(m.tags) || char(10)) LIKE '%' || char(10) || ? || char(10) || '%'", t.clone()); }
+    if let Some(w) = &q.within {
+        // every ? of a clause is the same parameter
+        add(" AND (lower(m.path) LIKE '%' || ? || '/%' OR lower(m.refs) LIKE '%\"' || ? || '\"%')", w.clone());
+    }
+    (sql, args)
+}
+
+const NAMES: usize = 8;
+const CONTENT: usize = 12;
+const CANDIDATES: usize = 100;
+/// ⌘K over a workspace: {names: [{path, title, type}], content: [{path, title, line, before, hit, after}]}. The text is
+/// matched as word prefixes against the title (names) and the body (content); `type:`, `in:` and `#tag` narrow both.
+/// With filters and no text, the names are the notes that pass them.
+pub fn find(dir: &Path, root: &str, query: &str) -> Result<Value, String> {
+    let q = parse_query(query);
+    let terms = terms(&q.text);
+    let (filter, args) = filters_sql(&q);
+    with(dir, root, |c| {
+        let run = |sql: &str, m: Option<String>| -> rusqlite::Result<Vec<Vec<String>>> {
+            let mut st = c.prepare(sql)?;
+            let params: Vec<String> = m.into_iter().chain(args.iter().cloned()).collect();
+            let n = st.column_count();
+            let rows = st.query_map(rusqlite::params_from_iter(params), |r| (0..n).map(|i| Ok(r.get::<_, Option<String>>(i)?.unwrap_or_default())).collect())?;
+            rows.collect()
+        };
+        let names = if !terms.is_empty() {
+            run(&format!("SELECT docs.path, docs.title, m.kind, m.tags, m.refs FROM docs JOIN meta m ON m.path = docs.path
+                WHERE docs MATCH ?1{filter} ORDER BY bm25(docs, 0, 0, 5.0, 1.0) LIMIT {CANDIDATES}"), Some(fts("title", &terms)))?
+        } else if q.kind.is_some() || q.within.is_some() || !q.tags.is_empty() {
+            // no ?1 here: the filters' numbering starts at ?2, so a match is bound as an unused first value
+            run(&format!("SELECT m.path, m.title, m.kind, m.tags, m.refs FROM meta m WHERE ?1 = ?1{filter} ORDER BY m.path LIMIT {CANDIDATES}"), Some(String::new()))?
+        } else { vec![] };
+        let names: Vec<Value> = names.into_iter().filter(|n| keeps(&q, &n[0], &n[2], &n[3], &n[4])).take(NAMES)
+            .map(|n| json!({"path": n[0], "title": n[1], "type": n[2]})).collect();
+        let mut content = vec![];
+        if !terms.is_empty() {
+            let rows = run(&format!("SELECT docs.path, docs.title, m.kind, m.tags, m.refs, docs.body FROM docs JOIN meta m ON m.path = docs.path
+                WHERE docs MATCH ?1{filter} ORDER BY bm25(docs, 0, 0, 5.0, 1.0) LIMIT {CANDIDATES}"), Some(fts("body", &terms)))?;
+            for r in rows {
+                if !keeps(&q, &r[0], &r[2], &r[3], &r[4]) { continue; }
+                let Some((line, before, hit, after)) = hit_line(&r[5], &terms) else { continue };
+                content.push(json!({"path": r[0], "title": r[1], "line": line, "before": before, "hit": hit, "after": after}));
+                if content.len() == CONTENT { break; }
+            }
+        }
+        Ok(json!({"names": names, "content": content}))
+    })
+}
+
+/// When each note of `root` last changed, {path: seconds}, for a folder sorted by modified.
+pub fn times(dir: &Path, root: &str) -> Result<Value, String> {
+    with(dir, root, |c| {
+        let rows = c.prepare("SELECT path, mtime FROM docs")?.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?.collect::<Result<Vec<_>, _>>()?;
+        Ok(rows.into_iter().map(|(p, t)| (p, json!(t))).collect::<serde_json::Map<_, _>>().into())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -419,5 +575,99 @@ mod tests {
         c.prepare("SELECT refs FROM meta").unwrap();
         drop(c);
         fs::remove_file(&f).ok();
+    }
+
+    #[test]
+    fn a_query_splits_into_filters_and_text() {
+        let q = parse_query("type:Document in:Studio pricewise rate");
+        assert_eq!((q.text.as_str(), q.kind.as_deref(), q.within.as_deref()), ("pricewise rate", Some("document"), Some("studio")));
+        let q = parse_query("#beacon  in:\"Client Work\" #Plan notes");
+        assert_eq!((q.text.as_str(), q.within.as_deref(), q.tags.clone()), ("notes", Some("client work"), vec!["beacon".to_string(), "plan".to_string()]));
+        // a filter still being typed filters nothing; a lone # is text-free
+        assert_eq!(parse_query("type: in: rate"), Query { text: "rate".into(), ..Query::default() });
+        assert_eq!(parse_query("  "), Query::default());
+    }
+
+    fn write_vault(d: &Path) {
+        fs::create_dir_all(d.join("Contexts/Studio/Beacon/Documents")).unwrap();
+        fs::create_dir_all(d.join("Contexts/Clients/Northwind")).unwrap();
+        fs::write(d.join("Contexts/Studio/Beacon/Documents/Pricewise API findings.md"),
+            "---\ntype: Document\ncontext: \"[[Studio]]\"\ntags: [plan]\n---\n# Findings\n\nSome intro.\nPricewise rate limit: 60 requests per minute\n").unwrap();
+        fs::write(d.join("Contexts/Studio/Beacon/Documents/Pricewise rate limits test plan.md"), "---\ntype: Document\n---\nCases for the limits.\n").unwrap();
+        fs::write(d.join("Contexts/Studio/Beacon/Documents/Sprint scope.md"), "---\ntype: Meeting\ncontext: \"[[Studio]]\"\n---\nThe simulator respects the Pricewise rates with a cache\n").unwrap();
+        fs::write(d.join("Contexts/Clients/Northwind/Notes.md"), "---\ntype: Document\n---\nPricewise rate card for the client\n").unwrap();
+    }
+    fn found(d: &Path, q: &str) -> Value { find(&d.join("index"), &vault::canon(d.to_str().unwrap()), q).unwrap() }
+    fn paths(v: &Value, key: &str) -> Vec<String> { v[key].as_array().unwrap().iter().map(|r| r["path"].as_str().unwrap().rsplit('/').next().unwrap().to_string()).collect() }
+
+    #[test]
+    fn find_ranks_names_first_and_highlights_the_matched_line() {
+        let d = std::env::temp_dir().join(format!("relay-find-{}", std::process::id()));
+        fs::remove_dir_all(&d).ok();
+        write_vault(&d);
+        let r = found(&d, "pricewise rate");
+        // names: only the title that has both words
+        assert_eq!(paths(&r, "names"), vec!["Pricewise rate limits test plan.md"]);
+        assert_eq!(paths(&found(&d, "pricewise"), "names").len(), 2);
+        // content: the line with both words, its number counted from the top of the file, the run of words as the hit
+        let hit = r["content"].as_array().unwrap().iter().find(|c| c["path"].as_str().unwrap().ends_with("Pricewise API findings.md")).unwrap();
+        assert_eq!((hit["line"].as_u64(), hit["hit"].as_str()), (Some(9), Some("Pricewise rate")));
+        assert_eq!(hit["after"], " limit: 60 requests per minute");
+        // a prefix of the last word is enough
+        assert_eq!(paths(&found(&d, "pricewise ra"), "content").len(), 3);
+        assert_eq!(paths(&found(&d, "nothing here"), "content").len(), 0);
+        fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn find_narrows_by_type_context_and_tag() {
+        let d = std::env::temp_dir().join(format!("relay-find-filters-{}", std::process::id()));
+        fs::remove_dir_all(&d).ok();
+        write_vault(&d);
+        // type:Document in:Studio: not the meeting, not the client's note (a folder and a `context:` both count as in)
+        let r = found(&d, "type:Document in:Studio pricewise rate");
+        assert_eq!(paths(&r, "content"), vec!["Pricewise API findings.md"]);
+        assert_eq!(found(&d, "in:Clients pricewise")["content"].as_array().unwrap().len(), 1);
+        assert_eq!(paths(&found(&d, "#plan pricewise"), "content"), vec!["Pricewise API findings.md"]);
+        // filters alone list the notes that pass
+        let mut l = paths(&found(&d, "type:Meeting"), "names");
+        l.sort();
+        assert_eq!(l, vec!["Sprint scope.md"]);
+        // a note changed on disk is found at once
+        fs::write(d.join("Contexts/Clients/Northwind/Notes.md"), "---\ntype: Document\n---\nzebra\n").unwrap();
+        filetime_bump(&d.join("Contexts/Clients/Northwind/Notes.md"));
+        assert_eq!(paths(&found(&d, "zebra"), "content"), vec!["Notes.md"]);
+        fs::remove_dir_all(&d).ok();
+    }
+    // the index follows mtime in whole seconds: a rewrite within the same second would not be seen
+    fn filetime_bump(p: &Path) {
+        let f = fs::OpenOptions::new().write(true).open(p).unwrap();
+        f.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(5)).unwrap();
+    }
+
+    /// Acceptance: results within 150 ms on a 3,000-note vault (the index is warm; the first sync is not the typing path).
+    #[test]
+    fn find_answers_within_150_ms_on_3000_notes() {
+        let d = std::env::temp_dir().join(format!("relay-find-3k-{}", std::process::id()));
+        fs::remove_dir_all(&d).ok();
+        for i in 0..3000 {
+            let dir = d.join(format!("Contexts/C{}/P{}/Documents", i % 10, i % 60));
+            fs::create_dir_all(&dir).unwrap();
+            let body: String = (0..40).map(|l| format!("Line {l} of note {i}: the simulator handles quotes, plates and tariff tables for client {}.\n", i % 97)).collect();
+            fs::write(dir.join(format!("Note {i} about topic{}.md", i % 50)), format!("---\ntype: Document\ntags: [t{}]\n---\n{body}Pricewise rate limit {i}\n", i % 7)).unwrap();
+        }
+        let root = vault::canon(d.to_str().unwrap());
+        let idx = d.join("index");
+        let t = std::time::Instant::now();
+        find(&idx, &root, "pricewise").unwrap();
+        println!("cold (index built): {:?}", t.elapsed());
+        for q in ["pricewise rate", "type:Document in:C3 pricewise ra", "topic7", "simulator handles quo"] {
+            let t = std::time::Instant::now();
+            let r = find(&idx, &root, q).unwrap();
+            let took = t.elapsed();
+            println!("{q:?}: {took:?}, {} names, {} content", r["names"].as_array().unwrap().len(), r["content"].as_array().unwrap().len());
+            assert!(took < std::time::Duration::from_millis(150), "{q}: {took:?}");
+        }
+        fs::remove_dir_all(&d).ok();
     }
 }
