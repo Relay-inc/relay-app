@@ -1,6 +1,10 @@
 // Fixture kb (K5, K1): the notes ⌘K searches by name and content, the templates New ▸ offers, and the answers of the
 // backend's find_notes (src-tauri/src/related.rs `find`, which has its own tests): the same query words, `type:`, `in:`
 // and `#tag`, kept small. Fictional data only.
+import { NOW, HOUR } from "./util";
+import { VAULT } from "./vault";
+import { conversations } from "./conversations";
+
 export type KbNote = { path: string; type: string; context: string; tags: string[]; text: string };
 
 const meetingDir = "Calendar/Meetings/2026";
@@ -49,6 +53,61 @@ export const notes: KbNote[] = [
     text: "---\ntype: Document\n---\n# Rate card\n\nMy Northwind rate for a day of consulting.\n",
   },
 ];
+
+const hosting = `${docs}/Hosting plan.md`;
+// the note the right rail (K2) is shown on: headings enough to scroll, three notes that link to it, two that name it
+// without a link, and the conversations that used it
+const lorem = (topic: string) =>
+  `${topic} is planned in three steps. The first step moves the staging environment, the second the database and the ` +
+  `third the public traffic. Every step has an owner, a rollback and a check that someone other than the owner runs.\n\n` +
+  `The team agreed to keep the old cluster for two weeks after the move, so a rollback stays a switch and not a rebuild.\n`;
+notes.push(
+  {
+    path: hosting,
+    type: "Document",
+    context: "Agency",
+    tags: [],
+    text:
+      '---\ntype: Document\ncontext: "[[Agency]]"\nabout: "[[Northwind Portal]]"\naliases:\n  - Migration plan\n---\n# Hosting plan\n\n' +
+      `## Briefing\n${lorem("The move to the new cluster")}\n## Scope\n${lorem("The scope")}\n### Staging\n${lorem("Staging")}\n` +
+      `## Cutover\n${lorem("The cutover")}\n## Risks\n${lorem("The risk list")}\n## Next steps\n- Confirm the date with Sofie\n- Book the window\n`,
+  },
+  {
+    path: `${meetingDir}/2026-09-29 Portal sync.md`,
+    type: "Meeting",
+    context: "Agency",
+    tags: [],
+    text: '---\ntype: Meeting\ncontext: "[[Agency]]"\n---\n# Portal sync\n\nLast sync: [[Hosting plan]], cutover on 15 Oct.\n',
+  },
+  {
+    path: `${meetingDir}/2026-10-06 Portal sync.md`,
+    type: "Meeting",
+    context: "Agency",
+    tags: [],
+    text: '---\ntype: Meeting\ncontext: "[[Agency]]"\n---\n# Portal sync\n\nSince last time, from [[Hosting plan|the plan]]: staging is done.\n',
+  },
+  {
+    path: "Calendar/Weekly review W40.md",
+    type: "Daily",
+    context: "Personal",
+    tags: [],
+    text: "---\ntype: Daily\n---\n# Weekly review W40\n\nPortal: see [[Hosting plan]] for the cutover scope.\n",
+  },
+  {
+    path: "Calendar/Daily/2026/2026-09-29.md",
+    type: "Daily",
+    context: "Personal",
+    tags: [],
+    text: "---\ntype: Daily\n---\n# 2026-09-29\n\n09:30 Hosting plan sync with Sofie, then NW-212.\n",
+  },
+  {
+    path: "Contexts/Agency/People/Sofie Claes.md",
+    type: "Person",
+    context: "Agency",
+    tags: [],
+    text: "---\ntype: Person\n---\n# Sofie Claes\n\nWeekly hosting plan review on Wednesdays.\n",
+  },
+);
 export const paths = notes.map(n => n.path);
 export const texts: Record<string, string> = Object.fromEntries(notes.map(n => [n.path, n.text]));
 export const templates = ["Document", "Meeting", "Person"];
@@ -125,4 +184,75 @@ export function find(main: boolean, query: string) {
         .slice(0, 12)
     : [];
   return { names, content };
+}
+
+const stemOf = (path: string) => path.split("/").pop()!.replace(/\.md$/, "");
+const kindOf = (text: string) => /^type: (.*)$/m.exec(text)?.[1] ?? "";
+/** The notes conversations read and wrote this week, on top of the graph's: two used the note the rail is shown on. */
+export const touches = () => {
+  const [first, second] = [...conversations].sort((a, b) => b.at - a.at);
+  return [
+    { key: first.key, root: VAULT, path: hosting, at: NOW - 2 * HOUR, kind: "read" as const },
+    { key: second.key, root: VAULT, path: hosting, at: NOW - HOUR, kind: "write" as const },
+  ];
+};
+
+/** note_rail (related.rs `rail`, which has its own tests), over the notes as they are now: who links to `path`, where
+ *  its name or an alias stands without a link (4 characters or more), a fixed list of what is near it. */
+export function rail(path: string, textOf: (path: string) => string | undefined) {
+  const me = stemOf(path);
+  const all = paths.map(p => ({ p, text: textOf(p) ?? "" }));
+  const names = [
+    me,
+    ...(/^aliases:\n((?: {2}- .*\n)+)/m
+      .exec(textOf(path) ?? "")?.[1]
+      .match(/- (.*)/g)
+      ?.map(a => a.slice(2)) ?? []),
+  ].filter(n => n.length >= 4);
+  const context = (text: string, at: number, length: number) => {
+    const line = text.slice(0, at).split("\n").length;
+    const from = text.lastIndexOf("\n", at - 1) + 1;
+    const to = text.indexOf("\n", at);
+    const end = to < 0 ? text.length : to;
+    return {
+      line,
+      before: text.slice(from, at),
+      hit: text.slice(at, at + length),
+      after: text.slice(at + length, end),
+    };
+  };
+  const meta = (p: string, text: string) => ({ p, t: stemOf(p), k: kindOf(text) });
+  const backlinks: unknown[] = [];
+  const linking = new Set<string>();
+  for (const { p, text } of all) {
+    const m =
+      p === path
+        ? null
+        : new RegExp(`\\[\\[${me}(?:[|#][^\\]]*)?\\]\\]`, "i").exec(text.replace(/^---[\s\S]*?\n---\n/, ""));
+    if (m) {
+      linking.add(p);
+      const at = text.indexOf(m[0]);
+      backlinks.push({ ...meta(p, text), ...context(text, at, m[0].length) });
+    }
+  }
+  const mentions: unknown[] = [];
+  for (const { p, text } of all) {
+    if (p === path || linking.has(p)) continue;
+    const body = text.replace(/^---[\s\S]*?\n---\n/, (m: string) => " ".repeat(m.length));
+    for (const name of names) {
+      const re = new RegExp(`(?<![\\p{L}\\p{N}])${name}(?![\\p{L}\\p{N}])`, "giu");
+      const found = [...body.matchAll(re)].find(m => !/\[\[[^\]]*$/.test(body.slice(0, m.index).split("\n").pop()!));
+      if (found) {
+        mentions.push({ ...meta(p, text), ...context(text, found.index, found[0].length) });
+        break;
+      }
+    }
+  }
+  const related = ["Portal Architecture", "Billing Spec", "2026-09-30 Portal sync", "Rate limit findings"].flatMap(
+    name => {
+      const p = paths.find(x => stemOf(x) === name);
+      return p ? [meta(p, textOf(p) ?? "")] : [];
+    },
+  );
+  return { backlinks, mentions, related };
 }

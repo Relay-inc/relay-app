@@ -48,6 +48,23 @@ fn mtime(p: &Path) -> i64 {
     fs::metadata(p).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs() as i64)
 }
 
+/// A frontmatter key's value on its own line, unquoted; "" when absent.
+fn fm_get(head: &str, k: &str) -> String {
+    head.lines().find_map(|l| l.strip_prefix(k)?.strip_prefix(':')).map(|v| vault::unquote(v.trim())).unwrap_or_default()
+}
+/// The `- item` lines under a key, or its inline [a, b].
+fn fm_list(head: &str, k: &str) -> Vec<String> {
+    let inline = fm_get(head, k);
+    if let Some(i) = inline.strip_prefix('[').and_then(|i| i.strip_suffix(']')) {
+        return i.split(',').map(|x| vault::unquote(x.trim())).filter(|x| !x.is_empty()).collect();
+    }
+    if !inline.is_empty() { return vec![inline]; }
+    let mut lines = head.lines().skip_while(|l| l.strip_prefix(k).and_then(|r| r.strip_prefix(':')).is_none()).skip(1);
+    let mut out = vec![];
+    while let Some(item) = lines.next().and_then(|l| l.trim_start().strip_prefix("- ")) { out.push(vault::unquote(item.trim())); }
+    out
+}
+
 /// What the graph needs of a note: its title (frontmatter `title:`, else the file name), kind (`kind:` or `type:`),
 /// tags, the notes it points at (every [[wikilink]], frontmatter included, and the ids under `relates:`), and whether
 /// it is a hub that links everything (a generated index note, a contributor). Tags and links joined by newlines.
@@ -55,19 +72,8 @@ fn mtime(p: &Path) -> i64 {
 pub fn parse(rel: &str, text: &str) -> (String, String, String, String, bool) {
     let stem = rel.rsplit('/').next().unwrap_or(rel).trim_end_matches(".md").to_string();
     let (head, body) = text.strip_prefix("---\n").and_then(|r| r.split_once("\n---")).unwrap_or(("", text));
-    let get = |k: &str| head.lines().find_map(|l| l.strip_prefix(k)?.strip_prefix(':')).map(|v| vault::unquote(v.trim())).unwrap_or_default();
-    // the `- item` lines under a key, or its inline [a, b]
-    let list = |k: &str| -> Vec<String> {
-        let inline = get(k);
-        if let Some(i) = inline.strip_prefix('[').and_then(|i| i.strip_suffix(']')) {
-            return i.split(',').map(|x| vault::unquote(x.trim())).filter(|x| !x.is_empty()).collect();
-        }
-        if !inline.is_empty() { return vec![inline]; }
-        let mut lines = head.lines().skip_while(|l| l.strip_prefix(k).and_then(|r| r.strip_prefix(':')).is_none()).skip(1);
-        let mut out = vec![];
-        while let Some(item) = lines.next().and_then(|l| l.trim_start().strip_prefix("- ")) { out.push(vault::unquote(item.trim())); }
-        out
-    };
+    let get = |k: &str| fm_get(head, k);
+    let list = |k: &str| fm_list(head, k);
     let title = Some(get("title")).filter(|t| !t.is_empty()).unwrap_or(stem);
     let kind = Some(get("kind")).filter(|k| !k.is_empty()).unwrap_or_else(|| get("type")).trim_matches(|c| c == '[' || c == ']').to_string();
     let tags = list("tags");
@@ -210,6 +216,23 @@ pub fn related(dir: &Path, vault: &str, text: &str, limit: usize) -> Result<Vec<
     with(dir, vault, |c| search(c, &q, limit))
 }
 
+/// Every note by the names a link may use: its path without .md and its file name, lowercase, as indexes into `paths`.
+fn name_map<'a>(paths: impl Iterator<Item = &'a str>) -> HashMap<String, usize> {
+    let mut by: HashMap<String, usize> = HashMap::new();
+    for (i, p) in paths.enumerate() {
+        let full = p.trim_end_matches(".md").to_lowercase();
+        let stem = full.rsplit('/').next().unwrap_or(&full).to_string();
+        by.entry(stem).or_insert(i);
+        by.insert(full, i);
+    }
+    by
+}
+/// The note a link names, like Obsidian: by its path, else by its file name.
+fn lookup(by: &HashMap<String, usize>, link: &str) -> Option<usize> {
+    let l = link.trim_end_matches(".md").to_lowercase();
+    by.get(&l).or_else(|| by.get(l.rsplit('/').next().unwrap_or(&l))).copied()
+}
+
 /// Every note of `root` and the links between them: {nodes: [{p, t, k, g, h}], edges: [from, to, from, to, …]}
 /// (indexes into nodes, each pair once, no self links). A link resolves like Obsidian: the note's path without .md,
 /// else its file name, case-insensitive; one that names no note is dropped.
@@ -219,19 +242,12 @@ pub fn graph(dir: &Path, root: &str) -> Result<Value, String> {
             .prepare("SELECT path, title, kind, tags, links, hub FROM meta ORDER BY path")?
             .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)))?
             .collect::<Result<_, _>>()?;
-        let mut by: HashMap<String, usize> = HashMap::new();
-        for (i, (p, ..)) in rows.iter().enumerate() {
-            let full = p.trim_end_matches(".md").to_lowercase();
-            let stem = full.rsplit('/').next().unwrap_or(&full).to_string();
-            by.entry(stem).or_insert(i);
-            by.insert(full, i);
-        }
+        let by = name_map(rows.iter().map(|r| r.0.as_str()));
         let mut seen = std::collections::HashSet::new();
         let mut edges = vec![];
         for (i, (.., links, _)) in rows.iter().enumerate() {
             for l in links.lines() {
-                let l = l.trim_end_matches(".md").to_lowercase();
-                let Some(&j) = by.get(&l).or_else(|| by.get(l.rsplit('/').next().unwrap_or(&l))) else { continue };
+                let Some(j) = lookup(&by, l) else { continue };
                 if i != j && seen.insert((i.min(j), i.max(j))) { edges.push(i); edges.push(j); }
             }
         }
@@ -258,6 +274,137 @@ pub fn linked(dir: &Path, root: &str) -> Result<Value, String> {
             out.push(v);
         }
         Ok(Value::from(out))
+    })
+}
+
+/// A line cut to a window around [from, to) (chars): the text before, the hit, the text after, with … where it was cut.
+fn window(chars: &[char], from: usize, to: usize) -> (String, String, String) {
+    let lead = chars.iter().take_while(|c| c.is_whitespace()).count().min(from);
+    let start = from.saturating_sub(40).max(lead);
+    let end = chars.len().min(to + 100);
+    let cut = |a: usize, b: usize| chars[a..b].iter().collect::<String>();
+    (format!("{}{}", if start > lead { "…" } else { "" }, cut(start, from)), cut(from, to), format!("{}{}", cut(to, end), if end < chars.len() { "…" } else { "" }))
+}
+
+/// The lines of `text` after the frontmatter, with their numbers in the file (from 1), outside code fences.
+fn body_lines(text: &str) -> Vec<(usize, &str)> {
+    let skip = if text.starts_with("---\n") { text.find("\n---").map_or(0, |i| text[..i].lines().count() + 1) } else { 0 };
+    let mut fence = false;
+    let mut out = vec![];
+    for (i, l) in text.lines().enumerate().skip(skip) {
+        if l.trim_start().starts_with("```") || l.trim_start().starts_with("~~~") { fence = !fence; continue; }
+        if !fence { out.push((i + 1, l)); }
+    }
+    out
+}
+
+/// The [[…]] of a line as char ranges [from, to) and what they name (the part before `|` and `#`).
+fn wikilinks(chars: &[char]) -> Vec<(usize, usize, String)> {
+    let mut out = vec![];
+    let mut i = 0;
+    while i + 1 < chars.len() {
+        if chars[i] == '[' && chars[i + 1] == '[' {
+            if let Some(j) = (i + 2..chars.len().saturating_sub(1)).find(|&j| chars[j] == ']' && chars[j + 1] == ']') {
+                let inner: String = chars[i + 2..j].iter().collect();
+                out.push((i, j + 2, inner.split(['|', '#']).next().unwrap_or("").trim().to_string()));
+                i = j + 2;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
+/// The first line of `text` with a [[link]] that `names` the note: (line, before, the link as written, after). The body
+/// first, the frontmatter (`about:`, `context:`) when the body has none.
+fn link_line(text: &str, names: impl Fn(&str) -> bool) -> Option<(usize, String, String, String)> {
+    let body = body_lines(text);
+    let first = body.first().map_or(usize::MAX, |b| b.0);
+    let head = text.lines().enumerate().take_while(|(i, _)| i + 1 < first).map(|(i, l)| (i + 1, l));
+    body.into_iter().chain(head).find_map(|(n, l)| {
+        let chars: Vec<char> = l.chars().collect();
+        let (from, to, _) = wikilinks(&chars).into_iter().find(|w| names(&w.2))?;
+        let (before, hit, after) = window(&chars, from, to);
+        Some((n, before, hit, after))
+    })
+}
+
+/// The first line of `text` that has `name` (lowercase) as plain text: not inside a [[link]], on word boundaries,
+/// any case. (line, before, the text as written, after).
+fn mention_line(text: &str, names: &[Vec<char>]) -> Option<(usize, String, String, String)> {
+    body_lines(text).into_iter().find_map(|(n, l)| {
+        let chars: Vec<char> = l.chars().collect();
+        let lower: Vec<char> = chars.iter().map(|c| c.to_lowercase().next().unwrap_or(*c)).collect();
+        let links = wikilinks(&chars);
+        for name in names {
+            for from in 0..lower.len().saturating_sub(name.len() - 1) {
+                let to = from + name.len();
+                if lower[from..to] != name[..] { continue; }
+                if (from > 0 && chars[from - 1].is_alphanumeric()) || (to < chars.len() && chars[to].is_alphanumeric()) { continue; }
+                if links.iter().any(|w| from < w.1 && to > w.0) { continue; }
+                let (before, hit, after) = window(&chars, from, to);
+                return Some((n, before, hit, after));
+            }
+        }
+        None
+    })
+}
+
+/// A note's right rail (K2): who links to it, where its name is written without a link, and what is near it, from
+/// the index of `root` brought up to date. `path` is the note in the workspace.
+/// {backlinks, mentions: [{p, t, k, line, before, hit, after}], related: [{p, t, k}]}, a line counting from 1 in the file.
+/// Names shorter than 4 characters are not looked for (a note called "AI" or "Q3" would match everywhere).
+pub fn rail(dir: &Path, root: &str, path: &str) -> Result<Value, String> {
+    with(dir, root, |c| {
+        let rows: Vec<(String, String, String, String)> = c
+            .prepare("SELECT path, title, kind, links FROM meta ORDER BY path")?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+            .collect::<Result<_, _>>()?;
+        let by = name_map(rows.iter().map(|r| r.0.as_str()));
+        let Some(me) = rows.iter().position(|r| r.0 == path) else { return Ok(json!({"backlinks": [], "mentions": [], "related": []})) };
+        let read = |p: &str| fs::read_to_string(Path::new(root).join(p)).unwrap_or_default();
+        let hit = |(p, t, k, _): &(String, String, String, String), at: (usize, String, String, String)| {
+            json!({"p": p, "t": t, "k": k, "line": at.0, "before": at.1, "hit": at.2, "after": at.3})
+        };
+        let mut backlinks = vec![];
+        let mut linking = std::collections::HashSet::new();
+        for (i, row) in rows.iter().enumerate() {
+            if i == me || !row.3.lines().any(|l| lookup(&by, l) == Some(me)) { continue; }
+            linking.insert(i);
+            if let Some(at) = link_line(&read(&row.0), |name| lookup(&by, name) == Some(me)) { backlinks.push(hit(row, at)); }
+        }
+        // the names the note goes by: its file name, its title, its aliases
+        let text = read(path);
+        let head = text.strip_prefix("---\n").and_then(|r| r.split_once("\n---")).map_or("", |h| h.0);
+        let stem = path.rsplit('/').next().unwrap_or(path).trim_end_matches(".md").to_string();
+        let mut names: Vec<Vec<char>> = vec![];
+        for n in [stem, rows[me].1.clone()].into_iter().chain(fm_list(head, "aliases")) {
+            let n: Vec<char> = n.trim().chars().map(|c| c.to_lowercase().next().unwrap_or(c)).collect();
+            if n.len() >= 4 && !names.contains(&n) { names.push(n); }
+        }
+        let mut mentions = vec![];
+        let mut seen = std::collections::HashSet::new();
+        for name in &names {
+            let phrase = format!("\"{}\"", name.iter().collect::<String>().replace('"', "\"\""));
+            let mut st = c.prepare("SELECT path FROM docs WHERE docs MATCH ?1 ORDER BY path LIMIT 200")?;
+            let candidates: Vec<String> = st.query_map([&phrase], |r| r.get(0))?.collect::<Result<_, _>>()?;
+            for p in candidates {
+                let Some(i) = rows.iter().position(|r| r.0 == p) else { continue };
+                if i == me || linking.contains(&i) || !seen.insert(i) || mentions.len() >= 20 { continue; }
+                match mention_line(&read(&p), &names) { Some(at) => mentions.push(hit(&rows[i], at)), None => { seen.remove(&i); } }
+            }
+        }
+        let related: Vec<Value> = search(c, &query_of(&text), 7)?
+            .into_iter()
+            .filter(|v| v["path"] != path)
+            .take(5)
+            .map(|v| {
+                let k = rows.iter().find(|r| v["path"] == r.0.as_str()).map_or("", |r| r.2.as_str());
+                json!({"p": v["path"], "t": v["title"], "k": k})
+            })
+            .collect();
+        Ok(json!({"backlinks": backlinks, "mentions": mentions, "related": related}))
     })
 }
 
@@ -450,6 +597,58 @@ mod tests {
         fs::remove_file(d.join("Contexts/A/Bramwell.md")).unwrap();
         fs::write(d.join("Contexts/A/Prijzen.md"), "de prijscascade per klant").unwrap();
         assert_eq!(paths("prijscascade"), vec!["Contexts/A/Prijzen.md"]);
+    }
+
+    #[test]
+    fn mention_finder() {
+        let names = |n: &[&str]| n.iter().map(|s| s.chars().collect::<Vec<_>>()).collect::<Vec<_>>();
+        let text = "---\ntitle: Daily\n---\nSee [[Hosting plan]] first.\n09:30 hosting PLAN with Sam, then NW-212.\n";
+        // the linked one is no mention, the plain one is, in the case it was written, with its line in the file
+        let (n, before, hit, after) = mention_line(text, &names(&["hosting plan"])).unwrap();
+        assert_eq!((n, before.as_str(), hit.as_str(), after.as_str()), (5, "09:30 ", "hosting PLAN", " with Sam, then NW-212."));
+        // a word boundary on both sides, frontmatter and code fences are not read
+        assert!(mention_line("The hosting planner.\nunhosting plan\n", &names(&["hosting plan"])).is_none());
+        assert!(mention_line("---\naliases: hosting plan\n---\n```\nhosting plan\n```\n", &names(&["hosting plan"])).is_none());
+        // an alias finds it, a link with a label or heading counts as a link to the note
+        assert!(mention_line("Het Plan voor de host.\n", &names(&["hosting plan", "plan voor de host"])).is_some());
+        let (n, _, hit, _) = link_line("a\nb [[Other]] and [[Hosting Plan#Scope|the plan]] c", |x| x.eq_ignore_ascii_case("hosting plan")).unwrap();
+        assert_eq!((n, hit.as_str()), (2, "[[Hosting Plan#Scope|the plan]]"));
+    }
+
+    #[test]
+    fn rail_of_a_note() {
+        let d = std::env::temp_dir().join(format!("relay-rail-{}", std::process::id()));
+        fs::remove_dir_all(&d).ok();
+        fs::create_dir_all(d.join("Docs")).unwrap();
+        let v = vault::canon(d.to_str().unwrap());
+        let db = d.join("index");
+        let w = |p: &str, t: &str| fs::write(d.join(p), t).unwrap();
+        w("Docs/Hosting plan.md", "---\naliases:\n  - Migration plan\n  - AI\n---\n# Hosting plan\n\nCaching per plate, rate limits of the sandbox.\n");
+        w("Docs/A.md", "Intro\nLast sync: [[Hosting plan]], migration on 15 Nov.\n");
+        w("Docs/B.md", "---\nabout: \"[[Hosting plan]]\"\n---\nNothing in the body.\n");
+        w("Docs/C.md", "See [[docs/hosting plan|the plan]].\n");
+        w("Docs/D.md", "Weekly hosting plan on Wednesdays, and the migration plan too. AI everywhere.\n");
+        w("Docs/E.md", "Links [[Hosting plan]] and also names the hosting plan in plain text.\n");
+        w("Docs/F.md", "Caching per plate and rate limits, unrelated to the name.\n");
+        let r = rail(&db, &v, "Docs/Hosting plan.md").unwrap();
+        let p = |k: &str| r[k].as_array().unwrap().iter().map(|x| x["p"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+        // three notes link to it (E too: it is a backlink, not a mention), each with its line
+        assert_eq!(p("backlinks"), vec!["Docs/A.md", "Docs/B.md", "Docs/C.md", "Docs/E.md"]);
+        let a = &r["backlinks"][0];
+        assert_eq!((a["line"].as_u64(), a["before"].as_str(), a["hit"].as_str()), (Some(2), Some("Last sync: "), Some("[[Hosting plan]]")));
+        assert_eq!(r["backlinks"][1]["line"], 2); // the frontmatter line, the body has no link
+        // D names it twice (name and alias) and shows once; "AI" is under 4 characters and is not looked for
+        assert_eq!(p("mentions"), vec!["Docs/D.md"]);
+        assert_eq!(r["mentions"][0]["hit"], "hosting plan");
+        assert!(p("related").contains(&"Docs/F.md".to_string()));
+        assert!(!p("related").contains(&"Docs/Hosting plan.md".to_string()));
+        // linking the mention moves it to the backlinks
+        std::thread::sleep(std::time::Duration::from_millis(1100)); // the index follows the mtime, in seconds
+        w("Docs/D.md", "Weekly [[Hosting plan|hosting plan]] on Wednesdays.\n");
+        let r = rail(&db, &v, "Docs/Hosting plan.md").unwrap();
+        assert!(r["mentions"].as_array().unwrap().is_empty());
+        assert_eq!(r["backlinks"].as_array().unwrap().len(), 5);
+        fs::remove_dir_all(&d).ok();
     }
 
     // Alex's real vault, read-only (index in a temp file); skipped where it does not exist

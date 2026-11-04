@@ -63,6 +63,8 @@ const READS = new Set([
   "note_times",
   "note_templates",
   "favourites",
+  "note_rail",
+  "note_touches",
 ]);
 const isIgnored = c => IGNORED.has(c.cmd) || c.cmd.startsWith("plugin:event|");
 const isRead = c => READS.has(c.cmd) || (c.cmd === "integration_call" && c.args.method === "GET");
@@ -2154,6 +2156,102 @@ const SCENARIOS = {
       (await visible(page.locator('[data-section="pages:favourites"]')).count()) === 0,
     );
     s.check("and is saved", (await s.calls("set_favourites")).pop()?.args.paths.length === 0);
+  },
+
+  // K2, issue 366: a note's right rail. 3 backlinks with their line, one opens the note at that line; Link on an
+  // unlinked mention writes the wikilink and moves it to Backlinks; the outline jumps and follows the scroll; the fold
+  // survives a restart
+  async rail(s) {
+    const kb = { fixture: "kb", keep: true };
+    await s.load(kb);
+    const { page } = s;
+    const hosting = "Contexts/Agency/Projects/Northwind Portal/Documents/Hosting plan.md";
+    // the text of the line the editor's cursor is on
+    const cursorLine = () =>
+      page.evaluate(() => {
+        const r = document.querySelector(".cm-cursor")?.getBoundingClientRect();
+        if (!r) return "";
+        const y = r.top + r.height / 2;
+        return (
+          [...document.querySelectorAll(".cm-line")].find(l => {
+            const b = l.getBoundingClientRect();
+            return b.top <= y && y <= b.bottom;
+          })?.textContent ?? ""
+        );
+      });
+    const openHosting = async () => {
+      await click(page.getByRole("tab", { name: /^Pages/ }));
+      if ((await page.locator('[data-folder$="Northwind Portal/Documents"]').count()) === 0)
+        await click(page.locator('[data-project="Northwind Portal"]'));
+      if ((await page.locator(`[data-page="${hosting}"]`).count()) === 0)
+        await click(page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]'));
+      await click(page.locator(`[data-page="${hosting}"]`).first(), 400);
+    };
+    await openHosting();
+    const section = id => page.locator(`[data-rail-section="${id}"]`);
+    await section("backlinks").waitFor();
+    s.check(
+      "a note linked from 3 notes shows 3 backlinks",
+      (await section("backlinks").locator("button.font-medium").count()) === 3,
+    );
+    s.check(
+      "each with the line around the link",
+      (await section("backlinks").textContent())?.includes("Last sync: [[Hosting plan]], cutover on 15 Oct.") ?? false,
+    );
+    s.check(
+      "the breadcrumb shows the real folder",
+      (await page.locator("[data-breadcrumb]").textContent()) === "ContextsAgencyProjectsNorthwind PortalDocuments",
+    );
+    s.check("and the about: chip", await hasText(page, "about:"));
+    // a backlink opens its note at the line
+    await click(
+      section("backlinks").getByRole("button", { name: "Last sync: [[Hosting plan]], cutover on 15 Oct." }),
+      600,
+    );
+    s.check("a backlink opens the note at its line", (await cursorLine()).includes("Last sync"));
+    await openHosting();
+    await section("unlinked").waitFor();
+    s.check("2 unlinked mentions", (await section("unlinked").getByRole("button", { name: /^Link/ }).count()) === 2);
+    // Link: the text becomes a wikilink through a normal write, and the note moves to Backlinks
+    await click(page.getByRole("button", { name: "Link “Hosting plan” in 2026-09-29" }), 600);
+    const writes = await s.calls("write_note");
+    const w = writes.at(-1)?.args;
+    s.check(
+      "Link writes the wikilink in the other note",
+      !!w && w.target.endsWith("2026-09-29.md") && w.text.includes("09:30 [[Hosting plan]] sync with Sofie"),
+    );
+    s.check("which moves to Backlinks", (await section("backlinks").locator("button.font-medium").count()) === 4);
+    s.check(
+      "and leaves the mentions",
+      (await section("unlinked").getByRole("button", { name: /^Link/ }).count()) === 1,
+    );
+    // the outline jumps on a click and follows the scroll
+    const marked = () => page.locator('[data-rail-section="outline"] [aria-current="true"]').textContent();
+    await click(section("outline").getByRole("button", { name: "Cutover" }), 600);
+    s.check("the outline jumps to a heading", (await marked()) === "Cutover");
+    s.check("the editor's cursor is on it", (await cursorLine()).includes("Cutover"));
+    // the reader scrolls (a wheel over the page); a click's own scroll did not move the mark
+    await page.mouse.move(500, 500);
+    await page.mouse.wheel(0, -3000);
+    await settle(page, 400);
+    s.check("scrolling up moves the mark to the first heading", (await marked()) === "Briefing");
+    await page.mouse.wheel(0, 3000);
+    await settle(page, 400);
+    s.check("and down to the last", (await marked()) === "Next steps");
+    // conversations that used it
+    s.check(
+      "2 conversations used the note",
+      (await section("conversations").textContent())?.includes("Wrote") ?? false,
+    );
+    // the fold is kept over a restart
+    await click(button(page, "Hide right rail"));
+    s.check("Hide right rail folds it", (await page.locator("[data-rail]").count()) === 0);
+    await settle(page, 500);
+    await s.load(kb);
+    await openHosting();
+    s.check("after a restart it is still folded", (await page.locator("[data-rail]").count()) === 0);
+    await click(button(page, "Show right rail"));
+    s.check("Show right rail brings it back", (await page.locator("[data-rail]").count()) === 1);
   },
 
   // New ▸ from template on a folder and Today's note in the Pages tab: a Meeting in a project is saved in its home

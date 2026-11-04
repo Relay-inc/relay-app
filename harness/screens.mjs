@@ -1195,6 +1195,18 @@ const VIEWS = {
     await settle(page, 400);
   },
   "pages-favourites-dark": async () => VIEWS["pages-favourites"]("kb-dark"),
+  // K2, #366: a note's right rail: the outline (the heading in view marked), 3 backlinks with their line, 2 unlinked
+  // mentions with Link, what is near it and the 2 conversations that used it; the real folder and the about: chip above
+  "page-rail": async (fixture = "kb") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
+    await page.locator('[data-page$="/Hosting plan.md"]').first().click();
+    await waitText("Unlinked mentions");
+    await settle(page, 400);
+  },
+  "page-rail-dark": async () => VIEWS["page-rail"]("kb-dark"),
   // New ▸ from template on a project: the templates of the vault under the folder's own items
   "pages-new-from-template": async (fixture = "kb") => {
     await open(page, server.url, { fixture });

@@ -50,6 +50,8 @@ export type CommentsApi = {
   locate: (anchor: unknown, quote: string) => Span;
   mark: (spans: { id: string; from: number; to: number }[], active: string | null) => void;
   reveal: (from: number, to: number) => void;
+  /** The line of the file (from 1) at window height `y`: where the page is scrolled to, for the rail's outline. */
+  lineAt: (y: number) => number;
 };
 /** The editor's side of a page's comments, and what it tells them: a selection made or gone, ⌘⌥M, a commented text
  *  clicked, the text changed (anchors move). */
@@ -360,9 +362,11 @@ function Editor(props: {
       const heading = takeHeading(page);
       if (heading?.startsWith(LINE)) {
         // a line of the file (⌘K's content match): the body starts after the head's lines
-        const n = Number(heading.slice(LINE.length)) - (head.split("\n").length - 1);
+        const [line, edge] = heading.slice(LINE.length).split(":");
+        const n = Number(line) - (head.split("\n").length - 1);
         const at = view.state.doc.line(Math.min(Math.max(n, 1), view.state.doc.lines)).from;
-        view.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, { y: "center" }) });
+        const y = edge === "top" ? ({ y: "start", yMargin: 24 } as const) : ({ y: "center" } as const);
+        view.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, y) });
         view.focus();
         return;
       }
@@ -406,6 +410,8 @@ function Editor(props: {
           selection: { anchor: from, head: to },
           effects: EditorView.scrollIntoView(from, { y: "center" }),
         }),
+      lineAt: y =>
+        view.state.doc.lineAt(view.lineBlockAtHeight(y - view.documentTop).from).number + head.split("\n").length - 1,
     });
     // the file changed outside Relay (Claude, Obsidian, a shared round): merged into what is typed when the two did not
     // change the same lines, else the bar. Not undoable with ⌘Z: it is not the user's edit.
