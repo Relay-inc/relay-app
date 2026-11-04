@@ -1918,6 +1918,7 @@ const VIEWS = {
     await waitText("Too large: 25 MB max per file");
     await settle(page);
   },
+  "page-embeds-toolarge-dark": async () => VIEWS["page-embeds-toolarge"]("embeds-dark"),
   // a page's history beside it (ticket 10): three sessions, who and when, what made them, lines added and removed
   "page-history": async () => {
     await VIEWS["page-view"]();

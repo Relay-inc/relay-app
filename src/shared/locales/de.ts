@@ -563,6 +563,7 @@ export default {
   "block.link": "Link zu Seite",
   "block.file": "Datei",
   "attach.tooLarge": "Zu groß: maximal 25 MB pro Datei",
+  "attach.tooLargeDetail": "{name} ist {size} groß · Dateien bis 25 MB passen in eine Notiz",
   "attach.drop": "Nach {folder} kopieren und einbetten",
   "embed.open": "Öffnen",
   "embed.play": "Abspielen",

@@ -558,6 +558,7 @@ const en = {
   "block.link": "Link to page",
   "block.file": "File",
   "attach.tooLarge": "Too large: 25 MB max per file",
+  "attach.tooLargeDetail": "{name} is {size} · Files up to 25 MB can go in a note",
   "attach.drop": "Copy to {folder} and embed",
   "embed.open": "Open",
   "embed.play": "Play",

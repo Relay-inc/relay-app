@@ -109,9 +109,9 @@ let toastTimer = 0;
 /** Text on the clipboard. */
 export const copy = (text: string) => backend.copyText(text).catch(e => console.error(e));
 
-export function toast(text: string, undo?: () => void, btn = t("toast.undo"), ms = 8000) {
+export function toast(text: string, undo?: () => void, btn = t("toast.undo"), ms = 8000, detail?: string) {
   set(draft => {
-    draft.toast = { text, undo, btn };
+    draft.toast = { text, undo, btn, detail };
   });
   clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => {

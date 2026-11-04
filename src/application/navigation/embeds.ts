@@ -1,4 +1,5 @@
-import { t } from "../../shared/i18n";
+import { currentLocale, t } from "../../shared/i18n";
+import { fileSize } from "../../shared/format";
 import { MAX_ATTACHMENT, pastedName } from "../../domain/workspace/embeds";
 import * as backend from "../../infrastructure/backend";
 import { openAttached, pastedPaths, pickedPaths } from "../conversations/attachments";
@@ -44,7 +45,15 @@ export function attachDest(page: string) {
 
 /** The names to embed the added files by; a file over the limit is told once and left out. */
 function embedNames(done: backend.Attached[]) {
-  if (done.some(d => "tooLarge" in d)) toast(t("attach.tooLarge"));
+  const big = done.find(d => "tooLarge" in d);
+  if (big && "tooLarge" in big)
+    toast(
+      t("attach.tooLarge"),
+      undefined,
+      undefined,
+      8000,
+      big.name ? t("attach.tooLargeDetail", { name: big.name, size: fileSize(big.size, currentLocale()) }) : undefined,
+    );
   return done.flatMap(d => ("link" in d ? [d.link] : []));
 }
 /** Files at paths (dropped, copied in Finder, picked with / → File) copied into the page's attachments folder. */

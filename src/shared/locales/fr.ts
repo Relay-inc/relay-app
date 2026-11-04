@@ -570,6 +570,7 @@ export default {
   "block.link": "Lien vers une page",
   "block.file": "Fichier",
   "attach.tooLarge": "Trop volumineux : 25 Mo maximum par fichier",
+  "attach.tooLargeDetail": "{name} fait {size} · Les fichiers jusqu'à 25 Mo peuvent aller dans une note",
   "attach.drop": "Copier dans {folder} et intégrer",
   "embed.open": "Ouvrir",
   "embed.play": "Lire",

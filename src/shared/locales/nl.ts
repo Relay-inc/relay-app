@@ -563,6 +563,7 @@ export default {
   "block.link": "Link naar pagina",
   "block.file": "Bestand",
   "attach.tooLarge": "Te groot: maximaal 25 MB per bestand",
+  "attach.tooLargeDetail": "{name} is {size} · Bestanden tot 25 MB kunnen in een notitie",
   "attach.drop": "Kopieer naar {folder} en sluit in",
   "embed.open": "Open",
   "embed.play": "Afspelen",
