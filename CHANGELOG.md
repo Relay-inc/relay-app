@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Fixed
 
-- A page's Changes panel scrolls again when a run's changes are longer than the panel: the open entry was squeezed to the panel's height and its lower diffs were cut off
+- A page's Changes panel scrolls again when a run's changes are longer than the panel: the open entry was squeezed to the panel's height and its lower diffs were cut off (#405)
 
 ## [0.0.47] - 2026-11-04
 
