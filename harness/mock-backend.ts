@@ -1097,7 +1097,7 @@ function handle(cmd: string, a: Args): unknown {
       // file), on top of what the harness seeded
       if (keepState) {
         const seeded = Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage.getItem(key) ?? ""]));
-        const kept = ["pagesOpen", "pagesSort"].flatMap(k => {
+        const kept = ["pagesOpen", "pagesSort", "railClosed"].flatMap(k => {
           const v = sessionStorage.getItem(`mockUi:${k}`);
           return v == null ? [] : [[k, v]];
         });
@@ -1234,7 +1234,11 @@ function handle(cmd: string, a: Args): unknown {
     case "notes_graph":
       return graph.graph();
     case "note_touches":
-      return graph.touches();
+      return kbOn ? [...graph.touches(), ...kb.touches()] : graph.touches();
+    case "note_rail":
+      return kbOn && a.folder === vault.VAULT
+        ? kb.rail(String(a.path), p => written.get(p)?.text)
+        : { backlinks: [], mentions: [], related: [] };
     case "notes_linked":
       return linkedOn ? vault.linkedNotes() : [];
 

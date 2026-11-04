@@ -343,11 +343,15 @@ export function onHeading(listener: (page: string) => void) {
 }
 /** The marker a line to open at is kept under in `headings`: `LINE` + the line's number in the file. */
 export const LINE = "\u0000line:";
-/** A note of any workspace opened at a line (⌘K's content matches): the editor puts its cursor there. */
+/** The page `page` (a page key's target) scrolls to a line of its file, its editor's cursor there: in the middle of the
+ *  window, or with `top` at its top (the rail's outline). */
+export function revealLine(page: string, line: number, top = false) {
+  headings.set(page, `${LINE}${line}${top ? ":top" : ""}`);
+  headingWatchers.forEach(listener => listener(page));
+}
+/** A note of any workspace opened at a line (⌘K's content matches, a backlink): the editor puts its cursor there. */
 export function openPageAtLine(folder: string, path: string, line: number) {
-  const full = isMain(folder) ? path : `${folder}/${path}`;
-  headings.set(full, `${LINE}${line}`);
-  headingWatchers.forEach(listener => listener(full));
+  revealLine(isMain(folder) ? path : `${folder}/${path}`, line);
   return openPageIn(folder, path);
 }
 /** A [[link]] in a page: the note of the workspace shown it names opens as a page, or in the right drawer with

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Toast } from "../conversations/Toast";
 import {
   askAboutPage,
+  followPageLink,
   loadPage,
   pagePath,
   pageProject,
@@ -37,6 +38,10 @@ import { Properties } from "./Properties";
 import { PageHistory, VersionDiff } from "./PageHistory";
 import { LinkedSections } from "./LinkedSections";
 import { loadLinked } from "../../../application/navigation/linked";
+import { loadRail, railNote, railOpen, setRail, useRailStore } from "../../../application/navigation/rail";
+import { aboutOf } from "../../../domain/workspace/rail";
+import { Rail } from "./Rail";
+import { toggleFavourite, useFavouritesStore } from "../../../application/navigation/favourites";
 
 const EDIT_MAX = 1_000_000; // characters: a bigger note is shown read-only
 
@@ -52,6 +57,18 @@ export function PageView({ target, className }: { target: string; className: str
   }, [target]);
   const page = read && !("err" in read) ? read : null;
   const err = read && "err" in read ? read.err : "";
+  // the rail is asked for when the page opens and after each save (a new hash), not on a keystroke
+  const hash = page?.hash;
+  useEffect(() => {
+    if (!hash) return;
+    const { folder, path } = railNote(target);
+    void loadRail(folder, path);
+  }, [target, hash]);
+  const folder = railNote(target).folder;
+  useRailStore(s => s.closed); // the rail's fold follows
+  const shown = railOpen(folder);
+  const pinned = useFavouritesStore(s => (s.by[folder] ?? []).includes(railNote(target).path));
+  const scroller = useRef<HTMLDivElement>(null);
   const path = pagePath(target) || target;
   // the page's own workspace, not the one the sidebar shows
   const workspace = useDerived(() => workspaces().find(w => w.folder === workspaceOf(pageKey(target)))?.name ?? "");
@@ -95,7 +112,8 @@ export function PageView({ target, className }: { target: string; className: str
     setOpenThread(asked.thread);
   }
   const { title, head, body } = page ? pageParts(path, page.text) : { ...noteTitle(path, noteName(path)), head: "" };
-  const folders = path.split("/").slice(0, -1);
+  const folders = railNote(target).path.split("/").slice(0, -1); // where the note really is, in its workspace
+  const about = aboutOf(frontmatterOf(head) ?? "");
 
   return (
     <div className={`${className} flex flex-col min-h-0`}>
@@ -155,8 +173,55 @@ export function PageView({ target, className }: { target: string; className: str
         </button>
       </div>
 
+      <div className="h-10 flex-none flex items-center gap-1.5 pl-6 pr-4 text-sm text-secondary select-none">
+        <div data-breadcrumb className="flex items-center gap-1.5 min-w-0 whitespace-nowrap">
+          {folders.map((name, i) => (
+            <span key={i} className="contents">
+              {i ? <Icon name="right" className="glyph size-3 flex-none text-tertiary" /> : null}
+              <span>{name}</span>
+            </span>
+          ))}
+        </div>
+        {folders.length ? <Icon name="right" className="glyph size-3 flex-none text-tertiary" /> : null}
+        <span className="truncate">{title}</span>
+        {about ? (
+          <button
+            className="ml-2 h-5.5 flex-none flex items-center gap-1.5 pl-1.5 pr-2 rounded-md border border-separator-strong text-xs text-accent-text"
+            onClick={() => void followPageLink(about, false)}
+          >
+            <span className="text-secondary">about:</span>
+            <span className="size-3.5 grid place-items-center rounded-sm bg-accent-soft text-[9px] font-bold">
+              {about.charAt(0).toUpperCase()}
+            </span>
+            {about}
+          </button>
+        ) : null}
+        <span className="flex-1" />
+        <button
+          className={`size-7 grid place-items-center rounded-md hover:bg-fill ${pinned ? "text-accent-text" : "text-secondary hover:text-label"}`}
+          title={t(pinned ? "pages.unfavourite" : "pages.favourite")}
+          aria-label={t(pinned ? "pages.unfavourite" : "pages.favourite")}
+          aria-pressed={pinned}
+          onClick={() => void toggleFavourite(railNote(target).path)}
+        >
+          <Icon name="star" className={`glyph size-4 ${pinned ? "fill-current" : ""}`} />
+        </button>
+        <button
+          className={`size-7 grid place-items-center rounded-md ${shown ? "bg-accent-soft text-accent-text" : "text-secondary hover:bg-fill hover:text-label"}`}
+          title={t(shown ? "rail.hide" : "rail.show")}
+          aria-label={t(shown ? "rail.hide" : "rail.show")}
+          aria-pressed={shown}
+          onClick={() => {
+            setRail(folder, !shown);
+            if (!shown) setView({ on: target, side: null, picked: null });
+          }}
+        >
+          <Icon name="columns" className="glyph size-4" />
+        </button>
+      </div>
+
       <div className="flex-1 min-h-0 flex">
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div ref={scroller} className="flex-1 min-h-0 overflow-y-auto">
           {err ? (
             <div className="err-box m-4.5">{err}</div>
           ) : !page ? (
@@ -166,16 +231,6 @@ export function PageView({ target, className }: { target: string; className: str
           ) : (
             <article className="w-full max-w-180 mx-auto pt-10 px-8 pb-16 flex flex-col gap-6">
               <header className="flex flex-col gap-4">
-                {folders.length ? (
-                  <div data-breadcrumb className="flex items-center gap-1.5 text-[13px] text-tertiary">
-                    {folders.map((folder, i) => (
-                      <span key={i} className="contents">
-                        {i ? <Icon name="right" className="glyph size-3 flex-none" /> : null}
-                        <span>{folder}</span>
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
                 <div className="flex items-center gap-3">
                   <span className="size-11 flex-none grid place-items-center rounded-lg bg-fill-2 text-xl">
                     {isImg(icon?.img) ? (
@@ -284,6 +339,9 @@ export function PageView({ target, className }: { target: string; className: str
               void loadPage(target); // the page's text as it is now, to show what changed since
             }}
           />
+        ) : null}
+        {shown && !side && page ? (
+          <Rail target={target} text={page.text} api={commentsApi} scroller={scroller} />
         ) : null}
       </div>
       {/* the bar ConversationsView shows under a conversation: Undo of a page put in the trash, an error */}

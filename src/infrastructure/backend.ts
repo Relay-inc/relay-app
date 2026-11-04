@@ -56,6 +56,7 @@ import type { Meeting, Meetings } from "../domain/calendar/types";
 import type { PrDetail, PRs } from "../domain/pull-requests/types";
 import type { NotesGraph, Touch } from "../domain/graph/types";
 import type { LinkedNote } from "../domain/workspace/linked";
+import type { RailData } from "../domain/workspace/rail";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
 import type { OrchEvent, Worker } from "../domain/orchestrator/types";
 import type { PrStatus, Ticket } from "../domain/pipeline/types";
@@ -511,6 +512,9 @@ export const githubStatus = () => invoke<string>("github_status");
 export const notesGraph = (folder: string) => invoke<NotesGraph>("notes_graph", { folder });
 /** The notes of a workspace that point at another through `about:`, `context:` or `with:`. */
 export const notesLinked = (folder: string) => invoke<LinkedNote[]>("notes_linked", { folder });
+/** A note's right rail: its backlinks and unlinked mentions with the line around each, and the notes near it. `path` is
+ *  the note in the workspace `folder`. */
+export const noteRail = (folder: string, path: string) => invoke<RailData>("note_rail", { folder, path });
 /** One line of ⌘K's content matches: `line` counts from the top of the note, `hit` the matched words. */
 export type ContentHit = { path: string; title: string; line: number; before: string; hit: string; after: string };
 export type NameHit = { path: string; title: string; type: string };
