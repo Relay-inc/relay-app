@@ -6,10 +6,10 @@ import {
   keptStart,
   loadKept,
   retryRecording,
-  showRecording,
   stopRecording,
   useRecordingStore,
 } from "../../../application/calendar/recording";
+import { openMeetingView } from "../../../application/calendar/meeting-view";
 import { sentAt } from "../../../shared/format";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
@@ -30,7 +30,7 @@ export const Meter = ({ label, level }: { label: string; level: number }) => (
  *  transcription's progress, or why it failed. */
 export function RecordingBar() {
   const { t, locale } = useT();
-  const { meeting, title, phase, secs, me, others, system, heard, why, progress, error, retry, kept, lines, shown } =
+  const { meeting, title, phase, secs, me, others, system, heard, why, progress, error, retry, kept, lines } =
     useRecordingStore();
   useEffect(() => {
     loadKept();
@@ -44,11 +44,11 @@ export function RecordingBar() {
           <button
             className="flex items-center gap-2.5 -m-1 p-1 rounded-lg text-left text-[13px] cursor-pointer hover:bg-fill"
             title={t("rec.showTranscript")}
-            onClick={() => showRecording()}
+            onClick={() => meeting && openMeetingView(meeting)}
           >
             <span className="size-2.5 flex-none animate-pulse rounded-full bg-late"></span>
             <span className="min-w-0 flex-1 truncate font-medium">{meeting?.title || t("wait.meetingUntitled")}</span>
-            {!shown && lines.length ? (
+            {lines.length ? (
               <span className="text-xs text-secondary">{t("rec.lines", { n: lines.length })}</span>
             ) : null}
             <span className="tabular-nums text-secondary">{clock(secs)}</span>

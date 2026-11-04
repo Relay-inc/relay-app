@@ -3,10 +3,7 @@ import { clockTime } from "../../shared/format";
 import {
   bannerDue,
   prepChatOf,
-  briefingIn,
   meetingNoteName,
-  withBriefing,
-  withEvent,
   meetingDay,
   joinable,
   meetingPrompt,
@@ -123,16 +120,6 @@ export async function meetingNote(meeting: Meeting) {
     hash: string;
   } | null;
   return note && typeof note.text === "string" ? note : null;
-}
-/** The briefing in the meeting's note replaced by `body`, the note read again right before so an edit elsewhere is not
- *  lost outside the section. The note as written, or null when it is gone or has no briefing any more; a note changed
- *  in between throws "changed" (nothing written). */
-export async function saveBriefing(meeting: Meeting, body: string) {
-  const note = await meetingNote(meeting);
-  if (!note || briefingIn(note.text) === null) return null;
-  const text = withEvent(withBriefing(note.text, body), meeting.id);
-  const { hash } = await backend.writeNote(note.path, text, note.hash, false);
-  return { path: note.path, text, hash };
 }
 /** The same for a meeting already in hand: a recording outlives the meeting's place in the list. */
 export async function chatAbout(meeting: Meeting, how: MeetingChat, recording?: Recording) {

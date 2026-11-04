@@ -476,11 +476,11 @@ export function settings(fixture: string) {
       experimental: fixture === "mailexp",
     },
     calendar:
-      fixture === "calendar"
+      fixture === "calendar" || fixture === "calendar-dark"
         ? { on: true, feeds: [{ email: MAIL_ACCOUNT }, { email: MAIL_ACCOUNT_2 }] }
         : { on: false, feeds: [] },
     language: "en",
-    theme: fixture === "dark" || fixture === "plugins-dark" || fixture === "shared-live-dark" ? "dark" : "light",
+    theme: fixture === "dark" || fixture === "calendar-dark" || fixture === "plugins-dark" || fixture === "shared-live-dark" ? "dark" : "light",
     accent: fixture === "graphite" ? "graphite" : "relay",
     terminal: "auto",
     ...(fixture === "icons" ? { sidebar: { layout: "icons" } } : {}),

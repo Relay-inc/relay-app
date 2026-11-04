@@ -15,6 +15,7 @@ import { makeStore } from "../make-store";
 import { toast } from "../navigation/navigation";
 import { meetingLanguage } from "../../domain/calendar/rules";
 import { chatAbout, meetingNote } from "./calendar";
+import { openMeetingView } from "./meeting-view";
 import { useCalendarStore } from "./store";
 
 // Recording a meeting from its card in Waiting for you (src-tauri/src/meeting.rs): the microphone and what the Mac
@@ -26,6 +27,7 @@ type RecordingState = {
   title: string; // what the bar calls it: the meeting's, or for a kept recording after a restart its start time
   phase: "idle" | "recording" | "saving";
   secs: number;
+  startedAt: number; // when it started (epoch ms), for the clock time of a line
   me: number;
   others: number;
   system: boolean; // the Mac's audio is in it
@@ -38,13 +40,13 @@ type RecordingState = {
   lines: LiveLine[]; // what live transcription heard so far, the latest ones
   upto: number; // seconds of the recording it transcribed
   live: boolean; // false once the model stalled: the rest is transcribed after Stop
-  shown: boolean; // open in Today's big pane (from Record, or a click on the bar), until another item is picked
 };
 export const useRecordingStore = makeStore<RecordingState>(() => ({
   meeting: null,
   title: "",
   phase: "idle",
   secs: 0,
+  startedAt: 0,
   me: 0,
   others: 0,
   system: false,
@@ -57,7 +59,6 @@ export const useRecordingStore = makeStore<RecordingState>(() => ({
   lines: [],
   upto: 0,
   live: true,
-  shown: false,
 }));
 const set = (patch: Partial<RecordingState>) => useRecordingStore.setState(patch);
 const rec = () => useRecordingStore.getState();
@@ -70,6 +71,7 @@ export async function startRecording(id: string, fallback?: Meeting) {
     meeting,
     phase: "recording",
     secs: 0,
+    startedAt: Date.now(),
     me: 0,
     others: 0,
     heard: false,
@@ -79,8 +81,8 @@ export async function startRecording(id: string, fallback?: Meeting) {
     lines: [],
     upto: 0,
     live: true,
-    shown: true,
   });
+  openMeetingView(meeting);
   try {
     // the note's language, else Settings'; neither: the recorder listens for it (src-tauri/src/meeting.rs)
     const note = await meetingNote(meeting).catch(() => null);
@@ -124,9 +126,6 @@ export function recordNow() {
     people: [],
   });
 }
-
-/** The recording in Today's big pane: its live transcript, Stop and Cancel. */
-export const showRecording = (shown = true) => set({ shown });
 
 export async function stopRecording() {
   if (rec().phase === "recording") await save(meetingRecordStop);

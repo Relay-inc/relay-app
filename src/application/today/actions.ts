@@ -24,6 +24,7 @@ import { openCard, openPr } from "../navigation/panel";
 import { select, toast } from "../navigation/navigation";
 import { projectLabel } from "../workspace/vault";
 import { joinMeeting, meetingChat } from "../calendar/calendar";
+import { openMeetingView } from "../calendar/meeting-view";
 import { reviewPr } from "../pull-requests/prs";
 import { backgroundAction, typeInto } from "../conversations/actions";
 import { markSeen, newChat } from "../conversations/chats";
@@ -160,7 +161,7 @@ const RUN: {
     hide: ({ subject }) => backgroundAction("hide", subject.session.id),
   },
   meeting: {
-    prep: ({ subject }) => meetingChat(subject.meeting.id, "prep"),
+    prep: ({ subject }) => openMeetingView(subject.meeting),
     join: ({ subject }) => joinMeeting(subject.meeting.join),
     record: ({ subject }) => startRecording(subject.meeting.id),
     makeNote: entry =>

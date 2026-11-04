@@ -52,6 +52,97 @@ const unfold = async name => {
     .click();
   await settle(page);
 };
+// the Meeting view: a meeting's card on Today opens it
+const BRIEFING = [
+  "## Briefing",
+  "### Goal",
+  "Scope van de Indicata auto-simulatie vastleggen voor sprint 24.",
+  "",
+  "### Since last time",
+  "- [x] Thomas deelt de Indicata API-docs",
+  "- [ ] Kristof schat de auto-simulatie in (story points)",
+  "",
+  "### My points",
+  "- [x] Feedback op de sprint 23 demo",
+  "- [x] Hosting migratie: planning en downtime-venster",
+  "- [ ] Beveiligingsaudit: wie neemt het op?",
+  "",
+];
+const meetingBriefing = async (fixture, title, briefed = false) => {
+  await open(page, server.url, { fixture });
+  await waitText(title);
+  if (briefed) {
+    // the standup has a briefing in its note; the clock is NOW, the meeting started 5 minutes before it
+    await page.evaluate(
+      ([brief]) => {
+        const id = `standup@${new Date(window.__harness.now - 5 * 60000).toISOString()}`;
+        window.__harness.meetingNote(
+          id,
+          "Calendar/2026-10-01 Daily standup.md",
+          ["---", "type: Meeting", `event: "${id}"`, "---", "", "# Daily standup", "", ...brief, "## Notes", ""].join("\n"),
+        );
+      },
+      [BRIEFING],
+    );
+  }
+  await click(title);
+  await waitText("Wrap-up");
+  if (briefed) await waitText("Beveiligingsaudit: wie neemt het op?");
+  await page.mouse.move(900, 400);
+};
+// a 1:1 that came in by link (as from Keel), its note typed in, recording, and the transcript coming in
+const meetingLive = async fixture => {
+  await open(page, server.url, { fixture });
+  const start = Math.floor((await page.evaluate(() => window.__harness.now)) / 1000);
+  await page.evaluate(([start, BRIEFING_]) => {
+    const id = `spardex@${start}`;
+    window.__harness.meetingNote(
+      id,
+      "Calendar/2026-10-01 Spardex sync Thomas.md",
+      [
+        "---",
+        "type: Meeting",
+        `event: "${id}"`,
+        "with:",
+        '  - "Thomas Van Hecke"',
+        "created: 2026-10-01",
+        "language: nl",
+        "---",
+        "",
+        "# Spardex sync Thomas",
+        "[[2026-10-01|Thursday October 1st, 2026]]",
+        "",
+        ...BRIEFING_,
+        "## Notes",
+        "- [09:31] Sprint 23 demo: Indicata-koppeling werkt op staging, geen issues",
+        "- [09:33] = Indicata simulator komt in sprint 24, niet 25",
+        "- [09:35] Maxim bouwt de waarde-API los van de rest",
+        "- [09:38] ! Agenda in het kanaal posten zodat Pieter het weet",
+        "- [09:40] ? Wie neemt de beveiligingsaudit op? Thomas checkt met Pieter",
+        '- [09:44] > Me: "Oké, zaterdag de vijftiende dan. Zes tot acht uur?"',
+        "",
+      ].join("\n"),
+    );
+    window.__harness.deepLink(
+      `relay://meeting?do=note&uid=spardex&start=${start}&end=${start + 1800}&title=${encodeURIComponent("Spardex sync Thomas")}&with=${encodeURIComponent("Thomas Van Hecke <thomas@spardex.be>")}`,
+    );
+  }, [start, BRIEFING]);
+  await waitText("Start notes");
+  await click("Record");
+  const said = [
+    [1, "Voor de migratie zou ik zaterdag vroeg doen, dan is er bijna geen verkeer op de configurator."],
+    [1, "Ja, dat lukt. Ik zet het in de planning en laat het Pieter weten."],
+    [0, "Oké, zaterdag de vijftiende dan. Zes tot acht uur?"],
+    [0, "Top. Dan de simulator: welke velden van Indicata hebben we echt nodig?"],
+    [1, "Kenteken, kilometerstand, uitvoering en de restwaarde. De rest kunnen we later toevoegen."],
+    [0, "Dan werk ik die vier velden uit in een ticket."],
+  ].map(([track, text], i) => ({ at: 1020 + i * 14, track, text }));
+  await page.evaluate(lines => window.__harness.recordingTick(1104, 0.35, 0.2, { lines, upto: 1100 }), said);
+  await waitText("Dan werk ik die vier velden", 4000).catch(async e => { await page.screenshot({ path: `${dir}/debug.png` }); throw e; });
+  // the pointer on a turn offers to quote it
+  await page.getByText("Kenteken, kilometerstand").hover();
+  await settle(page);
+};
 const settingsPage = async (tab, sub, fixture = "default") => {
   await page.setViewportSize({ width: 900, height: 700 });
   await open(page, server.url, { path: "/settings.html", fixture });
@@ -1985,6 +2076,22 @@ const VIEWS = {
     await page.locator("section", { hasText: "Daily standup" }).last().getByRole("button", { name: "Record" }).click();
     await page.evaluate(() => window.__harness.recordingTick(754, 0.35, 0.25));
     await waitText("12:34");
+  },
+  // the Meeting view (#363): a meeting from Today with its briefing, one without, and a 1:1 recorded with notes (an
+  // action, a decision, a question, a quote) next to the live transcript, in light and dark
+  "meeting-briefing": async () => meetingBriefing("calendar", "Daily standup", true),
+  "meeting-briefing-empty": async () => meetingBriefing("calendar", "Sprint review Northwind Portal"),
+  "meeting-briefing-empty-dark": async () => meetingBriefing("calendar-dark", "Sprint review Northwind Portal"),
+  "meeting-live": async () => meetingLive("calendar"),
+  "meeting-briefing-dark": async () => meetingBriefing("calendar-dark", "Daily standup", true),
+  "meeting-live-dark": async () => meetingLive("calendar-dark"),
+  // the cursor on the first line of the notes: its time stays out of the text
+  "meeting-live-cursor": async () => {
+    await meetingLive("calendar");
+    await page.locator(".notes-editor .cm-line").first().click({ position: { x: 400, y: 8 } });
+    await page.keyboard.press("Home");
+    await page.mouse.move(10, 10);
+    await settle(page);
   },
   // a recording an earlier failure kept, offered again after a restart; Transcribe, then the hint while it runs
   "recording-kept-offer": async () => {

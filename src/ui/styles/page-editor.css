@@ -271,3 +271,64 @@
   background: color-mix(in srgb, var(--soon) 30%, transparent);
   border-bottom-color: var(--soon);
 }
+
+/* the meeting's notes (ui/features/meeting/NotesEditor.tsx): every line is a row of a time gutter (3.125rem), a marker
+   column (1.125rem) and the text, wrapped lines hang under the text */
+.notes-editor .cm-editor {
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+.notes-editor .cm-line.cm-note {
+  padding: 4px 0 4px 4.25rem;
+  text-indent: -4.25rem;
+}
+.notes-editor .cm-placeholder {
+  color: var(--tertiary);
+}
+.notes-editor .cm-note-prefix {
+  display: inline-flex;
+  align-items: baseline;
+  text-indent: 0;
+  width: 4.25rem;
+}
+.notes-editor .cm-note-time {
+  width: 3.125rem;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--tertiary);
+}
+.notes-editor .cm-note-mark {
+  display: inline-flex;
+  justify-content: center;
+  align-self: center;
+  width: 1.125rem;
+  font-weight: 700;
+}
+.notes-editor .cm-note-mark svg {
+  width: 15px;
+  height: 15px;
+}
+.notes-editor .cm-note-mark .cm-marker-fill {
+  width: 12px;
+  fill: currentColor;
+  stroke: none;
+}
+.notes-editor .cm-marker-action {
+  color: var(--accent-text);
+}
+.notes-editor .cm-marker-decision {
+  color: var(--viz-4);
+}
+.notes-editor .cm-marker-question {
+  color: var(--secondary);
+}
+.notes-editor .cm-quote-who {
+  font-size: 12px;
+  font-weight: 600;
+  margin-right: 8px;
+}
+.notes-editor .cm-quote-text {
+  border-left: 2px solid var(--separator-strong);
+  padding-left: 8px;
+  color: var(--secondary);
+}

@@ -9,6 +9,15 @@ export const ICON_BUTTON =
 export const Caps = ({ children }: { children: ReactNode }) => (
   <span className="text-[11px] font-semibold tracking-[0.06em] uppercase text-tertiary">{children}</span>
 );
+/** A person's initials, from their name or address. */
+export const initials = (name: string) =>
+  name
+    .split(/[\s@.]+/)
+    .filter(Boolean)
+    .map(part => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 /** Minutes as "25 min" or "1.5 h". */
 export const minutes = (n: number) => (n < 60 ? `${n} min` : `${Math.round((n / 60) * 10) / 10} h`);
 

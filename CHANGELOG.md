@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- A meeting has its own view, opened from Today, the recording bar, Cmd-K or a `relay://meeting` link: its briefing, a notes editor that stamps every line with the time (⌘1 marks an action, ⌘2 a decision, ⌘3 a question) saved into the meeting note, the live transcript next to it with a click to quote a line, and a language pick for the transcription (#363).
 - A meeting note remembers which calendar event it belongs to (`event:` in its frontmatter), so renaming the event
   no longer loses its note and briefing (#362).
 

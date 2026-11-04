@@ -120,7 +120,7 @@ settings-shared-vaults (Settings › Machines of a workspace's admin: the worksp
 settings-integration-github, settings-integration-mail, settings-integration-mail-experimental (the switch on),
 settings-integration-calendar, settings-integration-buddy, settings-project-buddy (a project's Buddy project), settings-integration-commonwealth, settings-commonwealth-joined (Commonwealth's page, then the report after Join), settings-agent-access, settings-reminders-access (Reminders' agent access under General), settings-agent-claude (Claude Code's row
 folded open, no extra account), settings-agent-accounts (two accounts, the account picker and auto-switch). Other: onboarding (the starter vault offered), onboarding-own (a vault of one's own), onboarding-setup (Start offers the setup interview or Skip), onboarding-setup-started (the setup conversation sent), dark-waiting,
-dark-conversation, graphite-waiting, sidebar-icons, dark-board, dark-mail, dark-usage. Recording: recording-meeting (the bar in Waiting
+dark-conversation, graphite-waiting, sidebar-icons, dark-board, dark-mail, dark-usage. Meeting view: meeting-briefing, meeting-briefing-empty, meeting-live (a 1:1 recorded, notes with markers next to the transcript) and the two dark ones. Recording: recording-meeting (the bar in Waiting
 for you and the sidebar's row), recording-dictation (dictation in a conversation, the row seen from Reminders).
 
 1440x900 at device scale 2, page clock fixed to `NOW`, reduced motion, animations disabled, caret hidden. Navigation

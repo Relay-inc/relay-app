@@ -5,8 +5,6 @@ import { entries as deriveEntries, queueOf, KINDS } from "../../domain/today/kin
 import { DAY, startOfDay } from "../../domain/today/kinds/common";
 import type { Entry } from "../../domain/today/kinds/types";
 import { todayIso } from "../../domain/reminders/rules";
-import { WAIT } from "../../domain/navigation/views";
-import { select } from "../navigation/navigation";
 import type { Reminder } from "../../domain/reminders/types";
 import type { PR } from "../../domain/pull-requests/types";
 import { settings } from "../settings/settings";
@@ -17,7 +15,7 @@ import { contextTint } from "../navigation/sidebar";
 import { contexts, project as projectOf, projectLabel, loadSnapshot } from "../workspace/vault";
 import { useWorkspaceStore } from "../workspace/store";
 import { useCalendarStore } from "../calendar/store";
-import { showRecording } from "../calendar/recording";
+import { meetingById, openMeetingView } from "../calendar/meeting-view";
 import { loadMeetings } from "../calendar/calendar";
 import { loadPrs } from "../pull-requests/prs";
 import { usePullRequestsStore } from "../pull-requests/store";
@@ -269,19 +267,12 @@ export function openTicketOf(pr: PR) {
   const tracker = provider(link.provider);
   if (board && tracker) openCard(tracker, board.ref, link.card);
 }
-/** A meeting clicked in the day's track or the queue: its prep before it, its note after it. When the context filter
- *  hides that item, Today shows all again. False when the meeting has neither (running, or its note was skipped). */
+/** A meeting clicked in the day's track or the queue, in Cmd-K or the sidebar: its Meeting view. False for one the
+ *  calendar no longer holds. */
 export function openMeeting(meetingId: string) {
-  const item = entries().find(entry => entry.subject.type === "meeting" && entry.subject.meeting.id === meetingId);
-  if (!item) return false;
-  if (!inContext(useTodayStore.getState().context, projectOf(item.project)?.context)) setContext("");
-  selectEntry(item.id);
-  return true;
-}
-/** Cmd-K picked a meeting: Today, with its prep or note open when it has one. */
-export async function openFoundMeeting(meetingId: string) {
-  await select(WAIT);
-  openMeeting(meetingId);
+  const meeting = meetingById(meetingId);
+  if (meeting) openMeetingView(meeting);
+  return !!meeting;
 }
 /** The Today item a review covers (a group's id is its item's id). */
 export function reviewItemsOf(id: string): Entry[] {
@@ -304,7 +295,6 @@ export function focusEntry(id: string) {
   selectEntry(id);
 }
 export function selectEntry(id: string) {
-  showRecording(false); // another item takes the big pane from a recording
   useTodayStore.setState(draft => {
     draft.selected = id;
   });
