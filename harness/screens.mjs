@@ -1859,6 +1859,29 @@ const VIEWS = {
     await waitText("Stand van zaken");
     await settle(page);
   },
+  // the Pages tab under a project: its folder, then below "linked here" the notes that point at it (about:, context:,
+  // with:) as Meetings, Threads and People that unfold to the newest four, the same notes nowhere else (K1)
+  "pages-virtual-groups": async (fixture = "linked") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText("linked here");
+    await page.locator('[data-linked-group="meetings"]').click();
+    await waitText("Show all 6");
+    await page.getByText("Show all 6").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  "pages-virtual-groups-dark": async () => VIEWS["pages-virtual-groups"]("linked-dark"),
+  // a project's page with "From links" under its body: meetings, documents, people, open reminders, conversations (K3)
+  "project-auto-sections": async (fixture = "linked") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText("From links");
+    await page.locator("[data-from-links]").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  "project-auto-sections-dark": async () => VIEWS["project-auto-sections"]("linked-dark"),
   // a page's history beside it (ticket 10): three sessions, who and when, what made them, lines added and removed
   "page-history": async () => {
     await VIEWS["page-view"]();

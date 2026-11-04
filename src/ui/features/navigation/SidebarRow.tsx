@@ -16,6 +16,7 @@ type Props = Omit<ComponentProps<"div">, "className"> & {
   name: string;
   icon?: string; // a named icon, or `svg`: a provider's own glyph
   svg?: string;
+  lead?: ReactNode; // a glyph of its own in the icon's place (a meeting's stage)
   box?: string; // the grid `svg` is drawn on
   img?: string | null; // a project's icon: an image, else an emoji, else the folder
   emoji?: string;
@@ -70,6 +71,7 @@ export function SidebarRow({
   name,
   icon = "",
   svg = "",
+  lead: own,
   box = "0 0 16 16",
   img = null,
   emoji = "",
@@ -137,7 +139,8 @@ export function SidebarRow({
 
   const glyphClass = `glyph ${kind === "conv" ? (indent ? "size-3.25" : "size-3.75") : indent ? "size-3.5" : "size-4"} flex-none ${glyphColor}`;
   let lead: ReactNode = glyph(glyphClass);
-  if (kind === "fold") lead = null;
+  if (own) lead = <span className="size-4 flex-none grid place-items-center text-secondary">{own}</span>;
+  else if (kind === "fold") lead = null;
   else if (kind === "proj") {
     if (isImg(img)) lead = <ProjectImg url={img} className="size-4 flex-none object-contain rounded-xs" />;
     else if (emoji) lead = <span className="w-4 flex-none text-center text-sm leading-none">{emoji}</span>;

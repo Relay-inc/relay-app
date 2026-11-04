@@ -301,6 +301,39 @@ const focusedPlaceholder = page =>
 
 // ---------- the scenarios
 const SCENARIOS = {
+  // the Pages tab's virtual groups (#367): a project's linked notes, Show all, a click opens the note at its own place,
+  // and a flat project (its note alone) unfolds to its groups too
+  async linked(s) {
+    await s.load({ fixture: "linked" });
+    const { page } = s;
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    s.check("linked here shows", await waitText(page, "linked here"));
+    const group = page.locator('[data-linked-group="meetings"]');
+    s.check("the group counts 6 meetings", (await group.textContent())?.includes("6") ?? false);
+    await group.click();
+    const rows = page.locator('[data-linked] [data-page^="Calendar/Meetings/"]');
+    s.check("the newest 4 show first", (await rows.count()) === 4);
+    await page.getByText("Show all 6").click();
+    s.check("Show all lists all 6", (await rows.count()) === 6);
+    s.check(
+      "another project's meeting is not among them",
+      (await page.locator('[data-page*="Atlas Logistics sync"]').count()) === 0,
+    );
+    await rows.first().click();
+    await page.locator("[data-breadcrumb]").waitFor();
+    s.check(
+      "the note opens at its own place",
+      (await page.locator("[data-breadcrumb]").textContent()) === "CalendarMeetings2026",
+    );
+    // a flat project: no folder, only its note
+    await page.locator('[data-project="Delmas Bakery"]').click();
+    s.check("a flat project unfolds to its groups", await waitText(page, "linked here"));
+    const flat = page.locator(
+      '[data-linked="Contexts/Agency/Projects/Delmas Bakery.md"] [data-linked-group="meetings"]',
+    );
+    s.check("with its 2 meetings", (await flat.textContent())?.includes("2") ?? false);
+  },
   async send(s) {
     await s.load(); // a first load reads the fixture keys
     await s.load({ sel: s.keys.switchTo });
@@ -1466,7 +1499,9 @@ const SCENARIOS = {
     // the day's meetings are blocks in the strip, the running or next one is the card above the queue
     const block = title =>
       visible(page.locator('section[aria-label="Day"]').getByRole("button", { name: title, exact: true })).first();
-    await block("Sprint review Northwind Portal").waitFor({ timeout: 4000 }).catch(() => {});
+    await block("Sprint review Northwind Portal")
+      .waitFor({ timeout: 4000 })
+      .catch(() => {});
     s.check("the day strip has the meetings", (await block("Sprint review Northwind Portal").count()) === 1);
     s.check(
       "every meeting of the day, the one an hour ago and the one in 90 minutes too",
@@ -1555,10 +1590,15 @@ const SCENARIOS = {
   async calendarNoClaude(s) {
     await s.load({ fixture: "calendar" });
     const { page } = s;
-    await page.locator('section[aria-label="Day"]').getByRole("button", { name: "Sprint review Northwind Portal", exact: true }).waitFor();
+    await page
+      .locator('section[aria-label="Day"]')
+      .getByRole("button", { name: "Sprint review Northwind Portal", exact: true })
+      .waitFor();
     await click(
       visible(
-        page.locator('section[aria-label="Day"]').getByRole("button", { name: "Sprint review Northwind Portal", exact: true }),
+        page
+          .locator('section[aria-label="Day"]')
+          .getByRole("button", { name: "Sprint review Northwind Portal", exact: true }),
       ).first(),
       400,
     );

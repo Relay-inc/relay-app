@@ -152,6 +152,17 @@ const solid = { fill: "currentColor", stroke: "none" };
 const EXTRA: Record<string, Icon> = {
   // unread: the envelope with a solid dot in its corner
   unread: [...Mail01Icon.map(own), ["circle", { cx: "19.5", cy: "5", r: "3.2", ...solid }]],
+  // a folder drawn dashed with a link in it: the group of notes that point at a project, which live elsewhere
+  folderLinked: [
+    [
+      "path",
+      {
+        d: "M3.75 6.75a1.5 1.5 0 0 1 1.5-1.5h4.5l2.25 2.25h6.75a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H5.25a1.5 1.5 0 0 1-1.5-1.5z",
+        strokeDasharray: "2.4 2.4",
+      },
+    ],
+    ["path", { d: "M9.9 14.4a1.95 1.95 0 0 0 2.7 0l1.5-1.5a1.95 1.95 0 0 0-2.7-2.7l-.45.45" }],
+  ],
   stop: [["rect", { x: "6", y: "6", width: "12", height: "12", rx: "2", ...solid }]],
 };
 

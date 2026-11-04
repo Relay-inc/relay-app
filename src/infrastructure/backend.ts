@@ -55,6 +55,7 @@ import type { Mail, MailBody } from "../domain/mail/types";
 import type { Meeting, Meetings } from "../domain/calendar/types";
 import type { PrDetail, PRs } from "../domain/pull-requests/types";
 import type { NotesGraph, Touch } from "../domain/graph/types";
+import type { LinkedNote } from "../domain/workspace/linked";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
 import type { OrchEvent, Worker } from "../domain/orchestrator/types";
 import type { PrStatus, Ticket } from "../domain/pipeline/types";
@@ -479,6 +480,8 @@ export const githubStatus = () => invoke<string>("github_status");
 
 // ---------- the Pages graph and Recent
 export const notesGraph = (folder: string) => invoke<NotesGraph>("notes_graph", { folder });
+/** The notes of a workspace that point at another through `about:`, `context:` or `with:`. */
+export const notesLinked = (folder: string) => invoke<LinkedNote[]>("notes_linked", { folder });
 export const noteTouches = (days: number) => invoke<Touch[]>("note_touches", { days });
 
 // ---------- mail
