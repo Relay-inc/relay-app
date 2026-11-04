@@ -7,6 +7,7 @@ import {
   isTerminal,
   boardKey,
 } from "../domain/navigation/keys";
+import { finishPendingPreps } from "./calendar/prep";
 import { WAIT, PRS, MAIL, BRAIN, isView, pluginIdOf } from "../domain/navigation/views";
 import { shownPlugins } from "../domain/plugins/rules";
 import type { Settings } from "../domain/settings/types";
@@ -107,6 +108,7 @@ export async function boot() {
   listenToBackend();
   await loadSettingsAndVault();
   await adoptEarlierConversations();
+  finishPendingPreps(); // a prep the app was closed on: its snapshot goes back into the briefing
   await loadWorkers();
   await loadRetries();
   loadPhoneShared();

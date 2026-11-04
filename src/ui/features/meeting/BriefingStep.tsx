@@ -2,12 +2,7 @@ import { useEffect, useState } from "react";
 import { briefingIn, prepChatOf, joinable } from "../../../domain/calendar/rules";
 import type { Meeting } from "../../../domain/calendar/types";
 import { chatAbout, joinMeeting, meetingChat, meetingProjectOf, timeOf } from "../../../application/calendar/calendar";
-import {
-  finishPrep,
-  loadMeetingNote,
-  saveBriefing,
-  toggleBriefingTask,
-} from "../../../application/calendar/meeting-view";
+import { loadMeetingNote, saveBriefing, toggleBriefingTask } from "../../../application/calendar/meeting-view";
 import { startRecording, useRecordingStore } from "../../../application/calendar/recording";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useWorkspaceStore } from "../../../application/workspace/store";
@@ -66,11 +61,6 @@ export function BriefingStep({
   useEffect(() => {
     if (progress) void loadMeetingNote(meeting, true);
   }, [meeting, progress]);
-  // a prep that has finished: what the briefing held of mine comes back into the new one
-  const busyPrep = useConversationsStore(s => (prep ? s.status[prep] === "busy" : false));
-  useEffect(() => {
-    if (prep && !busyPrep) void finishPrep(meeting);
-  }, [meeting, prep, busyPrep]);
   const text = note ? briefingIn(note.text) : null;
   const shaped = text ? parseBriefing(text) : null;
   const [editing, setEditing] = useState<string | null>(null);

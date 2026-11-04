@@ -1,3 +1,4 @@
+import type { PrepRun } from "../calendar/briefing.ts";
 import type { Hunk } from "../agents/types";
 
 // The conversations: the app's own (with their messages, state and drafts), the terminal sessions next to them, and
@@ -78,6 +79,7 @@ export type Chat = {
   ask?: string[]; // the projects a Cmd-K question named: offered once, after it started
   orch?: true; // a worker the orchestrator started
   meeting?: string; // the meeting (Meeting.id) this conversation prepared
+  prep?: PrepRun; // what of the old briefing a prep keeps (its points, ticked steps), until it has been merged back
   pr?: string; // the PR (its url) this conversation reviews, listed in that PR's detail
   answers?: string; // a second opinion: the review conversation it answers
   window?: number; // the context window its last turn reported, for the meter once its transcript is read again

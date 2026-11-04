@@ -13,6 +13,7 @@ import {
   type MeetingChat,
 } from "../../domain/calendar/rules";
 import type { Meeting } from "../../domain/calendar/types";
+import { keepFrom } from "../../domain/calendar/briefing";
 import { calendarOn as isCalendarOn } from "../../domain/settings/types";
 import { voiceOf } from "../../domain/settings/voice";
 import { WAIT } from "../../domain/navigation/views";
@@ -124,16 +125,19 @@ export async function meetingNote(meeting: Meeting) {
   return note && typeof note.text === "string" ? note : null;
 }
 /** The same for a meeting already in hand: a recording outlives the meeting's place in the list. */
-// what a briefing held when its prep was asked: the user's own parts of it come back after (mergePrep, finishPrep)
-const prepBefore = new Map<string, string>();
-/** The briefing as it was when the last prep was asked, once; undefined when none is waiting. */
-export function takePrepBefore(id: string) {
-  const before = prepBefore.get(id);
-  prepBefore.delete(id);
-  return before;
-}
 export async function chatAbout(meeting: Meeting, how: MeetingChat) {
   if (useAgentsStore.getState().loaded && !agentOf("claude")?.on) return toast(t("cal.needClaude"));
+  // the briefing's fixed shape in the meeting's language; what the note already holds goes along, so a re-run keeps it,
+  // and what of it is the user's (points, ticked steps) stays with the conversation until it is merged back (calendar/prep)
+  let prep;
+  let keep = null;
+  if (how === "prep") {
+    const note = await meetingNote(meeting).catch(() => null);
+    const existing = note ? (briefingIn(note.text) ?? "") : "";
+    const code = meetingLanguage(note?.text ?? null, voiceOf(settings().voice).language) ?? "nl";
+    prep = { language: new Intl.DisplayNames(["nl"], { type: "language" }).of(code) ?? code, code, existing };
+    keep = keepFrom(existing, { id: meeting.id, title: meeting.title, start: meeting.start });
+  }
   // under the meeting's project, so its prep and its note sit with the project's other work
   const key = startChat(meetingProjectOf(meeting), {
     provider: "claude",
@@ -141,16 +145,8 @@ export async function chatAbout(meeting: Meeting, how: MeetingChat) {
     note: t("note.meetingStarted", { title: meeting.title }),
     fromMail: true,
     meeting: how === "prep" ? meeting.id : undefined,
+    prep: keep ?? undefined,
   });
   await select(key);
-  // the briefing's fixed shape in the meeting's language; what the note already holds goes along, so a re-run keeps it
-  let prep;
-  if (how === "prep") {
-    const note = await meetingNote(meeting).catch(() => null);
-    const existing = note ? (briefingIn(note.text) ?? "") : "";
-    const code = meetingLanguage(note?.text ?? null, voiceOf(settings().voice).language) ?? "nl";
-    prepBefore.set(meeting.id, existing);
-    prep = { language: new Intl.DisplayNames(["nl"], { type: "language" }).of(code) ?? code, code, existing };
-  }
   sendMsg(meetingPrompt(meeting, how, timeOf, undefined, prep));
 }

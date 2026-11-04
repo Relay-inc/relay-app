@@ -219,47 +219,66 @@ export function removePoint(briefing: string, n: number) {
   return lines.join("\n");
 }
 
-/** A new briefing from a re-run, with what the user owns kept: their My points as they are, and the steps of Since last
- *  time they ticked still ticked (found by their text). `old` and `fresh` are the section's text. */
-export function mergePrep(old: string, fresh: string) {
-  const before = parseBriefing(old);
-  if (!before) return fresh;
-  const kept = before.points;
-  const ticked = new Set(before.since.steps.filter(s => s.done).map(s => s.text.toLowerCase()));
-  const lines = fresh.split("\n");
+/** What a prep is asked to keep: the meeting it is for (enough to find its note again) and what is the user's in the
+ *  briefing it replaces, their points and the steps they ticked. Kept with the prep's conversation until it has been
+ *  merged back. */
+export type PrepRun = {
+  meeting: { id: string; title: string; start: string };
+  points: { text: string; done: boolean }[];
+  ticked: string[];
+};
+/** What of a briefing is the user's, for a prep to keep; null when the briefing has none of it (or no shape). */
+export function keepFrom(briefing: string, meeting: PrepRun["meeting"]): PrepRun | null {
+  const shaped = parseBriefing(briefing);
+  if (!shaped) return null;
+  const points = shaped.points.filter(p => p.text.trim()).map(p => ({ text: p.text, done: p.done }));
+  const ticked = shaped.since.steps.filter(s => s.done).map(s => s.text);
+  return points.length || ticked.length ? { meeting, points, ticked } : null;
+}
+
+/** The briefing a prep wrote, with what the user owned put back: their points as they were (the new empty list is
+ *  replaced) and the steps of Since last time they ticked still ticked, found by their text. A text that is not a shaped
+ *  briefing is left alone. Running it again on its own result changes nothing. */
+export function mergePrep(keep: Pick<PrepRun, "points" | "ticked">, fresh: string) {
+  if (!parseBriefing(fresh)) return fresh;
+  const ticked = new Set(keep.ticked.map(text => text.toLowerCase()));
+  const own = keep.points.map(p => `- [${p.done ? "x" : " "}] ${p.text}`);
   let section = "";
   let hasPoints = false;
-  const merged: string[] = [];
   let skipping = false;
-  for (const line of lines) {
+  const merged: string[] = [];
+  for (const line of fresh.split("\n")) {
     const heading = /^###\s+(.*?)\s*#*$/.exec(line);
     if (heading) {
       section = heading[1];
       skipping = false;
       if (isPointsHeading(section)) {
         hasPoints = true;
-        merged.push(line, ...kept.map(p => `- [${p.done ? "x" : " "}] ${p.text}`));
-        skipping = true; // the new, empty list is replaced by the user's
+        skipping = own.length > 0; // the new, empty list is replaced by the user's
+        merged.push(line, ...own);
         continue;
       }
     }
     if (skipping) {
-      if (/^\s*[-*] /.test(line) || !line.trim()) {
-        if (!line.trim()) merged.push(line);
+      if (/^\s*[-*] /.test(line)) continue;
+      if (!line.trim()) {
+        merged.push(line);
         continue;
       }
       skipping = false;
     }
     const task = /^(\s*[-*+] \[)([ xX])(\] )(.*)$/.exec(line);
-    if (task && partOf(section) === "since" && task[2] === " ") {
-      const text = task[4].replace(DONE, "").trim().toLowerCase();
-      merged.push(ticked.has(text) ? `${task[1]}x${task[3]}${task[4]}` : line);
-      continue;
-    }
-    merged.push(line);
+    if (
+      task &&
+      partOf(section) === "since" &&
+      task[2] === " " &&
+      ticked.has(task[4].replace(DONE, "").trim().toLowerCase())
+    )
+      merged.push(`${task[1]}x${task[3]}${task[4]}`);
+    else merged.push(line);
   }
   const out = merged.join("\n");
-  if (hasPoints || !kept.length) return out;
-  const code = Object.entries(WORDS).find(([, w]) => before && fresh.includes(`### ${w.heading.goal}`))?.[0];
-  return `${out.replace(/\n*$/, "\n\n")}### ${wordsFor(code).heading.points}\n${kept.map(p => `- [${p.done ? "x" : " "}] ${p.text}`).join("\n")}`;
+  if (hasPoints || !own.length) return out;
+  const code = Object.entries(WORDS).find(([, w]) => fresh.includes(`### ${w.heading.goal}`))?.[0];
+  return `${out.replace(/\n*$/, "\n\n")}### ${wordsFor(code).heading.points}\n${own.join("\n")}`;
 }

@@ -5,6 +5,7 @@ import {
   addPoint,
   editPoint,
   isPointsHeading,
+  keepFrom,
   mergePrep,
   parseBriefing,
   partOf,
@@ -118,22 +119,40 @@ test("ticking works through the same task numbers the blocks show", () => {
   assert.equal(parseBriefing(ticked)!.since.steps[1].done, false);
 });
 
-test("a re-run keeps My points and the steps that were ticked", () => {
-  const fresh = [
-    "### Doel",
-    "Nieuw doel.",
-    "### Mensen",
-    "- Thomas · laatst ontmoet 2026-11-04",
-    "### Sinds de vorige keer",
-    "van [[2026-11-04 Spardex sync]]",
-    "- [ ] Thomas deelt de Indicata API-docs",
-    "- [ ] Nieuwe stap",
-    "### Threads",
-    "- Mail · 2026-11-05",
-    "### Mijn punten",
-    "- [ ] ",
-  ].join("\n");
-  const out = mergePrep(nl, fresh);
+const meeting = { id: "abc@100", title: "Spardex sync", start: "2026-11-04T09:30:00+01:00" };
+const fresh = [
+  "### Doel",
+  "Nieuw doel.",
+  "### Mensen",
+  "- Thomas · laatst ontmoet 2026-11-04",
+  "### Sinds de vorige keer",
+  "van [[2026-11-04 Spardex sync]]",
+  "- [ ] Thomas deelt de Indicata API-docs",
+  "- [ ] Nieuwe stap",
+  "### Threads",
+  "- Mail · 2026-11-05",
+  "### Mijn punten",
+  "- [ ] ",
+].join("\n");
+
+test("what is the user's in the old briefing is kept for the prep, nothing when there is none", () => {
+  const keep = keepFrom(nl, meeting)!;
+  assert.deepEqual(keep.points, [
+    { text: "Hosting migratie", done: false },
+    { text: "Beveiligingsaudit", done: true },
+  ]);
+  assert.deepEqual(keep.ticked, ["Thomas deelt de Indicata API-docs"]);
+  assert.deepEqual(keep.meeting, meeting);
+  assert.equal(keepFrom("free text\n- [ ] a\n", meeting), null, "no shape: nothing to keep");
+  assert.equal(
+    keepFrom(fresh.replace("### Mijn punten\n- [ ] ", "### Mijn punten"), meeting),
+    null,
+    "nothing of the user's",
+  );
+});
+
+test("a prep that dropped the user's points and ticks gets them back", () => {
+  const out = mergePrep(keepFrom(nl, meeting)!, fresh);
   assert.ok(out.includes("Nieuw doel."));
   assert.ok(out.includes("- [x] Thomas deelt de Indicata API-docs"), "ticked stays ticked");
   assert.ok(out.includes("- [ ] Nieuwe stap"));
@@ -146,10 +165,19 @@ test("a re-run keeps My points and the steps that were ticked", () => {
     ],
   );
   assert.equal(out.includes("- [ ] \n"), false, "the empty list of the new one is gone");
-  // a run without the heading gets the old points added
+  // a run without the heading gets the points added, in the language of the briefing
   const noPoints = fresh.slice(0, fresh.indexOf("### Mijn punten")).trimEnd();
-  assert.equal(parseBriefing(mergePrep(nl, noPoints))!.points.length, 2);
-  // nothing before: the new one as it is
-  assert.equal(mergePrep("", fresh), fresh);
-  assert.equal(mergePrep("free text\n", fresh), fresh);
+  assert.equal(parseBriefing(mergePrep(keepFrom(nl, meeting)!, noPoints))!.points.length, 2);
+  // a text that is no shaped briefing is left alone
+  assert.equal(mergePrep(keepFrom(nl, meeting)!, "free text\n"), "free text\n");
+});
+
+test("merging twice is the same as once, so a trigger that fires again changes nothing", () => {
+  const keep = keepFrom(nl, meeting)!;
+  const once = mergePrep(keep, fresh);
+  assert.equal(mergePrep(keep, once), once);
+  // and a prep that kept them itself is not touched
+  assert.equal(mergePrep(keep, nl), nl);
+  // what the user changed since the snapshot is not undone for items the prep did keep
+  assert.equal(parseBriefing(mergePrep(keep, once))!.points.length, 2);
 });
