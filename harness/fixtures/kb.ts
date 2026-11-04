@@ -256,3 +256,51 @@ export function rail(path: string, textOf: (path: string) => string | undefined)
   );
   return { backlinks, mentions, related };
 }
+
+// ---------- the Changes feed (K6, issue 371): fixture kb-changes
+/** A note without `type:`: what Fix properties is for. */
+export const untyped = { path: `${docs}/Pricing sketch.md`, text: "# Pricing sketch\n\nPer-plate pricing for the sandbox, to discuss on Friday.\n" };
+const billing = "Contexts/Agency/Projects/Beacon Billing/Documents/Billing Spec.md";
+const findings = `${docs}/Rate limit findings.md`;
+const decision = "- 2026-09-30 · Dry run first, live after [[Sofie Claes]] confirms the rate rule";
+/** What a capture run edits: two notes (the Billing Spec's decision, the findings' status), and what it answered. */
+export const capture = {
+  subject: "Pricing check",
+  reason: "Decision: dry run first, live after Sofie confirms the rate rule",
+  files: [
+    { path: billing, before: texts[billing], after: `${texts[billing]}\n## Decisions\n${decision}\n` },
+    {
+      path: findings,
+      before: texts[findings],
+      after: texts[findings].replace(
+        "Go live in sprint 24.",
+        "Dry run in sprint 24 against the sandbox.\nLive once Sofie confirms the rate rule.",
+      ),
+    },
+  ],
+};
+const portal = "Contexts/Agency/Projects/Northwind Portal/Documents/Portal Architecture.md";
+const sync = `${meetingDir}/2026-09-30 Portal sync.md`;
+/** The feed K6 shows: the capture run open, one more open entry, two kept ones. The notes hold the text after them. */
+export function seedChanges() {
+  const entry = (id: number, source: string, subject: string, reason: string, hours: number, files: typeof capture.files, state = "open") => ({
+    id: `${NOW - hours * HOUR}-${id}`,
+    at: NOW - hours * HOUR,
+    source,
+    subject,
+    reason,
+    files: files.map(f => ({ ...f, state })),
+  });
+  const filed = {
+    path: portal,
+    before: texts[portal],
+    after: `${texts[portal]}\n## Follow-ups\n- Retest the rate limit from the new outbound IP.\n`,
+  };
+  const wrapped = { path: sync, before: texts[sync], after: `${texts[sync]}\nNext: retest on Friday.\n` };
+  return [
+    entry(1, "capture", capture.subject, capture.reason, 0.2, capture.files),
+    entry(2, "capture", "Hosting migration", "Filed 1 follow-up from the migration chat", 1, [filed]),
+    entry(3, "action:summarise", "Portal sync", "Added a one-line next step", 20, [wrapped], "kept"),
+    entry(4, "capture", "Start the security audit", "Decision: audit starts in sprint 25", 60, [{ path: portal, before: texts[portal], after: texts[portal] }], "kept"),
+  ];
+}

@@ -1231,6 +1231,30 @@ const VIEWS = {
     await settle(page, 400);
   },
   "page-rail-dark": async () => VIEWS["page-rail"]("kb-dark"),
+  // K6 / K12 (issue 371): the Changes feed beside a page, the capture run open with its two diffs
+  "changes-feed": async (fixture = "kb-changes") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Beacon Billing"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Beacon Billing/Documents"]').click();
+    await page.locator('[data-page$="/Billing Spec.md"]').first().click();
+    await waitText("Billing Spec");
+    await page.getByRole("button", { name: /^Changes, \d+ to review/ }).click();
+    await waitText("Pricing check");
+    await settle(page, 400);
+  },
+  "changes-feed-dark": async () => VIEWS["changes-feed"]("kb-changes-dark"),
+  // Ask Claude as a menu: the page actions
+  "page-actions-menu": async (fixture = "kb-changes") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Beacon Billing"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Beacon Billing/Documents"]').click();
+    await page.locator('[data-page$="/Billing Spec.md"]').first().click();
+    await waitText("Billing Spec");
+    await page.getByRole("button", { name: "Ask Claude" }).click();
+    await settle(page, 300);
+  },
   // New ▸ from template on a project: the templates of the vault under the folder's own items
   "pages-new-from-template": async (fixture = "kb") => {
     await open(page, server.url, { fixture });
@@ -2213,6 +2237,7 @@ const VIEWS = {
     await VIEWS["pages-shared"]();
     await waitText("Stand van zaken");
     await page.getByRole("button", { name: "Ask Claude" }).click();
+    await page.getByRole("button", { name: "Ask about this page" }).click(); // Ask Claude is a menu since issue 371
     await waitText("New conversation about Team Handbook");
     await settle(page);
   },

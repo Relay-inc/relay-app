@@ -6,6 +6,7 @@ import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types"
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { Related } from "../domain/related/rules";
 import type { CommentThread, Member } from "../domain/workspace/comments";
+import type { Change, Merge } from "../domain/workspace/changes";
 import type { TidyMove, TidyPlan } from "../domain/workspace/tidy";
 import type { GitRepo } from "../domain/git/git";
 import type { CommitFile, GitCommit } from "../domain/git/graph";
@@ -253,7 +254,23 @@ export const favicons = (projects: { name: string; aliases: string[] }[]) =>
 export const findIconSites = (projects: { name: string; context: string; summary: string }[]) =>
   invoke<Record<string, string>>("find_icon_sites", { projects });
 /** Write what a closed conversation leaves for the vault, straight in (lib.rs capture_vault). */
-export const captureVault = (key: string) => invoke<void>("capture_vault", { key });
+export const captureVault = (key: string, title: string) => invoke<void>("capture_vault", { key, title });
+/** Claude does one job on a note in the background (`action`: summarise, next-steps, link, properties, split; a
+ *  `selection` limits it to that text). What it wrote lands in the Changes feed (lib.rs page_action). */
+export const pageAction = (workspace: string, path: string, action: string, selection: string | null) =>
+  invoke<void>("page_action", { workspace, path, action, selection });
+/** The Changes feed of a workspace: what Relay-run Claude jobs of this Mac wrote, newest first (changes.rs). */
+export const changesList = (workspace: string) => invoke<Change[]>("changes_list", { workspace });
+/** A note of a change (every open one without `path`) marked as read. */
+export const changeKeep = (workspace: string, id: string, path: string | null) =>
+  invoke<void>("change_keep", { workspace, id, path });
+/** Undo one note of a change. `merge` false: it is back as it was. Else the note changed since: the three texts, nothing written. */
+export const changeUndo = (workspace: string, id: string, path: string) =>
+  invoke<{ merge: false } | ({ merge: true } & Merge)>("change_undo", { workspace, id, path });
+/** Write a merge, only while the note still is `expect` (null: still missing). */
+export const changeResolve = (workspace: string, id: string, path: string, expect: string | null, text: string) =>
+  invoke<void>("change_resolve", { workspace, id, path, expect, text });
+export const onChangesChanged = (handler: () => void) => listen("changes-changed", () => handler());
 export const projectRepos = () => invoke<Record<string, string[]>>("project_repos");
 export const setProjectRepos = (project: string, repos: string[]) => invoke("set_project_repos", { project, repos });
 /** What moving or copying a project to another workspace takes along (src-tauri migrate.rs), or, without `dry`, done. */

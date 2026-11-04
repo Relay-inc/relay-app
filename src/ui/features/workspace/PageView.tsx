@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from "react";
+import { SidebarMenu, type MenuItem } from "../navigation/SidebarMenu";
+import { useDismiss } from "../../hooks/useDismiss";
+import { loadChanges, runPageAction, setChangesOpen, useChangesStore } from "../../../application/navigation/changes";
+import { openCount } from "../../../domain/workspace/changes";
 import { Toast } from "../conversations/Toast";
 import {
+  addToConversation,
   askAboutPage,
+  copyPagePath,
+  revealPage,
   followPageLink,
   loadPage,
   pagePath,
@@ -41,6 +48,7 @@ import { loadLinked } from "../../../application/navigation/linked";
 import { loadRail, railNote, railOpen, setRail, useRailStore } from "../../../application/navigation/rail";
 import { aboutOf } from "../../../domain/workspace/rail";
 import { Rail } from "./Rail";
+import { ChangesPanel } from "./ChangesPanel";
 import { toggleFavourite, useFavouritesStore } from "../../../application/navigation/favourites";
 
 const EDIT_MAX = 1_000_000; // characters: a bigger note is shown read-only
@@ -67,6 +75,13 @@ export function PageView({ target, className }: { target: string; className: str
   const folder = railNote(target).folder;
   useRailStore(s => s.closed); // the rail's fold follows
   const shown = railOpen(folder);
+  // the Changes feed of the page's workspace: its count on the pill, the panel when open
+  useEffect(() => {
+    void loadChanges(folder);
+  }, [folder, hash]);
+  const feed = useChangesStore(s => s.by[folder]);
+  const feedOpen = useChangesStore(s => s.open);
+  const toReview = feed ? openCount(feed) : 0;
   const pinned = useFavouritesStore(s => (s.by[folder] ?? []).includes(railNote(target).path));
   const scroller = useRef<HTMLDivElement>(null);
   const path = pagePath(target) || target;
@@ -79,6 +94,14 @@ export function PageView({ target, className }: { target: string; className: str
   const chats = project ? chatsOf(project.key) : [];
 
   const headRef = useRef<HeadWriter["current"]>(null);
+  // the Ask Claude and More menus, under their buttons
+  const [menu, setMenu] = useState<{ kind: "ask" | "more"; x: number; y: number } | null>(null);
+  const menuElement = useRef<HTMLDivElement>(null);
+  useDismiss(menuElement, !!menu, () => setMenu(null), { inside: el => !!el.closest("[data-menu-button]") });
+  const openMenu = (kind: "ask" | "more") => (e: React.MouseEvent<HTMLButtonElement>) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    setMenu(menu?.kind === kind ? null : { kind, x: kind === "ask" ? box.left : box.right - 180, y: box.bottom + 4 });
+  };
   const [peers, setPeers] = useState<Peer[]>([]); // who else is on a shared document's page
   // what is beside the page (its history or its comments, one at a time), and a version picked in the history (what
   // changed since shows in the page's place); both belong to the page they were opened on
@@ -115,8 +138,31 @@ export function PageView({ target, className }: { target: string; className: str
   const folders = railNote(target).path.split("/").slice(0, -1); // where the note really is, in its workspace
   const about = aboutOf(frontmatterOf(head) ?? "");
 
+  const ACTIONS = ["summarise", "next-steps", "link", "properties", "split"] as const;
+  const menuItems = (): MenuItem[] =>
+    menu?.kind === "more"
+      ? [
+          { id: "addchat", label: t("pages.addToChat"), icon: "talk" },
+          { id: "reveal", label: t("pages.reveal"), icon: "folder" },
+          { id: "copy", label: t("pages.copyPath"), icon: "copy" },
+        ]
+      : [
+          { id: "ask", label: t("page.askAbout"), icon: "talk" },
+          ...(selected ? [{ id: "", label: t("page.actOn"), head: true }] : []),
+          ...ACTIONS.map(a => ({ id: `act:${a}`, label: t(`page.action.${a}`), icon: "wand" })),
+        ];
+  const pick = (id: string) => {
+    setMenu(null);
+    if (id === "ask") void askAboutPage(path);
+    else if (id === "addchat") void addToConversation(railNote(target).path, folder);
+    else if (id === "reveal") void revealPage(path);
+    else if (id === "copy") void copyPagePath(path);
+    else if (id.startsWith("act:"))
+      void runPageAction(folder, railNote(target).path, id.slice(4), commentsApi.current?.selection()?.quote ?? null);
+  };
+
   return (
-    <div className={`${className} flex flex-col min-h-0`}>
+    <div className={`${className} relative flex flex-col min-h-0`}>
       {/* app chrome is not text: no selection in the bar, like a native Mac app */}
       <div className="h-12 flex-none flex items-center gap-2 pl-4 pr-2.5 select-none" data-tauri-drag-region>
         <Icon name="file" className="glyph size-3.75 text-tertiary" />
@@ -143,6 +189,20 @@ export function PageView({ target, className }: { target: string; className: str
             ))}
           </div>
         ) : null}
+        <button
+          className={`h-6.5 flex items-center gap-1.5 px-2.5 rounded-full text-[13px] font-medium ${feedOpen ? "bg-accent-soft text-accent-text" : "border border-separator-strong text-label hover:bg-fill"}`}
+          aria-label={t("changes.pill", { n: toReview })}
+          aria-pressed={feedOpen}
+          onClick={() => setChangesOpen(!feedOpen)}
+        >
+          <Icon name="edit" className="glyph size-3.25" />
+          {t("changes.title")}
+          {toReview ? (
+            <span className="min-w-4 h-4 px-1 grid place-items-center rounded-full bg-accent text-on-accent text-[10.5px] font-semibold">
+              {toReview}
+            </span>
+          ) : null}
+        </button>
         {page?.modified ? (
           <span className="text-xs text-tertiary">{t("page.edited", { ago: agoOf(page.modified, t) })}</span>
         ) : null}
@@ -165,8 +225,11 @@ export function PageView({ target, className }: { target: string; className: str
           <Icon name="talk" className="glyph size-4" />
         </button>
         <button
+          data-menu-button
           className="flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-separator text-[13px] text-label hover:bg-fill"
-          onClick={() => void askAboutPage(path)}
+          aria-haspopup="menu"
+          aria-expanded={menu?.kind === "ask"}
+          onClick={openMenu("ask")}
         >
           <Icon name="wand" className="glyph size-3.5" />
           {t("page.ask")}
@@ -217,6 +280,17 @@ export function PageView({ target, className }: { target: string; className: str
           }}
         >
           <Icon name="columns" className="glyph size-4" />
+        </button>
+        <button
+          data-menu-button
+          className="size-7 grid place-items-center rounded-md text-secondary hover:bg-fill hover:text-label"
+          title={t("page.more")}
+          aria-label={t("page.more")}
+          aria-haspopup="menu"
+          aria-expanded={menu?.kind === "more"}
+          onClick={openMenu("more")}
+        >
+          <Icon name="more" className="glyph size-4" />
         </button>
       </div>
 
@@ -344,6 +418,8 @@ export function PageView({ target, className }: { target: string; className: str
           <Rail target={target} text={page.text} api={commentsApi} scroller={scroller} />
         ) : null}
       </div>
+      {menu ? <SidebarMenu ref={menuElement} x={menu.x} y={menu.y} items={menuItems()} onPick={pick} /> : null}
+      {feedOpen ? <ChangesPanel folder={folder} /> : null}
       {/* the bar ConversationsView shows under a conversation: Undo of a page put in the trash, an error */}
       {toast ? (
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2">

@@ -288,6 +288,17 @@ const click = async (locator, ms = 150) => {
 const byText = (page, text) => page.getByText(text, { exact: true });
 const nav = page => page.getByRole("navigation").first();
 const navHas = async (page, text) => (await visible(nav(page).getByText(text, { exact: true })).count()) > 0;
+// the Beacon Billing spec open in Pages (fixture kb): where the Changes pill is
+const openBilling = async s => {
+  const { page } = s;
+  const billing = "Contexts/Agency/Projects/Beacon Billing/Documents/Billing Spec.md";
+  await click(page.getByRole("tab", { name: /^Pages/ }));
+  await click(page.locator('[data-project="Beacon Billing"]'));
+  await click(page.locator('[data-folder="Contexts/Agency/Projects/Beacon Billing/Documents"]'));
+  await click(page.locator(`[data-page="${billing}"]`).first());
+  await waitText(page, "Billing Spec");
+  return { billing, findings: "Contexts/Agency/Projects/Northwind Portal/Documents/Rate limit findings.md" };
+};
 const button = (page, name) => page.getByRole("button", { name, exact: true });
 /** a visible element whose whole text is `text` (a mail row's subject, not a longer subject that contains it) */
 const listed = async (page, text) => (await visible(byText(page, text)).count()) > 0;
@@ -2168,6 +2179,87 @@ const SCENARIOS = {
     s.check("it says to switch workspace", await waitText(page, "Switch workspace to add this note", 3000));
     s.check("no chip is added", (await chips()) === 0);
     s.check("nothing is attached for the next message", (await s.calls("send")).length === 0);
+  },
+
+  // K6, issue 371: the feed shows a capture run as one entry with both diffs and its reason; Undo puts one note back
+  // and leaves the other
+  async changesFeed(s) {
+    await s.load({ fixture: "kb-changes" });
+    const { page } = s;
+    const { billing, findings } = await openBilling(s);
+    const note = path => page.evaluate(p => window.__harness.noteText(p), path);
+    s.check("the pill counts the entries to review", (await page.getByRole("button", { name: "Changes, 2 to review" }).count()) === 1);
+    await click(page.getByRole("button", { name: "Changes, 2 to review" }));
+    s.check("the feed opens", await waitText(page, "written to the vault by Relay"));
+    s.check("one entry with the reason line", await hasText(page, "Decision: dry run first, live after Sofie confirms the rate rule"));
+    s.check("and both notes' diffs", (await page.locator("[data-file]").count()) === 2 && (await hasText(page, "2 notes changed")));
+    await click(page.locator(`[data-file="${findings}"]`).getByRole("button", { name: "Undo", exact: true }));
+    await settle(page, 300);
+    s.check("Undo puts that note back", (await note(findings)).includes("Go live in sprint 24."));
+    s.check("the other note stays", (await note(billing)).includes("Dry run first"));
+    s.check("the row says so", await hasText(page, "Undone"));
+    s.fact("backend calls", (await s.calls("change_undo")).map(c => c.args.path));
+  },
+
+  // issue 371: Undo on a note the user edited since shows the merge and writes nothing until it is applied
+  async changesMerge(s) {
+    await s.load({ fixture: "kb-changes" });
+    const { page } = s;
+    const { billing, findings } = await openBilling(s);
+    const note = path => page.evaluate(p => window.__harness.noteText(p), path);
+    await click(page.getByRole("button", { name: "Changes, 2 to review" }));
+    await waitText(page, "written to the vault by Relay");
+    // my line added after the run: the merge keeps it and takes the run's change out
+    const mine = (await note(findings)) + "My own line.\n";
+    await page.evaluate(([p, t]) => window.__harness.typeInto(p, t), [findings, mine]);
+    await click(page.locator(`[data-file="${findings}"]`).getByRole("button", { name: "Undo", exact: true }));
+    s.check("a merge is shown", await waitText(page, "You edited this note after the run"));
+    s.check("and nothing is written yet", (await note(findings)) === mine);
+    await click(button(page, "Apply merge"));
+    await settle(page, 300);
+    const merged = await note(findings);
+    s.check("the merge keeps my line", merged.includes("My own line."));
+    s.check("and takes the run's change out", merged.includes("Go live in sprint 24.") && !merged.includes("Dry run in sprint 24"));
+    // my rewrite of the same lines: no merge, my text stays
+    const rewrite = (await note(billing)).replace("Dry run first, live after [[Sofie Claes]] confirms the rate rule", "Something else entirely");
+    await page.evaluate(([p, t]) => window.__harness.typeInto(p, t), [billing, rewrite]);
+    await click(page.locator(`[data-file="${billing}"]`).getByRole("button", { name: "Undo", exact: true }));
+    s.check("the same lines: nothing is overwritten", await waitText(page, "Nothing is overwritten"));
+    s.check("my text is still there", (await note(billing)) === rewrite);
+    s.check("and no merge to apply", (await button(page, "Apply merge").count()) === 0);
+    await click(button(page, "Keep mine"));
+    await settle(page, 200);
+    s.check("Keep mine leaves it as it is", (await note(billing)) === rewrite);
+  },
+
+  // K6, issue 371: a capture run lands in the feed as one entry; Fix properties (Ask Claude's menu) adds the missing
+  // type and its run shows up there too
+  async changesActions(s) {
+    await s.load({ fixture: "kb-sketch" });
+    const { page } = s;
+    await openBilling(s);
+    const note = path => page.evaluate(p => window.__harness.noteText(p), path);
+    s.check("no badge before a run", (await page.getByRole("button", { name: "Changes, 0 to review" }).count()) === 1);
+    await page.evaluate(() => window.__harness.capture());
+    await settle(page, 300);
+    await click(page.getByRole("button", { name: "Changes, 1 to review" }));
+    s.check("a capture run that edited 2 notes is one entry with 2 diffs", (await page.locator("[data-file]").count()) === 2 && (await hasText(page, "2 notes changed")));
+    s.check("with its reason", await hasText(page, "Decision: dry run first"));
+    await click(page.getByRole("button", { name: "Close changes" }));
+    // a note without type:
+    const sketch = "Contexts/Agency/Projects/Northwind Portal/Documents/Pricing sketch.md";
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    await click(page.locator('[data-project="Northwind Portal"]'));
+    await click(page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]'));
+    await click(page.locator(`[data-page="${sketch}"]`).first());
+    await waitText(page, "Pricing sketch");
+    await click(button(page, "Ask Claude"));
+    await click(button(page, "Fix properties"));
+    await settle(page, 400);
+    s.check("page_action asked for the properties", (await s.calls("page_action")).some(c => c.args.action === "properties" && c.args.path === sketch));
+    s.check("the note has its type now", (await note(sketch)).startsWith("---\ntype: Document"));
+    await click(page.getByRole("button", { name: /^Changes, 2 to review/ }));
+    s.check("and the run is in the feed", await waitText(page, "Added type: Document"));
   },
 
   // K1, issue 369: a note pinned from its menu stands under Favourites above Recent, and is still there after a
