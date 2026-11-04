@@ -1635,7 +1635,9 @@ const VAULT_FINDINGS = [
 const trashed = new Map<string, string[]>();
 // fixture linked: notes outside the projects' folders that point at them (about:, context:, with:)
 const linkedOn = fixture.startsWith("linked");
-const pageList = () => pages ?? (linkedOn ? [...vault.notes, ...vault.linkedPaths] : vault.notes);
+const pageList = () =>
+  pages ??
+  (linkedOn ? [...vault.notes.filter(n => vault.flat(n)), vault.FLAT_NOTE, ...vault.linkedPaths] : vault.notes);
 const pageRel = (p: unknown) => String(p).replace(vault.VAULT, "").replace(/^\//, "");
 // shared-live: the Mac's document of the page, which the editor and the mock peers share, and the cursors sent
 const liveDoc = new Y.Doc();

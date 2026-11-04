@@ -480,7 +480,14 @@ export function settings(fixture: string) {
         ? { on: true, feeds: [{ email: MAIL_ACCOUNT }, { email: MAIL_ACCOUNT_2 }] }
         : { on: false, feeds: [] },
     language: "en",
-    theme: fixture === "dark" || fixture === "calendar-dark" || fixture.endsWith("-dark") || fixture === "plugins-dark" || fixture === "shared-live-dark" ? "dark" : "light",
+    theme:
+      fixture === "dark" ||
+      fixture === "calendar-dark" ||
+      fixture.endsWith("-dark") ||
+      fixture === "plugins-dark" ||
+      fixture === "shared-live-dark"
+        ? "dark"
+        : "light",
     accent: fixture === "graphite" ? "graphite" : "relay",
     terminal: "auto",
     ...(fixture === "icons" ? { sidebar: { layout: "icons" } } : {}),
@@ -570,7 +577,13 @@ type Linked = {
   daysAgo?: number;
 };
 const people = ["Sofie Claes", "Tom Willems", "Lena Maes", "Jonas Peeters"];
-const meet = (day: string, title: string, stage: "planned" | "briefed" | "wrapped", who: string[], about = ["Northwind Portal"]): Linked => ({
+const meet = (
+  day: string,
+  title: string,
+  stage: "planned" | "briefed" | "wrapped",
+  who: string[],
+  about = ["Northwind Portal"],
+): Linked => ({
   p: `Calendar/Meetings/2026/${day} ${title}.md`,
   k: "Meeting",
   about,
@@ -582,14 +595,27 @@ const linkedList: Linked[] = [
   meet("2026-10-08", "Northwind Portal sync", "planned", [people[0]]),
   meet("2026-10-01", "Northwind Portal sprint planning", "briefed", people.slice(0, 3)),
   meet("2026-09-24", "Northwind Portal sync", "wrapped", [people[0]]),
-  meet("2026-09-17", "Northwind Portal and Atlas Logistics hosting", "wrapped", [people[0], people[3]], ["Northwind Portal", "Atlas Logistics"]),
+  meet(
+    "2026-09-17",
+    "Northwind Portal and Atlas Logistics hosting",
+    "wrapped",
+    [people[0], people[3]],
+    ["Northwind Portal", "Atlas Logistics"],
+  ),
   meet("2026-09-10", "Northwind Portal design review", "wrapped", [people[1]]),
   meet("2026-09-03", "Northwind Portal kickoff", "wrapped", people),
   meet("2026-09-30", "Atlas Logistics sync", "wrapped", [people[3]], ["Atlas Logistics"]),
+  meet("2026-09-30", "Delmas Bakery opening hours", "wrapped", [people[2]], ["Delmas Bakery"]),
+  meet("2026-09-22", "Delmas Bakery holiday banner", "wrapped", [people[1]], ["Delmas Bakery"]),
   { p: "Calendar/Threads/Invoice export columns.md", k: "Thread", about: ["Northwind Portal"], daysAgo: 2 },
   { p: "Calendar/Threads/Portal hosting quote.md", k: "Thread", context: ["Northwind Portal"], daysAgo: 6 },
   { p: "Resources/Reference/Portal pricing notes.md", k: "Reference", about: ["Northwind Portal"], daysAgo: 0 },
-  { p: "Resources/Reference/Invoice export format.md", k: "Reference", about: ["Northwind Portal", "Atlas Logistics"], daysAgo: 4 },
+  {
+    p: "Resources/Reference/Invoice export format.md",
+    k: "Reference",
+    about: ["Northwind Portal", "Atlas Logistics"],
+    daysAgo: 4,
+  },
   { p: "Resources/Reference/Depot data sheet.md", k: "Reference", about: ["Atlas Logistics"], daysAgo: 9 },
   { p: "People/Sofie Claes.md", k: "Person", role: "Developer · Agency", context: ["Northwind Portal"] },
   { p: "People/Tom Willems.md", k: "Person", role: "Designer · Northwind", about: ["Northwind Portal"] },
@@ -611,3 +637,6 @@ export const linkedNotes = () =>
     stage: n.stage ?? "",
     role: n.role ?? "",
   }));
+/** In the linked fixtures Delmas Bakery is a flat project: its note alone, no folder of its own. */
+export const flat = (p: string) => (p.startsWith("Contexts/Agency/Projects/Delmas Bakery/") ? "" : p);
+export const FLAT_NOTE = "Contexts/Agency/Projects/Delmas Bakery.md";

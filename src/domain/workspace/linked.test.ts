@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { attendees, linkedTo, type LinkedNote } from "./linked.ts";
+import { attendees, linkedTo, shownSections, type LinkedNote } from "./linked.ts";
 
 const note = (p: string, o: Partial<LinkedNote> = {}): LinkedNote => ({
   p,
@@ -76,4 +76,13 @@ test("attendees: one by full name, several by first name", () => {
   assert.equal(attendees(meeting("2026-11-04", { with: ["Sam Peeters"] })), "Sam Peeters");
   assert.equal(attendees(meeting("2026-11-04", { with: ["Sam Peeters", "Noor", "Milan Jacobs"] })), "Sam, Noor, Milan");
   assert.equal(attendees(meeting("2026-11-04")), "");
+});
+
+test("a project with only meetings shows only the Meetings section", () => {
+  const groups = linkedTo([meeting("2026-11-04", { about: ["Beacon"] })], "Beacon");
+  assert.deepEqual(
+    shownSections({ meetings: groups.meetings, documents: groups.documents, people: groups.people, reminders: [] }),
+    ["meetings"],
+  );
+  assert.deepEqual(shownSections({ meetings: [], documents: [] }), []);
 });

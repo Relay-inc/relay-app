@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { attendees, type LinkedNote } from "../../../domain/workspace/linked";
+import { attendees, shownSections, type LinkedNote } from "../../../domain/workspace/linked";
 import { noteName } from "../../../domain/navigation/pages";
 import { label } from "../../../application/conversations/selectors";
 import { select } from "../../../application/navigation/navigation";
@@ -23,7 +23,7 @@ export function LinkedSections({ path }: { path: string }) {
   const seen = all.path === path ? all.seen : new Set<string>();
   if (!sections) return null;
   const { meetings, documents, people, reminders, conversations } = sections;
-  if (![meetings, documents, people, reminders, conversations].some(list => list.length)) return null;
+  if (!shownSections(sections).length) return null;
 
   const card = (id: string, title: string, count: number, rows: ReactNode[], shown: number, wide = false) =>
     count ? (

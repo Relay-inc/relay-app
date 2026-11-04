@@ -321,13 +321,15 @@ export function PagesView() {
               />
             ) : (
               context.projects.map(project => {
-                const isOpen = !!project.folder && unfolded.has(project.folder.path);
+                // a flat project (just its note) unfolds too, to the notes that point at it
+                const at = project.folder?.path ?? project.note;
+                const isOpen = unfolded.has(at);
                 return (
                   <div key={project.key}>
                     <SidebarRow
                       kind="proj"
                       tint={tint}
-                      aria-expanded={project.folder ? isOpen : undefined}
+                      aria-expanded={isOpen}
                       data-project={project.key}
                       name={project.label}
                       img={icons[project.key]?.img ?? null}
@@ -336,23 +338,27 @@ export function PagesView() {
                       meta={project.count > 1 ? { kind: "count", n: project.count } : undefined}
                       // opens its note and unfolds; a click on it open again folds it
                       onClick={() => {
-                        if (project.folder) togglePage(project.folder.path, !(isOpen && open === project.note));
+                        togglePage(at, !(isOpen && open === project.note));
                         openPage(project.note);
                       }}
                       onContextMenu={onMenu(project.key, "project")}
                     />
-                    {isOpen && project.folder
-                      ? contents(
-                          project.folder,
-                          project.note,
-                          "",
-                          <LinkedRows
-                            name={noteName(project.note)}
-                            inside={project.folder.path}
-                            base={project.folder.path}
-                          />,
-                        )
-                      : null}
+                    {isOpen && project.folder ? (
+                      contents(
+                        project.folder,
+                        project.note,
+                        "",
+                        <LinkedRows
+                          name={noteName(project.note)}
+                          inside={project.folder.path}
+                          base={project.folder.path}
+                        />,
+                      )
+                    ) : isOpen ? (
+                      <div className="ml-4">
+                        <LinkedRows name={noteName(project.note)} inside="" base={project.note} />
+                      </div>
+                    ) : null}
                   </div>
                 );
               })

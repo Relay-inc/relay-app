@@ -167,7 +167,7 @@ export function PageView({ target, className }: { target: string; className: str
             <article className="w-full max-w-180 mx-auto pt-10 px-8 pb-16 flex flex-col gap-6">
               <header className="flex flex-col gap-4">
                 {folders.length ? (
-                  <div className="flex items-center gap-1.5 text-[13px] text-tertiary">
+                  <div data-breadcrumb className="flex items-center gap-1.5 text-[13px] text-tertiary">
                     {folders.map((folder, i) => (
                       <span key={i} className="contents">
                         {i ? <Icon name="right" className="glyph size-3 flex-none" /> : null}

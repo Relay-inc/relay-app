@@ -66,3 +66,7 @@ export function attendees(note: LinkedNote) {
   const names = note.with.map(name => noteName(name).trim()).filter(Boolean);
   return names.length > 1 ? names.map(name => name.split(/\s+/)[0]).join(", ") : (names[0] ?? "");
 }
+
+/** Which of a page's auto sections have anything to show, in their order: an empty one is not drawn. */
+export const shownSections = (sections: Record<string, unknown[]>) =>
+  Object.keys(sections).filter(key => sections[key].length);
