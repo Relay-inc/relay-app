@@ -258,8 +258,27 @@ export function rail(path: string, textOf: (path: string) => string | undefined)
 }
 
 // ---------- the Changes feed (K6, issue 371): fixture kb-changes
+/** The page the table scenarios and screenshots edit (fixture kb-tables): a 3-column table with alignment, an empty
+ *  cell, an escaped pipe and inline bold, link and code in cells, and a wide one. */
+export const tables = {
+  path: `${docs}/Vendor overview.md`,
+  text:
+    '---\ntype: Document\ncontext: "[[Agency]]"\n---\n# Vendor overview\n\n' +
+    "| Vendor | Contact | Monthly cost |\n| :-- | :-: | --: |\n" +
+    "| Atlas Logistics | Sofie Claes | 1.240,00 |\n" +
+    "| **Bluebird Studio** | [Tom Willems](mailto:tom.willems@example.com) | `860,50` |\n" +
+    "| Harbour \\| Docks |  | 2.100,00 |\n\n" +
+    "Open questions per vendor:\n\n" +
+    "| ID | Vendor | Question | Owner | Phase | Due | Status | Notes |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n" +
+    "| V1 | Atlas Logistics | Does the rate card include weekend pickups or only weekdays within the metro area? | Sofie Claes | Review | 2026-11-12 | Open | Waiting for the updated contract from the vendor |\n" +
+    "| V2 | Bluebird Studio | Can the invoices be delivered as UBL instead of PDF? | Tom Willems | Intake | 2026-11-19 | Open | Asked on the call |\n\n" +
+    "Closing line.\n",
+};
 /** A note without `type:`: what Fix properties is for. */
-export const untyped = { path: `${docs}/Pricing sketch.md`, text: "# Pricing sketch\n\nPer-plate pricing for the sandbox, to discuss on Friday.\n" };
+export const untyped = {
+  path: `${docs}/Pricing sketch.md`,
+  text: "# Pricing sketch\n\nPer-plate pricing for the sandbox, to discuss on Friday.\n",
+};
 const billing = "Contexts/Agency/Projects/Beacon Billing/Documents/Billing Spec.md";
 const findings = `${docs}/Rate limit findings.md`;
 const decision = "- 2026-09-30 · Dry run first, live after [[Sofie Claes]] confirms the rate rule";
@@ -283,7 +302,15 @@ const portal = "Contexts/Agency/Projects/Northwind Portal/Documents/Portal Archi
 const sync = `${meetingDir}/2026-09-30 Portal sync.md`;
 /** The feed K6 shows: the capture run open, one more open entry, two kept ones. The notes hold the text after them. */
 export function seedChanges() {
-  const entry = (id: number, source: string, subject: string, reason: string, hours: number, files: typeof capture.files, state = "open") => ({
+  const entry = (
+    id: number,
+    source: string,
+    subject: string,
+    reason: string,
+    hours: number,
+    files: typeof capture.files,
+    state = "open",
+  ) => ({
     id: `${NOW - hours * HOUR}-${id}`,
     at: NOW - hours * HOUR,
     source,
@@ -301,6 +328,14 @@ export function seedChanges() {
     entry(1, "capture", capture.subject, capture.reason, 0.2, capture.files),
     entry(2, "capture", "Hosting migration", "Filed 1 follow-up from the migration chat", 1, [filed]),
     entry(3, "action:summarise", "Portal sync", "Added a one-line next step", 20, [wrapped], "kept"),
-    entry(4, "capture", "Start the security audit", "Decision: audit starts in sprint 25", 60, [{ path: portal, before: texts[portal], after: texts[portal] }], "kept"),
+    entry(
+      4,
+      "capture",
+      "Start the security audit",
+      "Decision: audit starts in sprint 25",
+      60,
+      [{ path: portal, before: texts[portal], after: texts[portal] }],
+      "kept",
+    ),
   ];
 }

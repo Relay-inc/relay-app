@@ -10,10 +10,12 @@
   outline: none;
 }
 .page-editor .cm-scroller {
+  min-width: 0;
   font-family: inherit;
   overflow: visible;
 }
 .page-editor .cm-content {
+  min-width: 0; /* a wide table scrolls inside itself, it does not widen the page */
   padding: 0;
   caret-color: var(--accent);
 }
@@ -736,4 +738,76 @@
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
+}
+
+/* Tables (tables.ts): every row is a line laid out as a grid (its columns sized in the line's style), every cell a mark
+   in it, as the read-only page draws one: a rule under each row, a semibold header. A wide table scrolls inside itself,
+   its rows together. */
+.page-editor .cm-trow {
+  display: grid;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.page-editor .cm-trow::-webkit-scrollbar {
+  display: none;
+}
+.page-editor .cm-trow.cm-tlast {
+  scrollbar-width: thin;
+}
+.page-editor .cm-trow.cm-tlast::-webkit-scrollbar {
+  display: block;
+  height: 6px;
+}
+.page-editor .cm-thide {
+  display: none;
+}
+.page-editor .cm-tdelim {
+  height: 0;
+  overflow: hidden;
+  font-size: 0;
+  line-height: 0;
+}
+.page-editor .cm-tcell {
+  min-height: calc(1.65em + 12px);
+  box-sizing: border-box;
+  padding: 6px 16px 6px 0;
+  border-bottom: 1px solid var(--separator);
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.page-editor .cm-tcell:first-child {
+  padding-left: 12px;
+}
+.page-editor .cm-thead .cm-tcell {
+  font-weight: 600;
+}
+.page-editor .cm-ta-center {
+  text-align: center;
+}
+.page-editor .cm-ta-right {
+  text-align: right;
+}
+/* the grips of the table under the pointer: a row's at its left edge, a column's above the header */
+.page-editor .cm-table-grip {
+  position: absolute;
+  z-index: 10;
+  border-radius: 4px;
+  background: var(--fill-2);
+  color: var(--tertiary);
+  cursor: pointer;
+}
+.page-editor .cm-table-grip:hover {
+  background: var(--separator-strong);
+}
+.page-editor .cm-table-row-grip {
+  left: 0;
+  width: 8px;
+}
+.page-editor .cm-table-col-grip {
+  width: 24px;
+  height: 8px;
+}
+.page-editor .cm-table-menu {
+  margin-top: 0;
+  width: 220px;
 }

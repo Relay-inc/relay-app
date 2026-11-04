@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { markdownLanguage } from "@codemirror/lang-markdown";
-import { SLASH, moveBlock, nextCell, pasteLink, prevCell, tableAddColumn, tableRow, turnInto } from "./blocks.ts";
+import { SLASH, moveBlock, pasteLink, turnInto } from "./blocks.ts";
 
 const gfm = markdownLanguage.parser; // the editor's own parser: GFM tables and to-dos
 const top = (text: string) => {
@@ -44,7 +44,7 @@ test("every / block is the markdown expected and parses as its kind", () => {
       "> Said",
       "> [!note]\n> Mind this",
       "```\nlet a = 1\n```",
-      "| Column | Column |\n| --- | --- |\n| a |  |",
+      "| a    |     |     |\n| --- | --- | --- |\n|     |     |     |\n|     |     |     |",
       "---\n",
       "[[Northwind Portal]]",
     ].join("\n\n"),
@@ -93,16 +93,6 @@ test("a list item moves between items without a blank line", () => {
   assert.equal(moveBlock(list, 8, 11, 0, false), "- c\n- a\n- b");
   assert.equal(moveBlock(list, 0, 3, list.length, false), "- b\n- c\n- a");
   assert.equal(moveBlock(list, 0, 3, 8, false), "- b\n- a\n- c");
-});
-
-test("tables: a row, a column, Tab and Shift-Tab between cells", () => {
-  const table = "| A | B |\n| --- | --- |\n| 1 | 2 |";
-  assert.equal(tableRow("| A | B |"), "|  |  |");
-  assert.equal(tableAddColumn(table), "| A | B | Column |\n| --- | --- | --- |\n| 1 | 2 |  |");
-  assert.equal(nextCell("| 1 | 2 |", 2), 6);
-  assert.equal(nextCell("| 1 | 2 |", 6), null);
-  assert.equal(prevCell("| 1 | 2 |", 6), 2);
-  assert.equal(prevCell("| 1 | 2 |", 2), null);
 });
 
 test("a pasted URL over a selection makes a link", () => {

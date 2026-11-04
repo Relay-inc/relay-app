@@ -145,7 +145,7 @@ tabs, no checkboxes, E does nothing), prs (side by side, Review with Claude), bo
 window, comment, status, Start conversation), boardNewTask (New task in the title bar and a lane's +), boardTools (list view, filters, Productive's saved views, grouping),
 reminders, reminderUndo, settings (theme, accent, GitHub owners, language), calendar (the meetings under Waiting, the banner, Join, Prepare and Meeting note as restricted conversations on Claude), calendarNoClaude (refused with Claude off), calendarSettings (add, a refused address, remove), agentAccess (policy and access per
 extension), agentAccounts (add a folder, pick it for new conversations, auto-switch, rename, remove), cmdkProject, deepLinks (at launch and while running), resolvedDefaults, slashCommands, closeAll, typedDraft,
-typingOutside. Calls are normalised (conversation keys as `chat:<project>/<title>`, new ones `new#n`, dates masked) and
+typingOutside, and in the page editor pageTables (a grid you edit in place; fixture `kb-tables`). Calls are normalised (conversation keys as `chat:<project>/<title>`, new ones `new#n`, dates masked) and
 split into effects and counted reads. `KNOWN` lists checks a Lit baseline fails on purpose: three Lit bugs (typingOutside,
 the mail link bar, mailTriageFilter) and one intended difference (deepLinks: a `relay://ask?q=` link opens Cmd-K with the text and waits
 for Enter, Lit sends it at once). The mock leaves sessionStorage alone, as a webview reload does: a launch link handled
