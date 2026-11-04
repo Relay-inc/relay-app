@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 pub const STATES: [&str; 4] = ["Active", "Blocked", "Quiet", "Paused"];
 /// The note types a project can be, in the order New project offers them; a vault offers the ones it has a template for.
-const KINDS: [&str; 5] = ["Project", "Product", "Initiative", "Platform", "Feature"];
+pub(crate) const KINDS: [&str; 5] = ["Project", "Product", "Initiative", "Platform", "Feature"];
 const TABLE: &str = "| Project | State | Last Touched | Left Off |\n|---|---|---|---|";
 
 fn err(e: impl ToString) -> String { e.to_string() }
@@ -63,13 +63,17 @@ pub fn set_field(text: &str, key: &str, value: &str) -> String {
     if !found { out.push(line); }
     format!("---\n{}\n---{body}", out.join("\n"))
 }
+/// A template's text with the tags Relay knows filled in: Obsidian's {{date}} and {{title}}, Templater's date and title
+/// tags. Any other tag stays as text.
+pub(crate) fn fill(text: &str, name: &str, today: &str) -> String {
+    let text = Regex::new(r"<%\s*tp\.date\.now\([^)]*\)\s*%>").unwrap().replace_all(&text.replace("\r\n", "\n"), today).into_owned();
+    let text = Regex::new(r"<%\s*tp\.file\.title\s*%>").unwrap().replace_all(&text, name).into_owned();
+    Regex::new(r"\{\{date(:[^}]*)?\}\}").unwrap().replace_all(&text, today).replace("{{title}}", name)
+}
 /// The vault's template `kind` filled in for a note `name` of `ctx`, or None: no template, or one that runs a script
-/// (Templater `<%* … %>`) Relay can't. Obsidian's {{date}} and {{title}} and Templater's date and title tags are filled.
+/// (Templater `<%* … %>`) Relay can't.
 fn template(vault: &str, kind: &str, name: &str, ctx: &str, today: &str) -> Option<String> {
-    let text = fs::read_to_string(Path::new(vault).join("Resources/Templates").join(format!("{kind}.md"))).ok()?.replace("\r\n", "\n");
-    let text = Regex::new(r"<%\s*tp\.date\.now\([^)]*\)\s*%>").unwrap().replace_all(&text, today);
-    let text = Regex::new(r"<%\s*tp\.file\.title\s*%>").unwrap().replace_all(&text, name);
-    let text = Regex::new(r"\{\{date(:[^}]*)?\}\}").unwrap().replace_all(&text, today).replace("{{title}}", name);
+    let text = fill(&fs::read_to_string(Path::new(vault).join("Resources/Templates").join(format!("{kind}.md"))).ok()?, name, today);
     if text.contains("<%") || !text.starts_with("---\n") { return None; }
     // lastSync: a sync plugin's stamp on the template itself, not the note's
     let text = Regex::new(r"(?m)^lastSync:.*\n").unwrap().replace(&text, "").into_owned();

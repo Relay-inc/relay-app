@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from "react";
 import type { PageFolder } from "../../../domain/navigation/pages";
-import { noteName } from "../../../domain/navigation/pages";
+import { noteName, sortPages } from "../../../domain/navigation/pages";
 import { CONTEXT_TINTS } from "../../../domain/navigation/sidebar";
 import {
   copyPagePath,
@@ -9,12 +9,25 @@ import {
   openPage,
   openPagePath,
   pagesView,
+  placeIn,
   projectEntry,
   PROJECT_STATES,
   revealPage,
   setProjectState,
   togglePage,
 } from "../../../application/navigation/pages";
+import { isFavourite, loadFavourites, toggleFavourite } from "../../../application/navigation/favourites";
+import {
+  loadTemplates,
+  loadTimes,
+  newFromTemplate,
+  openDailyNote,
+  setSort,
+  sortOf,
+  sortsByModified,
+  templatesOf,
+  useKbStore,
+} from "../../../application/navigation/kb";
 import { newChatHere } from "../../../application/conversations/chats";
 import { select } from "../../../application/navigation/navigation";
 import { GRAPH } from "../../../domain/navigation/views";
@@ -37,9 +50,13 @@ import { ProjectDialog, type ProjectAsk } from "./ProjectDialog";
 import { VaultCheckDialog } from "./VaultCheckDialog";
 import { LinkedRows } from "./LinkedRows";
 
+const FAVOURITES = "pages:favourites";
+const NO_TIMES: Record<string, number> = {};
+// separates the parts of a menu item's id that hold a template or folder name
+const SEP = "\u001f";
 const RECENT = "pages:recent";
 const FOLDERS = "pages:folders";
-// unfolded like a folder (pagesOpen), so it starts folded on every start
+// unfolded like a folder (pagesOpen)
 const SYSTEM = "pages:system";
 
 /** The sidebar's Pages tab: the notes of the workspace shown. Recent, its contexts with their projects (a project
@@ -51,7 +68,7 @@ const SYSTEM = "pages:system";
  *  workspace. A context without projects still shows, with New project. A page or folder dragged onto a folder moves there. */
 export function PagesView() {
   const { t } = useT();
-  const { model, system, recent, found } = useDerived(() => pagesView());
+  const { model, system, recent, found, favourites } = useDerived(() => pagesView());
   const open = useDerived(() => openPagePath());
   const unfolded = useNavigationStore(s => s.sidebar.pagesOpen);
   const collapsed = useNavigationStore(s => s.sidebar.collapsed);
@@ -72,6 +89,17 @@ export function PagesView() {
   useEffect(() => {
     void loadLinked();
   }, [notesVersion, workspaceShown]);
+  // the pinned notes and the templates of the workspace shown; the times a folder sorted by modified needs
+  useKbStore(s => s.templates); // the menus list them once read
+  const sorts = useKbStore(s => s.sorts);
+  const times = useKbStore(s => s.times[workspaceShown]) ?? NO_TIMES;
+  useEffect(() => {
+    void loadFavourites();
+    void loadTemplates();
+  }, [workspaceShown]);
+  useEffect(() => {
+    if (sortsByModified()) void loadTimes();
+  }, [notesVersion, workspaceShown, sorts]);
   useDismiss(menuElement, !!menu, () => setMenu(null));
 
   const onMenu = (path: string, kind: MenuKind) => (e: MouseEvent) => {
@@ -88,11 +116,33 @@ export function PagesView() {
       ...others.map(w => ({ id: `${mode}:${w.folder}`, label: w.name })),
     ]);
   };
-  const fileItems = (kind: "note" | "folder" | "top"): MenuItem[] => [
+  // New ▸ from a template: one item per template of the vault, made in the type's home or in this folder
+  const templateItems = (folder: string): MenuItem[] => {
+    const list = templatesOf();
+    return list.length
+      ? [
+          { id: "", label: t("pages.fromTemplate"), head: true },
+          ...list.map(name => ({ id: `tpl${SEP}${name}${SEP}${folder}`, label: name, icon: "file" })),
+        ]
+      : [];
+  };
+  const fileItems = (kind: "note" | "folder" | "top", path = ""): MenuItem[] => [
+    ...(kind === "note"
+      ? [{ id: "fav", label: t(isFavourite(path) ? "pages.unfavourite" : "pages.favourite"), icon: "star" }]
+      : []),
     ...(kind !== "note"
       ? [
           { id: "page", label: t("pages.newPage"), icon: "file" },
           { id: "folder", label: t("pages.newFolder"), icon: "folder" },
+          ...templateItems(path),
+        ]
+      : []),
+    ...(kind !== "note"
+      ? [
+          {
+            id: `sort${SEP}${path}${SEP}${sortOf(path) === "name" ? "modified" : "name"}`,
+            label: t(sortOf(path) === "name" ? "pages.sortModified" : "pages.sortName"),
+          },
         ]
       : []),
     ...(kind !== "top"
@@ -119,7 +169,7 @@ export function PagesView() {
     const folder = model.contexts.find(context => context.name === name)?.folder ?? "";
     return [
       { id: "project", label: t("pages.newProject") },
-      ...(folder ? [...inFolder(folder), ...where(folder)] : []),
+      ...(folder ? [...inFolder(folder), ...templateItems(folder), ...where(folder)] : []),
     ];
   };
   const projectItems = (key: string): MenuItem[] => {
@@ -128,6 +178,7 @@ export function PagesView() {
     const folder = project.folder?.path ?? "";
     return [
       ...(folder ? inFolder(folder) : []),
+      ...templateItems(folder || project.note.split("/").slice(0, -1).join("/")),
       { id: "open", label: t("pages.openNote") },
       { id: "chat", label: t("nav.newChat") },
       { id: "", label: t("pages.projectState"), head: true },
@@ -150,14 +201,18 @@ export function PagesView() {
         ? contextItems(path)
         : kind === "top"
           ? [{ id: "context", label: t("pages.newContext") }, ...fileItems(kind), { id: "check", label: t("vc.menu") }]
-          : fileItems(kind);
+          : fileItems(kind, path);
   // a project's own note keeps its name and place: the project is known by it
   const guarded = (path: string, then: () => void) => (isProjectNote(path) ? toast(t("pages.projectNote")) : then());
   const pick = (target: { path: string; kind: MenuKind }, id: string) => {
     setMenu(null);
     const { path } = target;
     const arg = id.slice(id.indexOf(":") + 1);
-    if (id.startsWith("page:") || id.startsWith("folder:"))
+    const [verb, one, two] = id.split(SEP);
+    if (verb === "tpl") void newFromTemplate(one, placeIn(two));
+    else if (verb === "sort") setSort(one, two as "name" | "modified");
+    else if (id === "fav") void toggleFavourite(path);
+    else if (id.startsWith("page:") || id.startsWith("folder:"))
       setAsk({ kind: id.startsWith("page:") ? "page" : "folder", folder: arg });
     else if (id.startsWith("reveal:")) void revealPage(arg);
     else if (id.startsWith("copy:")) void copyPagePath(arg);
@@ -222,7 +277,11 @@ export function PagesView() {
   const contents = (folder: PageFolder, skip = "", scope = "", extra: ReactNode = null) => (
     <div className="ml-4">
       {folder.folders.map(sub => renderFolder(sub, scope))}
-      {folder.notes.filter(path => path !== skip).map(path => note(path))}
+      {sortPages(
+        folder.notes.filter(path => path !== skip),
+        sorts[`${workspaceShown}|${folder.path}`] ?? "name",
+        times,
+      ).map(path => note(path))}
       {extra}
     </div>
   );
@@ -301,6 +360,19 @@ export function PagesView() {
         selected={selected === GRAPH}
         onClick={() => select(GRAPH)}
       />
+      <SidebarRow
+        kind="view"
+        data-today-note
+        icon="cal"
+        name={t("pages.todayNote")}
+        onClick={() => void openDailyNote()}
+      />
+      {favourites.length ? (
+        <div className="mt-3" data-section={FAVOURITES}>
+          {head(FAVOURITES, t("pages.favourites"))}
+          {collapsed[FAVOURITES] ? null : favourites.map(path => note(path))}
+        </div>
+      ) : null}
       {recent.length ? (
         <div className="mt-3">
           {head(RECENT, t("pages.recent"))}
@@ -378,7 +450,7 @@ export function PagesView() {
         {collapsed[FOLDERS] ? null : (
           <>
             {model.top.folders.map(folder => renderFolder(folder))}
-            {model.top.notes.map(path => note(path))}
+            {sortPages(model.top.notes, sorts[`${workspaceShown}|`] ?? "name", times).map(path => note(path))}
           </>
         )}
       </div>

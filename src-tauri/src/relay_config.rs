@@ -13,6 +13,7 @@
 //   actions   extension -> agent access and the policy per action for the `relay` command (actions.rs):
 //             {"access": false} switches an extension off for agents, {"*": "ask", "add_time": "auto"} sets
 //             policies (auto, ask, deny), a plain "auto" sets them all. No entry: on, reads run, writes ask.
+//   favourites  the notes pinned above Recent in Pages, paths relative to the vault, in the order pinned
 //   sync      the git remote the vault is committed and pushed to, as a backup (vaultsync.rs):
 //             {"remote", "on", "minutes"}
 //
@@ -101,6 +102,22 @@ pub fn ignore_repo(vault: &str, repo: &str) -> Result<(), String> {
     if !c["repos"].is_object() { c["repos"] = json!({}); }
     c["repos"].as_object_mut().unwrap().entry(repo).or_insert(json!(""));
     save(vault, &c)
+}
+
+// ---------- favourites
+
+/// The notes pinned above Recent, in the order they were pinned.
+pub fn favourites(vault: &str) -> Vec<String> {
+    load(vault).and_then(|c| c["favourites"].as_array().cloned()).unwrap_or_default().iter().filter_map(|v| v.as_str().map(String::from)).collect()
+}
+/// The pinned notes replaced as a whole (a pin, an unpin, a rename that follows): relative paths of notes, no duplicates.
+pub fn set_favourites(vault: &str, paths: &[String]) -> Result<Vec<String>, String> {
+    let mut seen = std::collections::HashSet::new();
+    let list: Vec<String> = paths.iter().filter(|p| !p.starts_with('/') && !p.split('/').any(|s| s == ".." || s.is_empty()) && p.ends_with(".md") && seen.insert(p.as_str())).cloned().collect();
+    let mut c = load(vault).ok_or("no .relay/config.json")?;
+    if list.is_empty() { c.as_object_mut().unwrap().remove("favourites"); } else { c["favourites"] = json!(list); }
+    save(vault, &c)?;
+    Ok(list)
 }
 
 // ---------- actions
@@ -329,6 +346,24 @@ fn repos(vault: &str, projects: &[String]) -> Map<String, Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn favourites_are_kept_in_the_config_in_order() {
+        let v = std::env::temp_dir().join(format!("relay-fav-{}", std::process::id()));
+        let vs = v.to_string_lossy().into_owned();
+        fs::remove_dir_all(&v).ok();
+        fs::create_dir_all(&v).unwrap();
+        assert!(set_favourites(&vs, &["A.md".into()]).is_err(), "no config yet");
+        save(&vs, &json!({"version": 1, "repos": {}})).unwrap();
+        assert!(favourites(&vs).is_empty());
+        let list = set_favourites(&vs, &["Beacon/Beacon.md".into(), "../x.md".into(), "/abs.md".into(), "Notes.md".into(), "Beacon/Beacon.md".into(), "dir".into()]).unwrap();
+        assert_eq!(list, ["Beacon/Beacon.md", "Notes.md"]);
+        // read again from the file, other keys untouched
+        assert_eq!(favourites(&vs), ["Beacon/Beacon.md", "Notes.md"]);
+        assert_eq!(load(&vs).unwrap()["version"], 1);
+        set_favourites(&vs, &[]).unwrap();
+        assert!(load(&vs).unwrap().get("favourites").is_none());
+        fs::remove_dir_all(&v).ok();
+    }
     #[test]
     fn icons_live_in_the_vault() {
         let v = std::env::temp_dir().join(format!("relay-icons-{}", std::process::id()));

@@ -13,6 +13,7 @@ import * as orch from "./fixtures/orchestrator";
 import * as graph from "./fixtures/graph";
 import * as git from "./fixtures/git";
 import * as files from "./fixtures/files";
+import * as kb from "./fixtures/kb";
 import * as Y from "yjs";
 // the example plugin's real view: the harness serves it from a blob, where the app has the relay-plugin:// scheme
 import diceView from "../packages/plugin-example/view.html?raw";
@@ -65,6 +66,7 @@ const member = fixture === "shared-member" || fixture === "shared-keeper";
 const live = fixture === "shared-live" || fixture === "shared-live-dark";
 const shared =
   fixture === "shared" ||
+  fixture === "kb-shared" ||
   fixture === "shared-invite" ||
   fixture === "shared-rekey" ||
   fixture === "shared-unlisted" ||
@@ -522,7 +524,9 @@ function handle(cmd: string, a: Args): unknown {
       return (a.paths as string[]).map(path => {
         const name = path.split("/").pop()!;
         attached.push({ page: String(a.page), name });
-        return name === embeds.DUMP ? { tooLarge: true, name, size: 312_000_000 } : { path: `Attachments/2026/${name}`, link: name };
+        return name === embeds.DUMP
+          ? { tooLarge: true, name, size: 312_000_000 }
+          : { path: `Attachments/2026/${name}`, link: name };
       });
     case "open_file":
       return String(a.path).includes("missing") ? Promise.reject("not found") : null;
@@ -1089,6 +1093,16 @@ function handle(cmd: string, a: Args): unknown {
       return structuredClone(vaultSync);
     // the UI state file (src/infrastructure/storage.ts): empty, so the app takes over the fixtures' localStorage
     case "ui_state_get": {
+      // ?keep=1: the Pages tab's folds and sorts the app saved before the reload (a restart reads them from the UI state
+      // file), on top of what the harness seeded
+      if (keepState) {
+        const seeded = Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage.getItem(key) ?? ""]));
+        const kept = ["pagesOpen", "pagesSort"].flatMap(k => {
+          const v = sessionStorage.getItem(`mockUi:${k}`);
+          return v == null ? [] : [[k, v]];
+        });
+        return { ...seeded, ...Object.fromEntries(kept) };
+      }
       if (!orchClosed) return {};
       // on top of what the harness seeded (the selection), which a non-empty state would otherwise replace
       const seeded = Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage.getItem(key) ?? ""]));
@@ -1116,6 +1130,7 @@ function handle(cmd: string, a: Args): unknown {
       return "main";
     case "ui_state_set":
       localStorage.setItem(a.key, a.value);
+      if (keepState) sessionStorage.setItem(`mockUi:${a.key}`, a.value);
       return null;
     case "dictation_models":
       return structuredClone(voiceModels);
@@ -1222,6 +1237,39 @@ function handle(cmd: string, a: Args): unknown {
       return graph.touches();
     case "notes_linked":
       return linkedOn ? vault.linkedNotes() : [];
+
+    // the knowledge base (K5, K1): ⌘K's search, templates, today's note and the pinned notes. The favourites are kept in
+    // sessionStorage with ?keep=1, so a reload shows them back the way `.relay/config.json` does after a restart.
+    case "find_notes":
+      return kbOn ? kb.find(a.folder === vault.VAULT, String(a.query)) : { names: [], content: [] };
+    case "note_times":
+      return Object.fromEntries(pageList().map((p, i) => [p, NOW_S - i * 3600]));
+    case "note_templates":
+      return kbOn ? kb.templates : [];
+    case "new_from_template": {
+      const day = new Date(NOW).toISOString().slice(0, 10);
+      const home = a.template === "Meeting" ? `Calendar/Meetings/${day.slice(0, 4)}` : String(a.folder);
+      const name = a.template === "Meeting" ? `${day} ${a.about ? `${a.about} ` : ""}Meeting` : String(a.template);
+      const path = `${home ? `${home}/` : ""}${name}.md`;
+      const links = [a.context && `context: "[[${a.context}]]"`, a.about && `about: "[[${a.about}]]"`].filter(Boolean);
+      pages = [...pageList(), path];
+      written.set(path, { text: `---\ntype: ${a.template}\n${links.join("\n")}\n---\n# ${name}\n`, hash: "h0" });
+      return path;
+    }
+    case "daily_note": {
+      const path = kb.dailyPath(new Date(NOW).toISOString().slice(0, 10));
+      if (!pageList().includes(path)) {
+        pages = [...pageList(), path];
+        written.set(path, { text: "---\ntype: Daily\n---\n", hash: "h0" });
+      }
+      return path;
+    }
+    case "favourites":
+      return kbOn ? favourites : [];
+    case "set_favourites":
+      favourites = (a.paths as string[]).slice();
+      if (keepState) sessionStorage.setItem("mockFavourites", JSON.stringify(favourites));
+      return favourites;
 
     // GitHub, mail, boards
     case "github_status":
@@ -1655,13 +1703,20 @@ const trashed = new Map<string, string[]>();
 const linkedOn = fixture.startsWith("linked");
 // fixture embeds (K4): the Northwind Portal page holds a picture, a PDF, an audio file and a section of another note
 const embedsOn = fixture.startsWith("embeds");
+// fixture kb (K5, K1): notes with content to search, templates, favourites
+const kbOn = fixture.startsWith("kb");
+const keepState = query.get("keep") === "1";
+let favourites: string[] = keepState ? JSON.parse(sessionStorage.getItem("mockFavourites") || "[]") : [];
+if (!keepState) for (const k of Object.keys(sessionStorage)) if (k.startsWith("mock")) sessionStorage.removeItem(k);
 const pageList = () =>
   pages ??
-  (linkedOn
-    ? [...vault.notes.filter(n => vault.flat(n)), vault.FLAT_NOTE, ...vault.linkedPaths]
-    : embedsOn
-      ? [...vault.notes, embeds.FINDINGS_NOTE]
-      : vault.notes);
+  (kbOn
+    ? [...vault.notes, ...kb.paths]
+    : linkedOn
+      ? [...vault.notes.filter(n => vault.flat(n)), vault.FLAT_NOTE, ...vault.linkedPaths]
+      : embedsOn
+        ? [...vault.notes, embeds.FINDINGS_NOTE]
+        : vault.notes);
 const pageRel = (p: unknown) => String(p).replace(vault.VAULT, "").replace(/^\//, "");
 // shared-live: the Mac's document of the page, which the editor and the mock peers share, and the cursors sent
 const liveDoc = new Y.Doc();
@@ -1718,7 +1773,11 @@ function threadsOf(all: Comment[]) {
 }
 
 const written = new Map<string, { text: string; hash: string }>(
-  embedsOn ? Object.entries(embeds.texts).map(([path, text]) => [path, { text, hash: "h0" }]) : [],
+  embedsOn
+    ? Object.entries(embeds.texts).map(([path, text]) => [path, { text, hash: "h0" }])
+    : kbOn
+      ? Object.entries(kb.texts).map(([path, text]) => [path, { text, hash: "h0" }])
+      : [],
 );
 // the files added to a page (attach_copy, attach_save), for the checks
 const attached: { page: string; name: string; bytes?: number }[] = [];

@@ -1161,6 +1161,48 @@ const VIEWS = {
     await page.keyboard.type("export");
     await settle(page, 0);
   },
+  // K5, #369: ⌘K over names and content; type: and in: typed as text are pills, notes by name above the lines of content with
+  // the match marked, the keys at the bottom
+  "quick-switcher": async (fixture = "kb") => {
+    await open(page, server.url, { fixture, sel: keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.keyboard.type("type:Document in:Agency rate limit");
+    await settle(page, 500);
+  },
+  "quick-switcher-dark": async () => VIEWS["quick-switcher"]("kb-dark"),
+  // an action matching what is typed: New <template> where the open page is, Today's note
+  "quick-switcher-actions": async (fixture = "kb") => {
+    await open(page, server.url, { fixture, sel: keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.keyboard.type("new");
+    await settle(page, 500);
+    await page.keyboard.press("ArrowDown");
+    await settle(page);
+  },
+  // K1, #369: three notes pinned from their menu stand under Favourites above Recent
+  "pages-favourites": async (fixture = "kb") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
+    for (const name of ["Rate limit findings", "Portal Architecture", "Rate limit test plan"]) {
+      await page.locator(`[data-page$="/${name}.md"]`).first().click({ button: "right" });
+      await click("Add to favourites");
+    }
+    await page.locator('[data-page$="/Rate limit findings.md"]').first().click();
+    await settle(page, 400);
+  },
+  "pages-favourites-dark": async () => VIEWS["pages-favourites"]("kb-dark"),
+  // New ▸ from template on a project: the templates of the vault under the folder's own items
+  "pages-new-from-template": async (fixture = "kb") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('[data-project="Northwind Portal"]').click({ button: "right" });
+    await settle(page);
+  },
   "deep-link-ask": async () => {
     await open(page, server.url, { sel: keys.switchTo, link: "relay://ask" }); // the link the app was launched with
     await settle(page, 300);
@@ -1907,7 +1949,10 @@ const VIEWS = {
   "page-embeds-drop": async (fixture = "embeds") => {
     await VIEWS["page-embeds"](fixture);
     const card = await page.locator('.cm-embed[data-kind="pdf"]').boundingBox();
-    await page.evaluate(([x, y]) => window.__harness.dropHover(["/Users/me/Downloads/dealer-portal-error.png"], { x, y }), [card.x + 40, card.y + 2]);
+    await page.evaluate(
+      ([x, y]) => window.__harness.dropHover(["/Users/me/Downloads/dealer-portal-error.png"], { x, y }),
+      [card.x + 40, card.y + 2],
+    );
     await settle(page);
   },
   "page-embeds-drop-dark": async () => VIEWS["page-embeds-drop"]("embeds-dark"),

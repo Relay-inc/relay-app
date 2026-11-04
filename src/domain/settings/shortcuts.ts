@@ -9,7 +9,7 @@ export type Scope = "app" | "chat" | "card" | "today" | "mail";
 type Command = { scope: Scope; keys: readonly string[] };
 
 export const COMMANDS = {
-  "app.quickAsk": { scope: "app", keys: ["meta+KeyK"] },
+  "app.quickAsk": { scope: "app", keys: ["meta+KeyK", "meta+KeyO"] },
   "app.newProject": { scope: "app", keys: ["meta+KeyT"] },
   "app.newGeneral": { scope: "app", keys: ["alt+meta+KeyT"] },
   "app.reopenChat": { scope: "app", keys: ["shift+meta+KeyT"] },

@@ -6,7 +6,9 @@ import { setPop, useDetailsStore } from "../../../application/today/details";
 import { closeCompose } from "../../../application/today/mail";
 import { ContextFilter } from "./ContextFilter";
 import { useNavigationStore } from "../../../application/navigation/store";
-import { isKey } from "../../../application/settings/settings";
+import { filesOn, isKey } from "../../../application/settings/settings";
+import { openDailyNote } from "../../../application/navigation/kb";
+import { Icon } from "../../components/Icon";
 import type { CommandId } from "../../../domain/settings/shortcuts";
 import { cardOf } from "../../../application/navigation/panel";
 import { loadTodayCards, noteSeen, putOff, selectEntry, todayModel } from "../../../application/today/today";
@@ -176,6 +178,17 @@ export function TodayView({ className = "" }: { className?: string }) {
             <span className="text-xs text-late truncate max-w-80" title={errors.join("\n")}>
               {t("today.boardsDown", { n: errors.length })}
             </span>
+          ) : null}
+          {filesOn() ? (
+            <button
+              type="button"
+              data-today-note
+              className="flex-none flex items-center gap-1.5 border-0 bg-transparent p-0 cursor-pointer text-secondary hover:text-label"
+              onClick={() => void openDailyNote()}
+            >
+              <Icon name="cal" className="glyph size-3.5" />
+              {t("pages.todayNote")}
+            </button>
           ) : null}
           <ContextFilter model={model} />
         </div>

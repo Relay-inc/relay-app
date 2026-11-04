@@ -3,6 +3,7 @@ import {
   isSystemPage,
   pagesModel,
   pageTree,
+  placeOf,
   recentPages,
   type PageFolder,
   type PagesModel,
@@ -26,6 +27,7 @@ import { openDetail } from "./panel";
 import { useNavigationStore } from "./store";
 import { makeStore } from "../make-store";
 import { loadLinked } from "./linked";
+import { favouritesOf, followFavourites } from "./favourites";
 import { activeFolder, workspaces } from "./workspaces";
 
 // The sidebar's two tabs: Chats (the conversations, as before) and Pages (the notes of the workspace shown).
@@ -118,10 +120,11 @@ function build(): Built {
   return built;
 }
 /** The Pages tab: the workspace's contexts with their projects, its top folders, the notes the vault runs on (for an
- *  admin, else null), the recent notes, or the search's. */
+ *  admin, else null), the pinned and the recent notes, or the search's. */
 export function pagesView(): {
   model: PagesModel;
   system: PageFolder | null;
+  favourites: string[];
   recent: string[];
   found: string[] | null;
   total: number;
@@ -133,23 +136,31 @@ export function pagesView(): {
   return {
     model,
     system,
+    favourites: favouritesOf(workspace).filter(path => exists.has(path)),
     recent: recentPages(touches, root, path => exists.has(path)),
     found: query ? findPages(paths, query) : null,
     total: model.top.count, // the pages people write in: System not counted, for an admin either
   };
 }
 
-/** Folders and projects unfolded in the Pages tab, by path; not kept over a restart. `open` unfolds or folds it
- *  either way, else it toggles. */
-export const togglePage = (path: string, open = !useNavigationStore.getState().sidebar.pagesOpen.has(path)) =>
+/** Folders and projects unfolded in the Pages tab, by path, kept over a restart. `open` unfolds or folds it either
+ *  way, else it toggles. */
+export function togglePage(path: string, open = !useNavigationStore.getState().sidebar.pagesOpen.has(path)) {
   set(draft => {
     if (open) draft.sidebar.pagesOpen.add(path);
     else draft.sidebar.pagesOpen.delete(path);
   });
+  storage.set("pagesOpen", [...useNavigationStore.getState().sidebar.pagesOpen]);
+}
 /** A note of the workspace shown opens as a page in the middle column. */
 /** A note as a page in the middle column; with Files off in the side drawer, as before pages. */
-export const openPage = (path: string) =>
-  filesOn() ? select(pageKey(target(path))) : openDetail(noteKey(target(path)));
+export const openPage = (path: string) => openPageIn(activeFolder(), path);
+/** A note of any workspace (`folder`, its path in it): in the middle column, or with `beside` in the drawer next to
+ *  the open conversation. */
+export function openPageIn(folder: string, path: string, beside = false) {
+  const full = isMain(folder) ? path : `${folder}/${path}`;
+  return filesOn() && !beside ? select(pageKey(full)) : openDetail(noteKey(full));
+}
 /** A page's note as a path of the workspace shown ("" when the open page is another workspace's). */
 export function pagePath(page: string) {
   if (isMain(activeFolder())) return page.startsWith("/") ? "" : page;
@@ -378,6 +389,8 @@ export const freePageName = (folder: string) =>
   backend.freePageName(abs(folder), t("pages.untitled")).catch(() => t("pages.untitled"));
 /** A project's own note can't be renamed or moved here: the project is keyed by its name. */
 export const isProjectNote = (path: string) => !!pageProject(path);
+/** Where a new note is asked for in `folder` of the workspace shown: the project and context it sits under. */
+export const placeIn = (folder: string) => placeOf(build().model, folder);
 /** Every folder of the workspace shown, for Move to…. */
 export function pageFolders() {
   const all = new Set<string>();
@@ -413,6 +426,7 @@ export async function movePage(from: string, to: string) {
   try {
     const { path } = await backend.movePath(abs(from), abs(to), false);
     await loadSnapshot();
+    followFavourites(from, path);
     if (open === from) openPage(path);
     else if (open.startsWith(`${from}/`)) openPage(path + open.slice(from.length));
   } catch (e) {
