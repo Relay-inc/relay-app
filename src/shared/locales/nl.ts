@@ -1346,7 +1346,7 @@ export default {
   "gh.sidebar": "Zijbalk:",
   "gh.show": "Pull requests tonen",
   "gh.owners": "Owners:",
-  "gh.ownersPh": "Leeg is overal, bv. weareantenna",
+  "gh.ownersPh": "Leeg is overal, bv. your-org",
   "gh.help":
     "Toont je open PR's en die waar je review gevraagd wordt, per project gekoppeld via de repos op de projectkaart. Enkel lezen, een klik opent de PR op GitHub. De app gebruikt de login van de GitHub CLI, er staat geen token in de app. Niet ingelogd: voer <code>gh auth login</code> uit in de terminal.",
   "gh.recheck": "Opnieuw nakijken",
@@ -1504,7 +1504,7 @@ export default {
   "mail.step2Hint":
     "De code gaat rechtstreeks naar de macOS-sleutelhanger, onder de dienst relay-mail. De app bewaart ze nergens anders en toont ze niet meer. Klopt ze niet, dan wordt ze meteen weer verwijderd.",
   "mail.adv":
-    "Open de app Sleutelhangertoegang en zoek het item. De naam van het item is de dienst, het veld Account is het sleutelhanger-account. Voor himalaya is de dienst himalaya-&lt;naam&gt;-imap en het account &lt;naam&gt;, met de accountnaam uit je himalaya-config. Bijvoorbeeld dienst himalaya-weareantenna-imap en account weareantenna. Vraagt macOS toestemming om het te lezen, kies dan Altijd toestaan.",
+    "Open de app Sleutelhangertoegang en zoek het item. De naam van het item is de dienst, het veld Account is het sleutelhanger-account. Voor himalaya is de dienst himalaya-&lt;naam&gt;-imap en het account &lt;naam&gt;, met de accountnaam uit je himalaya-config. Bijvoorbeeld dienst himalaya-work-imap en account wearebluebird. Vraagt macOS toestemming om het te lezen, kies dan Altijd toestaan.",
   "mail.svcL": "Dienst",
   "mail.kaccL": "Sleutelhanger-account",
   "mail.addTest": "Test en voeg toe",

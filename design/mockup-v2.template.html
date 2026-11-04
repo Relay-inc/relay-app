@@ -133,7 +133,7 @@ const D = JSON.parse(document.getElementById('data').textContent);
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const md = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
-const SEL = 'Weemaes';
+const SEL = 'Orchard';
 
 // which projects need the user, work, or finished since they last looked, from claude agents --json
 const names = D.projects.map(p => p.name).sort((a, b) => b.length - a.length);
@@ -150,7 +150,7 @@ const waiting = Object.values(flags).filter(f => f === 'wait').length;
 const row = (name, trail, cls = '') => `<div class="row ${cls}"><span class="nm">${esc(name)}</span>${trail}</div>`;
 const trailOf = n => flags[n] === 'wait' ? '<span class="dot"></span>' : flags[n] === 'busy' ? '<span class="spin"></span>' : '';
 let nav = row('Wacht op jou', waiting ? `<span class="badge">${waiting}</span>` : '') + row('Algemeen', '');
-for (const c of ['Antenna', 'Zaak', 'Personal']) {
+for (const c of ['Bluebird', 'Freelance', 'Personal']) {
   const live = D.projects.filter(p => p.context === c && ['Active', 'Blocked'].includes(p.state));
   const quiet = D.projects.filter(p => p.context === c).length - live.length;
   nav += `<div class="grp">${c.toUpperCase()}</div>` + live.map(p =>
@@ -165,12 +165,12 @@ $('t').textContent = P.name;
 $('ts').textContent = `${P.state === 'Active' ? 'Actief' : P.state} · ${P.open ?? 0} open`;
 const paras = (P.stand || '').split(/\n\s*\n/).filter(Boolean);
 $('msgs').innerHTML = `
-  <div class="me">waar staan we met weemaes</div>
-  <div class="tool">Weemaes.md, Session Log en reminders gelezen</div>
+  <div class="me">waar staan we met orchard</div>
+  <div class="tool">Orchard.md, Session Log en reminders gelezen</div>
   <div class="ai">${paras.map(p => `<p>${md(p)}</p>`).join('')}</div>
   <div class="me">merge #741 als de checks groen zijn</div>
   <div class="tool"><code>gh pr checks 741</code> uitgevoerd, alles groen</div>
-  <div class="perm"><div class="q">Claude wil dit uitvoeren in weemaes-backend. Dit ziet iemand anders, dus het wacht op jou.</div>
+  <div class="perm"><div class="q">Claude wil dit uitvoeren in orchard-backend. Dit ziet iemand anders, dus het wacht op jou.</div>
     <pre>gh pr merge 741 --squash</pre>
     <div class="acts"><button class="btn">Weigeren</button><button class="btn primary">Toestaan</button></div></div>`;
 $('c').placeholder = `Vraag iets over ${P.name}…`;

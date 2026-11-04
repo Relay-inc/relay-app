@@ -43,13 +43,13 @@ test("a project under 15 minutes is dropped, titles are unique and in order", ()
 });
 
 test("the prompt names every project once with its board", () => {
-  const p = timePrompt("2026-10-05", [{ label: "Spardex", minutes: 90, titles: ["API"], board: "12" }]);
-  assert.match(p, /Spardex: 90 min \(Productive-project 12\)/);
+  const p = timePrompt("2026-10-05", [{ label: "Northwind", minutes: 90, titles: ["API"], board: "12" }]);
+  assert.match(p, /Northwind: 90 min \(Productive-project 12\)/);
   assert.match(p, /productive\.add_time/);
 });
 
 test("the prompt names every source and leaves out the sessions already counted", () => {
-  const p = timePrompt("2026-10-08", [{ label: "Spardex", minutes: 30, titles: ["DMS"] }], ["abc"]);
+  const p = timePrompt("2026-10-08", [{ label: "Northwind", minutes: 30, titles: ["DMS"] }], ["abc"]);
   for (const s of [
     "calendar.meetings date=2026-10-08",
     "Slack",

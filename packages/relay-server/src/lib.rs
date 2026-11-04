@@ -247,7 +247,7 @@ impl Server {
         let keeper = me.as_ref().is_some_and(|c| c.vaults_only);
         let parent = me.and_then(|c| c.parent);
         if parent.is_some() && !LINKED_OPS.contains(&op) { return reply(&mut w, Err(format!("{op:?} is not allowed from a linked device"))); }
-        // each device its own conversations and cards: two laptops may both have a conversation "Weemaes"; a linked
+        // each device its own conversations and cards: two laptops may both have a conversation "Orchard"; a linked
         // device works in the one it belongs to
         let ns = &parent.as_deref().unwrap_or(&fp)[..16];
         let key = |k: &Value| format!("{ns}:{}", k.as_str().unwrap_or(""));

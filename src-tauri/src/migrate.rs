@@ -314,14 +314,14 @@ mod tests {
     #[test]
     fn copy_into_a_hand_kept_work_state() {
         let (a, b) = (own("hand-a"), tmp("hand-b"));
-        w(&b, "State/work-state.md", "# Work State\n\n## Clients\n\n| Project | State | Last Touched | Left Off |\n|---|---|---|---|\n| Habo | Active | 2026-10-01 | y |\n\n## Personal\n");
+        w(&b, "State/work-state.md", "# Work State\n\n## Clients\n\n| Project | State | Last Touched | Left Off |\n|---|---|---|---|\n| Atlas Logistics | Active | 2026-10-01 | y |\n\n## Personal\n");
         fs::create_dir_all(b.join("Contexts/Clients")).unwrap();
         let (from, to) = (side(&a, "State/work-state.md", "Contexts"), side(&b, "State/work-state.md", "Contexts"));
         let p = plan(&from, &to, "Kestrel", "Clients", &Filter::vault_default(), false).unwrap();
         assert_eq!(p.json(&to)["files"], json!(["Contexts/Clients/Portfolio/Kestrel/Documents/Spec.md", "Contexts/Clients/Portfolio/Kestrel/Kestrel.md"]));
         p.apply(&from, &to, false, "2026-10-28").unwrap();
         let ws = fs::read_to_string(b.join("State/work-state.md")).unwrap();
-        assert!(ws.contains("| Habo | Active | 2026-10-01 | y |\n| Kestrel | Active | 2026-10-20 | Shop page built. |\n\n## Personal"), "{ws}");
+        assert!(ws.contains("| Atlas Logistics | Active | 2026-10-01 | y |\n| Kestrel | Active | 2026-10-20 | Shop page built. |\n\n## Personal"), "{ws}");
         assert_eq!(fs::read_to_string(b.join(".relay/notes/Kestrel/a1.md")).unwrap(), "scratch");
         let cfg: Value = serde_json::from_str(&fs::read_to_string(b.join(".relay/config.json")).unwrap()).unwrap();
         assert_eq!(cfg["repos"], json!({"me/kestrel": "Kestrel"}));

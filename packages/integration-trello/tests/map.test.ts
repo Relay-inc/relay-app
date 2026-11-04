@@ -8,9 +8,9 @@ const fx = (n: string) => JSON.parse(readFileSync(new URL(`./fixtures/${n}.json`
 
 test("boards group under their workspace, the rest under personal", () => {
   const r = mapBoards(fx("boards"), fx("orgs"), "Personal");
-  assert.deepEqual(r.projects, [{ id: "600000000000000000000a01", name: "Antenna" }, { id: PERSONAL, name: "Personal" }]);
+  assert.deepEqual(r.projects, [{ id: "600000000000000000000a01", name: "Bluebird" }, { id: PERSONAL, name: "Personal" }]);
   assert.deepEqual(r.boards.map(b => [b.name, b.project, b.group]), [
-    ["Website", "600000000000000000000a01", "Antenna"], ["Groceries", PERSONAL, "Personal"], ["Client board", PERSONAL, "Personal"]]);
+    ["Website", "600000000000000000000a01", "Bluebird"], ["Groceries", PERSONAL, "Personal"], ["Client board", PERSONAL, "Personal"]]);
 });
 
 test("columns are the open lists in board order", () => {
@@ -20,7 +20,7 @@ test("columns are the open lists in board order", () => {
 test("cards carry number, list, due day and the first name of the first member", () => {
   const [a, b] = mapCards(fx("cards"));
   assert.deepEqual(a, { id: "600000000000000000000d01", title: "Fix the header", number: "12", column: "600000000000000000000c01",
-    placement: 65535, due: "2026-10-03", who: "Kristof", whoName: "Kristof Example" });
+    placement: 65535, due: "2026-10-03", who: "Alex", whoName: "Alex Example" });
   assert.equal(b.due, null);
   assert.equal(b.who, "");
 });

@@ -136,7 +136,7 @@ test("review: merged, closed, people's words after the run, bots and approvals l
   assert.deepEqual(review(pr({ state: "MERGED" }), 0), { kind: "merged" });
   assert.deepEqual(review(pr({ state: "CLOSED" }), 0), { kind: "closed" });
   assert.equal(review(pr({}), 0), null);
-  const old = { author: { login: "kristof" }, body: "old", state: "COMMENTED", submittedAt: at(50) };
+  const old = { author: { login: "alex" }, body: "old", state: "COMMENTED", submittedAt: at(50) };
   assert.equal(review(pr({ reviews: [old] }), 100), null, "before the run ended");
   assert.equal(review(pr({ reviews: [{ ...old, submittedAt: at(200), state: "APPROVED", body: "lgtm" }] }), 100), null);
   assert.equal(
@@ -150,13 +150,13 @@ test("review: merged, closed, people's words after the run, bots and approvals l
   const r = review(
     pr({
       reviews: [{ ...old, submittedAt: at(200), state: "CHANGES_REQUESTED", body: "rename it" }],
-      inline: [{ user: { login: "kristof" }, body: "typo", path: "a.ts", line: 3, created_at: at(201) }],
+      inline: [{ user: { login: "alex" }, body: "typo", path: "a.ts", line: 3, created_at: at(201) }],
     }),
     100,
   );
   assert.equal(r?.kind, "feedback");
   assert.ok(
-    r?.kind === "feedback" && r.text.includes("rename it") && r.text.includes("On a.ts:3, by kristof:\ntypo"),
+    r?.kind === "feedback" && r.text.includes("rename it") && r.text.includes("On a.ts:3, by alex:\ntypo"),
     JSON.stringify(r),
   );
 });

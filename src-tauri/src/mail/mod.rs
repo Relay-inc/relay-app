@@ -634,17 +634,17 @@ mod tests {
     #[test]
     fn accounts_are_validated() {
         let m = json!({ "accounts": [
-            { "email": "a@b.be", "keychain_service": "himalaya-x", "keychain_account": "x" },
-            { "email": "a@b.be", "keychain_service": "-s", "keychain_account": "x" },
-            { "email": "a@b.be", "keychain_service": "x\ny", "keychain_account": "x" },
-            { "email": "a\"@b.be", "keychain_service": "x", "keychain_account": "x" },
+            { "email": "a@example.com", "keychain_service": "himalaya-x", "keychain_account": "x" },
+            { "email": "a@example.com", "keychain_service": "-s", "keychain_account": "x" },
+            { "email": "a@example.com", "keychain_service": "x\ny", "keychain_account": "x" },
+            { "email": "a\"@example.com", "keychain_service": "x", "keychain_account": "x" },
             { "email": "nope", "keychain_service": "x", "keychain_account": "x" },
-            { "email": "a@b.be", "keychain_service": "x".repeat(129), "keychain_account": "x" },
-            { "email": "a@b.be", "keychain_service": "", "keychain_account": "x" },
+            { "email": "a@example.com", "keychain_service": "x".repeat(129), "keychain_account": "x" },
+            { "email": "a@example.com", "keychain_service": "", "keychain_account": "x" },
         ] });
-        assert_eq!(accounts(&m), vec![Account { email: "a@b.be".into(), keychain_service: "himalaya-x".into(), keychain_account: "x".into(), host: "".into(), port: 993 }]);
+        assert_eq!(accounts(&m), vec![Account { email: "a@example.com".into(), keychain_service: "himalaya-x".into(), keychain_account: "x".into(), host: "".into(), port: 993 }]);
         assert!(accounts(&json!({})).is_empty());
-        let h = |h: Value, p: Value| accounts(&json!({ "accounts": [{ "email": "a@b.be", "keychain_service": "x", "keychain_account": "x", "host": h, "port": p }] }));
+        let h = |h: Value, p: Value| accounts(&json!({ "accounts": [{ "email": "a@example.com", "keychain_service": "x", "keychain_account": "x", "host": h, "port": p }] }));
         let n = Value::Null;
         assert_eq!((h(json!("mail.ex-ample.com"), json!(143))[0].host.as_str(), h(json!("mail.ex-ample.com"), json!(143))[0].port), ("mail.ex-ample.com", 143));
         assert_eq!((h(n.clone(), n.clone())[0].host.as_str(), h(n.clone(), n.clone())[0].port), ("", 993));
@@ -688,17 +688,17 @@ mod tests {
 
     #[test]
     fn inbox_or_other() {
-        let known: HashSet<String> = ["friend@shop.be".to_string()].into();
+        let known: HashSet<String> = ["friend@example.com".to_string()].into();
         let is_other = |raw: &str| other(&MessageParser::default().parse(raw.as_bytes()).unwrap(), &known);
-        assert!(!is_other("From: Jan <jan@client.be>\r\nSubject: hi\r\n\r\n"));
-        assert!(is_other("From: news@shop.be\r\nList-Unsubscribe: <mailto:x@y.be>\r\n\r\n"));
-        assert!(is_other("From: x@y.be\r\nPrecedence: Bulk\r\n\r\n"));
-        assert!(is_other("From: x@y.be\r\nAuto-Submitted: auto-generated\r\n\r\n"));
-        assert!(!is_other("From: x@y.be\r\nAuto-Submitted: no\r\n\r\n"));
+        assert!(!is_other("From: Jan <jan@example.com>\r\nSubject: hi\r\n\r\n"));
+        assert!(is_other("From: news@example.com\r\nList-Unsubscribe: <mailto:x@example.com>\r\n\r\n"));
+        assert!(is_other("From: x@example.com\r\nPrecedence: Bulk\r\n\r\n"));
+        assert!(is_other("From: x@example.com\r\nAuto-Submitted: auto-generated\r\n\r\n"));
+        assert!(!is_other("From: x@example.com\r\nAuto-Submitted: no\r\n\r\n"));
         assert!(is_other("From: GitHub <notifications@github.com>\r\n\r\n"));
-        assert!(is_other("From: no-reply@bank.be\r\n\r\n"));
+        assert!(is_other("From: no-reply@example.com\r\n\r\n"));
         // someone you wrote to stays in the Inbox, newsletter or not
-        assert!(!is_other("From: Friend@Shop.be\r\nList-Id: <l.shop.be>\r\n\r\n"));
+        assert!(!is_other("From: Friend@example.com\r\nList-Id: <l.shop.be>\r\n\r\n"));
     }
 
     #[test]
@@ -706,8 +706,8 @@ mod tests {
         let now = SystemTime::now();
         let (k, keep) = known_or_empty(Err("IMAP: in:sent failed".into()), now);
         assert!(k.is_empty() && keep.is_none(), "a failed read lists the inbox with nobody known and is not kept");
-        let (k, keep) = known_or_empty(Ok(["a@b.be".to_string()].into()), now);
-        assert!(k.contains("a@b.be"));
+        let (k, keep) = known_or_empty(Ok(["a@example.com".to_string()].into()), now);
+        assert!(k.contains("a@example.com"));
         assert!(fresh(&keep, now + Duration::from_secs(600)).is_some(), "kept across a session's 5 minutes");
         assert!(fresh(&keep, now + KNOWN_TTL).is_none(), "read again after the hour");
     }
@@ -736,28 +736,28 @@ mod tests {
 
     #[test]
     fn draft_from_check() {
-        let ok = "From: Laurent <Laurent@WeAreAntenna.be>\nTo: x@y.be\nSubject: Re: hi\n\nBody\n";
-        let (raw, to, cc, _bcc) = draft(ok, "laurent@weareantenna.be").unwrap();
+        let ok = "From: Lena <Alex@example.com>\nTo: x@example.com\nSubject: Re: hi\n\nBody\n";
+        let (raw, to, cc, _bcc) = draft(ok, "alex@example.com").unwrap();
         assert_eq!(raw, ok.replace('\n', "\r\n").into_bytes());
-        assert_eq!((to, cc), (vec!["x@y.be".to_string()], vec![]));
-        let (_, to, cc, bcc) = draft("From: laurent@weareantenna.be\nTo: A <a@x.be>, b@x.be\nCc: c@x.be\nBcc: d@x.be\n\nb", "laurent@weareantenna.be").unwrap();
-        assert_eq!(bcc, vec!["d@x.be".to_string()], "a hidden recipient shows in the app note too");
-        assert_eq!((to, cc), (vec!["a@x.be".to_string(), "b@x.be".to_string()], vec!["c@x.be".to_string()]));
+        assert_eq!((to, cc), (vec!["x@example.com".to_string()], vec![]));
+        let (_, to, cc, bcc) = draft("From: alex@example.com\nTo: A <a@example.com>, b@example.com\nCc: c@example.com\nBcc: d@example.com\n\nb", "alex@example.com").unwrap();
+        assert_eq!(bcc, vec!["d@example.com".to_string()], "a hidden recipient shows in the app note too");
+        assert_eq!((to, cc), (vec!["a@example.com".to_string(), "b@example.com".to_string()], vec!["c@example.com".to_string()]));
         for bad in [
-            "From: someone@else.be\nSubject: x\n\nb",
+            "From: someone@example.com\nSubject: x\n\nb",
             "Subject: no from\n\nb",
-            "From: a@x.be, laurent@weareantenna.be\n\nb",
-            "From: evil@x.be\nFrom: laurent@weareantenna.be\n\nb",
-            "From: laurent@weareantenna.be\n\nb\0",
+            "From: a@example.com, alex@example.com\n\nb",
+            "From: evil@example.com\nFrom: alex@example.com\n\nb",
+            "From: alex@example.com\n\nb\0",
         ] {
-            assert!(draft(bad, "laurent@weareantenna.be").is_err(), "{bad:?}");
+            assert!(draft(bad, "alex@example.com").is_err(), "{bad:?}");
         }
-        assert!(draft(&format!("From: laurent@weareantenna.be\n\n{}", "x".repeat(DRAFT_MAX)), "laurent@weareantenna.be").is_err());
+        assert!(draft(&format!("From: alex@example.com\n\n{}", "x".repeat(DRAFT_MAX)), "alex@example.com").is_err());
     }
 
     #[tokio::test]
     async fn tool_args_fail_before_the_network() {
-        let (m, a, d) = (Mail::new(), [acct("laurent@weareantenna.be")], std::env::temp_dir());
+        let (m, a, d) = (Mail::new(), [acct("alex@example.com")], std::env::temp_dir());
         let call = async |name: &str, args: Value| m.tool(&a, "", name, &args, &d).await;
         assert!(err(&call("search", json!({ "query": "a\r\nA1 LOGOUT" })).await).contains("ASCII"));
         assert!(err(&call("search", json!({ "query": "x\"", "limit": 51 })).await).contains("limit"));
@@ -765,22 +765,22 @@ mod tests {
         assert!(err(&call("read", json!({ "id": "1 FLAGS" })).await).contains("id"));
         assert!(err(&call("read", json!({ "id": "1", "headers": ["Bad Name"] })).await).contains("header"));
         assert!(err(&call("attachment", json!({ "id": "1", "index": -1 })).await).contains("index"));
-        assert!(err(&call("thread", json!({ "id": "1", "account": "other@x.be" })).await).contains("not configured"));
-        assert!(err(&call("save_draft", json!({ "raw": "From: other@x.be\n\nb" })).await).contains("From"));
+        assert!(err(&call("thread", json!({ "id": "1", "account": "other@example.com" })).await).contains("not configured"));
+        assert!(err(&call("save_draft", json!({ "raw": "From: other@example.com\n\nb" })).await).contains("From"));
         assert!(err(&call("send", json!({})).await).contains("Unknown tool"));
         assert!(err(&m.tool(&[], "", "search", &json!({ "query": "x" }), &d).await).contains("No mail account"));
         // "" is the default account, not the first: the default here is not configured
-        assert!(err(&m.tool(&a, "other@x.be", "read", &json!({ "id": "1", "account": "" }), &d).await).contains("not configured"));
+        assert!(err(&m.tool(&a, "other@example.com", "read", &json!({ "id": "1", "account": "" }), &d).await).contains("not configured"));
     }
 
     #[test]
     fn accounts_by_email() {
-        let a = [acct("a@b.be"), acct("c@d.be")];
-        assert_eq!(pick_account(&a, "").unwrap().email, "a@b.be");
-        assert_eq!(pick_account(&a, "C@D.be").unwrap().email, "c@d.be");
-        assert!(pick_account(&a, "x@y.be").is_none() && pick_account(&[], "").is_none());
-        assert_eq!(pick(&a, "c@d.be", &json!("")).unwrap().email, "c@d.be");
-        assert_eq!(pick(&a, "", &Value::Null).unwrap().email, "a@b.be");
+        let a = [acct("a@example.com"), acct("c@example.com")];
+        assert_eq!(pick_account(&a, "").unwrap().email, "a@example.com");
+        assert_eq!(pick_account(&a, "C@example.com").unwrap().email, "c@example.com");
+        assert!(pick_account(&a, "x@example.com").is_none() && pick_account(&[], "").is_none());
+        assert_eq!(pick(&a, "c@example.com", &json!("")).unwrap().email, "c@example.com");
+        assert_eq!(pick(&a, "", &Value::Null).unwrap().email, "a@example.com");
     }
 
     #[test]

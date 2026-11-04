@@ -47,7 +47,7 @@ export async function linkVaultBoard(vaultProject: string, providerId: string, p
   await loadTodayCards();
 }
 
-/** The vault projects to link a repo to, the one its name points at first (be-plastics-frontend → BE Plastics). */
+/** The vault projects to link a repo to, the one its name points at first (acme-plastics-frontend → Acme Plastics). */
 export function repoProjects(repo: string): [string, string][] {
   const all = vaultProjects();
   const name = repo.split("/").pop() ?? repo;

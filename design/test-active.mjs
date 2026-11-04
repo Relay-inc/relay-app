@@ -1,4 +1,4 @@
-import { chromium } from '/Users/laurentmeersman/Documents/Antenna/craft-overnamemarkt/node_modules/playwright-core/index.mjs';
+import { chromium } from 'playwright-core';
 import { readFileSync } from 'fs';
 const snap = readFileSync('snapshot.json', 'utf8'), agents = readFileSync('agents.json', 'utf8');
 const b = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
@@ -13,15 +13,15 @@ await p.goto('http://localhost:1420'); await p.waitForTimeout(900);
 const sections = () => p.$$eval('.grp', gs => gs.map(g => g.querySelector('.gl').textContent));
 console.log('secties:', (await sections()).join(' | '));
 console.log('actief:', await p.$$eval('.grp[data-sec="Actief"] ~ div .prow .nm', r => r.map(x => x.textContent)));
-// close a terminal under Weemaes, undo, close again, reopen via right-click on the project
-const sel = '.prow[data-p="Weemaes"] ~ .row.term';
+// close a terminal under Orchard, undo, close again, reopen via right-click on the project
+const sel = '.prow[data-p="Orchard"] ~ .row.term';
 const k = await p.getAttribute(sel, 'data-k');
 await p.hover(`[data-k="${k}"]`); await p.click(`[data-k="${k}"] .x`); await p.waitForTimeout(200);
 console.log('toast:', (await p.textContent('#toast')).replace(/\s+/g, ' ').trim().slice(0, 70), '| weg:', !(await p.$(`#nav [data-k="${k}"]`)));
 await p.click('#undo'); await p.waitForTimeout(300);
 console.log('na ongedaan maken terug:', !!(await p.$(`#nav [data-k="${k}"]`)));
 await p.hover(`#nav [data-k="${k}"]`); await p.click(`#nav [data-k="${k}"] .x`); await p.waitForTimeout(200);
-await p.click('.prow[data-p="Weemaes"]', { button: 'right' }); await p.waitForTimeout(150);
+await p.click('.prow[data-p="Orchard"]', { button: 'right' }); await p.waitForTimeout(150);
 console.log('rechtsklik op project:', await p.$$eval('#ctx > *', r => r.map(x => x.textContent.slice(0, 34))));
 await p.click(`#ctx [data-ctx="reopen"][data-k="${k}"]`); await p.waitForTimeout(300);
 console.log('heropend en geselecteerd:', await p.evaluate(k => document.querySelector(`#nav [data-k="${k}"]`)?.classList.contains('sel'), k));

@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn machines_validate_and_bind() {
         // an older settings file still has project folders: ignored
-        let m = json!({"id": "0123456789ab", "name": "LServer", "host": "192.168.1.2", "port": 47800, "fp": "a".repeat(64), "folders": {"Weemaes": "/home/l/weemaes"}});
+        let m = json!({"id": "0123456789ab", "name": "LServer", "host": "192.168.1.2", "port": 47800, "fp": "a".repeat(64), "folders": {"Orchard": "/home/l/orchard"}});
         assert!(valid(&m));
         for bad in [json!({"host": "a b"}), json!({"port": 0}), json!({"fp": "xyz"})] {
             let mut b = m.clone();

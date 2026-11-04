@@ -29,7 +29,7 @@ test("one account's first page replaces its rows and keeps the other account's",
   );
 });
 
-const row = (id: string, other = false): Mail => ({ ...mail("a@b.be", id, "2026-10-02T10:00:00Z"), other });
+const row = (id: string, other = false): Mail => ({ ...mail("a@example.com", id, "2026-10-02T10:00:00Z"), other });
 const filter: MailFilter = { q: "", state: "all", project: "", box: "inbox" };
 const noProject = () => null;
 

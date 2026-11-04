@@ -195,8 +195,8 @@ export function MailSettings() {
           {emailField("mailemail2")}
           {textField("mailhost2", t("mail.advHostL"), "host", "mail.example.com")}
           {textField("mailport2", t("mail.portL"), "port", "993")}
-          {textField("mailsvc", t("mail.svcL"), "keychain_service", "himalaya-weareantenna-imap")}
-          {textField("mailkacc", t("mail.kaccL"), "keychain_account", "weareantenna")}
+          {textField("mailsvc", t("mail.svcL"), "keychain_service", "himalaya-work-imap")}
+          {textField("mailkacc", t("mail.kaccL"), "keychain_account", "work")}
           {addButton("advanced", "mail.addTest", addMailAccount)}
         </div>
       ),

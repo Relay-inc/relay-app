@@ -1361,7 +1361,7 @@ export default {
   "gh.sidebar": "Barre latérale :",
   "gh.show": "Afficher les pull requests",
   "gh.owners": "Propriétaires :",
-  "gh.ownersPh": "Vide = partout, p. ex. weareantenna",
+  "gh.ownersPh": "Vide = partout, p. ex. your-org",
   "gh.help":
     "Affiche vos PR ouvertes et celles où votre revue est demandée, reliées à chaque projet via les dépôts de la fiche projet. Lecture seule, un clic ouvre la PR sur GitHub. L'app utilise la connexion de la GitHub CLI, aucun jeton n'est stocké dans l'app. Pas connecté : lancez <code>gh auth login</code> dans le terminal.",
   "gh.recheck": "Vérifier à nouveau",
@@ -1521,7 +1521,7 @@ export default {
   "mail.step2Hint":
     "Le code va directement dans le trousseau macOS, sous le service relay-mail. L'app ne le stocke nulle part ailleurs et ne l'affiche plus. S'il est faux, il est supprimé aussitôt.",
   "mail.adv":
-    "Ouvrez l'app Trousseaux d'accès et cherchez l'élément. Son nom est le service, son champ Compte est le compte du trousseau. Pour himalaya, le service est himalaya-&lt;nom&gt;-imap et le compte &lt;nom&gt;, avec le nom de compte de votre configuration himalaya. Par exemple le service himalaya-weareantenna-imap et le compte weareantenna. Si macOS demande l'autorisation de le lire, choisissez Toujours autoriser.",
+    "Ouvrez l'app Trousseaux d'accès et cherchez l'élément. Son nom est le service, son champ Compte est le compte du trousseau. Pour himalaya, le service est himalaya-&lt;nom&gt;-imap et le compte &lt;nom&gt;, avec le nom de compte de votre configuration himalaya. Par exemple le service himalaya-work-imap et le compte wearebluebird. Si macOS demande l'autorisation de le lire, choisissez Toujours autoriser.",
   "mail.svcL": "Service",
   "mail.kaccL": "Compte du trousseau",
   "mail.addTest": "Tester et ajouter",

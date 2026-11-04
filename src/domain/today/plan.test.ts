@@ -101,7 +101,9 @@ test("an item's status: the tracker's when there is one, else started on Today o
 });
 
 test("the context filter: everything, the items without a project, or one context", () => {
-  assert.ok(inContext("", "Antenna") && inContext("", undefined));
-  assert.ok(inContext("Antenna", "Antenna") && !inContext("Antenna", "Personal") && !inContext("Antenna", undefined));
-  assert.ok(inContext(NO_PROJECT, undefined) && !inContext(NO_PROJECT, "Antenna"));
+  assert.ok(inContext("", "Bluebird") && inContext("", undefined));
+  assert.ok(
+    inContext("Bluebird", "Bluebird") && !inContext("Bluebird", "Personal") && !inContext("Bluebird", undefined),
+  );
+  assert.ok(inContext(NO_PROJECT, undefined) && !inContext(NO_PROJECT, "Bluebird"));
 });

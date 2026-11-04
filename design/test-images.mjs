@@ -1,4 +1,4 @@
-import { chromium } from '/Users/laurentmeersman/Documents/Antenna/craft-overnamemarkt/node_modules/playwright-core/index.mjs';
+import { chromium } from 'playwright-core';
 import { readFileSync } from 'fs';
 const snap = readFileSync('snapshot.json', 'utf8');
 const sid = JSON.parse(snap).sessions.items[0].sessionId;
@@ -12,7 +12,7 @@ await p.addInitScript(([snap, sid]) => {
   window.__TAURI_INTERNALS__ = { transformCallback: fn => { const id = ++n; cbs[id] = fn; return id; },
     invoke: async (cmd, a) => {
       if (cmd === 'snapshot') return JSON.parse(snap);
-      if (cmd === 'chats') return ['Resolvus'];
+      if (cmd === 'chats') return ['Meridian'];
       if (cmd === 'history') return [
         { type: 'user', message: { content: [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: red } }, { type: 'text', text: 'wat zie je hier?' }] } },
         { type: 'user', message: { content: [{ type: 'image', source: { type: 'url', url: 'https://x' } }] } },
@@ -28,7 +28,7 @@ await p.addInitScript(([snap, sid]) => {
 await p.goto('http://localhost:1420'); await p.waitForTimeout(900);
 
 // history: an inline image is a thumbnail, a non-inline one a placeholder
-await p.click('.row.conv[data-k="Resolvus"]'); await p.waitForTimeout(400);
+await p.click('.row.conv[data-k="Meridian"]'); await p.waitForTimeout(400);
 console.log('historiek thumbs:', await p.$$eval('#msgs .mimgs img', x => x.length), 'placeholder:', await p.$$eval('#msgs .imgph', x => x.map(e => e.textContent)));
 
 // paste helper: a File made on a canvas, inside a DataTransfer on a synthetic ClipboardEvent

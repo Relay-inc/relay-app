@@ -4,7 +4,7 @@ import { NO_PROJECT } from "../../../domain/today/plan";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 
-/** Today per context: all of it, one context of the vault (Antenna, Freelance, Personal), or what has no project.
+/** Today per context: all of it, one context of the vault (Bluebird, Freelance, Personal), or what has no project.
  *  A quiet select in the header; a context with nothing today stays out, unless it is the one picked. */
 export function ContextFilter({ model }: { model: TodayModel }) {
   const { t } = useT();

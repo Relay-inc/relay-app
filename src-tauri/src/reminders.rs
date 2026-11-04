@@ -217,8 +217,8 @@ mod tests {
         (dir.join("reminders.md"), dir.join("actions.log"))
     }
     const TABLE: &str = "# Reminders\n\n*intro*\n\n| Date | Reminder | Source | Repeat |\n|------|----------|--------|--------|\n\
-| 2026-10-02 | [[Smappee Laadpassen]] **Prijsvork naar Mina.** Kern 12,5-19k. | [[x]] |  |\n\
-| 2026-10-11 | [[Antenna]] **Budgetronde** (a \\| b). | Laurent | 1m |\n\
+| 2026-10-02 | [[Brightcharge Laadpassen]] **Prijsvork naar Lena.** Kern 12,5-19k. | [[x]] |  |\n\
+| 2026-10-11 | [[Bluebird]] **Budgetronde** (a \\| b). | Lena | 1m |\n\
 | 2026-09-30 | Overdracht Moduus. Mail verstuurd. | Mail |\n";
 
     #[test]
@@ -230,9 +230,9 @@ mod tests {
         assert_eq!(l[0]["days"], 0);
         assert_eq!(l[0]["title"], "Overdracht Moduus");
         assert_eq!(l[0]["project"], Value::Null);
-        assert_eq!(l[1]["project"], "Smappee Laadpassen");
-        assert_eq!(l[1]["title"], "Prijsvork naar Mina");
-        assert_eq!(l[2]["text"], "[[Antenna]] **Budgetronde** (a | b).");
+        assert_eq!(l[1]["project"], "Brightcharge Laadpassen");
+        assert_eq!(l[1]["title"], "Prijsvork naar Lena");
+        assert_eq!(l[2]["text"], "[[Bluebird]] **Budgetronde** (a | b).");
         assert_eq!(l[2]["repeat"], "1m");
         // ids are sha1("date|unescaped text")[:8], as in reminder-digest.py row_id
         // expected values from hashlib.sha1("date|text".encode()).hexdigest()[:8], as in reminder-digest.py
@@ -248,13 +248,13 @@ mod tests {
         let ids: Vec<String> = list(&p, today).iter().map(|r| r["id"].as_str().unwrap().to_string()).collect();
         // done on a repeat moves it on, from the later of its date and today
         assert_eq!(act(&p, &lg, "done", &ids[2], None, today).unwrap(), "2026-11-11");
-        assert!(fs::read_to_string(&p).unwrap().contains("| 2026-11-11 | [[Antenna]] **Budgetronde** (a \\| b). | Laurent | 1m |"));
+        assert!(fs::read_to_string(&p).unwrap().contains("| 2026-11-11 | [[Bluebird]] **Budgetronde** (a \\| b). | Lena | 1m |"));
         // push to a weekday: 2026-09-30 is a Wednesday
         assert_eq!(act(&p, &lg, "push", &ids[0], Some("maandag"), today).unwrap(), "2026-10-05");
         assert_eq!(act(&p, &lg, "drop", &ids[1], None, today).unwrap(), "");
         let s = fs::read_to_string(&p).unwrap();
         assert!(s.starts_with("# Reminders\n\n*intro*\n") && s.ends_with("|\n"));
-        assert!(!s.contains("Smappee"));
+        assert!(!s.contains("Brightcharge"));
         assert_eq!(list(&p, today).len(), 2);
         assert_eq!(act(&p, &lg, "done", &ids[1], None, today), Err("err.rem_gone".into()));
         assert_eq!(fs::read_to_string(&lg).unwrap().lines().count(), 3);
@@ -264,8 +264,8 @@ mod tests {
     fn add_creates_the_file_and_appends_after_the_last_row() {
         let (p, lg) = tmp("add");
         let today = d("2026-09-30");
-        let id = add(&p, &lg, "Eerste  reminder\nmet | pipe", "morgen", Some("Weemaes"), None, today).unwrap();
-        assert_eq!(fs::read_to_string(&p).unwrap(), format!("{HEADER}| 2026-10-01 | [[Weemaes]] Eerste reminder met \\| pipe | Relay |  |\n"));
+        let id = add(&p, &lg, "Eerste  reminder\nmet | pipe", "morgen", Some("Orchard"), None, today).unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), format!("{HEADER}| 2026-10-01 | [[Orchard]] Eerste reminder met \\| pipe | Relay |  |\n"));
         assert_eq!(list(&p, today)[0]["id"], id.as_str());
         add(&p, &lg, "Tweede", "+2w", None, Some("14d"), today).unwrap();
         let l = list(&p, today);

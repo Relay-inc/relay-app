@@ -205,8 +205,8 @@ mod tests {
 
     #[test]
     fn query_keeps_topic_words() {
-        let q = query_of("Wat is de status van Spardex? Spardex portal, de customer portal en de testklanten.");
-        assert!(q.starts_with("\"portal\" OR \"spardex\""), "{q}");
+        let q = query_of("Wat is de status van Vantage? Vantage portal, de customer portal en de testklanten.");
+        assert!(q.starts_with("\"portal\" OR \"vantage\""), "{q}");
         assert!(!q.contains("\"status\" OR \"wat\""));
         assert!(!q.contains("\"van\""));
         assert_eq!(query_of("de en het 2026 ok"), "");
@@ -219,34 +219,34 @@ mod tests {
         fs::create_dir_all(d.join("Contexts/A")).unwrap();
         let v = vault::canon(d.to_str().unwrap());
         let db = d.join("index");
-        fs::write(d.join("Contexts/A/Spardex.md"), "Customer portal voor testklanten").unwrap();
-        fs::write(d.join("Contexts/A/Brutsaert.md"), "Access ERP migratie, prijscascade").unwrap();
-        fs::write(d.join("Contexts/A/Other.md"), "Over de customer portal van Spardex, kort").unwrap();
+        fs::write(d.join("Contexts/A/Northwind.md"), "Customer portal voor testklanten").unwrap();
+        fs::write(d.join("Contexts/A/Bramwell.md"), "Access ERP migratie, prijscascade").unwrap();
+        fs::write(d.join("Contexts/A/Other.md"), "Over de customer portal van Northwind, kort").unwrap();
         let paths = |text: &str| related(&db, &v, text, 5).unwrap().iter().map(|r| r["path"].as_str().unwrap().to_string()).collect::<Vec<_>>();
-        let hits = paths("hoe zit het met de Spardex customer portal");
-        assert_eq!(hits[0], "Contexts/A/Spardex.md"); // the title match wins
+        let hits = paths("hoe zit het met de Northwind customer portal");
+        assert_eq!(hits[0], "Contexts/A/Northwind.md"); // the title match wins
         assert!(hits.contains(&"Contexts/A/Other.md".to_string()));
-        assert!(!hits.contains(&"Contexts/A/Brutsaert.md".to_string()));
-        assert_eq!(paths("prijscascade"), vec!["Contexts/A/Brutsaert.md"]);
+        assert!(!hits.contains(&"Contexts/A/Bramwell.md".to_string()));
+        assert_eq!(paths("prijscascade"), vec!["Contexts/A/Bramwell.md"]);
         // a deleted note leaves the index, a new one comes in
-        fs::remove_file(d.join("Contexts/A/Brutsaert.md")).unwrap();
+        fs::remove_file(d.join("Contexts/A/Bramwell.md")).unwrap();
         fs::write(d.join("Contexts/A/Prijzen.md"), "de prijscascade per klant").unwrap();
         assert_eq!(paths("prijscascade"), vec!["Contexts/A/Prijzen.md"]);
     }
 
-    // Kristof's real vault, read-only (index in a temp file); skipped where it does not exist
+    // Alex's real vault, read-only (index in a temp file); skipped where it does not exist
     #[test]
-    fn real_vault_of_kristof() {
-        let v = "/Users/kristof/vault";
+    fn real_vault_of_maintainer() {
+        let v = "/Users/alex/vault";
         if !Path::new(v).is_dir() { return; }
         let db = std::env::temp_dir().join(format!("relay-related-real-{}", std::process::id()));
         let t = std::time::Instant::now();
-        let hits = related(&db, &vault::canon(v), "tariefgesprek met Pieter, dagtarief en de o2o plaatsing", 8).unwrap();
+        let hits = related(&db, &vault::canon(v), "tariefgesprek met Sofie, dagtarief en de a2a plaatsing", 8).unwrap();
         println!("{:?}", t.elapsed());
         for h in &hits { println!("{}", h["path"]); }
         assert!(!hits.is_empty());
         let t = std::time::Instant::now();
-        related(&db, &vault::canon(v), "Spardex customer portal", 8).unwrap();
+        related(&db, &vault::canon(v), "Northwind customer portal", 8).unwrap();
         println!("warm: {:?}", t.elapsed());
         fs::remove_dir_all(db).ok();
     }
@@ -257,7 +257,7 @@ mod tests {
     fn real_graphs() {
         let home = std::env::var("HOME").unwrap();
         let db = std::env::temp_dir().join(format!("relay-graph-real-{}", std::process::id()));
-        for r in [format!("{home}/vault"), format!("{home}/projects/antenna-brain")] {
+        for r in [format!("{home}/vault"), format!("{home}/projects/bluebird-brain")] {
             let t = std::time::Instant::now();
             let g = graph(&db, &vault::canon(&r)).unwrap();
             let hubs = g["nodes"].as_array().unwrap().iter().filter(|n| n["h"] == true).count();
@@ -271,18 +271,18 @@ mod tests {
 
     #[test]
     fn a_note_parses_into_title_kind_tags_and_links() {
-        let brain = "---\nid: x-1\nkind: memory\ntitle: 'It''s done'\ntags:\n  - spardex\n  - dms\nrelates:\n  - contributor-k\n---\nSee [[Other note|the other]] and [[a/b#Head]].\n";
+        let brain = "---\nid: x-1\nkind: memory\ntitle: 'It''s done'\ntags:\n  - northwind\n  - dms\nrelates:\n  - contributor-k\n---\nSee [[Other note|the other]] and [[a/b#Head]].\n";
         let (title, kind, tags, links, hub) = parse("memory/x-1.md", brain);
-        assert_eq!((title.as_str(), kind.as_str(), tags.as_str(), hub), ("It's done", "memory", "spardex\ndms", false));
+        assert_eq!((title.as_str(), kind.as_str(), tags.as_str(), hub), ("It's done", "memory", "northwind\ndms", false));
         assert_eq!(links, "contributor-k\nOther note\na/b");
-        let vault = "---\ntype: Meeting\ncontext: \"[[Antenna]]\"\ntags: [a, b]\n---\n# Hi\n";
-        assert_eq!(parse("Calendar/2026-10-08 Sync.md", vault), ("2026-10-08 Sync".into(), "Meeting".into(), "a\nb".into(), "Antenna".into(), false));
-        assert!(parse("spardex/Spardex.md", "# Spardex\n\n> Generated index for `spardex`.\n").4);
+        let vault = "---\ntype: Meeting\ncontext: \"[[Bluebird]]\"\ntags: [a, b]\n---\n# Hi\n";
+        assert_eq!(parse("Calendar/2026-10-08 Sync.md", vault), ("2026-10-08 Sync".into(), "Meeting".into(), "a\nb".into(), "Bluebird".into(), false));
+        assert!(parse("northwind/Northwind.md", "# Northwind\n\n> Generated index for `northwind`.\n").4);
     }
 
     #[test]
     fn typed_words_must_all_match_the_last_may_be_half() {
-        assert_eq!(typed_query("spardex dm"), "\"spardex\"* \"dm\"*");
+        assert_eq!(typed_query("northwind dm"), "\"northwind\"* \"dm\"*");
         assert_eq!(typed_query("  \"; "), "");
     }
 

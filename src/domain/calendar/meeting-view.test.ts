@@ -27,7 +27,7 @@ import type { Meeting } from "./types";
 
 const meeting: Meeting = {
   id: "abc@100",
-  feed: "me@x.be",
+  feed: "me@example.com",
   title: "Northwind sync",
   start: "2026-11-04T09:30:00+01:00",
   end: "2026-11-04T10:00:00+01:00",
@@ -59,7 +59,7 @@ test("a meeting key is a view and names its meeting", () => {
 test("Others carries the name in a 1:1 only", () => {
   assert.equal(othersLabel(meeting.people, "Others"), "Tom Willems");
   assert.equal(othersLabel([{ name: "", email: "a@b.c" }], "Others"), "a@b.c");
-  assert.equal(othersLabel([...meeting.people, { name: "Sofie", email: "s@x.be" }], "Others"), "Others");
+  assert.equal(othersLabel([...meeting.people, { name: "Sofie", email: "s@example.com" }], "Others"), "Others");
   assert.equal(othersLabel([], "Others"), "Others");
 });
 

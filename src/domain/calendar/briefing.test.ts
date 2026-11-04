@@ -30,7 +30,7 @@ const nl = [
   "- [ ] Alex schat de prijssimulatie in",
   "",
   "### Threads",
-  "- Agenda sprint meeting · 2026-11-04 · `mail:me@x.be:4999`",
+  "- Agenda sprint meeting · 2026-11-04 · `mail:me@example.com:4999`",
   "- Re: pricing API-docs · 2026-10-30",
   "",
   "### Mijn punten",
@@ -51,7 +51,7 @@ test("the shaped briefing reads into its five blocks", () => {
     { n: 1, text: "Alex schat de prijssimulatie in", done: false, doneOn: "" },
   ]);
   assert.deepEqual(b.threads, [
-    { subject: "Agenda sprint meeting", date: "2026-11-04", key: "mail:me@x.be:4999" },
+    { subject: "Agenda sprint meeting", date: "2026-11-04", key: "mail:me@example.com:4999" },
     { subject: "Re: pricing API-docs", date: "2026-10-30", key: "" },
   ]);
   assert.deepEqual(

@@ -160,7 +160,7 @@ export function meetingsOfToday(now = Date.now()) {
 /** Today as a whole: the queue in order, the slots, where each item is planned, and how far the day got. */
 export function todayModel(now = Date.now()) {
   const state = useTodayStore.getState();
-  // the context filter decides what is planned too: Antenna's queue fills the day on its own
+  // the context filter decides what is planned too: Bluebird's queue fills the day on its own
   const every = entries(now);
   const contextOf = (entry: Entry) => projectOf(entry.project)?.context;
   const all = every.filter(entry => inContext(state.context, contextOf(entry)));
