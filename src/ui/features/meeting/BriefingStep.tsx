@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { briefingIn, prepChatOf, joinable } from "../../../domain/calendar/rules";
 import type { Meeting } from "../../../domain/calendar/types";
-import { chatAbout, joinMeeting, meetingChat, timeOf } from "../../../application/calendar/calendar";
+import { chatAbout, joinMeeting, meetingChat, meetingProjectOf, timeOf } from "../../../application/calendar/calendar";
 import { loadMeetingNote, saveBriefing, toggleBriefingTask } from "../../../application/calendar/meeting-view";
 import { startRecording, useRecordingStore } from "../../../application/calendar/recording";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useWorkspaceStore } from "../../../application/workspace/store";
 import { markdownHtml } from "../../../shared/markdown";
+import { parseBriefing } from "../../../domain/calendar/briefing";
+import { BriefingBlocks } from "./BriefingBlocks";
 import { Glyph } from "../../components/Glyph";
 import { Icon } from "../../components/Icon";
 import { agent } from "../../../shared/plugins";
@@ -60,6 +62,7 @@ export function BriefingStep({
     if (progress) void loadMeetingNote(meeting, true);
   }, [meeting, progress]);
   const text = note ? briefingIn(note.text) : null;
+  const shaped = text ? parseBriefing(text) : null;
   const [editing, setEditing] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const save = async () => {
@@ -70,6 +73,12 @@ export function BriefingStep({
     if (saved === null) setErr(t("today.briefingGone"));
     setEditing(null);
   };
+  // what the prep looks at: the people and the earlier meetings about the same project (else of the same name)
+  const people = meeting.people.map(person => person.name || person.email);
+  const about = meetingProjectOf(meeting) ?? meeting.title;
+  const hint = people.length
+    ? t("meet.brief.hint", { names: people.slice(0, 3).join(", ") + (people.length > 3 ? "…" : ""), about })
+    : t("meet.brief.hintAlone", { about });
   const canJoin = joinable(meeting.join);
   // Join is the way in once there is a briefing to read; before it, preparing is (the card)
   const joinFirst = !!text && canJoin;
@@ -154,7 +163,11 @@ export function BriefingStep({
                 >
                   <Icon name="edit" className="glyph size-3.5" />
                 </button>
-                <BriefingBody text={text} onTick={n => void toggleBriefingTask(meeting, n)} />
+                {shaped ? (
+                  <BriefingBlocks meeting={meeting} shaped={shaped} />
+                ) : (
+                  <BriefingBody text={text} onTick={n => void toggleBriefingTask(meeting, n)} />
+                )}
               </>
             )}
             {err ? <div className="err-box mt-2">{err}</div> : null}
@@ -180,7 +193,7 @@ export function BriefingStep({
               {claude ? <Glyph svg={claude} className="glyph size-3.5 flex-none" /> : null}
               {t("meet.prep")}
             </button>
-            <p className="m-0 mt-2 max-w-[60ch] text-xs leading-snug text-secondary">{t("today.briefingHint")}</p>
+            <p className="m-0 mt-2 max-w-[60ch] text-xs leading-snug text-secondary">{hint}</p>
           </aside>
         ) : null}
       </div>

@@ -1,6 +1,7 @@
 import { t } from "../../shared/i18n";
 import { urlOk } from "../../shared/markdown";
 import { mailKey, isMailKey, panelItem } from "../../domain/navigation/keys";
+import { MAIL } from "../../domain/navigation/views";
 import type { Mail, MailBox, MailFilter } from "../../domain/mail/types";
 import {
   PAGE_SIZE,
@@ -380,4 +381,11 @@ export async function openAttachment(key: string, index: number) {
   } catch (error) {
     toast(String(error));
   }
+}
+
+/** A thread a briefing names (`mail:<account>:<id>`): the Mail view with that mail open next to the list. */
+export async function openMailThread(key: string) {
+  if (!isMailKey(key)) return;
+  await select(MAIL);
+  await openMail(key);
 }

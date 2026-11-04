@@ -1,6 +1,7 @@
 import type { Chat, Item } from "../conversations/types";
 import type { Meeting } from "./types";
 import { fill, prompts, untrusted, untrustedNote } from "../../shared/prompts.ts";
+import { shapeIn, wordsFor } from "./briefing.ts";
 
 // The timing of the meetings under Waiting and their banner, and the prompts of a conversation about one. The clock
 // is an argument (`now`, epoch ms), so the rules hold at any moment. Times are instants (RFC 3339 with an offset): the
@@ -60,7 +61,13 @@ export const meetingDay = (iso: string, timeZone?: string) => new Date(iso).toLo
 
 /** The first message of a conversation about a meeting. The title, the place and the names come from the invite, so
  *  from whoever sent it: the prompt marks them as untrusted (and the conversation is marked like one about a mail). `time` formats an instant as the clock time the user reads. */
-export function meetingPrompt(meeting: Meeting, how: MeetingChat, time: (iso: string) => string, timeZone?: string) {
+export function meetingPrompt(
+  meeting: Meeting,
+  how: MeetingChat,
+  time: (iso: string) => string,
+  timeZone?: string,
+  prep: { language: string; code: string; existing: string } = { language: "", code: "", existing: "" },
+) {
   const people = meeting.people.map(person => (person.name ? `${person.name} <${person.email}>` : person.email));
   const details = [
     `Titel: ${meeting.title}`,
@@ -72,8 +79,29 @@ export function meetingPrompt(meeting: Meeting, how: MeetingChat, time: (iso: st
   ]
     .filter(Boolean)
     .join("\n");
-  const ask = fill(PROMPTS[how], { note: quoted(meetingNoteName(meeting, timeZone)) });
-  return `${ask}\n\n${untrustedNote("nl", ["meeting"])}\n${untrusted("meeting", details)}`;
+  const note = quoted(meetingNoteName(meeting, timeZone));
+  // the prep asks for the briefing's fixed shape in the meeting's language, and keeps what a briefing already has of
+  // the user's (their points, the steps they ticked): handed over as data, the same way as the invite
+  const ask =
+    how === "prep"
+      ? fill(prompts.meetings.prep, {
+          note,
+          language: prep.language || "Nederlands",
+          shape: shapeIn(prep.code),
+          existing: prep.existing
+            ? `\nEr staat al een briefing. Neem mijn items onder ${wordsFor(prep.code).heading.points} ongewijzigd over, ook de afgevinkte, en laat de stappen onder ${wordsFor(prep.code).heading.since} die al afgevinkt zijn afgevinkt (<briefing> hieronder).\n`
+            : "",
+        })
+      : fill(PROMPTS[how], { note });
+  const tags = how === "prep" && prep.existing ? ["meeting", "briefing"] : ["meeting"];
+  return [
+    ask,
+    untrustedNote("nl", tags),
+    untrusted("meeting", details),
+    how === "prep" && prep.existing ? untrusted("briefing", prep.existing) : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 // ---------- the briefing before a meeting: under `## Briefing` in the meeting's note, named after its day and title

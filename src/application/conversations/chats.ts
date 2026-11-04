@@ -1,4 +1,5 @@
 import { newChatKey } from "../../domain/navigation/keys";
+import type { PrepRun } from "../../domain/calendar/briefing";
 import { activeWorkspace, chatsToStore, newChatEntry, pickedVault } from "../../domain/conversations/rules";
 import { useNavigationStore } from "../navigation/store";
 import { ensureCoordinator, ensureWorkerChat } from "../../domain/orchestrator/rules";
@@ -55,6 +56,7 @@ export function startChat(
     mail?: string;
     provider?: string;
     meeting?: string;
+    prep?: PrepRun;
     pr?: string;
     answers?: string;
   },
@@ -67,6 +69,7 @@ export function startChat(
     if (start.mail) conversation.mail = start.mail;
     if (start.provider) conversation.provider = start.provider;
     if (start.meeting) conversation.meeting = start.meeting;
+    if (start.prep) conversation.prep = start.prep;
     if (start.pr) conversation.pr = start.pr;
     if (start.answers) conversation.answers = start.answers;
     draft.messages[key] = [{ kind: "note", text: start.note }];
@@ -101,4 +104,12 @@ export function adoptWorkers(workers: Worker[]) {
     for (const worker of workers) changed = ensureWorkerChat(draft.chats, worker) || changed;
   });
   if (changed) saveChats();
+}
+
+/** A prep's snapshot has been put back (or there was nothing to put it in): forgotten, also in what is stored. */
+export function clearPrep(key: string) {
+  useConversationsStore.setState(draft => {
+    if (draft.chats[key]) delete draft.chats[key].prep;
+  });
+  saveChats();
 }

@@ -161,3 +161,8 @@ export async function saveBriefing(meeting: Meeting, body: string | ((now: strin
 /** A task of the briefing ticked or unticked (the `n`th `- [ ]`): My points on the Live step, the lists of the briefing. */
 export const toggleBriefingTask = (meeting: Meeting, n: number) =>
   saveBriefing(meeting, now => toggleTask(now, n)).catch(error => set(draft => void (draft.error = String(error))));
+
+/** A point of My points added after `after` (its task number), the text of one changed, one taken out: written into the
+ *  briefing section only, the note read again right before. */
+export const changeBriefing = (meeting: Meeting, edit: (briefing: string) => string) =>
+  saveBriefing(meeting, edit).catch(error => set(draft => void (draft.error = String(error))));

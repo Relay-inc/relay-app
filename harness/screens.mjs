@@ -58,9 +58,19 @@ const BRIEFING = [
   "### Goal",
   "Scope van de Indicata auto-simulatie vastleggen voor sprint 24.",
   "",
+  "### People",
+  "- [[Tom Willems]]: Medior dev, Acme · last met 2026-09-28",
+  "- dev@acme.example · last met 2026-09-02",
+  "",
   "### Since last time",
-  "- [x] Thomas deelt de Indicata API-docs",
+  "from [[2026-09-28 Daily standup]]",
+  "- [x] Tom deelt de Indicata API-docs · done 2026-09-30",
   "- [ ] Kristof schat de auto-simulatie in (story points)",
+  "- [ ] Tom test de Indicata-sandbox met echte kentekens",
+  "",
+  "### Threads",
+  "- Agenda sprint meeting · 2026-09-30 · `mail:laurent@example.com:4999`",
+  "- Re: Indicata API-docs en sandbox-toegang · 2026-09-29 · `mail:laurent@example.com:4998`",
   "",
   "### My points",
   "- [x] Feedback op de sprint 23 demo",
@@ -87,7 +97,7 @@ const meetingBriefing = async (fixture, title, briefed = false) => {
   }
   await click(title);
   await waitText("Wrap-up");
-  if (briefed) await waitText("Beveiligingsaudit: wie neemt het op?");
+  if (briefed) await waitText("Add point");
   await page.mouse.move(900, 400);
 };
 // a 1:1 that came in by link (as from Keel), its note typed in, recording, and the transcript coming in
@@ -2147,6 +2157,9 @@ const VIEWS = {
   // the Meeting view (#363): a meeting from Today with its briefing, one without, and a 1:1 recorded with notes (an
   // action, a decision, a question, a quote) next to the live transcript, in light and dark
   "meeting-briefing": async () => meetingBriefing("calendar", "Daily standup", true),
+  // an older, free-form briefing stays plain markdown
+  "meeting-briefing-freeform": async () => meetingBriefing("calendar", "Lunch with the accountant"),
+  "meeting-briefing-freeform-dark": async () => meetingBriefing("calendar-dark", "Lunch with the accountant"),
   "meeting-briefing-empty": async () => meetingBriefing("calendar", "Sprint review Northwind Portal"),
   "meeting-briefing-empty-dark": async () => meetingBriefing("calendar-dark", "Sprint review Northwind Portal"),
   // the Wrap-up step (#376): the draft summary with next steps and decisions, while it is written, accepted, and failed

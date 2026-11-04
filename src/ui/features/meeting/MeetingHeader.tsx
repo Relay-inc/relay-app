@@ -12,7 +12,7 @@ import { Menu } from "./Menu";
 // the languages a meeting is transcribed in: the app's own, and whatever the note already says
 const LANGUAGES = ["nl", "en", "fr", "de"];
 // literal classes, so Tailwind finds them: a context's tile
-const TILE = {
+export const TILE = {
   "": "bg-fill-2 text-secondary",
   "ctx-a": "bg-ctx-a/10 text-ctx-a",
   "ctx-m": "bg-ctx-m/10 text-ctx-m",
