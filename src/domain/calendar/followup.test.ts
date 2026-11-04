@@ -15,16 +15,16 @@ import type { Meeting } from "./types";
 const meeting: Meeting = {
   id: "abc@100",
   feed: "me@x.be",
-  title: "Spardex  sync",
+  title: "Northwind  sync",
   start: "2026-11-04T09:30:00+01:00",
   end: "2026-11-04T10:00:00+01:00",
   location: "",
   join: "",
   organizer: "",
   people: [
-    { name: "Thomas Van Hecke", email: "Thomas@Spardex.be" },
-    { name: "", email: "pieter@spardex.be" },
-    { name: "Thomas again", email: "thomas@spardex.be" },
+    { name: "Tom Willems", email: "Tom@Northwind.example" },
+    { name: "", email: "sofie@northwind.example" },
+    { name: "Tom again", email: "tom@northwind.example" },
     { name: "Me", email: "me@x.be" },
   ],
 };
@@ -41,8 +41,8 @@ test("the mail is the JSON in the answer; a missing subject is the default", () 
 
 test("everyone invited gets it once, without me", () => {
   assert.deepEqual(recipients(meeting, ["ME@x.be"]), [
-    { name: "Thomas Van Hecke", email: "Thomas@Spardex.be" },
-    { name: null, email: "pieter@spardex.be" },
+    { name: "Tom Willems", email: "Tom@Northwind.example" },
+    { name: null, email: "sofie@northwind.example" },
   ]);
   assert.deepEqual(recipients({ ...meeting, people: [] }, []), []);
 });
@@ -55,9 +55,9 @@ test("an address typed into Cc", () => {
 });
 
 test("the default subject names the meeting and the day in its language", () => {
-  assert.equal(defaultSubject(meeting, "nl", "Europe/Brussels"), "Recap Spardex sync – 4 nov");
-  assert.equal(defaultSubject(meeting, "fr", "Europe/Brussels"), "Récap Spardex sync – 4 nov.");
-  assert.equal(defaultSubject(meeting, "", "Europe/Brussels"), "Recap Spardex sync – 4 Nov");
+  assert.equal(defaultSubject(meeting, "nl", "Europe/Brussels"), "Recap Northwind sync – 4 nov");
+  assert.equal(defaultSubject(meeting, "fr", "Europe/Brussels"), "Récap Northwind sync – 4 nov.");
+  assert.equal(defaultSubject(meeting, "", "Europe/Brussels"), "Recap Northwind sync – 4 Nov");
 });
 
 test("the model gets the summary and the invite as untrusted text, and the sign-off only with a name", () => {
@@ -74,8 +74,8 @@ test("the model gets the summary and the invite as untrusted text, and the sign-
   assert.match(system, /<summary>, <meeting>/);
   assert.match(system, /zonder naam eronder/);
   assert.equal((text.match(/<\/summary>/g) ?? []).length, 1);
-  assert.match(text, /Deelnemers: Thomas Van Hecke <Thomas@Spardex.be>/);
-  assert.match(followupAsk(meeting, "s", "x", "", "Kristof", "d").system, /voornaam \(Kristof\)/);
+  assert.match(text, /Deelnemers: Tom Willems <Tom@Northwind.example>/);
+  assert.match(followupAsk(meeting, "s", "x", "", "Alex", "d").system, /voornaam \(Alex\)/);
 });
 
 test("the note says it was followed up, in its frontmatter only", () => {

@@ -1286,13 +1286,13 @@ function handle(cmd: string, a: Args): unknown {
         if (wrapupMode === "fail") return Promise.reject("claude exited with code 1");
         return JSON.stringify({
           summary_md:
-            "Thomas en ik overliepen de sprint 23 demo en de planning voor sprint 24. De Indicata auto-simulatie schuift naar sprint 24; de hosting migratie gebeurt op zaterdag 15 november. Wie de beveiligingsaudit opneemt, is nog open.\n\n- Indicata-koppeling werkt op staging; de demo liep zonder problemen.\n- Simulator komt in sprint 24, niet 25.\n- Downtime-venster: zaterdag 15 nov, 06:00 – 08:00.\n- Beveiligingsaudit: Thomas checkt met Pieter wie het opneemt.\n\n**Maxim's way of working**\n- Maxim bouwt de waarde-API\n- Progress te checken\n- Voorstel: korte check-in",
+            "Tom en ik overliepen de sprint 23 demo en de planning voor sprint 24. De prijssimulatie schuift naar sprint 24; de hosting migratie gebeurt op zaterdag 15 november. Wie de beveiligingsaudit opneemt, is nog open.\n\n- API-koppeling werkt op staging; de demo liep zonder problemen.\n- Simulator komt in sprint 24, niet 25.\n- Downtime-venster: zaterdag 15 nov, 06:00 – 08:00.\n- Beveiligingsaudit: Tom checkt met Sofie wie het opneemt.\n\n**Lena's way of working**\n- Lena bouwt de rapport-API\n- Progress te checken\n- Voorstel: korte check-in",
           next_steps: [
-            { text: "Agenda in het kanaal posten zodat Pieter het weet", route: "reminder", due: "2026-10-01" },
-            { text: "Met Maxim bespreken: begrijpen wat hij bouwt, sneller vragen", route: "reminder", due: "2026-10-02" },
-            { text: "Indicata-velden simulator uitwerken", route: "ticket" },
+            { text: "Agenda in het kanaal posten zodat Sofie het weet", route: "reminder", due: "2026-10-01" },
+            { text: "Met Lena bespreken: begrijpen wat hij bouwt, sneller vragen", route: "reminder", due: "2026-10-02" },
+            { text: "pricing-velden simulator uitwerken", route: "ticket" },
           ],
-          decisions: ["Indicata simulator in sprint 24", "Migratie op zaterdag 15 nov, 06:00"],
+          decisions: ["Pricing-simulator in sprint 24", "Migratie op zaterdag 15 nov, 06:00"],
         });
       }
       // the follow-up mail after a meeting (prompts/meetings/followup.md)
@@ -1301,7 +1301,7 @@ function handle(cmd: string, a: Args): unknown {
         if (followupMode === "fail") return Promise.reject("claude exited with code 1");
         return JSON.stringify({
           subject: "Recap Sprint review Northwind Portal – 1 okt",
-          body: "Hoi allemaal,\n\nKort verslag van de sprint review. De Indicata auto-simulatie gaat mee in sprint 24, en de hosting migratie plannen we op zaterdag 15 november van 06:00 tot 08:00.\n\nVolgende stappen\n- Ik: agenda in het kanaal posten, zodat Pieter het weet (vandaag)\n- Ik: Indicata-velden voor de simulator uitwerken (ticket)\n- Sofie: met Pieter afstemmen wie de beveiligingsaudit opneemt\n\nGroetjes",
+          body: "Hoi allemaal,\n\nKort verslag van de sprint review. De prijssimulatie gaat mee in sprint 24, en de hosting migratie plannen we op zaterdag 15 november van 06:00 tot 08:00.\n\nVolgende stappen\n- Ik: agenda in het kanaal posten, zodat Sofie het weet (vandaag)\n- Ik: pricing-velden voor de simulator uitwerken (ticket)\n- Sofie: met Sofie afstemmen wie de beveiligingsaudit opneemt\n\nGroetjes",
         });
       }
       if (/git commit message/.test(a.system)) return git.commitMessage;
@@ -1416,7 +1416,8 @@ function handle(cmd: string, a: Args): unknown {
       const feeds: string[] = settings.calendar?.on
         ? settings.calendar.feeds.map((f: { email: string }) => f.email)
         : [];
-      return { meetings: feeds.length ? structuredClone(integ.meetings) : [], errors: integ.calendarErrors(feeds) };
+      const day = fixture.startsWith("today-") ? integ.todayMeetings(fixture.replace(/^today-/, "").replace(/-dark$/, "")) : integ.meetings;
+      return { meetings: feeds.length ? structuredClone(day) : [], errors: integ.calendarErrors(feeds) };
     }
     // plugins (src-tauri/src/plugins.rs): the one example server, a fixed die so the screenshots stay the same
     case "plugins_list":

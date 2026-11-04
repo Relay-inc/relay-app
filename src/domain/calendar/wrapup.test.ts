@@ -18,13 +18,13 @@ import type { Meeting } from "./types";
 const meeting: Meeting = {
   id: "abc@100",
   feed: "x",
-  title: "Spardex sync",
+  title: "Northwind sync",
   start: "2026-11-04T09:30:00+01:00",
   end: "2026-11-04T10:00:00+01:00",
   location: "",
   join: "",
   organizer: "",
-  people: [{ name: "Thomas", email: "t@spardex.be" }],
+  people: [{ name: "Tom", email: "t@northwind.example" }],
 };
 
 test("the draft is the JSON in the answer, whatever is around it", () => {
@@ -101,16 +101,16 @@ test("the recording's files go under the date line before the first section, nev
 
 test("a decision is one dated line at the end of the project's decisions, once", () => {
   const project = "# P\n\n## Status\ns\n\n## Decisions\n- 2026-10-01: old ([[x]])\n\n## Open\n- [ ] o\n";
-  const out = withDecision(project, "2026-11-04", " Simulator  in sprint 24 ", "2026-11-04 Spardex sync")!;
+  const out = withDecision(project, "2026-11-04", " Simulator  in sprint 24 ", "2026-11-04 Northwind sync")!;
   assert.equal(
     out,
-    "# P\n\n## Status\ns\n\n## Decisions\n- 2026-10-01: old ([[x]])\n- 2026-11-04: Simulator in sprint 24 ([[2026-11-04 Spardex sync]])\n\n## Open\n- [ ] o\n",
+    "# P\n\n## Status\ns\n\n## Decisions\n- 2026-10-01: old ([[x]])\n- 2026-11-04: Simulator in sprint 24 ([[2026-11-04 Northwind sync]])\n\n## Open\n- [ ] o\n",
   );
-  assert.equal(withDecision(out, "2026-11-04", "Simulator in sprint 24", "2026-11-04 Spardex sync"), out);
+  assert.equal(withDecision(out, "2026-11-04", "Simulator in sprint 24", "2026-11-04 Northwind sync"), out);
   // added on another day: still there, not added again
-  assert.equal(withDecision(out, "2026-12-01", "Simulator in sprint 24", "2026-11-04 Spardex sync"), out);
-  assert.ok(hasDecision(out, "Simulator in sprint 24", "2026-11-04 Spardex sync"));
-  assert.ok(!hasDecision(out, "Simulator in sprint 25", "2026-11-04 Spardex sync"));
+  assert.equal(withDecision(out, "2026-12-01", "Simulator in sprint 24", "2026-11-04 Northwind sync"), out);
+  assert.ok(hasDecision(out, "Simulator in sprint 24", "2026-11-04 Northwind sync"));
+  assert.ok(!hasDecision(out, "Simulator in sprint 25", "2026-11-04 Northwind sync"));
   assert.equal(
     withDecision("# P\n\n## Decisions\n", "2026-11-04", "x", "n"),
     "# P\n\n## Decisions\n- 2026-11-04: x ([[n]])\n",
@@ -133,7 +133,7 @@ test("what goes to the model marks the invite, transcript and briefing as untrus
   assert.match(system, /nl/);
   assert.match(system, /2026-11-04/);
   assert.match(system, /<meeting>, <transcript>, <briefing>/);
-  assert.match(text, /<meeting>\nTitel: Spardex sync\nDeelnemers: Thomas <t@spardex.be>\n<\/meeting>/);
+  assert.match(text, /<meeting>\nTitel: Northwind sync\nDeelnemers: Tom <t@northwind.example>\n<\/meeting>/);
   assert.match(text, /<notes>\n- \[09:31\] a\n<\/notes>/);
   assert.equal((text.match(/<\/transcript>/g) ?? []).length, 1, "the transcript cannot close its own tag");
   assert.ok(text.indexOf("<notes>") < text.indexOf("<transcript>"));

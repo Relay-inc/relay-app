@@ -13,6 +13,7 @@ import {
 } from "../../domain/calendar/rules";
 import { cleanNotes, newMeetingNote, notesIn, toggleTask, withNotes } from "../../domain/calendar/meeting-view";
 import type { Meeting } from "../../domain/calendar/types";
+import { digestOf } from "../../domain/today/day";
 import * as backend from "../../infrastructure/backend";
 import { select } from "../navigation/navigation";
 import { useWorkspaceStore } from "../workspace/store";
@@ -95,6 +96,7 @@ export async function noteFor(meeting: Meeting) {
 export const remember = (meeting: Meeting, note: { path: string; text: string; hash: string }) =>
   set(draft => {
     draft.note = { id: meeting.id, ...note };
+    draft.digests[meeting.id] = digestOf(note.text); // Today's strip follows what is written here
     draft.noted = meeting.id;
     draft.error = "";
   });

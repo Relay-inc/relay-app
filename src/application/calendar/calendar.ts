@@ -14,6 +14,8 @@ import {
 } from "../../domain/calendar/rules";
 import type { Meeting } from "../../domain/calendar/types";
 import { keepFrom } from "../../domain/calendar/briefing";
+import { digestOf, owedFrom } from "../../domain/today/day";
+import { useWorkspaceStore } from "../workspace/store";
 import { calendarOn as isCalendarOn } from "../../domain/settings/types";
 import { voiceOf } from "../../domain/settings/voice";
 import { WAIT } from "../../domain/navigation/views";
@@ -30,7 +32,7 @@ import { sendMsg } from "../conversations/actions";
 import { useCalendarStore } from "./store";
 
 // The meetings of the next 12 hours, fetched by the backend from each calendar's secret iCal address every 5 minutes.
-// Not a view of its own: the ones about to start sit at the top of Waiting, and 5 minutes before the start a banner
+// Not a view of its own: the day's meetings are the strip on Today, and 5 minutes before the start a banner
 // goes out. No events are created or answered from here, the calendar stays read-only.
 const set = useCalendarStore.setState;
 const cal = () => useCalendarStore.getState();
@@ -71,10 +73,11 @@ export async function loadMeetings() {
     });
   }
   tick();
+  void loadDayNotes();
 }
 
 // every 30 seconds: the countdown, and the banner. Also when the window has focus (unlike a finished turn's banner,
-// application/conversations/events.ts): a meeting in 5 minutes matters whatever is on screen. A click opens Waiting.
+// application/conversations/events.ts): a meeting in 5 minutes matters whatever is on screen. A click opens Today.
 export function tick() {
   if (!cal().list.length) return; // nothing counts down: no wake-up for the reads over this store
   const now = Date.now();
@@ -84,7 +87,7 @@ export function tick() {
   if (!isPrimary()) return; // one banner, from the main window
   for (const meeting of bannerDue(cal().list, now, sent)) {
     sent.add(meeting.id);
-    // a slot per meeting, so the next one's banner does not replace this one; a click opens Waiting
+    // a slot per meeting, so the next one's banner does not replace this one; a click opens Today
     backend.notify(
       WAIT,
       t("cal.banner", { time: timeOf(meeting.start) }),
@@ -149,4 +152,36 @@ export async function chatAbout(meeting: Meeting, how: MeetingChat) {
   });
   await select(key);
   sendMsg(meetingPrompt(meeting, how, timeOf, undefined, prep));
+}
+
+// ---------- what the notes say, for Today's day strip, now card and wrap-ups owed. Read when Today opens and with the
+// meeting refresh every 5 minutes (never on the 30-second tick): one note per meeting of today, and the last days'
+// meeting notes by their file names.
+let notesGen = 0;
+export async function loadDayNotes() {
+  const mine = ++notesGen;
+  const midnight = new Date().setHours(0, 0, 0, 0);
+  const today = cal().list.filter(m => Date.parse(m.start) < midnight + 864e5 && Date.parse(m.end) > midnight);
+  const digests = Object.fromEntries(
+    await Promise.all(
+      today.map(async m => [m.id, digestOf((await meetingNote(m).catch(() => null))?.text ?? null)] as const),
+    ),
+  );
+  const days = [1, 2].map(back => new Date(midnight - back * 864e5).toLocaleDateString("sv-SE"));
+  const paths = [...useWorkspaceStore.getState().notes.paths].filter(
+    path => /^Calendar\/\d{4}-\d\d-\d\d /.test(path) && days.includes(path.slice(9, 19)),
+  );
+  const earlier = (
+    await Promise.all(
+      paths.map(async path => {
+        const note = (await backend.readNote(path).catch(() => null)) as { text?: string } | null;
+        return typeof note?.text === "string" ? owedFrom(path, note.text, path.slice(9, 19)) : null;
+      }),
+    )
+  ).flatMap(owed => owed ?? []);
+  if (mine !== notesGen) return;
+  set(draft => {
+    draft.digests = digests;
+    draft.earlier = earlier;
+  });
 }

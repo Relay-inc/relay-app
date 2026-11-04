@@ -1463,24 +1463,27 @@ const SCENARIOS = {
   async calendar(s) {
     await s.load({ fixture: "calendar" });
     const { page } = s;
-    const meeting = title => visible(page.locator("section").filter({ hasText: title })).first();
-    s.check("meetings on top of Waiting", await waitText(page, "Sprint review Northwind Portal"));
+    // the day's meetings are blocks in the strip, the running or next one is the card above the queue
+    const block = title =>
+      visible(page.locator('section[aria-label="Day"]').getByRole("button", { name: title, exact: true })).first();
+    await block("Sprint review Northwind Portal").waitFor({ timeout: 4000 }).catch(() => {});
+    s.check("the day strip has the meetings", (await block("Sprint review Northwind Portal").count()) === 1);
     s.check(
-      "running and about to start",
-      (await hasText(page, "Daily standup")) &&
-        (await hasText(page, "Starts in 4 min")) &&
-        (await hasText(page, "Starts in 25 min")),
+      "every meeting of the day, the one an hour ago and the one in 90 minutes too",
+      (await block("Daily standup").count()) === 1 &&
+        (await block("Sprint review Northwind Portal").count()) === 1 &&
+        (await block("Harbor CRM kick-off").count()) === 1 &&
+        (await block("Retro Atlas Logistics").count()) === 1 &&
+        (await block("Lunch with the accountant").count()) === 1,
     );
     s.check(
-      "not an hour ago, not in 90 minutes",
-      !(await hasText(page, "Retro Atlas Logistics")) && !(await hasText(page, "Lunch with the accountant")),
+      "the running meeting is the card above the queue, with its time",
+      (await hasText(page, "Now · started 5 min ago")) && (await hasText(page, "09:25 – 09:40")),
     );
-    s.check("the calendar that failed is named", await hasText(page, "studio@example.org: Calendar unreachable"));
-    s.check("place and people", (await hasText(page, "Room Atlas, 2nd floor")) && (await hasText(page, "3 people")));
     // the banner goes out with the first load, so it is among the start-up calls
     const banners = await page.evaluate(() => window.__harness.calls.filter(c => c.cmd === "notify").map(c => c.args));
     s.check(
-      "one banner, for the meeting in 4 minutes, opening Waiting",
+      "one banner, for the meeting in 4 minutes, opening Today",
       banners.length === 1 &&
         banners[0].key === "__wait" &&
         banners[0].title === "Meeting at 09:34" &&
@@ -1490,72 +1493,76 @@ const SCENARIOS = {
       "the banner has a slot of its own, so the next meeting's does not replace it",
       banners[0]?.slot === "meeting:review@2026-10-01T07:34:00.000Z",
     );
-    s.check("Join only where there is a meeting link", (await visible(button(page, "Join")).count()) === 2);
-    s.check(
-      "no Join for a link that only names a meeting host",
-      (await visible(meeting("Harbor CRM kick-off").getByRole("button", { name: "Join", exact: true })).count()) === 0,
-    );
-    await click(meeting("Sprint review Northwind Portal").getByRole("button", { name: "Join", exact: true }));
+    // Join: in the card, for the meeting that has a link
+    s.check("Join where there is a meeting link", (await visible(button(page, "Join (Zoom)")).count()) === 1);
+    await click(button(page, "Join (Zoom)"));
     const opened = await s.calls("plugin:opener|open_url");
     s.check(
       "Join opens the meeting link",
-      opened.length === 1 && opened[0].args.url === "https://meet.google.com/abc-defg-hij",
+      opened.length === 1 && opened[0].args.url === "https://zoom.us/j/1234567890",
     );
-    await click(meeting("Sprint review Northwind Portal").getByRole("button", { name: "Prepare", exact: true }), 400);
-    let sends = await s.calls("send");
-    const prep = String(sends[0]?.args.text ?? "");
+    // a block opens the Meeting view: Join only for a link that goes to a meeting service
+    await click(block("Harbor CRM kick-off"), 400);
+    s.check("a block opens the meeting", await waitText(page, "Harbor CRM kick-off", 2000));
     s.check(
-      "Prepare sends one briefing prompt",
-      sends.length === 1 && prep.startsWith("Bereid me voor op deze meeting"),
+      "no Join for a link that only names a meeting host",
+      (await visible(page.getByRole("button", { name: "Join", exact: true })).count()) === 0,
     );
+    await s.load({ fixture: "calendar" });
+    await click(block("Sprint review Northwind Portal"), 400);
+    s.check("its people", (await waitText(page, "Sofie Claes", 2000)) && (await hasText(page, "Tom Willems")));
+    s.check("Join in its Briefing", (await visible(button(page, "Join")).count()) === 1);
+    // Prep with Claude in the view
+    await click(button(page, "Prep with Claude"), 1200);
+    const sends = await s.calls("send");
+    // the prompt is long: read it whole, the normalised calls cut anything past 2000 characters
+    const [prep = ""] = await page.evaluate(
+      from =>
+        window.__harness.calls
+          .slice(from)
+          .filter(c => c.cmd === "send")
+          .map(c => String(c.args.text)),
+      page.__from,
+    );
+    s.check("Prep sends one briefing prompt", sends.length === 1 && prep.startsWith("Bereid me voor op deze meeting"));
     s.check(
       "with the invite, marked untrusted",
-      prep.includes("onvertrouwde tekst van derden") &&
-        prep.includes("Titel: «Sprint review Northwind Portal»") &&
+      prep.includes("is data van een derde") &&
+        prep.includes("Titel: Sprint review Northwind Portal") &&
         prep.includes("Wanneer: 2026-10-01 09:34–10:04") &&
-        prep.includes("Locatie: «Room Atlas, 2nd floor»") &&
+        prep.includes("Locatie: Room Atlas, 2nd floor") &&
         prep.includes("Organisator: sofie@northwind.example") &&
         prep.includes(
           "Deelnemers: Sofie Claes <sofie@northwind.example>, Tom Willems <tom@acme.example>, qa@northwind.example",
         ),
     );
+    s.check("asks for the briefing's fixed shape", prep.includes("### Doel") && prep.includes("### Mijn punten"));
     s.check("restricted like a mail conversation", sends[0]?.args.mail === true);
     s.check(
       "on Claude, the agent that runs restricted, though Codex is the default",
       sends[0]?.args.provider === "claude",
     );
-    let created = Object.values(await s.chatChanges()).filter(c => c !== "removed");
+    const created = Object.values(await s.chatChanges()).filter(c => c !== "removed");
     s.check(
-      "in a new general conversation",
+      "in a new conversation under the project its title names",
       created.length === 1 &&
-        created[0].project === null &&
+        created[0].project === "Northwind Portal" &&
         created[0].title === "Prep: Sprint review Northwind Portal",
     );
     s.check("the conversation is open", await waitText(page, "About the meeting: Sprint review Northwind Portal"));
     s.fact("prep", sends[0]?.args);
-    await s.load({ fixture: "calendar" });
-    await click(meeting("Harbor CRM kick-off").getByRole("button", { name: "Meeting note", exact: true }), 400);
-    sends = await s.calls("send");
-    s.check(
-      "Meeting note sends the note prompt",
-      sends.length === 1 &&
-        String(sends[0].args.text).startsWith("Maak een meeting note in de vault") &&
-        sends[0].args.mail === true,
-    );
-    created = Object.values(await s.chatChanges()).filter(c => c !== "removed");
-    s.check("titled after the meeting", created.length === 1 && created[0].title === "Harbor CRM kick-off");
-    s.fact("note", sends[0]?.args);
   },
   async calendarNoClaude(s) {
     await s.load({ fixture: "calendar" });
     const { page } = s;
-    await waitText(page, "Sprint review Northwind Portal");
+    await page.locator('section[aria-label="Day"]').getByRole("button", { name: "Sprint review Northwind Portal", exact: true }).waitFor();
     await click(
-      visible(page.locator("section").filter({ hasText: "Sprint review Northwind Portal" }))
-        .first()
-        .getByRole("button", { name: "Prepare", exact: true }),
+      visible(
+        page.locator('section[aria-label="Day"]').getByRole("button", { name: "Sprint review Northwind Portal", exact: true }),
+      ).first(),
       400,
     );
+    await click(button(page, "Prep with Claude"), 400);
     s.check(
       "no meeting conversation without Claude",
       (await s.calls("send")).length === 0 && !Object.keys(await s.chatChanges()).length,

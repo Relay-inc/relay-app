@@ -912,6 +912,33 @@ export const meetings = [
     people: [{ name: "Accountant", email: "office@accounting.example" }],
   }),
 ];
+/** The day of the today-t1 / t2 / t3 / empty fixtures (Today's day strip), around NOW (09:30): a meeting 08:30–09:00 first,
+ *  then what the variant is about. The people and the join link make the card's buttons. */
+export const todayMeetings = (variant: string) => {
+  const northwind = (id: string, from: number, minutes: number, extra = {}) =>
+    meeting(id, "Northwind sync Tom", from, minutes, {
+      join: "https://meet.google.com/abc-defg-hij",
+      people: [{ name: "Tom Willems", email: "tom@northwind.example" }],
+      ...extra,
+    });
+  const day = [
+    meeting("squad", "Platform squad refinement", 90, 60, { people: [{ name: "Lena Maes", email: "lena@northwind.example" }] }),
+    meeting("sprint", "Northwind – Platform sprint meeting", 270, 90, {
+      people: [
+        { name: "Tom Willems", email: "tom@northwind.example" },
+        { name: "Noor Dewit", email: "noor@northwind.example" },
+        { name: "Lena Maes", email: "lena@northwind.example" },
+        { name: "Kim Peeters", email: "kim@northwind.example" },
+      ],
+    }),
+    meeting("vendor", "Vendor follow-up call", 420, 30, { people: [{ name: "Vendor Co", email: "info@vendor.example" }] }),
+  ];
+  if (variant === "empty") return [];
+  if (variant === "t1") return [northwind("done", -60, 30), northwind("sync", 50, 30), ...day];
+  if (variant === "t2") return [northwind("done", -60, 30), northwind("sync", 20, 30), ...day];
+  // t3: this one is being recorded, the earlier one ended without its summary
+  return [northwind("done", -60, 30), meeting("live", "Northwind – Platform sprint meeting", -42, 90, { people: day[1].people }), ...day.filter(m => !m.id.startsWith("sprint"))];
+};
 /** The second calendar of the calendar fixture does not load, so Waiting says so. */
 export const calendarErrors = (feeds: string[]) =>
   feeds.includes(MAIL_ACCOUNT_2)

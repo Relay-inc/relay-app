@@ -9,14 +9,7 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { isKey } from "../../../application/settings/settings";
 import type { CommandId } from "../../../domain/settings/shortcuts";
 import { cardOf } from "../../../application/navigation/panel";
-import {
-  loadTodayCards,
-  noteSeen,
-  openMeeting,
-  putOff,
-  selectEntry,
-  todayModel,
-} from "../../../application/today/today";
+import { loadTodayCards, noteSeen, putOff, selectEntry, todayModel } from "../../../application/today/today";
 import { actionsOf, openTodayCard, setStatus } from "../../../application/today/actions";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
@@ -24,8 +17,12 @@ import { BoardTicket } from "../board/BoardTicket";
 import { Toast } from "../conversations/Toast";
 import { TodayQueue } from "./TodayQueue";
 import { TodayDetail } from "./TodayDetail";
-import { Icon } from "../../components/Icon";
-import { timeOf } from "../../../application/calendar/calendar";
+import { DayStrip } from "./DayStrip";
+import { NowCard } from "./NowCard";
+import { dayInputs } from "../../../application/today/day";
+import { freeTime, lengthOf, nowCard, timed } from "../../../domain/today/day";
+import { loadDayNotes } from "../../../application/calendar/calendar";
+import { openMeetingView } from "../../../application/calendar/meeting-view";
 import { ColumnResize } from "../navigation/ColumnResize";
 
 // keys that belong to a field, a button or a link, not to Today
@@ -48,7 +45,7 @@ const MAIL_KEYS = [
 ] as const;
 
 export function TodayView({ className = "" }: { className?: string }) {
-  const { t, locale } = useT();
+  const { t, tn, locale } = useT();
   // a clock, for the plan and the timeline: the stores do not change when only time passes
   const [clock, setClock] = useState(Date.now);
   useEffect(() => {
@@ -56,6 +53,9 @@ export function TodayView({ className = "" }: { className?: string }) {
     return () => clearInterval(timer);
   }, []);
   const model = useDerived(() => todayModel(clock));
+  const day = useDerived(() => dayInputs(clock));
+  // the notes of today's meetings, for the strip's glyphs, when Today opens (and with the 5-minute refresh)
+  useEffect(() => void loadDayNotes(), []);
   const cards = useTodayStore(s => s.cards);
   const errors = useTodayStore(s => s.errors);
   const toast = useNavigationStore(s => s.toast);
@@ -84,6 +84,16 @@ export function TodayView({ className = "" }: { className?: string }) {
       if (e.key === "Escape" && !e.metaKey && !e.ctrlKey && !e.altKey && (details.pop || details.compose)) {
         e.preventDefault();
         return details.pop ? setPop("") : closeCompose();
+      }
+      // M: the next meeting, or the one being recorded
+      if (isKey(e, "today.meeting")) {
+        const inputs = dayInputs(Date.now());
+        const card = nowCard(inputs.meetings, inputs.stages, Date.now());
+        if (card.kind !== "none") {
+          e.preventDefault();
+          void openMeetingView(card.meeting);
+          return;
+        }
       }
       const now = todayModel();
       const entry = now.selected;
@@ -145,41 +155,40 @@ export function TodayView({ className = "" }: { className?: string }) {
     return <BoardTicket provider={open.provider} board={board} step={step} project={item.project} />;
   };
 
-  const date = new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short" }).format(clock);
-  // the next two meetings, named once here: the queue has them at their time
-  const ahead = model.meetings.filter(meeting => Date.parse(meeting.start) > clock);
-  const nextIn = ahead[0] ? Math.round((Date.parse(ahead[0].start) - clock) / 60_000) : 0;
+  const date = new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" }).format(clock);
+  // the day in one muted line: how many meetings, how much of the working day is free, what is left to do
+  const free = freeTime(day.meetings.map(timed), clock).minutes;
+  const card = nowCard(day.meetings, day.stages, clock);
+  const line = [
+    day.meetings.length ? tn("today.d.meetings", day.meetings.length) : t("today.d.noMeetings"),
+    t("today.d.free", { time: lengthOf(free) }),
+    t("today.d.todo", { n: model.rows }),
+  ].join(" · ");
   return (
     <div className={`${className} relative flex flex-col min-h-0`}>
-      <div className="flex-none h-12 flex items-center gap-3 px-5 border-b border-separator min-w-0">
-        <span className="text-[15px] font-semibold capitalize whitespace-nowrap">{date}</span>
-        {ahead[0] ? (
-          <button
-            onClick={() => openMeeting(ahead[0].id)}
-            className="ml-2 inline-flex items-center gap-2 min-w-0 text-[13px] text-secondary cursor-pointer hover:text-label"
-          >
-            <Icon name="cal" className="glyph size-3.5 flex-none text-soon" />
-            <span className="truncate">
-              {ahead[0].title || t("wait.meetingUntitled")}{" "}
-              {nextIn < 60 ? t("today.inMin", { n: nextIn }) : timeOf(ahead[0].start)}
-              {ahead[1]
-                ? ` · ${t("today.thenAt", { title: ahead[1].title || t("wait.meetingUntitled"), time: timeOf(ahead[1].start) })}`
-                : ""}
+      <div className="flex-none px-7 pt-5">
+        <div className="flex items-end gap-4 min-w-0">
+          <div className="flex-1 min-w-0">
+            <h1 className="m-0 text-[22px] leading-7 font-bold tracking-tight capitalize truncate">{date}</h1>
+            <div className="mt-0.5 text-secondary truncate">{line}</div>
+          </div>
+          {errors.length ? (
+            <span className="text-xs text-late truncate max-w-80" title={errors.join("\n")}>
+              {t("today.boardsDown", { n: errors.length })}
             </span>
-          </button>
-        ) : null}
-        <span className="flex-1" />
-        {errors.length ? (
-          <span className="text-xs text-late truncate max-w-80" title={errors.join("\n")}>
-            {t("today.boardsDown", { n: errors.length })}
-          </span>
-        ) : null}
-        <span className="text-[13px] text-tertiary tabular-nums whitespace-nowrap">
-          {t("today.doneOf", { done: model.cleared, total: model.total })}
-        </span>
-        <ContextFilter model={model} />
+          ) : null}
+          <ContextFilter model={model} />
+        </div>
+        <DayStrip
+          meetings={day.meetings}
+          stages={day.stages}
+          followed={day.followed}
+          now={clock}
+          focus={card.kind === "soon" ? card.meeting.id : null}
+        />
+        <NowCard meetings={day.meetings} stages={day.stages} now={clock} />
       </div>
-      <div className="relative flex-1 min-h-0 grid grid-cols-[var(--today-w)_minmax(0,1fr)]">
+      <div className="relative flex-1 min-h-0 mt-3.5 border-t border-separator grid grid-cols-[var(--today-w)_minmax(0,1fr)]">
         <TodayQueue model={model} />
         <ColumnResize column="today" />
         <TodayDetail model={model} />

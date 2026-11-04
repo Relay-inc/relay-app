@@ -28,13 +28,13 @@ import type { Meeting } from "./types";
 const meeting: Meeting = {
   id: "abc@100",
   feed: "me@x.be",
-  title: "Spardex sync",
+  title: "Northwind sync",
   start: "2026-11-04T09:30:00+01:00",
   end: "2026-11-04T10:00:00+01:00",
   location: "",
   join: "",
   organizer: "",
-  people: [{ name: "Thomas Van Hecke", email: "thomas@spardex.be" }],
+  people: [{ name: "Tom Willems", email: "tom@northwind.example" }],
 };
 const apply = (line: string, c: { from: number; to: number; insert: string }) =>
   line.slice(0, c.from) + c.insert + line.slice(c.to);
@@ -57,7 +57,7 @@ test("a meeting key is a view and names its meeting", () => {
 });
 
 test("Others carries the name in a 1:1 only", () => {
-  assert.equal(othersLabel(meeting.people, "Others"), "Thomas Van Hecke");
+  assert.equal(othersLabel(meeting.people, "Others"), "Tom Willems");
   assert.equal(othersLabel([{ name: "", email: "a@b.c" }], "Others"), "a@b.c");
   assert.equal(othersLabel([...meeting.people, { name: "Sofie", email: "s@x.be" }], "Others"), "Others");
   assert.equal(othersLabel([], "Others"), "Others");
@@ -102,14 +102,11 @@ test("the notes parse into time, marker and text; lines without a time are left 
 });
 
 test("a quote is a notes line, on one line, with who said it", () => {
-  assert.equal(
-    quoteLine("09:44", "Thomas", " Zaterdag\n de vijftiende "),
-    '- [09:44] > Thomas: "Zaterdag de vijftiende"',
-  );
+  assert.equal(quoteLine("09:44", "Tom", " Zaterdag\n de vijftiende "), '- [09:44] > Tom: "Zaterdag de vijftiende"');
   assert.equal(quoteLine("09:44", "", "x"), '- [09:44] > "x"');
   assert.equal(quoteLine("09:44", 'A "B": C', "x"), '- [09:44] > A B C: "x"');
   assert.equal(parseNotes(quoteLine("09:44", "Me", "x"))[0].time, "09:44");
-  assert.equal(QUOTE.exec('> Thomas: "x"')?.[1], "Thomas");
+  assert.equal(QUOTE.exec('> Tom: "x"')?.[1], "Tom");
   assert.equal(QUOTE.exec('> "x"')?.[1], undefined);
 });
 
@@ -192,10 +189,10 @@ test("a day reads as the vault writes it", () => {
 });
 
 test("a new meeting note has the vault's shape and keeps its event id", () => {
-  const text = newMeetingNote(meeting, "Spardex sync", "2026-11-04", "Europe/Brussels");
+  const text = newMeetingNote(meeting, "Northwind sync", "2026-11-04", "Europe/Brussels");
   assert.equal(
     text,
-    '---\ntype: Meeting\nevent: "abc@100"\nwith:\n  - "Thomas Van Hecke"\ncreated: 2026-11-04\n---\n\n# Spardex sync\n[[2026-11-04|Wednesday November 4th, 2026]]\n\n## Notes\n',
+    '---\ntype: Meeting\nevent: "abc@100"\nwith:\n  - "Tom Willems"\ncreated: 2026-11-04\n---\n\n# Northwind sync\n[[2026-11-04|Wednesday November 4th, 2026]]\n\n## Notes\n',
   );
   assert.equal(eventOf(text), "abc@100");
   assert.equal(notesIn(text), "");

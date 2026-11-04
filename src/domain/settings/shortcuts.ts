@@ -39,6 +39,7 @@ export const COMMANDS = {
   "today.done": { scope: "today", keys: ["e"] },
   "today.snooze": { scope: "today", keys: ["s"] },
   "today.later": { scope: "today", keys: ["l"] },
+  "today.meeting": { scope: "today", keys: ["m"] },
   "today.doing": { scope: "today", keys: ["p"] },
   "today.reply": { scope: "today", keys: ["r"] },
   "today.replyAll": { scope: "today", keys: ["a"] },

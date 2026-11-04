@@ -35,9 +35,6 @@ const context = async value => {
 try {
   await open(page, server.url, { fixture: "calendar", sel: "__wait" });
   await shot("01-overview");
-  // the meetings that ended fold away on top; a click shows them
-  await page.getByRole("button", { name: /1 earlier/ }).click();
-  await shot("01a-earlier");
   await page.getByRole("button", { name: /Record a meeting now/ }).click();
   await shot("01d-record-now");
   // live transcription in the big pane: the turns so far and how far it got
@@ -54,16 +51,19 @@ try {
     }),
   );
   await shot("01e-live-transcript");
-  // another item takes the pane back; the bar stays, and a click on it opens the transcript again
-  await page.getByRole("button", { name: /1 earlier/ }).click();
+  // back to Today: the recording is the card above the queue and the row in the sidebar
+  await page.keyboard.press("Escape");
   await page.getByText("Allow relay").first().click();
   await shot("01f-recording-in-bar");
   await page
     .getByRole("button", { name: /Meeting \d\d:\d\d/ })
     .first()
     .click();
-  await page.getByRole("button", { name: "Cancel" }).first().click();
-  await page.getByRole("button", { name: /1 earlier/ }).click();
+  // Cancel is in the Meeting view's menu, and asks first
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("button", { name: "Discard", exact: true }).click();
+  await page.keyboard.press("Escape");
   await context("Agency");
   await shot("01b-context");
   await context("-");
@@ -177,17 +177,14 @@ try {
   await context("-");
   await bottom();
   await shot("11-snoozed-no-project");
-  // a meeting card in the queue opens its prep (the filter goes back to All when it hides it)
-  await byText(page, "Harbor CRM kick-off", true).click();
-  await shot("12-meeting-card");
-  // the next meeting, named in the header, opens too
-  await page
-    .locator("button", { hasText: /· then / })
-    .first()
-    .click();
-  await shot("13-next-meeting-in-header");
-  // a meeting whose note has a briefing: the briefing itself, not the Write briefing button
-  await byText(page, "Lunch with the accountant", true).click();
+  // a block of the day strip opens its Meeting view
+  const block = title => page.locator('section[aria-label="Day"]').getByRole("button", { name: title, exact: true });
+  await block("Harbor CRM kick-off").click();
+  await shot("12-meeting-block");
+  await page.keyboard.press("Escape");
+  await context("");
+  // a meeting whose note has a briefing: the briefing itself, not the Prep button
+  await block("Lunch with the accountant").click();
   await shot("13b-meeting-briefing");
   // edited there: the section in a field, saved into the note with Cmd-Enter
   await page.getByRole("button", { name: "Edit", exact: true }).click();
@@ -196,6 +193,7 @@ try {
   await page.keyboard.press("Meta+Enter");
   await settle(page, 200);
   await shot("13d-briefing-edited");
+  await page.keyboard.press("Escape");
   // work in progress in the sidebar: a reply draft under its section, a click brings the mail and its draft back
   await rowOf("Acceptance checklist portal v2");
   await page.keyboard.press("r");

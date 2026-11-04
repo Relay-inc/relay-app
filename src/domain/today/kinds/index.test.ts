@@ -10,6 +10,8 @@ import {
   kindLabelKey,
   queueOf,
   rankOf,
+  rowsIn,
+  visibleRows,
 } from "./index.ts";
 import { NOW, TODAY, at, flags, iso, mail, meeting, pr, reminder, snap, words } from "./fixtures.ts";
 import type { Kind } from "../plan.ts";
@@ -76,16 +78,17 @@ test("the queue: agents first, then by rank with overdue reminders ahead, the ol
   const queue = queueOf(all, []);
   assert.deepEqual(
     queue.map(e => e.id),
-    ["ask:p1", "chat:c2", "prep:m1@9", "rem:late", "mail:mail:a:1", "rem:today", `review:${pr().url}`].map(id => id),
+    ["ask:p1", "chat:c2", "rem:late", "mail:mail:a:1", "rem:today", `review:${pr().url}`],
   );
+  assert.ok(!queue.some(e => e.subject.type === "meeting"), "the meetings are not in the queue");
   assert.ok(queue.slice(0, 2).every(isAgentItem));
 });
 
 test("what the user put off goes last, what is in progress first (after the agents)", () => {
   const all = entries(day({ doing: ["rem:today"] }), words, NOW);
   assert.deepEqual(
-    queueOf(all, ["prep:m1@9"]).map(e => e.id),
-    ["ask:p1", "chat:c2", "rem:today", "rem:late", "mail:mail:a:1", `review:${pr().url}`, "prep:m1@9"],
+    queueOf(all, ["mail:mail:a:1"]).map(e => e.id),
+    ["ask:p1", "chat:c2", "rem:today", "rem:late", `review:${pr().url}`, "mail:mail:a:1"],
   );
 });
 
@@ -111,12 +114,34 @@ test("the kind chip, and the actions of whichever kind an entry is", () => {
   const get = (id: string) => all.find(e => e.id === id) as Entry;
   assert.equal(kindLabelKey(get("ask:p1")), "today.kind.ask");
   assert.equal(kindLabelKey(get("rem:today")), "today.kind.reminder");
-  assert.equal(kindLabelKey(get("prep:m1@9")), "today.kind.prep");
   assert.deepEqual(
     actionsFor(get("rem:today"), flags, words).acts.map(a => a.id),
     ["complete", "tomorrow", "week", "chat"],
   );
   void [at, iso];
+});
+
+test("the header counts the rows the queue shows: three mails in a slot are one row, an agent's item is its own", () => {
+  const rows = (mails: ReturnType<typeof mail>[], tomorrow: string[] = []) => {
+    const queue = queueOf(entries(day({ mails }), words, NOW), []);
+    const placed = Object.fromEntries(
+      queue.filter(e => !isAgentItem(e) && !tomorrow.includes(e.id)).map(e => [e.id, { slot: "now" }]),
+    );
+    return { queue, rows: visibleRows(queue, ["now"], placed, tomorrow) };
+  };
+  // the day: an ask and a finished chat (rows of their own), two reminders, a review, and the mails
+  const one = rows([mail({ id: "1" })]);
+  assert.equal(one.queue.length, one.rows, "every item is a row of its own");
+  const two = rows([mail({ id: "1" }), mail({ id: "2" })]);
+  assert.equal(two.queue.length, two.rows);
+  const three = rows([mail({ id: "1" }), mail({ id: "2" }), mail({ id: "3" })]);
+  assert.equal(three.queue.length, one.queue.length + 2);
+  assert.equal(three.rows, one.rows, "three mails are one row, as one mail is");
+  // what moved to tomorrow is one group there; what is placed nowhere is not shown
+  const ids = three.queue.filter(e => e.kind === "mail").map(e => e.id);
+  assert.equal(rows([mail({ id: "1" }), mail({ id: "2" }), mail({ id: "3" })], ids).rows, three.rows);
+  assert.equal(rowsIn([]), 0);
+  assert.equal(rowsIn(three.queue.filter(e => e.kind === "mail")), 1);
 });
 
 test("agents come in this order: asks, blocked sessions, finished conversations", () => {

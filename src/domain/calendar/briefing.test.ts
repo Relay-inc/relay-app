@@ -18,20 +18,20 @@ import { pointsIn, toggleTask } from "./meeting-view.ts";
 
 const nl = [
   "### Doel",
-  "Scope van de Indicata auto-simulatie vastleggen voor sprint 24.",
+  "Scope van de prijssimulatie vastleggen voor sprint 24.",
   "",
   "### Mensen",
-  "- [[Thomas Van Hecke]]: Medior dev, Antenna · laatst ontmoet 2026-10-28",
+  "- [[Tom Willems]]: Product owner, Northwind · laatst ontmoet 2026-10-28",
   "- Sofie Claes · laatst ontmoet 2026-09-02",
   "",
   "### Sinds de vorige keer",
-  "van [[2026-10-28 Spardex sync Thomas]]",
-  "- [x] Thomas deelt de Indicata API-docs · klaar 2026-10-30",
-  "- [ ] Kristof schat de auto-simulatie in",
+  "van [[2026-10-28 Northwind sync Tom]]",
+  "- [x] Tom deelt de pricing API-docs · klaar 2026-10-30",
+  "- [ ] Alex schat de prijssimulatie in",
   "",
   "### Threads",
   "- Agenda sprint meeting · 2026-11-04 · `mail:me@x.be:4999`",
-  "- Re: Indicata API-docs · 2026-10-30",
+  "- Re: pricing API-docs · 2026-10-30",
   "",
   "### Mijn punten",
   "- [ ] Hosting migratie",
@@ -40,19 +40,19 @@ const nl = [
 
 test("the shaped briefing reads into its five blocks", () => {
   const b = parseBriefing(nl)!;
-  assert.equal(b.goal, "Scope van de Indicata auto-simulatie vastleggen voor sprint 24.");
+  assert.equal(b.goal, "Scope van de prijssimulatie vastleggen voor sprint 24.");
   assert.deepEqual(b.people, [
-    { name: "Thomas Van Hecke", link: true, role: "Medior dev, Antenna", lastMet: "2026-10-28" },
+    { name: "Tom Willems", link: true, role: "Product owner, Northwind", lastMet: "2026-10-28" },
     { name: "Sofie Claes", link: false, role: "", lastMet: "2026-09-02" },
   ]);
-  assert.equal(b.since.from, "2026-10-28 Spardex sync Thomas");
+  assert.equal(b.since.from, "2026-10-28 Northwind sync Tom");
   assert.deepEqual(b.since.steps, [
-    { n: 0, text: "Thomas deelt de Indicata API-docs", done: true, doneOn: "2026-10-30" },
-    { n: 1, text: "Kristof schat de auto-simulatie in", done: false, doneOn: "" },
+    { n: 0, text: "Tom deelt de pricing API-docs", done: true, doneOn: "2026-10-30" },
+    { n: 1, text: "Alex schat de prijssimulatie in", done: false, doneOn: "" },
   ]);
   assert.deepEqual(b.threads, [
     { subject: "Agenda sprint meeting", date: "2026-11-04", key: "mail:me@x.be:4999" },
-    { subject: "Re: Indicata API-docs", date: "2026-10-30", key: "" },
+    { subject: "Re: pricing API-docs", date: "2026-10-30", key: "" },
   ]);
   assert.deepEqual(
     b.points.map(p => [p.n, p.text, p.done]),
@@ -121,15 +121,15 @@ test("ticking works through the same task numbers the blocks show", () => {
   assert.equal(parseBriefing(ticked)!.since.steps[1].done, false);
 });
 
-const meeting = { id: "abc@100", title: "Spardex sync", start: "2026-11-04T09:30:00+01:00" };
+const meeting = { id: "abc@100", title: "Northwind sync", start: "2026-11-04T09:30:00+01:00" };
 const fresh = [
   "### Doel",
   "Nieuw doel.",
   "### Mensen",
-  "- Thomas · laatst ontmoet 2026-11-04",
+  "- Tom · laatst ontmoet 2026-11-04",
   "### Sinds de vorige keer",
-  "van [[2026-11-04 Spardex sync]]",
-  "- [ ] Thomas deelt de Indicata API-docs",
+  "van [[2026-11-04 Northwind sync]]",
+  "- [ ] Tom deelt de pricing API-docs",
   "- [ ] Nieuwe stap",
   "### Threads",
   "- Mail · 2026-11-05",
@@ -143,7 +143,7 @@ test("what is the user's in the old briefing is kept for the prep, nothing when 
     { text: "Hosting migratie", done: false },
     { text: "Beveiligingsaudit", done: true },
   ]);
-  assert.deepEqual(keep.ticked, ["Thomas deelt de Indicata API-docs"]);
+  assert.deepEqual(keep.ticked, ["Tom deelt de pricing API-docs"]);
   assert.deepEqual(keep.meeting, meeting);
   assert.equal(keepFrom("free text\n- [ ] a\n", meeting), null, "no shape: nothing to keep");
   assert.equal(
@@ -156,7 +156,7 @@ test("what is the user's in the old briefing is kept for the prep, nothing when 
 test("a prep that dropped the user's points and ticks gets them back", () => {
   const out = mergePrep(keepFrom(nl, meeting)!, fresh);
   assert.ok(out.includes("Nieuw doel."));
-  assert.ok(out.includes("- [x] Thomas deelt de Indicata API-docs"), "ticked stays ticked");
+  assert.ok(out.includes("- [x] Tom deelt de pricing API-docs"), "ticked stays ticked");
   assert.ok(out.includes("- [ ] Nieuwe stap"));
   const b = parseBriefing(out)!;
   assert.deepEqual(

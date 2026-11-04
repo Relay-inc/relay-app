@@ -19,7 +19,7 @@ import { openMeetingView } from "./meeting-view";
 import { attachRecording, generateDraft } from "./wrapup";
 import { useCalendarStore } from "./store";
 
-// Recording a meeting from its card in Waiting for you (src-tauri/src/meeting.rs): the microphone and what the Mac
+// Recording a meeting from its card on Today (src-tauri/src/meeting.rs): the microphone and what the Mac
 // plays, then on Stop the audio and transcript in the vault and, unless switched off in Settings › Voice, a
 // conversation that makes the meeting note and summarises it. One recording at a time; it keeps the meeting it is
 // about, since a long meeting leaves the list of soon ones before it ends.

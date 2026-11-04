@@ -55,7 +55,7 @@ export function parseNotes(notes: string): NoteLine[] {
     return m ? [{ time: m[2], marker: m[3] ? MARKER_OF[m[3]] : null, text: m[4].trim() }] : [];
   });
 }
-/** A quoted transcript line, as a notes line: `- [09:44] > Thomas: "text"` (no name: `> "text"`). */
+/** A quoted transcript line, as a notes line: `- [09:44] > Tom: "text"` (no name: `> "text"`). */
 export const quoteLine = (time: string, speaker: string, text: string) => {
   const who = speaker
     .replace(/[:"\n]/g, " ")

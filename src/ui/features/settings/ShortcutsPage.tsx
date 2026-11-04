@@ -49,6 +49,7 @@ const TODAY: CommandId[] = [
   "today.done",
   "today.snooze",
   "today.later",
+  "today.meeting",
   "today.doing",
   "today.reply",
   "today.replyAll",

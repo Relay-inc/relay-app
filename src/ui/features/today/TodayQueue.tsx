@@ -1,36 +1,26 @@
 import { useState, type ReactNode } from "react";
-import type { Meeting } from "../../../domain/calendar/types";
 import type { Slot } from "../../../domain/today/plan";
-import { joinable } from "../../../domain/calendar/rules";
-import { KINDS, isAgentItem } from "../../../domain/today/kinds";
-import {
-  openMeeting,
-  projectChip,
-  reopen,
-  selectEntry,
-  wake,
-  type Entry,
-  type TodayModel,
-} from "../../../application/today/today";
-import { joinMeeting, meetingProjectOf, timeOf } from "../../../application/calendar/calendar";
+import { BUNDLE_FROM, KINDS, isAgentItem } from "../../../domain/today/kinds";
+import { projectChip, reopen, selectEntry, wake, type Entry, type TodayModel } from "../../../application/today/today";
+import { timeOf } from "../../../application/calendar/calendar";
 import { useTodayStore } from "../../../application/today/store";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
 import { RecordingBar } from "../conversations/RecordingBar";
 import { recordNow, useRecordingStore } from "../../../application/calendar/recording";
 import { StatusDot, minutes } from "./parts";
+import { WrapUpRow } from "./WrapUpRow";
 
 const iso = (at: number) => new Date(at).toISOString();
 const MIN = 60_000;
 
-/** The queue as the day runs (design "Today Calm" 6a / 6c): a quiet heading per free slot, the meetings in between as
- *  cards at their time, what did not fit under Tomorrow. A row says what it is once: one icon, the title, and the
- *  project and how long. Three or more mails or PRs in a slot are one row that opens. A click opens an item. */
+/** The queue as the day runs (design "Today Calm" 6a / 6c): a quiet heading per free slot, what did not fit under Tomorrow. A row says what it is once: one icon, the title, and the
+ *  project and how long. Three or more mails or PRs in a slot are one row that opens. A click opens an item. The
+ *  meetings are not in it: the strip and the card above carry them; only the wrap-ups owed are one row on top. */
 export function TodayQueue({ model }: { model: TodayModel }) {
   const { t, locale } = useT();
   const pins = useTodayStore(s => s.pins);
   const [opened, setOpened] = useState<string[]>([]);
-  const [showPast, setShowPast] = useState(false);
   const recordingIdle = useRecordingStore(s => s.phase === "idle");
   const { queue, slots, placed, tomorrow, selected, meetings, now, done, snoozed } = model;
 
@@ -82,7 +72,7 @@ export function TodayQueue({ model }: { model: TodayModel }) {
     const bundled = new Set<string>();
     for (const entry of items) {
       const kind = KINDS[entry.kind].bundle;
-      if (!kind || count(kind) < 3) {
+      if (!kind || count(kind) < BUNDLE_FROM) {
         if (kind) shown.add(kind);
         out.push(row(entry));
         continue;
@@ -153,64 +143,8 @@ export function TodayQueue({ model }: { model: TodayModel }) {
     );
   };
 
-  // a meeting at its time, as a card: Join only when it starts within 15 minutes (or runs)
-  const meetingCard = (meeting: Meeting) => {
-    const start = Date.parse(meeting.start);
-    const end = Date.parse(meeting.end);
-    const live = start <= now && now < end;
-    const past = end <= now;
-    const soon = !live && !past && start - now < 15 * MIN;
-    const on = !!selected && selected.id === model.meetingItems[meeting.id];
-    const where = meeting.location && !/^https?:/.test(meeting.location) ? meeting.location : "";
-    const sub = [
-      projectChip(meetingProjectOf(meeting))?.label,
-      where,
-      meeting.people.length > 1 ? t("today.people", { n: meeting.people.length }) : "",
-      live
-        ? `${t("today.meetingNow")} · ${t("today.until", { time: timeOf(meeting.end) })}`
-        : past
-          ? t("today.ended", { time: timeOf(meeting.end) })
-          : soon
-            ? t("today.inMin", { n: Math.max(0, Math.round((start - now) / MIN)) })
-            : t("today.until", { time: timeOf(meeting.end) }),
-    ]
-      .filter(Boolean)
-      .join(" · ");
-    return (
-      <div
-        key={`meet:${meeting.id}`}
-        onClick={() => openMeeting(meeting.id)}
-        className={`flex items-center gap-3 min-h-13 my-2 px-3 py-1.5 rounded-xl bg-raised ${on ? "shadow-[inset_0_0_0_1.5px_var(--color-accent)]" : "shadow-[inset_0_0_0_1px_var(--color-separator-strong)] hover:bg-fill"} ${model.meetingItems[meeting.id] ? "cursor-pointer" : ""} ${past && !on ? "opacity-60" : ""}`}
-      >
-        <span className="w-11 flex-none text-sm font-semibold tabular-nums">{timeOf(meeting.start)}</span>
-        <span className="flex-1 min-w-0 flex flex-col leading-snug">
-          <span className={`text-sm truncate ${on ? "font-semibold" : "font-medium"}`}>
-            {meeting.title || t("wait.meetingUntitled")}
-          </span>
-          <span className={`text-xs truncate ${live || soon ? "text-soon" : "text-tertiary"}`}>{sub}</span>
-        </span>
-        {(live || soon) && joinable(meeting.join) ? (
-          <button
-            className="flex-none h-7.5 px-3.5 rounded-lg bg-accent text-on-accent text-[13px] font-medium cursor-pointer hover:bg-accent-hover"
-            onClick={e => {
-              e.stopPropagation();
-              joinMeeting(meeting.join);
-            }}
-          >
-            {t("wait.meetingJoin")}
-          </button>
-        ) : null}
-      </div>
-    );
-  };
-
-  // the slots and the meetings that are not over, in the order of the day; the ones that ended fold away on top
-  const ahead = meetings.filter(meeting => Date.parse(meeting.end) > now);
-  const past = meetings.filter(meeting => Date.parse(meeting.end) <= now);
-  const parts: [number, ReactNode][] = [
-    ...slots.map((slot): [number, ReactNode] => [slot.start, slotGroup(slot)]),
-    ...ahead.map((meeting): [number, ReactNode] => [Date.parse(meeting.start) - 0.5, meetingCard(meeting)]),
-  ];
+  // the slots of the day in order: the meetings are above, in the strip
+  const parts: [number, ReactNode][] = slots.map((slot): [number, ReactNode] => [slot.start, slotGroup(slot)]);
   parts.sort((a, b) => a[0] - b[0]);
   const later = queue.filter(entry => !isAgentItem(entry) && tomorrow.includes(entry.id));
   // what an agent needs you for sits on top: a decision, a blocked session, a result to read
@@ -234,21 +168,7 @@ export function TodayQueue({ model }: { model: TodayModel }) {
           {t("rec.now")}
         </button>
       ) : null}
-      {past.length ? (
-        <button
-          className="flex items-center gap-2 w-full h-8 mt-1 px-3 rounded-lg bg-fill text-xs text-secondary cursor-pointer hover:text-label"
-          onClick={() => setShowPast(!showPast)}
-        >
-          <Icon name="cal" className="glyph size-3.5 text-tertiary" />
-          {ahead.length ? null : <span>{t("today.noMoreMeetings")} ·</span>}
-          <span className="text-tertiary">{t("today.earlier", { n: past.length })}</span>
-          <Icon
-            name="chevron"
-            className={`glyph size-3 ml-auto text-tertiary transition-transform duration-150 ease-out ${showPast ? "" : "-rotate-90"}`}
-          />
-        </button>
-      ) : null}
-      {showPast ? past.map(meetingCard) : null}
+      <WrapUpRow owed={model.owed} />
       {asks.length ? (
         <div>
           {heading(t("today.agentsNeedYou"), String(asks.length))}
