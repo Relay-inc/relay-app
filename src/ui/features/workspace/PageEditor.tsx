@@ -31,7 +31,9 @@ import { LOCAL, openSharedPage, type Peer, type SharedPage } from "../../../appl
 import { yAnchor, ySpan } from "../../../application/workspace/anchors";
 import { findQuote, type Span } from "../../../domain/workspace/comments";
 import { useT } from "../../hooks/useT";
-import { livePreview } from "./livePreview";
+import { livePreview, showMarkdown } from "./livePreview";
+import { formatting, type FormatWords } from "./formatting";
+import { useEditorStore } from "../../../application/navigation/editor";
 import { blockEditing, type BlockWords } from "./blocks";
 import { attachEditing, embeds, pickAndEmbed } from "./embeds";
 import { fileDrop } from "./fileDrop";
@@ -218,6 +220,25 @@ function Editor(props: {
     addColumn: t("block.addColumn"),
     handle: t("block.handle"),
   }));
+  const [format] = useState<FormatWords>(() => ({
+    toolbar: t("fmt.toolbar"),
+    bold: t("fmt.bold"),
+    italic: t("fmt.italic"),
+    strike: t("fmt.strike"),
+    code: t("fmt.code"),
+    link: t("fmt.link"),
+    target: t("fmt.target"),
+    removeLink: t("fmt.removeLink"),
+    turn: { label: t("block.turnInto"), kind: kind => t(`block.${kind}`) },
+  }));
+  const raw = useEditorStore(s => s.showMarkdown);
+  const mode = useRef(new Compartment()); // Show markdown, changed while the editor lives
+  const rawNow = useRef(raw);
+  const apply = useRef<(on: boolean) => void>(() => {});
+  useEffect(() => {
+    rawNow.current = raw;
+    apply.current(raw);
+  }, [raw]);
   useEffect(() => {
     const { page, body, split, onReady, onChanged, onFailed, onPeers } = first;
     // a shared document's page (ticket 9): typed into its text after the head, not saved as a file
@@ -276,7 +297,9 @@ function Editor(props: {
           drawSelection(),
           EditorView.lineWrapping,
           markdown({ base: markdownLanguage }),
+          mode.current.of(showMarkdown.of(rawNow.current)),
           livePreview((link, drawer) => void followPageLink(link, drawer)),
+          formatting(format),
           embeds(page),
           attachEditing(page),
           blockEditing(
@@ -341,6 +364,7 @@ function Editor(props: {
         ],
       }),
     });
+    apply.current = on => view.dispatch({ effects: mode.current.reconfigure(showMarkdown.of(on)) });
     // files dragged in from Finder: the line they would land on, then copied into the attachments folder and embedded
     forgetEmbeds(page);
     const drop = fileDrop(view, {
@@ -509,6 +533,6 @@ function Editor(props: {
       void write(); // leaving the page saves what was typed
       view.destroy();
     };
-  }, [first, label, words, by]);
+  }, [first, label, words, by, format]);
   return <div ref={host} className="page-editor" />;
 }

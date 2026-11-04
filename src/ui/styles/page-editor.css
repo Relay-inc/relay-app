@@ -118,6 +118,15 @@
 .page-editor .cm-hr {
   color: var(--tertiary);
 }
+/* a divider: the line stands in for its --- */
+.page-editor .cm-rule {
+  display: block;
+  margin: 10px 0;
+  border-top: 1px solid var(--separator-strong);
+}
+.page-editor .cm-strike {
+  text-decoration: line-through;
+}
 
 /* Notion-like editing (blocks.ts): the handle left of the block under the pointer, its menu, the line where a dragged
    block lands, and the / and [[ completion lists */
@@ -196,6 +205,126 @@
   margin: 6px 8px;
   border: 0;
   border-top: 1px solid var(--separator);
+}
+/* styling without markdown (formatting.ts): the bar over a selection, its Turn into menu and the popover of a link */
+.page-editor .cm-format-bar,
+.page-editor .cm-link-pop,
+.page-editor .cm-format-menu {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--separator);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  line-height: 1.3;
+}
+.page-editor .cm-format-bar[hidden],
+.page-editor .cm-link-pop[hidden] {
+  display: none;
+}
+.page-editor .cm-format-bar {
+  gap: 2px;
+  padding: 4px;
+}
+.page-editor .cm-format-bar button {
+  min-width: 28px;
+  height: 26px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--label);
+  cursor: default;
+}
+.page-editor .cm-format-bar button:hover {
+  background: var(--fill-2);
+}
+.page-editor .cm-format-bar button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.page-editor .cm-format-bold {
+  font-weight: 700;
+}
+.page-editor .cm-format-italic {
+  font-style: italic;
+}
+.page-editor .cm-format-strike {
+  text-decoration: line-through;
+}
+.page-editor .cm-format-code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.page-editor .cm-format-bar .glyph {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+.page-editor .cm-format-turn {
+  gap: 4px;
+  white-space: nowrap;
+}
+.page-editor .cm-format-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--separator);
+}
+.page-editor .cm-format-menu {
+  flex-direction: column;
+  align-items: stretch;
+  width: 160px;
+  padding: 6px;
+}
+.page-editor .cm-format-menu button {
+  padding: 5px 8px;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--label);
+  cursor: default;
+}
+.page-editor .cm-format-menu button:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.page-editor .cm-link-pop {
+  gap: 6px;
+  width: 320px;
+  padding: 6px;
+}
+.page-editor .cm-link-input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--separator-strong);
+  background: transparent;
+  color: var(--label);
+  font: inherit;
+}
+.page-editor .cm-link-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.page-editor .cm-link-remove {
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  color: var(--secondary);
+  cursor: default;
+}
+.page-editor .cm-link-remove:hover {
+  background: var(--fill-2);
+  color: var(--label);
 }
 .page-editor .cm-tooltip.cm-tooltip-autocomplete {
   padding: 4px;

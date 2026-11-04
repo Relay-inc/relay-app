@@ -1249,6 +1249,56 @@ const VIEWS = {
     await settle(page, 400);
   },
   "page-rail-dark": async () => VIEWS["page-rail"]("kb-dark"),
+  // K, #392: a page with every block type typed into the editor, no markdown showing; `state` is what the cursor does
+  // last: "heading" (in a heading), "selection" (the toolbar over a selected word), "link" (in a link: its popover),
+  // "raw" (Show markdown on)
+  "page-hidden-markdown": async (fixture = "kb", state = "heading") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
+    await page.locator('[data-page$="/Rate limit findings.md"]').first().click();
+    const editor = page.locator(".cm-content");
+    await editor.waitFor();
+    await editor.click();
+    await page.keyboard.press("Meta+End");
+    for (const text of [
+      "## Next steps",
+      "Agree the **window** with Sofie Claes, see [the plan](https://example.com/plan) and [[Northwind Portal]].",
+      "- Send the new key",
+      "- [ ] Call the client",
+      "> Keep the old key for a week",
+      "",
+      "> [!note] Heads up",
+      "> Retry-After is in seconds.",
+      "",
+      "---",
+    ]) {
+      await page.keyboard.insertText("\n");
+      if (text) await page.keyboard.type(text);
+      else await page.keyboard.type(" "); // a blank line (WebKit swallows a second newline in a row)
+    }
+    await settle(page, 300);
+    if (state === "heading") await page.locator(".cm-h2", { hasText: "Next steps" }).click();
+    else if (state === "selection") {
+      const word = page.locator(".cm-strong", { hasText: "window" });
+      await word.dblclick();
+    } else if (state === "link") {
+      const link = page.locator(".cm-link", { hasText: "the plan" });
+      const box = await link.boundingBox();
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await page.locator(".cm-link-input").waitFor();
+    } else if (state === "raw") {
+      await page.keyboard.press("Shift+Meta+m");
+    }
+    await settle(page, 400);
+  },
+  "page-hidden-markdown-dark": async () => VIEWS["page-hidden-markdown"]("kb-dark"),
+  "page-format-toolbar": async () => VIEWS["page-hidden-markdown"]("kb", "selection"),
+  "page-format-toolbar-dark": async () => VIEWS["page-hidden-markdown"]("kb-dark", "selection"),
+  "page-link-popover": async () => VIEWS["page-hidden-markdown"]("kb", "link"),
+  "page-link-popover-dark": async () => VIEWS["page-hidden-markdown"]("kb-dark", "link"),
+  "page-show-markdown": async () => VIEWS["page-hidden-markdown"]("kb", "raw"),
   // K6 / K12 (issue 371): the Changes feed beside a page, the capture run open with its two diffs
   "changes-feed": async (fixture = "kb-changes") => {
     await open(page, server.url, { fixture });

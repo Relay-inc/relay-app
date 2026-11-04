@@ -45,6 +45,7 @@ import { Properties } from "./Properties";
 import { PageHistory, VersionDiff } from "./PageHistory";
 import { LinkedSections } from "./LinkedSections";
 import { loadLinked } from "../../../application/navigation/linked";
+import { toggleShowMarkdown, useEditorStore } from "../../../application/navigation/editor";
 import { loadRail, railNote, railOpen, setRail, useRailStore } from "../../../application/navigation/rail";
 import { aboutOf } from "../../../domain/workspace/rail";
 import { Rail } from "./Rail";
@@ -83,6 +84,7 @@ export function PageView({ target, className }: { target: string; className: str
   const feedOpen = useChangesStore(s => s.open);
   const toReview = feed ? openCount(feed) : 0;
   const pinned = useFavouritesStore(s => (s.by[folder] ?? []).includes(railNote(target).path));
+  const raw = useEditorStore(s => s.showMarkdown);
   const scroller = useRef<HTMLDivElement>(null);
   const path = pagePath(target) || target;
   // the page's own workspace, not the one the sidebar shows
@@ -145,6 +147,7 @@ export function PageView({ target, className }: { target: string; className: str
           { id: "addchat", label: t("pages.addToChat"), icon: "talk" },
           { id: "reveal", label: t("pages.reveal"), icon: "folder" },
           { id: "copy", label: t("pages.copyPath"), icon: "copy" },
+          { id: "markdown", label: t(raw ? "page.hideMarkdown" : "page.showMarkdown"), icon: "term" },
         ]
       : [
           { id: "ask", label: t("page.askAbout"), icon: "talk" },
@@ -157,6 +160,7 @@ export function PageView({ target, className }: { target: string; className: str
     else if (id === "addchat") void addToConversation(railNote(target).path, folder);
     else if (id === "reveal") void revealPage(path);
     else if (id === "copy") void copyPagePath(path);
+    else if (id === "markdown") toggleShowMarkdown();
     else if (id.startsWith("act:"))
       void runPageAction(folder, railNote(target).path, id.slice(4), commentsApi.current?.selection()?.quote ?? null);
   };
