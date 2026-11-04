@@ -13,17 +13,19 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.45] - 2026-11-04
+
 ### Added
 
 - A meeting is transcribed while you record it: the transcript grows live in Today's big pane (opened when you press
-  Record, or by clicking the recording bar), and after Stop only the last few seconds are left to do.
+  Record, or by clicking the recording bar), and after Stop only the last few seconds are left to do (#360).
 - Record a meeting that is not in your calendar: "Record a meeting now" on top of Today starts recording at once,
-  and the transcript and meeting note follow as for any recorded meeting.
+  and the transcript and meeting note follow as for any recorded meeting (#358).
 
 ### Changed
 
 - A track that hardly said anything (the Mac's in a meeting in the room, a notification or two) is left out of the
-  transcript and the audio.
+  transcript and the audio (#360).
 - Transcribing a recorded meeting is several times faster: the speech model hears up to 25 seconds at a time instead
   of every short stretch on its own (a 2-hour meeting went from about 1,200 model calls to about 330) (#359).
 
