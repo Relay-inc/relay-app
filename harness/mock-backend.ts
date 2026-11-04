@@ -615,6 +615,8 @@ function handle(cmd: string, a: Args): unknown {
       return null;
     case "note_by_event":
       return eventNotes.get(String(a.event)) ?? null;
+    case "note_home":
+      return `Calendar/Meetings/${String(a.day).slice(0, 4)}`;
     case "read_note": {
       // a meeting note (`YYYY-MM-DD Title`) exists only when it was made or set with __harness.meetingNote
       const target = String(a.target);
@@ -1251,7 +1253,11 @@ function handle(cmd: string, a: Args): unknown {
             "Tom en ik overliepen de sprint 23 demo en de planning voor sprint 24. De prijssimulatie schuift naar sprint 24; de hosting migratie gebeurt op zaterdag 15 november. Wie de beveiligingsaudit opneemt, is nog open.\n\n- API-koppeling werkt op staging; de demo liep zonder problemen.\n- Simulator komt in sprint 24, niet 25.\n- Downtime-venster: zaterdag 15 nov, 06:00 – 08:00.\n- Beveiligingsaudit: Tom checkt met Sofie wie het opneemt.\n\n**Lena's way of working**\n- Lena bouwt de rapport-API\n- Progress te checken\n- Voorstel: korte check-in",
           next_steps: [
             { text: "Agenda in het kanaal posten zodat Sofie het weet", route: "reminder", due: "2026-10-01" },
-            { text: "Met Lena bespreken: begrijpen wat hij bouwt, sneller vragen", route: "reminder", due: "2026-10-02" },
+            {
+              text: "Met Lena bespreken: begrijpen wat hij bouwt, sneller vragen",
+              route: "reminder",
+              due: "2026-10-02",
+            },
             { text: "pricing-velden simulator uitwerken", route: "ticket" },
           ],
           decisions: ["Pricing-simulator in sprint 24", "Migratie op zaterdag 15 nov, 06:00"],
@@ -1378,7 +1384,9 @@ function handle(cmd: string, a: Args): unknown {
       const feeds: string[] = settings.calendar?.on
         ? settings.calendar.feeds.map((f: { email: string }) => f.email)
         : [];
-      const day = fixture.startsWith("today-") ? integ.todayMeetings(fixture.replace(/^today-/, "").replace(/-dark$/, "")) : integ.meetings;
+      const day = fixture.startsWith("today-")
+        ? integ.todayMeetings(fixture.replace(/^today-/, "").replace(/-dark$/, ""))
+        : integ.meetings;
       return { meetings: feeds.length ? structuredClone(day) : [], errors: integ.calendarErrors(feeds) };
     }
     // plugins (src-tauri/src/plugins.rs): the one example server, a fixed die so the screenshots stay the same

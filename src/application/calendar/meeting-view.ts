@@ -3,6 +3,7 @@ import { workKey } from "../../domain/navigation/keys";
 import { WAIT } from "../../domain/navigation/views";
 import {
   eventOf,
+  meetingDay,
   meetingNoteName,
   withBriefing,
   withEvent,
@@ -17,7 +18,7 @@ import { digestOf } from "../../domain/today/day";
 import * as backend from "../../infrastructure/backend";
 import { select } from "../navigation/navigation";
 import { useWorkspaceStore } from "../workspace/store";
-import { meetingNote } from "./calendar";
+import { meetingNote, meetingProjectOf } from "./calendar";
 import { useRecordingStore } from "./recording";
 import { useCalendarStore } from "./store";
 
@@ -27,8 +28,6 @@ import { useCalendarStore } from "./store";
 // elsewhere in between is not lost; a note changed while writing throws "changed", nothing written.
 const set = useCalendarStore.setState;
 const cal = () => useCalendarStore.getState();
-/** The folder the vault keeps its meeting notes in (the default vault's Calendar/, `note_by_event` looks there too). */
-const FOLDER = "Calendar";
 
 /** A meeting by its event id: the calendar's, the one being recorded (an ad-hoc one is in no calendar), or the one a
  *  link or a click opened the view on. */
@@ -78,17 +77,17 @@ export const backToToday = () => select(WAIT);
 export async function noteFor(meeting: Meeting) {
   const found = await meetingNote(meeting);
   if (found) return found;
+  // in the vault's folder for meeting notes (Calendar/Meetings/<year>/ unless it sets another), made when missing
   const root = useWorkspaceStore.getState().notes.root;
-  const create = () => backend.createNote(`${root}/${FOLDER}`, meetingNoteName(meeting), false);
-  const path = await create().catch(async () => {
-    await backend.createNote(root, FOLDER, true).catch(() => {}); // a vault without the folder yet
-    return create();
-  });
+  const folder = await backend.noteHome("meeting", meetingDay(meeting.start));
+  const path = await backend.createNote(`${root}/${folder}`, meetingNoteName(meeting), false);
   const empty = (await backend.readNote(path)) as { hash: string };
   const text = newMeetingNote(
     meeting,
     meeting.title || t("wait.meetingUntitled"),
     new Date().toLocaleDateString("sv-SE"),
+    undefined,
+    meetingProjectOf(meeting),
   );
   const { hash } = await backend.writeNote(path, text, empty.hash, false);
   return { path, text, hash };

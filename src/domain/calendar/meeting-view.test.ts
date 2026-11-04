@@ -201,4 +201,7 @@ test("a new meeting note has the vault's shape and keeps its event id", () => {
   // a name with quotes stays one plain string
   const odd = newMeetingNote({ ...meeting, people: [{ name: 'Al "B": C', email: "a@b.c" }] }, "T", "2026-11-04");
   assert.ok(odd.includes('  - "Al \\"B\\": C"'));
+  // the project the meeting is about, as a link
+  const about = newMeetingNote(meeting, "Northwind sync", "2026-11-04", "Europe/Brussels", "Northwind");
+  assert.ok(about.includes('event: "abc@100"\nabout: "[[Northwind]]"\nwith:'));
 });

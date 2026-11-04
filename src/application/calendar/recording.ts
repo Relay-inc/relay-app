@@ -13,7 +13,7 @@ export type { LiveLine };
 import { settings } from "../settings/settings";
 import { makeStore } from "../make-store";
 import { toast } from "../navigation/navigation";
-import { meetingLanguage, type Recording } from "../../domain/calendar/rules";
+import { meetingLanguage, meetingNoteName, type Recording } from "../../domain/calendar/rules";
 import { meetingNote } from "./calendar";
 import { openMeetingView } from "./meeting-view";
 import { attachRecording, generateDraft } from "./wrapup";
@@ -169,7 +169,9 @@ async function save(write: typeof meetingRecordStop, folder = "") {
   });
   let recording: Recording;
   try {
-    recording = await write(meeting?.title || t("wait.meetingUntitled"), t("rec.me"), t("rec.others"), progress =>
+    // the transcript names the meeting's note: the one it has (renamed or not), else the one attachRecording makes
+    const note = meeting ? ((await noteNameOf(meeting)) ?? meetingNoteName(meeting)) : null;
+    recording = await write(meeting?.title || t("wait.meetingUntitled"), note, t("rec.me"), t("rec.others"), progress =>
       set({ progress }),
     );
     set({ phase: "idle", meeting: null });
@@ -193,6 +195,9 @@ async function save(write: typeof meetingRecordStop, folder = "") {
     openMeetingView(meeting);
   } else toast(t("rec.saved", { path: recording.transcript }));
 }
+
+const noteNameOf = async (meeting: Meeting) =>
+  (await meetingNote(meeting).catch(() => null))?.path.split("/").pop()?.replace(/\.md$/, "") ?? null;
 
 export async function cancelRecording() {
   if (rec().phase !== "recording") return;

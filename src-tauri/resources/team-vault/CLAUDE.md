@@ -21,13 +21,15 @@ System/          the brain (.claude -> System)
 Contexts/<Work|...>/
   <Context>.md  People/  Documents/ (only what spans projects)
   Projects/<Project>/<Project>.md   card + Status + Open + Decisions
-    Documents/  Communication/ (transcripts/ inside)  Attachments/  Log.md  _archive/
+    Documents/  Communication/ (mail and chat threads)  Log.md  _archive/
+Calendar/Meetings/<year>/   every meeting note, its project in about:, its transcript beside it (.transcript.md)
 Calendar/        conversations without one project
+Attachments/<year>/         images, audio, PDFs
 Resources/       templates, frameworks, reference
 Archive/<year>/  closed projects
 ```
 
-Not read by default: `Communication/transcripts/`, `_archive/`, `Archive/`, `System/archive/`.
+Not read by default: transcripts (`*.transcript.md`), `_archive/`, `Archive/`, `System/archive/`.
 
 ## Memory, four layers
 1. **Index:** `rules/core/work-state.md`, one line per project, generated from the cards (`status`, `last`, `index`) by `python3 System/scripts/build-index.py`. Never edit by hand. Each Mac builds its own, it does not sync.

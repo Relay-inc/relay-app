@@ -97,6 +97,16 @@ test("the prompt marks the invite as untrusted and cannot be closed from inside"
 test("the prompt leaves out what the invite does not have", () => {
   const text = meetingPrompt(at("x", 5), "note", () => "t", "UTC");
   assert.match(text, /^Maak een meeting note «2026-10-01 x»/);
+  // with the path Relay gives it, the conversation writes there
+  const placed = meetingPrompt(
+    at("x", 5),
+    "note",
+    () => "t",
+    "UTC",
+    undefined,
+    "Calendar/Meetings/2026/2026-10-01 x.md",
+  );
+  assert.match(placed, /^Maak een meeting note «Calendar\/Meetings\/2026\/2026-10-01 x\.md» .* op precies dat pad/);
   assert.doesNotMatch(text, /Locatie|Organisator|Deelnemers/);
 });
 

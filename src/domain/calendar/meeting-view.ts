@@ -117,13 +117,20 @@ export function longDay(day: string) {
 }
 /** A new meeting note: frontmatter (`event:` its match key, `with:` the invited by name), the title, the day linked,
  *  and an empty `## Notes`. `today` is the creation date (YYYY-MM-DD). */
-export function newMeetingNote(meeting: Meeting, title: string, today: string, timeZone?: string) {
+export function newMeetingNote(
+  meeting: Meeting,
+  title: string,
+  today: string,
+  timeZone?: string,
+  project?: string | null,
+) {
   const day = meetingDay(meeting.start, timeZone);
   const names = meeting.people.map(person => JSON.stringify(person.name || person.email));
   return [
     "---",
     "type: Meeting",
     `event: ${JSON.stringify(meeting.id)}`,
+    ...(project ? [`about: ${JSON.stringify(`[[${project}]]`)}`] : []),
     names.length ? `with:\n${names.map(name => `  - ${name}`).join("\n")}` : "with:",
     `created: ${today}`,
     "---",

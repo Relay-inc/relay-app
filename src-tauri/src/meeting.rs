@@ -255,9 +255,9 @@ pub fn meeting_record_cancel(state: State<MeetingRec>) -> Result<(), String> {
 /// Stops recording, then writes the audio and the transcript into the vault: `title` names the files, `me` and `others`
 /// the two speakers in the transcript, `on_progress` gets 0..1 while it transcribes. Answers the files' vault paths.
 #[tauri::command]
-pub async fn meeting_record_stop(app: AppHandle, state: State<'_, MeetingRec>, title: String, me: String, others: String, on_progress: Channel<f64>) -> Result<Value, String> {
+pub async fn meeting_record_stop(app: AppHandle, state: State<'_, MeetingRec>, title: String, note: Option<String>, me: String, others: String, on_progress: Channel<f64>) -> Result<Value, String> {
     let (dir, heard) = end(&state)?;
-    save(app, dir, title, me, others, heard, on_progress).await
+    save(app, dir, title, note, me, others, heard, on_progress).await
 }
 
 /// The recordings a failure kept (one that worked or was cancelled is gone), newest first: what a restart finds
@@ -295,13 +295,13 @@ fn kept(root: &Path, busy: Option<&Path>) -> Vec<String> {
 
 /// Writes out the recording a failure kept, `folder` one of `meeting_kept`'s, as `meeting_record_stop`.
 #[tauri::command]
-pub async fn meeting_record_retry(app: AppHandle, state: State<'_, MeetingRec>, folder: String, title: String, me: String, others: String, on_progress: Channel<f64>) -> Result<Value, String> {
+pub async fn meeting_record_retry(app: AppHandle, state: State<'_, MeetingRec>, folder: String, title: String, note: Option<String>, me: String, others: String, on_progress: Channel<f64>) -> Result<Value, String> {
     if state.session.lock().unwrap().is_some() { return Err("already recording".into()); }
     let dir = recordings(&app)?.join(&folder);
     // only a folder this app made: its name is a start time, no path
     if started(&dir).is_none() || !dir.join("me.wav").is_file() { return Err("no kept recording".into()); }
     let language = Language(read_meta(&dir).and_then(|m| m["language"].as_str().map(str::to_string)));
-    save(app, dir, title, me, others, (vec![], vec![], language), on_progress).await
+    save(app, dir, title, note, me, others, (vec![], vec![], language), on_progress).await
 }
 
 /// When a recording started: its folder's name.
@@ -309,12 +309,12 @@ fn started(dir: &Path) -> Option<chrono::NaiveDateTime> {
     chrono::NaiveDateTime::parse_from_str(&dir.file_name()?.to_string_lossy(), "%Y%m%d-%H%M%S").ok()
 }
 
-async fn save(app: AppHandle, dir: PathBuf, title: String, me: String, others: String, heard: Done, on_progress: Channel<f64>) -> Result<Value, String> {
+async fn save(app: AppHandle, dir: PathBuf, title: String, note: Option<String>, me: String, others: String, heard: Done, on_progress: Channel<f64>) -> Result<Value, String> {
     let vault = super::need_vault(&app.state::<super::App>())?;
     let keep_audio = app.state::<super::App>().settings.lock().unwrap()["voice"]["keepAudio"] != false;
     let work = dir.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let done = write_out(&app, &work, Path::new(&vault), &title, [&me, &others], keep_audio, heard, &on_progress);
+        let done = write_out(&app, &work, Path::new(&vault), &title, note.as_deref(), [&me, &others], keep_audio, heard, &on_progress);
         // kept when it failed, so nothing is lost: the error says where it is
         match done {
             Ok(v) => { std::fs::remove_dir_all(&work).ok(); Ok(v) }
@@ -362,7 +362,9 @@ fn region_text(app: &AppHandle, samples: &[f32], language: Option<String>) -> Re
 }
 
 /// `heard`: what live transcription already did (lines, and per track where they end); only the rest is transcribed.
-fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, speakers: [&str; 2], keep_audio: bool, heard: Done, progress: &Channel<f64>) -> Result<Value, String> {
+/// The transcript goes next to the meeting notes (a note of its own, `note` the meeting note's name it belongs to), the
+/// audio into the attachments, both in the folders `homes` gives for the recording's year.
+fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, note: Option<&str>, speakers: [&str; 2], keep_audio: bool, heard: Done, progress: &Channel<f64>) -> Result<Value, String> {
     // each track as Parakeet takes it: 16 kHz mono 16-bit
     let mut tracks = vec![];
     for (i, name) in ["me", "others"].iter().enumerate() {
@@ -372,11 +374,12 @@ fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, speakers: [
         afconvert(&["-f", "WAVE", "-d", "LEI16@16000", "-c", "1"], &raw, &wav)?;
         tracks.push((speakers[i], transcribe_rs::audio::read_wav_samples(&wav).map_err(|e| e.to_string())?));
     }
-    let folder = attachments(vault);
-    std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
     // named by when the recording started (its folder's name), so a retry later in the day keeps the meeting's time
     let started = started(dir).unwrap_or_else(|| chrono::Local::now().naive_local());
-    let stem = free_stem(&folder, &format!("{} {}", started.format("%Y-%m-%d %H%M"), safe_name(title)));
+    let year = started.format("%Y").to_string();
+    let (notes, files) = (crate::homes::home(vault, "meeting", &year), crate::homes::home(vault, "attachments", &year));
+    for f in [&notes, &files] { std::fs::create_dir_all(f).map_err(|e| e.to_string())?; }
+    let stem = free_stem(&notes, &files, &format!("{} {}", started.format("%Y-%m-%d %H%M"), safe_name(title)));
     // the speech of both tracks in windows of up to 25 s, transcribed in turn: one model call per window, not per
     // stretch (whisper pays for a full 30 s window on every call, and most stretches are a second or two)
     let (done, upto, mut language) = heard;
@@ -412,24 +415,21 @@ fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, speakers: [
         // all of them when none said anything, so the audio is still there to listen to
         let heard: Vec<&[f32]> = tracks.iter().zip(&used).filter(|(_, u)| **u || !used.contains(&true)).map(|((_, s), _)| s.as_slice()).collect();
         write_mix(&mixed, &heard)?;
-        let m4a = folder.join(format!("{stem}.m4a"));
+        let m4a = files.join(format!("{stem}.m4a"));
         afconvert(&["-f", "m4af", "-d", "aac", "-b", "48000"], &mixed, &m4a)?;
         Some(m4a)
     } else { None };
-    let md = folder.join(format!("{stem}.md"));
-    std::fs::write(&md, format!("# {title}\n\n{}", transcript(drop_echo(lines)))).map_err(|e| e.to_string())?;
+    let md = notes.join(format!("{stem}.transcript.md"));
+    std::fs::write(&md, format!("{}# {title}\n\n{}", transcript_front(note), transcript(drop_echo(lines)))).map_err(|e| e.to_string())?;
     let rel = |p: &Path| p.strip_prefix(vault).unwrap_or(p).to_string_lossy().to_string();
     let seconds = tracks.iter().map(|(_, s)| s.len()).max().unwrap_or(0) / RATE;
     Ok(json!({ "audio": audio.as_deref().map(rel), "transcript": rel(&md), "seconds": seconds, "language": language.0 }))
 }
 
-/// Where Obsidian puts attachments: its attachmentFolderPath, the vault root when unset or relative to the note.
-fn attachments(vault: &Path) -> PathBuf {
-    let set = std::fs::read_to_string(vault.join(".obsidian/app.json")).ok()
-        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
-        .and_then(|v| v["attachmentFolderPath"].as_str().map(str::to_string))
-        .filter(|p| !p.is_empty() && !p.starts_with('.') && !p.starts_with('/') && !p.contains(".."));
-    set.map_or(vault.to_path_buf(), |p| vault.join(p))
+/// A transcript note's frontmatter: its type, and the meeting note it belongs to when there is one.
+fn transcript_front(note: Option<&str>) -> String {
+    let meeting = note.filter(|n| !n.trim().is_empty()).map(|n| format!("meeting: {}\n", serde_json::to_string(&format!("[[{}]]", n.trim())).unwrap()));
+    format!("---\ntype: Transcript\n{}---\n", meeting.unwrap_or_default())
 }
 /// A title as a file name: no characters Obsidian or the Mac refuse in one.
 fn safe_name(title: &str) -> String {
@@ -437,8 +437,8 @@ fn safe_name(title: &str) -> String {
     let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
     if name.is_empty() { "Meeting".into() } else { name.chars().take(80).collect() }
 }
-fn free_stem(folder: &Path, stem: &str) -> String {
-    let taken = |s: &str| folder.join(format!("{s}.md")).exists() || folder.join(format!("{s}.m4a")).exists();
+fn free_stem(notes: &Path, files: &Path, stem: &str) -> String {
+    let taken = |s: &str| notes.join(format!("{s}.transcript.md")).exists() || files.join(format!("{s}.m4a")).exists();
     (1..).map(|n| if n == 1 { stem.to_string() } else { format!("{stem} ({n})") }).find(|s| !taken(s)).unwrap()
 }
 
@@ -797,12 +797,11 @@ mod tests {
     fn names_and_folders_stay_inside_the_vault() {
         assert_eq!(safe_name("Northwind / status: Q4?"), "Northwind status Q4");
         assert_eq!(safe_name("  "), "Meeting");
-        let vault = std::env::temp_dir().join(format!("relay-att-{}", std::process::id()));
-        std::fs::create_dir_all(vault.join(".obsidian")).unwrap();
-        std::fs::write(vault.join(".obsidian/app.json"), r#"{"attachmentFolderPath":"Resources/Attachments"}"#).unwrap();
-        assert_eq!(attachments(&vault), vault.join("Resources/Attachments"));
-        std::fs::write(vault.join(".obsidian/app.json"), r#"{"attachmentFolderPath":"../outside"}"#).unwrap();
-        assert_eq!(attachments(&vault), vault);
-        std::fs::remove_dir_all(&vault).ok();
+    }
+
+    #[test]
+    fn a_transcript_names_its_meeting_note() {
+        assert_eq!(transcript_front(Some("2026-11-04 Beacon \"sync\"")), "---\ntype: Transcript\nmeeting: \"[[2026-11-04 Beacon \\\"sync\\\"]]\"\n---\n");
+        assert_eq!(transcript_front(None), "---\ntype: Transcript\n---\n");
     }
 }
