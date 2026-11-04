@@ -282,7 +282,7 @@ export const capture = {
 const portal = "Contexts/Agency/Projects/Northwind Portal/Documents/Portal Architecture.md";
 const sync = `${meetingDir}/2026-09-30 Portal sync.md`;
 /** The feed K6 shows: the capture run open, one more open entry, two kept ones. The notes hold the text after them. */
-export function seedChanges() {
+export function seedChanges(long = false) {
   const entry = (id: number, source: string, subject: string, reason: string, hours: number, files: typeof capture.files, state = "open") => ({
     id: `${NOW - hours * HOUR}-${id}`,
     at: NOW - hours * HOUR,
@@ -297,8 +297,18 @@ export function seedChanges() {
     after: `${texts[portal]}\n## Follow-ups\n- Retest the rate limit from the new outbound IP.\n`,
   };
   const wrapped = { path: sync, before: texts[sync], after: `${texts[sync]}\nNext: retest on Friday.\n` };
+  // kb-changes-long: the run's first note grows by 120 lines, one of them a 400-character line without a space, and five
+  // more notes follow, so the entry is taller than the panel
+  const lots = (n: number) => Array.from({ length: n }, (_, i) => `Line ${i + 1} of the migration notes.`).join("\n");
+  const longFiles = long
+    ? [
+        { ...capture.files[0], after: `${capture.files[0].after}\n${lots(120)}\n${"x".repeat(400)}\n` },
+        capture.files[1],
+        ...[1, 2, 3, 4, 5].map(n => ({ ...filed, path: `${docs}/Migration step ${n}.md`, before: null, after: lots(30) })),
+      ]
+    : capture.files;
   return [
-    entry(1, "capture", capture.subject, capture.reason, 0.2, capture.files),
+    entry(1, "capture", capture.subject, capture.reason, 0.2, longFiles),
     entry(2, "capture", "Hosting migration", "Filed 1 follow-up from the migration chat", 1, [filed]),
     entry(3, "action:summarise", "Portal sync", "Added a one-line next step", 20, [wrapped], "kept"),
     entry(4, "capture", "Start the security audit", "Decision: audit starts in sprint 25", 60, [{ path: portal, before: texts[portal], after: texts[portal] }], "kept"),

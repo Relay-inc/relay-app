@@ -138,7 +138,7 @@ function Unfolded({ folder, change }: { folder: string; change: Change }) {
   const merging = useChangesStore(s => s.merging);
   const open = change.files.filter(f => f.state === "open");
   return (
-    <section className="rounded-xl border border-separator-strong overflow-hidden">
+    <section className="flex-none rounded-xl border border-separator-strong overflow-hidden">
       <Head change={change} />
       {change.files.map(f => (
         <FileDiff key={f.path} folder={folder} id={change.id} file={f} pending={merging[`${change.id}\n${f.path}`]} />
