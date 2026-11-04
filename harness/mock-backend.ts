@@ -580,7 +580,15 @@ function handle(cmd: string, a: Args): unknown {
       return null;
     // the workspace check: a few of each kind, gone once repaired
     case "vault_check":
-      return VAULT_FINDINGS.filter(f => !repaired.has(f.id));
+      return VAULT_FINDINGS.filter(f => !repaired.has(f.id) && !(tidied && f.kind === "outside_home"));
+    case "tidy_preview":
+      return TIDY;
+    case "tidy_apply":
+      tidied = true;
+      return TIDY;
+    case "tidy_undo":
+      tidied = false;
+      return TIDY.moves.length;
     case "vault_repair":
       (a.ids as string[]).forEach(id => repaired.add(id));
       return (a.ids as string[]).length;
@@ -1569,7 +1577,45 @@ const finding = (kind: string, context: string, path: string, paths: string[] = 
   paths,
   fix,
 });
+// Tidy structure: the flat Calendar/'s notes by type, each with the folder its type goes in
+const OUTSIDE: [string, string, string[]][] = [
+  [
+    "Meeting",
+    "Calendar/Meetings/2026",
+    [
+      "2026-11-04 Northwind sync",
+      "2026-10-28 Northwind sync",
+      "2026-10-22 Atlas intake",
+      "Old/2026-10-22 Atlas intake",
+      "2026-10-15 Bluebird kickoff",
+    ],
+  ],
+  ["Thread", "Calendar/Threads/2026", ["Atlas pricing question", "Bluebird brief"]],
+  ["Daily", "Calendar/Daily/2026", ["2026-11-04", "2026-11-03", "2026-11-02"]],
+];
+const TIDY = {
+  moves: OUTSIDE.flatMap(([kind, home, names]) =>
+    names.map((n, i) => {
+      const name = n.split("/").pop()!;
+      const renamed = names.findIndex(o => o.split("/").pop() === name) !== i;
+      return { kind, from: `Calendar/${n}.md`, to: `${home}/${name}${renamed ? " 2" : ""}.md`, renamed };
+    }),
+  ),
+  stay: 4,
+  links: 12,
+  notes: 7,
+};
+let tidied = false;
 const VAULT_FINDINGS = [
+  ...OUTSIDE.map(([kind, , names]) =>
+    finding(
+      "outside_home",
+      "",
+      kind,
+      names.map(n => `Calendar/${n}.md`),
+      false,
+    ),
+  ),
   finding("missing_file", "", "System/rules/core/team.md"),
   finding("orphan_rule", "", "System/rules/gone/context.md", ["Contexts/Gone"], false),
   finding("context_rule", "Agency", "System/rules/agency/context.md"),

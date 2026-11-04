@@ -65,7 +65,7 @@ fn from_starter(vault: &Path) -> bool {
     match fs::canonicalize(vault.join(".claude")) { Ok(c) => c == vault.join("System"), Err(_) => vault.join("System/rules/core").is_dir() }
 }
 /// The frontmatter of a note, without its fences, or None.
-fn frontmatter(text: &str) -> Option<&str> { text.strip_prefix("---\n").and_then(|t| t.split_once("\n---")).map(|(fm, _)| fm) }
+pub(crate) fn frontmatter(text: &str) -> Option<&str> { text.strip_prefix("---\n").and_then(|t| t.split_once("\n---")).map(|(fm, _)| fm) }
 /// The contexts a note's `context:` names (a value or a list), by their link target.
 fn named_contexts(fm: &str) -> Option<Vec<String>> {
     let link = Regex::new(r"\[\[([^\]|#]+)").unwrap();
@@ -157,6 +157,10 @@ pub fn check(side: &Side, starter: &Starter) -> Vec<Finding> {
             }
         }
     }
+    // notes whose type has a home and that sit elsewhere, by type: Tidy structure moves them, Repair does not
+    let mut outside: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for m in crate::tidy::plan(side).moves { outside.entry(m.kind).or_default().push(m.from); }
+    for (kind, paths) in outside { out.push(f("outside_home", "", kind, paths, false)); }
     out
 }
 
@@ -292,6 +296,24 @@ mod tests {
         assert_eq!(repair(&side, &s, &ids, "2026-10-29").unwrap(), 2);
         assert!(r(&v, "State/ws.md").contains("## Home\n\n| Project |"));
         assert_eq!(kinds(&check(&side, &s)), vec!["row_without_note Work Ghost"]);
+    }
+
+    #[test]
+    fn notes_outside_their_home_are_found_by_type_and_not_repaired() {
+        let root = tmp("home");
+        let s = starter(&root);
+        let v = root.join("vault");
+        w(&v, "State/ws.md", "## Work\n\n| Project | State | Last Touched | Left Off |\n|---|---|---|---|\n");
+        w(&v, "Contexts/Work/Work.md", "---\ntype: Context\n---\n");
+        w(&v, "Calendar/2026-11-04 Sync.md", "---\ntype: Meeting\n---\n");
+        w(&v, "Calendar/2026-11-03 Sync.md", "---\ntype: Meeting\n---\n");
+        w(&v, "Calendar/2026-11-04.md", "---\ntype: Daily\n---\n");
+        w(&v, "Calendar/Meetings/2026/2026-10-01 Home.md", "---\ntype: Meeting\n---\n");
+        let side = Side { vault: v.to_string_lossy().into(), work_state: v.join("State/ws.md").to_string_lossy().into(), notes: v.join("Contexts").to_string_lossy().into() };
+        let found: Vec<Finding> = check(&side, &s).into_iter().filter(|f| f.kind == "outside_home").collect();
+        assert_eq!(kinds(&found), vec!["outside_home  Daily", "outside_home  Meeting"]);
+        assert_eq!(found[1].paths, vec!["Calendar/2026-11-03 Sync.md", "Calendar/2026-11-04 Sync.md"]);
+        assert!(found.iter().all(|f| !f.fix));
     }
 
     #[test]

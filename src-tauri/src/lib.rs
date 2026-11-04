@@ -41,6 +41,7 @@ mod migrate;
 mod pagefiles;
 mod homes;
 mod projects;
+mod tidy;
 mod vaultcheck;
 pub mod notify;
 mod permissions;
@@ -426,6 +427,7 @@ struct App {
     proj_vault: Mutex<HashMap<String, (String, String)>>, // project key -> (its vault, its name there), from the last snapshot
     extra: Mutex<Value>,                   // the last snapshot's extra vaults: [{vault, renamed, error}]
     shared: shared_vaults::Hub,            // the shared vaults' sync rounds (shared_vaults.rs)
+    tidied: Mutex<HashMap<String, pagefiles::Batch>>, // workspace -> its last Tidy structure, for its Undo (tidy.rs)
     vault_gate: Mutex<()>,                 // held while an agent is fenced and started, and while a vault is added (policy.rs)
 }
 
@@ -907,6 +909,10 @@ fn starter_for(app: &AppHandle, s: &Value, workspace: &str) -> Result<vaultcheck
     let team = shared_vaults::list(s).iter().any(|v| v.folder == workspace);
     Ok(vaultcheck::Starter { template: res("default-vault")?, overlay: if team { Some(res("team-vault")?) } else { None } })
 }
+/// Only an admin writes to a shared workspace's structure: what it writes reaches every member.
+fn admin_only(s: &Value, workspace: &str) -> Result<(), String> {
+    if shared_vaults::list(s).iter().any(|v| v.folder == workspace && v.role == "member") { Err(trc("err.admin_only")) } else { Ok(()) }
+}
 /// The workspace check (vaultcheck.rs): [{id, kind, context, path, paths, fix}].
 #[tauri::command]
 async fn vault_check(app: AppHandle, state: State<'_, App>, workspace: String) -> Result<Value, String> {
@@ -914,11 +920,96 @@ async fn vault_check(app: AppHandle, state: State<'_, App>, workspace: String) -
     let starter = starter_for(&app, &s, &workspace)?;
     on_files(move || Ok(json!(vaultcheck::check(&side, &starter).iter().map(vaultcheck::Finding::json).collect::<Vec<_>>()))).await
 }
+/// The plan of Tidy structure (tidy.rs) with the links its move would rewrite, read now and not written: {moves: [{kind,
+/// from, to, renamed}], stay, links, notes}. The batch is what Apply moves, so these are its counts.
+fn tidy_plan(side: &migrate::Side) -> Result<(tidy::Tidy, pagefiles::Batch), String> {
+    let t = tidy::plan(side);
+    let moves: Vec<(String, String)> = t.moves.iter().map(|m| (m.from.clone(), m.to.clone())).collect();
+    let b = pagefiles::plan_batch(&side.vault, &moves)?;
+    Ok((t, b))
+}
+fn tidy_json(t: &tidy::Tidy, b: &pagefiles::Batch) -> Value {
+    let moves: Vec<Value> = t.moves.iter().map(|m| json!({"kind": m.kind, "from": m.from, "to": m.to, "renamed": m.renamed})).collect();
+    json!({"moves": moves, "stay": t.stay, "links": b.links, "notes": b.edits.len()})
+}
+#[tauri::command]
+async fn tidy_preview(state: State<'_, App>, workspace: String) -> Result<Value, String> {
+    let (_, side) = workspace_side(&state, &workspace)?;
+    on_files(move || tidy_plan(&side).map(|(t, b)| tidy_json(&t, &b))).await
+}
+/// Moves every note outside its home to it (tidy.rs, pagefiles::apply_batch) as one run, with Undo (`tidy_undo`). In a
+/// shared workspace only an admin, and the whole run under the workspace's round lock: no round sees half of it, its
+/// documents follow in the manifest, and the files that left their place pass the next round's delete brake.
+#[tauri::command]
+async fn tidy_apply(app: AppHandle, state: State<'_, App>, workspace: String) -> Result<Value, String> {
+    let (s, side) = workspace_side(&state, &workspace)?;
+    admin_only(&s, &workspace)?;
+    let shared = shared_at(&state, std::path::Path::new(&vault::canon(&workspace)));
+    let a = app.clone();
+    let (t, b) = on_files(move || {
+        let run = || -> Result<_, String> {
+            let (t, b) = tidy_plan(&side)?;
+            if b.moves.is_empty() { return Ok((t, b)); }
+            pagefiles::apply_batch(&b)?;
+            Ok((t, b))
+        };
+        let Some(id) = shared else { return run() };
+        let hub = &a.state::<App>().shared;
+        hub.with_vault(&id, || {
+            let (t, b) = run()?;
+            if let Err(e) = hub.moved_notes(&id, &b.root.to_string_lossy(), &b.moves) {
+                pagefiles::undo_batch(&b).ok();
+                return Err(format!("not moved: {e}"));
+            }
+            Ok((t, b))
+        })
+    }).await?;
+    if b.moves.is_empty() { return Ok(tidy_json(&t, &b)); }
+    if let Some(id) = shared_at(&state, &b.root) { app.state::<App>().shared.let_through(&id, b.gone.clone()); }
+    watch::moved(&b.root, &b.moves.iter().map(|(_, to)| to.clone()).collect::<Vec<_>>(), &b.edits.iter().map(|(at, _, new)| (at.clone(), new.clone())).collect::<Vec<_>>());
+    let out = tidy_json(&t, &b);
+    state.tidied.lock().unwrap().insert(workspace, b);
+    Ok(out)
+}
+/// Undo of the workspace's last `tidy_apply`: every note back, every link as it was, in a shared workspace as one run
+/// again. A note edited since stays where it is and is named in the error.
+#[tauri::command]
+async fn tidy_undo(app: AppHandle, state: State<'_, App>, workspace: String) -> Result<usize, String> {
+    let (s, _) = workspace_side(&state, &workspace)?;
+    admin_only(&s, &workspace)?;
+    let b = state.tidied.lock().unwrap().remove(&workspace).ok_or("nothing to undo")?;
+    let shared = shared_at(&state, &b.root);
+    let back: Vec<(String, String)> = b.moves.iter().map(|(from, to)| (to.clone(), from.clone())).collect();
+    let (a, b2, shared_id) = (app.clone(), b.clone(), shared.clone());
+    // what is where the notes go back from: its hash, for the next round's delete brake
+    let left: Vec<(String, String)> = on_files(move || {
+        let run = || -> Result<_, String> {
+            let left = b2.moves.iter().filter_map(|(_, to)| std::fs::read(b2.root.join(to)).ok().map(|d| (to.clone(), relay_remote::sync::sha256_hex(&d)))).collect();
+            pagefiles::undo_batch(&b2)?;
+            Ok(left)
+        };
+        let Some(id) = shared_id else { return run() };
+        let hub = &a.state::<App>().shared;
+        hub.with_vault(&id, || {
+            let left = run()?;
+            hub.moved_notes(&id, &b2.root.to_string_lossy(), &back)?;
+            Ok(left)
+        })
+    }).await?;
+    if let Some(id) = shared {
+        let hub = &app.state::<App>().shared;
+        hub.forget_through(&id, &b.moves.iter().map(|(from, _)| from.clone()).collect::<Vec<_>>());
+        hub.let_through(&id, left);
+    }
+    let was: std::collections::HashMap<&str, &str> = b.moves.iter().map(|(from, to)| (to.as_str(), from.as_str())).collect();
+    watch::moved(&b.root, &b.moves.iter().map(|(from, _)| from.clone()).collect::<Vec<_>>(), &b.edits.iter().map(|(at, old, _)| (was.get(at.as_str()).copied().unwrap_or(at).to_string(), old.clone())).collect::<Vec<_>>());
+    Ok(b.moves.len())
+}
 /// Repairs the findings `ids` of the check. In a shared workspace only an admin: what it writes reaches every member.
 #[tauri::command]
 async fn vault_repair(app: AppHandle, state: State<'_, App>, workspace: String, ids: Vec<String>) -> Result<usize, String> {
     let (s, side) = workspace_side(&state, &workspace)?;
-    if shared_vaults::list(&s).iter().any(|v| v.folder == workspace && v.role == "member") { return Err(trc("err.admin_only")); }
+    admin_only(&s, &workspace)?;
     let starter = starter_for(&app, &s, &workspace)?;
     on_files(move || {
         let n = vaultcheck::repair(&side, &starter, &ids, &today())?;
@@ -2916,7 +3007,7 @@ pub fn run() {
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings), Some(&settings["shortcuts"]))?)?;
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
             let machines = machines::Machines::load(&data_dir(app.handle()))?;
-            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default(), orch: Mutex::new(()), proj_vault: Default::default(), extra: Mutex::new(json!([])), shared: Default::default(), vault_gate: Mutex::new(()) });
+            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default(), orch: Mutex::new(()), proj_vault: Default::default(), extra: Mutex::new(json!([])), shared: Default::default(), tidied: Default::default(), vault_gate: Mutex::new(()) });
             app.manage(pty::Ptys::default());
             app.manage(plugins::Plugins::default());
             app.manage(dictation::Dictation::default());
@@ -3020,7 +3111,7 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![shared_doc_absorb, shared_doc_open, page_history, page_restore, page_comments, page_comment, workspace_inbox, shared_doc_edit, shared_awareness, shared_vaults::shared_vault_docs, snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, migrate_project, move_chat_workspace, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, note_by_event, note_home, write_note, property_values, create_note, create_context, create_project, project_kinds, set_project_state, project_row, vault_check, vault_repair, free_page_name, duplicate_note, move_path, trash_path, restore_path, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_trust, shared_vaults::shared_vault_admin, shared_vaults::shared_vault_add, shared_vaults::shared_vault_pending_invite, notes_graph, note_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_kept, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
+        .invoke_handler(tauri::generate_handler![shared_doc_absorb, shared_doc_open, page_history, page_restore, page_comments, page_comment, workspace_inbox, shared_doc_edit, shared_awareness, shared_vaults::shared_vault_docs, snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, migrate_project, move_chat_workspace, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, note_by_event, note_home, write_note, property_values, create_note, create_context, create_project, project_kinds, set_project_state, project_row, vault_check, vault_repair, tidy_preview, tidy_apply, tidy_undo, free_page_name, duplicate_note, move_path, trash_path, restore_path, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_trust, shared_vaults::shared_vault_admin, shared_vaults::shared_vault_add, shared_vaults::shared_vault_pending_invite, notes_graph, note_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_kept, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the window used last back (the main one may be hidden)

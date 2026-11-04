@@ -1,8 +1,19 @@
 import { useEffect, useState } from "react";
-import { canRepair, checkWorkspace, repairWorkspace, type VaultFinding } from "../../../application/workspace/check";
+import {
+  canRepair,
+  checkWorkspace,
+  repairWorkspace,
+  tidyApply,
+  tidyPreview,
+  tidyUndo,
+  type TidyPlan,
+  type VaultFinding,
+} from "../../../application/workspace/check";
+import { outsideKinds } from "../../../domain/workspace/tidy";
 import { openPage } from "../../../application/navigation/pages";
 import { toast } from "../../../application/navigation/navigation";
 import { useT } from "../../hooks/useT";
+import { TidySheet } from "./TidySheet";
 
 // what each kind of finding says; the ones about a context sit under its name, the rest under Workspace
 const TEXT = {
@@ -22,6 +33,9 @@ export function VaultCheckDialog({ workspace, onClose }: { workspace: string; on
   const { t, tn } = useT();
   const [found, setFound] = useState<VaultFinding[] | null>(null);
   const [busy, setBusy] = useState(false);
+  // Tidy structure's dry run: open (`tidying`) with its plan once read
+  const [tidying, setTidying] = useState(false);
+  const [plan, setPlan] = useState<TidyPlan | null>(null);
   const read = () =>
     checkWorkspace().then(setFound, e => {
       toast(String(e));
@@ -40,7 +54,33 @@ export function VaultCheckDialog({ workspace, onClose }: { workspace: string; on
     }
     setBusy(false);
   };
+  const tidy = () => {
+    setTidying(true);
+    setPlan(null);
+    tidyPreview().then(setPlan, e => {
+      toast(String(e));
+      setTidying(false);
+    });
+  };
+  const applyTidy = async () => {
+    setBusy(true);
+    try {
+      const done = await tidyApply();
+      toast(tn("tidy.done", done.moves.length), () => {
+        void tidyUndo()
+          .then(() => toast(t("tidy.undone")))
+          .catch(e => toast(String(e)));
+      });
+      setTidying(false);
+      await read();
+    } catch (e) {
+      toast(String(e));
+    }
+    setBusy(false);
+  };
   const fixable = (found ?? []).filter(f => f.fix);
+  const outside = (found ?? []).filter(f => f.kind === "outside_home");
+  const outsideTotal = outside.reduce((n, f) => n + f.paths.length, 0);
   const groups = [...new Set((found ?? []).map(f => f.context))].sort((a, b) =>
     !a ? -1 : !b ? 1 : a.localeCompare(b),
   );
@@ -87,9 +127,11 @@ export function VaultCheckDialog({ workspace, onClose }: { workspace: string; on
       <div
         role="dialog"
         aria-label={t("vc.title", { workspace })}
-        className="w-140 max-h-[80vh] grid grid-rows-[auto_1fr_auto] gap-3 p-5 bg-bg border border-separator rounded-xl shadow-lg text-sm text-label"
+        className="relative w-180 max-h-[80vh] grid grid-rows-[auto_1fr_auto] gap-3 p-5 bg-bg border border-separator rounded-xl shadow-lg text-sm text-label"
         onKeyDown={e => {
-          if (e.key === "Escape") onClose();
+          if (e.key !== "Escape") return;
+          if (tidying) setTidying(false);
+          else onClose();
         }}
       >
         <h2 className="text-base font-semibold">{t("vc.title", { workspace })}</h2>
@@ -105,7 +147,7 @@ export function VaultCheckDialog({ workspace, onClose }: { workspace: string; on
                   {group || t("vc.workspace")}
                 </h3>
                 {found
-                  .filter(f => f.context === group)
+                  .filter(f => f.context === group && f.kind !== "outside_home")
                   .map(f => (
                     <div key={f.id} data-finding={f.kind} className="flex items-start gap-3">
                       <div className="flex-1 min-w-0 text-secondary break-words">{says(f)}</div>
@@ -124,6 +166,28 @@ export function VaultCheckDialog({ workspace, onClose }: { workspace: string; on
                       )}
                     </div>
                   ))}
+                {!group && outside.length ? (
+                  <div data-finding="outside_home" className="flex items-start gap-3">
+                    <span className="flex-none h-6 min-w-8 px-2 grid place-items-center rounded-full bg-accent-soft text-accent-text text-xs font-semibold tabular-nums">
+                      {outsideTotal}
+                    </span>
+                    <div className="flex-1 min-w-0 grid break-words">
+                      <span className="font-semibold">{t("vc.outsideTitle")}</span>
+                      <span className="text-secondary">{t("vc.outsideSub", { kinds: outsideKinds(outside) })}</span>
+                    </div>
+                    {admin ? (
+                      <button
+                        className={`btn flex-none cursor-pointer disabled:opacity-50 ${fixable.length ? "" : "btn-primary"}`}
+                        disabled={busy}
+                        onClick={tidy}
+                      >
+                        {t("vc.tidy")}
+                      </button>
+                    ) : (
+                      <span className="flex-none text-xs text-tertiary">{t("vc.outsideAdmin")}</span>
+                    )}
+                  </div>
+                ) : null}
               </section>
             ))
           )}
@@ -143,6 +207,9 @@ export function VaultCheckDialog({ workspace, onClose }: { workspace: string; on
             </button>
           ) : null}
         </div>
+        {tidying ? (
+          <TidySheet plan={plan} busy={busy} onCancel={() => setTidying(false)} onApply={() => void applyTidy()} />
+        ) : null}
       </div>
     </div>
   );

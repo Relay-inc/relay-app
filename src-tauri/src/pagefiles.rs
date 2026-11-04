@@ -148,7 +148,7 @@ pub fn restore(roots: &[String], root: &str, trashed: &str, rel: &str) -> Result
 
 /// Every file of a workspace, relative to it: hidden names (.git, .obsidian, .trash, .relay-sync-…) and links skipped,
 /// no depth limit, archives included. What a move counts and rewrites links in.
-fn all_files(root: &Path) -> Vec<String> {
+pub fn all_files(root: &Path) -> Vec<String> {
     let mut out = vec![];
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
@@ -305,6 +305,26 @@ fn rewrite(text: &str, note: &str, at: &str, ctx: &Ctx) -> (String, usize) {
     (out, n)
 }
 
+/// What moving `moved` (from, to; relative to `root`) does among the files `all`: the notes whose links change with
+/// their text before and after (at the place they are in after the move), how many links, and (path, hash) of every
+/// file that leaves its place.
+fn changes(root: &Path, all: &[String], moved: &[(String, String)]) -> (Vec<(String, String, String)>, usize, Vec<(String, String)>) {
+    let gone = moved.iter().filter_map(|(p, _)| fs::read(root.join(p)).ok().map(|d| (p.clone(), relay_remote::sync::sha256_hex(&d)))).collect();
+    let notes: Vec<String> = all.iter().filter(|p| lower(p).ends_with(".md")).cloned().collect();
+    let map: HashMap<&str, &str> = moved.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+    let after = notes.iter().map(|p| map.get(p.as_str()).map_or(p.clone(), |n| n.to_string())).collect();
+    let ctx = Ctx { notes, after, files: all.iter().map(String::as_str).collect(), map };
+    let mut edits = vec![];
+    let mut links = 0;
+    for note in &ctx.notes {
+        let Ok(text) = fs::read_to_string(root.join(note)) else { continue };
+        let at = ctx.map.get(note.as_str()).copied().unwrap_or(note);
+        let (new, n) = rewrite(&text, note, at, &ctx);
+        if n > 0 { links += n; edits.push((at.to_string(), text, new)); }
+    }
+    (edits, links, gone)
+}
+
 /// What moving `from` to `to` (both absolute, in the same workspace) would do, read now; nothing is written. Only a
 /// change of case is allowed onto a name that is there (the same file on macOS).
 pub fn plan(roots: &[String], from: &str, to: &str) -> Result<Plan, String> {
@@ -323,19 +343,7 @@ pub fn plan(roots: &[String], from: &str, to: &str) -> Result<Plan, String> {
         let prefix = format!("{rel}/");
         all.iter().filter_map(|p| p.strip_prefix(&prefix).map(|r| (p.clone(), format!("{rel_to}/{r}")))).collect()
     } else { vec![(rel.clone(), rel_to.clone())] };
-    let gone = moved.iter().filter_map(|(p, _)| fs::read(root.join(p)).ok().map(|d| (p.clone(), relay_remote::sync::sha256_hex(&d)))).collect();
-    let notes: Vec<String> = all.iter().filter(|p| lower(p).ends_with(".md")).cloned().collect();
-    let map: HashMap<&str, &str> = moved.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
-    let after = notes.iter().map(|p| map.get(p.as_str()).map_or(p.clone(), |n| n.to_string())).collect();
-    let ctx = Ctx { notes, after, files: all.iter().map(String::as_str).collect(), map };
-    let mut edits = vec![];
-    let mut links = 0;
-    for note in &ctx.notes {
-        let Ok(text) = fs::read_to_string(root.join(note)) else { continue };
-        let at = ctx.map.get(note.as_str()).copied().unwrap_or(note);
-        let (new, n) = rewrite(&text, note, at, &ctx);
-        if n > 0 { links += n; edits.push((at.to_string(), text, new)); }
-    }
+    let (edits, links, gone) = changes(&root, &all, &moved);
     Ok(Plan { root, from: src, to: dst, rel_to, case_only, edits, links, gone })
 }
 
@@ -386,6 +394,81 @@ fn put_back(plan: &Plan, done: usize) -> Vec<String> {
         if !back { stuck.push(at.clone()); }
     }
     if move_it(plan, &plan.to, &plan.from).is_err() { stuck.push(plan.rel_to.clone()); }
+    stuck
+}
+
+/// Many notes moved at once (Tidy structure): (from, to) relative to the workspace, and the links to all of them
+/// rewritten in one pass, so the counts are the ones the apply makes. `edits`, `gone` as in `Plan`.
+#[derive(Debug, Clone)]
+pub struct Batch {
+    pub root: PathBuf,
+    pub moves: Vec<(String, String)>,
+    pub edits: Vec<(String, String, String)>,
+    pub links: usize,
+    pub gone: Vec<(String, String)>,
+}
+/// What moving the notes `moves` (from, to; relative to `root`) would do, read now; nothing is written. Each is a page
+/// that is there, going to a name that is free, no two to the same one.
+pub fn plan_batch(root: &str, moves: &[(String, String)]) -> Result<Batch, String> {
+    let roots = [root.to_string()];
+    let base = PathBuf::from(canon(root));
+    let mut seen = HashSet::new();
+    for (from, to) in moves {
+        let (_, src, _) = locate(&roots, &base.join(from).to_string_lossy())?;
+        let (_, dst, rel_to) = locate(&roots, &base.join(to).to_string_lossy())?;
+        if !src.is_file() || src.extension().is_none_or(|e| e != "md") { return Err(format!("not a page: {from}")); }
+        if !lower(&rel_to).ends_with(".md") { return Err(format!("a page keeps .md: {rel_to}")); }
+        if fs::symlink_metadata(&dst).is_ok() || !seen.insert(lower(&rel_to)) { return Err(format!("already there: {rel_to}")); }
+    }
+    let all = all_files(&base);
+    let (edits, links, gone) = changes(&base, &all, moves);
+    Ok(Batch { root: base, moves: moves.to_vec(), edits, links, gone })
+}
+/// Do a planned batch: every note to its place, then each note with a changed link written, but only while it still
+/// holds the text the plan read. A stop or a failed write puts everything back (what could not be is named).
+pub fn apply_batch(b: &Batch) -> Result<(), String> {
+    for (i, (from, to)) in b.moves.iter().enumerate() {
+        let (a, c) = (b.root.join(from), b.root.join(to));
+        if let Err(e) = c.parent().map_or(Ok(()), fs::create_dir_all).and_then(|_| rename_new(&a, &c)) {
+            return Err(failed(from, &e.to_string(), revert(b, 0, i)));
+        }
+    }
+    for (i, (at, old, new)) in b.edits.iter().enumerate() {
+        let p = b.root.join(at);
+        let why = match fs::read_to_string(&p) {
+            Ok(now) if now == *old => write(&p, new).err().map(|e| e.to_string()),
+            Ok(_) => Some("changed since the links were counted".into()),
+            Err(e) => Some(e.to_string()),
+        };
+        if let Some(why) = why { return Err(failed(at, &why, revert(b, i, b.moves.len()))); }
+    }
+    Ok(())
+}
+/// Undo of `apply_batch`: the links as they were and every note back, each only while it is as the batch left it.
+pub fn undo_batch(b: &Batch) -> Result<(), String> {
+    let stuck = revert(b, b.edits.len(), b.moves.len());
+    if stuck.is_empty() { Ok(()) } else { Err(format!("these could not be put back: {}", stuck.join(", "))) }
+}
+fn failed(at: &str, why: &str, stuck: Vec<String>) -> String {
+    if stuck.is_empty() { format!("{at}: {why}; nothing was changed") } else { format!("{at}: {why}; these could not be put back: {}", stuck.join(", ")) }
+}
+/// The first `edits` edits and `moves` moves of a batch undone (edits first, a note only while it holds what was
+/// written), the folders the move made left empty removed: the paths that could not be put back.
+fn revert(b: &Batch, edits: usize, moves: usize) -> Vec<String> {
+    let mut stuck = vec![];
+    for (at, old, new) in &b.edits[..edits] {
+        let p = b.root.join(at);
+        if !(matches!(fs::read_to_string(&p), Ok(now) if now == *new) && write(&p, old).is_ok()) { stuck.push(at.clone()); }
+    }
+    for (from, to) in b.moves[..moves].iter().rev() {
+        let (a, c) = (b.root.join(from), b.root.join(to));
+        if a.parent().map_or(Ok(()), fs::create_dir_all).and_then(|_| rename_new(&c, &a)).is_err() { stuck.push(to.clone()); continue; }
+        let mut up = c.parent();
+        while let Some(d) = up.filter(|d| *d != b.root) {
+            if fs::remove_dir(d).is_err() { break; }
+            up = d.parent();
+        }
+    }
     stuck
 }
 

@@ -89,7 +89,9 @@ const meetingBriefing = async (fixture, title, briefed = false) => {
         window.__harness.meetingNote(
           id,
           "Calendar/2026-10-01 Daily standup.md",
-          ["---", "type: Meeting", `event: "${id}"`, "---", "", "# Daily standup", "", ...brief, "## Notes", ""].join("\n"),
+          ["---", "type: Meeting", `event: "${id}"`, "---", "", "# Daily standup", "", ...brief, "## Notes", ""].join(
+            "\n",
+          ),
         );
       },
       [BRIEFING],
@@ -104,39 +106,42 @@ const meetingBriefing = async (fixture, title, briefed = false) => {
 const meetingLive = async fixture => {
   await open(page, server.url, { fixture });
   const start = Math.floor((await page.evaluate(() => window.__harness.now)) / 1000);
-  await page.evaluate(([start, BRIEFING_]) => {
-    const id = `northwind@${start}`;
-    window.__harness.meetingNote(
-      id,
-      "Calendar/2026-10-01 Northwind sync Tom.md",
-      [
-        "---",
-        "type: Meeting",
-        `event: "${id}"`,
-        "with:",
-        '  - "Tom Willems"',
-        "created: 2026-10-01",
-        "language: nl",
-        "---",
-        "",
-        "# Northwind sync Tom",
-        "[[2026-10-01|Thursday October 1st, 2026]]",
-        "",
-        ...BRIEFING_,
-        "## Notes",
-        "- [09:31] Sprint 23 demo: API-koppeling werkt op staging, geen issues",
-        "- [09:33] = Pricing-simulator komt in sprint 24, niet 25",
-        "- [09:35] Lena bouwt de rapport-API los van de rest",
-        "- [09:38] ! Agenda in het kanaal posten zodat Sofie het weet",
-        "- [09:40] ? Wie neemt de beveiligingsaudit op? Tom checkt met Sofie",
-        '- [09:44] > Me: "Oké, zaterdag de vijftiende dan. Zes tot acht uur?"',
-        "",
-      ].join("\n"),
-    );
-    window.__harness.deepLink(
-      `relay://meeting?do=note&uid=northwind&start=${start}&end=${start + 1800}&title=${encodeURIComponent("Northwind sync Tom")}&with=${encodeURIComponent("Tom Willems <tom@northwind.example>")}`,
-    );
-  }, [start, BRIEFING]);
+  await page.evaluate(
+    ([start, BRIEFING_]) => {
+      const id = `northwind@${start}`;
+      window.__harness.meetingNote(
+        id,
+        "Calendar/2026-10-01 Northwind sync Tom.md",
+        [
+          "---",
+          "type: Meeting",
+          `event: "${id}"`,
+          "with:",
+          '  - "Tom Willems"',
+          "created: 2026-10-01",
+          "language: nl",
+          "---",
+          "",
+          "# Northwind sync Tom",
+          "[[2026-10-01|Thursday October 1st, 2026]]",
+          "",
+          ...BRIEFING_,
+          "## Notes",
+          "- [09:31] Sprint 23 demo: API-koppeling werkt op staging, geen issues",
+          "- [09:33] = Pricing-simulator komt in sprint 24, niet 25",
+          "- [09:35] Lena bouwt de rapport-API los van de rest",
+          "- [09:38] ! Agenda in het kanaal posten zodat Sofie het weet",
+          "- [09:40] ? Wie neemt de beveiligingsaudit op? Tom checkt met Sofie",
+          '- [09:44] > Me: "Oké, zaterdag de vijftiende dan. Zes tot acht uur?"',
+          "",
+        ].join("\n"),
+      );
+      window.__harness.deepLink(
+        `relay://meeting?do=note&uid=northwind&start=${start}&end=${start + 1800}&title=${encodeURIComponent("Northwind sync Tom")}&with=${encodeURIComponent("Tom Willems <tom@northwind.example>")}`,
+      );
+    },
+    [start, BRIEFING],
+  );
   await waitText("Start notes");
   await click("Record");
   const said = [
@@ -148,7 +153,10 @@ const meetingLive = async fixture => {
     [0, "Dan werk ik die vier velden uit in een ticket."],
   ].map(([track, text], i) => ({ at: 1020 + i * 14, track, text }));
   await page.evaluate(lines => window.__harness.recordingTick(1104, 0.35, 0.2, { lines, upto: 1100 }), said);
-  await waitText("Dan werk ik die vier velden", 4000).catch(async e => { await page.screenshot({ path: `${dir}/debug.png` }); throw e; });
+  await waitText("Dan werk ik die vier velden", 4000).catch(async e => {
+    await page.screenshot({ path: `${dir}/debug.png` });
+    throw e;
+  });
   // the pointer on a turn offers to quote it
   await page.getByText("Kenteken, kilometerstand").hover();
   await settle(page);
@@ -232,7 +240,17 @@ const todayDay = async (variant, dark) => {
         window.__harness.meetingNote(
           e,
           `Calendar/2026-10-01 ${title} (${name}).md`,
-          ["---", "type: Meeting", `event: "${e}"`, ...(body.followed ? ["followed-up: true"] : []), "---", "", `# ${title}`, "", ...body.lines].join("\n"),
+          [
+            "---",
+            "type: Meeting",
+            `event: "${e}"`,
+            ...(body.followed ? ["followed-up: true"] : []),
+            "---",
+            "",
+            `# ${title}`,
+            "",
+            ...body.lines,
+          ].join("\n"),
         );
       };
       const brief = [
@@ -252,9 +270,29 @@ const todayDay = async (variant, dark) => {
         "",
       ];
       // the meeting of 08:30 is wrapped (and followed up) in the mornings, owed its summary in T3
-      if (variant === "t3") note("done", -60, "Northwind sync Tom", { lines: ["## Notes", "- [08:34] Demo liep goed", "- [08:41] ! Agenda posten", ""] });
-      else note("done", -60, "Northwind sync Tom", { followed: true, lines: ["## Notes", "- [08:34] Demo", "", "## Summary", "Kort.", ""] });
-      if (variant === "t1") note("sync", 50, "Northwind sync Tom", { lines: ["## Briefing", "### Goal", "Scope vastleggen.", "", "### My points", "- [ ] Een punt", "", "## Notes", ""] });
+      if (variant === "t3")
+        note("done", -60, "Northwind sync Tom", {
+          lines: ["## Notes", "- [08:34] Demo liep goed", "- [08:41] ! Agenda posten", ""],
+        });
+      else
+        note("done", -60, "Northwind sync Tom", {
+          followed: true,
+          lines: ["## Notes", "- [08:34] Demo", "", "## Summary", "Kort.", ""],
+        });
+      if (variant === "t1")
+        note("sync", 50, "Northwind sync Tom", {
+          lines: [
+            "## Briefing",
+            "### Goal",
+            "Scope vastleggen.",
+            "",
+            "### My points",
+            "- [ ] Een punt",
+            "",
+            "## Notes",
+            "",
+          ],
+        });
       if (variant === "t2") note("sync", 20, "Northwind sync Tom", { lines: [...brief, "## Notes", ""] });
     }, variant);
     // Today again, so it reads them
@@ -1716,6 +1754,30 @@ const VIEWS = {
     await page.locator("[data-finding=context_mismatch] summary").click();
     await settle(page);
   },
+  // Tidy structure (PR 365): the notes outside their home, and the dry run sheet over the check
+  "vault-check-tidy": async () => {
+    await VIEWS["vault-check"]();
+    await page.getByRole("button", { name: "Tidy structure" }).click();
+    await waitText("Dry run");
+    await waitText("one Undo");
+    await settle(page);
+  },
+  "vault-check-tidy-dark": async () => {
+    await open(page, server.url, { fixture: "dark" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await page.getByRole("button", { name: "Check workspace…" }).click();
+    await page.getByRole("button", { name: "Tidy structure" }).click();
+    await waitText("one Undo");
+    await settle(page);
+  },
+  // after Apply: the finding is gone, one Undo on offer
+  "vault-check-tidy-applied": async () => {
+    await VIEWS["vault-check-tidy"]();
+    await page.getByRole("button", { name: /^Apply \d+ moves$/ }).click();
+    await waitText("moved to their home");
+    if (await page.locator("[data-finding=outside_home]").count()) throw new Error("the finding stays after Apply");
+    await settle(page);
+  },
   // after Repair all: what needs a person stays
   "vault-check-repaired": async () => {
     await VIEWS["vault-check"]();
@@ -1730,7 +1792,11 @@ const VIEWS = {
     await page.getByRole("tab", { name: /^Pages/ }).click();
     await page.getByText("Folders", { exact: true }).click({ button: "right" });
     await page.getByRole("button", { name: "Check workspace…" }).click();
-    await waitText("Only an admin");
+    await waitText("Only an admin of this workspace can repair it.");
+    // the Tidy structure finding shows, its button and so Apply do not
+    await waitText("Only an admin can tidy the structure");
+    if (await page.getByRole("button", { name: "Tidy structure" }).count())
+      throw new Error("a member sees Tidy structure");
     await settle(page);
   },
   // a project unfolded to its folder, its note open in the drawer, and a top folder unfolded (PR workspace-pages)
@@ -2254,7 +2320,10 @@ const VIEWS = {
   // the cursor on the first line of the notes: its time stays out of the text
   "meeting-live-cursor": async () => {
     await meetingLive("calendar");
-    await page.locator(".notes-editor .cm-line").first().click({ position: { x: 400, y: 8 } });
+    await page
+      .locator(".notes-editor .cm-line")
+      .first()
+      .click({ position: { x: 400, y: 8 } });
     await page.keyboard.press("Home");
     await page.mouse.move(10, 10);
     await settle(page);

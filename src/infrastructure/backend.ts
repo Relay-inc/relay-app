@@ -6,6 +6,7 @@ import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types"
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { Related } from "../domain/related/rules";
 import type { CommentThread, Member } from "../domain/workspace/comments";
+import type { TidyMove, TidyPlan } from "../domain/workspace/tidy";
 import type { GitRepo } from "../domain/git/git";
 import type { CommitFile, GitCommit } from "../domain/git/graph";
 import type { FileEntry, FileRoot } from "../domain/files/files";
@@ -199,6 +200,13 @@ export const projectRow = (workspace: string, name: string, context: string, row
 export type VaultFinding = { id: string; kind: string; context: string; path: string; paths: string[]; fix: boolean };
 export const vaultCheck = (workspace: string) => invoke<VaultFinding[]>("vault_check", { workspace });
 export const vaultRepair = (workspace: string, ids: string[]) => invoke<number>("vault_repair", { workspace, ids });
+/** Tidy structure (tidy.rs): every note outside the home of its `type:` and where it goes, with the links the move
+ *  rewrites (`links` in `notes` notes) and how many notes of a type with a home already `stay`. */
+export type { TidyMove, TidyPlan };
+export const tidyPreview = (workspace: string) => invoke<TidyPlan>("tidy_preview", { workspace });
+/** Moves them all as one run (an admin's, in a shared workspace); `tidyUndo` puts the last run back. */
+export const tidyApply = (workspace: string) => invoke<TidyPlan>("tidy_apply", { workspace });
+export const tidyUndo = (workspace: string) => invoke<number>("tidy_undo", { workspace });
 export const propertyValues = (folder: string, key: string) => invoke<string[]>("property_values", { folder, key });
 export const pickFolder = () => invoke<string | null>("pick_folder");
 export const pickPath = (folder: boolean, start: string) => invoke<string | null>("pick_path", { folder, start });

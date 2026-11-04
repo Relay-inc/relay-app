@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- The workspace check finds notes that sit outside the folder their type goes in (meetings, transcripts, daily notes and threads loose in `Calendar/`) and offers Tidy structure: a dry run says how many notes move and how many links change, and Apply moves them all as one run with one Undo. Only an admin can do it in a shared workspace (#365).
+
 ### Changed
 
 - New meeting notes go into `Calendar/Meetings/<year>/` and link their project in `about:` when the title names one. A recording's transcript is saved as a note next to its meeting (`….transcript.md`, linked to the meeting note) and its audio goes to `Attachments/<year>/` (or Obsidian's attachment folder). A vault can choose other folders under `homes` in `.relay/config.json`. Existing notes stay where they are and are still found (#384).
