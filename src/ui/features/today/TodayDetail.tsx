@@ -32,8 +32,6 @@ import { ConnectedList } from "./sections/ConnectedList";
 import { sectionOf } from "./sections";
 import type { Connected } from "./sections/types";
 import { ICON_BUTTON } from "./parts";
-import { useRecordingStore } from "../../../application/calendar/recording";
-import { RecordingDetail } from "./RecordingDetail";
 
 const BUTTON =
   "inline-flex items-center gap-1.5 h-7.5 px-2.5 rounded-lg text-[13px] font-medium whitespace-nowrap cursor-pointer";
@@ -58,14 +56,6 @@ export function TodayDetail({ model }: { model: TodayModel }) {
     if (entry) sectionOf(entry).load?.(entry);
   });
   useEffect(() => load(), [entryId]);
-  // the meeting being recorded takes the pane: opened from Record or the bar, or its card picked in the queue
-  const recording = useRecordingStore(s =>
-    s.phase === "idle"
-      ? false
-      : s.shown || (entry?.subject.type === "meeting" && entry.subject.meeting.id === s.meeting?.id),
-  );
-  if (recording) return <RecordingDetail />;
-
   if (!entry) {
     const next = model.meetings.find(meeting => Date.parse(meeting.start) > model.now);
     return (

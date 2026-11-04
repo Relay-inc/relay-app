@@ -546,7 +546,10 @@ function handle(cmd: string, a: Args): unknown {
     case "create_note": {
       const folder = pageRel(a.parent);
       const path = `${folder ? `${folder}/` : ""}${String(a.name)}${a.folder ? "" : ".md"}`;
-      if (!a.folder) pages = [...pageList(), path];
+      if (!a.folder) {
+        pages = [...pageList(), path];
+        written.set(path, { text: "", hash: "h0" }); // an empty file, as the backend makes it
+      }
       return path;
     }
     // contexts and projects from the Pages tab: a project's note goes to Contexts/<context>/Projects/<name>/
@@ -613,8 +616,14 @@ function handle(cmd: string, a: Args): unknown {
       pages = [...pageList(), ...(trashed.get(String(a.path)) ?? [])];
       return null;
     case "note_by_event":
-      return null;
+      return eventNotes.get(String(a.event)) ?? null;
     case "read_note": {
+      // a meeting note (`YYYY-MM-DD Title`) exists only when it was made or set with __harness.meetingNote
+      const target = String(a.target);
+      const made = [...written.keys()].find(k => k === target || k.endsWith(`/${target.replace(/\.md$/, "")}.md`));
+      if (made) a.target = made;
+      else if (/(^|\/)\d{4}-\d\d-\d\d /.test(target) && !target.includes(vault.BRIEFING_NOTE))
+        return Promise.reject(`not found: ${target}`);
       const team = shared && vault.teamNotes.find(n => n.endsWith(`/${String(a.target).replace(/\.md$/, "")}.md`));
       const modified = Date.now() - 2 * 3600_000; // a page reads "Edited 2 h ago"
       lastPage = String(a.target);
@@ -1634,6 +1643,7 @@ function threadsOf(all: Comment[]) {
 }
 
 const written = new Map<string, { text: string; hash: string }>();
+const eventNotes = new Map<string, string>(); // a calendar event's id -> the note that holds it (`event:`)
 let writes = 0;
 let diskChanged = false;
 let lastPage = ""; // the page read_note last read, which __harness.editOutside changes
@@ -1712,6 +1722,11 @@ const harness = {
     emitAgent(key, { type: "resolved", model, effort, default_model: true, default_effort: true }),
   /** the live events after the long conversation opened: running and failed tools, an error, a draft note */
   liveTail: (key = conv.LONG_KEY) => conv.liveTail().forEach(event => emitAgent(key, event)),
+  /** a meeting note in the vault: its text, found by the event it belongs to */
+  meetingNote: (event: string, path: string, text: string) => {
+    written.set(path, { text, hash: `h${++writes}` });
+    eventNotes.set(event, path);
+  },
   /** what the page editor saved last (write_note) */
   written: () => [...written.values()].pop()?.text ?? null,
   /** someone changed a note on disk: the next save without force is refused */

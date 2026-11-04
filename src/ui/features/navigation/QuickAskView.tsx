@@ -5,7 +5,7 @@ import { openProject, quickProjects, toggleQuickAsk } from "../../../application
 import { quickSend } from "../../../application/conversations/actions";
 import { knownTickets, openFoundCard, searchTickets, type Found } from "../../../application/board/board";
 import { findMeetings, timeOf } from "../../../application/calendar/calendar";
-import { openFoundMeeting } from "../../../application/today/today";
+import { openMeeting } from "../../../application/today/today";
 import type { Meeting } from "../../../domain/calendar/types";
 import { prepImages, releaseImages } from "../../../application/conversations/images";
 import { dropTarget, fromPaths } from "../../../application/conversations/attachments";
@@ -124,7 +124,7 @@ export function QuickAskView() {
   const choose = (option: Option) => {
     close();
     if (option.kind === "project") openProject(option.name);
-    else if (option.kind === "meeting") openFoundMeeting(option.meeting.id);
+    else if (option.kind === "meeting") openMeeting(option.meeting.id);
     else openFoundCard(option.provider, option.hit);
   };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {

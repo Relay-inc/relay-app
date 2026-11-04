@@ -8,7 +8,7 @@ export const boardIdOf = (key: string) => {
   const view = opened(key);
   return view.kind === "board" ? view.provider : undefined;
 };
-/** A view, a board, a plugin's view, a page, or a review of Today's work in progress: no conversation, no composer. */
+/** A view, a board, a plugin's view, a page, a review of Today's work in progress or a meeting: no conversation, no composer. */
 export const isView = (key: string) => {
   const target = opened(key);
   return (
@@ -16,7 +16,7 @@ export const isView = (key: string) => {
     target.kind === "board" ||
     target.kind === "plugin" ||
     target.kind === "page" ||
-    (target.kind === "work" && target.work === "review")
+    (target.kind === "work" && (target.work === "review" || target.work === "meeting"))
   );
 };
 /** The id of the plugin whose view a selection key opens, undefined for any other key. */
@@ -28,6 +28,11 @@ export const pluginIdOf = (key: string) => {
 export const reviewOf = (key: string) => {
   const target = opened(key);
   return target.kind === "work" && target.work === "review" ? target.id : "";
+};
+/** The meeting a Meeting view key is about (its calendar event id), "" for any other key. */
+export const meetingOf = (key: string) => {
+  const target = opened(key);
+  return target.kind === "work" && target.work === "meeting" ? target.id : "";
 };
 /** What the right drawer shows, "" while it is closed: a note's detail, one of the project's tools, the open
  *  conversation's changes, or the orchestrator's workers. */

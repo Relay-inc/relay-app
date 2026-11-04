@@ -12,7 +12,7 @@ import { mailProject } from "../mail/mail";
 import { useDetailsStore } from "./details";
 import { closeCompose } from "./mail";
 import { discardReview, useReviewStore } from "./review";
-import { entries, focusEntry, openMeeting } from "./today";
+import { entries, focusEntry } from "./today";
 import { useTodayStore } from "./store";
 
 // Today's work in progress (domain/today/work.ts) from the state that holds it, for the sidebar: a row per item under
@@ -52,23 +52,22 @@ export const workOf = (project: string | null, now = Date.now()) => currentWork(
 
 /** Whether the row is what Today shows now. */
 export function isOpenWork(work: Work) {
-  if (useNavigationStore.getState().selected !== WAIT) return false;
-  if (work.kind === "review") return useNavigationStore.getState().selected === work.key;
-  return useTodayStore.getState().selected === work.item;
+  const { selected } = useNavigationStore.getState();
+  // a review and a meeting are views of their own
+  if (work.kind === "review" || work.kind === "meeting") return selected === work.key;
+  return selected === WAIT && useTodayStore.getState().selected === work.item;
 }
 
-/** A work row clicked: Today, on that item (a review's screen, the mail with its draft, the meeting's prep or note).
+/** A work row clicked: the review's or meeting's own view, or Today on the mail with its draft.
  *  When its item left Today (the PR was merged, the mail archived elsewhere) it says so and offers to discard it. */
 export async function openWork(key: string) {
   const target = opened(key);
   if (target.kind !== "work") return;
   // a review is a view of its own: its screen loads itself, and says so when the PR left Today
   if (target.work === "review") return void (await select(key));
+  // a meeting opens on its own view (a meeting the calendar no longer holds says so there)
+  if (target.work === "meeting") return void (await select(key));
   await select(WAIT);
-  if (target.work === "meeting") {
-    openMeeting(target.id);
-    return;
-  }
   const id = target.work === "mail" ? `mail:${target.id}` : target.id;
   const item = entries().find(entry => entry.id === id);
   if (!item) return toast(t(`today.work.gone.${target.work}`), () => closeWork(key), t("today.work.discard"));

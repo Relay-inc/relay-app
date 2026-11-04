@@ -10,6 +10,7 @@ import {
   USAGE,
   WAIT,
   reviewOf,
+  meetingOf,
 } from "../../../domain/navigation/views";
 import { boardOf } from "../../../application/navigation/navigation";
 import { useConversationsStore } from "../../../application/conversations/store";
@@ -35,6 +36,7 @@ import { BrainView } from "../brain/BrainView";
 import { MailView } from "../mail/MailView";
 import { TodayView } from "../today/TodayView";
 import { ReviewView } from "../today/ReviewView";
+import { MeetingView } from "../meeting/MeetingView";
 import { PluginView } from "../plugins/PluginView";
 import { PageView } from "../workspace/PageView";
 import { ChatBar } from "./ChatBar";
@@ -99,6 +101,8 @@ export function ConversationsView({ className }: { className: string }) {
   const stick = useRef(true);
   // the Pull requests and Mail views scroll their list and the open item apart, so they fill the pane instead of the log
   const review = reviewOf(selected);
+  // a meeting: its own header and steps, each scrolling itself
+  const meeting = meetingOf(selected);
   // a plugin's view is a page of its own in a frame, which scrolls itself
   const plugin = pluginIdOf(selected);
   // a workspace's note as a page: its own bar and scroll
@@ -110,6 +114,7 @@ export function ConversationsView({ className }: { className: string }) {
     selected === BRAIN ||
     selected === WAIT ||
     !!review ||
+    !!meeting ||
     plugin !== undefined;
   useEffect(() => {
     if (ownScroll) return;
@@ -195,6 +200,8 @@ export function ConversationsView({ className }: { className: string }) {
           <TodayView className="flex-1" />
         ) : review ? (
           <ReviewView className="flex-1" />
+        ) : meeting ? (
+          <MeetingView className="flex-1" />
         ) : plugin !== undefined ? (
           <PluginView key={plugin} id={plugin} className="flex-1" />
         ) : (

@@ -123,6 +123,18 @@ export function withEvent(text: string, id: string) {
   const end = 4 + head[1].length;
   return `${text.slice(0, end)}\nevent: ${JSON.stringify(id)}${text.slice(end)}`;
 }
+/** The note with `language:` set to `code` in its frontmatter (added when it has none), or taken out for "". Only the
+ *  frontmatter changes. */
+export function withLanguage(text: string, code: string) {
+  const head = /^---\n([\s\S]*?)\n---(\n|$)/.exec(text);
+  if (!head) return text;
+  const lines = head[1].split("\n");
+  const at = lines.findIndex(line => /^language:/.test(line));
+  const line = code ? `language: ${code}` : null;
+  if (at >= 0) lines.splice(at, 1, ...(line ? [line] : []));
+  else if (line) lines.push(line);
+  return `---\n${lines.join("\n")}\n---${text.slice(head[0].length - head[2].length)}`;
+}
 /** The language a meeting is transcribed in: the note's `language:`, else Settings' unless that is auto, else none (the
  *  recorder then listens for it). */
 export const meetingLanguage = (note: string | null, voice: string) =>

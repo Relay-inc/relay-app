@@ -3,7 +3,18 @@ import * as rules from "../../domain/conversations/rules";
 import type { Item } from "../../domain/conversations/types";
 import type { Project } from "../../domain/workspace/types";
 import { isTerminal, termSid } from "../../domain/navigation/keys";
-import { WAIT, REM, PRS, MAIL, BRAIN, USAGE, isView, pluginIdOf, reviewOf } from "../../domain/navigation/views";
+import {
+  WAIT,
+  REM,
+  PRS,
+  MAIL,
+  BRAIN,
+  USAGE,
+  isView,
+  meetingOf,
+  pluginIdOf,
+  reviewOf,
+} from "../../domain/navigation/views";
 import { useWorkspaceStore } from "../workspace/store";
 import { useNavigationStore } from "../navigation/store";
 import { ghOn, settings } from "../settings/settings";
@@ -16,6 +27,7 @@ import { contextTint } from "../navigation/sidebar";
 import { agentOf, chatAgent, chatCaps } from "../agents/agents";
 import { otherVaultOf, projectLabel } from "../workspace/vault";
 import { soonMeetings } from "../calendar/calendar";
+import { meetingById } from "../calendar/meeting-view";
 import { machinePick } from "../../domain/settings/machines";
 import { ORCH, isOrchKey } from "../../domain/orchestrator/rules";
 import { workerCounts } from "../orchestrator/orchestrator";
@@ -77,6 +89,7 @@ const VIEW_ICONS: Record<string, string> = {
 
 // the phrase after the view's name in the title bar: what needs you now
 function viewSummary(key: string) {
+  if (meetingOf(key)) return meetingById(meetingOf(key))?.title || t("wait.meetingUntitled");
   if (key === WAIT) {
     const n = waitCount();
     const rest = todayRest();
@@ -143,7 +156,9 @@ export function chatBar(key: string) {
         ? t(VIEW_NAMES[key])
         : review
           ? `${t("today.kind.review")} ${review.title}`
-          : "";
+          : meetingOf(key)
+            ? t("meet.name")
+            : "";
   const linkedRef = toolProject ? settings().boards?.[toolProject] : undefined;
   const linked = linkedRef && provider(linkedRef.provider);
   return {
@@ -153,7 +168,7 @@ export function chatBar(key: string) {
     projectName,
     img: toolProject ? (useWorkspaceStore.getState().icons[toolProject]?.img ?? "") : "",
     tint: context ? contextTint(context) : ("" as const),
-    icon: tool ? "" : pluginId !== undefined ? "puzzle" : (VIEW_ICONS[key] ?? ""),
+    icon: tool ? "" : pluginId !== undefined ? "puzzle" : meetingOf(key) ? "cal" : (VIEW_ICONS[key] ?? ""),
     title: session ? session.title : label(key),
     renamable: !!conversation,
     // the orchestrator's coordinator reads like a view: its name and what runs, no title, no project to move it to

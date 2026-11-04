@@ -2,11 +2,9 @@ import { parseLink, unhandled } from "../domain/navigation/deep-links";
 import * as backend from "../infrastructure/backend";
 import { session } from "../infrastructure/storage";
 import { isActive, isPrimary } from "../infrastructure/window";
-import { openProject, quickProjects, toast, toggleQuickAsk } from "./navigation/navigation";
-import { meetingChat } from "./calendar/calendar";
+import { openProject, quickProjects, toggleQuickAsk } from "./navigation/navigation";
+import { openMeetingView } from "./calendar/meeting-view";
 import { useCalendarStore } from "./calendar/store";
-import { startRecording } from "./calendar/recording";
-import { t } from "../shared/i18n";
 
 /** A relay:// link from outside the app (Raycast, a launcher, any web page). Deliberately unlike Lit, which sent
  *  `ask?q=` at once: an ask link only opens Cmd-K with its question typed, and nothing goes to an agent until the user
@@ -19,15 +17,9 @@ function handleLink(link: string) {
     if (best) openProject(best.name);
     else toggleQuickAsk(true);
   } else if (parsed?.kind === "meeting") {
-    // Relay's own copy when the calendar has it, else the meeting as the link gives it; the toast's button starts it
-    const meeting = useCalendarStore.getState().list.find(x => x.id === parsed.meeting.id) ?? parsed.meeting;
-    const acts: Record<typeof parsed.act, [() => unknown, string]> = {
-      prep: [() => meetingChat(meeting.id, "prep", meeting), t("wait.meetingPrep")],
-      record: [() => startRecording(meeting.id, meeting), t("rec.record")],
-      note: [() => meetingChat(meeting.id, "note", meeting), t("today.makeNote")],
-    };
-    const [run, label] = acts[parsed.act];
-    toast(meeting.title || t("wait.meetingUntitled"), () => void run(), label, 30000);
+    // Relay's own copy when the calendar has it, else the meeting as the link gives it: its view, where Prep, Record and
+    // Start notes are one click each (recording never starts from a link alone)
+    void openMeetingView(useCalendarStore.getState().list.find(x => x.id === parsed.meeting.id) ?? parsed.meeting);
   }
 }
 

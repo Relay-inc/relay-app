@@ -1,6 +1,7 @@
 import { t } from "../../shared/i18n";
 import { WAIT } from "../../domain/navigation/views";
 import { useRecordingStore } from "../calendar/recording";
+import { openMeetingView } from "../calendar/meeting-view";
 import { useDictationStore } from "../conversations/dictation";
 import { usePillStore } from "../conversations/pill";
 import { label } from "../conversations/selectors";
@@ -18,7 +19,7 @@ export function recordingNow(): RecordingNow {
     return {
       label: title,
       ...(meeting.phase === "saving" ? { progress: meeting.progress } : { since: Date.now() - meeting.secs * 1000 }),
-      open: () => select(WAIT),
+      open: () => (meeting.meeting ? void openMeetingView(meeting.meeting) : select(WAIT)),
     };
   }
   const dictation = useDictationStore.getState();
