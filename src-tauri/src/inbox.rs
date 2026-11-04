@@ -172,11 +172,12 @@ pub fn filed_text(text: &str, item: &Item) -> String {
 }
 
 /// One note filed: its path in the workspace after the move, and the texts before and after, for the Changes feed.
+#[derive(Clone)]
 pub struct Filed { pub from: String, pub to: String, pub before: String, pub after: String }
 
 /// File one note: frontmatter written, then the file moved to `dest/title.md` (a free name) by pagefiles, which
 /// rewrites the links to it. Goes back as it was when the move fails. `roots`: the workspaces of this Mac.
-pub fn accept(roots: &[String], root: &Path, item: &Item) -> Result<(Filed, pagefiles::Plan), String> {
+pub fn accept(roots: &[String], root: &Path, item: &Item, defer: bool) -> Result<(Filed, pagefiles::Plan), String> {
     let dest = folder_of(&item.dest).filter(|d| d != DIR).ok_or("keep it in the Inbox: nothing to file")?;
     if !item.path.starts_with("Inbox/") || item.path[DIR.len() + 1..].contains('/') || !item.path.ends_with(".md") { return Err(format!("not an Inbox note: {}", item.path)); }
     let file = root.join(&item.path);
@@ -187,9 +188,22 @@ pub fn accept(roots: &[String], root: &Path, item: &Item) -> Result<(Filed, page
     let folder = if dest.is_empty() { root.to_path_buf() } else { root.join(&dest) };
     let to = (0..1000).map(|i| folder.join(if i == 0 { format!("{name}.md") } else { format!("{name} {}.md", i + 1) })).find(|p| fs::symlink_metadata(p).is_err()).ok_or("no free name")?;
     let plan = pagefiles::plan(roots, &file.to_string_lossy(), &to.to_string_lossy())?;
-    write(&file, &after)?;
-    if let Err(e) = pagefiles::apply(&plan) { write(&file, &before).ok(); return Err(e); }
+    // `defer`: the note moves as it is and `finish` writes the frontmatter later. In a shared workspace another Mac sees a
+    // move only while the content arriving is the content that left (sync.rs), so the edit goes in a round after it
+    if !defer { write(&file, &after)?; }
+    if let Err(e) = pagefiles::apply(&plan) { if !defer { write(&file, &before).ok(); } return Err(e); }
     Ok((Filed { from: item.path.clone(), to: plan.rel_to.clone(), before, after }, plan))
+}
+/// The frontmatter of a note that moved first (`accept` with `defer`): written while the note still is what moved.
+pub fn finish(root: &Path, f: &Filed) -> bool {
+    let p = root.join(&f.to);
+    fs::read_to_string(&p).is_ok_and(|now| now == f.before) && write(&p, &f.after).is_ok()
+}
+/// A filing taken back (a shared workspace's document could not follow): the note to the Inbox with its old text.
+pub fn revert(roots: &[String], root: &Path, f: &Filed) {
+    let (now, was) = (root.join(&f.to), root.join(&f.from));
+    if let Ok(back) = pagefiles::plan(roots, &now.to_string_lossy(), &was.to_string_lossy()) { pagefiles::apply(&back).ok(); }
+    write(&was, &f.before).ok();
 }
 fn write(p: &Path, text: &str) -> Result<(), String> {
     let tmp = p.with_extension("md.relay-tmp");
@@ -267,8 +281,8 @@ mod tests {
         let known = stems(&d);
         let one = clean(Item { path: "Inbox/2026-11-04 1432.md".into(), title: "Pricewise go-live".into(), kind: "Document".into(), dest: "Projects/Beacon/Documents".into(), links: vec![("about".into(), "Beacon".into()), ("with".into(), "Eva".into())] }, &known);
         let two = clean(Item { path: "Inbox/2026-11-03 2210.md".into(), title: "Milan".into(), kind: "Person".into(), dest: "".into(), links: vec![] }, &known);
-        let (a, _) = accept(&roots, &d, &one).unwrap();
-        let (b, _) = accept(&roots, &d, &two).unwrap();
+        let (a, _) = accept(&roots, &d, &one, false).unwrap();
+        let (b, _) = accept(&roots, &d, &two, false).unwrap();
         assert_eq!(a.to, "Projects/Beacon/Documents/Pricewise go-live.md");
         assert_eq!(read(&d, &a.to), "---\ntype: Document\nabout: \"[[Beacon]]\"\nwith: \"[[Eva]]\"\n---\n\nEva confirms the tax rule Friday\n");
         assert_eq!(b.to, "Milan.md");
@@ -293,9 +307,9 @@ mod tests {
         fs::write(d.join("Inbox/x.md"), "x\n").unwrap();
         let known = stems(&d);
         let it = |path: &str, title: &str| clean(Item { path: path.into(), title: title.into(), kind: "".into(), dest: "".into(), links: vec![] }, &known);
-        assert_eq!(accept(&roots, &d, &it("Inbox/x.md", "Eva")).unwrap().0.to, "Eva 2.md");
-        assert!(accept(&roots, &d, &it("Eva.md", "Eve")).is_err());
-        assert!(accept(&roots, &d, &it("Inbox/../Eva.md", "Eve")).is_err());
+        assert_eq!(accept(&roots, &d, &it("Inbox/x.md", "Eva"), false).unwrap().0.to, "Eva 2.md");
+        assert!(accept(&roots, &d, &it("Eva.md", "Eve"), false).is_err());
+        assert!(accept(&roots, &d, &it("Inbox/../Eva.md", "Eve"), false).is_err());
         assert_eq!(read(&d, "Eva.md"), "# Eva\n");
     }
 
@@ -308,5 +322,22 @@ mod tests {
         assert_eq!(paths, ["Inbox/a.md"]);
         assert!(p.contains("- meeting: Calendar/Meetings/2026/") && p.contains("<note>\npath: Inbox/a.md") && !p.contains("{{"));
         assert_eq!(p.matches("</note>").count(), 1, "a closing tag in a note is made harmless");
+    }
+
+    #[test]
+    fn a_deferred_filing_moves_the_note_as_it_is_and_writes_the_frontmatter_once_after() {
+        let d = vault("defer");
+        let roots = vec![d.to_string_lossy().into_owned()];
+        fs::create_dir_all(d.join("Inbox")).unwrap();
+        fs::write(d.join("Inbox/a.md"), "hello\n").unwrap();
+        let known = stems(&d);
+        let item = clean(Item { path: "Inbox/a.md".into(), title: "Hello".into(), kind: "Document".into(), dest: "Docs".into(), links: vec![] }, &known);
+        let (f, plan) = accept(&roots, &d, &item, true).unwrap();
+        assert_eq!(read(&d, "Docs/Hello.md"), "hello\n", "moved with the content that left");
+        assert_eq!(plan.gone.len(), 1);
+        assert!(finish(&d, &f) && read(&d, "Docs/Hello.md").starts_with("---\ntype: Document"));
+        // edited in between: left alone
+        fs::write(d.join("Docs/Hello.md"), "mine\n").unwrap();
+        assert!(!finish(&d, &f) && read(&d, "Docs/Hello.md") == "mine\n");
     }
 }

@@ -1190,7 +1190,8 @@ async fn scratch_pending(state: State<'_, App>, workspace: String) -> Result<Vec
 /// `scratch_migrate_undo` reads. Returns how many moved.
 #[tauri::command]
 async fn scratch_migrate(app: AppHandle, state: State<'_, App>, workspace: String) -> Result<usize, String> {
-    let (_, side) = workspace_side(&state, &workspace)?;
+    let (s, side) = workspace_side(&state, &workspace)?;
+    admin_only(&s, &workspace)?; // in a shared workspace as Tidy: the notes move for every member
     let n = on_files(move || scratch::migrate(&side.vault).map(|m| m.len())).await?;
     app.emit("inbox-changed", ()).ok();
     Ok(n)
@@ -1198,7 +1199,8 @@ async fn scratch_migrate(app: AppHandle, state: State<'_, App>, workspace: Strin
 /// The last migration back: {back, left} (a note edited since stays in the Inbox).
 #[tauri::command]
 async fn scratch_migrate_undo(app: AppHandle, state: State<'_, App>, workspace: String) -> Result<Value, String> {
-    let (_, side) = workspace_side(&state, &workspace)?;
+    let (s, side) = workspace_side(&state, &workspace)?;
+    admin_only(&s, &workspace)?;
     let (back, left) = on_files(move || scratch::undo(&side.vault)).await?;
     app.emit("inbox-changed", ()).ok();
     Ok(json!({"back": back, "left": left}))
@@ -1255,15 +1257,28 @@ fn now_ms() -> u64 { std::time::SystemTime::now().duration_since(std::time::UNIX
 #[tauri::command]
 async fn inbox_accept(app: AppHandle, state: State<'_, App>, workspace: String, items: Vec<Value>) -> Result<Value, String> {
     let root = changes_root(&state, &workspace)?;
-    if shared_at(&state, &root).is_some() { return Err("filing is not available in a shared workspace yet".into()); }
+    // in a shared workspace any member files their notes: the run is under its round lock, as a Tidy is
+    let shared = shared_at(&state, &root);
     let roots = page_roots(&state)?;
+    let hubapp = app.clone();
     let out = on_files(move || {
         let known = inbox::stems(&root);
-        let (mut filed, mut failed, mut notes, mut done) = (vec![], vec![], vec![], vec![]);
+        let (mut filed, mut failed, mut notes, mut done, mut gone, mut later) = (vec![], vec![], vec![], vec![], vec![], vec![]);
+        let mut run = || -> Result<(), String> {
         for v in &items {
             let Some(item) = inbox::item_of(v, &known) else { continue };
-            match inbox::accept(&roots, &root, &item) {
+            match inbox::accept(&roots, &root, &item, shared.is_some()) {
                 Ok((f, plan)) => {
+                    // a shared workspace's document follows its note in the manifest; when it cannot, the note goes back
+                    if let Some(id) = &shared {
+                        if let Err(e) = hubapp.state::<App>().shared.moved_notes(id, &root.to_string_lossy(), &[(f.from.clone(), f.to.clone())]) {
+                            inbox::revert(&roots, &root, &f);
+                            failed.push(json!({"path": item.path, "error": format!("not moved: {e}")}));
+                            continue;
+                        }
+                    }
+                    gone.extend(plan.gone.clone());
+                    if shared.is_some() { later.push(f.clone()); }
                     let edits: Vec<(String, String)> = plan.edits.iter().map(|(at, _, new)| (at.clone(), new.clone())).collect();
                     watch::moved(&plan.root, &pagefiles::files(&plan.root, &plan.to), &edits);
                     filed.push(json!({"path": f.from, "to": f.to}));
@@ -1273,6 +1288,27 @@ async fn inbox_accept(app: AppHandle, state: State<'_, App>, workspace: String, 
                 }
                 Err(error) => failed.push(json!({"path": item.path, "error": error})),
             }
+        }
+        Ok(())
+        };
+        match &shared {
+            Some(id) => hubapp.state::<App>().shared.with_vault(id, run)?,
+            None => run()?,
+        }
+        // the old paths pass the next round's delete brake as moves, while the server still has what they held
+        if let Some(id) = &shared {
+            hubapp.state::<App>().shared.let_through(id, gone);
+            // the frontmatter of what moved, in a round after the move (inbox.rs `accept`)
+            let (h, id, root, folder) = (hubapp.clone(), id.clone(), root.clone(), vault::canon(&root.to_string_lossy()));
+            shared_vaults::sync_now();
+            std::thread::spawn(move || {
+                // the loop takes the ask, the round runs under the vault's lock: the lock free again, the move is out
+                for _ in 0..50 { if !shared_vaults::pending() { break; } std::thread::sleep(std::time::Duration::from_millis(100)); }
+                let hub = &h.state::<App>().shared;
+                hub.with_vault(&id, || {
+                    for f in &later { if inbox::finish(&root, f) { hub.absorb(&id, &folder, &f.to, "relay"); } }
+                });
+            });
         }
         let reason = inbox::reason(&done.iter().collect::<Vec<_>>());
         let recorded = if done.is_empty() { None } else { changes::record_files(&root, "inbox", "", &reason, &notes)? };
