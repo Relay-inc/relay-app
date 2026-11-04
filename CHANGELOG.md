@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- A project's page in Pages shows what points at it, without moving or writing anything: under its folder a thin "linked here" divider with Meetings, Documents, Threads and People (built from `about:`, `context:` and `with:` of notes elsewhere in the vault, the newest four with Show all), and under the page's body a read-only "From links" with its meetings, documents, people, open reminders and conversations. A note about two projects shows in both (#386).
 - The workspace check finds notes that sit outside the folder their type goes in (meetings, transcripts, daily notes and threads loose in `Calendar/`) and offers Tidy structure: a dry run says how many notes move and how many links change, and Apply moves them all as one run with one Undo. Only an admin can do it in a shared workspace (#385).
 
 ### Changed

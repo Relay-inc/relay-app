@@ -35,6 +35,8 @@ import { PageComments } from "./PageComments";
 import type { Peer } from "../../../application/workspace/coedit";
 import { Properties } from "./Properties";
 import { PageHistory, VersionDiff } from "./PageHistory";
+import { LinkedSections } from "./LinkedSections";
+import { loadLinked } from "../../../application/navigation/linked";
 
 const EDIT_MAX = 1_000_000; // characters: a bigger note is shown read-only
 
@@ -46,6 +48,7 @@ export function PageView({ target, className }: { target: string; className: str
   const toast = useNavigationStore(s => s.toast);
   useEffect(() => {
     void loadPage(target);
+    void loadLinked(); // the project page's auto sections
   }, [target]);
   const page = read && !("err" in read) ? read : null;
   const err = read && "err" in read ? read.err : "";
@@ -255,6 +258,7 @@ export function PageView({ target, className }: { target: string; className: str
                   }}
                 />
               )}
+              <LinkedSections path={path} />
             </article>
           )}
         </div>

@@ -556,3 +556,58 @@ export const machineGit = {
   ].map(r => ({ ...r, path: `/home/relay/repos/${r.name}` })),
   device: { user_code: "ABCD-1234", verification_uri: "https://github.com/login/device", expires_in: 900, interval: 5 },
 };
+
+// ---- fixture "linked": notes outside the projects' folders that point at them (about:, context:, with:)
+type Linked = {
+  p: string;
+  k: string;
+  about?: string[];
+  context?: string[];
+  with?: string[];
+  date?: string;
+  stage?: "planned" | "briefed" | "wrapped";
+  role?: string;
+  daysAgo?: number;
+};
+const people = ["Sofie Claes", "Tom Willems", "Lena Maes", "Jonas Peeters"];
+const meet = (day: string, title: string, stage: "planned" | "briefed" | "wrapped", who: string[], about = ["Northwind Portal"]): Linked => ({
+  p: `Calendar/Meetings/2026/${day} ${title}.md`,
+  k: "Meeting",
+  about,
+  with: who,
+  date: day,
+  stage,
+});
+const linkedList: Linked[] = [
+  meet("2026-10-08", "Northwind Portal sync", "planned", [people[0]]),
+  meet("2026-10-01", "Northwind Portal sprint planning", "briefed", people.slice(0, 3)),
+  meet("2026-09-24", "Northwind Portal sync", "wrapped", [people[0]]),
+  meet("2026-09-17", "Northwind Portal and Atlas Logistics hosting", "wrapped", [people[0], people[3]], ["Northwind Portal", "Atlas Logistics"]),
+  meet("2026-09-10", "Northwind Portal design review", "wrapped", [people[1]]),
+  meet("2026-09-03", "Northwind Portal kickoff", "wrapped", people),
+  meet("2026-09-30", "Atlas Logistics sync", "wrapped", [people[3]], ["Atlas Logistics"]),
+  { p: "Calendar/Threads/Invoice export columns.md", k: "Thread", about: ["Northwind Portal"], daysAgo: 2 },
+  { p: "Calendar/Threads/Portal hosting quote.md", k: "Thread", context: ["Northwind Portal"], daysAgo: 6 },
+  { p: "Resources/Reference/Portal pricing notes.md", k: "Reference", about: ["Northwind Portal"], daysAgo: 0 },
+  { p: "Resources/Reference/Invoice export format.md", k: "Reference", about: ["Northwind Portal", "Atlas Logistics"], daysAgo: 4 },
+  { p: "Resources/Reference/Depot data sheet.md", k: "Reference", about: ["Atlas Logistics"], daysAgo: 9 },
+  { p: "People/Sofie Claes.md", k: "Person", role: "Developer · Agency", context: ["Northwind Portal"] },
+  { p: "People/Tom Willems.md", k: "Person", role: "Designer · Northwind", about: ["Northwind Portal"] },
+  { p: "People/Lena Maes.md", k: "Person", role: "Product owner · Northwind", about: ["Northwind Portal"] },
+  { p: "People/Jonas Peeters.md", k: "Person", role: "Developer · Atlas Logistics", about: ["Atlas Logistics"] },
+];
+/** The notes the fixture adds to the vault, and what notes_linked tells of them (related.rs `linked`). */
+export const linkedPaths = linkedList.map(n => n.p);
+export const linkedNotes = () =>
+  linkedList.map(n => ({
+    p: n.p,
+    t: n.p.split("/").pop()!.replace(/\.md$/, ""),
+    k: n.k,
+    at: Math.floor((NOW - (n.daysAgo ?? 3) * DAY) / 1000),
+    about: n.about ?? [],
+    context: n.context ?? [],
+    with: n.with ?? [],
+    date: n.date ?? "",
+    stage: n.stage ?? "",
+    role: n.role ?? "",
+  }));

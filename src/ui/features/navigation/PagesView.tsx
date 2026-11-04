@@ -1,4 +1,4 @@
-import { useRef, useState, type DragEvent, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from "react";
 import type { PageFolder } from "../../../domain/navigation/pages";
 import { noteName } from "../../../domain/navigation/pages";
 import { CONTEXT_TINTS } from "../../../domain/navigation/sidebar";
@@ -19,7 +19,8 @@ import { newChatHere } from "../../../application/conversations/chats";
 import { select } from "../../../application/navigation/navigation";
 import { GRAPH } from "../../../domain/navigation/views";
 import { toast } from "../../../application/navigation/navigation";
-import { workspaces } from "../../../application/navigation/workspaces";
+import { activeFolder, workspaces } from "../../../application/navigation/workspaces";
+import { loadLinked } from "../../../application/navigation/linked";
 import { projectVault as homeOf } from "../../../application/navigation/migrate";
 import { toggleSection } from "../../../application/navigation/sidebar";
 import { useNavigationStore } from "../../../application/navigation/store";
@@ -34,6 +35,7 @@ import { PageFileDialog, type PageFileAsk } from "./PageFileDialog";
 import { MigrateDialog } from "./MigrateDialog";
 import { ProjectDialog, type ProjectAsk } from "./ProjectDialog";
 import { VaultCheckDialog } from "./VaultCheckDialog";
+import { LinkedRows } from "./LinkedRows";
 
 const RECENT = "pages:recent";
 const FOLDERS = "pages:folders";
@@ -64,6 +66,12 @@ export function PagesView() {
   const [migrating, setMigrating] = useState<{ project: string; to: string; mode: "move" | "copy" } | null>(null);
   const [dropOn, setDropOn] = useState<string | null>(null);
   const menuElement = useRef<HTMLDivElement>(null);
+  // what points at the projects and contexts (their virtual groups): read again when the notes that exist change
+  const notesVersion = useWorkspaceStore(s => s.notesVersion);
+  const workspaceShown = useDerived(() => activeFolder());
+  useEffect(() => {
+    void loadLinked();
+  }, [notesVersion, workspaceShown]);
   useDismiss(menuElement, !!menu, () => setMenu(null));
 
   const onMenu = (path: string, kind: MenuKind) => (e: MouseEvent) => {
@@ -211,10 +219,11 @@ export function PagesView() {
   );
   // a folder's subfolders, then its notes, one step in; `skip` is the note its project row already opens
   // `scope` keeps a folder's unfolding apart when System shows a folder the tree has too (Resources)
-  const contents = (folder: PageFolder, skip = "", scope = "") => (
+  const contents = (folder: PageFolder, skip = "", scope = "", extra: ReactNode = null) => (
     <div className="ml-4">
       {folder.folders.map(sub => renderFolder(sub, scope))}
       {folder.notes.filter(path => path !== skip).map(path => note(path))}
+      {extra}
     </div>
   );
   const renderFolder = (folder: PageFolder, scope = "") => {
@@ -332,10 +341,24 @@ export function PagesView() {
                       }}
                       onContextMenu={onMenu(project.key, "project")}
                     />
-                    {isOpen && project.folder ? contents(project.folder, project.note) : null}
+                    {isOpen && project.folder
+                      ? contents(
+                          project.folder,
+                          project.note,
+                          "",
+                          <LinkedRows
+                            name={noteName(project.note)}
+                            inside={project.folder.path}
+                            base={project.folder.path}
+                          />,
+                        )
+                      : null}
                   </div>
                 );
               })
+            )}
+            {collapsed[id] || !context.folder ? null : (
+              <LinkedRows name={context.name} inside={context.folder} base={`ctx:${context.name}`} />
             )}
           </div>
         );

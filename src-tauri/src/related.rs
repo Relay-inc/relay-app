@@ -37,6 +37,10 @@ fn open(db: &Path) -> rusqlite::Result<Connection> {
          tokenize = 'unicode61 remove_diacritics 2');
          CREATE TABLE IF NOT EXISTS meta (path TEXT PRIMARY KEY, title TEXT, kind TEXT, tags TEXT, links TEXT, hub INTEGER);",
     )?;
+    // an index made before `refs` existed: add the column and let the next sync read every note again
+    if c.prepare("SELECT refs FROM meta LIMIT 0").is_err() {
+        c.execute_batch("ALTER TABLE meta ADD COLUMN refs TEXT; DELETE FROM docs;")?;
+    }
     Ok(c)
 }
 
@@ -80,6 +84,53 @@ pub fn parse(rel: &str, text: &str) -> (String, String, String, String, bool) {
     (title, kind, tags.join("\n"), links.join("\n"), hub)
 }
 
+/// The notes a note points at through the frontmatter keys `about:`, `context:` and `with:`, as the names they link by
+/// (`[[Beacon|alias]]` gives Beacon): a plain string, an inline or block list, a wikilink, quoted or not (YAML reads
+/// an unquoted `[[Beacon]]` as a list in a list, which is why this scans the value instead). Plus what a meeting row
+/// shows: the date, the stage, and a person's role. As JSON: {about, context, with, date, stage, role}.
+// ponytail: a value scanner, not a YAML parser (the workspace has none). Ceiling: a value that is a mapping, or a
+// list item with a comma in a plain (unlinked) name.
+pub fn refs(rel: &str, text: &str) -> String {
+    let (head, body) = text.strip_prefix("---\n").and_then(|r| r.split_once("\n---")).unwrap_or(("", text));
+    let key = |k: &str| -> Vec<String> {
+        let mut lines = head.lines();
+        let Some(first) = lines.find_map(|l| l.strip_prefix(k)?.strip_prefix(':')) else { return vec![] };
+        let mut value = first.to_string();
+        for l in lines.take_while(|l| l.starts_with([' ', '\t']) || l.starts_with("- ")) { value.push('\n'); value.push_str(l); }
+        let mut out = vec![];
+        if value.contains("[[") {
+            let mut rest = value.as_str();
+            while let Some(i) = rest.find("[[") {
+                rest = &rest[i + 2..];
+                let Some(j) = rest.find("]]") else { break };
+                let target = rest[..j].split(['|', '#']).next().unwrap_or("").trim();
+                if !target.is_empty() { out.push(target.to_string()); }
+                rest = &rest[j + 2..];
+            }
+        } else {
+            for part in value.split([',', '\n']) {
+                let part = part.trim().trim_start_matches("- ").trim().trim_matches(['[', ']']).trim();
+                let part = vault::unquote(part);
+                if !part.is_empty() { out.push(part); }
+            }
+        }
+        out
+    };
+    let get = |k: &str| key(k).into_iter().next().unwrap_or_default();
+    let stem = rel.rsplit('/').next().unwrap_or(rel);
+    let date = Some(get("date")).filter(|d| !d.is_empty()).unwrap_or_else(|| {
+        let d = stem.get(..10).unwrap_or("");
+        if d.len() == 10 && d.bytes().enumerate().all(|(i, b)| if i == 4 || i == 7 { b == b'-' } else { b.is_ascii_digit() }) { d.to_string() } else { String::new() }
+    });
+    let kind = get("type").to_lowercase();
+    // the stages a note can show (a live one is the recording, which the index does not know): as meetingStage in rules.ts
+    let stage = if kind != "meeting" { "" }
+        else if body.lines().any(|l| l.trim_end_matches([' ', '\t']) == "## Summary") { "wrapped" }
+        else if body.split_once("\n## Briefing").is_some_and(|(_, r)| r.lines().skip(1).take_while(|l| !l.starts_with("# ") && !l.starts_with("## ")).any(|l| !l.trim().is_empty())) { "briefed" }
+        else { "planned" };
+    json!({"about": key("about"), "context": key("context"), "with": key("with"), "date": date, "stage": stage, "role": get("role")}).to_string()
+}
+
 /// Bring the index in line with the folder: new and changed notes in, deleted ones out. Returns how many changed.
 /// A brain's staging/ is its review queue, not its notes, so it stays out.
 fn sync(c: &mut Connection, root: &str) -> rusqlite::Result<usize> {
@@ -97,9 +148,10 @@ fn sync(c: &mut Connection, root: &str) -> rusqlite::Result<usize> {
         if known.remove(&rel) == Some(m) { continue; }
         let body = fs::read_to_string(&p).unwrap_or_default();
         let (title, kind, tags, links, hub) = parse(&rel, &body);
+        let refs = refs(&rel, &body);
         tx.execute("DELETE FROM docs WHERE path = ?1", [&rel])?;
         tx.execute("INSERT INTO docs (path, mtime, title, body) VALUES (?1, ?2, ?3, ?4)", params![rel, m, title, body])?;
-        tx.execute("INSERT OR REPLACE INTO meta (path, title, kind, tags, links, hub) VALUES (?1, ?2, ?3, ?4, ?5, ?6)", params![rel, title, kind, tags, links, hub])?;
+        tx.execute("INSERT OR REPLACE INTO meta (path, title, kind, tags, links, hub, refs) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", params![rel, title, kind, tags, links, hub, refs])?;
         n += 1;
     }
     for gone in known.keys() {
@@ -185,6 +237,27 @@ pub fn graph(dir: &Path, root: &str) -> Result<Value, String> {
         }
         let nodes: Vec<Value> = rows.iter().map(|(p, t, k, tags, _, h)| json!({"p": p, "t": t, "k": k, "g": tags.lines().collect::<Vec<_>>(), "h": h})).collect();
         Ok(json!({"nodes": nodes, "edges": edges}))
+    })
+}
+
+/// The notes of `root` that point at another through `about:`, `context:` or `with:`:
+/// [{p, t, k, at, about, context, with, date, stage, role}], `at` the file's mtime in seconds. The Pages tree's virtual
+/// groups and a project page's auto sections are built from it on the frontend.
+pub fn linked(dir: &Path, root: &str) -> Result<Value, String> {
+    with(dir, root, |c| {
+        let mut st = c.prepare(
+            "SELECT m.path, m.title, m.kind, d.mtime, m.refs FROM meta m JOIN docs d ON d.path = m.path WHERE m.refs IS NOT NULL ORDER BY m.path",
+        )?;
+        let rows = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, i64>(3)?, r.get::<_, String>(4)?)))?;
+        let mut out = vec![];
+        for row in rows {
+            let (p, t, k, at, refs) = row?;
+            let Ok(mut v) = serde_json::from_str::<Value>(&refs) else { continue };
+            if ["about", "context", "with"].iter().all(|key| v[key].as_array().is_none_or(|a| a.is_empty())) { continue; }
+            v["p"] = json!(p); v["t"] = json!(t); v["k"] = json!(k); v["at"] = json!(at);
+            out.push(v);
+        }
+        Ok(Value::from(out))
     })
 }
 
@@ -284,5 +357,67 @@ mod tests {
         let names: Vec<&str> = g["nodes"].as_array().unwrap().iter().map(|n| n["p"].as_str().unwrap()).collect();
         assert_eq!(names, vec!["Two.md", "a/One.md", "a/Three.md"]);
         assert_eq!(g["edges"], json!([0, 1, 1, 2])); // One-Two once, One-Three; Nowhere dropped
+    }
+
+    #[test]
+    fn refs_read_a_string_a_list_and_a_wikilink() {
+        let r = |head: &str| -> Value { serde_json::from_str(&refs("Calendar/Meetings/2026/2026-11-04 Sync.md", &format!("---\n{head}\n---\n"))).unwrap() };
+        assert_eq!(r("about: [[Beacon]]")["about"], json!(["Beacon"])); // YAML would read a list in a list
+        assert_eq!(r("about: \"[[Beacon|the app]]\"")["about"], json!(["Beacon"]));
+        assert_eq!(r("about: Beacon")["about"], json!(["Beacon"]));
+        assert_eq!(r("about: [Beacon, 'Harbor']")["about"], json!(["Beacon", "Harbor"]));
+        assert_eq!(r("about:\n  - \"[[Beacon]]\"\n  - \"[[Harbor#Plan]]\"\ncontext: x")["about"], json!(["Beacon", "Harbor"]));
+        assert_eq!(r("with: [[Sam Peeters]], [[Noor]]")["with"], json!(["Sam Peeters", "Noor"]));
+        assert_eq!(r("with:\n  - Sam Peeters\n  - Noor\nabout: [[Beacon]]")["with"], json!(["Sam Peeters", "Noor"]));
+        assert_eq!(r("context: \"[[Studio]]\"")["context"], json!(["Studio"]));
+        assert_eq!(r("type: Meeting")["about"], json!([]));
+        assert_eq!(r("type: Meeting")["date"], "2026-11-04"); // from the file name
+        assert_eq!(r("type: Person\nrole: Developer")["role"], "Developer");
+    }
+
+    #[test]
+    fn a_meetings_stage_follows_its_note() {
+        let stage = |body: &str| -> String { serde_json::from_str::<Value>(&refs("2026-11-04 Sync.md", &format!("---\ntype: Meeting\n---\n{body}"))).unwrap()["stage"].as_str().unwrap().to_string() };
+        assert_eq!(stage("# Sync\n\n## Notes\n- \n"), "planned");
+        assert_eq!(stage("# Sync\n\n## Briefing\n\n## Notes\n"), "planned"); // an empty briefing
+        assert_eq!(stage("# Sync\n\n## Briefing\nGoal: x\n\n## Notes\n"), "briefed");
+        assert_eq!(stage("# Sync\n\n## Briefing\nGoal: x\n\n## Summary\n- done\n"), "wrapped");
+    }
+
+    #[test]
+    fn linked_lists_the_notes_that_point_somewhere_and_follows_edits() {
+        let d = std::env::temp_dir().join(format!("relay-linked-{}", std::process::id()));
+        fs::remove_dir_all(&d).ok();
+        fs::create_dir_all(d.join("Calendar/Meetings/2026")).unwrap();
+        fs::create_dir_all(d.join("Beacon")).unwrap();
+        fs::write(d.join("Calendar/Meetings/2026/2026-11-04 Beacon sync.md"), "---\ntype: Meeting\nabout: [[Beacon]]\nwith: [[Sam Peeters]]\n---\n## Summary\n").unwrap();
+        fs::write(d.join("Beacon/Beacon.md"), "---\ntype: Project\n---\nHome").unwrap();
+        let root = vault::canon(d.to_str().unwrap());
+        let idx = d.join(".idx");
+        let l = linked(&idx, &root).unwrap();
+        assert_eq!(l.as_array().unwrap().len(), 1);
+        assert_eq!(l[0]["p"], "Calendar/Meetings/2026/2026-11-04 Beacon sync.md");
+        assert_eq!(l[0]["about"], json!(["Beacon"]));
+        assert_eq!(l[0]["stage"], "wrapped");
+        // a new note joins, an old index without refs is rebuilt
+        fs::write(d.join("Calendar/Other.md"), "---\ntype: Thread\nabout: Beacon\n---\n").unwrap();
+        assert_eq!(linked(&idx, &root).unwrap().as_array().unwrap().len(), 2);
+        fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn an_index_without_refs_is_rebuilt() {
+        let f = std::env::temp_dir().join(format!("relay-old-index-{}.db", std::process::id()));
+        fs::remove_file(&f).ok();
+        let old = Connection::open(&f).unwrap();
+        old.execute_batch("CREATE VIRTUAL TABLE docs USING fts5(path UNINDEXED, mtime UNINDEXED, title, body);
+            CREATE TABLE meta (path TEXT PRIMARY KEY, title TEXT, kind TEXT, tags TEXT, links TEXT, hub INTEGER);
+            INSERT INTO docs VALUES ('a.md', 1, 'a', 'b');").unwrap();
+        drop(old);
+        let c = open(&f).unwrap();
+        assert_eq!(c.query_row("SELECT count(*) FROM docs", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
+        c.prepare("SELECT refs FROM meta").unwrap();
+        drop(c);
+        fs::remove_file(&f).ok();
     }
 }

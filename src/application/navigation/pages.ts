@@ -25,6 +25,7 @@ import { copy, select, toast } from "./navigation";
 import { openDetail } from "./panel";
 import { useNavigationStore } from "./store";
 import { makeStore } from "../make-store";
+import { loadLinked } from "./linked";
 import { activeFolder, workspaces } from "./workspaces";
 
 // The sidebar's two tabs: Chats (the conversations, as before) and Pages (the notes of the workspace shown).
@@ -162,6 +163,9 @@ export function pageProject(path: string) {
     .model.contexts.flatMap(context => context.projects)
     .find(project => project.note === path);
 }
+/** The context whose note this page is, in the workspace shown. */
+export const pageContext = (path: string) =>
+  build().model.contexts.find(context => !!context.folder && path === `${context.folder}/${context.name}.md`);
 /** A page as read: its text, its hash (what a save checks the file against) and when it was changed, or why it could not
  *  be read. */
 export type Page = { path: string; text: string; hash: string; modified: number } | { err: string };
@@ -187,6 +191,7 @@ export async function savePage(page: string, text: string, force = false): Promi
     set(draft => {
       draft.panel.detail[pageKey(page)] = { ...read, text, hash, modified: Date.now() };
     });
+    void loadLinked(); // its about:, context: or with: may have changed
     return "";
   } catch (e) {
     if (String(e) === "changed") return "changed";
@@ -270,6 +275,7 @@ function byClaude(page: string) {
  *  holds another text than the file gets the file's, to merge. */
 export async function noteChanged({ path, hash, relinked }: backend.NoteChange) {
   void loadNotes();
+  void loadLinked();
   const by = relinked ? "relay" : byClaude(path) ? "claude" : "disk";
   // another workspace's note (an absolute path): if it is a shared document, its file change becomes an edit of it
   if (hash && path.startsWith("/")) void backend.sharedDocAbsorb(path, by).catch(() => {});

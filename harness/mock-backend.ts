@@ -630,7 +630,11 @@ function handle(cmd: string, a: Args): unknown {
       const target = String(a.target);
       const made = [...written.keys()].find(k => k === target || k.endsWith(`/${target.replace(/\.md$/, "")}.md`));
       if (made) a.target = made;
-      else if (/(^|\/)\d{4}-\d\d-\d\d /.test(target) && !target.includes(vault.BRIEFING_NOTE))
+      else if (
+        /(^|\/)\d{4}-\d\d-\d\d /.test(target) &&
+        !target.includes(vault.BRIEFING_NOTE) &&
+        !pageList().some(n => n === target || n.endsWith(`/${target.replace(/\.md$/, "")}.md`))
+      )
         return Promise.reject(`not found: ${target}`);
       const team = shared && vault.teamNotes.find(n => n.endsWith(`/${String(a.target).replace(/\.md$/, "")}.md`));
       const modified = Date.now() - 2 * 3600_000; // a page reads "Edited 2 h ago"
@@ -1200,6 +1204,8 @@ function handle(cmd: string, a: Args): unknown {
       return graph.graph();
     case "note_touches":
       return graph.touches();
+    case "notes_linked":
+      return linkedOn ? vault.linkedNotes() : [];
 
     // GitHub, mail, boards
     case "github_status":
@@ -1627,7 +1633,9 @@ const VAULT_FINDINGS = [
   ]),
 ];
 const trashed = new Map<string, string[]>();
-const pageList = () => pages ?? vault.notes;
+// fixture linked: notes outside the projects' folders that point at them (about:, context:, with:)
+const linkedOn = fixture.startsWith("linked");
+const pageList = () => pages ?? (linkedOn ? [...vault.notes, ...vault.linkedPaths] : vault.notes);
 const pageRel = (p: unknown) => String(p).replace(vault.VAULT, "").replace(/^\//, "");
 // shared-live: the Mac's document of the page, which the editor and the mock peers share, and the cursors sent
 const liveDoc = new Y.Doc();
