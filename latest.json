@@ -1,11 +1,11 @@
 {
-  "version": "0.0.44",
-  "notes": "### Added\n\n- Buddy pipelines in a project's title bar: link a Buddy project to a vault project (Settings › Projects) and a button\n  shows the worst status of its pipelines, with each pipeline's last run in its menu; a click opens it in Buddy. Set up\n  in Settings › Integrations › Buddy with a region and a personal access token. Read-only: the backend only lets GET\n  through on workspaces, projects, pipelines and executions, whatever the token allows (#356).\n\n### Fixed\n\n- A zoomed image taller than the window now starts at the top and scrolls, a smaller one stays centred (#354).",
-  "pub_date": "2026-11-02T13:38:31.888Z",
+  "version": "0.0.45",
+  "notes": "### Added\n\n- A meeting is transcribed while you record it: the transcript grows live in Today's big pane (opened when you press\n  Record, or by clicking the recording bar), and after Stop only the last few seconds are left to do (#360).\n- Record a meeting that is not in your calendar: \"Record a meeting now\" on top of Today starts recording at once,\n  and the transcript and meeting note follow as for any recorded meeting (#358).\n\n### Changed\n\n- A track that hardly said anything (the Mac's in a meeting in the room, a notification or two) is left out of the\n  transcript and the audio (#360).\n- Transcribing a recorded meeting is several times faster: the speech model hears up to 25 seconds at a time instead\n  of every short stretch on its own (a 2-hour meeting went from about 1,200 model calls to about 330) (#359).",
+  "pub_date": "2026-11-04T09:01:13.469Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWm8rWmZvWldCUnpVZTB4LzNpWlhnajdhaUtIS1NxbWhEQzNabEZSOU5yRnlxRmFCclFIcndHcjl5bkdjVzhPVUh0d1lDWU4zbm8rZWltU0w4Z1VPQkF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNjI2NTk5CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC40NApFcGs3ampmVUJKOFJ0V0hlTkFBb0xWZlhRRERaZ2VvK1BPdEZrRk9WeGVPbzc3RWtqSlNoWll4eGhpUGNtRmVJQndIZ1hUWkhZdXc5aUZDbDhweDhEZz09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/701884518"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWmxJckJ5U29teFVFZFc3MkE5Z2pROWx3U3R0Mko5emN5cHhKMm85Nm1RZU4zT2RZbHFPUmRYNVZLMW96N3JrYnhBOFdYSzlLYWM0WTFKTExGSDJGYmdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNzgyNzI2CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC40NQphblVjU2pwLy95Ukw0TVhpUStpdFBiekR6UHIyVVlrUlp2R2R0YURsZGZVWC9WQmxNUXBtS2twZW93eVNDam5yUC8vcXF6OGlYS3ZZS3JzTHlRakpEUT09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/708892048"
     }
   }
 }
