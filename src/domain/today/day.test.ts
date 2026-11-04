@@ -151,10 +151,10 @@ test("what a meeting's note says for Today: its stage, whether there is somethin
 });
 
 test("an earlier day's meeting note is owed when it has notes and no summary", () => {
-  const note = '---\ntype: Meeting\nevent: "abc@100"\n---\n# Spardex sync\n\n## Notes\n- [09:31] a\n';
-  const owed = owedFrom("Calendar/2026-11-02 Spardex sync.md", note, "2026-11-02")!;
+  const note = '---\ntype: Meeting\nevent: "abc@100"\n---\n# Northwind sync\n\n## Notes\n- [09:31] a\n';
+  const owed = owedFrom("Calendar/2026-11-02 Northwind sync.md", note, "2026-11-02")!;
   assert.equal(owed.id, "abc@100");
-  assert.equal(owed.title, "Spardex sync");
+  assert.equal(owed.title, "Northwind sync");
   assert.equal(new Date(owed.start).getDate(), 2);
   assert.equal(
     owedFrom("Calendar/2026-11-02 X.md", note.replace("type: Meeting", "type: Document"), "2026-11-02"),
@@ -169,7 +169,7 @@ test("an earlier day's meeting note is owed when it has notes and no summary", (
   assert.equal(
     owedFrom(
       "Calendar/2026-11-02 Plain.md",
-      note.replace('event: "abc@100"\n', "").replace("# Spardex sync\n", ""),
+      note.replace('event: "abc@100"\n', "").replace("# Northwind sync\n", ""),
       "2026-11-02",
     )!.id,
     "note:Calendar/2026-11-02 Plain.md",

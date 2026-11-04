@@ -2,7 +2,7 @@ import { provider } from "../../shared/plugins";
 import { byDue, myCardToday, type TodayCard } from "../../domain/today/rules";
 import { NO_PROJECT, inContext, plan, slots, type Kind } from "../../domain/today/plan";
 import { wrapUps } from "../../domain/today/day";
-import { entries as deriveEntries, queueOf, KINDS } from "../../domain/today/kinds";
+import { entries as deriveEntries, queueOf, visibleRows, KINDS } from "../../domain/today/kinds";
 import { DAY, startOfDay } from "../../domain/today/kinds/common";
 import type { Entry } from "../../domain/today/kinds/types";
 import { todayIso } from "../../domain/reminders/rules";
@@ -220,6 +220,14 @@ export function todayModel(now = Date.now()) {
     ],
     context: state.context,
     owed,
+    // the rows the queue shows (a bundle of mails or PRs is one), and the wrap-ups owed: the header's "to do"
+    rows:
+      visibleRows(
+        queue,
+        free.map(slot => slot.key),
+        placed,
+        tomorrow,
+      ) + owed.length,
     // snoozed and not back yet, soonest first
     snoozed: Object.entries(state.snoozed)
       .filter(

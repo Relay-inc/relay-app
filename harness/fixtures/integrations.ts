@@ -915,29 +915,29 @@ export const meetings = [
 /** The day of the today-t1 / t2 / t3 / empty fixtures (Today's day strip), around NOW (09:30): a meeting 08:30–09:00 first,
  *  then what the variant is about. The people and the join link make the card's buttons. */
 export const todayMeetings = (variant: string) => {
-  const spardex = (id: string, from: number, minutes: number, extra = {}) =>
-    meeting(id, "Spardex sync Thomas", from, minutes, {
+  const northwind = (id: string, from: number, minutes: number, extra = {}) =>
+    meeting(id, "Northwind sync Tom", from, minutes, {
       join: "https://meet.google.com/abc-defg-hij",
-      people: [{ name: "Thomas Van Hecke", email: "thomas@spardex.example" }],
+      people: [{ name: "Tom Willems", email: "tom@northwind.example" }],
       ...extra,
     });
   const day = [
-    meeting("squad", "o2o Platform squad refinement", 90, 60, { people: [{ name: "Jolien Maes", email: "jolien@o2o.example" }] }),
-    meeting("sprint", "Spardex – Platforms sprint meeting", 270, 90, {
+    meeting("squad", "Platform squad refinement", 90, 60, { people: [{ name: "Lena Maes", email: "lena@northwind.example" }] }),
+    meeting("sprint", "Northwind – Platform sprint meeting", 270, 90, {
       people: [
-        { name: "Thomas Van Hecke", email: "thomas@spardex.example" },
-        { name: "Sander Peeters", email: "sander@spardex.example" },
-        { name: "Jolien Maes", email: "jolien@o2o.example" },
-        { name: "Kim Willems", email: "kim@spardex.example" },
+        { name: "Tom Willems", email: "tom@northwind.example" },
+        { name: "Noor Dewit", email: "noor@northwind.example" },
+        { name: "Lena Maes", email: "lena@northwind.example" },
+        { name: "Kim Peeters", email: "kim@northwind.example" },
       ],
     }),
-    meeting("habo", "Habo follow-up call", 420, 30, { people: [{ name: "Habo", email: "info@habo.example" }] }),
+    meeting("vendor", "Vendor follow-up call", 420, 30, { people: [{ name: "Vendor Co", email: "info@vendor.example" }] }),
   ];
   if (variant === "empty") return [];
-  if (variant === "t1") return [spardex("done", -60, 30), spardex("sync", 50, 30), ...day];
-  if (variant === "t2") return [spardex("done", -60, 30), spardex("sync", 20, 30), ...day];
+  if (variant === "t1") return [northwind("done", -60, 30), northwind("sync", 50, 30), ...day];
+  if (variant === "t2") return [northwind("done", -60, 30), northwind("sync", 20, 30), ...day];
   // t3: this one is being recorded, the earlier one ended without its summary
-  return [spardex("done", -60, 30), meeting("live", "Spardex – Platforms sprint meeting", -42, 90, { people: day[1].people }), ...day.filter(m => !m.id.startsWith("sprint"))];
+  return [northwind("done", -60, 30), meeting("live", "Northwind – Platform sprint meeting", -42, 90, { people: day[1].people }), ...day.filter(m => !m.id.startsWith("sprint"))];
 };
 /** The second calendar of the calendar fixture does not load, so Waiting says so. */
 export const calendarErrors = (feeds: string[]) =>

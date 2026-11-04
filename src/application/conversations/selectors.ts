@@ -22,7 +22,6 @@ import { useConversationsStore } from "./store";
 import { phoneCommands } from "./phoneShare";
 import { useDraftsStore } from "./drafts";
 import { useReviewStore } from "../today/review";
-import { todayRest } from "../today/today";
 import { useBrainStore } from "../brain/store";
 import { graphOf } from "../brain/brain";
 
@@ -77,9 +76,9 @@ const VIEW_ICONS: Record<string, string> = {
 // the phrase after the view's name in the title bar: what needs you now
 function viewSummary(key: string) {
   if (key === WAIT) {
+    // "Today" alone, or with how many agents and sessions wait on you (the badge's number)
     const n = waitCount();
-    const rest = todayRest();
-    return n ? t("bar.waitingN", { n }) : rest ? t("bar.todayN", { n: rest }) : t("bar.allClear");
+    return n ? t("bar.needYouN", { n }) : "";
   }
   if (key === REM) {
     const reminders = useWorkspaceStore.getState().snap.reminders;

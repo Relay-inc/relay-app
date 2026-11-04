@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import type { Slot } from "../../../domain/today/plan";
-import { KINDS, isAgentItem } from "../../../domain/today/kinds";
+import { BUNDLE_FROM, KINDS, isAgentItem } from "../../../domain/today/kinds";
 import { projectChip, reopen, selectEntry, wake, type Entry, type TodayModel } from "../../../application/today/today";
 import { timeOf } from "../../../application/calendar/calendar";
 import { useTodayStore } from "../../../application/today/store";
@@ -72,7 +72,7 @@ export function TodayQueue({ model }: { model: TodayModel }) {
     const bundled = new Set<string>();
     for (const entry of items) {
       const kind = KINDS[entry.kind].bundle;
-      if (!kind || count(kind) < 3) {
+      if (!kind || count(kind) < BUNDLE_FROM) {
         if (kind) shown.add(kind);
         out.push(row(entry));
         continue;

@@ -86,7 +86,7 @@ export function TodayView({ className = "" }: { className?: string }) {
         return details.pop ? setPop("") : closeCompose();
       }
       // M: the next meeting, or the one being recorded
-      if (e.key === "m" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (isKey(e, "today.meeting")) {
         const inputs = dayInputs(Date.now());
         const card = nowCard(inputs.meetings, inputs.stages, Date.now());
         if (card.kind !== "none") {
@@ -158,12 +158,11 @@ export function TodayView({ className = "" }: { className?: string }) {
   const date = new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" }).format(clock);
   // the day in one muted line: how many meetings, how much of the working day is free, what is left to do
   const free = freeTime(day.meetings.map(timed), clock).minutes;
-  const todo = model.queue.length + model.owed.length;
   const card = nowCard(day.meetings, day.stages, clock);
   const line = [
     day.meetings.length ? tn("today.d.meetings", day.meetings.length) : t("today.d.noMeetings"),
     t("today.d.free", { time: lengthOf(free) }),
-    t("today.d.todo", { n: todo }),
+    t("today.d.todo", { n: model.rows }),
   ].join(" · ");
   return (
     <div className={`${className} relative flex flex-col min-h-0`}>

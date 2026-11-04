@@ -94,3 +94,33 @@ export function actionsFor(entry: Entry, flags: Flags, w: Words): ActionSet {
 export const kindLabelKey = (entry: Entry): Key =>
   (SUBJECTS[entry.subject.type] as SubjectDef<SubjectType>).labelKey?.(entry as EntryOf<SubjectType>) ??
   (`today.kind.${entry.kind}` as const);
+
+/** From this many of a kind that bundles (mails, PRs) in one group, the queue draws them as one row that opens. */
+export const BUNDLE_FROM = 3;
+/** How many rows a group of items is drawn as. */
+export function rowsIn(items: Pick<Entry, "kind">[]) {
+  const bundled: Record<string, number> = {};
+  let rows = 0;
+  for (const item of items) {
+    const kind = KINDS[item.kind].bundle;
+    if (kind) bundled[kind] = (bundled[kind] ?? 0) + 1;
+    else rows++;
+  }
+  return rows + Object.values(bundled).reduce((sum, n) => sum + (n < BUNDLE_FROM ? n : 1), 0);
+}
+/** The rows the queue shows: each thing an agent needs you for, then per free slot and under Tomorrow the rows of
+ *  its items (a bundle is one row). What the header counts as "to do". */
+export function visibleRows(
+  queue: Entry[],
+  slotKeys: string[],
+  placed: Record<string, { slot: string }>,
+  tomorrow: string[],
+) {
+  const rest = queue.filter(entry => !isAgentItem(entry));
+  return (
+    queue.length -
+    rest.length +
+    slotKeys.reduce((sum, key) => sum + rowsIn(rest.filter(entry => placed[entry.id]?.slot === key)), 0) +
+    rowsIn(rest.filter(entry => tomorrow.includes(entry.id)))
+  );
+}

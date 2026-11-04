@@ -10,6 +10,8 @@ import {
   kindLabelKey,
   queueOf,
   rankOf,
+  rowsIn,
+  visibleRows,
 } from "./index.ts";
 import { NOW, TODAY, at, flags, iso, mail, meeting, pr, reminder, snap, words } from "./fixtures.ts";
 import type { Kind } from "../plan.ts";
@@ -117,6 +119,29 @@ test("the kind chip, and the actions of whichever kind an entry is", () => {
     ["complete", "tomorrow", "week", "chat"],
   );
   void [at, iso];
+});
+
+test("the header counts the rows the queue shows: three mails in a slot are one row, an agent's item is its own", () => {
+  const rows = (mails: ReturnType<typeof mail>[], tomorrow: string[] = []) => {
+    const queue = queueOf(entries(day({ mails }), words, NOW), []);
+    const placed = Object.fromEntries(
+      queue.filter(e => !isAgentItem(e) && !tomorrow.includes(e.id)).map(e => [e.id, { slot: "now" }]),
+    );
+    return { queue, rows: visibleRows(queue, ["now"], placed, tomorrow) };
+  };
+  // the day: an ask and a finished chat (rows of their own), two reminders, a review, and the mails
+  const one = rows([mail({ id: "1" })]);
+  assert.equal(one.queue.length, one.rows, "every item is a row of its own");
+  const two = rows([mail({ id: "1" }), mail({ id: "2" })]);
+  assert.equal(two.queue.length, two.rows);
+  const three = rows([mail({ id: "1" }), mail({ id: "2" }), mail({ id: "3" })]);
+  assert.equal(three.queue.length, one.queue.length + 2);
+  assert.equal(three.rows, one.rows, "three mails are one row, as one mail is");
+  // what moved to tomorrow is one group there; what is placed nowhere is not shown
+  const ids = three.queue.filter(e => e.kind === "mail").map(e => e.id);
+  assert.equal(rows([mail({ id: "1" }), mail({ id: "2" }), mail({ id: "3" })], ids).rows, three.rows);
+  assert.equal(rowsIn([]), 0);
+  assert.equal(rowsIn(three.queue.filter(e => e.kind === "mail")), 1);
 });
 
 test("agents come in this order: asks, blocked sessions, finished conversations", () => {

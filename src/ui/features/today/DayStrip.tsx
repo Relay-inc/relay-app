@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { MeetingStage } from "../../../domain/calendar/rules";
 import type { Meeting } from "../../../domain/calendar/types";
 import { freeTime, glyphOf, lanes, lengthOf, pct, scale, timed } from "../../../domain/today/day";
@@ -34,6 +35,16 @@ export function DayStrip({
   now: number;
 }) {
   const { t } = useT();
+  // the strip's width in pixels: what a block shows depends on how wide it is
+  const track = useRef<HTMLDivElement>(null);
+  const [wide, setWide] = useState(1000);
+  useEffect(() => {
+    const el = track.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setWide(el.clientWidth));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const blocks = meetings.map(timed);
   const hours = scale(blocks, now);
   const { lane, lanes: count } = lanes(blocks);
@@ -66,7 +77,11 @@ export function DayStrip({
           </span>
         ))}
       </div>
-      <div className="absolute top-4.5 inset-x-0 overflow-hidden rounded-[10px] bg-sidebar" style={{ height }}>
+      <div
+        ref={track}
+        className="absolute top-4.5 inset-x-0 overflow-hidden rounded-[10px] bg-sidebar"
+        style={{ height }}
+      >
         {marks.map(h => (
           <span key={h} className="absolute inset-y-0 w-px bg-separator" style={{ left: `${at(day + h * HOUR)}%` }} />
         ))}
@@ -89,6 +104,12 @@ export function DayStrip({
         const width = Math.max(1.5, at(end) - left);
         const people = meeting.people.map(person => person.name || person.email).join(", ");
         const elapsed = stage === "live" && end > start ? Math.min(100, ((now - start) / (end - start)) * 100) : 0;
+        // what fits: time and title in a wide block, glyph and a title of two lines in a middle one, the glyph alone
+        // in a narrow one (the tooltip has the rest)
+        const px = (width / 100) * wide;
+        const full = px >= 140 && single;
+        const glyphOnly = px < 60;
+        const title = meeting.title || t("wait.meetingUntitled");
         return (
           <div
             key={meeting.id}
@@ -96,20 +117,25 @@ export function DayStrip({
             style={{ top: 22 + lane[meeting.id] * (laneH + 4), height: laneH, left: `${left}%`, width: `${width}%` }}
           >
             <button
-              title={[meeting.title, `${timeOf(iso(start))}–${timeOf(iso(end))}`, people].filter(Boolean).join(" · ")}
+              title={[title, `${timeOf(iso(start))}–${timeOf(iso(end))}`, people].filter(Boolean).join(" · ")}
+              aria-label={title}
               onClick={() => void openMeetingView(meeting)}
-              className={`relative flex h-full w-full overflow-hidden rounded-lg border px-2 text-left cursor-pointer ${single ? "flex-col justify-center gap-px" : "items-center gap-1.5"} ${BLOCK[tint]} ${glyph.dashed ? "border-dashed bg-bg" : ""} ${stage === "live" ? "ring-[1.5px] ring-late" : meeting.id === focus ? "ring-2 ring-accent" : ""} ${end <= now && stage !== "live" && !glyph.dashed ? "opacity-75" : ""}`}
+              className={`relative flex h-full w-full overflow-hidden rounded-lg border text-left cursor-pointer ${glyphOnly ? "items-center justify-center px-0" : "px-2"} ${full ? "flex-col justify-center gap-px" : "items-center gap-1.5"} ${BLOCK[tint]} ${glyph.dashed ? "border-dashed bg-bg" : ""} ${stage === "live" ? "ring-[1.5px] ring-late" : meeting.id === focus ? "ring-2 ring-accent" : ""} ${end <= now && stage !== "live" && !glyph.dashed ? "opacity-75" : ""}`}
             >
               {elapsed ? (
                 <span className={`absolute inset-y-0 left-0 ${ELAPSED[tint]}`} style={{ width: `${elapsed}%` }} />
               ) : null}
               <span className="relative flex items-center gap-1.25 text-[11px] tabular-nums whitespace-nowrap">
-                <StageGlyph glyph={glyph} />
-                {single ? timeOf(iso(start)) : null}
+                <StageGlyph glyph={full ? glyph : { stage: glyph.stage, followed: false }} />
+                {full ? timeOf(iso(start)) : null}
               </span>
-              <span className="relative min-w-0 truncate text-xs font-semibold">
-                {meeting.title || t("wait.meetingUntitled")}
-              </span>
+              {glyphOnly ? null : (
+                <span
+                  className={`relative min-w-0 text-xs font-semibold leading-tight ${full ? "truncate" : single ? "line-clamp-2 break-words" : "truncate"}`}
+                >
+                  {title}
+                </span>
+              )}
             </button>
           </div>
         );

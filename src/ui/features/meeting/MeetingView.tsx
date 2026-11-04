@@ -8,6 +8,7 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { MeetingHeader } from "./MeetingHeader";
+import { Toast } from "../conversations/Toast";
 import { MeetingBar } from "./MeetingBar";
 import { RecordingError } from "./RecordingError";
 import { BriefingStep } from "./BriefingStep";
@@ -26,6 +27,7 @@ export function MeetingView({ className = "" }: { className?: string }) {
   const saving = useRecordingStore(s => s.phase === "saving" && s.meeting?.id === id);
   const note = useCalendarStore(s => (s.note?.id === id ? s.note : null));
   const looked = useCalendarStore(s => s.noted === id);
+  const toast = useNavigationStore(s => s.toast);
 
   const load = useEffectEvent((again: boolean) => {
     const found = meetingById(id);
@@ -74,7 +76,7 @@ export function MeetingView({ className = "" }: { className?: string }) {
       </div>
     );
   return (
-    <div className={`${className} flex flex-col min-h-0`}>
+    <div className={`${className} relative flex flex-col min-h-0`}>
       <MeetingBar meeting={meeting} note={note} />
       <RecordingError />
       <MeetingHeader
@@ -96,6 +98,12 @@ export function MeetingView({ className = "" }: { className?: string }) {
       ) : (
         <WrapupStep key={meeting.id} meeting={meeting} note={note} onNotes={() => setPick({ reached, step: "live" })} />
       )}
+      {/* a reminder or ticket made, a decision added, why Prep did not start: said here, the view has no composer */}
+      {toast ? (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
+          <Toast toast={toast} />
+        </div>
+      ) : null}
     </div>
   );
 }

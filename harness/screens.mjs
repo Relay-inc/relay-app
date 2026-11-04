@@ -56,7 +56,7 @@ const unfold = async name => {
 const BRIEFING = [
   "## Briefing",
   "### Goal",
-  "Scope van de Indicata auto-simulatie vastleggen voor sprint 24.",
+  "Scope van de prijssimulatie vastleggen voor sprint 24.",
   "",
   "### People",
   "- [[Tom Willems]]: Medior dev, Acme · last met 2026-09-28",
@@ -64,13 +64,13 @@ const BRIEFING = [
   "",
   "### Since last time",
   "from [[2026-09-28 Daily standup]]",
-  "- [x] Tom deelt de Indicata API-docs · done 2026-09-30",
-  "- [ ] Kristof schat de auto-simulatie in (story points)",
-  "- [ ] Tom test de Indicata-sandbox met echte kentekens",
+  "- [x] Tom deelt de pricing API-docs · done 2026-09-30",
+  "- [ ] Alex schat de prijssimulatie in (story points)",
+  "- [ ] Tom test de pricing-sandbox met echte klantnummers",
   "",
   "### Threads",
   "- Agenda sprint meeting · 2026-09-30 · `mail:laurent@example.com:4999`",
-  "- Re: Indicata API-docs en sandbox-toegang · 2026-09-29 · `mail:laurent@example.com:4998`",
+  "- Re: pricing API-docs en sandbox-toegang · 2026-09-29 · `mail:laurent@example.com:4998`",
   "",
   "### My points",
   "- [x] Feedback op de sprint 23 demo",
@@ -105,46 +105,46 @@ const meetingLive = async fixture => {
   await open(page, server.url, { fixture });
   const start = Math.floor((await page.evaluate(() => window.__harness.now)) / 1000);
   await page.evaluate(([start, BRIEFING_]) => {
-    const id = `spardex@${start}`;
+    const id = `northwind@${start}`;
     window.__harness.meetingNote(
       id,
-      "Calendar/2026-10-01 Spardex sync Thomas.md",
+      "Calendar/2026-10-01 Northwind sync Tom.md",
       [
         "---",
         "type: Meeting",
         `event: "${id}"`,
         "with:",
-        '  - "Thomas Van Hecke"',
+        '  - "Tom Willems"',
         "created: 2026-10-01",
         "language: nl",
         "---",
         "",
-        "# Spardex sync Thomas",
+        "# Northwind sync Tom",
         "[[2026-10-01|Thursday October 1st, 2026]]",
         "",
         ...BRIEFING_,
         "## Notes",
-        "- [09:31] Sprint 23 demo: Indicata-koppeling werkt op staging, geen issues",
-        "- [09:33] = Indicata simulator komt in sprint 24, niet 25",
-        "- [09:35] Maxim bouwt de waarde-API los van de rest",
-        "- [09:38] ! Agenda in het kanaal posten zodat Pieter het weet",
-        "- [09:40] ? Wie neemt de beveiligingsaudit op? Thomas checkt met Pieter",
+        "- [09:31] Sprint 23 demo: API-koppeling werkt op staging, geen issues",
+        "- [09:33] = Pricing-simulator komt in sprint 24, niet 25",
+        "- [09:35] Lena bouwt de rapport-API los van de rest",
+        "- [09:38] ! Agenda in het kanaal posten zodat Sofie het weet",
+        "- [09:40] ? Wie neemt de beveiligingsaudit op? Tom checkt met Sofie",
         '- [09:44] > Me: "Oké, zaterdag de vijftiende dan. Zes tot acht uur?"',
         "",
       ].join("\n"),
     );
     window.__harness.deepLink(
-      `relay://meeting?do=note&uid=spardex&start=${start}&end=${start + 1800}&title=${encodeURIComponent("Spardex sync Thomas")}&with=${encodeURIComponent("Thomas Van Hecke <thomas@spardex.be>")}`,
+      `relay://meeting?do=note&uid=northwind&start=${start}&end=${start + 1800}&title=${encodeURIComponent("Northwind sync Tom")}&with=${encodeURIComponent("Tom Willems <tom@northwind.example>")}`,
     );
   }, [start, BRIEFING]);
   await waitText("Start notes");
   await click("Record");
   const said = [
     [1, "Voor de migratie zou ik zaterdag vroeg doen, dan is er bijna geen verkeer op de configurator."],
-    [1, "Ja, dat lukt. Ik zet het in de planning en laat het Pieter weten."],
+    [1, "Ja, dat lukt. Ik zet het in de planning en laat het Sofie weten."],
     [0, "Oké, zaterdag de vijftiende dan. Zes tot acht uur?"],
-    [0, "Top. Dan de simulator: welke velden van Indicata hebben we echt nodig?"],
-    [1, "Kenteken, kilometerstand, uitvoering en de restwaarde. De rest kunnen we later toevoegen."],
+    [0, "Top. Dan de simulator: welke velden van Pricing API hebben we echt nodig?"],
+    [1, "Klantnummer, volume, uitvoering en de korting. De rest kunnen we later toevoegen."],
     [0, "Dan werk ik die vier velden uit in een ticket."],
   ].map(([track, text], i) => ({ at: 1020 + i * 14, track, text }));
   await page.evaluate(lines => window.__harness.recordingTick(1104, 0.35, 0.2, { lines, upto: 1100 }), said);
@@ -181,9 +181,9 @@ const meetingWrapup = async (fixture, mode) => {
         "# Sprint review Northwind Portal",
         "",
         "## Notes",
-        "- [09:31] Sprint 23 demo: Indicata-koppeling werkt op staging, geen issues",
-        "- [09:33] = Indicata simulator komt in sprint 24, niet 25",
-        "- [09:38] ! Agenda in het kanaal posten zodat Pieter het weet",
+        "- [09:31] Sprint 23 demo: API-koppeling werkt op staging, geen issues",
+        "- [09:33] = Pricing-simulator komt in sprint 24, niet 25",
+        "- [09:38] ! Agenda in het kanaal posten zodat Sofie het weet",
         "- [09:40] ? Wie neemt de beveiligingsaudit op?",
         "",
       ].join("\n"),
@@ -238,12 +238,12 @@ const todayDay = async (variant, dark) => {
       const brief = [
         "## Briefing",
         "### Goal",
-        "Scope van de Indicata auto-simulatie vastleggen voor sprint 24.",
+        "Scope van de prijssimulatie vastleggen voor sprint 24.",
         "",
         "### Since last time",
-        "from [[2026-09-28 Spardex sync Thomas]]",
-        "- [x] Thomas deelt de Indicata API-docs · done 2026-09-30",
-        "- [ ] Kristof schat de auto-simulatie in (story points)",
+        "from [[2026-09-28 Northwind sync Tom]]",
+        "- [x] Tom deelt de pricing API-docs · done 2026-09-30",
+        "- [ ] Alex schat de prijssimulatie in (story points)",
         "",
         "### My points",
         "- [ ] Hosting migratie: planning en downtime-venster",
@@ -252,10 +252,10 @@ const todayDay = async (variant, dark) => {
         "",
       ];
       // the meeting of 08:30 is wrapped (and followed up) in the mornings, owed its summary in T3
-      if (variant === "t3") note("done", -60, "Spardex sync Thomas", { lines: ["## Notes", "- [08:34] Demo liep goed", "- [08:41] ! Agenda posten", ""] });
-      else note("done", -60, "Spardex sync Thomas", { followed: true, lines: ["## Notes", "- [08:34] Demo", "", "## Summary", "Kort.", ""] });
-      if (variant === "t1") note("sync", 50, "Spardex sync Thomas", { lines: ["## Briefing", "### Goal", "Scope vastleggen.", "", "### My points", "- [ ] Een punt", "", "## Notes", ""] });
-      if (variant === "t2") note("sync", 20, "Spardex sync Thomas", { lines: [...brief, "## Notes", ""] });
+      if (variant === "t3") note("done", -60, "Northwind sync Tom", { lines: ["## Notes", "- [08:34] Demo liep goed", "- [08:41] ! Agenda posten", ""] });
+      else note("done", -60, "Northwind sync Tom", { followed: true, lines: ["## Notes", "- [08:34] Demo", "", "## Summary", "Kort.", ""] });
+      if (variant === "t1") note("sync", 50, "Northwind sync Tom", { lines: ["## Briefing", "### Goal", "Scope vastleggen.", "", "### My points", "- [ ] Een punt", "", "## Notes", ""] });
+      if (variant === "t2") note("sync", 20, "Northwind sync Tom", { lines: [...brief, "## Notes", ""] });
     }, variant);
     // Today again, so it reads them
     await click("Reminders");
