@@ -13,9 +13,10 @@ export type { LiveLine };
 import { settings } from "../settings/settings";
 import { makeStore } from "../make-store";
 import { toast } from "../navigation/navigation";
-import { meetingLanguage } from "../../domain/calendar/rules";
-import { chatAbout, meetingNote } from "./calendar";
+import { meetingLanguage, type Recording } from "../../domain/calendar/rules";
+import { meetingNote } from "./calendar";
 import { openMeetingView } from "./meeting-view";
+import { attachRecording, generateDraft } from "./wrapup";
 import { useCalendarStore } from "./store";
 
 // Recording a meeting from its card in Waiting for you (src-tauri/src/meeting.rs): the microphone and what the Mac
@@ -166,14 +167,13 @@ async function save(write: typeof meetingRecordStop, folder = "") {
     error: "",
     retry: "",
   });
+  let recording: Recording;
   try {
-    const recording = await write(meeting?.title || t("wait.meetingUntitled"), t("rec.me"), t("rec.others"), progress =>
+    recording = await write(meeting?.title || t("wait.meetingUntitled"), t("rec.me"), t("rec.others"), progress =>
       set({ progress }),
     );
     set({ phase: "idle", meeting: null });
     loadKept();
-    if (meeting && voiceOf(settings().voice).summarize) await chatAbout(meeting, "transcript", recording);
-    else toast(t("rec.saved", { path: recording.transcript }));
   } catch (e) {
     // the backend kept the recording and says where after the reason: the newest one, unless it was a retry
     await loadKept();
@@ -182,7 +182,16 @@ async function save(write: typeof meetingRecordStop, folder = "") {
       retry: folder || rec().kept[0] || "",
       error: String(e).startsWith("model") ? t("rec.noModel") : String(e),
     });
+    return;
   }
+  // the files go into the meeting's note; then, unless switched off in Settings › Voice, its Wrap-up writes the draft
+  // summary (a retried recording comes here too, with the meeting its meeting.json kept)
+  if (!meeting) return toast(t("rec.saved", { path: recording.transcript }));
+  await attachRecording(meeting, recording).catch(e => toast(String(e)));
+  if (voiceOf(settings().voice).summarize) {
+    void generateDraft(meeting, recording);
+    openMeetingView(meeting);
+  } else toast(t("rec.saved", { path: recording.transcript }));
 }
 
 export async function cancelRecording() {

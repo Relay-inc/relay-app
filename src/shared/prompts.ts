@@ -22,7 +22,7 @@ import mailTweakFormal from "../../prompts/mail/tweak-formal.md?raw";
 import mailTweakShorter from "../../prompts/mail/tweak-shorter.md?raw";
 import meetingsNote from "../../prompts/meetings/note.md?raw";
 import meetingsPrep from "../../prompts/meetings/prep.md?raw";
-import meetingsTranscript from "../../prompts/meetings/transcript.md?raw";
+import meetingsWrapup from "../../prompts/meetings/wrapup.md?raw";
 import pipelinePreflight from "../../prompts/pipeline/preflight.md?raw";
 import pipelineResume from "../../prompts/pipeline/resume.md?raw";
 import pipelineReviewComments from "../../prompts/pipeline/review-comments.md?raw";
@@ -69,7 +69,7 @@ export const prompts = {
   meetings: {
     note: text(meetingsNote),
     prep: text(meetingsPrep),
-    transcript: text(meetingsTranscript),
+    wrapup: text(meetingsWrapup),
   },
   pipeline: {
     preflight: text(pipelinePreflight),

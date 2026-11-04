@@ -13,6 +13,7 @@ import { RecordingError } from "./RecordingError";
 import { BriefingStep } from "./BriefingStep";
 import { LiveStep } from "./LiveStep";
 import { WrapupStep } from "./WrapupStep";
+import { useWrapupStore } from "../../../application/calendar/wrapup";
 
 /** A meeting as a view of its own (its selection key is `work:meeting:<event id>`): the header, then the step the meeting
  *  is on, or the one picked in the stepper. Esc goes back to Today. */
@@ -54,7 +55,11 @@ export function MeetingView({ className = "" }: { className?: string }) {
   }, []);
 
   // the step the meeting is on, until one is picked; it is the meeting's again when its stage moves on
-  const reached = stepOf(stage, saving);
+  // Wrap-up once it was recorded, a draft is on its way, or the meeting is over without its summary
+  const wrapping = useWrapupStore(s => !!s.wraps[id]);
+  const now = useCalendarStore(s => s.now);
+  const ended = !!meeting && Date.parse(meeting.end) <= now;
+  const reached = stepOf(stage, saving || wrapping || (ended && stage !== "live"));
   const [pick, setPick] = useState<{ reached: Step; step: Step | null }>({ reached, step: null });
   if (pick.reached !== reached) setPick({ reached, step: null });
   const step = pick.step ?? reached;
@@ -77,6 +82,7 @@ export function MeetingView({ className = "" }: { className?: string }) {
         noteText={note?.text ?? null}
         step={step}
         reached={reached}
+        wrapReady={reached === "wrapup" || ended || !!notesIn(note?.text ?? "")}
         showJoin={step === "live"}
         onStep={next => setPick({ reached, step: next })}
       />
@@ -88,7 +94,7 @@ export function MeetingView({ className = "" }: { className?: string }) {
           <LiveStep meeting={meeting} notes={note ? (notesIn(note.text) ?? "") : ""} noteText={note?.text ?? ""} />
         ) : null
       ) : (
-        <WrapupStep note={note} />
+        <WrapupStep key={meeting.id} meeting={meeting} note={note} onNotes={() => setPick({ reached, step: "live" })} />
       )}
     </div>
   );

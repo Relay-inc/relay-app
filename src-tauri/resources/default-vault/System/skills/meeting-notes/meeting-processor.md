@@ -64,9 +64,9 @@ Resolve codes, abbreviations and spoken shorthand with the shorthand map. Flag a
 - Collapse over-categorized sections into fewer, tighter groupings.
 - Full topics: bold heading, nested bullets, attribution flagging. Brief topics: one `[BRIEF] Topic: sentence` bullet in the summary signals. Skip topics: omitted everywhere, except an action for the user, which is still included with a note on its topic.
 
-### 6. Action extraction
+### 6. Next steps
 
-**Only the user's commitments become checkboxes.** Other people's next steps stay as plain bullets in their topic.
+**Only the user's commitments become next steps**, plain bullets under **Next Steps**. Other people's next steps stay as plain bullets in their topic.
 
 | Include as action | Capture in the topic only |
 |---|---|
@@ -75,7 +75,7 @@ Resolve codes, abbreviations and spoken shorthand with the shorthand map. Flag a
 | Multi-step tasks that could be forgotten | Routine follow-through the topic already captures |
 | Commitments with outside visibility | Internal cleanup with no dependency |
 
-Test: would someone reading only the actions lose track of something important without this item? Group micro-tasks into one item. Preserve checkboxes already in the notes exactly. If there are none, omit the section.
+Test: would someone reading only the next steps lose track of something important without this item? Group micro-tasks into one item. If there are none, omit the section.
 
 ### 7. Continuation detection
 
@@ -109,8 +109,8 @@ Key signals:
 	- Detail
 - Another key point
 
-=== ACTION_ITEMS ===
-- [ ] Task the user committed to
+=== NEXT_STEPS ===
+- Task the user committed to
 
 === PRIOR_ITEMS_RESOLVED ===
 - "Original item text" (from [Meeting Name, YYYY-MM-DD]) -- resolved: [evidence]
@@ -124,7 +124,7 @@ Section rules:
 - METADATA: only `one-liner`. The orchestrator owns all other frontmatter.
 - SUMMARY: narrative plus key signals. Skip routine updates that changed nothing. No wikilinks.
 - TOPICS: only Full topics, `**bold**` headers, nested bullets, first person for the user, plain text names.
-- ACTION_ITEMS, PRIOR_ITEMS_RESOLVED, ENTITY_CANDIDATES: omit the section when empty.
+- NEXT_STEPS, PRIOR_ITEMS_RESOLVED, ENTITY_CANDIDATES: omit the section when empty.
 
 ## Constraints
 

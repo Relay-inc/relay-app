@@ -11,11 +11,7 @@ import { Glyph } from "../../components/Glyph";
 import { Icon } from "../../components/Icon";
 import { agent } from "../../../shared/plugins";
 import { useT } from "../../hooks/useT";
-
-// one size system in content: h-8, rounded-lg, medium; one primary, the others outline
-const ACT = "inline-flex items-center gap-1.5 h-8 px-3.5 rounded-lg text-[13px] font-medium cursor-pointer";
-const PRIMARY = `${ACT} bg-accent text-on-accent hover:bg-accent-hover`;
-const OUTLINE = `${ACT} border border-separator-strong text-label hover:bg-fill disabled:opacity-50 disabled:cursor-default`;
+import { OUTLINE, PRIMARY } from "./buttons";
 
 /** The briefing as the design draws it: its markdown, whose `- [ ]` lists are real checkboxes that write back. */
 function BriefingBody({ text, onTick }: { text: string; onTick: (n: number) => void }) {

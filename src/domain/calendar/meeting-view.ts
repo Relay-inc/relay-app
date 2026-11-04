@@ -7,10 +7,10 @@ import { meetingDay, type MeetingStage } from "./rules.ts";
 // ---------- the steps
 export type Step = "briefing" | "live" | "wrapup";
 export const STEPS: readonly Step[] = ["briefing", "live", "wrapup"];
-/** The step a meeting is on: Live while it is recorded, Wrap-up once it is (still being written out, or summarised),
- *  else the briefing. */
-export const stepOf = (stage: MeetingStage, saving: boolean): Step =>
-  stage === "live" ? "live" : stage === "wrapped" || saving ? "wrapup" : "briefing";
+/** The step a meeting is on: Live while it is recorded, Wrap-up once it is wrapped or `wrapping` (recorded and being
+ *  written out, a draft on its way, or over without its summary), else the briefing. */
+export const stepOf = (stage: MeetingStage, wrapping: boolean): Step =>
+  stage === "live" ? "live" : stage === "wrapped" || wrapping ? "wrapup" : "briefing";
 
 /** Who a transcript line is from: "Others" is named when exactly one other person is invited (a 1:1). */
 export const othersLabel = (people: Meeting["people"], others: string) =>

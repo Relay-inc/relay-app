@@ -9,7 +9,6 @@ import {
   meetingPrompt,
   soon,
   type MeetingChat,
-  type Recording,
 } from "../../domain/calendar/rules";
 import type { Meeting } from "../../domain/calendar/types";
 import { calendarOn as isCalendarOn } from "../../domain/settings/types";
@@ -122,7 +121,7 @@ export async function meetingNote(meeting: Meeting) {
   return note && typeof note.text === "string" ? note : null;
 }
 /** The same for a meeting already in hand: a recording outlives the meeting's place in the list. */
-export async function chatAbout(meeting: Meeting, how: MeetingChat, recording?: Recording) {
+export async function chatAbout(meeting: Meeting, how: MeetingChat) {
   if (useAgentsStore.getState().loaded && !agentOf("claude")?.on) return toast(t("cal.needClaude"));
   // under the meeting's project, so its prep and its note sit with the project's other work
   const key = startChat(meetingProjectOf(meeting), {
@@ -133,5 +132,5 @@ export async function chatAbout(meeting: Meeting, how: MeetingChat, recording?: 
     meeting: how === "prep" ? meeting.id : undefined,
   });
   await select(key);
-  sendMsg(meetingPrompt(meeting, how, timeOf, undefined, recording));
+  sendMsg(meetingPrompt(meeting, how, timeOf));
 }

@@ -5,7 +5,7 @@ description: "Turn one conversation into one note (what was decided, what was pr
 
 One conversation becomes one note, whatever the source: a meeting (transcript or rough notes), a mail thread or a chat thread. The note keeps the essence: what was decided, what was promised and by whom, what is still open. The original stays where it is and gets a reference.
 
-**Input:** a pasted transcript, a transcript file (`.md`, `.txt`, `.srt`, `.vtt`), a meeting note with raw `## Notes`, a mail or thread the user pastes, or nothing (auto-detect).
+**Input:** a pasted transcript, a transcript file (`.md`, `.txt`, `.srt`, `.vtt`), a meeting note with `## Notes` and no `## Summary`, a mail or thread the user pastes, or nothing (auto-detect).
 
 ## 0. Detect input and place
 
@@ -71,30 +71,29 @@ Write the output in the language of the conversation (or the user's language whe
 ## Summary
 Two or three sentences: what the conversation was about and what changed.
 
-- New information or status change, one per bullet, ordered by importance
+- New information, a status change or a decision, one per bullet, ordered by importance
 
-## Decisions
-- Decision, with who took it when that matters
+**Topic**
+- Related bullet
+- Related bullet
+- Related bullet
 
-## Actions
-- Me: send the estimate to the client (Fri 2026-01-16)
-- Jane: confirm the label
-
-## Open
-- Question or item nobody took yet
+**Next Steps**
+- Send the estimate to the client (Fri 2026-01-16)
+- Check the sandbox with real data
 ```
 
-All four sections are always present, `- none` when empty. `**Topic**` groups inside `## Summary` only when a subject has 3+ related bullets. Target 10 to 30 lines. Entities in frontmatter stay plain text in the body, other vault entities get one wikilink on first mention, unknown ones stay plain text.
+One shape for every meeting note: `## Summary`, flat bullets, `**Topic**` blocks only when one subject needs 3+ bullets, then `**Next Steps**` as plain bullets. Decisions stay among the bullets, there are no separate Decisions, Actions or Open sections. **Next Steps** holds only the user's own commitments, as plain bullets (no checkboxes: the note is the record, reminders and tickets come from them in Relay's Wrap-up); other people's next steps stay in their topic. Target 10 to 30 lines. Entities in frontmatter stay plain text in the body, other vault entities get one wikilink on first mention, unknown ones stay plain text.
 
 ## 4. Write
 
-1. Replace `## Notes` and everything under it with the processed output. Raw notes are scaffolding, not content.
+1. Write `## Summary` after `## Notes`, which stays as the user typed it, and keep a `## Briefing` where it is. The audio embed (`![[… .m4a]]`) and the `Transcript: [[…]]` link sit right under the date line below the H1, before the first `##`: the only H2s of a meeting note are `## Briefing`, `## Notes` and `## Summary`. Relay's Wrap-up writes the same shape from the app.
 2. Frontmatter: `one-liner:` from the summary, `modified:` today, `about:` extended with discovered projects that have a note.
 3. Confirm in one line. Do not re-print the note.
 
 ## 5. Propagate
 
-1. **Project note:** the user's own promises go to `## Open` (checkbox with the date), lasting decisions to `## Decisions` (with rationale), and `## Status` is rewritten only when the conversation changed the state. On the card: `last` today, `next` and `index` when they changed, then `python3 System/scripts/build-index.py`. Add an entry to the project's `Log.md`.
+1. **Project note:** the user's own **Next Steps** go to `## Open` (checkbox with the date), lasting decisions to `## Decisions` (with rationale), and `## Status` is rewritten only when the conversation changed the state. On the card: `last` today, `next` and `index` when they changed, then `python3 System/scripts/build-index.py`. Add an entry to the project's `Log.md`.
 2. **Reminders:** for promises with a real future trigger, propose reminders and add them with `relay reminders.add text=... date=... project=...`. Most do not need one.
 3. **Decisions:** a decision with lasting effect also gets one line in `System/rules/core/memory.md` (see the update-memory skill).
 4. **Reply needed:** draft it only when the user asks, through Relay's mail drafts.

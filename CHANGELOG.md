@@ -15,9 +15,14 @@ a PR. Versions follow
 
 ### Added
 
+- A meeting has a Wrap-up step: after Stop (or from the stepper) Claude drafts the summary from your notes, the transcript and the briefing, in the vault's shape (summary, bullets, Next Steps). You edit or regenerate it, route each of your next steps to a reminder or a ticket, add a decision to the project's note with one click, and Accept writes it into the meeting note (#376).
 - A meeting has its own view, opened from Today, the recording bar, Cmd-K or a `relay://meeting` link: its briefing, a notes editor that stamps every line with the time (⌘1 marks an action, ⌘2 a decision, ⌘3 a question) saved into the meeting note, the live transcript next to it with a click to quote a line, and a language pick for the transcription (#363).
 - A meeting note remembers which calendar event it belongs to (`event:` in its frontmatter), so renaming the event
   no longer loses its note and briefing (#362).
+
+### Changed
+
+- The vault's meeting notes have one shape: Summary with bullets and **Next Steps**, no separate Decisions, Actions and Open sections. Recording a meeting no longer opens a conversation to write the note; the draft is in the meeting's Wrap-up (#376).
 
 ### Fixed
 
