@@ -2188,17 +2188,29 @@ const SCENARIOS = {
     const { page } = s;
     const { billing, findings } = await openBilling(s);
     const note = path => page.evaluate(p => window.__harness.noteText(p), path);
-    s.check("the pill counts the entries to review", (await page.getByRole("button", { name: "Changes, 2 to review" }).count()) === 1);
+    s.check(
+      "the pill counts the entries to review",
+      (await page.getByRole("button", { name: "Changes, 2 to review" }).count()) === 1,
+    );
     await click(page.getByRole("button", { name: "Changes, 2 to review" }));
     s.check("the feed opens", await waitText(page, "written to the vault by Relay"));
-    s.check("one entry with the reason line", await hasText(page, "Decision: dry run first, live after Sofie confirms the rate rule"));
-    s.check("and both notes' diffs", (await page.locator("[data-file]").count()) === 2 && (await hasText(page, "2 notes changed")));
+    s.check(
+      "one entry with the reason line",
+      await hasText(page, "Decision: dry run first, live after Sofie confirms the rate rule"),
+    );
+    s.check(
+      "and both notes' diffs",
+      (await page.locator("[data-file]").count()) === 2 && (await hasText(page, "2 notes changed")),
+    );
     await click(page.locator(`[data-file="${findings}"]`).getByRole("button", { name: "Undo", exact: true }));
     await settle(page, 300);
     s.check("Undo puts that note back", (await note(findings)).includes("Go live in sprint 24."));
     s.check("the other note stays", (await note(billing)).includes("Dry run first"));
     s.check("the row says so", await hasText(page, "Undone"));
-    s.fact("backend calls", (await s.calls("change_undo")).map(c => c.args.path));
+    s.fact(
+      "backend calls",
+      (await s.calls("change_undo")).map(c => c.args.path),
+    );
   },
 
   // issue 371: Undo on a note the user edited since shows the merge and writes nothing until it is applied
@@ -2219,9 +2231,15 @@ const SCENARIOS = {
     await settle(page, 300);
     const merged = await note(findings);
     s.check("the merge keeps my line", merged.includes("My own line."));
-    s.check("and takes the run's change out", merged.includes("Go live in sprint 24.") && !merged.includes("Dry run in sprint 24"));
+    s.check(
+      "and takes the run's change out",
+      merged.includes("Go live in sprint 24.") && !merged.includes("Dry run in sprint 24"),
+    );
     // my rewrite of the same lines: no merge, my text stays
-    const rewrite = (await note(billing)).replace("Dry run first, live after [[Sofie Claes]] confirms the rate rule", "Something else entirely");
+    const rewrite = (await note(billing)).replace(
+      "Dry run first, live after [[Sofie Claes]] confirms the rate rule",
+      "Something else entirely",
+    );
     await page.evaluate(([p, t]) => window.__harness.typeInto(p, t), [billing, rewrite]);
     await click(page.locator(`[data-file="${billing}"]`).getByRole("button", { name: "Undo", exact: true }));
     s.check("the same lines: nothing is overwritten", await waitText(page, "Nothing is overwritten"));
@@ -2230,6 +2248,163 @@ const SCENARIOS = {
     await click(button(page, "Keep mine"));
     await settle(page, 200);
     s.check("Keep mine leaves it as it is", (await note(billing)) === rewrite);
+  },
+
+  // K7, issue 372: File with Claude proposes per note and writes nothing; Edit picks another folder, Skip leaves a note,
+  // Accept moves it with its links and the filing is one entry in the Changes feed, undone from there
+  async inboxFiling(s) {
+    await s.load({ fixture: "kb-changes-inbox" });
+    const { page } = s;
+    const note = path => page.evaluate(p => window.__harness.noteText(p), path);
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    s.check(
+      "the Pages tab has an Inbox row with its count",
+      (await page.locator("[data-inbox]").textContent())?.includes("4") ?? false,
+    );
+    await click(page.locator("[data-inbox]"));
+    s.check("the Inbox lists the 4 notes", await waitText(page, "4 notes"));
+    s.check("no proposal and no Accept before File with Claude", (await button(page, "Accept", true).count()) === 0);
+    await click(button(page, "File with Claude"));
+    s.check("a proposal per note", await waitText(page, "Claude proposed a home for each"));
+    s.check("File with Claude asked once", (await s.calls("inbox_propose")).length === 1);
+    s.check(
+      "nothing moved yet",
+      (await note("Inbox/2026-10-01 0915.md")) !== null && (await s.calls("inbox_accept")).length === 0,
+    );
+    // Edit: another folder
+    const row = path => page.locator(`[data-inbox-note="${path}"]`);
+    await click(row("Inbox/2026-10-01 0830.md").getByRole("button", { name: "Edit" }));
+    s.check(
+      "Edit shows the destination as a picker with the type's home marked",
+      await waitText(page, "home for Meeting"),
+    );
+    await click(page.getByRole("option", { name: /^Calendar\/Daily\/2026\// }));
+    await click(row("Inbox/2026-10-01 0830.md").getByRole("button", { name: "Save" }));
+    s.check(
+      "Save keeps the picked folder",
+      (await row("Inbox/2026-10-01 0830.md").textContent())?.includes("Calendar/Daily/2026/") ?? false,
+    );
+    // Skip
+    await click(row("Inbox/2026-09-30 1740.md").getByRole("button", { name: "Skip" }));
+    s.check(
+      "Skip leaves the note in the list",
+      (await row("Inbox/2026-09-30 1740.md").count()) === 1 && (await hasText(page, "Skipped")),
+    );
+    // Accept one: moved, linked, in the feed
+    await click(row("Inbox/2026-10-01 0915.md").getByRole("button", { name: "Accept" }));
+    await settle(page, 400);
+    const dest = "Contexts/Agency/Projects/Northwind Portal/Documents/Portal go-live after tax rule check.md";
+    const after = await note(dest);
+    s.check(
+      "Accept moved the note and set type, about and with",
+      !!after &&
+        after.includes("type: Document") &&
+        after.includes('about: "[[Northwind Portal]]"') &&
+        after.includes('with: "[[Sofie Claes]]"'),
+    );
+    s.check(
+      "it left the Inbox",
+      (await note("Inbox/2026-10-01 0915.md")) === null &&
+        (await page.locator("[data-inbox]").textContent())?.includes("3"),
+    );
+    const fed = await s.calls("inbox_accept");
+    s.check("one inbox_accept with that note only", fed.length === 1 && fed[0].args.items.length === 1);
+    // the entry is in Changes (on a page), and Undo from there puts the note back
+    await click(page.locator('[data-project="Northwind Portal"]'));
+    await click(page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]'));
+    await click(page.locator(`[data-page="${dest}"]`).first());
+    await waitText(page, "Portal go-live after tax rule check");
+    await click(page.getByRole("button", { name: /^Changes, \d+ to review/ }));
+    s.check(
+      "the filing is an Inbox filing entry with its reason",
+      (await waitText(page, "Inbox filing")) && (await hasText(page, "Filed 1 capture: 1 Document")),
+    );
+    await click(
+      page.locator(`[data-file="Inbox/2026-10-01 0915.md"]`).getByRole("button", { name: "Undo", exact: true }),
+    );
+    await click(page.locator(`[data-file="${dest}"]`).getByRole("button", { name: "Undo", exact: true }));
+    await settle(page, 300);
+    s.check(
+      "Undo puts the note back in the Inbox as it was",
+      (await note("Inbox/2026-10-01 0915.md")) ===
+        "Sofie confirms the tax rule Friday → then take the Northwind portal live, tell Tom\n" &&
+        (await note(dest)) === null,
+    );
+    // Accept all: the rest in one entry
+    await click(page.getByRole("button", { name: "Close changes" }));
+    await click(page.locator("[data-inbox]"));
+    await click(button(page, "File with Claude"));
+    await waitText(page, "Claude proposed a home for each");
+    await click(button(page, "Accept all"));
+    await settle(page, 400);
+    s.check(
+      "Accept all filed every note",
+      (await page.locator("[data-inbox]").textContent())?.includes("4") === false &&
+        (await hasText(page, "The Inbox is empty")),
+    );
+  },
+
+  // K7, issue 372: the old scratch notes show a dry run first, Move writes them into the Inbox with about: set and the
+  // drawer shows them per project, one Undo puts them back
+  async inboxScratch(s) {
+    await s.load({ fixture: "kb-changes-inbox" });
+    const { page } = s;
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    await click(page.locator("[data-inbox]"));
+    await waitText(page, "2 older scratch notes");
+    s.check("nothing was moved by looking", (await s.calls("scratch_migrate")).length === 0);
+    await click(button(page, "Move into Inbox…"));
+    s.check(
+      "the dry run lists each note's project and new name",
+      (await waitText(page, "Move scratch notes into the vault")) && (await hasText(page, "Inbox/2026-09-20 1015.md")),
+    );
+    s.check("one primary button on screen", (await page.locator(".btn-primary").count()) === 1);
+    await click(button(page, "Move 2 notes"));
+    await settle(page, 400);
+    s.check(
+      "the notes are in the Inbox with about:",
+      (await page.evaluate(() => window.__harness.noteText("Inbox/2026-09-20 1015.md")))?.includes(
+        'about: "[[Northwind Portal]]"',
+      ),
+    );
+    s.check("the Inbox counts them", await waitText(page, "6 notes"));
+    s.check("the toast offers the one Undo", await hasText(page, "Moved 2 scratch notes into the Inbox"));
+    await click(page.getByRole("button", { name: "Undo", exact: true }));
+    await settle(page, 400);
+    s.check(
+      "Undo puts them back outside the vault",
+      (await s.calls("scratch_migrate_undo")).length === 1 &&
+        (await waitText(page, "4 notes")) &&
+        (await hasText(page, "2 older scratch notes")),
+    );
+  },
+
+  // K7, issue 372: the capture window saves its text through quick_capture_save with ⌘↵ and puts the window away; Esc
+  // puts it away without saving
+  async quickCapture(s) {
+    await s.load({ path: "/capture.html", fixture: "kb-changes-inbox" });
+    const { page } = s;
+    const field = page.getByRole("textbox", { name: "Quick capture" });
+    s.check(
+      "Save is off while the field is empty",
+      await page.getByRole("button", { name: /^Save to Inbox/ }).isDisabled(),
+    );
+    await field.fill("Call Tom about the hosting window");
+    await page.keyboard.press("Escape");
+    await settle(page, 200);
+    s.check(
+      "Esc hides the window and saves nothing",
+      (await s.calls("quick_capture_hide")).length === 1 && (await s.calls("quick_capture_save")).length === 0,
+    );
+    s.check("what was typed stays", (await field.inputValue()) === "Call Tom about the hosting window");
+    await page.keyboard.press("Meta+Enter");
+    await settle(page, 300);
+    const saved = await s.calls("quick_capture_save");
+    s.check(
+      "⌘↵ saves the text to the Inbox",
+      saved.length === 1 && saved[0].args.text === "Call Tom about the hosting window",
+    );
+    s.check("and the field is empty again", (await field.inputValue()) === "");
   },
 
   // K6, issue 371: a capture run lands in the feed as one entry; Fix properties (Ask Claude's menu) adds the missing
@@ -2243,7 +2418,10 @@ const SCENARIOS = {
     await page.evaluate(() => window.__harness.capture());
     await settle(page, 300);
     await click(page.getByRole("button", { name: "Changes, 1 to review" }));
-    s.check("a capture run that edited 2 notes is one entry with 2 diffs", (await page.locator("[data-file]").count()) === 2 && (await hasText(page, "2 notes changed")));
+    s.check(
+      "a capture run that edited 2 notes is one entry with 2 diffs",
+      (await page.locator("[data-file]").count()) === 2 && (await hasText(page, "2 notes changed")),
+    );
     s.check("with its reason", await hasText(page, "Decision: dry run first"));
     await click(page.getByRole("button", { name: "Close changes" }));
     // a note without type:
@@ -2256,7 +2434,10 @@ const SCENARIOS = {
     await click(button(page, "Ask Claude"));
     await click(button(page, "Fix properties"));
     await settle(page, 400);
-    s.check("page_action asked for the properties", (await s.calls("page_action")).some(c => c.args.action === "properties" && c.args.path === sketch));
+    s.check(
+      "page_action asked for the properties",
+      (await s.calls("page_action")).some(c => c.args.action === "properties" && c.args.path === sketch),
+    );
     s.check("the note has its type now", (await note(sketch)).startsWith("---\ntype: Document"));
     await click(page.getByRole("button", { name: /^Changes, 2 to review/ }));
     s.check("and the run is in the feed", await waitText(page, "Added type: Document"));
@@ -2297,7 +2478,9 @@ const SCENARIOS = {
     );
     const recorded = async () => (await s.calls("change_record")).map(c => c.args);
     const text = path => page.evaluate(p => window.__harness.noteText(p), path);
-    const day = page.locator('section[aria-label="Day"]').getByRole("button", { name: "Sprint review Northwind Portal", exact: true });
+    const day = page
+      .locator('section[aria-label="Day"]')
+      .getByRole("button", { name: "Sprint review Northwind Portal", exact: true });
     await click(visible(day).first(), 400);
     // the wrap-up: Accept writes the summary into the note, a click adds a decision to the project's note
     await click(page.getByRole("button", { name: "Wrap-up", exact: true }), 300);
@@ -2308,30 +2491,58 @@ const SCENARIOS = {
     await click(page.getByRole("button", { name: "Add to Northwind Portal note" }).first(), 300);
     await waitText(page, "Added ✓");
     const wrapups = (await recorded()).filter(r => r.source === "wrap-up");
-    s.check("Accept and the decision are one entry each", wrapups.length === 2 && wrapups.every(r => r.files.length === 1));
+    s.check(
+      "Accept and the decision are one entry each",
+      wrapups.length === 2 && wrapups.every(r => r.files.length === 1),
+    );
     const decision = wrapups.find(r => r.files[0].path === project);
-    s.check("the decision's before/after is the project note", !!decision && decision.files[0].before === projectText && decision.files[0].after.includes("Pricing-simulator in sprint 24") && decision.reason === "Decision from Sprint review Northwind Portal added to Northwind Portal");
+    s.check(
+      "the decision's before/after is the project note",
+      !!decision &&
+        decision.files[0].before === projectText &&
+        decision.files[0].after.includes("Pricing-simulator in sprint 24") &&
+        decision.reason === "Decision from Sprint review Northwind Portal added to Northwind Portal",
+    );
     const accept = wrapups.find(r => r.files[0].path === notePath);
-    s.check("Accept's after holds the summary", !!accept && accept.files[0].after.includes("## Summary") && !accept.files[0].before.includes("## Summary"));
+    s.check(
+      "Accept's after holds the summary",
+      !!accept && accept.files[0].after.includes("## Summary") && !accept.files[0].before.includes("## Summary"),
+    );
     // the prep: Claude writes the briefing into the note, then its turn ends
     await click(page.getByRole("button", { name: "Briefing", exact: true }), 300);
     await click(button(page, "Prep with Claude"), 400);
     const key = Object.keys(await s.chatChanges())[0];
     const withBriefing = (await text(notePath)) + "\n## Briefing\n### Doel\nDe sprint afronden.\n";
-    await page.evaluate(([path, t, key]) => {
-      window.__harness.setNote(path, t);
-      window.__harness.emitAgent(key, { type: "turn_end", ok: true, error: null, usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 }, duration_ms: 1 });
-    }, [notePath, withBriefing, key]);
+    await page.evaluate(
+      ([path, t, key]) => {
+        window.__harness.setNote(path, t);
+        window.__harness.emitAgent(key, {
+          type: "turn_end",
+          ok: true,
+          error: null,
+          usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+          duration_ms: 1,
+        });
+      },
+      [notePath, withBriefing, key],
+    );
     await settle(page, 400);
     const prep = (await recorded()).find(r => r.source === "prep");
     s.check("the prep is recorded", !!prep && prep.reason === "Briefing for Sprint review Northwind Portal");
-    s.check("before: the note without a briefing, after: with it", !!prep && !prep.files[0].before.includes("## Briefing") && prep.files[0].after.includes("De sprint afronden."));
+    s.check(
+      "before: the note without a briefing, after: with it",
+      !!prep && !prep.files[0].before.includes("## Briefing") && prep.files[0].after.includes("De sprint afronden."),
+    );
     // all three in the feed; Undo on the decision puts the project note back exactly
     await click(page.getByRole("tab", { name: /^Pages/ }));
     await click(page.locator('[data-project="Northwind Portal"]'));
     await waitText(page, "Northwind Portal");
     await click(page.getByRole("button", { name: /^Changes, \d+ to review/ }));
-    s.check("the feed lists the prep and the wrap-up", (await waitText(page, "Briefing for “Sprint review Northwind Portal”")) && (await hasText(page, "Meeting wrap-up “Sprint review Northwind Portal”")));
+    s.check(
+      "the feed lists the prep and the wrap-up",
+      (await waitText(page, "Briefing for “Sprint review Northwind Portal”")) &&
+        (await hasText(page, "Meeting wrap-up “Sprint review Northwind Portal”")),
+    );
     await click(page.getByRole("button", { name: /^Meeting wrap-up/ }).first(), 200); // the decision, the newest of the two
     await click(page.locator(`[data-file="${project}"]`).getByRole("button", { name: "Undo", exact: true }));
     await settle(page, 300);

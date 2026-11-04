@@ -1,4 +1,5 @@
 import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
+import type { FilingItem, InboxNote } from "../domain/inbox/rules";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
@@ -717,6 +718,32 @@ export const scratchList = (project: string) => invoke<ScratchFile[]>("scratch_l
 export const scratchSave = (project: string, id: string | null, text: string) =>
   invoke<string>("scratch_save", { project, id, text });
 export const scratchDelete = (project: string, id: string) => invoke("scratch_delete", { project, id });
+/** What moving a workspace's old scratch notes (`.relay/notes`) into its Inbox would do, nothing written. */
+export type ScratchMove = { project: string; id: string; to: string };
+export const scratchPending = (workspace: string) => invoke<ScratchMove[]>("scratch_pending", { workspace });
+export const scratchMigrate = (workspace: string) => invoke<number>("scratch_migrate", { workspace });
+export const scratchMigrateUndo = (workspace: string) =>
+  invoke<{ back: number; left: number }>("scratch_migrate_undo", { workspace });
+
+// ---------- the Inbox and quick capture (src-tauri/src/inbox.rs, anywhere.rs)
+export const inboxList = (workspace: string) => invoke<InboxNote[]>("inbox_list", { workspace });
+/** The folder notes of this type go to (meeting, daily, thread), null for a type without a home of its own. */
+export const inboxHome = (workspace: string, kind: string) => invoke<string | null>("inbox_home", { workspace, kind });
+/** File with Claude: one read-only run, a proposal per note. Nothing is written. */
+export const inboxPropose = (workspace: string) =>
+  invoke<{ at: number; items: FilingItem[] }>("inbox_propose", { workspace });
+/** Accept proposals: each note gets its frontmatter and moves; one entry in the Changes feed (source "inbox"). */
+export const inboxAccept = (workspace: string, items: FilingItem[]) =>
+  invoke<{ filed: { path: string; to: string }[]; failed: { path: string; error: string }[] }>("inbox_accept", {
+    workspace,
+    items,
+  });
+export const onInboxChanged = (handler: () => void) => listen("inbox-changed", () => handler());
+/** The capture window's: save the text as an Inbox note of the main vault, hide the window. */
+export const quickCaptureSave = (text: string) => invoke<string>("quick_capture_save", { text });
+export const quickCaptureHide = () => invoke("quick_capture_hide");
+/** The window was brought forward (the shortcut, the menu bar item): take the focus. */
+export const onCaptureOpen = (handler: () => void) => listen("capture-open", () => handler());
 
 // ---------- dictation in the composer (src-tauri/src/dictation.rs)
 /** Every speech model Settings › Voice offers, with whether it is on this Mac. */

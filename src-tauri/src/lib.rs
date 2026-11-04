@@ -56,6 +56,7 @@ mod related;
 mod relay_config;
 mod reminders;
 mod retry;
+mod inbox;
 mod scratch;
 mod session;
 mod policy;
@@ -233,6 +234,8 @@ const TEXT: &[(&str, [&str; 4])] = &[
         "Le rappel a besoin d'un texte (2000 caractères max.) et d'un nom de projet sans [ ] ni |",
         "Die Erinnerung braucht einen Text (max. 2000 Zeichen) und einen Projektnamen ohne [ ] oder |"]),
     ("tray.open", ["Open Relay", "Open Relay", "Ouvrir Relay", "Relay öffnen"]),
+    ("tray.capture", ["Quick capture", "Snel vastleggen", "Capture rapide", "Schnell erfassen"]),
+    ("capture", ["Capture", "Vastleggen", "Capture", "Erfassen"]),
     ("tray.late", ["Overdue", "Vervallen", "En retard", "Überfällig"]),
     ("tray.today", ["Today", "Vandaag", "Aujourd'hui", "Heute"]),
     ("tray.tomorrow", ["Tomorrow", "Morgen", "Demain", "Morgen"]),
@@ -644,7 +647,11 @@ const CAPTURE_PROMPT: &str = agent_core::prompt::text(include_str!("../../prompt
 /// said or written there), and started under the vault lock like a conversation: a vault change waits for it or stops
 /// it. `resume`: the session whose fork it is. Returns what Claude answered.
 /// ponytail: no timeout on the run; a hung one holds the queue (application/capture) until Relay quits
-async fn claude_job(app: &AppHandle, state: &State<'_, App>, mut eb: EnvBuf, account: String, resume: Option<String>, prompt: String) -> Result<String, String> {
+async fn claude_job(app: &AppHandle, state: &State<'_, App>, eb: EnvBuf, account: String, resume: Option<String>, prompt: String) -> Result<String, String> {
+    claude_run(app, state, eb, account, resume, prompt, "Read,Glob,Grep,Edit,Write").await
+}
+/// `claude_job` with the tools it may use: a job that only reads (the Inbox's proposals) is given no Edit or Write.
+async fn claude_run(app: &AppHandle, state: &State<'_, App>, mut eb: EnvBuf, account: String, resume: Option<String>, prompt: String, tools: &'static str) -> Result<String, String> {
     let mut child = {
         let _gate = state.vault_gate.lock().unwrap();
         fence_in(app, state, &mut eb);
@@ -653,7 +660,7 @@ async fn claude_job(app: &AppHandle, state: &State<'_, App>, mut eb: EnvBuf, acc
         c.arg("-p");
         if let Some(sid) = &resume { c.args(["--resume", sid, "--fork-session"]); }
         c.args(["--no-session-persistence", "--model", "sonnet", "--strict-mcp-config",
-                "--tools", "Read,Glob,Grep,Edit,Write", "--allowedTools", "Read,Glob,Grep,Edit,Write"])
+                "--tools", tools, "--allowedTools", tools])
             .args(if deny.is_empty() { vec![] } else { std::iter::once("--disallowedTools".to_string()).chain(deny).collect() })
             // in a shared vault no hook runs here either, as in the conversation it closes
             .args(if eb.opts["fenced"] == true { vec!["--settings", agent_claude::fenced_settings()] } else { vec![] })
@@ -1173,6 +1180,144 @@ fn scratch_save(state: State<App>, project: String, id: Option<String>, text: St
 }
 #[tauri::command]
 fn scratch_delete(state: State<App>, project: String, id: String) -> Result<(), String> { let (v, n) = project_home(&state, &project)?; scratch::delete(&v, &n, &id) }
+/// What moving the old scratch notes of a workspace into its Inbox would do, nothing written: [{project, id, to}].
+#[tauri::command]
+async fn scratch_pending(state: State<'_, App>, workspace: String) -> Result<Vec<Value>, String> {
+    let (_, side) = workspace_side(&state, &workspace)?;
+    on_files(move || Ok(scratch::plan(&side.vault).into_iter().map(|m| json!({"project": m.project, "id": m.id, "to": m.to})).collect())).await
+}
+/// Move the old scratch notes of a workspace into its Inbox (`scratch_pending` showed them), with the journal that
+/// `scratch_migrate_undo` reads. Returns how many moved.
+#[tauri::command]
+async fn scratch_migrate(app: AppHandle, state: State<'_, App>, workspace: String) -> Result<usize, String> {
+    let (s, side) = workspace_side(&state, &workspace)?;
+    admin_only(&s, &workspace)?; // in a shared workspace as Tidy: the notes move for every member
+    let n = on_files(move || scratch::migrate(&side.vault).map(|m| m.len())).await?;
+    app.emit("inbox-changed", ()).ok();
+    Ok(n)
+}
+/// The last migration back: {back, left} (a note edited since stays in the Inbox).
+#[tauri::command]
+async fn scratch_migrate_undo(app: AppHandle, state: State<'_, App>, workspace: String) -> Result<Value, String> {
+    let (s, side) = workspace_side(&state, &workspace)?;
+    admin_only(&s, &workspace)?;
+    let (back, left) = on_files(move || scratch::undo(&side.vault)).await?;
+    app.emit("inbox-changed", ()).ok();
+    Ok(json!({"back": back, "left": left}))
+}
+
+/// Quick capture (the window ⌃⌥⌘N opens, anywhere.rs): the text as a note in the main vault's Inbox. Returns its path.
+#[tauri::command]
+async fn quick_capture_save(app: AppHandle, state: State<'_, App>, text: String) -> Result<String, String> {
+    let root = PathBuf::from(vault::canon(&need_vault(&state)?));
+    let path = on_files(move || inbox::capture(&root, &text, chrono::Local::now())).await?;
+    app.emit("inbox-changed", ()).ok();
+    Ok(path)
+}
+/// The Inbox of a workspace: [{path, text, modified}], newest first.
+#[tauri::command]
+async fn inbox_list(state: State<'_, App>, workspace: String) -> Result<Vec<Value>, String> {
+    let root = changes_root(&state, &workspace)?;
+    on_files(move || Ok(inbox::list(&root))).await
+}
+/// The folder a note of type `kind` goes to in a workspace (homes.rs: meeting, daily, thread), relative, for a note of
+/// this year; None for a type without a home of its own.
+#[tauri::command]
+fn inbox_home(state: State<App>, workspace: String, kind: String) -> Result<Option<String>, String> {
+    let root = changes_root(&state, &workspace)?;
+    let year = chrono::Local::now().format("%Y").to_string();
+    Ok(tidy::home_of(&kind, "").map(|home| homes::home(&root, home, &year)).and_then(|p| p.strip_prefix(&root).ok().map(|r| r.to_string_lossy().into_owned())))
+}
+const FILE_PROMPT: &str = agent_core::prompt::text(include_str!("../../prompts/conversation/inbox-file.md"));
+/// File with Claude: one read-only Sonnet run over the Inbox's notes that proposes, per note, a title, type, folder and
+/// links (inbox.rs `parse` keeps only what is safe). Nothing is written. Returns {at (ms), items: [{path, title, type,
+/// dest, links: [{k, v}]}]}; a note it said nothing about has dest "Inbox", meaning it stays.
+#[tauri::command]
+async fn inbox_propose(app: AppHandle, state: State<'_, App>, workspace: String) -> Result<Value, String> {
+    let (s, _) = workspace_side(&state, &workspace)?;
+    let root = changes_root(&state, &workspace)?;
+    let p = agents::enabled(&s).into_iter().find(|p| p.id() == "claude").ok_or_else(|| trc("err.icons_no_claude"))?;
+    let (r, year) = (root.clone(), chrono::Local::now().format("%Y").to_string());
+    let (prompt, paths, known) = on_files(move || {
+        let homes: Vec<(&str, String)> = ["meeting", "daily", "thread"].iter().map(|k| (*k, homes::home(&r, k, &year).strip_prefix(&r).map(|d| d.to_string_lossy().into_owned()).unwrap_or_default())).collect();
+        let (prompt, paths) = inbox::prompt(&r, FILE_PROMPT, &homes);
+        Ok((prompt, paths, inbox::stems(&r)))
+    }).await?;
+    if paths.is_empty() { return Ok(json!({"at": now_ms(), "items": []})); }
+    let eb = in_vault(env_of(&app, &state, p), workspace.clone());
+    let account = account_of(&state, p, "", "sonnet");
+    let answer = claude_run(&app, &state, eb, account, None, prompt, "Read,Glob,Grep").await?;
+    let items: Vec<Value> = inbox::parse(&answer, &paths, &known).iter().map(inbox::item_json).collect();
+    Ok(json!({"at": now_ms(), "items": items}))
+}
+fn now_ms() -> u64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64) }
+/// Accept proposals: each note gets its frontmatter and moves to its folder (pagefiles keeps every link to it). One
+/// entry in the Changes feed holds all of them, source "inbox", so each filing can be undone there. Returns
+/// {filed: [{path, to}], failed: [{path, error}]}; a note that failed stays as it was.
+#[tauri::command]
+async fn inbox_accept(app: AppHandle, state: State<'_, App>, workspace: String, items: Vec<Value>) -> Result<Value, String> {
+    let root = changes_root(&state, &workspace)?;
+    // in a shared workspace any member files their notes: the run is under its round lock, as a Tidy is
+    let shared = shared_at(&state, &root);
+    let roots = page_roots(&state)?;
+    let hubapp = app.clone();
+    let out = on_files(move || {
+        let known = inbox::stems(&root);
+        let (mut filed, mut failed, mut notes, mut done, mut gone, mut later) = (vec![], vec![], vec![], vec![], vec![], vec![]);
+        let mut run = || -> Result<(), String> {
+        for v in &items {
+            let Some(item) = inbox::item_of(v, &known) else { continue };
+            match inbox::accept(&roots, &root, &item, shared.is_some()) {
+                Ok((f, plan)) => {
+                    // a shared workspace's document follows its note in the manifest; when it cannot, the note goes back
+                    if let Some(id) = &shared {
+                        if let Err(e) = hubapp.state::<App>().shared.moved_notes(id, &root.to_string_lossy(), &[(f.from.clone(), f.to.clone())]) {
+                            inbox::revert(&roots, &root, &f);
+                            failed.push(json!({"path": item.path, "error": format!("not moved: {e}")}));
+                            continue;
+                        }
+                    }
+                    gone.extend(plan.gone.clone());
+                    if shared.is_some() { later.push(f.clone()); }
+                    let edits: Vec<(String, String)> = plan.edits.iter().map(|(at, _, new)| (at.clone(), new.clone())).collect();
+                    watch::moved(&plan.root, &pagefiles::files(&plan.root, &plan.to), &edits);
+                    filed.push(json!({"path": f.from, "to": f.to}));
+                    notes.push((f.from, Some(f.before), None));
+                    notes.push((f.to, None, Some(f.after)));
+                    done.push(item);
+                }
+                Err(error) => failed.push(json!({"path": item.path, "error": error})),
+            }
+        }
+        Ok(())
+        };
+        match &shared {
+            Some(id) => hubapp.state::<App>().shared.with_vault(id, run)?,
+            None => run()?,
+        }
+        // the old paths pass the next round's delete brake as moves, while the server still has what they held
+        if let Some(id) = &shared {
+            hubapp.state::<App>().shared.let_through(id, gone);
+            // the frontmatter of what moved, in a round after the move (inbox.rs `accept`)
+            let (h, id, root, folder) = (hubapp.clone(), id.clone(), root.clone(), vault::canon(&root.to_string_lossy()));
+            shared_vaults::sync_now();
+            std::thread::spawn(move || {
+                // the loop takes the ask, the round runs under the vault's lock: the lock free again, the move is out
+                for _ in 0..50 { if !shared_vaults::pending() { break; } std::thread::sleep(std::time::Duration::from_millis(100)); }
+                let hub = &h.state::<App>().shared;
+                hub.with_vault(&id, || {
+                    for f in &later { if inbox::finish(&root, f) { hub.absorb(&id, &folder, &f.to, "relay"); } }
+                });
+            });
+        }
+        let reason = inbox::reason(&done.iter().collect::<Vec<_>>());
+        let recorded = if done.is_empty() { None } else { changes::record_files(&root, "inbox", "", &reason, &notes)? };
+        Ok((json!({"filed": filed, "failed": failed}), recorded.is_some()))
+    }).await?;
+    if out.1 { app.emit("changes-changed", ()).ok(); }
+    app.emit("inbox-changed", ()).ok();
+    Ok(out.0)
+}
 
 /// A vault note a conversation links to, for the right panel or a page: {path (relative to the vault), text, modified}.
 #[tauri::command]
@@ -3234,7 +3379,7 @@ pub fn run() {
         .on_window_event(|w, e| {
             windows::track(w, e);
             if let tauri::WindowEvent::CloseRequested { api, .. } = e {
-                if w.label() == "main" { api.prevent_close(); w.hide().ok(); }
+                if w.label() == "main" || w.label() == "capture" { api.prevent_close(); w.hide().ok(); }
             }
         })
         .setup(|app| {
@@ -3349,7 +3494,7 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![shared_doc_absorb, shared_doc_open, page_history, page_restore, page_comments, page_comment, workspace_inbox, shared_doc_edit, shared_awareness, shared_vaults::shared_vault_docs, snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, page_action, change_record, changes_list, change_keep, change_undo, change_resolve, project_repos, set_project_repos, migrate_project, move_chat_workspace, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, note_by_event, note_home, write_note, property_values, create_note, create_context, create_project, project_kinds, set_project_state, project_row, vault_check, vault_repair, tidy_preview, tidy_apply, tidy_undo, free_page_name, attach_copy, attach_save, attach_dest, embed_info, duplicate_note, move_path, trash_path, restore_path, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_trust, shared_vaults::shared_vault_admin, shared_vaults::shared_vault_add, shared_vaults::shared_vault_pending_invite, notes_graph, notes_linked, note_rail, find_notes, note_times, note_templates, new_from_template, daily_note, favourites, set_favourites, note_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_kept, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
+        .invoke_handler(tauri::generate_handler![shared_doc_absorb, shared_doc_open, page_history, page_restore, page_comments, page_comment, workspace_inbox, shared_doc_edit, shared_awareness, shared_vaults::shared_vault_docs, snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, page_action, change_record, changes_list, change_keep, change_undo, change_resolve, project_repos, set_project_repos, migrate_project, move_chat_workspace, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, note_by_event, note_home, write_note, property_values, create_note, create_context, create_project, project_kinds, set_project_state, project_row, vault_check, vault_repair, tidy_preview, tidy_apply, tidy_undo, free_page_name, attach_copy, attach_save, attach_dest, embed_info, duplicate_note, move_path, trash_path, restore_path, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, scratch_pending, scratch_migrate, scratch_migrate_undo, quick_capture_save, inbox_list, inbox_home, inbox_propose, inbox_accept, anywhere::quick_capture_hide, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_trust, shared_vaults::shared_vault_admin, shared_vaults::shared_vault_add, shared_vaults::shared_vault_pending_invite, notes_graph, notes_linked, note_rail, find_notes, note_times, note_templates, new_from_template, daily_note, favourites, set_favourites, note_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_kept, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the window used last back (the main one may be hidden)

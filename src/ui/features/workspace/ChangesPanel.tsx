@@ -82,6 +82,7 @@ function useLabel() {
   return (c: Change) => {
     if (c.source === "capture")
       return c.subject ? t("changes.capture", { subject: c.subject }) : t("changes.captureUntitled");
+    if (c.source === "inbox") return t("changes.inbox");
     if (c.source === "prep") return t("changes.prep", { subject: c.subject });
     if (c.source === "wrap-up") return t("changes.wrapup", { subject: c.subject });
     return t("changes.page", {
@@ -114,15 +115,18 @@ function Head({ change }: { change: Change }) {
         </div>
         {change.reason ? <div className="mt-0.5">{change.reason}</div> : null}
         <div className="flex flex-wrap gap-1.5 mt-1.5">
-          {change.files.map(f => (
-            <span
-              key={f.path}
-              title={f.path}
-              className="h-5 inline-flex items-center px-1.75 rounded-md bg-fill-2 text-xs"
-            >
-              {stem(f.path)}
-            </span>
-          ))}
+          {/* an Inbox filing holds each note twice, where it was and where it went: the chips name the second */}
+          {change.files
+            .filter(f => change.source !== "inbox" || f.after !== null)
+            .map(f => (
+              <span
+                key={f.path}
+                title={f.path}
+                className="h-5 inline-flex items-center px-1.75 rounded-md bg-fill-2 text-xs"
+              >
+                {stem(f.path)}
+              </span>
+            ))}
         </div>
       </div>
     </div>

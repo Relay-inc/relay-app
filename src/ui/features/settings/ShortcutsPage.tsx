@@ -40,6 +40,7 @@ const APP: CommandId[] = [
   "app.escape",
   "app.stop",
   "app.sidebarTab",
+  "app.capture",
 ];
 const TODAY: CommandId[] = [
   "today.next",

@@ -31,7 +31,8 @@ import {
 } from "../../../application/navigation/kb";
 import { newChatHere } from "../../../application/conversations/chats";
 import { select } from "../../../application/navigation/navigation";
-import { GRAPH } from "../../../domain/navigation/views";
+import { GRAPH, INBOX_VIEW } from "../../../domain/navigation/views";
+import { loadInboxNotes, useInboxStore } from "../../../application/inbox/inbox";
 import { toast } from "../../../application/navigation/navigation";
 import { activeFolder, workspaces } from "../../../application/navigation/workspaces";
 import { loadLinked } from "../../../application/navigation/linked";
@@ -102,6 +103,11 @@ export function PagesView() {
     if (sortsByModified()) void loadTimes();
   }, [notesVersion, workspaceShown, sorts]);
   useDismiss(menuElement, !!menu, () => setMenu(null));
+  // the Inbox's count: read again when the notes that exist change
+  const inboxCount = useInboxStore(s => s.notes[workspaceShown]?.length ?? 0);
+  useEffect(() => {
+    void loadInboxNotes(workspaceShown);
+  }, [notesVersion, workspaceShown]);
 
   const onMenu = (path: string, kind: MenuKind) => (e: MouseEvent) => {
     e.preventDefault();
@@ -384,6 +390,15 @@ export function PagesView() {
           {collapsed[RECENT] ? null : recent.map(path => note(path))}
         </div>
       ) : null}
+      <SidebarRow
+        kind="view"
+        data-inbox
+        icon="inbox"
+        name={t("nav.inbox")}
+        selected={selected === INBOX_VIEW}
+        meta={inboxCount ? { kind: "badge", n: inboxCount } : undefined}
+        onClick={() => select(INBOX_VIEW)}
+      />
       {model.contexts.map(context => {
         const id = `pages:ctx:${context.name}`;
         const tint = CONTEXT_TINTS[context.index % CONTEXT_TINTS.length];
