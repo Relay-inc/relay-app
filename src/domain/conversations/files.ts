@@ -18,6 +18,8 @@ export function splitFiles(text: string): { text: string; files: string[] } {
     ? { text: text.slice(0, found.index), files: found[1].split("\n").filter(Boolean) }
     : { text, files: [] };
 }
+/** A path that is not absolute is a note, by its path in the vault: the agent reads it from there. */
+export const isNote = (path: string) => !path.startsWith("/");
 /** The name a path shows: its last part. */
 export const fileName = (path: string) => path.replace(/\/+$/, "").split("/").pop() || path;
 

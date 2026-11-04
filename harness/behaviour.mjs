@@ -960,7 +960,6 @@ const SCENARIOS = {
     await s.load();
     const { page } = s;
     const row = path => page.locator(`[data-page="${path}"]`);
-    const spec = "Contexts/Agency/Projects/Beacon Billing/Documents/Billing Spec.md";
     await click(page.getByRole("tab", { name: /^Pages/ }));
     await click(page.locator('[data-project="Beacon Billing"]'));
     await click(page.locator('[data-folder="Contexts/Agency/Projects/Beacon Billing/Documents"]'));
@@ -2094,6 +2093,59 @@ const SCENARIOS = {
       String((await s.local(["sel"])).sel).startsWith("page:/Users/me/Side vault/"),
     );
     s.fact("sel", (await s.local(["sel"])).sel);
+  },
+
+  // issue 370: @ in the composer picks a note as a chip and the message carries its path; Add to conversation (the
+  // page's menu and ⌥↵ in ⌘K) puts the chip in the note's project conversation
+  async noteMention(s) {
+    const kb = { fixture: "kb" };
+    await s.load(kb);
+    await s.load({ ...kb, sel: s.keys.switchTo });
+    const { page } = s;
+    const hosting = "Contexts/Agency/Projects/Northwind Portal/Documents/Hosting plan.md";
+    const chips = name => visible(page.getByRole("button", { name: new RegExp(`^${name}`) })).count();
+    await typeInComposer(page, "Check @hosti");
+    s.check("@ lists the notes by name", await waitText(page, "Hosting plan", 3000));
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check("picking one shows a chip", (await chips("Hosting plan")) === 1);
+    s.check("and takes the @name out of the text", (await composerValue(page)) === "Check ");
+    s.check("nothing sent by the pick", (await s.calls("send")).length === 0);
+    await page.keyboard.type("and summarise it");
+    await page.keyboard.press("Enter");
+    s.check("send called", await s.waitCall("send"));
+    const sent = (await s.calls("send"))[0]?.args.text ?? "";
+    s.check("the sent message carries the vault path", String(sent).includes(`\n${hosting}\n`));
+    s.check("and the typed text", String(sent).startsWith("Check and summarise it"));
+    s.fact("send text", sent);
+    // the page's menu: the chip lands in a new conversation of the note's project
+    await settle(page, 300);
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    await click(page.locator('[data-project="Northwind Portal"]'));
+    await click(page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]'));
+    await page.locator(`[data-page="${hosting}"]`).first().click({ button: "right" });
+    await click(button(page, "Add to conversation"));
+    await settle(page, 400);
+    s.check("Add to conversation shows the chip in a composer", (await chips("Hosting plan")) >= 1);
+    s.check(
+      "in a conversation of the note's project",
+      (await composer(page).getAttribute("placeholder")) === "Ask something about Northwind Portal…",
+    );
+    // ⌥↵ in ⌘K
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    await page.keyboard.type("billing spec");
+    await waitText(page, "Notes by name");
+    await page.keyboard.press("ArrowDown");
+    s.check("the hint offers ⌥↵", await hasText(page, "⌥↵ add to conversation"));
+    await page.keyboard.press("Alt+Enter");
+    await settle(page, 500);
+    s.check("⌥↵ puts the note's chip in a composer", (await chips("Billing Spec")) === 1);
+    s.check("⌘K is closed", !(await hasText(page, "Notes by name")));
+    s.check(
+      "in a conversation of that note's project",
+      (await composer(page).getAttribute("placeholder")) === "Ask something about Beacon…",
+    );
   },
 
   // K1, issue 369: a note pinned from its menu stands under Favourites above Recent, and is still there after a

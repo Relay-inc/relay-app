@@ -3,6 +3,7 @@ import type { PageFolder } from "../../../domain/navigation/pages";
 import { noteName, sortPages } from "../../../domain/navigation/pages";
 import { CONTEXT_TINTS } from "../../../domain/navigation/sidebar";
 import {
+  addToConversation,
   copyPagePath,
   duplicatePage,
   isProjectNote,
@@ -128,7 +129,10 @@ export function PagesView() {
   };
   const fileItems = (kind: "note" | "folder" | "top", path = ""): MenuItem[] => [
     ...(kind === "note"
-      ? [{ id: "fav", label: t(isFavourite(path) ? "pages.unfavourite" : "pages.favourite"), icon: "star" }]
+      ? [
+          { id: "fav", label: t(isFavourite(path) ? "pages.unfavourite" : "pages.favourite"), icon: "star" },
+          { id: "addchat", label: t("pages.addToChat"), icon: "talk" },
+        ]
       : []),
     ...(kind !== "note"
       ? [
@@ -212,6 +216,7 @@ export function PagesView() {
     if (verb === "tpl") void newFromTemplate(one, placeIn(two));
     else if (verb === "sort") setSort(one, two as "name" | "modified");
     else if (id === "fav") void toggleFavourite(path);
+    else if (id === "addchat") void addToConversation(path);
     else if (id.startsWith("page:") || id.startsWith("folder:"))
       setAsk({ kind: id.startsWith("page:") ? "page" : "folder", folder: arg });
     else if (id.startsWith("reveal:")) void revealPage(arg);

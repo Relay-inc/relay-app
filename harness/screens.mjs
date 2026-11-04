@@ -723,6 +723,30 @@ const VIEWS = {
     await page.keyboard.type("/");
     await settle(page);
   },
+  // @ in the composer: the notes to pick from, then a picked note as a chip (issue 370)
+  "composer-note-mention": async () => {
+    await open(page, server.url, { fixture: "kb", sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("Look at @bil");
+    await settle(page);
+  },
+  "composer-note-chip": async () => {
+    await open(page, server.url, { fixture: "kb", sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("Look at @billin");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+  },
+  "composer-note-chip-dark": async () => {
+    await open(page, server.url, { fixture: "kb-dark", sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("Look at @billin");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+  },
   // Relay's own /share-phone in the completion, next to the agent's (PR phone-share)
   "composer-share-slash": async () => {
     await open(page, server.url, { sel: keys.switchTo });

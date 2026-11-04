@@ -2,7 +2,13 @@ import { useEffect, useEffectEvent, useRef, useState, type ClipboardEvent, type 
 import type { Img } from "../../../domain/conversations/types";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { openProject, quickProjects, toggleQuickAsk } from "../../../application/navigation/navigation";
-import { openPageAtLine, openPageIn, openPagePath, placeIn } from "../../../application/navigation/pages";
+import {
+  addToConversation,
+  openPageAtLine,
+  openPageIn,
+  openPagePath,
+  placeIn,
+} from "../../../application/navigation/pages";
 import {
   type ContentHit,
   type NameHit,
@@ -231,9 +237,11 @@ export function QuickAskView() {
     el.style.height = "auto";
     el.style.height = el.scrollHeight + "px";
   };
-  const choose = (option: Option, beside = false) => {
+  const choose = (option: Option, beside = false, add = false) => {
     close();
-    if (option.kind === "project") openProject(option.name);
+    if (add && (option.kind === "note" || option.kind === "content"))
+      void addToConversation(option.path, option.folder);
+    else if (option.kind === "project") openProject(option.name);
     else if (option.kind === "meeting") openMeeting(option.meeting.id);
     else if (option.kind === "ticket") openFoundCard(option.provider, option.hit);
     else if (option.kind === "content" && !beside) openPageAtLine(option.folder, option.path, option.line);
@@ -276,7 +284,7 @@ export function QuickAskView() {
     e.preventDefault();
     const option = options[picked];
     if (option) {
-      choose(option, e.metaKey);
+      choose(option, e.metaKey, e.altKey);
       return;
     }
     const text = e.currentTarget.value.trim();
