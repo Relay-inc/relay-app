@@ -12,13 +12,12 @@ import {
   type Addr,
 } from "../../domain/calendar/followup";
 import { draftMessage } from "../../domain/mail/reply";
-import { MAIL } from "../../domain/navigation/views";
 import { voiceOf } from "../../domain/settings/voice";
 import type { Meeting } from "../../domain/calendar/types";
 import * as backend from "../../infrastructure/backend";
 import { makeStore } from "../make-store";
 import { settings } from "../settings/settings";
-import { select, toast } from "../navigation/navigation";
+import { toast } from "../navigation/navigation";
 import { meetingNote } from "./calendar";
 import { noteFor, remember } from "./meeting-view";
 
@@ -148,6 +147,3 @@ export async function saveFollowup(meeting: Meeting) {
   discardFollowup(meeting.id);
   toast(t("today.draftSaved"));
 }
-
-/** "Open in Mail": Relay's Mail view (it lists the inbox; the draft itself sits in the account's Drafts folder). */
-export const openMail = () => select(MAIL);

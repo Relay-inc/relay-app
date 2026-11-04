@@ -1301,7 +1301,7 @@ function handle(cmd: string, a: Args): unknown {
         if (followupMode === "fail") return Promise.reject("claude exited with code 1");
         return JSON.stringify({
           subject: "Recap Sprint review Northwind Portal – 1 okt",
-          body: "Hoi allemaal,\n\nKort verslag van de sprint review. De Indicata auto-simulatie gaat mee in sprint 24, en de hosting migratie plannen we op zaterdag 15 oktober van 06:00 tot 08:00.\n\nVolgende stappen\n- Ik: agenda in het kanaal posten, zodat Pieter het weet (vandaag)\n- Ik: Indicata-velden voor de simulator uitwerken (ticket)\n- Sofie: met Pieter afstemmen wie de beveiligingsaudit opneemt\n\nGroetjes",
+          body: "Hoi allemaal,\n\nKort verslag van de sprint review. De Indicata auto-simulatie gaat mee in sprint 24, en de hosting migratie plannen we op zaterdag 15 november van 06:00 tot 08:00.\n\nVolgende stappen\n- Ik: agenda in het kanaal posten, zodat Pieter het weet (vandaag)\n- Ik: Indicata-velden voor de simulator uitwerken (ticket)\n- Sofie: met Pieter afstemmen wie de beveiligingsaudit opneemt\n\nGroetjes",
         });
       }
       if (/git commit message/.test(a.system)) return git.commitMessage;

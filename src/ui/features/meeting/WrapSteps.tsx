@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { Icon } from "../../components/Icon";
-import { canDraftMail, openMail, startFollowup, useFollowupStore } from "../../../application/calendar/followup";
+import { accountFor, canDraftMail, startFollowup, useFollowupStore } from "../../../application/calendar/followup";
 import { followedUp } from "../../../domain/calendar/followup";
 import { summaryIn } from "../../../domain/calendar/wrapup";
 import { FollowupComposer } from "./FollowupComposer";
@@ -228,13 +228,10 @@ export function WrapSteps({ meeting, wrap, noteText }: { meeting: Meeting; wrap:
         </>
       ) : null}
       {summarySaved && followedUp(noteText) ? (
-        <button
-          className="flex items-center gap-1.5 mt-4.5 text-xs text-secondary cursor-pointer hover:text-label"
-          onClick={() => void openMail()}
-        >
+        <div className="flex items-center gap-1.5 mt-4.5 text-xs text-secondary">
           <Icon name="mail" className="glyph size-3.5" />
-          {t("meet.mail.saved")} · {t("meet.mail.open")} ↗
-        </button>
+          {t("meet.mail.saved", { account: accountFor(meeting) })}
+        </div>
       ) : summarySaved && canDraftMail() ? (
         <button className={`${OUTLINE} w-full justify-center mt-4.5`} onClick={() => void startFollowup(meeting)}>
           <Icon name="mail" className="glyph size-3.5" />
