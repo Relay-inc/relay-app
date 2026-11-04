@@ -111,7 +111,7 @@ impl AgentProvider for Claude {
     fn caps(&self) -> Caps {
         Caps { persistent: true, images: true, thinking: true, permissions: true, questions: true, subagents: true, fork: true,
             terminal: true, background: true, effort: true, limits: true, title: true, write: true, accounts: true,
-            live_model: true, control: true, picked: true, remote: true }
+            live_model: true, control: true, picked: true, steer: true, remote: true }
     }
     fn npm_package(&self) -> Option<&'static str> { Some("@anthropic-ai/claude-code") }
     fn self_update(&self) -> &'static [&'static str] { &["update"] }
@@ -210,6 +210,9 @@ impl AgentProvider for Claude {
     }
     fn set_model(&self, model: &str) -> Option<String> {
         Some(json!({"type": "control_request", "request_id": "model", "request": {"subtype": "set_model", "model": if model.is_empty() { "default" } else { model }}}).to_string())
+    }
+    fn interrupt(&self) -> Option<String> {
+        Some(json!({"type": "control_request", "request_id": "interrupt", "request": {"subtype": "interrupt"}}).to_string())
     }
     fn respond(&self, req: &agent_core::pending::Request, decision: &Value) -> Option<String> { permission::respond(req, decision) }
     fn input(&self, turn: &Turn) -> Option<String> { Some(stream::user_message(turn).to_string()) }
@@ -425,6 +428,9 @@ mod tests {
         let model = line(PROVIDER.set_model("sonnet"));
         assert_eq!((model["type"].as_str(), model["request"]["subtype"].as_str(), model["request"]["model"].as_str()), (Some("control_request"), Some("set_model"), Some("sonnet")));
         assert_eq!(line(PROVIDER.set_model(""))["request"]["model"], "default");
+        let stop = line(PROVIDER.interrupt());
+        assert_eq!((stop["type"].as_str(), stop["request"]["subtype"].as_str()), (Some("control_request"), Some("interrupt")));
+        assert!(PROVIDER.caps().steer);
     }
     #[test]
     fn terminal_commands() {

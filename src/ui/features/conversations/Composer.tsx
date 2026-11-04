@@ -56,6 +56,9 @@ import { ImageThumbs } from "../../components/ImageThumbs";
 import { allowOnlyCard } from "../../components/PermissionCard";
 import { PickMenu } from "./PickMenu";
 import { FileChips } from "../../components/FileChips";
+import { QueueChips } from "./QueueChips";
+import { useKeyLabel } from "../../hooks/useKeyLabel";
+import { canSteer } from "../../../domain/conversations/queue";
 import { onPasteFiles } from "../../components/image-files";
 import { uiRequests } from "../../../application/navigation/requests";
 import "../../styles/conversations.css";
@@ -192,6 +195,8 @@ export function Composer({ className }: { className: string }) {
   const attached = useDraftsStore(s => s.attached);
   const files = useDraftsStore(s => s.files);
   const busy = useConversationsStore(s => s.status[selected] === "busy");
+  const sendKey = useKeyLabel("chat.send");
+  const steerKey = useKeyLabel("chat.steer");
   const dictation = useDictationStore(s => s.phase);
   const level = useDictationStore(s => s.level);
   const progress = useDictationStore(s => s.progress);
@@ -286,6 +291,12 @@ export function Composer({ className }: { className: string }) {
   };
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (onCompletionKey(e)) return;
+    // ⌥↵ while a turn runs ends it and sends this at once; without a turn it sends as ↵ does
+    if (isKey(e.nativeEvent, "chat.steer") && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      if (!e.repeat) sendMsg(undefined, undefined, [], [], true);
+      return;
+    }
     // Settings › Shortcuts may move sending to ⌘↵, the textarea then makes the new line on Enter itself
     if (isKey(e.nativeEvent, "chat.send") && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -338,6 +349,7 @@ export function Composer({ className }: { className: string }) {
           : t("ph.general");
   return (
     <div className={`relay-composer flex-none ${className}`}>
+      <QueueChips chatKey={selected} className="mb-2 px-1" />
       <div
         className={`relative rounded-[14px] bg-raised border pt-3 pr-3 pb-2 pl-3.5 shadow-md focus-within:border-accent ${dropping ? "border-accent" : "border-separator-strong"}`}
       >
@@ -432,6 +444,14 @@ export function Composer({ className }: { className: string }) {
           }}
           onPaste={e => onPasteFiles(e, attach, attachPaths)}
         ></textarea>
+        {/* while a turn runs: what each key does with the message; an agent that cannot steer queues on both */}
+        {busy && !view.terminal ? (
+          <div className="mt-1.5 text-xs text-secondary">
+            {view.agent && !canSteer(view.agent.caps)
+              ? t("composer.hintBusyQueueOnly", { queue: sendKey, steer: steerKey, agent: view.agent.name })
+              : t("composer.hintBusy", { queue: sendKey, steer: steerKey })}
+          </div>
+        ) : null}
         <div className="flex items-center gap-0.5 mt-2 -ml-1.5 text-secondary">
           {/* the + opens the file dialog; what it picks joins what is pasted or dropped, by its path */}
           <button

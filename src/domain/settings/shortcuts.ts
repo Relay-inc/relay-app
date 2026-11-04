@@ -30,6 +30,7 @@ export const COMMANDS = {
   "app.workspace9": { scope: "app", keys: ["ctrl+Digit9"] },
   "app.sidebarTab": { scope: "app", keys: ["meta+Period"] },
   "chat.send": { scope: "chat", keys: ["Enter"] },
+  "chat.steer": { scope: "chat", keys: ["alt+Enter"] },
   "chat.find": { scope: "chat", keys: ["meta+KeyF", "ctrl+KeyF"] },
   "card.confirm": { scope: "card", keys: ["Enter"] },
   "today.next": { scope: "today", keys: ["j", "ArrowDown"] },

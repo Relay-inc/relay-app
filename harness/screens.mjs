@@ -52,6 +52,22 @@ const unfold = async name => {
     .click();
   await settle(page);
 };
+// a turn runs (a message sent), then two more are queued with Enter: chips above the composer and the busy hint
+async function queueTwo() {
+  await page.evaluate(() => (window.__harness.autoReply = false)); // the turn keeps running
+  const field = page.locator("textarea").locator("visible=true").last();
+  for (const text of [
+    "Export the invoices for Northwind",
+    "Then write the test for the export",
+    "Mail Sofie Claes the result",
+  ]) {
+    await field.click();
+    await page.keyboard.type(text);
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+  }
+  await waitText("Mail Sofie Claes the result");
+}
 // the Meeting view: a meeting's card on Today opens it
 const BRIEFING = [
   "## Briefing",
@@ -89,7 +105,9 @@ const meetingBriefing = async (fixture, title, briefed = false) => {
         window.__harness.meetingNote(
           id,
           "Calendar/2026-10-01 Daily standup.md",
-          ["---", "type: Meeting", `event: "${id}"`, "---", "", "# Daily standup", "", ...brief, "## Notes", ""].join("\n"),
+          ["---", "type: Meeting", `event: "${id}"`, "---", "", "# Daily standup", "", ...brief, "## Notes", ""].join(
+            "\n",
+          ),
         );
       },
       [BRIEFING],
@@ -104,39 +122,42 @@ const meetingBriefing = async (fixture, title, briefed = false) => {
 const meetingLive = async fixture => {
   await open(page, server.url, { fixture });
   const start = Math.floor((await page.evaluate(() => window.__harness.now)) / 1000);
-  await page.evaluate(([start, BRIEFING_]) => {
-    const id = `northwind@${start}`;
-    window.__harness.meetingNote(
-      id,
-      "Calendar/2026-10-01 Northwind sync Tom.md",
-      [
-        "---",
-        "type: Meeting",
-        `event: "${id}"`,
-        "with:",
-        '  - "Tom Willems"',
-        "created: 2026-10-01",
-        "language: nl",
-        "---",
-        "",
-        "# Northwind sync Tom",
-        "[[2026-10-01|Thursday October 1st, 2026]]",
-        "",
-        ...BRIEFING_,
-        "## Notes",
-        "- [09:31] Sprint 23 demo: API-koppeling werkt op staging, geen issues",
-        "- [09:33] = Pricing-simulator komt in sprint 24, niet 25",
-        "- [09:35] Lena bouwt de rapport-API los van de rest",
-        "- [09:38] ! Agenda in het kanaal posten zodat Sofie het weet",
-        "- [09:40] ? Wie neemt de beveiligingsaudit op? Tom checkt met Sofie",
-        '- [09:44] > Me: "Oké, zaterdag de vijftiende dan. Zes tot acht uur?"',
-        "",
-      ].join("\n"),
-    );
-    window.__harness.deepLink(
-      `relay://meeting?do=note&uid=northwind&start=${start}&end=${start + 1800}&title=${encodeURIComponent("Northwind sync Tom")}&with=${encodeURIComponent("Tom Willems <tom@northwind.example>")}`,
-    );
-  }, [start, BRIEFING]);
+  await page.evaluate(
+    ([start, BRIEFING_]) => {
+      const id = `northwind@${start}`;
+      window.__harness.meetingNote(
+        id,
+        "Calendar/2026-10-01 Northwind sync Tom.md",
+        [
+          "---",
+          "type: Meeting",
+          `event: "${id}"`,
+          "with:",
+          '  - "Tom Willems"',
+          "created: 2026-10-01",
+          "language: nl",
+          "---",
+          "",
+          "# Northwind sync Tom",
+          "[[2026-10-01|Thursday October 1st, 2026]]",
+          "",
+          ...BRIEFING_,
+          "## Notes",
+          "- [09:31] Sprint 23 demo: API-koppeling werkt op staging, geen issues",
+          "- [09:33] = Pricing-simulator komt in sprint 24, niet 25",
+          "- [09:35] Lena bouwt de rapport-API los van de rest",
+          "- [09:38] ! Agenda in het kanaal posten zodat Sofie het weet",
+          "- [09:40] ? Wie neemt de beveiligingsaudit op? Tom checkt met Sofie",
+          '- [09:44] > Me: "Oké, zaterdag de vijftiende dan. Zes tot acht uur?"',
+          "",
+        ].join("\n"),
+      );
+      window.__harness.deepLink(
+        `relay://meeting?do=note&uid=northwind&start=${start}&end=${start + 1800}&title=${encodeURIComponent("Northwind sync Tom")}&with=${encodeURIComponent("Tom Willems <tom@northwind.example>")}`,
+      );
+    },
+    [start, BRIEFING],
+  );
   await waitText("Start notes");
   await click("Record");
   const said = [
@@ -148,7 +169,10 @@ const meetingLive = async fixture => {
     [0, "Dan werk ik die vier velden uit in een ticket."],
   ].map(([track, text], i) => ({ at: 1020 + i * 14, track, text }));
   await page.evaluate(lines => window.__harness.recordingTick(1104, 0.35, 0.2, { lines, upto: 1100 }), said);
-  await waitText("Dan werk ik die vier velden", 4000).catch(async e => { await page.screenshot({ path: `${dir}/debug.png` }); throw e; });
+  await waitText("Dan werk ik die vier velden", 4000).catch(async e => {
+    await page.screenshot({ path: `${dir}/debug.png` });
+    throw e;
+  });
   // the pointer on a turn offers to quote it
   await page.getByText("Kenteken, kilometerstand").hover();
   await settle(page);
@@ -232,7 +256,17 @@ const todayDay = async (variant, dark) => {
         window.__harness.meetingNote(
           e,
           `Calendar/2026-10-01 ${title} (${name}).md`,
-          ["---", "type: Meeting", `event: "${e}"`, ...(body.followed ? ["followed-up: true"] : []), "---", "", `# ${title}`, "", ...body.lines].join("\n"),
+          [
+            "---",
+            "type: Meeting",
+            `event: "${e}"`,
+            ...(body.followed ? ["followed-up: true"] : []),
+            "---",
+            "",
+            `# ${title}`,
+            "",
+            ...body.lines,
+          ].join("\n"),
         );
       };
       const brief = [
@@ -252,9 +286,29 @@ const todayDay = async (variant, dark) => {
         "",
       ];
       // the meeting of 08:30 is wrapped (and followed up) in the mornings, owed its summary in T3
-      if (variant === "t3") note("done", -60, "Northwind sync Tom", { lines: ["## Notes", "- [08:34] Demo liep goed", "- [08:41] ! Agenda posten", ""] });
-      else note("done", -60, "Northwind sync Tom", { followed: true, lines: ["## Notes", "- [08:34] Demo", "", "## Summary", "Kort.", ""] });
-      if (variant === "t1") note("sync", 50, "Northwind sync Tom", { lines: ["## Briefing", "### Goal", "Scope vastleggen.", "", "### My points", "- [ ] Een punt", "", "## Notes", ""] });
+      if (variant === "t3")
+        note("done", -60, "Northwind sync Tom", {
+          lines: ["## Notes", "- [08:34] Demo liep goed", "- [08:41] ! Agenda posten", ""],
+        });
+      else
+        note("done", -60, "Northwind sync Tom", {
+          followed: true,
+          lines: ["## Notes", "- [08:34] Demo", "", "## Summary", "Kort.", ""],
+        });
+      if (variant === "t1")
+        note("sync", 50, "Northwind sync Tom", {
+          lines: [
+            "## Briefing",
+            "### Goal",
+            "Scope vastleggen.",
+            "",
+            "### My points",
+            "- [ ] Een punt",
+            "",
+            "## Notes",
+            "",
+          ],
+        });
       if (variant === "t2") note("sync", 20, "Northwind sync Tom", { lines: [...brief, "## Notes", ""] });
     }, variant);
     // Today again, so it reads them
@@ -1098,6 +1152,32 @@ const VIEWS = {
     await page.getByRole("button", { name: "View details" }).click();
     await waitText("All of Claude Code", 10000);
     await settle(page);
+  },
+  // a turn runs and two messages are queued as chips above the composer, the hint naming both keys (#389)
+  "queue-chips": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await queueTwo();
+  },
+  "queue-chips-dark": async () => {
+    await open(page, server.url, { sel: keys.switchTo, fixture: "dark" });
+    await waitText(markers.switchEnd);
+    await queueTwo();
+  },
+  // the same on an agent that cannot steer: ⌥↵ queues too and the hint says so (#389)
+  "queue-chips-codex": async () => {
+    await open(page, server.url);
+    const key = await page.evaluate(() => {
+      const chats = JSON.parse(localStorage.getItem("chats") || "{}");
+      return Object.keys(chats).find(k => chats[k].provider === "codex" && chats[k].project && !chats[k].closed);
+    });
+    await open(page, server.url, { sel: key });
+    await queueTwo();
+  },
+  // Settings › Shortcuts: Send (queues while a turn runs) and Steer, both rebindable (#389)
+  "settings-shortcuts-steer": async () => {
+    await settingsPage("Shortcuts");
+    await intoView("Steer: end the running turn and send now");
   },
   "cmd-k": async () => {
     await open(page, server.url, { sel: keys.switchTo });
@@ -2254,7 +2334,10 @@ const VIEWS = {
   // the cursor on the first line of the notes: its time stays out of the text
   "meeting-live-cursor": async () => {
     await meetingLive("calendar");
-    await page.locator(".notes-editor .cm-line").first().click({ position: { x: 400, y: 8 } });
+    await page
+      .locator(".notes-editor .cm-line")
+      .first()
+      .click({ position: { x: 400, y: 8 } });
     await page.keyboard.press("Home");
     await page.mouse.move(10, 10);
     await settle(page);

@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- While a turn runs, Enter now holds your message as a chip above the composer and sends it when the turn ends; click a chip to edit it, drag to reorder, × to remove. ⌥Enter steers instead: it ends the running turn (what it wrote so far stays) and sends your message at once. Claude Code can steer; Codex and OpenCode queue on both keys. Both keys can be changed in Settings › Shortcuts (#PR).
+
 ### Changed
 
 - New meeting notes go into `Calendar/Meetings/<year>/` and link their project in `about:` when the title names one. A recording's transcript is saved as a note next to its meeting (`….transcript.md`, linked to the meeting note) and its audio goes to `Attachments/<year>/` (or Obsidian's attachment folder). A vault can choose other folders under `homes` in `.relay/config.json`. Existing notes stay where they are and are still found (#384).

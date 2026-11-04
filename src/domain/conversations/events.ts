@@ -24,7 +24,11 @@ export type EventEnv = {
   imageUrl: (mediaType: string, data: string) => string;
 };
 /** What the reducer asks for after an event. */
-export type Effect = { kind: "save-chats" } | { kind: "notify"; key: string; body: string } | { kind: "snapshot" };
+export type Effect =
+  | { kind: "save-chats" }
+  | { kind: "notify"; key: string; body: string }
+  | { kind: "snapshot" }
+  | { kind: "queue-next"; key: string };
 
 export function push(state: Pick<ConversationsState, "messages">, key: string, item: Item) {
   (state.messages[key] ||= []).push(item);
@@ -257,6 +261,8 @@ function onTurnEnd(state: ConversationsState, key: string, end: EventOf<"turn_en
     effects.push({ kind: "save-chats" });
   }
   effects.push({ kind: "snapshot" });
+  // the next message Relay holds goes out once a turn ended well and nothing else is on its way
+  if (end.ok && !state.queued[key]) effects.push({ kind: "queue-next", key });
   return effects;
 }
 

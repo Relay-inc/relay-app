@@ -244,6 +244,17 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
     Ok(())
 }
 
+/// Ends the running turn without ending the process: what it streamed so far stays in the session. False when
+/// nothing runs or the provider cannot ([`Caps::steer`]); the caller then only queues.
+pub(crate) fn interrupt(state: &App, project: &str) -> Result<bool, String> {
+    let mut procs = state.procs.lock().unwrap();
+    let Some(x) = procs.get_mut(project) else { return Ok(false) };
+    let p = crate::agents::get_or_first(Some(x.provider));
+    let Some(line) = p.interrupt().filter(|_| p.caps().steer) else { return Ok(false) };
+    writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
 pub(crate) fn stop(app: &AppHandle, state: &App, project: &str) {
     if orch::is_worker(project) { orch::stop(app, project); return; }
     if let Some(mut p) = state.procs.lock().unwrap().remove(project) { p.child.kill().ok(); }

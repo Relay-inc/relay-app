@@ -118,7 +118,22 @@ test("a turn that ends ok: done with its duration, idle, a banner with the last 
     { kind: "notify", key: "c:1", body: "All set" },
     { kind: "save-chats" },
     { kind: "snapshot" },
+    // Relay's own queue sends its next message now
+    { kind: "queue-next", key: "c:1" },
   ]);
+});
+
+test("a turn end with more queued, or a failed one, does not send the next held message", () => {
+  const busy = (n: number) =>
+    produce(fresh(), draft => {
+      draft.status["c:1"] = "busy";
+      draft.queued["c:1"] = n;
+    });
+  const next = (state: ReturnType<typeof fresh>, ok: boolean) =>
+    run(state, { type: "turn_end", ok, error: ok ? null : "boom" }).effects.some(e => e.kind === "queue-next");
+  assert.ok(next(busy(1), true));
+  assert.ok(!next(busy(2), true));
+  assert.ok(!next(busy(1), false));
 });
 
 test("the end of a turn counts what that turn did since the last end, and what it cost", () => {

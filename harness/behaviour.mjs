@@ -331,6 +331,104 @@ const SCENARIOS = {
     s.fact("typed", (await s.local(["typed"])).typed);
   },
 
+  // Enter while a turn runs queues (chips above the composer, nothing sent until the turn ends), ⌥Enter steers
+  async queueSteer(s) {
+    await s.load();
+    await s.load({ sel: s.keys.switchTo });
+    const { page } = s;
+    const key = s.keys.switchTo;
+    const chip = text => visible(page.getByRole("button", { name: text })).first();
+    const sends = async () => (await s.calls("send")).map(c => c.args.text);
+    const endTurn = async () => {
+      await page.evaluate(key => window.__harness.stream({ key, deltas: 4, ratePerSecond: 0 }), key);
+      await settle(page, 300);
+    };
+    await typeInComposer(page, "Export the invoices for Northwind");
+    await page.keyboard.press("Enter");
+    await s.waitCall("send");
+    s.check("a message with no turn running is sent", (await sends()).length === 1);
+    s.check("the hint names both keys while the turn runs", await waitText(page, "↵ queue · ⌥↵ steer"));
+    for (const text of ["Then write the test", "Also update the docs", "Mail Sofie Claes the result"]) {
+      await typeInComposer(page, text);
+      await page.keyboard.press("Enter");
+      await settle(page, 200);
+    }
+    s.check(
+      "queued messages are chips, nothing more was sent",
+      (await sends()).length === 1 && (await chip("Then write the test").count()) === 1,
+    );
+    s.check("the composer is empty after queueing", (await composerValue(page)) === "");
+    // edit: a click turns the chip into a field
+    await click(chip("Also update the docs"));
+    await page.keyboard.press("Meta+a");
+    await page.keyboard.type("Also update the changelog");
+    await page.keyboard.press("Enter");
+    await settle(page, 200);
+    s.check("a chip is edited in place", (await chip("Also update the changelog").count()) === 1);
+    // reorder: drag the last chip before the first
+    const from = await chip("Mail Sofie Claes the result").boundingBox();
+    const to = await chip("Then write the test").boundingBox();
+    await page.mouse.move(from.x + 10, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to.x + 4, to.y + to.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await settle(page, 200);
+    const order = await page.evaluate(() =>
+      [...document.querySelectorAll("[data-queued]")].map(el => el.firstElementChild.textContent.trim()),
+    );
+    s.fact("chips after the drag", order);
+    s.check("a chip is dragged to the front", order[0] === "Mail Sofie Claes the result" && order.length === 3);
+    // remove: × on a hovered chip
+    await chip("Also update the changelog").hover();
+    await visible(page.getByRole("button", { name: "Remove queued message" }))
+      .last()
+      .click();
+    await settle(page, 200);
+    s.check("a chip is removed", (await chip("Also update the changelog").count()) === 0);
+    // switching to another conversation and back keeps them (the chips are per conversation)
+    const titles = await page.evaluate(() => window.__harness.titles);
+    await click(nav(page).getByText(titles.permission, { exact: true }).first());
+    s.check(
+      "another conversation has no chips",
+      (await page.evaluate(() => document.querySelectorAll("[data-queued]").length)) === 0,
+    );
+    await click(nav(page).getByText(titles.switchTo, { exact: true }).first());
+    s.check("the chips survive switching away and back", (await chip("Then write the test").count()) === 1);
+    // the turn ends: the chips go out one by one, each after the turn before it
+    await endTurn();
+    let sent = await sends();
+    s.check(
+      "the first chip is sent when the turn ends, the others wait",
+      sent.length === 2 && sent[1].includes("Mail Sofie Claes"),
+    );
+    await endTurn();
+    sent = await sends();
+    s.check(
+      "the second chip goes after the next turn end",
+      sent.length === 3 && sent[2].includes("Then write the test"),
+    );
+    await endTurn();
+    s.check("the queue is empty", (await page.evaluate(() => document.querySelectorAll("[data-queued]").length)) === 0);
+    // Steer: ⌥Enter ends the turn and sends at once
+    await typeInComposer(page, "Stop, use the other template");
+    await page.keyboard.press("Enter");
+    await s.waitCall("send");
+    const before = (await s.calls("send")).length;
+    await typeInComposer(page, "Wrong file: use invoices-2026.csv");
+    await page.keyboard.press("Alt+Enter");
+    await s.waitCall("interrupt");
+    await settle(page, 300);
+    const calls = (await s.calls()).filter(c => c.cmd === "interrupt" || c.cmd === "send").map(c => c.cmd);
+    s.check(
+      "Steer interrupts, then sends",
+      calls.slice(-2).join() === "interrupt,send" && (await s.calls("send")).length === before + 1,
+    );
+    s.check(
+      "nothing is queued by Steer",
+      (await page.evaluate(() => document.querySelectorAll("[data-queued]").length)) === 0,
+    );
+  },
+
   async stop(s) {
     await s.load();
     await s.load({ sel: s.keys.switchTo });
@@ -1466,7 +1564,9 @@ const SCENARIOS = {
     // the day's meetings are blocks in the strip, the running or next one is the card above the queue
     const block = title =>
       visible(page.locator('section[aria-label="Day"]').getByRole("button", { name: title, exact: true })).first();
-    await block("Sprint review Northwind Portal").waitFor({ timeout: 4000 }).catch(() => {});
+    await block("Sprint review Northwind Portal")
+      .waitFor({ timeout: 4000 })
+      .catch(() => {});
     s.check("the day strip has the meetings", (await block("Sprint review Northwind Portal").count()) === 1);
     s.check(
       "every meeting of the day, the one an hour ago and the one in 90 minutes too",
@@ -1555,10 +1655,15 @@ const SCENARIOS = {
   async calendarNoClaude(s) {
     await s.load({ fixture: "calendar" });
     const { page } = s;
-    await page.locator('section[aria-label="Day"]').getByRole("button", { name: "Sprint review Northwind Portal", exact: true }).waitFor();
+    await page
+      .locator('section[aria-label="Day"]')
+      .getByRole("button", { name: "Sprint review Northwind Portal", exact: true })
+      .waitFor();
     await click(
       visible(
-        page.locator('section[aria-label="Day"]').getByRole("button", { name: "Sprint review Northwind Portal", exact: true }),
+        page
+          .locator('section[aria-label="Day"]')
+          .getByRole("button", { name: "Sprint review Northwind Portal", exact: true }),
       ).first(),
       400,
     );

@@ -717,6 +717,7 @@ const caps = (all: boolean) => ({
   liveModel: all,
   control: all,
   picked: all,
+  steer: all,
   remote: all,
   brain: all,
 });

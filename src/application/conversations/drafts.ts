@@ -1,3 +1,4 @@
+import { restored, storable } from "../../domain/conversations/queue";
 import type { DraftsState } from "../../domain/conversations/state";
 import { storage } from "../../infrastructure/storage";
 import { makeStore } from "../make-store";
@@ -9,7 +10,10 @@ export const useDraftsStore = makeStore<DraftsState>(() => ({
   attached: [],
   files: [],
   machine: {},
+  queue: restored(storage.get("queued", {})),
 }));
+/** Keeps the queued messages over a restart (text and files, see domain/conversations/queue.ts). */
+export const saveQueue = () => storage.set("queued", storable(useDraftsStore.getState().queue));
 // typed in another Relay window
 storage.watch("typed", () =>
   useDraftsStore.setState(draft => {

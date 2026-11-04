@@ -125,7 +125,7 @@ export function ShortcutsPage() {
         {rows(WORKSPACE_KEYS)}
       </Section>
       <Section title={t("keys.sec.chat")} rows>
-        {rows(["chat.send"])}
+        {rows(["chat.send", "chat.steer"])}
         {/* the textarea makes the new line itself, on whichever Enter does not send */}
         <Field label={t("keys.chat.newline")}>
           <kbd className={KEY}>{bindingLabel(send === "Enter" ? "shift+Enter" : "Enter")}</kbd>
