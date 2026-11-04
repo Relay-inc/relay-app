@@ -86,3 +86,22 @@ test("a project with only meetings shows only the Meetings section", () => {
   );
   assert.deepEqual(shownSections({ meetings: [], documents: [] }), []);
 });
+
+test("at a context, projects are a group of their own and not also documents; at a project they stay documents", () => {
+  const notes = [
+    note("Contexts/Studio/Projects/Harbor.md", { k: "Project", context: ["Studio"] }),
+    note("Contexts/Studio/Documents/Brand.md", { context: ["Studio"] }),
+  ];
+  const context = linkedTo(notes, "Studio", "", true);
+  assert.deepEqual(
+    context.projects.map(n => n.t),
+    ["Harbor"],
+  );
+  assert.deepEqual(
+    context.documents.map(n => n.t),
+    ["Brand"],
+  );
+  const project = linkedTo([note("Features/Search.md", { k: "Feature", about: ["Harbor"] })], "Harbor");
+  assert.equal(project.projects.length, 0);
+  assert.equal(project.documents.length, 1);
+});

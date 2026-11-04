@@ -105,10 +105,11 @@ export const STAGES = ["planned", "briefed", "wrapped"];
 const STATUSES = ["Active", "Blocked", "Quiet", "Paused"];
 
 /** One condition: a key is a value (any of its values), or a date key within a range (ISO dates, either end open). */
-export type Filter = { key: string; is?: string; from?: string; to?: string; outside?: string };
+export type Filter = { key: string; is?: string; from?: string; to?: string; outside?: string; apart?: boolean };
 /** The filter "Show all" opens a group of the Pages tree with: the group's own rule (domain/workspace/linked.ts) as one
  *  condition. A note is in when its `about:` or `context:` names `is`, outside the folder `outside` (whose notes the tree
- *  shows already) and not that note itself; a person is also in when a note that is in names them in `with:`. */
+ *  shows already) and not that note itself (`apart`: a context's group Projects is its own, so Documents has none of
+ *  them); a person is also in when a note that is in names them in `with:`. */
 export const LINKED = "linked";
 /** A collection as it is shown: which, in which context (""= any), table or board, what narrows and orders it. */
 export type View = {
@@ -150,11 +151,12 @@ export const columnOf = (collection: CollectionId, key: string): Column =>
   DEFS[collection].columns.find(c => c.key === key) ?? col(key, key === "date" ? "date" : "text");
 
 /** Whether a row belongs to a collection by its `type:`. */
-export function inCollection(row: Row, collection: CollectionId, grouped = false) {
+export function inCollection(row: Row, collection: CollectionId, grouped = false, apart = false) {
   const kinds = DEFS[collection].kinds;
   const kind = row.k.toLowerCase();
   // a tree group's documents are every note that is no meeting, thread or person (an untyped one too)
-  if (grouped && collection === "documents") return !["meeting", "thread", "person"].includes(kind);
+  if (grouped && collection === "documents")
+    return apart ? !TAKEN.has(kind) : !["meeting", "thread", "person"].includes(kind);
   return kinds === "rest" ? !!kind && !TAKEN.has(kind) : kinds.includes(kind);
 }
 const matches = (row: Row, f: Filter) => {
@@ -177,7 +179,12 @@ function linkedTest(rows: Row[], f: Filter, collection: CollectionId) {
 export const scoped = (rows: Row[], view: Pick<View, "collection" | "context"> & { filters?: Filter[] }) =>
   rows.filter(
     row =>
-      inCollection(row, view.collection, !!view.filters?.some(f => f.key === LINKED)) &&
+      inCollection(
+        row,
+        view.collection,
+        !!view.filters?.some(f => f.key === LINKED),
+        !!view.filters?.some(f => f.key === LINKED && f.apart),
+      ) &&
       (!view.context || (row.props.context ?? []).some(c => same(c, view.context))),
   );
 

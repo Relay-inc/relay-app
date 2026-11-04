@@ -95,16 +95,19 @@ export const findPages = (paths: string[], query: string, max = 50) =>
     .sort((a, b) => byName(noteName(a), noteName(b)))
     .slice(0, max);
 
-/** The notes conversations touched last in this workspace (`root`), newest first, each once, only ones that exist. */
+/** The notes conversations touched last in this workspace (`root`), newest first, each once, only ones that exist.
+ *  `removed` is when each note was taken off the list (the time of its last touch then): only a later touch brings it
+ *  back. */
 export function recentPages(
   touches: { root: string; path: string; at: number }[],
   root: string,
   exists: (path: string) => boolean,
   max = 5,
+  removed: Record<string, number> = {},
 ) {
   const seen = new Set<string>();
   return [...touches]
-    .filter(touch => touch.root === root && exists(touch.path))
+    .filter(touch => touch.root === root && exists(touch.path) && touch.at > (removed[touch.path] ?? -Infinity))
     .sort((a, b) => b.at - a.at)
     .map(touch => touch.path)
     .filter(path => !seen.has(path) && seen.add(path))
