@@ -2128,7 +2128,7 @@ const VIEWS = {
   "meeting-briefing": async () => meetingBriefing("calendar", "Daily standup", true),
   "meeting-briefing-empty": async () => meetingBriefing("calendar", "Sprint review Northwind Portal"),
   "meeting-briefing-empty-dark": async () => meetingBriefing("calendar-dark", "Sprint review Northwind Portal"),
-  // the Wrap-up step (#364): the draft summary with next steps and decisions, while it is written, accepted, and failed
+  // the Wrap-up step (#376): the draft summary with next steps and decisions, while it is written, accepted, and failed
   "meeting-wrapup-draft": async () => meetingWrapup("calendar", "ok"),
   "meeting-wrapup-draft-dark": async () => meetingWrapup("calendar-dark", "ok"),
   "meeting-wrapup-generating": async () => meetingWrapup("calendar", "slow"),
