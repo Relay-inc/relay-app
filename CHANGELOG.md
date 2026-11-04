@@ -13,6 +13,11 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- Record a meeting that is not in your calendar: "Record a meeting now" on top of Today starts recording at once,
+  and the transcript and meeting note follow as for any recorded meeting.
+
 ## [0.0.44] - 2026-11-02
 
 ### Added

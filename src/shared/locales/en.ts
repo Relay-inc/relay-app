@@ -1783,6 +1783,8 @@ const en = {
   "voice.summarizeHelp":
     "After the transcript, a conversation makes the meeting note and summarises it, the way the vault does meeting notes.",
   "rec.record": "Record",
+  "rec.now": "Record a meeting now",
+  "rec.nowTitle": "Meeting {time}",
   "rec.recordHelp": "Records your microphone and what the Mac plays, then transcribes it on this Mac",
   "rec.stop": "Stop",
   "rec.cancel": "Cancel",
