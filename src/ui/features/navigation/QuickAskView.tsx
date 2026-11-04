@@ -1,7 +1,20 @@
 import { useEffect, useEffectEvent, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import type { Img } from "../../../domain/conversations/types";
 import { useNavigationStore } from "../../../application/navigation/store";
-import { openProject, quickProjects, toggleQuickAsk } from "../../../application/navigation/navigation";
+import {
+  newHere,
+  openDrawer,
+  openProject,
+  openSettingsTab,
+  quickChats,
+  quickProjects,
+  select,
+  toggleQuickAsk,
+} from "../../../application/navigation/navigation";
+import { selectedProject } from "../../../application/conversations/selectors";
+import { TABS } from "../../../application/settings/window";
+import { WAIT } from "../../../domain/navigation/views";
+import { arrange, isQuestion, matchCommands } from "../../../domain/navigation/palette";
 import {
   addToConversation,
   openPageAtLine,
@@ -19,7 +32,7 @@ import {
   templatesOf,
 } from "../../../application/navigation/kb";
 import { activeFolder, workspaces } from "../../../application/navigation/workspaces";
-import { filterPrefix, matchesLabel, queryOf, takeFilters } from "../../../domain/navigation/search";
+import { filterPrefix, queryOf, takeFilters } from "../../../domain/navigation/search";
 import { quickSend } from "../../../application/conversations/actions";
 import { knownTickets, openFoundCard, searchTickets, type Found } from "../../../application/board/board";
 import { findMeetings, timeOf } from "../../../application/calendar/calendar";
@@ -40,12 +53,13 @@ const close = () => toggleQuickAsk(false);
 type Located = { folder: string };
 type Key = Parameters<ReturnType<typeof useT>["t"]>[0];
 type Option =
+  | { kind: "chat"; key: string; name: string; context: string }
   | ({ kind: "project" } & ReturnType<typeof quickProjects>[number])
   | { kind: "meeting"; meeting: Meeting }
   | ({ kind: "ticket" } & Found)
   | ({ kind: "note" } & NameHit & Located)
   | ({ kind: "content" } & ContentHit & Located)
-  | { kind: "action"; id: string; label: string };
+  | { kind: "action"; id: string; label: string; run?: () => void };
 const NO_NOTES: { names: NameHit[]; content: ContentHit[] } = { names: [], content: [] };
 /** The folders of a note's path that tell where it is, the last two. */
 const whereIs = (path: string) => path.split("/").slice(0, -1).slice(-2).join("/");
@@ -53,16 +67,19 @@ const ticketKey = (found: Found) => `${found.provider.id}:${found.hit.id}`;
 const rowKey = (option: Option) =>
   option.kind === "project"
     ? option.name
-    : option.kind === "meeting"
-      ? `meeting:${option.meeting.id}`
-      : option.kind === "ticket"
-        ? ticketKey(option)
-        : option.kind === "action"
-          ? `action:${option.id}`
-          : `${option.kind}:${option.folder}:${option.path}${option.kind === "content" ? `:${option.line}` : ""}`;
+    : option.kind === "chat"
+      ? `chat:${option.key}`
+      : option.kind === "meeting"
+        ? `meeting:${option.meeting.id}`
+        : option.kind === "ticket"
+          ? ticketKey(option)
+          : option.kind === "action"
+            ? `action:${option.id}`
+            : `${option.kind}:${option.folder}:${option.path}${option.kind === "content" ? `:${option.line}` : ""}`;
 /** Meetings and loaded cards show from this many characters, the trackers are searched once typing pauses this long (ms). */
 const MIN_QUERY = 3;
 const HINT = {
+  chat: "qk.chatHint",
   project: "qk.openHint",
   meeting: "qk.meetingHint",
   ticket: "qk.ticketHint",
@@ -72,10 +89,9 @@ const HINT = {
 } as const;
 const MIN_NOTES = 2;
 // the notes' groups always say what they are; a lone project or ticket list needs no heading
-const NOTE_GROUPS: string[] = ["qk.groupNotes", "qk.groupContent", "qk.groupActions"];
+const NOTE_GROUPS: string[] = ["qk.groupNotes", "qk.groupContent", "qk.groupCommands"];
 const PAUSE = 250;
 const PAUSE_NOTES = 60;
-const MAX_ACTIONS = 4;
 
 /** Cmd-K: open a matching project or ticket, or send a quick question in the background. Mounted while `quickAsk`. */
 export function QuickAskView() {
@@ -100,10 +116,12 @@ export function QuickAskView() {
   const space = spaces[searched] ?? spaces.find(w => w.active) ?? spaces[0];
   const folder = space?.folder ?? "";
   const found = useDerived(() => quickProjects(typed));
-  const asking = !!(images.length || files.length || typed.includes("\n"));
-  // a filter narrows the notes: the projects, meetings and tickets stand aside
+  // a question (6+ words, or ending in ?) lists nothing, unless a filter is set: a pill is not a question
+  const asking = !!(images.length || files.length || typed.includes("\n") || (!filters.length && isQuestion(typed)));
+  // a filter narrows the notes: the conversations, projects, meetings and tickets stand aside
   const onlyNotes = filters.length > 0;
   const projects = asking || onlyNotes ? [] : found;
+  const chats = useDerived(() => (asking || onlyNotes ? [] : quickChats(typed)));
   // the notes the backend finds by name and content, once typing pauses a moment; the last answer stays until the next
   const noteQuery = asking ? "" : queryOf(filters, typed);
   const [answer, setAnswer] = useState(NO_NOTES);
@@ -128,27 +146,47 @@ export function QuickAskView() {
     void findNotes(activeFolder(), "").catch(console.error);
     void loadTemplates();
   }, []);
-  // New <template> and Today's note, as actions when what is typed names them; made where the open page is
+  // Commands: the frame's Today's note and New <template> (made where the open page is), and the fixed list of
+  // places and tools; each shows when what is typed names it
   const place = useDerived(() => placeIn(openPagePath().split("/").slice(0, -1).join("/")));
   const templates = useDerived(() => templatesOf());
-  // the frame's two: Today's note, and a new note of the first template where the open page is (in a project); the
-  // others when what is typed names them
+  const inProject = useDerived(() => selectedProject() !== null);
+  const note = (id: string, label: string, run?: () => void) => ({ id, label, run });
+  const tools = [
+    ["terminal", t("drawer.terminal")],
+    ["notes", t("drawer.notes")],
+    ["design", t("drawer.design")],
+    ["git", t("drawer.git")],
+    ["files", t("drawer.files")],
+    ["agents", t("agents.column")],
+    ["workers", t("qk.cmdWorkers")],
+  ] as const;
   const everyAction = [
-    { id: "daily", label: t("qk.todayNote") },
-    ...templates.map(name => ({
-      id: `tpl:${name}`,
-      label: place.about
-        ? t("qk.newTemplateIn", { template: name, where: place.about })
-        : t("qk.newTemplate", { template: name }),
-    })),
+    note("daily", t("qk.todayNote")),
+    ...templates.map(name =>
+      note(
+        `tpl:${name}`,
+        place.about
+          ? t("qk.newTemplateIn", { template: name, where: place.about })
+          : t("qk.newTemplate", { template: name }),
+      ),
+    ),
+    note("new-here", t("qk.cmdNewHere"), () => void newHere()),
+    note("today", t("nav.today"), () => void select(WAIT)),
+    ...(inProject ? tools.map(([id, label]) => note(`tool:${id}`, label, () => openDrawer(id))) : []),
+    note("settings", t("set.title"), () => void openSettingsTab()),
+    ...TABS.map(([id, name]) =>
+      note(`settings:${id}`, `${t("set.title")}: ${t(name)}`, () => void openSettingsTab(id)),
+    ),
+    note("updates", t("qk.cmdUpdates"), () => void openSettingsTab("updates")),
   ];
   const usual = ["daily", ...(place.about && templates.length ? [`tpl:${templates[0]}`] : [])];
+  const named = matchCommands(everyAction, typed);
   const actions =
     asking || (typed.trim().length < MIN_NOTES && !filters.length)
       ? []
-      : everyAction
-          .filter(action => usual.includes(action.id) || matchesLabel(action.label, typed))
-          .slice(0, MAX_ACTIONS);
+      : [...named, ...everyAction.filter(action => usual.includes(action.id) && !named.includes(action))];
+  const exactCommand = !asking && !onlyNotes && named[0]?.label.toLowerCase() === typed.trim().toLowerCase();
   // the trackers' tickets, searched once typing pauses; the last answer stays until the next one is in
   const query = asking || onlyNotes ? "" : typed.trim();
   const [tickets, setTickets] = useState<Found[]>([]);
@@ -176,21 +214,43 @@ export function QuickAskView() {
     };
   }, [query]);
   // in groups, in the order they are shown; `options` is them in one list, which the arrow keys walk
-  const all: { title: Key; options: Option[] }[] = [
-    { title: "qk.groupProjects", options: projects.map(project => ({ kind: "project" as const, ...project })) },
-    { title: "qk.groupMeetings", options: meetings.map(meeting => ({ kind: "meeting" as const, meeting })) },
+  const all: { id: string; title: Key; options: Option[] }[] = [
+    { id: "chats", title: "qk.groupChats", options: chats.map(chat => ({ kind: "chat" as const, ...chat })) },
+    {
+      id: "projects",
+      title: "qk.groupProjects",
+      options: projects.map(project => ({ kind: "project" as const, ...project })),
+    },
+    {
+      id: "meetings",
+      title: "qk.groupMeetings",
+      options: meetings.map(meeting => ({ kind: "meeting" as const, meeting })),
+    },
     // the loaded cards first, the trackers' answers after them: a late answer adds rows below, the selection stays put
     {
+      id: "tickets",
       title: "qk.groupTickets",
       options: [
         ...new Map([...known, ...(query.length < MIN_QUERY ? [] : tickets)].map(x => [ticketKey(x), x])).values(),
       ].map(ticket => ({ kind: "ticket" as const, ...ticket })),
     },
-    { title: "qk.groupNotes", options: notes.names.map(name => ({ kind: "note" as const, ...name, folder })) },
-    { title: "qk.groupContent", options: notes.content.map(hit => ({ kind: "content" as const, ...hit, folder })) },
-    { title: "qk.groupActions", options: actions.map(action => ({ kind: "action" as const, ...action })) },
+    {
+      id: "notes",
+      title: "qk.groupNotes",
+      options: notes.names.map(name => ({ kind: "note" as const, ...name, folder })),
+    },
+    {
+      id: "content",
+      title: "qk.groupContent",
+      options: notes.content.map(hit => ({ kind: "content" as const, ...hit, folder })),
+    },
+    {
+      id: "commands",
+      title: "qk.groupCommands",
+      options: actions.map(action => ({ kind: "action" as const, ...action })),
+    },
   ];
-  const groups = all.filter(group => group.options.length);
+  const groups = arrange(all, exactCommand);
   const options = groups.flatMap(group => group.options);
   const update = (next: Img[]) => {
     waiting.current = next;
@@ -246,6 +306,8 @@ export function QuickAskView() {
     else if (option.kind === "ticket") openFoundCard(option.provider, option.hit);
     else if (option.kind === "content" && !beside) openPageAtLine(option.folder, option.path, option.line);
     else if (option.kind === "note" || option.kind === "content") openPageIn(option.folder, option.path, beside);
+    else if (option.kind === "chat") void select(option.key);
+    else if (option.run) option.run();
     else if (option.id === "daily") void openDailyNote();
     else void newFromTemplate(option.id.slice("tpl:".length), place);
   };
@@ -404,7 +466,9 @@ export function QuickAskView() {
                     onMouseDown={e => e.preventDefault()}
                     onClick={e => choose(option, e.metaKey)}
                   >
-                    {option.kind === "project" ? (
+                    {option.kind === "chat" ? (
+                      <span className="flex-1 min-w-0 truncate text-[13px] font-medium">{option.name}</span>
+                    ) : option.kind === "project" ? (
                       <span className="flex-1 min-w-0 truncate text-[13px] font-medium">{option.label}</span>
                     ) : option.kind === "meeting" ? (
                       <>
@@ -446,7 +510,7 @@ export function QuickAskView() {
                         </span>
                       </>
                     )}
-                    {option.kind === "project" ? (
+                    {option.kind === "chat" || option.kind === "project" ? (
                       <span className="text-xs text-secondary truncate max-w-40">{option.context}</span>
                     ) : option.kind === "meeting" ? (
                       <span className="text-xs text-secondary truncate max-w-40">{timeOf(option.meeting.start)}</span>

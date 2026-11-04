@@ -2128,6 +2128,121 @@ const SCENARIOS = {
     s.fact("chat changes", await s.chatChanges());
   },
 
+  // issue 387: ⌘K as the palette. Conversations (project on the right), commands (exact names first, one Commands
+  // group with Today's note), settings pages, the 8-row cap, and a question (6+ words or `?`) that lists nothing
+  async cmdkPalette(s) {
+    await s.load();
+    const { page } = s;
+    const open = async text => {
+      await page.keyboard.press("Meta+k");
+      await settle(page, 200);
+      await page.keyboard.type(text);
+      await settle(page, 300);
+    };
+    const rows = () => visible(page.locator("[data-option]")).evaluateAll(els => els.map(e => e.textContent.trim()));
+    const drawer = () => page.evaluate(() => document.querySelector(".relay-app")?.getAttribute("data-drawer") ?? "");
+    const sel = async () => (await s.local(["sel"])).sel;
+    // 1. a conversation by a part of its title, its project on the right; Enter opens it
+    await s.load();
+    await open("invoice export");
+    const found = await rows();
+    s.check(
+      "the conversation is listed with its project",
+      found.some(r => /Invoice export columns.*Northwind Portal/.test(r)),
+    );
+    s.check("under a Conversations group", await hasText(page, "Conversations"));
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check("Enter on it opens it", (await sel()) === s.keys.switchTo);
+    s.check("and sends no question", (await s.calls("send")).length === 0);
+    // 5. nothing selected: Enter asks, with results shown
+    await s.load();
+    await open("invoice export");
+    s.check("results are shown", (await rows()).length > 0);
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check("Enter with nothing selected sends a quick question", (await s.calls("send")).length === 1);
+    s.check("and does not open the conversation", (await sel()) !== s.keys.switchTo);
+    // 2. a project tool opens its drawer for the selected project
+    await s.load({ sel: s.keys.switchTo });
+    await open("terminal");
+    s.check("Terminal is the first row, the commands on top", (await rows())[0]?.startsWith("Terminal"));
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check("the terminal drawer opens", (await drawer()) === "terminal");
+    // 3. Settings and its pages; picking a page opens the window on that tab; 8 rows at most
+    await s.load({ sel: s.keys.switchTo });
+    await open("settings");
+    const settingsRows = await rows();
+    s.check(
+      "Settings comes first, then its pages",
+      settingsRows[0] === "Settings" && /^Settings: General/.test(settingsRows[1]),
+    );
+    s.check("no more than 8 rows", settingsRows.length === 8);
+    await click(page.getByRole("option", { name: /Settings: Agents/ }));
+    await settle(page, 300);
+    s.check(
+      "a settings page opens the window on its tab",
+      (await s.calls("open_settings_window")).some(c => c.args.tab === "agents"),
+    );
+    await s.load({ sel: s.keys.switchTo });
+    await open("check for updates");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check(
+      "Check for updates opens Updates",
+      (await s.calls("open_settings_window")).some(c => c.args.tab === "updates"),
+    );
+    // 2./Today: the view and today's note are two rows with their own names, the exact one first
+    await s.load({ sel: s.keys.switchTo });
+    await open("today");
+    const today = await rows();
+    s.check(
+      "Today first, then Open today's note, in one Commands group",
+      today[0] === "Today" && /today's note/.test(today[1] ?? ""),
+    );
+    s.check(
+      "one Commands group",
+      (await visible(page.locator("[role=group]").filter({ hasText: "Commands" })).count()) === 1,
+    );
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check(
+      "Today opens the Today view",
+      (await sel()) !== s.keys.switchTo && (await s.calls("daily_note")).length === 0,
+    );
+    // New conversation here
+    await s.load({ sel: s.keys.switchTo });
+    await open("new conversation here");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check("New conversation here opens a new conversation", (await sel()) !== s.keys.switchTo);
+    // 4. a question lists nothing and Enter asks
+    for (const question of ["how do I rename a project", "terminal?"]) {
+      await s.load({ sel: s.keys.switchTo });
+      await open(question);
+      s.check(`"${question}" lists nothing`, (await rows()).length === 0 && !(await hasText(page, "Commands")));
+      await page.keyboard.press("Enter");
+      await settle(page, 300);
+      s.check(`Enter sends "${question}" as a quick question`, (await s.calls("send")).length === 1);
+    }
+    // a filter pill is not a question: the notes stay with a long text
+    await s.load({ fixture: "kb", sel: s.keys.switchTo });
+    await open("type:Document rate limit what is the policy on this?");
+    s.check("with a pill a long question still lists notes", (await rows()).length > 0);
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check(
+      "and Enter opens the first one",
+      String(await sel()).startsWith("page:") && (await s.calls("send")).length === 0,
+    );
+  },
+
   // K5, issue 369: ⌘K over names and content. Typing finds notes by name and lines of content with the match marked,
   // `type:` and `in:` become pills that narrow what the backend is asked, ↵ opens, ⌘↵ opens beside the chat, ⌘O opens it
   async quickSwitcher(s) {
@@ -2222,8 +2337,8 @@ const SCENARIOS = {
     await settle(page, 300);
     s.check("⌘O opens the switcher", /search notes/i.test((await focusedPlaceholder(page)) ?? ""));
     // an action: Today's note, made once
-    await page.keyboard.type("today");
-    await waitText(page, "Actions");
+    await page.keyboard.type("today's note");
+    await waitText(page, "Commands");
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
     await settle(page, 500);
@@ -2233,7 +2348,7 @@ const SCENARIOS = {
     await page.keyboard.press("Meta+k");
     await settle(page, 300);
     await page.keyboard.type("new meeting");
-    await waitText(page, "Actions");
+    await waitText(page, "Commands");
     await click(page.getByRole("option", { name: /New Meeting/ }));
     await settle(page, 500);
     const made = await s.calls("new_from_template");

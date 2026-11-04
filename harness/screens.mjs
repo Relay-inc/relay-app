@@ -1205,6 +1205,24 @@ const VIEWS = {
     await page.keyboard.press("ArrowDown");
     await settle(page);
   },
+  // #387: ⌘K as the palette, conversations and commands next to the notes
+  palette: async (fixture = "kb") => {
+    await open(page, server.url, { fixture, sel: keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.keyboard.type("settings");
+    await settle(page, 500);
+    await page.keyboard.press("ArrowDown");
+    await settle(page);
+  },
+  "palette-dark": async () => VIEWS.palette("kb-dark"),
+  "palette-chats": async (fixture = "kb") => {
+    await open(page, server.url, { fixture, sel: keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.keyboard.type("export");
+    await settle(page, 500);
+  },
   // K1, #369: three notes pinned from their menu stand under Favourites above Recent
   "pages-favourites": async (fixture = "kb") => {
     await open(page, server.url, { fixture });

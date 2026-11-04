@@ -6,7 +6,7 @@ import { ORCH } from "../../domain/orchestrator/rules";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
 import { useConversationsStore } from "../conversations/store";
-import { chatsOf, selectedProject } from "../conversations/selectors";
+import { chatsOf, label as chatLabel, selectedProject } from "../conversations/selectors";
 import { newChat, newChatHere, dropEmptyDraft, markSeen } from "../conversations/chats";
 import { typedOf } from "../conversations/drafts";
 import { ensureHistory } from "../conversations/history";
@@ -190,6 +190,25 @@ export const quickProjects = (typed: string) =>
       .snap.projects.map(project => ({ ...project, label: settings().projects[project.name]?.label })),
     typed,
   ).map(project => ({ name: project.name, label: projectLabel(project.name), context: project.context }));
+/** Cmd-K's conversations for what is typed: matched on title and project name, as the projects are. */
+export const quickChats = (typed: string) =>
+  searchProjects(
+    Object.values(useConversationsStore.getState().chats)
+      .filter(chat => !chat.draft && !chat.closed && chat.key !== ORCH)
+      .map(chat => ({
+        key: chat.key,
+        name: chatLabel(chat.key),
+        context: projectLabel(chat.project),
+        aliases: [],
+      })),
+    typed,
+  );
+/** The settings window on a page (the last one it showed when none is given). */
+export const openSettingsTab = (tab?: string) => backend.openSettingsWindow(tab);
+/** A drawer tool, opened and left open when it already is. */
+export const openDrawer = (tool: Parameters<typeof toggleDrawer>[0]) => {
+  if (nav().drawer !== tool) toggleDrawer(tool);
+};
 /** A web or mail link in the default browser or mail app: a webview window cannot open them itself. */
 export const openExternal = (url: string) => backend.openUrl(url);
 /** The settings window, on Updates while there is one. */
