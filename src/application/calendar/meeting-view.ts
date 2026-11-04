@@ -11,7 +11,7 @@ import {
   type MeetingStage,
   meetingStage,
 } from "../../domain/calendar/rules";
-import { cleanNotes, newMeetingNote, notesIn, withNotes } from "../../domain/calendar/meeting-view";
+import { cleanNotes, newMeetingNote, notesIn, toggleTask, withNotes } from "../../domain/calendar/meeting-view";
 import type { Meeting } from "../../domain/calendar/types";
 import * as backend from "../../infrastructure/backend";
 import { select } from "../navigation/navigation";
@@ -105,6 +105,14 @@ let queue: Promise<unknown> = Promise.resolve();
  *  written and the view says so (`conflict`), unless `force` (Keep mine). */
 export function saveNotes(meeting: Meeting, typed: string, force = false) {
   const run = async () => {
+    set(draft => void (draft.saving = true));
+    try {
+      await write();
+    } finally {
+      set(draft => void (draft.saving = false));
+    }
+  };
+  const write = async () => {
     const body = cleanNotes(typed);
     for (let tries = 0; tries < 2; tries++) {
       const note = await noteFor(meeting);
@@ -138,13 +146,18 @@ export function saveLanguage(meeting: Meeting, code: string) {
   return (queue = queue.then(run).catch(error => set(draft => void (draft.error = String(error)))));
 }
 
-/** The briefing of the meeting's note replaced by `body`, the note read again right before; null when the note or its
- *  briefing is gone. A note changed in between throws "changed" (nothing written). */
-export async function saveBriefing(meeting: Meeting, body: string) {
+/** The briefing of the meeting's note replaced by `body` (or by what `body` makes of the briefing as it is now), the
+ *  note read again right before; null when the note or its briefing is gone. A note changed in between throws
+ *  "changed" (nothing written). */
+export async function saveBriefing(meeting: Meeting, body: string | ((now: string) => string)) {
   const note = await meetingNote(meeting);
-  if (!note || briefingIn(note.text) === null) return null;
-  const text = withEvent(withBriefing(note.text, body), meeting.id);
+  const now = note && briefingIn(note.text);
+  if (!note || now === null) return null;
+  const text = withEvent(withBriefing(note.text, typeof body === "string" ? body : body(now)), meeting.id);
   const { hash } = await backend.writeNote(note.path, text, note.hash, false);
   remember(meeting, { path: note.path, text, hash });
   return { path: note.path, text, hash };
 }
+/** A task of the briefing ticked or unticked (the `n`th `- [ ]`): My points on the Live step, the lists of the briefing. */
+export const toggleBriefingTask = (meeting: Meeting, n: number) =>
+  saveBriefing(meeting, now => toggleTask(now, n)).catch(error => set(draft => void (draft.error = String(error))));

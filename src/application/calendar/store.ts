@@ -8,6 +8,7 @@ type CalendarState = {
   opened: Record<string, Meeting>; // the meetings the Meeting view was opened on, for the ones the list does not hold
   note: { id: string; path: string; text: string; hash: string } | null; // the open Meeting view's note, as last read or written
   noted: string; // the meeting whose note has been looked for (note is null when it has none yet)
+  saving: boolean; // the typed notes are being written
   conflict: boolean; // its notes were changed outside Relay: what is typed is not written over them
   error: string; // why the last write to it failed
 };
@@ -19,6 +20,7 @@ export const useCalendarStore = makeStore<CalendarState>(() => ({
   opened: {},
   note: null,
   noted: "",
+  saving: false,
   conflict: false,
   error: "",
 }));

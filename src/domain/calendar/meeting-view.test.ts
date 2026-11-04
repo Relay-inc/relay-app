@@ -1,7 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  QUOTE,
   cleanNotes,
+  hhmm,
+  pointsIn,
+  serviceOf,
+  tasksIn,
+  toggleTask,
   isEmptyStamp,
   longDay,
   markLine,
@@ -95,9 +101,53 @@ test("the notes parse into time, marker and text; lines without a time are left 
   ]);
 });
 
-test("a quote is a notes line, on one line", () => {
-  assert.equal(quoteLine("09:44", " Zaterdag\n de vijftiende "), '- [09:44] > "Zaterdag de vijftiende"');
-  assert.equal(parseNotes(quoteLine("09:44", "x"))[0].time, "09:44");
+test("a quote is a notes line, on one line, with who said it", () => {
+  assert.equal(
+    quoteLine("09:44", "Thomas", " Zaterdag\n de vijftiende "),
+    '- [09:44] > Thomas: "Zaterdag de vijftiende"',
+  );
+  assert.equal(quoteLine("09:44", "", "x"), '- [09:44] > "x"');
+  assert.equal(quoteLine("09:44", 'A "B": C', "x"), '- [09:44] > A B C: "x"');
+  assert.equal(parseNotes(quoteLine("09:44", "Me", "x"))[0].time, "09:44");
+  assert.equal(QUOTE.exec('> Thomas: "x"')?.[1], "Thomas");
+  assert.equal(QUOTE.exec('> "x"')?.[1], undefined);
+});
+
+test("the clock time of a line is the machine's, 24 hours", () => {
+  assert.equal(hhmm(new Date(2026, 10, 4, 9, 5)), "09:05");
+  assert.equal(hhmm(new Date(2026, 10, 4, 21, 43)), "21:43");
+});
+
+const briefing =
+  "**Goal:** x\n- [ ] not mine\n\n## My points\n- [x] done one\n- [ ] open one\n\n## Threads\n- [ ] other";
+test("the tasks of a briefing, and the ones under My points", () => {
+  assert.deepEqual(
+    tasksIn(briefing).map(t => [t.n, t.done, t.section]),
+    [
+      [0, false, ""],
+      [1, true, "My points"],
+      [2, false, "My points"],
+      [3, false, "Threads"],
+    ],
+  );
+  assert.deepEqual(
+    pointsIn(briefing).map(t => t.text),
+    ["done one", "open one"],
+  );
+  assert.deepEqual(pointsIn("- [ ] loose"), []);
+});
+
+test("ticking a task changes that checkbox only", () => {
+  assert.equal(toggleTask(briefing, 2), briefing.replace("- [ ] open one", "- [x] open one"));
+  assert.equal(toggleTask(briefing, 1), briefing.replace("- [x] done one", "- [ ] done one"));
+  assert.equal(toggleTask(toggleTask(briefing, 3), 3), briefing);
+  assert.equal(toggleTask(briefing, 9), briefing);
+});
+
+test("the service a join link goes to", () => {
+  assert.equal(serviceOf("https://meet.google.com/abc"), "Meet");
+  assert.equal(serviceOf("https://acme.zoom.us/j/1"), "Zoom");
+  assert.equal(serviceOf("https://teams.microsoft.com/l/x"), "Teams");
 });
 
 test("lines that hold only a time are not written", () => {

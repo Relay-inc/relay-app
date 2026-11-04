@@ -216,6 +216,46 @@
     @apply underline decoration-focus underline-offset-2;
   }
 }
+/* a meeting's briefing (ui/features/meeting): the Meeting view's design, headings at 15px, lists at 14px with 6px
+   between them, task lists as checkboxes in the accent colour */
+@utility md-brief {
+  @apply text-[15px] leading-[1.55] wrap-anywhere;
+  & > :first-child {
+    @apply mt-0;
+  }
+  & h1,
+  & h2,
+  & h3,
+  & h4 {
+    @apply text-[15px] font-semibold leading-snug mt-5 mb-1;
+  }
+  & p {
+    @apply my-1;
+  }
+  & strong {
+    @apply font-semibold;
+  }
+  & ul,
+  & ol {
+    @apply text-sm pl-5 my-1.5;
+    list-style: revert;
+  }
+  & li + li {
+    @apply mt-1.5;
+  }
+  & li:has(> input[type="checkbox"]) {
+    @apply list-none -ml-5;
+  }
+  & input[type="checkbox"] {
+    @apply size-3.75 mr-2 align-[-2px] accent-accent cursor-pointer;
+  }
+  & li:has(> input:checked) {
+    @apply text-secondary line-through;
+  }
+  & a {
+    @apply text-accent-text cursor-pointer;
+  }
+}
 /* a vault note read in the drawer: a document, not a chat answer. Headings that step down, room between blocks, ruled
    tables, task lists without their bullets */
 @utility md-note {

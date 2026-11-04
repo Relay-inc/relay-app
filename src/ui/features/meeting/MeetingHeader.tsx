@@ -1,29 +1,41 @@
 import { joinable, meetingLanguage } from "../../../domain/calendar/rules";
-import { STEPS, type Step } from "../../../domain/calendar/meeting-view";
+import { STEPS, serviceOf, type Step } from "../../../domain/calendar/meeting-view";
 import type { Meeting } from "../../../domain/calendar/types";
 import { joinMeeting, meetingProjectOf, timeOf } from "../../../application/calendar/calendar";
-import { backToToday, saveLanguage } from "../../../application/calendar/meeting-view";
+import { saveLanguage } from "../../../application/calendar/meeting-view";
 import { projectChip } from "../../../application/today/today";
 import { Icon } from "../../components/Icon";
-import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
 import { initials } from "../today/parts";
+import { Menu } from "./Menu";
 
 // the languages a meeting is transcribed in: the app's own, and whatever the note already says
 const LANGUAGES = ["nl", "en", "fr", "de"];
-/** The meeting's header: back to Today, title, the stage stepper, then when, project, people, the transcription's
- *  language (written into the note's `language:`) and Join. `step` is the one shown, `reached` how far the meeting is. */
+// literal classes, so Tailwind finds them: a context's tile
+const TILE = {
+  "": "bg-fill-2 text-secondary",
+  "ctx-a": "bg-ctx-a/10 text-ctx-a",
+  "ctx-m": "bg-ctx-m/10 text-ctx-m",
+  "ctx-p": "bg-ctx-p/10 text-ctx-p",
+} as const;
+const AVATAR = "grid place-items-center size-4.5 rounded-full bg-fill-2 text-secondary text-[9px] font-semibold";
+const CHIP = "inline-flex items-center gap-1.5 h-6 pl-0.75 pr-2.25 rounded-full bg-fill-2 text-xs text-label";
+
+/** The meeting's header: its title with the stage stepper, then when, project, people, the transcription's language
+ *  (written into the note's `language:`) and Join. `step` is the one shown, `reached` how far the meeting is. */
 export function MeetingHeader({
   meeting,
   noteText,
   step,
   reached,
+  showJoin,
   onStep,
 }: {
   meeting: Meeting;
   noteText: string | null;
   step: Step;
   reached: Step;
+  showJoin: boolean; // once on the screen: the Briefing step has it in its own row
   onStep: (step: Step) => void;
 }) {
   const { t, locale } = useT();
@@ -36,16 +48,13 @@ export function MeetingHeader({
   const codes = language && !LANGUAGES.includes(language) ? [...LANGUAGES, language] : LANGUAGES;
   const at = STEPS.indexOf(step);
   const upto = STEPS.indexOf(reached);
+  const pick = (code: string, close: () => void) => {
+    close();
+    void saveLanguage(meeting, code);
+  };
   return (
     <div className="flex-none px-7 pt-4 pb-3.5 border-b border-separator">
       <div className="flex items-center gap-4">
-        <button
-          className="flex-none inline-flex items-center gap-1 h-7 pl-1 pr-2 -ml-1 rounded-lg text-[13px] text-secondary cursor-pointer hover:bg-fill hover:text-label"
-          onClick={backToToday}
-        >
-          <Icon name="left" className="glyph size-3.5" />
-          {t("nav.today")}
-        </button>
         <h1 className="flex-1 min-w-0 m-0 text-xl font-bold tracking-tight truncate select-text">
           {meeting.title || t("wait.meetingUntitled")}
         </h1>
@@ -82,40 +91,60 @@ export function MeetingHeader({
           {day} · {timeOf(meeting.start)} – {timeOf(meeting.end)}
         </span>
         {project ? (
-          <span className="inline-flex items-center h-6 px-2 rounded-md border border-separator-strong text-xs text-label">
-            {project.label}
-          </span>
+          <>
+            <span className="text-tertiary">·</span>
+            <span className="inline-flex items-center gap-1.5 h-6 pl-1 pr-2 rounded-md border border-separator-strong text-xs text-label">
+              <span
+                className={`grid place-items-center size-4 rounded-sm text-[9px] font-bold ${TILE[project.tint as keyof typeof TILE]}`}
+              >
+                {project.label.slice(0, 1).toUpperCase()}
+              </span>
+              {project.label}
+            </span>
+          </>
         ) : null}
         {meeting.people.map(person => (
-          <span
-            key={person.email}
-            className="inline-flex items-center gap-1.5 h-6 pl-0.75 pr-2.25 rounded-full bg-fill-2 text-xs text-label"
-            title={person.email}
-          >
-            <span className="grid place-items-center size-4.5 rounded-full bg-fill-2 text-secondary text-[9px] font-semibold">
-              {initials(person.name || person.email)}
-            </span>
+          <span key={person.email} className={CHIP} title={person.email}>
+            <span className={AVATAR}>{initials(person.name || person.email)}</span>
             {person.name || person.email}
           </span>
         ))}
-        <Select
-          aria-label={t("meet.language")}
-          className="h-6 px-1.5 rounded-md border border-separator-strong bg-transparent text-xs font-semibold text-label cursor-pointer"
-          options={[
-            { id: "", name: t("meet.auto") },
-            ...codes.map(code => ({ id: code, name: names.of(code) ?? code })),
-          ]}
-          value={language}
-          onChange={code => void saveLanguage(meeting, code)}
-        />
+        <span className={CHIP}>
+          <span className={AVATAR}>{t("rec.me").slice(0, 1)}</span>
+          {t("rec.me")}
+        </span>
+        <Menu
+          label={t("meet.languageIs", { language: language ? (names.of(language) ?? language) : t("meet.auto") })}
+          className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-separator-strong text-xs font-semibold text-label cursor-pointer hover:bg-fill"
+          trigger={
+            <>
+              {language ? language.toUpperCase() : t("meet.auto")}
+              <Icon name="down" className="glyph size-2.5 text-secondary" />
+            </>
+          }
+        >
+          {close =>
+            ["", ...codes].map(code => (
+              <button
+                key={code}
+                className="flex items-center gap-2 w-full h-7 px-2.5 rounded-md text-left text-[13px] cursor-pointer hover:bg-fill"
+                onClick={() => pick(code, close)}
+              >
+                <span className="w-6 text-xs font-semibold">{code ? code.toUpperCase() : t("meet.auto")}</span>
+                <span className="flex-1 text-secondary">{code ? (names.of(code) ?? code) : ""}</span>
+                {code === language ? <Icon name="check" className="glyph size-3" /> : null}
+              </button>
+            ))
+          }
+        </Menu>
         <span className="flex-1" />
-        {joinable(meeting.join) ? (
+        {showJoin && joinable(meeting.join) ? (
           <button
-            className="inline-flex items-center gap-1.5 btn cursor-pointer"
+            className="inline-flex items-center gap-1.5 h-7 px-3 rounded-lg border border-separator-strong text-[13px] font-medium text-label cursor-pointer hover:bg-fill"
             onClick={() => joinMeeting(meeting.join)}
           >
             <Icon name="video" className="glyph size-3.5" />
-            {t("wait.meetingJoin")}
+            {reached === "live" ? t("meet.backTo", { service: serviceOf(meeting.join) }) : t("wait.meetingJoin")}
           </button>
         ) : null}
       </div>

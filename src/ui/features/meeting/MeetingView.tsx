@@ -8,7 +8,8 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { MeetingHeader } from "./MeetingHeader";
-import { RecordingRow } from "./RecordingRow";
+import { MeetingBar } from "./MeetingBar";
+import { RecordingError } from "./RecordingError";
 import { BriefingStep } from "./BriefingStep";
 import { LiveStep } from "./LiveStep";
 import { WrapupStep } from "./WrapupStep";
@@ -69,12 +70,14 @@ export function MeetingView({ className = "" }: { className?: string }) {
     );
   return (
     <div className={`${className} flex flex-col min-h-0`}>
-      <RecordingRow meeting={meeting} />
+      <MeetingBar meeting={meeting} note={note} />
+      <RecordingError />
       <MeetingHeader
         meeting={meeting}
         noteText={note?.text ?? null}
         step={step}
         reached={reached}
+        showJoin={step === "live"}
         onStep={next => setPick({ reached, step: next })}
       />
       {step === "briefing" ? (
@@ -82,7 +85,7 @@ export function MeetingView({ className = "" }: { className?: string }) {
       ) : step === "live" ? (
         // the editor is made from the note once it has been looked for
         looked ? (
-          <LiveStep meeting={meeting} notes={note ? (notesIn(note.text) ?? "") : ""} />
+          <LiveStep meeting={meeting} notes={note ? (notesIn(note.text) ?? "") : ""} noteText={note?.text ?? ""} />
         ) : null
       ) : (
         <WrapupStep note={note} />

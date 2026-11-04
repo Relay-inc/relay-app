@@ -54,8 +54,16 @@ export function parseNotes(notes: string): NoteLine[] {
     return m ? [{ time: m[2], marker: m[3] ? MARKER_OF[m[3]] : null, text: m[4].trim() }] : [];
   });
 }
-/** A quoted transcript line, as a notes line. */
-export const quoteLine = (time: string, text: string) => `${stamp(time)}> "${text.trim().replace(/\s+/g, " ")}"`;
+/** A quoted transcript line, as a notes line: `- [09:44] > Thomas: "text"` (no name: `> "text"`). */
+export const quoteLine = (time: string, speaker: string, text: string) => {
+  const who = speaker
+    .replace(/[:"\n]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return `${stamp(time)}> ${who ? `${who}: ` : ""}"${text.trim().replace(/\s+/g, " ")}"`;
+};
+/** The start of a quote in a line's text: `> `, the speaker (1) when there is one, then the opening quote. */
+export const QUOTE = /^> (?:([^:"]{1,40}): )?"/;
 /** The notes as they are written to the note: the lines that hold only a time are left out. */
 export const cleanNotes = (notes: string) =>
   notes
@@ -126,3 +134,38 @@ export function newMeetingNote(meeting: Meeting, title: string, today: string, t
     "",
   ].join("\n");
 }
+
+// ---------- the tasks (`- [ ]`) in the briefing: My points are the ones under that heading
+export type Task = { n: number; done: boolean; text: string; section: string };
+const TASK = /^(\s*[-*+] \[)([ xX])(\] )(.*)$/;
+/** The tasks of a markdown text in order, `n` counting from 0, each with the heading it stands under. */
+export function tasksIn(markdown: string): Task[] {
+  let section = "";
+  return markdown
+    .split("\n")
+    .flatMap(line => {
+      const heading = /^#{1,6}\s+(.*?)\s*#*$/.exec(line) ?? /^\*\*(.+?)\*\*:?$/.exec(line);
+      if (heading) section = heading[1];
+      const m = TASK.exec(line);
+      return m ? [{ n: 0, done: m[2] !== " ", text: m[4], section }] : [];
+    })
+    .map((task, n) => ({ ...task, n }));
+}
+/** The tasks under a "My points" heading. */
+export const pointsIn = (briefing: string) =>
+  tasksIn(briefing).filter(task => /^(my points|mijn punten)$/i.test(task.section));
+/** The markdown with its `n`th task ticked or unticked, the rest as it was. */
+export function toggleTask(markdown: string, n: number) {
+  let at = -1;
+  return markdown
+    .split("\n")
+    .map(line => {
+      const m = TASK.exec(line);
+      return m && ++at === n ? `${m[1]}${m[2] === " " ? "x" : " "}${m[3]}${m[4]}` : line;
+    })
+    .join("\n");
+}
+
+/** The meeting service a join link goes to, for "Back to Meet". */
+export const serviceOf = (link: string) =>
+  link.includes("zoom.us") ? "Zoom" : link.includes("teams.") ? "Teams" : "Meet";

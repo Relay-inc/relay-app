@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { EditorState, Prec, type Range } from "@codemirror/state";
+import { EditorSelection, EditorState, Prec, type Range } from "@codemirror/state";
 import {
   Decoration,
   EditorView,
@@ -17,6 +17,7 @@ import { followPageLink } from "../../../application/navigation/pages";
 import {
   LINE,
   MARKER_OF,
+  QUOTE,
   hhmm,
   isEmptyStamp,
   isNotesLine,
@@ -25,6 +26,7 @@ import {
   stamp,
   type Marker,
 } from "../../../domain/calendar/meeting-view";
+import { GLYPHS } from "./markers";
 import { livePreview } from "../workspace/livePreview";
 import { useT } from "../../hooks/useT";
 import "../../styles/page-editor.css";
@@ -32,49 +34,78 @@ import "../../styles/page-editor.css";
 const SAVE_AFTER = 800; // ms after the last keystroke
 
 /** What the notes editor offers the transcript next to it. */
-export type NotesApi = { quote: (text: string) => void; discard: () => void; text: () => string; focus: () => void };
-
-// The marker after a line's time, drawn as the design's glyph; the file keeps `!`, `=` or `?`.
-const SVG = "http://www.w3.org/2000/svg";
-const GLYPHS: Record<Marker, { paths: string[]; fill: boolean }> = {
-  action: {
-    paths: [
-      "M2.5 4.5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2z",
-      "M8 7.5h6.5M12 5l2.5 2.5L12 10",
-    ],
-    fill: false,
-  },
-  decision: { paths: ["M8 1.5 14.5 8 8 14.5 1.5 8z"], fill: true },
-  question: { paths: [], fill: false },
+export type NotesApi = {
+  quote: (who: string, text: string) => void;
+  discard: () => void;
+  text: () => string;
+  focus: () => void;
 };
-class MarkerGlyph extends WidgetType {
-  constructor(readonly kind: Marker) {
+
+// Each notes line shows its time and marker in two fixed columns and hides the `- [09:38] ! ` it is written as (and the
+// `> ` of a quote), also on the line the cursor is on: the widget replaces the prefix, which the cursor skips whole.
+const SVG = "http://www.w3.org/2000/svg";
+class Prefix extends WidgetType {
+  constructor(
+    readonly time: string,
+    readonly kind: Marker | null,
+  ) {
     super();
   }
-  override eq(other: MarkerGlyph) {
-    return other.kind === this.kind;
+  override eq(other: Prefix) {
+    return other.time === this.time && other.kind === this.kind;
   }
   toDOM() {
-    const el = document.createElement("span");
-    el.className = `cm-marker cm-marker-${this.kind}`;
-    const { paths, fill } = GLYPHS[this.kind];
-    if (!paths.length) {
-      el.textContent = "?";
-      return el;
+    const cell = document.createElement("span");
+    cell.className = "cm-note-prefix";
+    const time = document.createElement("span");
+    time.className = "cm-note-time";
+    time.textContent = this.time;
+    const mark = document.createElement("span");
+    mark.className = `cm-note-mark ${this.kind ? `cm-marker-${this.kind}` : ""}`;
+    if (this.kind) {
+      const { paths, fill } = GLYPHS[this.kind];
+      if (!paths.length) mark.textContent = "?";
+      else {
+        const svg = document.createElementNS(SVG, "svg");
+        svg.setAttribute("viewBox", "0 0 16 16");
+        svg.setAttribute("class", fill ? "cm-marker-fill" : "glyph");
+        for (const d of paths) {
+          const path = document.createElementNS(SVG, "path");
+          path.setAttribute("d", d);
+          svg.append(path);
+        }
+        mark.append(svg);
+      }
     }
-    const svg = document.createElementNS(SVG, "svg");
-    svg.setAttribute("viewBox", "0 0 16 16");
-    svg.setAttribute("class", fill ? "cm-marker-fill" : "glyph");
-    for (const d of paths) {
-      const path = document.createElementNS(SVG, "path");
-      path.setAttribute("d", d);
-      svg.append(path);
-    }
-    el.append(svg);
-    return el;
+    cell.append(time, mark);
+    return cell;
   }
 }
-const timeMark = Decoration.mark({ class: "cm-note-time" });
+const row = Decoration.line({ class: "cm-note" });
+const quoteWho = Decoration.mark({ class: "cm-quote-who" });
+const quoteText = Decoration.mark({ class: "cm-quote-text" });
+/** How much of a line the prefix widget hides (the dash, time, marker and the `> ` of a quote); 0 for a line without a time. */
+function prefixEnd(text: string) {
+  const m = LINE.exec(text);
+  if (!m) return 0;
+  const sign = m[1].length;
+  const end = sign + (m[3] ? (text[sign + 1] === " " ? 2 : 1) : 0);
+  return QUOTE.test(text.slice(end)) ? end + 2 : end;
+}
+// the cursor never stays inside a hidden prefix (Home, a click in the gutter): it goes to where the text starts
+const outOfPrefix = EditorState.transactionFilter.of(tr => {
+  if (!tr.selection || tr.docChanged) return tr;
+  let moved = false;
+  const ranges = tr.selection.ranges.map(range => {
+    if (!range.empty) return range;
+    const line = tr.newDoc.lineAt(range.head);
+    const end = prefixEnd(line.text);
+    if (!end || range.head - line.from >= end) return range;
+    moved = true;
+    return EditorSelection.cursor(line.from + end);
+  });
+  return moved ? [tr, { selection: EditorSelection.create(ranges, tr.selection.mainIndex) }] : tr;
+});
 function decorate(view: EditorView) {
   const marks: Range<Decoration>[] = [];
   const glyphs: Range<Decoration>[] = [];
@@ -83,11 +114,20 @@ function decorate(view: EditorView) {
       const line = view.state.doc.lineAt(pos);
       const m = LINE.exec(line.text);
       if (m) {
-        const open = line.from + m[1].indexOf("[");
-        marks.push(timeMark.range(open, open + 7));
-        if (m[3]) {
-          const at = line.from + m[1].length;
-          glyphs.push(Decoration.replace({ widget: new MarkerGlyph(MARKER_OF[m[3]]) }).range(at, at + 1));
+        const end = prefixEnd(line.text);
+        const quote = QUOTE.exec(line.text.slice(end - 2)); // a quote: the prefix reaches past its "> ";
+        marks.push(row.range(line.from));
+        glyphs.push(
+          Decoration.replace({ widget: new Prefix(m[2], m[3] ? MARKER_OF[m[3]] : null) }).range(
+            line.from,
+            line.from + end,
+          ),
+        );
+        if (quote) {
+          const who = quote[1] ? quote[1].length + 1 : 0; // the name and its colon
+          if (who) marks.push(quoteWho.range(line.from + end, line.from + end + who));
+          if (line.from + end + who + (who ? 1 : 0) < line.to)
+            marks.push(quoteText.range(line.from + end + who + (who ? 1 : 0), line.to));
         }
       }
       pos = line.to + 1;
@@ -98,7 +138,7 @@ function decorate(view: EditorView) {
 const lines = ViewPlugin.fromClass(
   class {
     all: DecorationSet;
-    glyphs: DecorationSet; // the replaced marks: the cursor skips them whole
+    glyphs: DecorationSet; // the replaced prefixes: the cursor skips them whole
     constructor(view: EditorView) {
       ({ all: this.all, glyphs: this.glyphs } = decorate(view));
     }
@@ -140,9 +180,9 @@ const stampFirst = EditorView.inputHandler.of((view, from, to, text) => {
   return true;
 });
 // a quoted line of the transcript goes in at the cursor: on its own line after the one the cursor is on
-function quote(view: EditorView, text: string) {
+function quote(view: EditorView, who: string, text: string) {
   const line = lineAt(view);
-  const insert = quoteLine(hhmm(new Date()), text);
+  const insert = quoteLine(hhmm(new Date()), who, text);
   const empty = !line.text.trim() || isEmptyStamp(line.text);
   const at = empty ? { from: line.from, to: line.to } : { from: line.to, to: line.to };
   const put = empty ? insert : `\n${insert}`;
@@ -185,15 +225,17 @@ export function NotesEditor({
       parent: host.current!,
       state: EditorState.create({
         doc: first,
+        selection: { anchor: first.length }, // typing goes on at the end
         extensions: [
           history(),
           drawSelection(),
           EditorView.lineWrapping,
           markdown({ base: markdownLanguage }),
           livePreview((link, drawer) => void followPageLink(link, drawer)),
-          lines,
+          Prec.high(lines),
           EditorView.atomicRanges.of(v => v.plugin(lines)?.glyphs ?? Decoration.none),
           stampFirst,
+          outOfPrefix,
           placeholder(hint),
           Prec.high(
             keymap.of([
@@ -217,7 +259,7 @@ export function NotesEditor({
       }),
     });
     apiRef.current = {
-      quote: text => quote(view, text),
+      quote: (who, text) => quote(view, who, text),
       discard: () => (saved = view.state.doc.toString()), // a Reload: what is typed is not written
       text: () => view.state.doc.toString(),
       focus: () => view.focus(),

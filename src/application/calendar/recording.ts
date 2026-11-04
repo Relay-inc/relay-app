@@ -27,6 +27,7 @@ type RecordingState = {
   title: string; // what the bar calls it: the meeting's, or for a kept recording after a restart its start time
   phase: "idle" | "recording" | "saving";
   secs: number;
+  startedAt: number; // when it started (epoch ms), for the clock time of a line
   me: number;
   others: number;
   system: boolean; // the Mac's audio is in it
@@ -45,6 +46,7 @@ export const useRecordingStore = makeStore<RecordingState>(() => ({
   title: "",
   phase: "idle",
   secs: 0,
+  startedAt: 0,
   me: 0,
   others: 0,
   system: false,
@@ -69,6 +71,7 @@ export async function startRecording(id: string, fallback?: Meeting) {
     meeting,
     phase: "recording",
     secs: 0,
+    startedAt: Date.now(),
     me: 0,
     others: 0,
     heard: false,

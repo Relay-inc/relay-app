@@ -187,6 +187,8 @@ export function ConversationsView({ className }: { className: string }) {
       onShowInBrain={bar.renamable && !bar.session ? () => showInBrain(selected).then(() => select(BRAIN)) : undefined}
     />
   );
+  // a meeting brings its own title bar (back to Today, the recording's controls)
+  if (meeting) return <MeetingView className={`${className} relative bg-bg`} />;
   if (page) return <PageView key={page} target={page} className={`${className} relative bg-bg`} />;
   if (ownScroll)
     return (
@@ -200,8 +202,6 @@ export function ConversationsView({ className }: { className: string }) {
           <TodayView className="flex-1" />
         ) : review ? (
           <ReviewView className="flex-1" />
-        ) : meeting ? (
-          <MeetingView className="flex-1" />
         ) : plugin !== undefined ? (
           <PluginView key={plugin} id={plugin} className="flex-1" />
         ) : (
