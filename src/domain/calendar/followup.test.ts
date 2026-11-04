@@ -14,7 +14,7 @@ import type { Meeting } from "./types";
 
 const meeting: Meeting = {
   id: "abc@100",
-  feed: "me@x.be",
+  feed: "me@example.com",
   title: "Northwind  sync",
   start: "2026-11-04T09:30:00+01:00",
   end: "2026-11-04T10:00:00+01:00",
@@ -25,7 +25,7 @@ const meeting: Meeting = {
     { name: "Tom Willems", email: "Tom@Northwind.example" },
     { name: "", email: "sofie@northwind.example" },
     { name: "Tom again", email: "tom@northwind.example" },
-    { name: "Me", email: "me@x.be" },
+    { name: "Me", email: "me@example.com" },
   ],
 };
 
@@ -40,7 +40,7 @@ test("the mail is the JSON in the answer; a missing subject is the default", () 
 });
 
 test("everyone invited gets it once, without me", () => {
-  assert.deepEqual(recipients(meeting, ["ME@x.be"]), [
+  assert.deepEqual(recipients(meeting, ["ME@example.com"]), [
     { name: "Tom Willems", email: "Tom@Northwind.example" },
     { name: null, email: "sofie@northwind.example" },
   ]);
@@ -48,10 +48,10 @@ test("everyone invited gets it once, without me", () => {
 });
 
 test("an address typed into Cc", () => {
-  assert.deepEqual(addrOf(" a@b.be "), { name: null, email: "a@b.be" });
-  assert.deepEqual(addrOf('"Ann B" <a@b.be>'), { name: "Ann B", email: "a@b.be" });
+  assert.deepEqual(addrOf(" a@example.com "), { name: null, email: "a@example.com" });
+  assert.deepEqual(addrOf('"Ann B" <a@example.com>'), { name: "Ann B", email: "a@example.com" });
   assert.equal(addrOf("a@b"), null);
-  assert.equal(addrOf("a b@c.be"), null);
+  assert.equal(addrOf("a b@example.com"), null);
 });
 
 test("the default subject names the meeting and the day in its language", () => {

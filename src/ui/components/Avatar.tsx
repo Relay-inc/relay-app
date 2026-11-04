@@ -1,4 +1,4 @@
-// a person's circle with their initials: two letters of a full name ("Laurent Meersman" LM), the first two of one word.
+// a person's circle with their initials: two letters of a full name ("Lena Maes" LM), the first two of one word.
 // `self`: the board knows whether it is the user, who gets the accent and the others the two context tints. Without
 // it the colour is picked by the name among the three, so it stays the same
 const TINTS = ["bg-accent-soft text-accent-text", "bg-fill-2 text-ctx-p", "bg-fill-2 text-ctx-m"];

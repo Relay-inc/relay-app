@@ -3,15 +3,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { toFilters, toGroup, toLayout } from "../src/views.ts";
 
-const names = { status: new Map([["7", "In review"]]), who: new Map([["96137", "Kristof"]]), list: new Map([["3", "Sprint 4"]]), me: "96137" };
+const names = { status: new Map([["7", "In review"]]), who: new Map([["96137", "Alex"]]), list: new Map([["3", "Sprint 4"]]), me: "96137" };
 
 test("a view's conditions become the board's facets, in names", () => {
-  // the two Spardex views: nested "and" trees
+  // the two Northwind views: nested "and" trees
   assert.deepEqual(toFilters({ 0: { 0: { task_list_id: { not_eq: null } }, $op: "and" }, $op: "and" }, names), {});
   assert.deepEqual(toFilters({ 0: { 0: { workflow_status_category_id: { eq: ["1", "2", "3"] } }, $op: "and" }, $op: "and" }, names), { state: ["todo", "doing", "done"] });
   // flat, bare values, {me}, and asking for open tasks (all the board has) is no condition
   assert.deepEqual(toFilters({ status: "1", assignee_id: ["{me}"], workflow_status_id: { eq: "7" }, task_list_id: { eq: ["3"] }, tags: { eq: ["bug"] } }, names),
-    { who: ["Kristof"], status: ["In review"], list: ["Sprint 4"], label: ["bug"] });
+    { who: ["Alex"], status: ["In review"], list: ["Sprint 4"], label: ["bug"] });
   assert.deepEqual(toFilters(null, names), {});
 });
 

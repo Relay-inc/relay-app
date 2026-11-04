@@ -69,8 +69,8 @@ const BRIEFING = [
   "- [ ] Tom test de pricing-sandbox met echte klantnummers",
   "",
   "### Threads",
-  "- Agenda sprint meeting · 2026-09-30 · `mail:laurent@example.com:4999`",
-  "- Re: pricing API-docs en sandbox-toegang · 2026-09-29 · `mail:laurent@example.com:4998`",
+  "- Agenda sprint meeting · 2026-09-30 · `mail:lena@example.com:4999`",
+  "- Re: pricing API-docs en sandbox-toegang · 2026-09-29 · `mail:lena@example.com:4998`",
   "",
   "### My points",
   "- [x] Feedback op de sprint 23 demo",
@@ -1769,11 +1769,11 @@ const VIEWS = {
     await page.keyboard.press("Meta+End");
     await page.keyboard.type("Typed on this Mac.");
     await page.evaluate(() => {
-      window.__harness.peerType("- [ ] Second open loop", "\n- [ ] A third loop, typed by Laurent");
-      window.__harness.peerCursor("a1b2c3d4e5f6a7b8", "Laurent Meersman", "typed by Laurent");
+      window.__harness.peerType("- [ ] Second open loop", "\n- [ ] A third loop, typed by Jonas");
+      window.__harness.peerCursor("a1b2c3d4e5f6a7b8", "Jonas Peeters", "typed by Jonas");
       window.__harness.peerCursor("f0e1d2c3b4a59687", "Jeppe", "It links to", 11);
     });
-    await waitText("Laurent Meersman");
+    await waitText("Jonas Peeters");
     await settle(page);
   },
   "page-co-editing-dark": async () => VIEWS["page-co-editing"]("shared-live-dark"),
@@ -1981,7 +1981,7 @@ const VIEWS = {
     // CodeMirror takes Enter as a pick only 75 ms after the list opened, by Date.now, which the harness pins: move it on
     await page.clock.setFixedTime(await page.evaluate(() => Date.now() + 1000));
     await page.keyboard.press("Enter");
-    for (const cell of ["Kristof", "Build", "Laurent", "Review"]) {
+    for (const cell of ["Alex", "Build", "Lena", "Review"]) {
       await page.keyboard.type(cell);
       await page.keyboard.press("Tab");
     }
@@ -2354,7 +2354,7 @@ const VIEWS = {
         { content: "Group the open invoices by client", status: "completed", activeForm: "Grouping the open invoices" },
         { content: "Draft the reminder mails", status: "in_progress", activeForm: "Drafting the reminder mails" },
         { content: "Check the VAT codes", status: "pending", activeForm: "Checking the VAT codes" },
-        { content: "Send the summary to Pieter", status: "pending", activeForm: "Sending the summary" },
+        { content: "Send the summary to Sofie", status: "pending", activeForm: "Sending the summary" },
       ];
       h.emitAgent(key, { type: "working" });
       h.emitAgent(key, { type: "tool_call", id: "toolu_todo", name: "TodoWrite", input: { todos } });

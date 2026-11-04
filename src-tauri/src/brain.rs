@@ -70,9 +70,9 @@ mod tests {
     #[ignore]
     fn real_touches() {
         let home = std::env::var("HOME").unwrap();
-        let roots = vec![crate::vault::canon(&format!("{home}/vault")), crate::vault::canon(&format!("{home}/projects/antenna-brain"))];
+        let roots = vec![crate::vault::canon(&format!("{home}/vault")), crate::vault::canon(&format!("{home}/projects/bluebird-brain"))];
         let since = chrono::Utc::now().timestamp_millis() - 7 * 86_400_000;
-        let dir = format!("{home}/.claude/projects/-Users-kristof-vault");
+        let dir = format!("{home}/.claude/projects/-Users-alex-vault");
         let (mut n, mut files) = (std::collections::HashMap::new(), 0);
         for f in std::fs::read_dir(dir).unwrap().flatten().filter(|f| f.path().extension().is_some_and(|x| x == "jsonl")) {
             files += 1;

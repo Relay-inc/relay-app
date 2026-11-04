@@ -1,4 +1,4 @@
-import { chromium } from '/Users/laurentmeersman/Documents/Antenna/craft-overnamemarkt/node_modules/playwright-core/index.mjs';
+import { chromium } from 'playwright-core';
 import { readFileSync } from 'fs';
 const snap = readFileSync('snapshot.json', 'utf8'), agents = readFileSync('agents.json', 'utf8');
 const b = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
@@ -10,12 +10,12 @@ await p.addInitScript(([snap, agents]) => { window.__TAURI_INTERNALS__ = { trans
   return ['app_sids', 'pending', 'chats', 'history'].includes(c) ? [] : null; } }; }, [snap, agents]);
 await p.goto('http://localhost:1420'); await p.waitForTimeout(900);
 const secs = () => p.$$eval('.grp .gl', g => g.map(x => x.textContent).join(' | '));
-const projs = () => p.$$eval('.sec[data-drop="Antenna"] .prow .nm', r => r.map(x => x.textContent).join(', '));
-console.log('secties voor:', await secs()); console.log('antenna voor:', await projs());
+const projs = () => p.$$eval('.sec[data-drop="Bluebird"] .prow .nm', r => r.map(x => x.textContent).join(', '));
+console.log('secties voor:', await secs()); console.log('bluebird voor:', await projs());
 await p.dragAndDrop('.grp[data-sec="Personal"]', '.grp[data-sec="Algemeen"]'); await p.waitForTimeout(200);
 console.log('Personal naar boven:', await secs());
-const first = await p.$eval('.sec[data-drop="Antenna"] .prow', r => r.dataset.p);
-const last = await p.$$eval('.sec[data-drop="Antenna"] .prow', r => r[r.length - 1].dataset.p);
+const first = await p.$eval('.sec[data-drop="Bluebird"] .prow', r => r.dataset.p);
+const last = await p.$$eval('.sec[data-drop="Bluebird"] .prow', r => r[r.length - 1].dataset.p);
 await p.dragAndDrop(`.prow[data-p="${last}"]`, `.prow[data-p="${first}"]`); await p.waitForTimeout(200);
 console.log(`${last} bovenaan:`, await projs());
 await p.reload(); await p.waitForTimeout(900);

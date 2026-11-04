@@ -78,7 +78,7 @@ test("comments, quoting and untouched keys survive an edit elsewhere", () => {
 
 test("a wikilink is written double-quoted, a new key goes at the end", () => {
   assert.equal(setProperty(NOTE, "about", "[[Northwind Portal]]"), NOTE + '\nabout: "[[Northwind Portal]]"');
-  assert.equal(setProperty(NOTE, "context", "[[Antenna]]"), NOTE.replace('"[[Personal]]"', '"[[Antenna]]"'));
+  assert.equal(setProperty(NOTE, "context", "[[Bluebird]]"), NOTE.replace('"[[Personal]]"', '"[[Bluebird]]"'));
 });
 
 test("lists and empty values", () => {

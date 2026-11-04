@@ -54,7 +54,7 @@ fn items() -> Vec<Item> {
     out.extend(REMINDERS.iter().map(|(id, about, args)| Item { ext: "reminders", id, about, args, write: *id != "list",
         default: Policy::Auto, run: Run::Reminders }));
     // the conversation's own workspace's pages: reading runs, a reply is the user's word under their name, so it asks
-    out.push(Item { ext: "comments", id: "list", about: "The open comment threads on a page of this conversation's workspace (resolved ones marked), with their ids, quotes and replies.", args: &[("path", "the note's path in the workspace, e.g. Clients/o2o.md")], write: false, default: Policy::Auto, run: Run::Comments });
+    out.push(Item { ext: "comments", id: "list", about: "The open comment threads on a page of this conversation's workspace (resolved ones marked), with their ids, quotes and replies.", args: &[("path", "the note's path in the workspace, e.g. Clients/a2a.md")], write: false, default: Policy::Auto, run: Run::Comments });
     out.push(Item { ext: "comments", id: "reply", about: "Reply to a comment thread on a page of this conversation's workspace, as the user.", args: &[("path", "the note's path in the workspace"), ("id", "the thread's id from comments.list"), ("text", "the reply")], write: true, default: Policy::Ask, run: Run::Comments });
     out.push(Item { ext: "calendar", id: "meetings", about: "Meetings on the user's calendars from an hour ago to 12 hours ahead, or of one whole day, with errors per calendar.", args: &[("date?", "YYYY-MM-DD, a whole local day")], write: false, default: Policy::Auto, run: Run::Calendar });
     out
@@ -74,7 +74,7 @@ fn policy(acts: &Value, ext: &str, id: &str, default: Policy) -> Policy {
 
 /// A tool of the app's own MCP server relay-design that acts on the user's claude.ai account (`design.prompt`,
 /// `design.create`): the policy of an extension's action, under `design` in the vault's `actions`, allowed by default
-/// (Kristof, 19 Oct 2026): they only touch the project's own private canvas.
+/// (Alex, 19 Oct 2026): they only touch the project's own private canvas.
 pub fn gate(app: &AppHandle, key: &str, pid: u32, action: String, args: &Value) -> Result<(), String> {
     let provider = conversation(app, key).ok_or(NOT_IN_APP)?;
     let s = acts(app);

@@ -43,7 +43,7 @@ export function timeLines(events: Activity[]): TimeLine[] {
 
 /** The first message to the agent for a "Time <date>" conversation. `lines` carry the Relay project, its label and the
  *  Productive board it is linked to (a board id of provider productive), if any; `sids` are the sessions they were
- *  counted from. The agent adds the sources of weareantenna/antenna-tools' timesheet skill: calendar, Slack, git, other
+ *  counted from. The agent adds the sources of acme/team-tools' timesheet skill: calendar, Slack, git, other
  *  Claude Code sessions, Google Drive, Jira, Notion, Figma. */
 export function timePrompt(
   date: string,

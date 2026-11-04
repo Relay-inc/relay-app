@@ -129,7 +129,7 @@ fn build(rows: &[Value], lang: &str, icons: &BTreeMap<String, PathBuf>) -> muda:
 }
 
 /// A reminder with its actions underneath. macOS: the title alone, the project, its icon and the date go on the
-/// native item. Elsewhere it all goes in the label: "-3d Weemaes: Voorstel afwerken ↻" or "5/10 Weemaes: ...".
+/// native item. Elsewhere it all goes in the label: "-3d Orchard: Voorstel afwerken ↻" or "5/10 Orchard: ...".
 fn item(r: &Value, t: &dyn Fn(&str) -> String, icons: &BTreeMap<String, PathBuf>) -> muda::Result<(Submenu, Look)> {
     let (id, d) = (r["id"].as_str().unwrap_or(""), days(r));
     let date = r["date"].as_str().unwrap_or("");
@@ -139,7 +139,7 @@ fn item(r: &Value, t: &dyn Fn(&str) -> String, icons: &BTreeMap<String, PathBuf>
     };
     let proj = r["project"].as_str();
     let rep = if r["repeat"].is_string() { " ↻" } else { "" };
-    // "Skill `craft-upgrade-audit` afwerken op Xeos, in deze volgorde:" reads as a title without the markdown
+    // "Skill `upgrade-audit` afwerken op Acme, in deze volgorde:" reads as a title without the markdown
     let title = r["title"].as_str().unwrap_or("").replace('`', "");
     let title = title.trim_end_matches(':');
     let mut label = if cfg!(target_os = "macos") { title.to_string() }

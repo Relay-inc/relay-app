@@ -148,7 +148,7 @@ export const lastAi = (items: Item[] | undefined, t: Translate) =>
   [...(items || [])].reverse().find(item => item.kind === "ai")?.text || t("work.done");
 
 // ---------- permission and question cards
-const SKIPPED_QUESTION = "Laurent sloeg de vraag over en antwoordt zelf in het gesprek. Wacht op zijn bericht.";
+const SKIPPED_QUESTION = "Lena sloeg de vraag over en antwoordt zelf in het gesprek. Wacht op zijn bericht.";
 // a question skipped is answered in the conversation itself
 const denial = (request: Pending): Decision => ({
   behavior: "deny",

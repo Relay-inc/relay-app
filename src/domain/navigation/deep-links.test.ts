@@ -8,11 +8,11 @@ test("an ask link only carries the text for Cmd-K", () => {
 });
 
 test("an open link names the project to look for", () =>
-  assert.deepEqual(parseLink("relay://open?q=weemaes"), { kind: "open", query: "weemaes" }));
+  assert.deepEqual(parseLink("relay://open?q=orchard"), { kind: "open", query: "orchard" }));
 
 test("a meeting link carries the meeting as the calendar feeds would", () => {
   const link = parseLink(
-    "relay://meeting?do=prep&uid=abc%40google.com&start=1793520000&end=1793523600&title=Design%20review&with=Ann%20%3Cann%40x.be%3E&with=bob%40x.be",
+    "relay://meeting?do=prep&uid=abc%40google.com&start=1793520000&end=1793523600&title=Design%20review&with=Ann%20%3Cann%40example.com%3E&with=bob%40example.com",
   );
   assert.deepEqual(link, {
     kind: "meeting",
@@ -27,8 +27,8 @@ test("a meeting link carries the meeting as the calendar feeds would", () => {
       join: "",
       organizer: "",
       people: [
-        { name: "Ann", email: "ann@x.be" },
-        { name: "", email: "bob@x.be" },
+        { name: "Ann", email: "ann@example.com" },
+        { name: "", email: "bob@example.com" },
       ],
     },
   });

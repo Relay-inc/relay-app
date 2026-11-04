@@ -836,18 +836,18 @@ const SCENARIOS = {
     for (let i = 0; i < 20 && !(await doc()).includes("Mine here"); i++) await page.waitForTimeout(100);
     s.check("what is typed reaches the document", (await doc()).endsWith("Mine here"));
     s.check("and no file is written", (await page.evaluate(() => window.__harness.written())) === null);
-    await page.evaluate(() => window.__harness.peerType("- [ ] First open loop", " (Laurent)"));
-    s.check("a peer's text appears", (await editor()).includes("First open loop (Laurent)"));
+    await page.evaluate(() => window.__harness.peerType("- [ ] First open loop", " (Jonas)"));
+    s.check("a peer's text appears", (await editor()).includes("First open loop (Jonas)"));
     s.check("the head stays out of the editor", !(await editor()).includes("type: Document"));
-    await page.evaluate(() => window.__harness.peerCursor("a1b2c3d4e5f6a7b8", "Laurent Meersman", "(Laurent)"));
+    await page.evaluate(() => window.__harness.peerCursor("a1b2c3d4e5f6a7b8", "Jonas Peeters", "(Jonas)"));
     s.check(
       "a peer's cursor shows with their name",
-      (await page.locator(".cm-peer-name", { hasText: "Laurent Meersman" }).count()) === 1,
+      (await page.locator(".cm-peer-name", { hasText: "Jonas Peeters" }).count()) === 1,
     );
-    s.check("and their avatar in the bar", (await page.getByRole("img", { name: /Laurent Meersman/ }).count()) === 1);
+    s.check("and their avatar in the bar", (await page.getByRole("img", { name: /Jonas Peeters/ }).count()) === 1);
     s.check(
       "this Mac's cursor was sent",
-      (await page.evaluate(() => window.__harness.liveCursors())).some(c => c.includes("Kristof")),
+      (await page.evaluate(() => window.__harness.liveCursors())).some(c => c.includes("Alex")),
     );
     await page.keyboard.press("Meta+z");
     for (let i = 0; i < 20 && (await doc()).includes("Mine here"); i++) await page.waitForTimeout(100);
@@ -855,7 +855,7 @@ const SCENARIOS = {
       "⌘Z undoes this Mac's text",
       !(await editor()).includes("Mine here") && !(await doc()).includes("Mine here"),
     );
-    s.check("but not the peer's", (await editor()).includes("(Laurent)") && (await doc()).includes("(Laurent)"));
+    s.check("but not the peer's", (await editor()).includes("(Jonas)") && (await doc()).includes("(Jonas)"));
   },
 
   // Notion-like editing on a page (ticket 3): /to + Enter makes a to-do, its box toggles the file, a heading dragged
@@ -971,7 +971,7 @@ const SCENARIOS = {
         (await s.calls("mail_list")).map(c => c.args).sort((a, b) => a.account.localeCompare(b.account)),
       ) ===
         JSON.stringify([
-          { account: "laurent@example.com", page: 1 },
+          { account: "lena@example.com", page: 1 },
           { account: "studio@example.org", page: 1 },
         ]),
     );
@@ -995,7 +995,7 @@ const SCENARIOS = {
     const more = (await s.calls("mail_list")).filter(c => c.args.page === 2);
     s.check(
       "load more asks page 2 of the account that has more",
-      more.length === 1 && more[0].args.account === "laurent@example.com",
+      more.length === 1 && more[0].args.account === "lena@example.com",
     );
     s.check("page 2 shown", await waitText(page, "Contract renewal (5)"));
     // a link in the sandboxed html mail: the webview's navigation becomes the backend's mail-link event, as in Tauri
@@ -1065,7 +1065,7 @@ const SCENARIOS = {
     const first = (await s.calls("mail_move"))[0]?.args;
     s.check(
       "archive asks one mail, no trash",
-      JSON.stringify(first) === JSON.stringify({ account: "laurent@example.com", ids: ["5000"], trash: false }),
+      JSON.stringify(first) === JSON.stringify({ account: "lena@example.com", ids: ["5000"], trash: false }),
     );
     s.check("the archived mail left the list", !(await listed(page, markers.plainMail)));
     s.fact("opened next", (await s.calls("mail_read")).at(-1)?.args);
@@ -1319,7 +1319,7 @@ const SCENARIOS = {
       (await hasText(page, "Backlog")) && (await page.getByText("#300", { exact: true }).count()) > 0,
     );
     await click(button(page, "Filters"), 300);
-    await click(page.getByRole("button", { name: /^Laurent\b/ }), 300);
+    await click(page.getByRole("button", { name: /^Lena\b/ }), 300);
     s.check("an assignee filter narrows the board", await waitText(page, "3 of 20"));
     await click(button(page, "Show 3 tasks"), 300);
     await click(page.getByRole("button", { name: /^Filters/ }), 300); // with its count now
@@ -1421,7 +1421,7 @@ const SCENARIOS = {
     s.check("accent saved graphite", saves.at(-1)?.args.settings?.accent === "graphite");
     await click(navButton(page, "Integrations"), 300);
     await click(byText(page, "GitHub"), 300);
-    const owners = page.getByPlaceholder("Empty is everywhere, e.g. weareantenna");
+    const owners = page.getByPlaceholder("Empty is everywhere, e.g. your-org");
     await owners.fill("acme, globex");
     const save = visible(
       page
@@ -1590,20 +1590,20 @@ const SCENARIOS = {
     await click(button(page, "+ Add calendar"), 300);
     s.check("+ Add calendar opens the form", await waitText(page, "Add a calendar"));
     s.check("Add calendar waits for both fields", await add().isDisabled());
-    await field("calemail").fill("laurent@example.com");
+    await field("calemail").fill("lena@example.com");
     await field("calurl").fill("https://example.com/calendar.ics");
     await click(add(), 300);
     let connects = await s.calls("calendar_connect");
     s.check(
       "the address goes to the backend as typed",
       connects.length === 1 &&
-        connects[0].args.email === "laurent@example.com" &&
+        connects[0].args.email === "lena@example.com" &&
         connects[0].args.url === "https://example.com/calendar.ics",
     );
     s.check("a refused address shows why", await waitText(page, "That is no secret iCal address", 2000));
     s.check("and saves nothing", (await s.calls("set_settings")).length === 1);
-    s.check("the fields stay to fix", (await field("calemail").inputValue()) === "laurent@example.com");
-    const url = "https://calendar.google.com/calendar/ical/laurent%40example.com/private-0123456789abcdef/basic.ics";
+    s.check("the fields stay to fix", (await field("calemail").inputValue()) === "lena@example.com");
+    const url = "https://calendar.google.com/calendar/ical/lena%40example.com/private-0123456789abcdef/basic.ics";
     await field("calurl").fill(url);
     await click(add(), 300);
     saves = await s.calls("set_settings"); // args come normalised, keys sorted
@@ -1611,7 +1611,7 @@ const SCENARIOS = {
       "a calendar that loads is saved by its email only",
       saves.length === 2 &&
         JSON.stringify(saves[1].args.settings?.calendar) ===
-          JSON.stringify({ feeds: [{ email: "laurent@example.com" }], on: true }),
+          JSON.stringify({ feeds: [{ email: "lena@example.com" }], on: true }),
     );
     s.check(
       "the address never reaches the settings",
@@ -1619,9 +1619,9 @@ const SCENARIOS = {
     );
     s.check(
       "it says how many meetings",
-      await waitText(page, "laurent@example.com added: 3 meetings in the next 7 days", 2000),
+      await waitText(page, "lena@example.com added: 3 meetings in the next 7 days", 2000),
     );
-    s.check("back on the list with the calendar", await waitText(page, "laurent@example.com", 2000));
+    s.check("back on the list with the calendar", await waitText(page, "lena@example.com", 2000));
     // the calendar's own Remove comes before the integration's in the page
     await click(visible(button(page, "Remove")).first(), 300);
     connects = await s.calls("calendar_connect");

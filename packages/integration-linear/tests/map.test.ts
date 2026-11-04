@@ -9,10 +9,10 @@ const T1 = "b0000000-0000-4000-8000-000000000001";
 
 test("teams are projects, each with the whole team first, then its cycles when it uses them, then its projects", () => {
   const r = mapTeams(fx("teams").data, { all: "All issues", current: "Current cycle", cycle: n => `Cycle ${n}` });
-  assert.deepEqual(r.projects.map(p => p.name), ["Antenna", "Website"]);
+  assert.deepEqual(r.projects.map(p => p.name), ["Bluebird", "Website"]);
   assert.deepEqual(r.boards.map(b => [b.group, b.name, b.id === b.project]), [
-    ["Antenna", "All issues", true], ["Antenna", "Current cycle", false], ["Antenna", "Launch", false], ["Antenna", "Cycle 13", false],
-    ["Antenna", "Onboarding", false], ["Antenna", "Vault app", false], ["Website", "All issues", true]]);
+    ["Bluebird", "All issues", true], ["Bluebird", "Current cycle", false], ["Bluebird", "Launch", false], ["Bluebird", "Cycle 13", false],
+    ["Bluebird", "Onboarding", false], ["Bluebird", "Vault app", false], ["Website", "All issues", true]]);
   assert.equal(r.boards[1].id, CYCLE + T1);
   assert.equal(r.boards[2].id, CYCLE + "e0000000-0000-4000-8000-000000000012");
   assert.ok(r.boards.every(b => /^[A-Za-z0-9_-]+$/.test(b.id)));
@@ -35,11 +35,11 @@ test("the filter narrows to a project and to open states", () => {
 
 test("issues carry identifier, state, assignee's first and full name, priority and url", () => {
   const r = mapIssues(fx("issues-1").data);
-  assert.deepEqual(r.cards[0], { id: "d0000000-0000-4000-8000-000000000001", title: "Fix the header", number: "ANT-12", column: "s-todo",
-    placement: -42.5, due: "2026-10-03", who: "kristof", priority: 1, whoName: "Kristof Example" });
+  assert.deepEqual(r.cards[0], { id: "d0000000-0000-4000-8000-000000000001", title: "Fix the header", number: "BLU-12", column: "s-todo",
+    placement: -42.5, due: "2026-10-03", who: "alex", priority: 1, whoName: "Alex Example" });
   assert.equal(r.cards[1].who, "");
   assert.equal(r.cards[1].due, null);
-  assert.equal(r.urls[1][1], "https://linear.app/antenna/issue/ANT-13/write-docs");
+  assert.equal(r.urls[1][1], "https://linear.app/bluebird/issue/BLU-13/write-docs");
   assert.equal(r.next, "cursor-1");
   assert.equal(mapIssues(fx("issues-2").data).cards[0].who, "Jan");
 });
@@ -48,7 +48,7 @@ test("pages are followed by cursor until the last, and capped", async () => {
   const seen: (string | null)[] = [];
   const r = await allIssues(async after => { seen.push(after); return fx(after ? "issues-2" : "issues-1").data; });
   assert.deepEqual(seen, [null, "cursor-1"]);
-  assert.deepEqual(r.cards.map(c => c.number), ["ANT-12", "ANT-13", "ANT-14"]);
+  assert.deepEqual(r.cards.map(c => c.number), ["BLU-12", "BLU-13", "BLU-14"]);
   let n = 0;
   await allIssues(async () => { n++; return fx("issues-1").data; });
   assert.equal(n, MAX_PAGES);

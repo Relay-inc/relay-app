@@ -1,7 +1,7 @@
-import { chromium } from '/Users/laurentmeersman/Documents/Antenna/craft-overnamemarkt/node_modules/playwright-core/index.mjs';
+import { chromium } from 'playwright-core';
 import { readFileSync } from 'fs';
 const snap = readFileSync('snapshot.json', 'utf8'), agents = readFileSync('agents.json', 'utf8');
-const appSid = JSON.parse(snap).sessions.items.find(x => (x.name || '').startsWith('Weemaes:'))?.sessionId;
+const appSid = JSON.parse(snap).sessions.items.find(x => (x.name || '').startsWith('Orchard:'))?.sessionId;
 const b = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
 const p = await b.newPage({ viewport: { width: 1280, height: 820 }, deviceScaleFactor: 2 });
 const errs = []; p.on('pageerror', e => errs.push(String(e)));

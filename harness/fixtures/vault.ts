@@ -256,7 +256,7 @@ export const noteText = (target: string) => {
   if (name === BRIEFING_NOTE) return { path: `Calendar/${BRIEFING_NOTE}.md`, text: briefingNote };
   return {
     path: notes.find(n => n.endsWith(`/${name}.md`)) || target,
-    text: `---\ntype: Document\ndescription: How the portal bills a client: one invoice per month, credit notes against the \`invoice_id\` they correct.\ncontext: "[[Billing Spec]]"\nstatus: Active\ncreated: 2026-09-21\narchive: false\nparent:\naliases:\n  - portal\n  - client-portal\nlaatst: 2026-10-01\n---\n# ${name}\n\n> [!note] Archive: old repo\n> The previous repo is archived, all work goes here.\n\n## Stand van zaken\n\nThe note for **${name}**. It links to [[Billing Spec]] and [[Portal Architecture]].\n\n## Open\n\n- [ ] First open loop\n- [ ] Second open loop\n\n| Field | Value |\n|---|---|\n| Owner | Laurent |\n| Phase | Build |\n\n| ID | Story | Points |\n|---|---|---|\n| S1.1 | The contact form posts to the backend, which creates the client and the dossier and shows the reference on the confirmation screen | 5 |\n| S1.2 | A duplicate address reuses the existing dossier instead of creating a second one | 3 |\n\n\`\`\`ts\nexport const answer = 42;\n\`\`\`\n`,
+    text: `---\ntype: Document\ndescription: How the portal bills a client: one invoice per month, credit notes against the \`invoice_id\` they correct.\ncontext: "[[Billing Spec]]"\nstatus: Active\ncreated: 2026-09-21\narchive: false\nparent:\naliases:\n  - portal\n  - client-portal\nlaatst: 2026-10-01\n---\n# ${name}\n\n> [!note] Archive: old repo\n> The previous repo is archived, all work goes here.\n\n## Stand van zaken\n\nThe note for **${name}**. It links to [[Billing Spec]] and [[Portal Architecture]].\n\n## Open\n\n- [ ] First open loop\n- [ ] Second open loop\n\n| Field | Value |\n|---|---|\n| Owner | Lena |\n| Phase | Build |\n\n| ID | Story | Points |\n|---|---|---|\n| S1.1 | The contact form posts to the backend, which creates the client and the dossier and shows the reference on the confirmation screen | 5 |\n| S1.2 | A duplicate address reuses the existing dossier instead of creating a second one | 3 |\n\n\`\`\`ts\nexport const answer = 42;\n\`\`\`\n`,
   };
 };
 
@@ -367,7 +367,7 @@ export function remindersAfter(
   return list.map(x => (x === r ? at(date, r) : x));
 }
 
-export const MAIL_ACCOUNT = "laurent@example.com";
+export const MAIL_ACCOUNT = "lena@example.com";
 /** Claude Code's extra logins (settings.agents.providers.claude), each its own CLAUDE_CONFIG_DIR. */
 const CLAUDE_ACCOUNTS = {
   accounts: [
