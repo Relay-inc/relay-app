@@ -1,5 +1,10 @@
 import { useRef } from "react";
 import { Icon } from "../../components/Icon";
+import { canDraftMail, openMail, startFollowup, useFollowupStore } from "../../../application/calendar/followup";
+import { followedUp } from "../../../domain/calendar/followup";
+import { summaryIn } from "../../../domain/calendar/wrapup";
+import { FollowupComposer } from "./FollowupComposer";
+import { OUTLINE } from "./buttons";
 import type { Meeting } from "../../../domain/calendar/types";
 import {
   addDecision,
@@ -144,8 +149,12 @@ function StepCard({
 export function WrapSteps({ meeting, wrap, noteText }: { meeting: Meeting; wrap: Wrap | undefined; noteText: string }) {
   const { t } = useT();
   const project = meetingProjectOf(meeting);
+  const mail = useFollowupStore(s => s.mails[meeting.id]);
   const saved = wrap?.phase === "saved";
   const locked = !wrap || wrap.phase === "saving";
+  if (mail) return <FollowupComposer meeting={meeting} mail={mail} />;
+  // the mail is built from the accepted summary: asked for only once the note has it
+  const summarySaved = saved || summaryIn(noteText) !== null;
   return (
     <section
       aria-label={t("meet.wrap.steps")}
@@ -217,6 +226,21 @@ export function WrapSteps({ meeting, wrap, noteText }: { meeting: Meeting; wrap:
             ))}
           </div>
         </>
+      ) : null}
+      {summarySaved && followedUp(noteText) ? (
+        <button
+          className="flex items-center gap-1.5 mt-4.5 text-xs text-secondary cursor-pointer hover:text-label"
+          onClick={() => void openMail()}
+        >
+          <Icon name="mail" className="glyph size-3.5" />
+          {t("meet.mail.saved")} · {t("meet.mail.open")} ↗
+        </button>
+      ) : summarySaved && canDraftMail() ? (
+        <button className={`${OUTLINE} w-full justify-center mt-4.5`} onClick={() => void startFollowup(meeting)}>
+          <Icon name="mail" className="glyph size-3.5" />
+          {t("meet.mail.cta")}
+          <span className="text-xs font-normal text-secondary">{t("meet.mail.ctaHint")}</span>
+        </button>
       ) : null}
     </section>
   );

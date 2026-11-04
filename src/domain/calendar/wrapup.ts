@@ -81,31 +81,29 @@ export function summarySection(summary: string, steps: string[], nextSteps: stri
   return `## Summary\n${summary.trim()}${bullets ? `\n\n**${nextSteps}**\n${bullets}` : ""}`;
 }
 const HEADING = (name: string) => new RegExp(`^## ${name}[ \\t]*$`, "m");
-function span(text: string, name: string) {
+export function sectionSpan(text: string, name: string) {
   const heading = HEADING(name).exec(text);
   if (!heading) return null;
   const next = /^#{1,2} /m.exec(text.slice(heading.index + heading[0].length));
   return { from: heading.index, end: next ? heading.index + heading[0].length + next.index : text.length };
 }
-/** The note with its `## Summary` replaced by `section`; one it has not got goes after `## Notes`, else before
- *  at the end. The rest is as it was. */
+/** The note with its `## Summary` replaced by `section`; one it has not got goes after `## Notes`, else at the end. The
+ *  rest is as it was. */
 export function withSummary(text: string, section: string) {
-  const had = span(text, "Summary");
-  const at = had ?? span(text, "Notes");
+  const had = sectionSpan(text, "Summary");
+  const notes = sectionSpan(text, "Notes");
   if (had)
     return `${text.slice(0, had.from)}${section}\n\n${text.slice(had.end).replace(/^\n+/, "")}`.replace(/\n+$/, "\n");
-  if (at) {
-    const where = span(text, "Notes") ? at.end : at.from;
-    return `${text.slice(0, where).replace(/\n*$/, "\n\n")}${section}\n\n${text.slice(where).replace(/^\n+/, "")}`.replace(
+  if (notes)
+    return `${text.slice(0, notes.end).replace(/\n*$/, "\n\n")}${section}\n\n${text.slice(notes.end).replace(/^\n+/, "")}`.replace(
       /\n+$/,
       "\n",
     );
-  }
   return `${text.replace(/\n*$/, "\n\n")}${section}\n`;
 }
 /** The summary section's body (without its heading), or null. */
 export function summaryIn(text: string) {
-  const s = span(text, "Summary");
+  const s = sectionSpan(text, "Summary");
   return s
     ? text
         .slice(s.from, s.end)
@@ -159,7 +157,7 @@ const DECISIONS = ["Decisions", "Beslissingen", "Décisions", "Entscheidungen"];
  *  Dutch, French or German); null when the note has none. `from` is the meeting note's name, linked. */
 export function withDecision(text: string, day: string, decision: string, from: string) {
   for (const name of DECISIONS) {
-    const s = span(text, name);
+    const s = sectionSpan(text, name);
     if (!s) continue;
     const body = text.slice(s.from, s.end).replace(/\n+$/, "");
     const line = `- ${day}: ${decision.replace(/\s+/g, " ").trim()} ([[${from}]])`;

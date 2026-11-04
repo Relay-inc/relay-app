@@ -189,6 +189,27 @@ const meetingWrapup = async (fixture, mode) => {
   await page.mouse.move(900, 700);
   await settle(page);
 };
+// the wrap-up accepted, then the follow-up mail asked for and taken as far as `stage`
+const meetingFollowup = async (fixture, stage) => {
+  await meetingWrapup(fixture, "ok");
+  await click("Accept");
+  await waitText("Saved to note ✓");
+  await page.evaluate(mode => window.__harness.followupMode(mode), stage === "generating" ? "slow" : "ok");
+  if (stage === "cta") {
+    await waitText("Draft follow-up mail");
+  } else {
+    await page.getByRole("button", { name: /Draft follow-up mail/ }).click();
+    await settle(page);
+    if (stage === "generating") await waitText("Writing the mail…");
+    else await waitText("Relay never sends. The draft lands in your mail drafts.");
+    if (stage === "saved") {
+      await click("Save as draft");
+      await waitText("Follow-up draft saved");
+    }
+  }
+  await page.mouse.move(900, 700);
+  await settle(page);
+};
 const settingsPage = async (tab, sub, fixture = "default") => {
   await page.setViewportSize({ width: 900, height: 700 });
   await open(page, server.url, { path: "/settings.html", fixture });
@@ -2154,6 +2175,14 @@ const VIEWS = {
     await page.mouse.move(900, 600);
     await settle(page);
   },
+  // the follow-up mail (#377): the button once the summary is saved, the mail while it is written, to edit, and saved
+  "meeting-followup-cta": async () => meetingFollowup("calendar", "cta"),
+  "meeting-followup-cta-dark": async () => meetingFollowup("calendar-dark", "cta"),
+  "meeting-followup-generating": async () => meetingFollowup("calendar", "generating"),
+  "meeting-followup-composer": async () => meetingFollowup("calendar", "composer"),
+  "meeting-followup-composer-dark": async () => meetingFollowup("calendar-dark", "composer"),
+  "meeting-followup-saved": async () => meetingFollowup("calendar", "saved"),
+  "meeting-followup-saved-dark": async () => meetingFollowup("calendar-dark", "saved"),
   "meeting-live": async () => meetingLive("calendar"),
   "meeting-briefing-dark": async () => meetingBriefing("calendar-dark", "Daily standup", true),
   "meeting-live-dark": async () => meetingLive("calendar-dark"),

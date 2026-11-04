@@ -20,6 +20,7 @@ import mailTweakDutch from "../../prompts/mail/tweak-dutch.md?raw";
 import mailTweakEnglish from "../../prompts/mail/tweak-english.md?raw";
 import mailTweakFormal from "../../prompts/mail/tweak-formal.md?raw";
 import mailTweakShorter from "../../prompts/mail/tweak-shorter.md?raw";
+import meetingsFollowup from "../../prompts/meetings/followup.md?raw";
 import meetingsNote from "../../prompts/meetings/note.md?raw";
 import meetingsPrep from "../../prompts/meetings/prep.md?raw";
 import meetingsWrapup from "../../prompts/meetings/wrapup.md?raw";
@@ -70,6 +71,7 @@ export const prompts = {
     note: text(meetingsNote),
     prep: text(meetingsPrep),
     wrapup: text(meetingsWrapup),
+    followup: text(meetingsFollowup),
   },
   pipeline: {
     preflight: text(pipelinePreflight),
