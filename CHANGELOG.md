@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- Today is built around your meetings: the day as a strip of hours with each meeting's stage (planned, briefed, live, wrapped, followed up), how much of the working day is free, a card above the queue for the next meeting (with its briefing and Join when it starts within 30 minutes, the recording while you record), and one row for the meetings of the last three days that still need their summary. Press M to open the next or running meeting (#379).
 - The briefing of a meeting has a fixed shape (goal, people, what is left from last time, mail threads, my points) that Prep writes in the meeting's language and the Meeting view draws as blocks: a thread opens in Mail, my points can be typed in, and prepping again keeps your points and the steps you ticked (#378).
 - After a meeting is wrapped up you can draft a follow-up mail from its summary: Claude writes a short recap with the next steps, addressed to everyone invited, which you edit and save as a draft in your mail account. Relay never sends it; the meeting note records that it was drafted (#377).
 - A meeting has a Wrap-up step: after Stop (or from the stepper) Claude drafts the summary from your notes, the transcript and the briefing, in the vault's shape (summary, bullets, Next Steps). You edit or regenerate it, route each of your next steps to a reminder or a ticket, add a decision to the project's note with one click, and Accept writes it into the meeting note (#376).
@@ -25,6 +26,10 @@ a PR. Versions follow
 ### Changed
 
 - The vault's meeting notes have one shape: Summary with bullets and **Next Steps**, no separate Decisions, Actions and Open sections. Recording a meeting no longer opens a conversation to write the note; the draft is in the meeting's Wrap-up (#376).
+
+### Removed
+
+- Meetings are no longer items in Today's queue, and the folded "earlier" meetings are gone: the strip shows the whole day. The Today count no longer counts a meeting about to start (#379).
 
 ### Fixed
 

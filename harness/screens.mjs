@@ -220,6 +220,56 @@ const meetingFollowup = async (fixture, stage) => {
   await page.mouse.move(900, 700);
   await settle(page);
 };
+// Today's day for a variant of the today-* fixtures: notes written for the meetings (so their stage shows), then Today
+// opened again so it reads them
+const todayDay = async (variant, dark) => {
+  await open(page, server.url, { fixture: `today-${variant}${dark ? "-dark" : ""}` });
+  if (variant !== "empty") {
+    await page.evaluate(variant => {
+      const id = (name, from) => `${name}@${new Date(window.__harness.now + from * 60000).toISOString()}`;
+      const note = (name, from, title, body) => {
+        const e = id(name, from);
+        window.__harness.meetingNote(
+          e,
+          `Calendar/2026-10-01 ${title} (${name}).md`,
+          ["---", "type: Meeting", `event: "${e}"`, ...(body.followed ? ["followed-up: true"] : []), "---", "", `# ${title}`, "", ...body.lines].join("\n"),
+        );
+      };
+      const brief = [
+        "## Briefing",
+        "### Goal",
+        "Scope van de Indicata auto-simulatie vastleggen voor sprint 24.",
+        "",
+        "### Since last time",
+        "from [[2026-09-28 Spardex sync Thomas]]",
+        "- [x] Thomas deelt de Indicata API-docs · done 2026-09-30",
+        "- [ ] Kristof schat de auto-simulatie in (story points)",
+        "",
+        "### My points",
+        "- [ ] Hosting migratie: planning en downtime-venster",
+        "- [ ] Beveiligingsaudit: wie neemt het op?",
+        "- [ ] Feedback op de sprint 23 demo",
+        "",
+      ];
+      // the meeting of 08:30 is wrapped (and followed up) in the mornings, owed its summary in T3
+      if (variant === "t3") note("done", -60, "Spardex sync Thomas", { lines: ["## Notes", "- [08:34] Demo liep goed", "- [08:41] ! Agenda posten", ""] });
+      else note("done", -60, "Spardex sync Thomas", { followed: true, lines: ["## Notes", "- [08:34] Demo", "", "## Summary", "Kort.", ""] });
+      if (variant === "t1") note("sync", 50, "Spardex sync Thomas", { lines: ["## Briefing", "### Goal", "Scope vastleggen.", "", "### My points", "- [ ] Een punt", "", "## Notes", ""] });
+      if (variant === "t2") note("sync", 20, "Spardex sync Thomas", { lines: [...brief, "## Notes", ""] });
+    }, variant);
+    // Today again, so it reads them
+    await click("Reminders");
+    await click("Today");
+  }
+  if (variant === "t3") {
+    await page.getByRole("button", { name: "Record", exact: true }).first().click();
+    await page.evaluate(() => window.__harness.recordingTick(42 * 60, 0.35, 0.25));
+    await page.keyboard.press("Escape");
+    await waitText("Live · 42 min");
+  }
+  await page.mouse.move(900, 800);
+  await settle(page);
+};
 const settingsPage = async (tab, sub, fixture = "default") => {
   await page.setViewportSize({ width: 900, height: 700 });
   await open(page, server.url, { path: "/settings.html", fixture });
@@ -2196,6 +2246,16 @@ const VIEWS = {
   "meeting-followup-composer-dark": async () => meetingFollowup("calendar-dark", "composer"),
   "meeting-followup-saved": async () => meetingFollowup("calendar", "saved"),
   "meeting-followup-saved-dark": async () => meetingFollowup("calendar-dark", "saved"),
+  // Today around the meetings (#379): the morning (T1), a meeting within 30 minutes (T2), one being recorded with a
+  // wrap-up owed (T3) and a day without meetings, in light and dark
+  "today-t1": async () => todayDay("t1", false),
+  "today-t1-dark": async () => todayDay("t1", true),
+  "today-t2": async () => todayDay("t2", false),
+  "today-t2-dark": async () => todayDay("t2", true),
+  "today-t3": async () => todayDay("t3", false),
+  "today-t3-dark": async () => todayDay("t3", true),
+  "today-empty": async () => todayDay("empty", false),
+  "today-empty-dark": async () => todayDay("empty", true),
   "meeting-live": async () => meetingLive("calendar"),
   "meeting-briefing-dark": async () => meetingBriefing("calendar-dark", "Daily standup", true),
   "meeting-live-dark": async () => meetingLive("calendar-dark"),

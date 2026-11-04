@@ -1416,7 +1416,8 @@ function handle(cmd: string, a: Args): unknown {
       const feeds: string[] = settings.calendar?.on
         ? settings.calendar.feeds.map((f: { email: string }) => f.email)
         : [];
-      return { meetings: feeds.length ? structuredClone(integ.meetings) : [], errors: integ.calendarErrors(feeds) };
+      const day = fixture.startsWith("today-") ? integ.todayMeetings(fixture.replace(/^today-/, "").replace(/-dark$/, "")) : integ.meetings;
+      return { meetings: feeds.length ? structuredClone(day) : [], errors: integ.calendarErrors(feeds) };
     }
     // plugins (src-tauri/src/plugins.rs): the one example server, a fixed die so the screenshots stay the same
     case "plugins_list":

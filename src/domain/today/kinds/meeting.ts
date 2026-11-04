@@ -1,58 +1,18 @@
 import { joinable } from "../../calendar/rules.ts";
-import { DAY, MIN, actionSet, doneAction, startOfDay } from "./common.ts";
-import type { Draft, SubjectDef } from "./types.ts";
+import { actionSet, doneAction } from "./common.ts";
+import type { SubjectDef } from "./types.ts";
 
 export type MeetingAct = "prep" | "join" | "record" | "makeNote" | "noNote";
 
-/** A meeting of today: its prep until it ends (while it runs a click still opens its briefing), then its note. */
+/** A meeting of today. It has no items in the queue any more (see `entries`); its kinds and actions stay for the ones
+ *  that were opened before. */
 export const meeting: SubjectDef<"meeting", MeetingAct> = {
   kinds: {
     prep: { est: 10, rank: 1, icon: "cal" },
     note: { est: 10, rank: 5, icon: "cal" },
   },
-  entries: (snap, w, now) => {
-    const out: Draft[] = [];
-    const midnight = startOfDay(now);
-    for (const meeting of snap.meetings) {
-      const start = Date.parse(meeting.start);
-      const end = Date.parse(meeting.end);
-      if (start < midnight || start >= midnight + DAY) continue;
-      const base = {
-        project: snap.meetingProject[meeting.id] ?? null,
-        subject: { type: "meeting", meeting } as const,
-      };
-      const when = `${w.clock(meeting.start)}–${w.clock(meeting.end)}`;
-      const where = [when, meeting.location].filter(Boolean).join(" · ");
-      const title = meeting.title || w.t("wait.meetingUntitled");
-      if (end > now)
-        out.push({
-          ...base,
-          kind: "prep",
-          id: `prep:${meeting.id}`,
-          at: start,
-          by: start,
-          title: w.t("today.prepTitle", { title }),
-          where,
-          why:
-            start > now
-              ? w.t("today.starts", { time: w.clock(meeting.start) })
-              : `${w.t("wait.meetingNow")} · ${w.t("today.until", { time: w.clock(meeting.end) })}`,
-          tone: start - now < 60 * MIN ? "soon" : "",
-        });
-      else
-        out.push({
-          ...base,
-          kind: "note",
-          id: `note:${meeting.id}`,
-          at: end,
-          title: w.t("today.noteTitle", { title }),
-          where,
-          why: w.t("today.ended", { time: w.clock(meeting.end) }),
-          tone: "",
-        });
-    }
-    return out;
-  },
+  // the meetings are not in the queue: the day strip, the card above it and the wrap-ups owed carry them (ui/features/today)
+  entries: () => [],
   actions: (entry, _flags, w) => {
     if (entry.kind === "note")
       return actionSet(

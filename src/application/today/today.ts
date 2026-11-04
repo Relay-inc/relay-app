@@ -1,6 +1,7 @@
 import { provider } from "../../shared/plugins";
 import { byDue, myCardToday, type TodayCard } from "../../domain/today/rules";
 import { NO_PROJECT, inContext, plan, slots, type Kind } from "../../domain/today/plan";
+import { wrapUps } from "../../domain/today/day";
 import { entries as deriveEntries, queueOf, KINDS } from "../../domain/today/kinds";
 import { DAY, startOfDay } from "../../domain/today/kinds/common";
 import type { Entry } from "../../domain/today/kinds/types";
@@ -170,6 +171,9 @@ export function todayModel(now = Date.now()) {
   }
   const queue = queueOf(all, state.later);
   const meetings = meetingsOfToday(now);
+  // the wrap-ups owed count as to do, whatever the context filter says
+  const cal = useCalendarStore.getState();
+  const owed = wrapUps(meetings, cal.digests, cal.earlier, now);
   const dayEnd = new Date(now).setHours(18, 0, 0, 0);
   const free = slots(
     meetings.map(meeting => ({ id: meeting.id, start: Date.parse(meeting.start), end: Date.parse(meeting.end) })),
@@ -215,10 +219,7 @@ export function todayModel(now = Date.now()) {
       { id: NO_PROJECT, n: counts.get(NO_PROJECT) ?? 0 },
     ],
     context: state.context,
-    // per meeting the item a click on it opens: its prep before it, its note after it (filter or not)
-    meetingItems: Object.fromEntries(
-      every.flatMap(entry => (entry.subject.type === "meeting" ? [[entry.subject.meeting.id, entry.id] as const] : [])),
-    ) as Record<string, string>,
+    owed,
     // snoozed and not back yet, soonest first
     snoozed: Object.entries(state.snoozed)
       .filter(
@@ -226,7 +227,7 @@ export function todayModel(now = Date.now()) {
       )
       .sort((a, b) => a[1].until.localeCompare(b[1].until))
       .map(([id, item]) => ({ id, ...item })),
-    total: cleared + queue.length,
+    total: cleared + queue.length + owed.length,
     planned: queue.reduce((sum, entry) => sum + (placed[entry.id] ? entry.est : 0), 0),
     now,
   };
@@ -321,4 +322,10 @@ export async function moveTo(entry: Entry, slot: string) {
 }
 
 /** The line in the title bar and the sidebar's count: what is in the queue besides agents and sessions waiting. */
-export const todayRest = (now = Date.now()) => entries(now).filter(entry => !KINDS[entry.kind].waits).length;
+export const todayRest = (now = Date.now()) =>
+  entries(now).filter(entry => !KINDS[entry.kind].waits).length + owedNow(now).length;
+/** The meetings that ended in the last 3 days without their summary, oldest first. */
+export function owedNow(now = Date.now()) {
+  const cal = useCalendarStore.getState();
+  return wrapUps(meetingsOfToday(now), cal.digests, cal.earlier, now);
+}

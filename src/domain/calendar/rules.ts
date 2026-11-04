@@ -3,11 +3,11 @@ import type { Meeting } from "./types";
 import { fill, prompts, untrusted, untrustedNote } from "../../shared/prompts.ts";
 import { shapeIn, wordsFor } from "./briefing.ts";
 
-// The timing of the meetings under Waiting and their banner, and the prompts of a conversation about one. The clock
+// The timing of the meetings about to start and their banner, and the prompts of a conversation about one. The clock
 // is an argument (`now`, epoch ms), so the rules hold at any moment. Times are instants (RFC 3339 with an offset): the
 // backend already turned each event's time zone into one, and skipped all-day events.
 const MIN = 60_000;
-/** Under Waiting from half an hour before the start until 10 minutes after it. */
+/** About to start: from half an hour before the start until 10 minutes after it. */
 export const SOON = 30 * MIN;
 export const LATE = 10 * MIN;
 /** The banner, once per meeting. */

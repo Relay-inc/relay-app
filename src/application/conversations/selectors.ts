@@ -15,7 +15,6 @@ import { provider } from "../../shared/plugins";
 import { contextTint } from "../navigation/sidebar";
 import { agentOf, chatAgent, chatCaps } from "../agents/agents";
 import { otherVaultOf, projectLabel } from "../workspace/vault";
-import { soonMeetings } from "../calendar/calendar";
 import { machinePick } from "../../domain/settings/machines";
 import { ORCH, isOrchKey } from "../../domain/orchestrator/rules";
 import { workerCounts } from "../orchestrator/orchestrator";
@@ -54,8 +53,8 @@ export const selectedProject = () => {
   return isTerminal(selected) ? (terminalOf(selected)?.project ?? null) : projectOf(selected);
 };
 export const blockedAgents = () => rules.blockedAgents(cs());
-// meetings about to start count too: they sit at the top of Waiting (application/calendar)
-export const waitCount = () => rules.waitCount(cs()) + soonMeetings().length;
+// what agents and sessions wait on: the meetings are not in it (the card above Today's queue carries them)
+export const waitCount = () => rules.waitCount(cs());
 export const isWaiting = (key: string) => rules.isWaiting(cs(), key);
 export const runningSubs = (key: string) => rules.runningSubs(cs(), key);
 /** What was closed under a project, newest first, for "Heropen". */

@@ -76,16 +76,17 @@ test("the queue: agents first, then by rank with overdue reminders ahead, the ol
   const queue = queueOf(all, []);
   assert.deepEqual(
     queue.map(e => e.id),
-    ["ask:p1", "chat:c2", "prep:m1@9", "rem:late", "mail:mail:a:1", "rem:today", `review:${pr().url}`].map(id => id),
+    ["ask:p1", "chat:c2", "rem:late", "mail:mail:a:1", "rem:today", `review:${pr().url}`],
   );
+  assert.ok(!queue.some(e => e.subject.type === "meeting"), "the meetings are not in the queue");
   assert.ok(queue.slice(0, 2).every(isAgentItem));
 });
 
 test("what the user put off goes last, what is in progress first (after the agents)", () => {
   const all = entries(day({ doing: ["rem:today"] }), words, NOW);
   assert.deepEqual(
-    queueOf(all, ["prep:m1@9"]).map(e => e.id),
-    ["ask:p1", "chat:c2", "rem:today", "rem:late", "mail:mail:a:1", `review:${pr().url}`, "prep:m1@9"],
+    queueOf(all, ["mail:mail:a:1"]).map(e => e.id),
+    ["ask:p1", "chat:c2", "rem:today", "rem:late", `review:${pr().url}`, "mail:mail:a:1"],
   );
 });
 
@@ -111,7 +112,6 @@ test("the kind chip, and the actions of whichever kind an entry is", () => {
   const get = (id: string) => all.find(e => e.id === id) as Entry;
   assert.equal(kindLabelKey(get("ask:p1")), "today.kind.ask");
   assert.equal(kindLabelKey(get("rem:today")), "today.kind.reminder");
-  assert.equal(kindLabelKey(get("prep:m1@9")), "today.kind.prep");
   assert.deepEqual(
     actionsFor(get("rem:today"), flags, words).acts.map(a => a.id),
     ["complete", "tomorrow", "week", "chat"],
