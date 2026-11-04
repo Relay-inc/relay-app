@@ -83,7 +83,7 @@ pub fn note(vault: &str, target: &str) -> Option<(String, String)> {
 /// The value of a frontmatter key (one-line scalar, quotes off), None without frontmatter or key.
 fn front(text: &str, key: &str) -> Option<String> {
     let (head, _) = text.strip_prefix("---\n")?.split_once("\n---")?;
-    head.lines().find_map(|l| l.strip_prefix(key)?.strip_prefix(':')).map(|v| crate::commonwealth::unquote(v.trim()))
+    head.lines().find_map(|l| l.strip_prefix(key)?.strip_prefix(':')).map(|v| unquote(v.trim()))
 }
 
 /// The meeting note of calendar event `event` (its id), as a path relative to the vault: the note whose frontmatter
@@ -281,6 +281,14 @@ fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
         if e.file_type()?.is_dir() { copy_dir(&e.path(), &target)?; } else { fs::copy(e.path(), target)?; }
     }
     Ok(())
+}
+
+
+/// A frontmatter value without its YAML quotes.
+pub(crate) fn unquote(v: &str) -> String {
+    if v.len() >= 2 && v.starts_with('\'') && v.ends_with('\'') { v[1..v.len() - 1].replace("''", "'") }
+    else if v.len() >= 2 && v.starts_with('"') && v.ends_with('"') { v[1..v.len() - 1].replace("\\\"", "\"") }
+    else { v.to_string() }
 }
 
 #[cfg(test)]

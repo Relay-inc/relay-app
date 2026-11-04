@@ -40,7 +40,6 @@ import type {
   SharedInvite,
   SharedRole,
   SharedStatus,
-  CommonwealthStatus,
 } from "../domain/settings/types";
 import type {
   ExtraVault,
@@ -287,7 +286,7 @@ type SendArgs = {
   machine: string | null; // where a new conversation runs: "" this Mac, a machine id, null the default
   /** The project to tell the agent about; the backend puts the project line in front of `text`. */
   told: string | null;
-  /** The conversation's project, sent on every message so the team brain files what it learns under it. */
+  /** The conversation's project, sent on every message. */
   about: string | null;
   context: string | null;
   /** The vault folder picked for a general conversation, null for the main one. The backend checks it is a vault here. */
@@ -468,10 +467,6 @@ export const githubPrReview = (
 ) => invoke<void>("github_pr_review", { repo, number, event, body, comments });
 export const githubStatus = () => invoke<string>("github_status");
 
-// ---------- Commonwealth, the team brain
-export const commonwealthStatus = () => invoke<CommonwealthStatus>("commonwealth_status");
-export const commonwealthInstall = () => invoke<void>("commonwealth_install");
-export const commonwealthJoin = (remote: string) => invoke<string>("commonwealth_join", { remote });
 // ---------- the Pages graph and Recent
 export const notesGraph = (folder: string) => invoke<NotesGraph>("notes_graph", { folder });
 export const noteTouches = (days: number) => invoke<Touch[]>("note_touches", { days });

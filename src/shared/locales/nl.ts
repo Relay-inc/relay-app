@@ -2211,24 +2211,6 @@ export default {
   "graph.showIn": "Toon in graaf",
   "graph.showInTitle": "De notities die dit gesprek las en schreef, opgelicht in de graaf van Pages",
   "bar.graphNotes": "{n} notities",
-  "cw.help":
-    "Het teambrein: Claude Code leest het en zet wat het leert klaar voor review, in het brein waarnaar jouw eigen Commonwealth-regels de repositories van een project sturen.",
-  "cw.plugin": "Claude Code-plugin",
-  "cw.installed": "Geïnstalleerd",
-  "cw.missing": "Niet geïnstalleerd",
-  "cw.install": "Installeren",
-  "cw.installing": "Installeren…",
-  "cw.cli": "Opdrachtregel",
-  "cw.cliFound": "Gevonden op {path}",
-  "cw.cliMissing": "Niet gevonden. Installeer het met <code>{hint}</code>.",
-  "cw.projects": "Brein per project",
-  "cw.team": "Teambrein",
-  "cw.teamHelp":
-    "Plak de repository van het brein van je team om het te klonen en de repositories van zijn projecten ernaartoe te sturen.",
-  "cw.join": "Aansluiten",
-  "cw.joining": "Bezig met aansluiten…",
-  "cw.noProjects":
-    "Geen enkel project heeft een repository die een Commonwealth-regel doorstuurt, dus geen gesprek gebruikt een brein.",
   "set.tab.plugins": "Plug-ins",
   "plug.help":
     "Een plug-in is een MCP-server die Relay op deze Mac start. Eén met een weergave krijgt een rij in de zijbalk. De weergave draait in een zandbak, zonder toegang tot Relay of het netwerk, en kan enkel de tools aanroepen die je hier toelaat. Geheimen gaan naar de sleutelhanger.",

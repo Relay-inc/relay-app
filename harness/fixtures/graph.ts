@@ -1,10 +1,8 @@
-// The Pages graph: the vault's notes and their links, and the notes conversations touched in the last days. BRAIN is
-// the fictional team brain Commonwealth's status routes a project to in fixture "brain".
+// The Pages graph: the vault's notes and their links, and the notes conversations touched in the last days.
 import { NOW, HOUR, DAY, rng } from "./util";
 import { VAULT, notes as vaultNotes, projectNames } from "./vault";
 import { conversations } from "./conversations";
 
-export const BRAIN = "/Users/demo/projects/team-brain";
 type Node = { p: string; t: string; k: string; g: string[]; h: boolean };
 
 const vaultNodes: Node[] = vaultNotes.map(p => ({

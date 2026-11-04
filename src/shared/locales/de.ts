@@ -2231,24 +2231,6 @@ export default {
   "graph.showIn": "Im Graph zeigen",
   "graph.showInTitle": "Die Notizen, die dieses Gespräch gelesen und geschrieben hat, im Pages-Graph hervorgehoben",
   "bar.graphNotes": "{n} Notizen",
-  "cw.help":
-    "Das Team-Brain: Claude Code liest es und legt, was es lernt, zur Prüfung bereit, in dem Brain, zu dem deine eigenen Commonwealth-Regeln die Repositories eines Projekts leiten.",
-  "cw.plugin": "Claude-Code-Plugin",
-  "cw.installed": "Installiert",
-  "cw.missing": "Nicht installiert",
-  "cw.install": "Installieren",
-  "cw.installing": "Installiere…",
-  "cw.cli": "Kommandozeile",
-  "cw.cliFound": "Gefunden unter {path}",
-  "cw.cliMissing": "Nicht gefunden. Installiere sie mit <code>{hint}</code>.",
-  "cw.projects": "Brain pro Projekt",
-  "cw.team": "Team-Brain",
-  "cw.teamHelp":
-    "Füge das Repository des Brains deines Teams ein, um es zu klonen und die Repositories seiner Projekte dorthin zu leiten.",
-  "cw.join": "Beitreten",
-  "cw.joining": "Trete bei…",
-  "cw.noProjects":
-    "Kein Projekt hat ein Repository, das eine Commonwealth-Regel weiterleitet, also nutzt keine Unterhaltung ein Brain.",
   "set.tab.plugins": "Plugins",
   "plug.help":
     "Ein Plugin ist ein MCP-Server, den Relay auf diesem Mac startet. Eines mit einer Ansicht bekommt eine Zeile in der Seitenleiste. Die Ansicht läuft in einer Sandbox, ohne Zugriff auf Relay oder das Netzwerk, und kann nur die Tools aufrufen, die du hier erlaubst. Geheimnisse landen im Schlüsselbund.",

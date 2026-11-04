@@ -6,7 +6,7 @@ import type { Locales } from "./i18n";
 export type Caps = {
   persistent: boolean; images: boolean; thinking: boolean; permissions: boolean; questions: boolean; subagents: boolean;
   fork: boolean; terminal: boolean; background: boolean; effort: boolean; limits: boolean; title: boolean; write: boolean; accounts: boolean;
-  liveModel: boolean; control: boolean; picked: boolean; remote: boolean; brain: boolean;
+  liveModel: boolean; control: boolean; picked: boolean; remote: boolean;
 };
 export type Choice = { id: string; label: string };
 export type Detect = { installed: boolean; bin: string; version?: string | null; loggedIn?: boolean | null; note?: string | null };
