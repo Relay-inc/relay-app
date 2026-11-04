@@ -14,12 +14,16 @@ use std::time::UNIX_EPOCH;
 // the open index per folder; a folder's file is named after its path
 static INDEX: Mutex<Option<HashMap<String, Connection>>> = Mutex::new(None);
 
-// words that say nothing about a topic, in the languages the vault is written in
-const STOP: &[&str] = &[
+// words that say nothing about a topic, in the languages the vault is written in (English, then Dutch; the meeting
+// recorder also tells the two apart by them, see meeting.rs)
+pub(crate) const STOP_EN: &[&str] = &[
     "about", "after", "also", "been", "before", "being", "could", "does", "from", "have", "here", "into", "just", "like",
     "made", "make", "more", "most", "much", "need", "only", "other", "over", "same", "should", "some", "still", "such",
     "than", "that", "their", "them", "then", "there", "these", "they", "this", "those", "through", "very", "want",
-    "what", "when", "where", "which", "while", "will", "with", "would", "your", "aan", "alle", "als", "ben", "bij",
+    "what", "when", "where", "which", "while", "will", "with", "would", "your",
+];
+pub(crate) const STOP_NL: &[&str] = &[
+    "aan", "alle", "als", "ben", "bij",
     "dan", "dat", "deze", "die", "dit", "doen", "door", "een", "eens", "even", "geen", "had", "heb", "hebben", "heeft",
     "het", "hier", "hij", "hoe", "iets", "ook", "kan", "kunnen", "maar", "meer", "met", "moet", "naar", "niet", "niets",
     "nog", "omdat", "over", "tegen", "toch", "toen", "tot", "uit", "van", "veel", "voor", "waar", "wat", "wel", "werd",
@@ -112,7 +116,7 @@ fn sync(c: &mut Connection, root: &str) -> rusqlite::Result<usize> {
 pub fn query_of(text: &str) -> String {
     let mut count: HashMap<String, usize> = HashMap::new();
     for w in text.split(|ch: char| !ch.is_alphanumeric()).map(str::to_lowercase) {
-        if w.chars().count() >= 4 && !w.chars().all(|ch| ch.is_ascii_digit()) && !STOP.contains(&w.as_str()) {
+        if w.chars().count() >= 4 && !w.chars().all(|ch| ch.is_ascii_digit()) && !STOP_EN.contains(&w.as_str()) && !STOP_NL.contains(&w.as_str()) {
             *count.entry(w).or_default() += 1;
         }
     }

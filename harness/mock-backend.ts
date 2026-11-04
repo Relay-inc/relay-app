@@ -612,6 +612,8 @@ function handle(cmd: string, a: Args): unknown {
     case "restore_path":
       pages = [...pageList(), ...(trashed.get(String(a.path)) ?? [])];
       return null;
+    case "note_by_event":
+      return null;
     case "read_note": {
       const team = shared && vault.teamNotes.find(n => n.endsWith(`/${String(a.target).replace(/\.md$/, "")}.md`));
       const modified = Date.now() - 2 * 3600_000; // a page reads "Edited 2 h ago"
@@ -1112,7 +1114,7 @@ function handle(cmd: string, a: Args): unknown {
         seconds: 60,
       };
     case "meeting_kept":
-      return fixture === "kept-recording" ? ["20260930-152600"] : [];
+      return fixture === "kept-recording" ? [{ folder: "20260930-152600", meeting: null }] : [];
     case "meeting_record_retry": // in the kept-recording fixture it never ends, to look at the saving state
       if (fixture === "kept-recording") return new Promise(() => {});
       return { audio: null, transcript: "Attachments/2026-09-30 1526 Meeting.md", seconds: 60 };

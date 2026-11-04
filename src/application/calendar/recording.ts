@@ -13,7 +13,8 @@ export type { LiveLine };
 import { settings } from "../settings/settings";
 import { makeStore } from "../make-store";
 import { toast } from "../navigation/navigation";
-import { chatAbout } from "./calendar";
+import { meetingLanguage } from "../../domain/calendar/rules";
+import { chatAbout, meetingNote } from "./calendar";
 import { useCalendarStore } from "./store";
 
 // Recording a meeting from its card in Waiting for you (src-tauri/src/meeting.rs): the microphone and what the Mac
@@ -81,16 +82,23 @@ export async function startRecording(id: string, fallback?: Meeting) {
     shown: true,
   });
   try {
-    const { system, why } = await meetingRecordStart(({ secs, me = 0, others = 0, lines, upto, live }) =>
-      set({
-        secs,
-        me,
-        others,
-        heard: rec().heard || others > 0,
-        ...(lines?.length ? { lines: [...rec().lines, ...lines].sort((a, b) => a.at - b.at) } : {}),
-        ...(upto !== undefined ? { upto } : {}),
-        ...(live === false ? { live: false } : {}),
-      }),
+    // the note's language, else Settings'; neither: the recorder listens for it (src-tauri/src/meeting.rs)
+    const note = await meetingNote(meeting).catch(() => null);
+    const language = meetingLanguage(note?.text ?? null, voiceOf(settings().voice).language);
+    const { id, title, start, end, people, join } = meeting;
+    const { system, why } = await meetingRecordStart(
+      ({ secs, me = 0, others = 0, lines, upto, live }) =>
+        set({
+          secs,
+          me,
+          others,
+          heard: rec().heard || others > 0,
+          ...(lines?.length ? { lines: [...rec().lines, ...lines].sort((a, b) => a.at - b.at) } : {}),
+          ...(upto !== undefined ? { upto } : {}),
+          ...(live === false ? { live: false } : {}),
+        }),
+      language,
+      { id, title, start, end, people, join },
     );
     set({ system, why: why ?? "" });
   } catch (e) {
@@ -126,8 +134,14 @@ export async function stopRecording() {
 
 /** The recordings that were kept, for the bar to offer when the app starts (the failure that kept them is long gone). */
 export async function loadKept() {
-  set({ kept: await meetingKept().catch(() => []) });
+  const kept = await meetingKept().catch(() => []);
+  keptMeetings = Object.fromEntries(
+    kept.flatMap(k => (k.meeting ? [[k.folder, { feed: "", location: "", organizer: "", ...k.meeting }]] : [])),
+  );
+  set({ kept: kept.map(k => k.folder) });
 }
+// the meetings of the kept recordings (their meeting.json), so a retry starts the summary like a normal save
+let keptMeetings: Record<string, Meeting> = {};
 
 export const hideKept = () => set({ kept: [] });
 
@@ -142,9 +156,9 @@ export async function retryRecording(folder = rec().retry) {
   if (rec().phase === "idle" && folder) await save(meetingRecordRetry.bind(null, folder), folder);
 }
 
-// `folder`: a retry, which after a restart has no meeting to name it
+// `folder`: a retry, whose meeting comes from its meeting.json (none for a recording kept by an older Relay)
 async function save(write: typeof meetingRecordStop, folder = "") {
-  const { meeting } = rec();
+  const meeting = rec().meeting ?? (folder ? keptMeetings[folder] : undefined) ?? null;
   if (!meeting && !folder) return;
   set({
     phase: "saving",

@@ -47,7 +47,7 @@ export function joinable(link: string) {
 // ---------- a conversation about a meeting: a meeting note in the vault, or a briefing before it
 export type MeetingChat = "note" | "prep" | "transcript";
 /** A recorded meeting's files, as vault paths (src-tauri/src/meeting.rs): the audio is null when it was not kept. */
-export type Recording = { audio: string | null; transcript: string; seconds: number };
+export type Recording = { audio: string | null; transcript: string; seconds: number; language?: string | null };
 const PROMPTS: Record<Exclude<MeetingChat, "transcript">, string> = {
   note: prompts.meetings.note,
   prep: prompts.meetings.prep,
@@ -71,6 +71,7 @@ export function meetingPrompt(
   const details = [
     `Titel: ${meeting.title}`,
     `Wanneer: ${meetingDay(meeting.start, timeZone)} ${time(meeting.start)}–${time(meeting.end)}`,
+    `Id: ${meeting.id}`,
     meeting.location && `Locatie: ${meeting.location}`,
     meeting.organizer && `Organisator: ${meeting.organizer}`,
     people.length && `Deelnemers: ${people.join(", ")}`,
@@ -91,6 +92,7 @@ const transcriptPrompt = (recording: Recording) =>
     "Deze meeting is opgenomen en op deze Mac uitgeschreven.",
     `Transcriptie: \`${recording.transcript}\``,
     recording.audio && `Audio: \`${recording.audio}\``,
+    recording.language && `Taal van de meeting: ${recording.language}`,
     fill(prompts.meetings.transcript, {
       embed: recording.audio ? "Zet de audio erin als embed en link de transcriptie. " : "Link de transcriptie. ",
     }),
@@ -106,6 +108,32 @@ export const meetingNoteName = (meeting: Meeting, timeZone?: string) =>
     .replace(/[\\/:*?"<>|#^[\]]/g, " ")
     .replace(/\s+/g, " ")
     .trim()}`;
+/** A frontmatter key's value in a note (one-line scalar, quotes off); null without frontmatter or key. */
+const frontValue = (text: string, key: string) => {
+  const head = /^---\n([\s\S]*?)\n---(\n|$)/.exec(text)?.[1];
+  const value = head?.match(new RegExp(`^${key}:[ \\t]*(.*?)[ \\t]*$`, "m"))?.[1];
+  return value === undefined ? null : value.replace(/^(["'])(.*)\1$/, "$2");
+};
+/** The note's `event:`, the id of the calendar event it belongs to. */
+export const eventOf = (text: string) => frontValue(text, "event") || null;
+/** The note with `event: "<id>"` added to its frontmatter when it has none, the rest as it was. */
+export function withEvent(text: string, id: string) {
+  const head = /^---\n([\s\S]*?)\n---(\n|$)/.exec(text);
+  if (!head || /^event:/m.test(head[1])) return text;
+  const end = 4 + head[1].length;
+  return `${text.slice(0, end)}\nevent: ${JSON.stringify(id)}${text.slice(end)}`;
+}
+/** The language a meeting is transcribed in: the note's `language:`, else Settings' unless that is auto, else none (the
+ *  recorder then listens for it). */
+export const meetingLanguage = (note: string | null, voice: string) =>
+  (note && frontValue(note, "language")) || (voice && voice !== "auto" ? voice : undefined);
+/** How far a meeting is, derived from its note and whether it is being recorded (nothing is stored). */
+export type MeetingStage = "planned" | "briefed" | "live" | "wrapped";
+export function meetingStage(note: string | null, recording: boolean): MeetingStage {
+  if (recording) return "live";
+  if (note && /^## Summary[ \t]*$/m.test(note)) return "wrapped";
+  return note && briefingIn(note) ? "briefed" : "planned";
+}
 const BRIEFING = /^## Briefing[ \t]*$/m;
 /** Where the briefing section's body starts and ends in a note; null without one. */
 function briefingSpan(text: string) {

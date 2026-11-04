@@ -12,6 +12,10 @@ import {
   briefingIn,
   withBriefing,
   briefingText,
+  eventOf,
+  withEvent,
+  meetingStage,
+  meetingLanguage,
 } from "./rules.ts";
 import type { Chat, Item } from "../conversations/types";
 import type { Meeting } from "./types";
@@ -171,4 +175,36 @@ test("the briefing of a PR review: the answer to the first turn only", () => {
     item("ai", "something else"),
   ];
   assert.equal(briefingText(items), "the briefing");
+});
+
+test("a meeting note's event id is read from the frontmatter, quotes off, and added once without touching the rest", () => {
+  const note = '---\ntype: Meeting\ncontext: "[[A]]"\n---\n# Sync\n\n## Briefing\nx\n';
+  assert.equal(eventOf(note), null);
+  assert.equal(eventOf('---\nevent: "u1@100"\n---\n'), "u1@100");
+  assert.equal(eventOf("---\nevent: u1@100\n---\n"), "u1@100");
+  assert.equal(eventOf("event: u1@100\n"), null); // not frontmatter
+  const added = withEvent(note, "u1@100");
+  assert.equal(added, note.replace("\n---\n# Sync", '\nevent: "u1@100"\n---\n# Sync'));
+  assert.equal(eventOf(added), "u1@100");
+  assert.equal(withEvent(added, "other@1"), added);
+  assert.equal(withEvent("# no frontmatter\n", "u1@100"), "# no frontmatter\n");
+});
+
+test("a meeting's stage follows its note and the recording", () => {
+  const briefed = "---\ntype: Meeting\n---\n## Briefing\nGoal\n\n## Notes\n";
+  assert.equal(meetingStage(null, false), "planned");
+  assert.equal(meetingStage("---\ntype: Meeting\n---\n## Briefing\n\n## Notes\n", false), "planned");
+  assert.equal(meetingStage(briefed, false), "briefed");
+  assert.equal(meetingStage(`${briefed}\n## Summary\nDone\n`, false), "wrapped");
+  assert.equal(meetingStage(`${briefed}\n## Summary\nDone\n`, true), "live");
+  assert.equal(meetingStage(null, true), "live");
+});
+
+test("the language of a meeting: the note's, then Settings' unless auto, else none", () => {
+  const note = '---\nlanguage: "nl"\n---\n';
+  assert.equal(meetingLanguage(note, "en"), "nl");
+  assert.equal(meetingLanguage("---\ntype: Meeting\n---\n", "fr"), "fr");
+  assert.equal(meetingLanguage(null, "de"), "de");
+  assert.equal(meetingLanguage(null, "auto"), undefined);
+  assert.equal(meetingLanguage("---\nlanguage:\n---\n", "auto"), undefined);
 });

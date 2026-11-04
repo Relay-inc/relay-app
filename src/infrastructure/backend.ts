@@ -51,7 +51,7 @@ import type {
   VaultStatus,
 } from "../domain/workspace/types";
 import type { Mail, MailBody } from "../domain/mail/types";
-import type { Meetings } from "../domain/calendar/types";
+import type { Meeting, Meetings } from "../domain/calendar/types";
 import type { PrDetail, PRs } from "../domain/pull-requests/types";
 import type { BrainGraph, BrainNote, BrainRoot, BrainStatus, SearchHit, Touch } from "../domain/brain/types";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
@@ -117,6 +117,8 @@ export const vaultStatus = () => invoke<VaultStatus>("vault_status");
 export const extraVaultsStatus = () => invoke<ExtraVault[]>("extra_vaults_status");
 export const snapshot = () => invoke<Snapshot>("snapshot");
 export const vaultNotes = () => invoke<VaultNotes>("vault_notes");
+/** The path of the meeting note whose `event:` is `event`, among the notes of `day` (YYYY-MM-DD); null when none. */
+export const noteByEvent = (day: string, event: string) => invoke<string | null>("note_by_event", { day, event });
 export const readNote = (target: string) => invoke<unknown>("read_note", { target });
 /** Writes a page over its note; rejects with "changed" when the file is no longer the text with hash `expect`, unless
  *  `force`. Resolves to the new text's hash. */
@@ -696,10 +698,18 @@ export type RecordingTick = {
   live?: boolean;
 };
 /** Starts recording the microphone and, when macOS allows it, what the Mac plays (`system`, else `why` not). */
-export const meetingRecordStart = (onTick: (tick: RecordingTick) => void) => {
+export const meetingRecordStart = (
+  onTick: (tick: RecordingTick) => void,
+  language?: string,
+  meeting?: unknown, // kept beside the recording, so a retry knows its meeting
+) => {
   const channel = new Channel<RecordingTick>();
   channel.onmessage = onTick;
-  return invoke<{ system: boolean; why: string | null }>("meeting_record_start", { onTick: channel });
+  return invoke<{ system: boolean; why: string | null }>("meeting_record_start", {
+    onTick: channel,
+    language,
+    meeting,
+  });
 };
 /** Stops, then writes the audio and transcript into the vault, `onProgress` 0..1 while it transcribes. */
 export const meetingRecordStop = (title: string, me: string, others: string, onProgress: (done: number) => void) => {
@@ -708,7 +718,10 @@ export const meetingRecordStop = (title: string, me: string, others: string, onP
   return invoke<Recording>("meeting_record_stop", { title, me, others, onProgress: channel });
 };
 /** The folders of recordings a failure kept, newest first; their names are their start times (20261029-152600). */
-export const meetingKept = () => invoke<string[]>("meeting_kept");
+export const meetingKept = () =>
+  invoke<{ folder: string; meeting: Pick<Meeting, "id" | "title" | "start" | "end" | "people" | "join"> | null }[]>(
+    "meeting_kept",
+  );
 /** Writes out one of those recordings, as `meetingRecordStop`. */
 export const meetingRecordRetry = (
   folder: string,
