@@ -6,6 +6,7 @@ import {
   editPoint,
   isPointsHeading,
   keepFrom,
+  prepRunFor,
   prepState,
   sectionHash,
   mergePrep,
@@ -192,4 +193,11 @@ test("a turn that has not rewritten the briefing keeps the snapshot, one that di
   assert.equal(prepState(keep, fresh), "merge");
   assert.equal(prepState(keep, null), "clear", "no briefing: nothing to merge into");
   assert.notEqual(sectionHash(nl), sectionHash(fresh));
+});
+
+test("a prep always starts a run: the note as it was is its before, even with nothing of the user's to keep", () => {
+  assert.deepEqual(prepRunFor(nl, meeting, "note text").points.length, 2);
+  const none = prepRunFor("", meeting, null);
+  assert.deepEqual([none.points, none.ticked, none.before, none.hash], [[], [], null, sectionHash("")]);
+  assert.equal(prepRunFor("free text", meeting, "n").before, "n");
 });

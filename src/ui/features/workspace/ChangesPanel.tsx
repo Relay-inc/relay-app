@@ -82,6 +82,8 @@ function useLabel() {
   return (c: Change) => {
     if (c.source === "capture")
       return c.subject ? t("changes.capture", { subject: c.subject }) : t("changes.captureUntitled");
+    if (c.source === "prep") return t("changes.prep", { subject: c.subject });
+    if (c.source === "wrap-up") return t("changes.wrapup", { subject: c.subject });
     return t("changes.page", {
       action: t(`page.action.${c.source.replace("action:", "")}` as "page.action.link"),
       subject: c.subject,

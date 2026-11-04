@@ -227,6 +227,9 @@ export type PrepRun = {
   points: { text: string; done: boolean }[];
   ticked: string[];
   hash: string; // of the briefing it replaces: while the section still has it, the prep has not written yet
+  /** The meeting note when the prep started (null: there was none), for the Changes feed's before. A run kept from before
+   *  this existed has none and records nothing. */
+  before?: string | null;
 };
 /** A short hash of a briefing's text (djb2), to tell whether a prep has rewritten it. */
 export function sectionHash(briefing: string) {
@@ -247,6 +250,13 @@ export function keepFrom(briefing: string, meeting: PrepRun["meeting"]): PrepRun
   const points = shaped.points.filter(p => p.text.trim()).map(p => ({ text: p.text, done: p.done }));
   const ticked = shaped.since.steps.filter(s => s.done).map(s => s.text);
   return points.length || ticked.length ? { meeting, points, ticked, hash: sectionHash(briefing) } : null;
+}
+
+/** The run a prep starts with: what is the user's in the briefing it replaces (nothing, for a briefing without any or a
+ *  first one) and the note as it was, which the Changes feed shows the prep's write against. */
+export function prepRunFor(briefing: string, meeting: PrepRun["meeting"], note: string | null): PrepRun {
+  const run = keepFrom(briefing, meeting) ?? { meeting, points: [], ticked: [], hash: sectionHash(briefing) };
+  return { ...run, before: note };
 }
 
 /** The briefing a prep wrote, with what the user owned put back: their points as they were (the new empty list is

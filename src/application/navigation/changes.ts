@@ -87,6 +87,21 @@ export async function applyMerge(folder: string, id: string, path: string) {
   await loadChanges(folder);
 }
 
+/** Notes the app wrote itself, as one entry to review (a prep's briefing, a wrap-up's summary): the feed must never hold
+ *  up the write it describes, so a failure only goes to the console. */
+export async function recordWrite(
+  source: string,
+  subject: string,
+  reason: string,
+  files: { path: string; before: string | null; after: string | null }[],
+) {
+  try {
+    await backend.changeRecord(source, subject, reason, files);
+  } catch (e) {
+    console.error("changes", e);
+  }
+}
+
 /** A page action: Claude does the job in the background and the result lands in the feed. */
 export async function runPageAction(folder: string, path: string, action: string, selection: string | null) {
   toast(t("changes.working", { name: path.split("/").pop()!.replace(/\.md$/, "") }), undefined, "", 4000);

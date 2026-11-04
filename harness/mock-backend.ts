@@ -1296,6 +1296,14 @@ function handle(cmd: string, a: Args): unknown {
       recordChange(`action:${a.action}`, String(a.path).split("/").pop()!.replace(/\.md$/, ""), reason, edits);
       return null;
     }
+    case "change_record": {
+      const files = (a.files as { path: string; before: string | null; after: string | null }[]).filter(f => f.before !== f.after);
+      if (files.length) {
+        changes = [{ id: `${Date.now()}-${changes.length}`, at: Date.now(), source: String(a.source), subject: String(a.subject), reason: String(a.reason), files: files.map(f => ({ ...f, state: "open" })) }, ...changes];
+        emit("changes-changed", null);
+      }
+      return null;
+    }
     case "capture_vault":
       recordChange("capture", String(a.title ?? ""), kb.capture.reason, kb.capture.files.map(f => [f.path, f.after]));
       return null;

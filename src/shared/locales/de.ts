@@ -530,6 +530,12 @@ export default {
   "changes.editedAgain":
     "Die Notiz hat sich erneut geändert. Mache es erneut rückgängig für eine neue Zusammenführung.",
   "changes.working": "Claude arbeitet an „{name}“. Das Ergebnis erscheint bei Änderungen.",
+  "changes.prep": "Briefing für „{subject}“",
+  "changes.wrapup": "Besprechungsabschluss „{subject}“",
+  "changes.reasonPrep": "Briefing für {title}",
+  "changes.reasonSummary": "Zusammenfassung und nächste Schritte für {title}",
+  "changes.reasonDecision": "Entscheidung aus {title} zu {project} hinzugefügt",
+  "changes.reasonFollowup": "Entwurf der Nachfassmail für {title} gespeichert",
   "page.more": "Mehr",
   "page.action.summarise": "In einem Abschnitt zusammenfassen",
   "page.action.next-steps": "Nächste Schritte in Erinnerungen",

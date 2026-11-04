@@ -261,6 +261,13 @@ export const pageAction = (workspace: string, path: string, action: string, sele
   invoke<void>("page_action", { workspace, path, action, selection });
 /** The Changes feed of a workspace: what Relay-run Claude jobs of this Mac wrote, newest first (changes.rs). */
 export const changesList = (workspace: string) => invoke<Change[]>("changes_list", { workspace });
+/** Notes the app wrote itself (a meeting's prep or wrap-up) as one entry of the Changes feed (`path` relative to the main vault). */
+export const changeRecord = (
+  source: string,
+  subject: string,
+  reason: string,
+  files: { path: string; before: string | null; after: string | null }[],
+) => invoke<void>("change_record", { source, subject, reason, files });
 /** A note of a change (every open one without `path`) marked as read. */
 export const changeKeep = (workspace: string, id: string, path: string | null) =>
   invoke<void>("change_keep", { workspace, id, path });

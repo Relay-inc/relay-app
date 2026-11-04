@@ -2262,6 +2262,83 @@ const SCENARIOS = {
     s.check("and the run is in the feed", await waitText(page, "Added type: Document"));
   },
 
+  // issue 371: the meeting flow's own writes are in the feed: a prep's briefing, a wrap-up's Accept and a decision added
+  // to its project's note, each one entry; Undo on the decision restores the project note exactly
+  async changesMeeting(s) {
+    await s.load({ fixture: "calendar" });
+    const { page } = s;
+    const notePath = "Calendar/2026-10-01 Sprint review Northwind Portal.md";
+    const project = "Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md";
+    const projectText =
+      "---\ntype: Product\n---\n# Northwind Portal\n\n## Status\nBuilding.\n\n## Decisions\n- 2026-09-20: Billing per month ([[Billing Spec]])\n\n## Open\n";
+    const meetingText = [
+      "---",
+      "type: Meeting",
+      'event: "EVENT"',
+      "created: 2026-10-01",
+      "language: nl",
+      "---",
+      "",
+      "# Sprint review Northwind Portal",
+      "",
+      "## Notes",
+      "- [09:31] Sprint 23 demo: API-koppeling werkt op staging, geen issues",
+      "- [09:33] = Pricing-simulator komt in sprint 24, niet 25",
+      "",
+    ].join("\n");
+    const id = await page.evaluate(
+      ([project, projectText, notePath, meetingText]) => {
+        const id = `review@${new Date(window.__harness.now + 4 * 60000).toISOString()}`;
+        window.__harness.setNote(project, projectText);
+        window.__harness.meetingNote(id, notePath, meetingText.replace("EVENT", id));
+        return id;
+      },
+      [project, projectText, notePath, meetingText],
+    );
+    const recorded = async () => (await s.calls("change_record")).map(c => c.args);
+    const text = path => page.evaluate(p => window.__harness.noteText(p), path);
+    const day = page.locator('section[aria-label="Day"]').getByRole("button", { name: "Sprint review Northwind Portal", exact: true });
+    await click(visible(day).first(), 400);
+    // the wrap-up: Accept writes the summary into the note, a click adds a decision to the project's note
+    await click(page.getByRole("button", { name: "Wrap-up", exact: true }), 300);
+    await click(button(page, "Write the summary"), 300);
+    await waitText(page, "Built from");
+    await click(button(page, "Accept"), 300);
+    await waitText(page, "Saved to note ✓");
+    await click(page.getByRole("button", { name: "Add to Northwind Portal note" }).first(), 300);
+    await waitText(page, "Added ✓");
+    const wrapups = (await recorded()).filter(r => r.source === "wrap-up");
+    s.check("Accept and the decision are one entry each", wrapups.length === 2 && wrapups.every(r => r.files.length === 1));
+    const decision = wrapups.find(r => r.files[0].path === project);
+    s.check("the decision's before/after is the project note", !!decision && decision.files[0].before === projectText && decision.files[0].after.includes("Pricing-simulator in sprint 24") && decision.reason === "Decision from Sprint review Northwind Portal added to Northwind Portal");
+    const accept = wrapups.find(r => r.files[0].path === notePath);
+    s.check("Accept's after holds the summary", !!accept && accept.files[0].after.includes("## Summary") && !accept.files[0].before.includes("## Summary"));
+    // the prep: Claude writes the briefing into the note, then its turn ends
+    await click(page.getByRole("button", { name: "Briefing", exact: true }), 300);
+    await click(button(page, "Prep with Claude"), 400);
+    const key = Object.keys(await s.chatChanges())[0];
+    const withBriefing = (await text(notePath)) + "\n## Briefing\n### Doel\nDe sprint afronden.\n";
+    await page.evaluate(([path, t, key]) => {
+      window.__harness.setNote(path, t);
+      window.__harness.emitAgent(key, { type: "turn_end", ok: true, error: null, usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 }, duration_ms: 1 });
+    }, [notePath, withBriefing, key]);
+    await settle(page, 400);
+    const prep = (await recorded()).find(r => r.source === "prep");
+    s.check("the prep is recorded", !!prep && prep.reason === "Briefing for Sprint review Northwind Portal");
+    s.check("before: the note without a briefing, after: with it", !!prep && !prep.files[0].before.includes("## Briefing") && prep.files[0].after.includes("De sprint afronden."));
+    // all three in the feed; Undo on the decision puts the project note back exactly
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    await click(page.locator('[data-project="Northwind Portal"]'));
+    await waitText(page, "Northwind Portal");
+    await click(page.getByRole("button", { name: /^Changes, \d+ to review/ }));
+    s.check("the feed lists the prep and the wrap-up", (await waitText(page, "Briefing for “Sprint review Northwind Portal”")) && (await hasText(page, "Meeting wrap-up “Sprint review Northwind Portal”")));
+    await click(page.getByRole("button", { name: /^Meeting wrap-up/ }).first(), 200); // the decision, the newest of the two
+    await click(page.locator(`[data-file="${project}"]`).getByRole("button", { name: "Undo", exact: true }));
+    await settle(page, 300);
+    s.check("Undo restores the project note exactly", (await text(project)) === projectText);
+    s.check("and leaves the meeting note's summary", (await text(notePath)).includes("## Summary"));
+  },
+
   // K1, issue 369: a note pinned from its menu stands under Favourites above Recent, and is still there after a
   // restart (the backend keeps it in .relay/config.json); unfolded folders and a folder's sort are remembered too
   async favourites(s) {

@@ -64,6 +64,23 @@ pub fn record(root: &Path, before: &Snap, source: &str, subject: &str, reason: &
         if a.is_some_and(|a| typed.get(&root.join(p)).is_some_and(|h| *h == crate::vault::text_hash(a))) { continue; }
         files.push(json!({"path": p, "before": b, "after": a, "state": "open"}));
     }
+    write_entry(root, source, subject, reason, files)
+}
+
+/// An entry for writes the app made itself (a meeting's briefing, summary, decision or follow-up mark, written from the
+/// webview): `(path, before, after)` per note, the path relative to `root`. Notes whose text did not change are left out;
+/// None when nothing is left or a path is no note of the workspace.
+pub fn record_files(root: &Path, source: &str, subject: &str, reason: &str, notes: &[(String, Option<String>, Option<String>)]) -> Result<Option<String>, String> {
+    let mut files = vec![];
+    for (path, before, after) in notes {
+        let plain = Path::new(path).components().all(|c| matches!(c, Component::Normal(s) if !s.to_string_lossy().starts_with('.')));
+        if !plain || !path.ends_with(".md") { return Err(format!("not a note of this workspace: {path}")); }
+        if before != after { files.push(json!({"path": path, "before": before, "after": after, "state": "open"})); }
+    }
+    write_entry(root, source, subject, reason, files)
+}
+
+fn write_entry(root: &Path, source: &str, subject: &str, reason: &str, files: Vec<Value>) -> Result<Option<String>, String> {
     if files.is_empty() { return Ok(None); }
     let _lock = LOCK.lock().unwrap();
     let at = now_ms();
@@ -267,6 +284,29 @@ mod tests {
         keep(&d, &id, None).unwrap();
         assert_eq!(list(&d)[0]["files"][0]["state"], "kept");
         assert!(undo(&d, &id, "Projects/Findings.md").is_err());
+    }
+
+    #[test]
+    fn writes_the_app_made_are_one_entry_that_undo_restores_exactly() {
+        // a wrap-up's Accept: the meeting note changed, and a decision added to a project note by its own entry
+        let d = vault("app");
+        let (before, after) = ("## Notes\n- x\n".to_string(), "## Notes\n- x\n\n## Summary\nDone.\n".to_string());
+        fs::write(d.join("Projects/Beacon.md"), &after).unwrap();
+        let notes = [("Projects/Beacon.md".to_string(), Some(before.clone()), Some(after.clone())), ("Projects/Findings.md".to_string(), Some("same".into()), Some("same".into()))];
+        let id = record_files(&d, "wrap-up", "Beacon sync", "Summary for Beacon sync", &notes).unwrap().unwrap();
+        let e = &list(&d)[0];
+        assert_eq!((e["source"].as_str(), e["reason"].as_str(), e["files"].as_array().map(Vec::len)), (Some("wrap-up"), Some("Summary for Beacon sync"), Some(1)));
+        assert_eq!((e["files"][0]["before"].as_str(), e["files"][0]["after"].as_str()), (Some(before.as_str()), Some(after.as_str())));
+        // a new meeting note (a prep on a day without one) is undone by removing it
+        let id2 = record_files(&d, "prep", "Beacon sync", "Briefing for Beacon sync", &[("Projects/Meeting.md".into(), None, Some("briefing".into()))]).unwrap().unwrap();
+        fs::write(d.join("Projects/Meeting.md"), "briefing").unwrap();
+        assert!(matches!(undo(&d, &id2, "Projects/Meeting.md").unwrap(), Undone::Done));
+        assert!(!d.join("Projects/Meeting.md").exists());
+        assert!(matches!(undo(&d, &id, "Projects/Beacon.md").unwrap(), Undone::Done));
+        assert_eq!(read(&d, "Projects/Beacon.md"), before);
+        // nothing changed: no entry; a path outside the notes: refused
+        assert_eq!(record_files(&d, "prep", "x", "", &[("Projects/Beacon.md".into(), Some("a".into()), Some("a".into()))]).unwrap(), None);
+        assert!(record_files(&d, "prep", "x", "", &[("../x.md".into(), None, Some("a".into()))]).is_err());
     }
 
     #[test]
