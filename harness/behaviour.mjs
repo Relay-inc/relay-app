@@ -2744,6 +2744,48 @@ const SCENARIOS = {
     );
   },
 
+  // the lists of changed files scroll with the wheel (WebKit): a page's Changes panel with an entry taller than the
+  // panel, a conversation's Git drawer with 40 files and the diff window over the app with a 150-line diff
+  async changesScroll(s) {
+    const wheelAt = async (locator, dy = 600, dx = 40) => {
+      const box = await locator.boundingBox();
+      await s.page.mouse.move(box.x + dx, box.y + 40);
+      await s.page.mouse.wheel(0, dy);
+      await settle(s.page, 200);
+    };
+    const top = el => el.evaluate(e => e.scrollTop);
+    // the Changes panel beside a page: the open entry has 7 notes, the Reviewed rows come after it
+    await s.load({ fixture: "kb-changes-long" });
+    const { page } = s;
+    await openBilling(s);
+    await click(page.getByRole("button", { name: /^Changes, \d+ to review/ }));
+    await waitText(page, "written to the vault by Relay");
+    const panel = page.locator('aside[aria-label="Changes"]');
+    const list = panel.locator(".overflow-y-auto");
+    const last = panel.getByText("Capture from \u201cStart the security audit\u201d chat");
+    s.check("the panel's list is taller than the panel", (await list.evaluate(e => e.scrollHeight > e.clientHeight * 2)) === true);
+    await wheelAt(panel.locator("[data-file]").first());
+    s.check("the wheel over a diff scrolls the list", (await top(list)) > 0);
+    for (let i = 0; i < 12; i++) await wheelAt(list, 800);
+    const [lb, pb] = [await last.boundingBox(), await list.boundingBox()];
+    s.check("the last Reviewed row comes into view", !!lb && lb.y >= pb.y && lb.y + lb.height <= pb.y + pb.height + 1);
+    s.check("the panel keeps its width", (await panel.boundingBox()).width === 580);
+    // a conversation's changes in the Git drawer, and one file's diff in the window over the app
+    await s.load({ fixture: "git-long", sel: s.keys.long });
+    await page.evaluate(() => window.__harness.changeSettings({ gitDrawer: true }));
+    await click(button(page, "Git"));
+    await waitText(page, "Report01.php");
+    const files = page.locator(".relay-drawer .overflow-y-auto").first();
+    await wheelAt(page.getByText("Report05.php").first(), 3000, 20);
+    s.check("the wheel scrolls the drawer's file list", (await top(files)) > 0);
+    s.check("down to the last file", await page.getByText("Report40.php").first().isVisible());
+    await click(page.getByText("Report01.php").first());
+    const diff = page.locator(".ticket-window .overflow-y-auto").first();
+    await wheelAt(diff, 800, 300);
+    s.check("the wheel scrolls the diff window", (await top(diff)) > 0);
+    s.check("its width stays the window's", (await diff.evaluate(e => e.scrollWidth <= e.clientWidth)) === true);
+  },
+
   // issue 371: Undo on a note the user edited since shows the merge and writes nothing until it is applied
   async changesMerge(s) {
     await s.load({ fixture: "kb-changes" });

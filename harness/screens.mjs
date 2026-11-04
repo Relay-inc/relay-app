@@ -1312,6 +1312,15 @@ const VIEWS = {
     await settle(page, 400);
   },
   "changes-feed-dark": async () => VIEWS["changes-feed"]("kb-changes-dark"),
+  // a run's entry taller than the panel, scrolled with the wheel to its lower notes
+  "changes-feed-long": async (fixture = "kb-changes-long") => {
+    await VIEWS["changes-feed"](fixture);
+    const box = await page.locator('aside[aria-label="Changes"] [data-file]').first().boundingBox();
+    await page.mouse.move(box.x + 40, box.y + 40);
+    await page.mouse.wheel(0, 2600);
+    await settle(page, 400);
+  },
+  "changes-feed-long-dark": async () => VIEWS["changes-feed-long"]("kb-changes-long-dark"),
   // K1 / K7 (issue 372): the Inbox row with its count in the Pages tab, the Inbox view, Claude's proposals, a row's
   // destination picker, the dry run of moving the old scratch notes, and the quick capture window
   "inbox-row": async (fixture = "kb-changes-inbox") => {
