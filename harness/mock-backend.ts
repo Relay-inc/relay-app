@@ -1280,6 +1280,21 @@ function handle(cmd: string, a: Args): unknown {
     }
     // one Claude call without tools (src-tauri ai_write): findings, quick replies, an answer on a line, or a draft
     case "ai_write":
+      // a meeting's wrap-up (prompts/meetings/wrapup.md): the draft as JSON, or never, or failing (__harness.wrapupMode)
+      if (/verslag van een meeting/.test(a.system)) {
+        if (wrapupMode === "slow") return new Promise(() => {});
+        if (wrapupMode === "fail") return Promise.reject("claude exited with code 1");
+        return JSON.stringify({
+          summary_md:
+            "Thomas en ik overliepen de sprint 23 demo en de planning voor sprint 24. De Indicata auto-simulatie schuift naar sprint 24; de hosting migratie gebeurt op zaterdag 15 november. Wie de beveiligingsaudit opneemt, is nog open.\n\n- Indicata-koppeling werkt op staging; de demo liep zonder problemen.\n- Simulator komt in sprint 24, niet 25.\n- Downtime-venster: zaterdag 15 nov, 06:00 – 08:00.\n- Beveiligingsaudit: Thomas checkt met Pieter wie het opneemt.\n\n**Maxim's way of working**\n- Maxim bouwt de waarde-API\n- Progress te checken\n- Voorstel: korte check-in",
+          next_steps: [
+            { text: "Agenda in het kanaal posten zodat Pieter het weet", route: "reminder", due: "2026-10-01" },
+            { text: "Met Maxim bespreken: begrijpen wat hij bouwt, sneller vragen", route: "reminder", due: "2026-10-02" },
+            { text: "Indicata-velden simulator uitwerken", route: "ticket" },
+          ],
+          decisions: ["Indicata simulator in sprint 24", "Migratie op zaterdag 15 nov, 06:00"],
+        });
+      }
       if (/git commit message/.test(a.system)) return git.commitMessage;
       // a PR to a ticket: the invoice PR is ticket 300, anything else none
       if (/koppelt een pull request/.test(a.system)) return /Invoice/.test(a.text) ? "300" : "geen";
@@ -1646,6 +1661,7 @@ const written = new Map<string, { text: string; hash: string }>();
 const eventNotes = new Map<string, string>(); // a calendar event's id -> the note that holds it (`event:`)
 let writes = 0;
 let diskChanged = false;
+let wrapupMode: "ok" | "slow" | "fail" = "ok"; // what a meeting's wrap-up draft does (ai_write)
 let lastPage = ""; // the page read_note last read, which __harness.editOutside changes
 const harness = {
   // the app has asked for the orchestrator's workers (orchestrator-closed-empty waits for it)
@@ -1722,6 +1738,10 @@ const harness = {
     emitAgent(key, { type: "resolved", model, effort, default_model: true, default_effort: true }),
   /** the live events after the long conversation opened: running and failed tools, an error, a draft note */
   liveTail: (key = conv.LONG_KEY) => conv.liveTail().forEach(event => emitAgent(key, event)),
+  /** how a meeting's wrap-up draft goes: written, never finishing (the skeleton), or failing */
+  wrapupMode: (mode: "ok" | "slow" | "fail") => void (wrapupMode = mode),
+  /** a note in the vault with this text (a project's, with its decisions) */
+  setNote: (path: string, text: string) => void written.set(path, { text, hash: `h${++writes}` }),
   /** a meeting note in the vault: its text, found by the event it belongs to */
   meetingNote: (event: string, path: string, text: string) => {
     written.set(path, { text, hash: `h${++writes}` });

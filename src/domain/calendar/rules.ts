@@ -45,10 +45,10 @@ export function joinable(link: string) {
 }
 
 // ---------- a conversation about a meeting: a meeting note in the vault, or a briefing before it
-export type MeetingChat = "note" | "prep" | "transcript";
+export type MeetingChat = "note" | "prep";
 /** A recorded meeting's files, as vault paths (src-tauri/src/meeting.rs): the audio is null when it was not kept. */
 export type Recording = { audio: string | null; transcript: string; seconds: number; language?: string | null };
-const PROMPTS: Record<Exclude<MeetingChat, "transcript">, string> = {
+const PROMPTS: Record<MeetingChat, string> = {
   note: prompts.meetings.note,
   prep: prompts.meetings.prep,
 };
@@ -60,13 +60,7 @@ export const meetingDay = (iso: string, timeZone?: string) => new Date(iso).toLo
 
 /** The first message of a conversation about a meeting. The title, the place and the names come from the invite, so
  *  from whoever sent it: the prompt marks them as untrusted (and the conversation is marked like one about a mail). `time` formats an instant as the clock time the user reads. */
-export function meetingPrompt(
-  meeting: Meeting,
-  how: MeetingChat,
-  time: (iso: string) => string,
-  timeZone?: string,
-  recording?: Recording,
-) {
+export function meetingPrompt(meeting: Meeting, how: MeetingChat, time: (iso: string) => string, timeZone?: string) {
   const people = meeting.people.map(person => (person.name ? `${person.name} <${person.email}>` : person.email));
   const details = [
     `Titel: ${meeting.title}`,
@@ -78,27 +72,9 @@ export function meetingPrompt(
   ]
     .filter(Boolean)
     .join("\n");
-  const ask =
-    how === "transcript" && recording
-      ? transcriptPrompt(recording)
-      : fill(PROMPTS[how as keyof typeof PROMPTS], { note: quoted(meetingNoteName(meeting, timeZone)) });
+  const ask = fill(PROMPTS[how], { note: quoted(meetingNoteName(meeting, timeZone)) });
   return `${ask}\n\n${untrustedNote("nl", ["meeting"])}\n${untrusted("meeting", details)}`;
 }
-
-/** The ask after a recording: the note around its files, then the summary. What people said is text of third parties,
- *  like the invite, so the transcript is marked untrusted too. */
-const transcriptPrompt = (recording: Recording) =>
-  [
-    "Deze meeting is opgenomen en op deze Mac uitgeschreven.",
-    `Transcriptie: \`${recording.transcript}\``,
-    recording.audio && `Audio: \`${recording.audio}\``,
-    recording.language && `Taal van de meeting: ${recording.language}`,
-    fill(prompts.meetings.transcript, {
-      embed: recording.audio ? "Zet de audio erin als embed en link de transcriptie. " : "Link de transcriptie. ",
-    }),
-  ]
-    .filter(Boolean)
-    .join("\n");
 
 // ---------- the briefing before a meeting: under `## Briefing` in the meeting's note, named after its day and title
 /** The meeting note's name, as the vault names them: `YYYY-MM-DD Title`, without what a file name cannot hold. The

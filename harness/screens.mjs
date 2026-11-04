@@ -143,6 +143,52 @@ const meetingLive = async fixture => {
   await page.getByText("Kenteken, kilometerstand").hover();
   await settle(page);
 };
+// the review meeting of the calendar fixture (in 4 minutes) with notes typed in, its project's note with a decisions
+// section, then Wrap-up: the draft is written by the mock's ai_write in `mode`
+const meetingWrapup = async (fixture, mode) => {
+  await open(page, server.url, { fixture });
+  await waitText("Sprint review Northwind Portal");
+  await page.evaluate(mode => {
+    const id = `review@${new Date(window.__harness.now + 4 * 60000).toISOString()}`;
+    window.__harness.wrapupMode(mode);
+    window.__harness.setNote(
+      "Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md",
+      "---\ntype: Product\n---\n# Northwind Portal\n\n## Status\nBuilding.\n\n## Decisions\n- 2026-09-20: Billing per month ([[Billing Spec]])\n\n## Open\n",
+    );
+    window.__harness.meetingNote(
+      id,
+      "Calendar/2026-10-01 Sprint review Northwind Portal.md",
+      [
+        "---",
+        "type: Meeting",
+        `event: "${id}"`,
+        "with:",
+        '  - "Sofie Claes"',
+        "created: 2026-10-01",
+        "language: nl",
+        "---",
+        "",
+        "# Sprint review Northwind Portal",
+        "",
+        "## Notes",
+        "- [09:31] Sprint 23 demo: Indicata-koppeling werkt op staging, geen issues",
+        "- [09:33] = Indicata simulator komt in sprint 24, niet 25",
+        "- [09:38] ! Agenda in het kanaal posten zodat Pieter het weet",
+        "- [09:40] ? Wie neemt de beveiligingsaudit op?",
+        "",
+      ].join("\n"),
+    );
+  }, mode);
+  await click("Sprint review Northwind Portal");
+  await waitText("Wrap-up");
+  await click("Wrap-up");
+  await click("Write the summary");
+  if (mode === "slow") await waitText("Writing the summary…");
+  else if (mode === "fail") await waitText("The summary could not be written");
+  else await waitText("Built from");
+  await page.mouse.move(900, 700);
+  await settle(page);
+};
 const settingsPage = async (tab, sub, fixture = "default") => {
   await page.setViewportSize({ width: 900, height: 700 });
   await open(page, server.url, { path: "/settings.html", fixture });
@@ -2082,6 +2128,26 @@ const VIEWS = {
   "meeting-briefing": async () => meetingBriefing("calendar", "Daily standup", true),
   "meeting-briefing-empty": async () => meetingBriefing("calendar", "Sprint review Northwind Portal"),
   "meeting-briefing-empty-dark": async () => meetingBriefing("calendar-dark", "Sprint review Northwind Portal"),
+  // the Wrap-up step (#364): the draft summary with next steps and decisions, while it is written, accepted, and failed
+  "meeting-wrapup-draft": async () => meetingWrapup("calendar", "ok"),
+  "meeting-wrapup-draft-dark": async () => meetingWrapup("calendar-dark", "ok"),
+  "meeting-wrapup-generating": async () => meetingWrapup("calendar", "slow"),
+  "meeting-wrapup-generating-dark": async () => meetingWrapup("calendar-dark", "slow"),
+  "meeting-wrapup-error": async () => meetingWrapup("calendar", "fail"),
+  "meeting-wrapup-saved": async () => {
+    await meetingWrapup("calendar", "ok");
+    await click("Accept");
+    await waitText("Saved to note ✓");
+    await page.mouse.move(900, 600);
+    await settle(page);
+  },
+  "meeting-wrapup-saved-dark": async () => {
+    await meetingWrapup("calendar-dark", "ok");
+    await click("Accept");
+    await waitText("Saved to note ✓");
+    await page.mouse.move(900, 600);
+    await settle(page);
+  },
   "meeting-live": async () => meetingLive("calendar"),
   "meeting-briefing-dark": async () => meetingBriefing("calendar-dark", "Daily standup", true),
   "meeting-live-dark": async () => meetingLive("calendar-dark"),

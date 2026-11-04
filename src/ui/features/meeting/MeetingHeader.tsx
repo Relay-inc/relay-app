@@ -28,6 +28,7 @@ export function MeetingHeader({
   noteText,
   step,
   reached,
+  wrapReady,
   showJoin,
   onStep,
 }: {
@@ -35,6 +36,7 @@ export function MeetingHeader({
   noteText: string | null;
   step: Step;
   reached: Step;
+  wrapReady: boolean; // Wrap-up can be opened: the meeting is over, or there are notes to summarise
   showJoin: boolean; // once on the screen: the Briefing step has it in its own row
   onStep: (step: Step) => void;
 }) {
@@ -62,8 +64,8 @@ export function MeetingHeader({
           {STEPS.map((id, i) => {
             const current = i === at;
             const done = i < upto && !current;
-            // Briefing and Live can be looked at any time; Wrap-up once the meeting got there
-            const open = id !== "wrapup" || i <= upto;
+            // Briefing and Live can be looked at any time; Wrap-up once there is something to wrap up
+            const open = id !== "wrapup" || wrapReady;
             return (
               <li key={id} className="flex items-center gap-1.5">
                 {i ? <span className="w-4 h-px bg-separator-strong" /> : null}

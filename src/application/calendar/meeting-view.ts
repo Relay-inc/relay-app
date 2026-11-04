@@ -74,7 +74,7 @@ export async function loadMeetingNote(meeting: Meeting, again = false) {
 export const backToToday = () => select(WAIT);
 
 /** The meeting's note, made in the vault's meeting-note shape when it has none. */
-async function noteFor(meeting: Meeting) {
+export async function noteFor(meeting: Meeting) {
   const found = await meetingNote(meeting);
   if (found) return found;
   const root = useWorkspaceStore.getState().notes.root;
@@ -92,7 +92,7 @@ async function noteFor(meeting: Meeting) {
   const { hash } = await backend.writeNote(path, text, empty.hash, false);
   return { path, text, hash };
 }
-const remember = (meeting: Meeting, note: { path: string; text: string; hash: string }) =>
+export const remember = (meeting: Meeting, note: { path: string; text: string; hash: string }) =>
   set(draft => {
     draft.note = { id: meeting.id, ...note };
     draft.noted = meeting.id;

@@ -18,7 +18,3 @@ modified:
 - 
 
 ## Summary
-
-## Decisions
-
-## Actions
