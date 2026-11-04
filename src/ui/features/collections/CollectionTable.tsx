@@ -16,6 +16,7 @@ const WIDTH: Record<Column["kind"], string> = {
   status: "7.5rem",
   text: "6rem",
   time: "5.5rem",
+  followed: "6rem",
 };
 type Item = { head: string; count: number } | { row: Row };
 

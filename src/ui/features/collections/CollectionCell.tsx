@@ -92,6 +92,8 @@ export function CellValue({ row, column, today }: { row: Row; column: Column; to
           ))}
         </span>
       );
+    case "followed":
+      return values[0] === "true" ? <span className="text-ok">{t("coll.followed")}</span> : null;
     case "status":
       return values[0] ? (
         <span className="h-5 inline-flex items-center px-2 rounded-xl bg-fill-2 text-xs">{values[0]}</span>

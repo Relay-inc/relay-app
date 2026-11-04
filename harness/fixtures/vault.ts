@@ -583,10 +583,12 @@ const meet = (
   stage: "planned" | "briefed" | "wrapped",
   who: string[],
   about = ["Northwind Portal"],
+  context?: string[],
 ): Linked => ({
   p: `Calendar/Meetings/2026/${day} ${title}.md`,
   k: "Meeting",
   about,
+  context,
   with: who,
   date: day,
   stage,
@@ -602,7 +604,8 @@ const linkedList: Linked[] = [
     [people[0], people[3]],
     ["Northwind Portal", "Atlas Logistics"],
   ),
-  meet("2026-09-10", "Northwind Portal design review", "wrapped", [people[1]]),
+  // this one points at the project through context: only, which a group counts and an about: filter does not
+  meet("2026-09-10", "Northwind Portal design review", "wrapped", [people[1]], [], ["Northwind Portal"]),
   meet("2026-09-03", "Northwind Portal kickoff", "wrapped", people),
   meet("2026-09-30", "Atlas Logistics sync", "wrapped", [people[3]], ["Atlas Logistics"]),
   meet("2026-09-30", "Delmas Bakery opening hours", "wrapped", [people[2]], ["Delmas Bakery"]),

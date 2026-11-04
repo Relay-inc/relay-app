@@ -2509,4 +2509,7 @@ export default {
   "coll.linkAnother": "+ Lier un autre",
   "coll.search": "Rechercher",
   "coll.options": "options",
+  "coll.col.linked": "lié ici",
+  "coll.col.followed-up": "Suivi",
+  "coll.followed": "✓ Mail rédigé",
 } satisfies Record<Key, string>;

@@ -179,3 +179,22 @@ test("a links cell offers the projects of its type and what the rows name alread
   assert.deepEqual(linkOptions(rows, "about"), ["Atlas", "Beacon", "Old"]);
   assert.deepEqual(linkOptions([...rows, row("People/Sofie Claes.md", "Person", {})], "with"), ["Sofie Claes"]);
 });
+
+test("the linked filter is the tree group's rule: about: or context:, outside its folder, a person named in with:", () => {
+  const all = [
+    row("Calendar/M/2026-10-01 A.md", "Meeting", { about: ["Beacon"], with: ["Sofie Claes"] }, { date: "2026-10-01" }),
+    row("Calendar/M/2026-09-01 B.md", "Meeting", { context: ["Beacon"] }, { date: "2026-09-01" }),
+    row("Calendar/M/2026-08-01 C.md", "Meeting", { about: ["Atlas"] }),
+    row("Contexts/S/Beacon/Documents/Own.md", "Document", { about: ["Beacon"] }),
+    row("Resources/Ref.md", "Reference", { about: ["Beacon"] }),
+    row("Resources/Loose.md", "", { about: ["Beacon"] }),
+    row("Contexts/S/Beacon/Beacon.md", "Project", { context: ["Beacon"] }),
+    row("People/Sofie Claes.md", "Person", {}),
+    row("People/Tom Willems.md", "Person", { about: ["Atlas"] }),
+  ];
+  const filters = [{ key: "linked", is: "Beacon", outside: "Contexts/S/Beacon" }];
+  const names = (c: "meetings" | "documents" | "people") => evaluate(all, { ...newView(c, "", filters) }).map(r => r.t);
+  assert.deepEqual(names("meetings"), ["2026-10-01 A", "2026-09-01 B"]);
+  assert.deepEqual(names("documents").sort(), ["Loose", "Ref"]); // untyped counts, the project's own folder does not
+  assert.deepEqual(names("people"), ["Sofie Claes"]);
+});

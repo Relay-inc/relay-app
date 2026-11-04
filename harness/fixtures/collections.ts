@@ -24,13 +24,13 @@ for (const n of linkedEntries) {
   const meeting = n.k === "Meeting";
   const front = [
     `type: ${n.k}`,
-    meeting ? `context: ${link("Agency")}` : "",
     list("about", n.about ?? []),
-    list("context", meeting ? [] : (n.context ?? [])),
+    list("context", meeting ? ["Agency", ...(n.context ?? [])] : (n.context ?? [])),
     list("with", n.with ?? []),
     n.role ? `role: ${n.role}` : "",
     meeting && n.date ? `date: ${n.date}` : "",
     meeting && n.date === "2026-09-24" ? "language: nl" : "",
+    meeting && (n.date === "2026-09-24" || n.date === "2026-09-17") ? "followed-up: true" : "",
   ].filter(Boolean);
   texts[n.p] = `---\n${front.join("\n")}\n---\n${body(n.stage ?? "", title)}`;
 }

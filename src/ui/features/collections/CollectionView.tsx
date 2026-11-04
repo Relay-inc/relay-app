@@ -30,7 +30,7 @@ export function CollectionView({ className }: { className: string }) {
   const today = new Date().toISOString().slice(0, 10);
   const inScope = scoped(rows, view);
   const shown = evaluate(rows, view);
-  const about = view.filters.find(f => f.key === "about" && f.is !== undefined)?.is;
+  const about = view.filters.find(f => (f.key === "about" || f.key === "linked") && f.is !== undefined)?.is;
   const where = [
     view.context ? t("coll.in", { context: view.context }) : "",
     about && !view.context ? t("coll.about", { name: about }) : "",

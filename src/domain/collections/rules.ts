@@ -21,7 +21,7 @@ export const COLLECTIONS: CollectionId[] = ["meetings", "documents", "people", "
 
 /** How a column draws its cells: the note's title (opens it), a date, a meeting's stage, links as chips, people as
  *  chips with initials, a status as a pill, plain text, or the file's mtime. */
-export type ColumnKind = "title" | "date" | "stage" | "links" | "people" | "status" | "text" | "time";
+export type ColumnKind = "followed" | "title" | "date" | "stage" | "links" | "people" | "status" | "text" | "time";
 export type Column = { key: string; kind: ColumnKind };
 export type Sort = { key: string; dir: "asc" | "desc" };
 type Def = {
@@ -45,10 +45,11 @@ export const DEFS: Record<CollectionId, Def> = {
       col("about", "links"),
       col("with", "people"),
       col("language", "text"),
+      col("followed-up", "followed"),
     ],
     sort: { key: "date", dir: "desc" },
     board: "stage",
-    derived: ["stage"],
+    derived: ["stage", "followed-up"],
   },
   documents: {
     kinds: "rest",
@@ -104,7 +105,11 @@ export const STAGES = ["planned", "briefed", "wrapped"];
 const STATUSES = ["Active", "Blocked", "Quiet", "Paused"];
 
 /** One condition: a key is a value (any of its values), or a date key within a range (ISO dates, either end open). */
-export type Filter = { key: string; is?: string; from?: string; to?: string };
+export type Filter = { key: string; is?: string; from?: string; to?: string; outside?: string };
+/** The filter "Show all" opens a group of the Pages tree with: the group's own rule (domain/workspace/linked.ts) as one
+ *  condition. A note is in when its `about:` or `context:` names `is`, outside the folder `outside` (whose notes the tree
+ *  shows already) and not that note itself; a person is also in when a note that is in names them in `with:`. */
+export const LINKED = "linked";
 /** A collection as it is shown: which, in which context (""= any), table or board, what narrows and orders it. */
 export type View = {
   collection: CollectionId;
@@ -133,6 +138,7 @@ export function valuesOf(row: Row, key: string): string[] {
   if (key === "type") return row.k ? [row.k] : [];
   if (key === "updated") return [new Date(row.at * 1000).toISOString().slice(0, 10)];
   if (key === "stage" && row.stage) return [row.stage];
+  if (key === LINKED) return [...(row.props.about ?? []), ...(row.props.context ?? [])];
   if (key === "date") return row.props.date ?? (row.date ? [row.date] : []);
   return row.props[key] ?? [];
 }
@@ -144,9 +150,11 @@ export const columnOf = (collection: CollectionId, key: string): Column =>
   DEFS[collection].columns.find(c => c.key === key) ?? col(key, key === "date" ? "date" : "text");
 
 /** Whether a row belongs to a collection by its `type:`. */
-export function inCollection(row: Row, collection: CollectionId) {
+export function inCollection(row: Row, collection: CollectionId, grouped = false) {
   const kinds = DEFS[collection].kinds;
   const kind = row.k.toLowerCase();
+  // a tree group's documents are every note that is no meeting, thread or person (an untyped one too)
+  if (grouped && collection === "documents") return !["meeting", "thread", "person"].includes(kind);
   return kinds === "rest" ? !!kind && !TAKEN.has(kind) : kinds.includes(kind);
 }
 const matches = (row: Row, f: Filter) => {
@@ -155,11 +163,21 @@ const matches = (row: Row, f: Filter) => {
   return values.some(v => (!f.from || v >= f.from) && (!f.to || v <= f.to));
 };
 
+function linkedTest(rows: Row[], f: Filter, collection: CollectionId) {
+  const name = f.is ?? "";
+  const out = (row: Row) => (f.outside && row.p.startsWith(`${f.outside}/`)) || same(row.t, name);
+  const points = (row: Row) => !out(row) && valuesOf(row, LINKED).some(v => same(v, name));
+  const named = new Set(
+    rows.filter(points).flatMap(row => (row.props.with ?? []).map(v => noteName(v).trim().toLowerCase())),
+  );
+  return (row: Row) => points(row) || (collection === "people" && !out(row) && named.has(row.t.trim().toLowerCase()));
+}
+
 /** The rows of a collection in a context (its `context:` names it; "" for any), the base the filters narrow. */
-export const scoped = (rows: Row[], view: Pick<View, "collection" | "context">) =>
+export const scoped = (rows: Row[], view: Pick<View, "collection" | "context"> & { filters?: Filter[] }) =>
   rows.filter(
     row =>
-      inCollection(row, view.collection) &&
+      inCollection(row, view.collection, !!view.filters?.some(f => f.key === LINKED)) &&
       (!view.context || (row.props.context ?? []).some(c => same(c, view.context))),
   );
 
@@ -168,7 +186,10 @@ const compare = (a: string, b: string) => a.localeCompare(b, undefined, { numeri
  *  without a value for the sort key goes last, whichever way it runs. */
 export function evaluate(rows: Row[], view: View): Row[] {
   const sort = view.sort ?? DEFS[view.collection].sort;
-  const kept = scoped(rows, view).filter(row => view.filters.every(f => matches(row, f)));
+  const test = view.filters.map(f =>
+    f.key === LINKED ? linkedTest(rows, f, view.collection) : (row: Row) => matches(row, f),
+  );
+  const kept = scoped(rows, view).filter(row => test.every(f => f(row)));
   const first = (row: Row) => valuesOf(row, sort.key)[0] ?? "";
   return kept.sort((a, b) => {
     const [x, y] = [first(a), first(b)];

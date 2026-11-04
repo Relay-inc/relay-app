@@ -2028,7 +2028,7 @@ const VIEWS = {
     await page.getByRole("option", { name: "about" }).click();
     await page.getByRole("combobox", { name: "about" }).fill("Northwind Portal");
     await page.keyboard.press("Enter");
-    await waitText("6 match this view");
+    await waitText("5 match this view");
     await page
       .locator('[role="row"]', { hasText: "2026-10-08 Northwind Portal sync" })
       .locator('[data-cell="about"] div')

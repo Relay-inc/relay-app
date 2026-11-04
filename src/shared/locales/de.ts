@@ -2502,4 +2502,7 @@ export default {
   "coll.linkAnother": "+ Weitere verknüpfen",
   "coll.search": "Suchen",
   "coll.options": "Optionen",
+  "coll.col.linked": "hier verknüpft",
+  "coll.col.followed-up": "Nachgefasst",
+  "coll.followed": "✓ Mail entworfen",
 } satisfies Record<Key, string>;

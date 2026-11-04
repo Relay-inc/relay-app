@@ -2465,6 +2465,9 @@ const en = {
   "coll.linkAnother": "+ Link another",
   "coll.search": "Search",
   "coll.options": "options",
+  "coll.col.linked": "linked here",
+  "coll.col.followed-up": "Followed up",
+  "coll.followed": "✓ Mail drafted",
 };
 export type Key = keyof typeof en;
 export default en;

@@ -335,11 +335,15 @@ const SCENARIOS = {
     await page.getByText("Show all 6").click();
     s.check("Show all opens the Meetings collection", await waitText(page, "6 match this view"));
     s.check(
-      "filtered on about: Northwind Portal",
-      ((await page.locator('[data-filter="about"]').textContent()) ?? "").includes("Northwind Portal"),
+      "filtered on the group's own rule for Northwind Portal",
+      ((await page.locator('[data-filter="linked"]').textContent()) ?? "").includes("Northwind Portal"),
     );
     const titles = page.locator('[role="row"] [data-cell="title"]');
-    s.check("it lists all 6", (await titles.count()) === 6);
+    s.check("it lists all 6, as many as the group counts", (await titles.count()) === 6);
+    s.check(
+      "among them the meeting that points at the project through context: only",
+      (await page.locator('[data-cell="title"]', { hasText: "Northwind Portal design review" }).count()) === 1,
+    );
     s.check(
       "another project's meeting is not among them",
       (await page.locator('[data-cell="title"]', { hasText: "Atlas Logistics sync" }).count()) === 0,
@@ -383,8 +387,12 @@ const SCENARIOS = {
     await page.getByRole("combobox", { name: "about" }).fill("Northwind Portal"); // an input with a list is a combobox
     await page.keyboard.press("Enter");
     s.check(
-      "the about: filter narrows it to 6",
-      (await waitText(page, "6 match this view")) && (await titles.count()) === 6,
+      "the about: filter narrows it to 5 (the sixth links through context: only)",
+      (await waitText(page, "5 match this view")) && (await titles.count()) === 5,
+    );
+    s.check(
+      "Followed up has its column, set on two meetings",
+      (await hasText(page, "Followed up")) && (await page.getByText("✓ Mail drafted").count()) === 2,
     );
     s.check(
       "the chip is there",
@@ -414,7 +422,7 @@ const SCENARIOS = {
       "only the about: line changed, every other byte kept",
       after === before.replace('about: "[[Northwind Portal]]"', 'about: "[[Atlas Logistics]]"') && after !== before,
     );
-    s.check("it left the filtered table", (await titles.count()) === 5);
+    s.check("it left the filtered table", (await titles.count()) === 4);
     // sort and save the view
     await click(page.getByRole("button", { name: /^Sort / }));
     await click(page.getByRole("option", { name: "Title" }));

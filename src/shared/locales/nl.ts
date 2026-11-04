@@ -2480,4 +2480,7 @@ export default {
   "coll.linkAnother": "+ Nog een koppelen",
   "coll.search": "Zoeken",
   "coll.options": "opties",
+  "coll.col.linked": "hieraan gekoppeld",
+  "coll.col.followed-up": "Opgevolgd",
+  "coll.followed": "✓ Mail klaar",
 } satisfies Record<Key, string>;

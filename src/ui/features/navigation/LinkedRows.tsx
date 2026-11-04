@@ -1,5 +1,6 @@
 import { noteName } from "../../../domain/navigation/pages";
 import { LINKED_KEYS, LINKED_SHOWN } from "../../../domain/workspace/linked";
+import { LINKED } from "../../../domain/collections/rules";
 import { openCollection } from "../../../application/collections/collections";
 import { linkedOf } from "../../../application/navigation/linked";
 import { openPage, openPagePath, togglePage } from "../../../application/navigation/pages";
@@ -60,12 +61,8 @@ export function LinkedRows({ name, inside, base }: { name: string; inside: strin
                   <SidebarRow
                     kind="fold"
                     name={t("pages.linkedAll", { n: notes.length })}
-                    onClick={() =>
-                      // a context's group is the context's notes, a project's the notes about it
-                      void (base.startsWith("ctx:")
-                        ? openCollection(key, name)
-                        : openCollection(key, "", [{ key: "about", is: name }]))
-                    }
+                    // the group's own rule as the filter, so the table lists exactly the notes the group counts
+                    onClick={() => void openCollection(key, "", [{ key: LINKED, is: name, outside: inside }])}
                   />
                 ) : null}
               </div>
