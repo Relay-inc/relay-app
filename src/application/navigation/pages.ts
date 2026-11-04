@@ -341,6 +341,15 @@ export function onHeading(listener: (page: string) => void) {
   headingWatchers.add(listener);
   return () => void headingWatchers.delete(listener);
 }
+/** The marker a line to open at is kept under in `headings`: `LINE` + the line's number in the file. */
+export const LINE = "\u0000line:";
+/** A note of any workspace opened at a line (⌘K's content matches): the editor puts its cursor there. */
+export function openPageAtLine(folder: string, path: string, line: number) {
+  const full = isMain(folder) ? path : `${folder}/${path}`;
+  headings.set(full, `${LINE}${line}`);
+  headingWatchers.forEach(listener => listener(full));
+  return openPageIn(folder, path);
+}
 /** A [[link]] in a page: the note of the workspace shown it names opens as a page, or in the right drawer with
  *  `drawer` (⌘-click), as a link in a conversation does. With a `heading` (Open on an embedded section) the page opens
  *  at it. */

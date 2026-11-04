@@ -608,7 +608,11 @@ const SCENARIOS = {
     );
     const changes = await s.chatChanges();
     const created = Object.values(changes).filter(c => c !== "removed");
-    s.check("new conversation routed to the project", created.length === 1 && created[0].project === "Harbor CRM");
+    // Cmd-K always starts a general conversation and only offers the named project (e5c162bc)
+    s.check(
+      "new general conversation (no project, not a draft)",
+      created.length === 1 && created[0].project === null && !created[0].draft,
+    );
     s.check("open view unchanged", (await s.local(["sel"])).sel === s.keys.switchTo);
     s.check("started toast", await hasText(page, `Started: ${text}`));
     s.fact("chat changes", changes);
@@ -1930,7 +1934,6 @@ const SCENARIOS = {
 
   async cmdkProject(s) {
     await s.load();
-    await s.load({ sel: s.keys.switchTo });
     const { page } = s;
     await page.keyboard.press("Meta+k");
     await settle(page, 300);
@@ -1942,8 +1945,8 @@ const SCENARIOS = {
     await settle(page, 300);
     s.check("Enter on a picked project sends nothing", (await s.calls("send")).length === 0);
     s.check(
-      "the project opens",
-      (await s.local(["sel"])).sel !== s.keys.switchTo && (await hasText(page, "Contact sync testen op staging")),
+      "the project opens on its latest conversation",
+      (await s.local(["sel"])).sel !== "__wait" && (await hasText(page, "Contact sync strategy")),
     );
     s.fact("sel", (await s.local(["sel"])).sel);
     s.fact("chat changes", await s.chatChanges());
@@ -2008,6 +2011,24 @@ const SCENARIOS = {
     s.check("↵ opens a note as a page", String(sel).startsWith("page:") && (await s.calls("send")).length === 0);
     s.check("the note is shown", await waitText(page, "Rate limit"));
     s.fact("sel", sel);
+    // a content match opens at its line: the cursor stands on it
+    await s.load({ ...kb, sel: s.keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    await page.keyboard.type("retry-after");
+    await waitText(page, "Content matches");
+    const line = /line (\d+)/.exec(await page.locator("#quick-options").innerText())?.[1];
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 600);
+    const active = await page.evaluate(
+      () =>
+        (getSelection()?.anchorNode instanceof Node
+          ? getSelection().anchorNode.parentElement?.closest(".cm-line")?.textContent
+          : "") ?? "",
+    );
+    s.check("↵ on a content match puts the cursor on its line", !!line && active.includes("Retry-After"));
+    s.fact("line asked, line under the cursor", [line, active]);
     // ⌘↵: beside the conversation, which stays
     await s.load({ ...kb, sel: s.keys.switchTo });
     await page.keyboard.press("Meta+k");
@@ -2037,8 +2058,7 @@ const SCENARIOS = {
     await settle(page, 300);
     await page.keyboard.type("new meeting");
     await waitText(page, "Actions");
-    await page.keyboard.press("ArrowDown");
-    await page.keyboard.press("Enter");
+    await click(page.getByRole("option", { name: /New Meeting/ }));
     await settle(page, 500);
     const made = await s.calls("new_from_template");
     s.check("New Meeting asks for a meeting from a template", made.length === 1 && made[0].args.template === "Meeting");

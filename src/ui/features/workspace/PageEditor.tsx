@@ -15,6 +15,7 @@ import {
   adoptPage,
   followPageLink,
   loadPage,
+  LINE,
   onHeading,
   pageTextIs,
   savePage,
@@ -357,6 +358,14 @@ function Editor(props: {
     // Open on an embedded section: the page opens with the cursor on that heading
     const reveal = () => {
       const heading = takeHeading(page);
+      if (heading?.startsWith(LINE)) {
+        // a line of the file (⌘K's content match): the body starts after the head's lines
+        const n = Number(heading.slice(LINE.length)) - (head.split("\n").length - 1);
+        const at = view.state.doc.line(Math.min(Math.max(n, 1), view.state.doc.lines)).from;
+        view.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, { y: "center" }) });
+        view.focus();
+        return;
+      }
       const at = heading === undefined ? null : headingAt(view.state.doc.toString(), heading);
       if (at !== null)
         view.dispatch({

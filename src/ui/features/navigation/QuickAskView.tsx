@@ -2,7 +2,7 @@ import { useEffect, useEffectEvent, useRef, useState, type ClipboardEvent, type 
 import type { Img } from "../../../domain/conversations/types";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { openProject, quickProjects, toggleQuickAsk } from "../../../application/navigation/navigation";
-import { openPageIn, openPagePath, placeIn } from "../../../application/navigation/pages";
+import { openPageAtLine, openPageIn, openPagePath, placeIn } from "../../../application/navigation/pages";
 import {
   type ContentHit,
   type NameHit,
@@ -125,19 +125,23 @@ export function QuickAskView() {
   // New <template> and Today's note, as actions when what is typed names them; made where the open page is
   const place = useDerived(() => placeIn(openPagePath().split("/").slice(0, -1).join("/")));
   const templates = useDerived(() => templatesOf());
+  // the frame's two: Today's note, and a new note of the first template where the open page is (in a project); the
+  // others when what is typed names them
+  const everyAction = [
+    { id: "daily", label: t("qk.todayNote") },
+    ...templates.map(name => ({
+      id: `tpl:${name}`,
+      label: place.about
+        ? t("qk.newTemplateIn", { template: name, where: place.about })
+        : t("qk.newTemplate", { template: name }),
+    })),
+  ];
+  const usual = ["daily", ...(place.about && templates.length ? [`tpl:${templates[0]}`] : [])];
   const actions =
-    asking || typed.trim().length < MIN_NOTES
+    asking || (typed.trim().length < MIN_NOTES && !filters.length)
       ? []
-      : [
-          { id: "daily", label: t("qk.todayNote") },
-          ...templates.map(name => ({
-            id: `tpl:${name}`,
-            label: place.about
-              ? t("qk.newTemplateIn", { template: name, where: place.about })
-              : t("qk.newTemplate", { template: name }),
-          })),
-        ]
-          .filter(action => matchesLabel(action.label, typed))
+      : everyAction
+          .filter(action => usual.includes(action.id) || matchesLabel(action.label, typed))
           .slice(0, MAX_ACTIONS);
   // the trackers' tickets, searched once typing pauses; the last answer stays until the next one is in
   const query = asking || onlyNotes ? "" : typed.trim();
@@ -232,6 +236,7 @@ export function QuickAskView() {
     if (option.kind === "project") openProject(option.name);
     else if (option.kind === "meeting") openMeeting(option.meeting.id);
     else if (option.kind === "ticket") openFoundCard(option.provider, option.hit);
+    else if (option.kind === "content" && !beside) openPageAtLine(option.folder, option.path, option.line);
     else if (option.kind === "note" || option.kind === "content") openPageIn(option.folder, option.path, beside);
     else if (option.id === "daily") void openDailyNote();
     else void newFromTemplate(option.id.slice("tpl:".length), place);
