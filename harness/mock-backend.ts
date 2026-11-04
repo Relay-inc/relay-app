@@ -90,7 +90,7 @@ if (fixture === "buddy")
   };
 let vaultOk = !onboarding;
 let pending = [...conv.pending];
-const gitRepos = structuredClone(git.repos);
+const gitRepos = structuredClone(fixture === "git-long" ? git.longRepos : git.repos);
 let reminders = [...vault.reminders];
 let added = 0;
 let actionConfig = integ.actionConfig();
@@ -2087,7 +2087,7 @@ type Change = {
   reason: string;
   files: { path: string; before: string | null; after: string | null; state: string }[];
 };
-let changes: Change[] = changesOn ? kb.seedChanges() : [];
+let changes: Change[] = changesOn ? kb.seedChanges(fixture.startsWith("kb-changes-long")) : [];
 if (sketchOn) written.set(kb.untyped.path, { text: kb.untyped.text, hash: "h0" });
 if (changesOn) {
   for (const e of changes)
