@@ -18,8 +18,12 @@ export function splitFiles(text: string): { text: string; files: string[] } {
     ? { text: text.slice(0, found.index), files: found[1].split("\n").filter(Boolean) }
     : { text, files: [] };
 }
-/** A path that is not absolute is a note, by its path in the vault: the agent reads it from there. */
-export const isNote = (path: string) => !path.startsWith("/");
+/** A note attached by its absolute path (a conversation may run in a code repo, where a vault-relative path would not
+ *  resolve): a markdown file under one of the workspace `roots`. Its root and its path in that workspace. */
+export function noteIn(path: string, roots: string[]) {
+  const root = roots.find(r => r && path.startsWith(r.replace(/\/+$/, "") + "/"));
+  return root && /\.md$/i.test(path) ? { root, path: path.slice(root.replace(/\/+$/, "").length + 1) } : null;
+}
 /** The name a path shows: its last part. */
 export const fileName = (path: string) => path.replace(/\/+$/, "").split("/").pop() || path;
 

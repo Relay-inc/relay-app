@@ -2115,7 +2115,7 @@ const SCENARIOS = {
     await page.keyboard.press("Enter");
     s.check("send called", await s.waitCall("send"));
     const sent = (await s.calls("send"))[0]?.args.text ?? "";
-    s.check("the sent message carries the vault path", String(sent).includes(`\n${hosting}\n`));
+    s.check("the sent message carries the absolute path", String(sent).includes(`\n/Users/demo/Vault/${hosting}\n`));
     s.check("and the typed text", String(sent).startsWith("Check and summarise it"));
     s.fact("send text", sent);
     // the page's menu: the chip lands in a new conversation of the note's project
@@ -2146,6 +2146,28 @@ const SCENARIOS = {
       "in a conversation of that note's project",
       (await composer(page).getAttribute("placeholder")) === "Ask something about Beacon…",
     );
+  },
+
+  // issue 370: a note of another workspace is refused, and no chip is made
+  async noteMentionOtherWorkspace(s) {
+    const kb = { fixture: "kb-shared" };
+    await s.load(kb);
+    await s.load({ ...kb, sel: s.keys.switchTo });
+    const { page } = s;
+    const chips = () => visible(page.getByRole("button", { name: /^Rate policy/ })).count();
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    await page.keyboard.type("policy");
+    await s.waitCall("find_notes", 2);
+    await page.keyboard.press("Tab");
+    await settle(page, 300);
+    s.check("its note is listed", await waitText(page, "Rate policy"));
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Alt+Enter");
+    await settle(page, 400);
+    s.check("it says to switch workspace", await waitText(page, "Switch workspace to add this note", 3000));
+    s.check("no chip is added", (await chips()) === 0);
+    s.check("nothing is attached for the next message", (await s.calls("send")).length === 0);
   },
 
   // K1, issue 369: a note pinned from its menu stands under Favourites above Recent, and is still there after a

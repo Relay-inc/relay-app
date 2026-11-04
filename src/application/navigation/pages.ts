@@ -12,7 +12,8 @@ import {
 import { noteKey, pageKey, VIEW } from "../../domain/navigation/keys";
 import { pageOf } from "../../domain/navigation/views";
 import { ORCH } from "../../domain/orchestrator/rules";
-import { chatVault, inWorkspace } from "../../domain/conversations/rules";
+import { chatVault, inWorkspace, vaultChoices } from "../../domain/conversations/rules";
+import { noteIn } from "../../domain/conversations/files";
 import * as backend from "../../infrastructure/backend";
 import { t } from "../../shared/i18n";
 import { storage } from "../../infrastructure/storage";
@@ -374,7 +375,7 @@ export function followPageLink(link: string, drawer: boolean, heading = "") {
  *  with the note's path typed in. */
 export function askAboutPage(path: string) {
   const key = newChatHere(pageProject(path)?.key ?? null);
-  typeInto(key, `\`${path}\` `);
+  typeInto(key, `\`${abs(path)}\` `);
   return select(key);
 }
 
@@ -389,7 +390,8 @@ function noteProject(path: string) {
         .find(p => noteName(p.note) === about)?.key ?? null)
     : null;
 }
-/** A note of `folder` as a chip in the open conversation's composer: its path in the vault, which the agent reads.
+/** A note of `folder` as a chip in the open conversation's composer: its absolute path, which the agent reads from
+ *  wherever the conversation runs (a project's may run in its code repo).
  *  A conversation that runs in another workspace than the note's refuses. */
 export async function mentionNote(path: string, folder = activeFolder()) {
   const { selected } = useNavigationStore.getState();
@@ -399,8 +401,14 @@ export async function mentionNote(path: string, folder = activeFolder()) {
     toast(t("composer.noteOtherWorkspace"));
     return false;
   }
-  await attachPaths([isMain(folder) ? path : `${folder}/${path}`]);
+  await attachPaths([`${isMain(folder) ? useWorkspaceStore.getState().notes.root : folder}/${path}`]);
   return true;
+}
+/** The note an attached file is (it sits under a workspace and is markdown): its workspace folder and its path there. */
+export function attachedNote(file: string) {
+  const main = useWorkspaceStore.getState().notes.root;
+  const found = noteIn(file, [main, ...vaultChoices(settings()).map(choice => choice.folder)]);
+  return found && { folder: found.root === main ? settings().vault : found.root, path: found.path };
 }
 /** Add to conversation: the note as a chip in the open conversation when it is one of the note's project (or the note
  *  has none and it is a general one), else in a new conversation of the note's project. */

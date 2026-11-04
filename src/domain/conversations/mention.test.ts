@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { matchNotes, mentionAt, noteLabel } from "./mention.ts";
-import { splitFiles, withFiles } from "./files.ts";
+import { noteIn, splitFiles, withFiles } from "./files.ts";
 
 test("mentionAt finds an @name at the caret, not inside an address", () => {
   assert.deepEqual(mentionAt("see @bea", 8), { from: 4, query: "bea" });
@@ -16,8 +16,20 @@ test("matchNotes ranks names that start with the query first", () => {
   assert.equal(noteLabel("Projects/Bea Plan.md"), "Bea Plan");
 });
 
-test("the sent message carries the vault-relative path", () => {
-  const sent = withFiles("what changed?", ["Projects/Bea Plan.md"]);
-  assert.match(sent, /\nProjects\/Bea Plan\.md\n/);
-  assert.deepEqual(splitFiles(sent), { text: "what changed?", files: ["Projects/Bea Plan.md"] });
+test("a markdown file under a workspace root is a note, any other file is not", () => {
+  const roots = ["/Users/demo/Vault", "/Users/demo/Side vault"];
+  assert.deepEqual(noteIn("/Users/demo/Vault/Projects/Bea Plan.md", roots), {
+    root: "/Users/demo/Vault",
+    path: "Projects/Bea Plan.md",
+  });
+  assert.equal(noteIn("/Users/demo/Vault/Attachments/scan.pdf", roots), null);
+  assert.equal(noteIn("/Users/demo/Downloads/Bea Plan.md", roots), null);
+  assert.equal(noteIn("/Users/demo/Vault2/x.md", roots), null);
+});
+
+test("the sent message carries the note's absolute path", () => {
+  const file = "/Users/demo/Vault/Projects/Bea Plan.md";
+  const sent = withFiles("what changed?", [file]);
+  assert.match(sent, /\n\/Users\/demo\/Vault\/Projects\/Bea Plan\.md\n/);
+  assert.deepEqual(splitFiles(sent), { text: "what changed?", files: [file] });
 });
