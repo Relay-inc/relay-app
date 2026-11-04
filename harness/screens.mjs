@@ -1905,6 +1905,7 @@ const VIEWS = {
   // Tidy structure (PR 365): the notes outside their home, and the dry run sheet over the check
   "vault-check-tidy": async () => {
     await VIEWS["vault-check"]();
+    await page.getByRole("tab", { name: /^Garden/ }).click();
     await page.getByRole("button", { name: "Tidy structure" }).click();
     await waitText("Dry run");
     await waitText("one Undo");
@@ -1914,6 +1915,7 @@ const VIEWS = {
     await open(page, server.url, { fixture: "dark" });
     await page.getByRole("button", { name: /^Switch workspace/ }).click();
     await page.getByRole("button", { name: "Check workspace…" }).click();
+    await page.getByRole("tab", { name: /^Garden/ }).click();
     await page.getByRole("button", { name: "Tidy structure" }).click();
     await waitText("one Undo");
     await settle(page);
@@ -1923,7 +1925,38 @@ const VIEWS = {
     await VIEWS["vault-check-tidy"]();
     await page.getByRole("button", { name: /^Apply \d+ moves$/ }).click();
     await waitText("moved to their home");
-    if (await page.locator("[data-finding=outside_home]").count()) throw new Error("the finding stays after Apply");
+    if (await page.locator("[data-garden=outside_home]").count()) throw new Error("the finding stays after Apply");
+    await settle(page);
+  },
+  // the Garden tab (PR 374, K10): one of each problem with its count and action; Tidy structure is the one filled button
+  "vault-check-garden": async () => {
+    await VIEWS["vault-check"]();
+    await page.getByRole("tab", { name: /^Garden/ }).click();
+    await waitText("Notes outside their home");
+    await waitText("Meetings without a project");
+    await waitText("Unused attachments");
+    await settle(page);
+  },
+  "vault-check-garden-dark": async () => {
+    await open(page, server.url, { fixture: "dark" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await page.getByRole("button", { name: "Check workspace…" }).click();
+    await page.getByRole("tab", { name: /^Garden/ }).click();
+    await waitText("Notes outside their home");
+    await settle(page);
+  },
+  // Ask Claude to fix properties: its dry run over the tab, one filled button
+  "vault-check-garden-ask": async () => {
+    await VIEWS["vault-check-garden"]();
+    await page.getByRole("button", { name: "Ask Claude to fix properties" }).click();
+    await waitText("Dry run");
+    await settle(page);
+  },
+  // Move to trash: the dry run of the unused attachments
+  "vault-check-garden-trash": async () => {
+    await VIEWS["vault-check-garden"]();
+    await page.getByRole("button", { name: "Move to trash" }).click();
+    await waitText("one Undo");
     await settle(page);
   },
   // after Repair all: what needs a person stays
@@ -1941,8 +1974,10 @@ const VIEWS = {
     await page.getByText("Folders", { exact: true }).click({ button: "right" });
     await page.getByRole("button", { name: "Check workspace…" }).click();
     await waitText("Only an admin of this workspace can repair it.");
-    // the Tidy structure finding shows, its button and so Apply do not
+    // the Tidy structure finding shows on the Garden tab, its button and so Apply do not
+    await page.getByRole("tab", { name: /^Garden/ }).click();
     await waitText("Only an admin can tidy the structure");
+    await waitText("Only an admin can move files to the trash");
     if (await page.getByRole("button", { name: "Tidy structure" }).count())
       throw new Error("a member sees Tidy structure");
     await settle(page);

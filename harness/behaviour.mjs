@@ -1074,7 +1074,8 @@ const SCENARIOS = {
     s.check("the text names them", /@Ben Lauwers/.test(made?.args.text ?? ""));
     await page.keyboard.press("Control+Digit3");
     await click(page.getByRole("button", { name: /^Switch workspace/ }));
-    const inbox = page.getByRole("button", { name: /^Inbox/ });
+    // the Pages tab has an Inbox row of its own (#372): the workspace menu is the last one in the page
+    const inbox = page.getByRole("button", { name: /^Inbox/ }).last();
     s.check("the Inbox counts the thread that mentions you", (await inbox.textContent())?.trim() === "Inbox1");
     await click(inbox);
     await click(page.getByRole("button", { name: /Northwind Portal/ }).first());
@@ -1085,6 +1086,7 @@ const SCENARIOS = {
       "resolving takes it out of the Inbox",
       await page
         .getByRole("button", { name: /^Inbox$/ })
+        .last()
         .waitFor({ timeout: 3000 })
         .then(
           () => true,
@@ -1132,6 +1134,7 @@ const SCENARIOS = {
     await s.load();
     const { page } = s;
     const row = path => page.locator(`[data-page="${path}"]`);
+    const spec = "Contexts/Agency/Projects/Beacon Billing/Documents/Billing Spec.md";
     await click(page.getByRole("tab", { name: /^Pages/ }));
     await click(page.locator('[data-project="Beacon Billing"]'));
     await click(page.locator('[data-folder="Contexts/Agency/Projects/Beacon Billing/Documents"]'));
@@ -2602,6 +2605,88 @@ const SCENARIOS = {
     s.check("the note has its type now", (await note(sketch)).startsWith("---\ntype: Document"));
     await click(page.getByRole("button", { name: /^Changes, 2 to review/ }));
     s.check("and the run is in the feed", await waitText(page, "Added type: Document"));
+  },
+
+  // issue 374 (K10): the Garden tab of the vault check. One of each problem with its count; a project picked on a meeting
+  // writes about: and the row goes; Move to trash is a dry run, then one Undo; Ask Claude is a dry run too and its run is
+  // one entry in the feed; one filled button at a time, also with a sheet open
+  async vaultGarden(s) {
+    await s.load({ fixture: "kb-sketch" });
+    const { page } = s;
+    await click(page.getByRole("button", { name: /^Switch workspace/ }));
+    await click(button(page, "Check workspace…"), 300);
+    await click(page.getByRole("tab", { name: /^Garden/ }), 300);
+    const count = async kind => Number((await page.locator(`[data-garden=${kind}] span`).first().textContent()) ?? 0);
+    const counts = [];
+    for (const kind of ["outside_home", "no_project", "broken_link", "orphan", "unused_attachment", "no_type"])
+      counts.push(await count(kind));
+    s.check("each finding shows its count", counts.join(",") === "10,3,2,4,3,3");
+    s.check("the tab counts them all", (await page.getByRole("tab", { name: /^Garden\s*25$/ }).count()) === 1);
+    const primary = () =>
+      page.locator('[role=dialog][aria-label^="Check"] .btn-primary').locator("visible=true").count();
+    s.check("one filled button: Tidy structure", (await primary()) === 1);
+    // a project picked on a meeting
+    const meeting = "Calendar/Meetings/2026/2026-10-30 Call Sofie planning Q1.md";
+    await page
+      .getByLabel("Pick project: 2026-10-30 Call Sofie planning Q1")
+      .selectOption({ label: "Northwind Portal" });
+    await settle(page, 400);
+    const about = (await s.calls("garden_about")).map(c => c.args);
+    s.check(
+      "the pick writes about:",
+      about.length === 1 && about[0].path === meeting && about[0].project === "Northwind Portal",
+    );
+    s.check(
+      "and the row is gone",
+      (await count("no_project")) === 2 &&
+        (await page.getByLabel("Pick project: 2026-10-30 Call Sofie planning Q1").count()) === 0,
+    );
+    // Move to trash: a dry run, one Undo
+    await click(button(page, "Move to trash"), 300);
+    s.check(
+      "the dry run lists the files",
+      (await hasText(page, "Dry run")) && (await hasText(page, "floor-plan-v1.png")),
+    );
+    s.check("with the sheet open the Apply button is the only filled one", (await primary()) === 1);
+    await click(button(page, "Move 3 files to trash"), 500);
+    s.check("three files went to the trash", (await s.calls("trash_path")).length === 3);
+    s.check("the dialog stays open", (await page.getByRole("tab", { name: /^Garden/ }).count()) === 1);
+    await click(button(page, "Undo"), 400);
+    s.check(
+      "one Undo, clicked above the open dialog, puts all three back",
+      (await s.calls("restore_path")).length === 3,
+    );
+    s.check("and the row is there again", (await count("unused_attachment")) === 3);
+    // Tidy structure's Undo is reachable above the dialog too
+    await click(button(page, "Tidy structure"), 300);
+    await click(page.getByRole("button", { name: /^Apply \d+ moves$/ }), 500);
+    await click(button(page, "Undo"), 400);
+    s.check("Tidy structure's Undo works with the dialog open", (await s.calls("tidy_undo")).length === 1);
+    // Ask Claude to fix properties
+    await click(button(page, "Ask Claude to fix properties"), 300);
+    s.check(
+      "its dry run lists the notes, one filled button",
+      (await hasText(page, "Pricing ideas")) && (await primary()) === 1,
+    );
+    await click(button(page, "Ask Claude"), 600);
+    const asked = (await s.calls("garden_ask")).map(c => c.args);
+    s.check(
+      "Claude is asked once for the 3 notes",
+      asked.length === 1 && asked[0].action === "properties" && asked[0].paths.length === 3,
+    );
+    s.check("the row is gone", (await page.locator("[data-garden=no_type]").count()) === 0);
+    await click(button(page, "Close"), 300);
+    await openBilling(s);
+    s.check(
+      "its writes are one entry in the feed",
+      (await page.getByRole("button", { name: /^Changes, [1-9]\d* to review/ }).count()) === 1,
+    );
+    // a broken link opens its note at the line
+    await click(page.getByRole("button", { name: /^Switch workspace/ }));
+    await click(button(page, "Check workspace…"), 300);
+    await click(page.getByRole("tab", { name: /^Garden/ }), 300);
+    await click(page.locator("[data-garden=broken_link]").getByRole("button", { name: "Review" }), 200);
+    s.check("Review lists the links with their line", await hasText(page, "Northwind Portal.md:12"));
   },
 
   // issue 371: the meeting flow's own writes are in the feed: a prep's briefing, a wrap-up's Accept and a decision added

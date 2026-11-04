@@ -1,7 +1,17 @@
+import { createPortal } from "react-dom";
 import type { Toast as ToastState } from "../../../domain/navigation/views";
 
 /** A chip that hugs its text: what just happened and, when it can be taken back, a ghost Undo. */
 export function Toast({ toast }: { toast: ToastState }) {
+  // on the body, above dialogs and sheets (z-50): their Undo has to be reachable while they are open
+  return createPortal(
+    <div className="fixed bottom-3 left-1/2 z-60 -translate-x-1/2">
+      <Chip toast={toast} />
+    </div>,
+    document.body,
+  );
+}
+function Chip({ toast }: { toast: ToastState }) {
   return (
     <div
       className={`mx-auto flex w-fit max-w-full gap-3 rounded-[10px] bg-label pr-1.5 pl-3.5 text-[13px] text-bg shadow-lg select-none ${toast.detail ? "min-h-9 items-start py-2" : "h-9 items-center py-0"}`}

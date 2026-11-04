@@ -15,7 +15,7 @@ import { ORCH } from "../../domain/orchestrator/rules";
 import { chatVault, inWorkspace, vaultChoices } from "../../domain/conversations/rules";
 import { noteIn } from "../../domain/conversations/files";
 import * as backend from "../../infrastructure/backend";
-import { t } from "../../shared/i18n";
+import { t, tn } from "../../shared/i18n";
 import { storage } from "../../infrastructure/storage";
 import { useConversationsStore } from "../conversations/store";
 import { newChatHere } from "../conversations/chats";
@@ -512,6 +512,23 @@ export async function trashPage(path: string) {
   } catch (e) {
     fail(e);
   }
+}
+/** Files into the workspace's .trash/ as one run, with one Undo that puts them all back. */
+export async function trashPages(paths: string[], undone?: () => unknown) {
+  const gone: Awaited<ReturnType<typeof backend.trashPath>>[] = [];
+  try {
+    for (const path of paths) gone.push(await backend.trashPath(abs(path)));
+  } catch (e) {
+    fail(e);
+  }
+  await loadSnapshot();
+  if (!gone.length) return;
+  toast(tn("garden.trashed", gone.length), () => {
+    void Promise.all(gone.map(g => backend.restorePath(g.root, g.trash, g.path)))
+      .then(loadSnapshot)
+      .then(undone)
+      .catch(fail);
+  });
 }
 const noteLabel = (path: string) => path.split("/").pop()!.replace(/\.md$/i, "");
 export const revealPage = (path: string) => backend.openFile(abs(path), true).catch(fail);
