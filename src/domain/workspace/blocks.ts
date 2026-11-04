@@ -15,7 +15,8 @@ export type BlockKind =
   | "code"
   | "table"
   | "divider"
-  | "link";
+  | "link"
+  | "file";
 
 /** What a / item puts on its (empty) line, and where the cursor goes in it. */
 export const SLASH: { kind: BlockKind; insert: string; caret: number }[] = [

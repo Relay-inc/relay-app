@@ -28,3 +28,15 @@ export function sentAt(ms: number, locale: string, now = new Date()) {
 /** A clock time: hours and minutes, always on the 24-hour clock ("17:53", never "05:53 PM"). */
 export const clockTime = (iso: string, locale: string) =>
   dateFormat(locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso));
+/** A file's size the way Finder says it: "840 KB", "1,2 MB" (decimal units, one decimal from a megabyte up). */
+export function fileSize(bytes: number, locale: string) {
+  const [value, unit] =
+    bytes < 1e3
+      ? [bytes, "B"]
+      : bytes < 1e6
+        ? [bytes / 1e3, "KB"]
+        : bytes < 1e9
+          ? [bytes / 1e6, "MB"]
+          : [bytes / 1e9, "GB"];
+  return `${numberFormat(locale, { maximumFractionDigits: unit === "B" || unit === "KB" ? 0 : 1 }).format(value)} ${unit}`;
+}

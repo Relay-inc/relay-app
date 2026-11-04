@@ -50,7 +50,7 @@ fn plain(name: &str) -> Result<&str, String> {
 fn rel_of(root: &Path, p: &Path) -> String { p.strip_prefix(root).unwrap().to_string_lossy().into_owned() }
 /// Make `stem.ext` in `dir`, or `stem 1.ext`, `stem 2.ext`… when taken, with `make` (which must fail with
 /// AlreadyExists rather than write over one): taken between a look and the write is not possible this way.
-fn make_free(dir: &Path, stem: &str, ext: &str, make: impl Fn(&Path) -> io::Result<()>) -> io::Result<PathBuf> {
+pub(crate) fn make_free(dir: &Path, stem: &str, ext: &str, make: impl Fn(&Path) -> io::Result<()>) -> io::Result<PathBuf> {
     for i in 0..1000 {
         let p = dir.join(if i == 0 { format!("{stem}{ext}") } else { format!("{stem} {i}{ext}") });
         match make(&p) {
@@ -60,7 +60,7 @@ fn make_free(dir: &Path, stem: &str, ext: &str, make: impl Fn(&Path) -> io::Resu
     }
     Err(io::Error::other("no free name"))
 }
-fn new_file(p: &Path) -> io::Result<fs::File> { fs::OpenOptions::new().write(true).create_new(true).open(p) }
+pub(crate) fn new_file(p: &Path) -> io::Result<fs::File> { fs::OpenOptions::new().write(true).create_new(true).open(p) }
 /// `from` renamed to `to`, refused when `to` is there (renamex_np RENAME_EXCL on macOS: no window between a look and
 /// the rename).
 #[cfg(target_os = "macos")]
@@ -197,19 +197,24 @@ static WIKI: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[\[([^\]\|#\n\\]+)
 // a markdown link's destination: <…> or up to a space or `)`, then an optional title
 static MDLINK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"\]\((<[^>\n]+>|[^)\s]+)((?:\s+"[^"\n]*")?)\)"#).unwrap());
 
-fn lower(s: &str) -> String { s.to_lowercase() }
-fn base(p: &str) -> &str { p.rsplit('/').next().unwrap_or(p) }
+pub(crate) fn lower(s: &str) -> String { s.to_lowercase() }
+pub(crate) fn base(p: &str) -> &str { p.rsplit('/').next().unwrap_or(p) }
 fn dir(p: &str) -> &str { p.rfind('/').map_or("", |i| &p[..i]) }
-/// The note a [[link]] resolves to among `all`, as Obsidian does: a path from the root, else the one note ending in that
-/// path (a bare name: the one note of that name). Two notes it could be: none, so an ambiguous link is left alone.
+/// The file a [[link]] or ![[embed]] resolves to among `all`, as Obsidian does: a path from the root, else the one file
+/// ending in that path (a bare name: the one file of that name). A name with no extension is a note. Two files it could
+/// be: none, so an ambiguous link is left alone.
 fn wiki_target<'a>(link: &str, all: &'a [String]) -> Option<&'a String> {
     let t = link.trim().trim_start_matches('/');
-    let md = lower(&if lower(t).ends_with(".md") { t.to_string() } else { format!("{t}.md") });
-    if let Some(p) = all.iter().find(|p| lower(p) == md) { return Some(p); }
-    let tail = format!("/{md}");
-    let mut hits = all.iter().filter(|p| lower(p).ends_with(&tail));
-    let one = hits.next()?;
-    hits.next().is_none().then_some(one)
+    let md = if lower(t).ends_with(".md") { t.to_string() } else { format!("{t}.md") };
+    // `Photo.png` is that file, `Notes v1.2` is not: the note is tried second
+    [t.to_string(), md].iter().find_map(|c| {
+        let c = lower(c);
+        if let Some(p) = all.iter().find(|p| lower(p) == c) { return Some(p); }
+        let tail = format!("/{c}");
+        let mut hits = all.iter().filter(|p| lower(p).ends_with(&tail));
+        let one = hits.next()?;
+        hits.next().is_none().then_some(one)
+    })
 }
 /// `p` (relative to the root) as seen from the folder `from`: "../B/C.md".
 fn relative(from: &str, p: &str) -> String {
@@ -218,7 +223,7 @@ fn relative(from: &str, p: &str) -> String {
     std::iter::repeat_n("..", a.len() - same).chain(b[same..].iter().copied()).collect::<Vec<_>>().join("/")
 }
 /// A path joined onto a folder, with "." and ".." taken out (None when it climbs out of the root).
-fn join(folder: &str, rel: &str) -> Option<String> {
+pub(crate) fn join(folder: &str, rel: &str) -> Option<String> {
     let mut out: Vec<&str> = folder.split('/').filter(|s| !s.is_empty()).collect();
     for part in rel.split('/') {
         match part { "" | "." => {} ".." => { out.pop()?; } x => out.push(x) }
@@ -237,17 +242,18 @@ fn md_target(dest: &str, folder: &str, files: &HashSet<&str>, notes: &[String]) 
     if lower(dest).ends_with(".md") && !dest.contains("../") { return wiki_target(dest, notes).map(|p| (p.clone(), Form::Short)); }
     None
 }
-struct Ctx<'a> { notes: Vec<String>, after: Vec<String>, files: HashSet<&'a str>, map: HashMap<&'a str, &'a str> }
-/// One name among the notes after the move: a bare name or a shortest path may stay short.
+struct Ctx<'a> { notes: Vec<String>, all: &'a [String], after: Vec<String>, files: HashSet<&'a str>, map: HashMap<&'a str, &'a str> }
+/// One name among the files after the move: a bare name or a shortest path may stay short.
 fn unique(ctx: &Ctx, p: &str) -> bool { ctx.after.iter().filter(|q| lower(base(q)) == lower(base(p))).count() == 1 }
 
 /// A [[link]] rewritten when it resolves to a moved note.
 fn wiki(c: &regex::Captures, ctx: &Ctx, n: &mut usize) -> String {
     let (link, rest) = (&c[1], &c[2]);
-    let Some(new) = wiki_target(link, &ctx.notes).and_then(|p| ctx.map.get(p.as_str())) else { return c[0].to_string() };
-    let stem = new.strip_suffix(".md").unwrap_or(new);
+    let Some(new) = wiki_target(link, ctx.all).and_then(|p| ctx.map.get(p.as_str())) else { return c[0].to_string() };
+    // a note is named without .md (unless the link had it), any other file with its extension
+    let stem = if lower(new).ends_with(".md") { new.strip_suffix(".md").or(new.strip_suffix(".MD")).unwrap_or(new) } else { new };
     let mut form = if link.contains('/') || !unique(ctx, new) { stem.to_string() } else { base(stem).to_string() };
-    if lower(link).ends_with(".md") { form.push_str(".md"); }
+    if lower(new).ends_with(".md") && lower(link).ends_with(".md") { form.push_str(".md"); }
     if form == link { return c[0].to_string(); }
     *n += 1;
     format!("[[{form}{rest}]]")
@@ -312,8 +318,8 @@ fn changes(root: &Path, all: &[String], moved: &[(String, String)]) -> (Vec<(Str
     let gone = moved.iter().filter_map(|(p, _)| fs::read(root.join(p)).ok().map(|d| (p.clone(), relay_remote::sync::sha256_hex(&d)))).collect();
     let notes: Vec<String> = all.iter().filter(|p| lower(p).ends_with(".md")).cloned().collect();
     let map: HashMap<&str, &str> = moved.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
-    let after = notes.iter().map(|p| map.get(p.as_str()).map_or(p.clone(), |n| n.to_string())).collect();
-    let ctx = Ctx { notes, after, files: all.iter().map(String::as_str).collect(), map };
+    let after = all.iter().map(|p| map.get(p.as_str()).map_or(p.clone(), |n| n.to_string())).collect();
+    let ctx = Ctx { notes, all, after, files: all.iter().map(String::as_str).collect(), map };
     let mut edits = vec![];
     let mut links = 0;
     for note in &ctx.notes {
@@ -336,8 +342,9 @@ pub fn plan(roots: &[String], from: &str, to: &str) -> Result<Plan, String> {
     if !case_only && fs::symlink_metadata(&dst).is_ok() { return Err(format!("already there: {rel_to}")); }
     if !case_only && dst.starts_with(&src) { return Err("a folder cannot go into itself".into()); }
     let dir_move = meta.is_dir();
-    if !dir_move && src.extension().is_none_or(|e| e != "md") { return Err(format!("not a page: {from}")); }
-    if !dir_move && !lower(&rel_to).ends_with(".md") { return Err(format!("a page keeps .md: {rel_to}")); }
+    // a note keeps .md; an attachment (image, PDF, audio…) moves or is renamed too, and keeps its extension
+    let ext = |p: &str| p.rsplit_once('.').map(|(_, e)| lower(e)).unwrap_or_default();
+    if !dir_move && ext(&rel) != ext(&rel_to) { return Err(format!("a file keeps its extension: {rel_to}")); }
     let all = all_files(&root);
     let moved: Vec<(String, String)> = if dir_move {
         let prefix = format!("{rel}/");
@@ -504,6 +511,44 @@ mod tests {
         assert_eq!(read(&v, "One.md"), "see [[B]] and [[B|the a]]\n");
         assert_eq!(read(&v, "Two.md"), "path [[Notes/B]] and heading [[B#Intro]] and embed ![[B]]\n");
         assert_eq!(read(&v, "Deep/Three.md"), "md [a](../Notes/B.md) and [x](https://x.test/A.md)\n```\n[[A]]\n```\n");
+    }
+
+    #[test]
+    fn renaming_an_attachment_rewrites_every_embed_that_points_to_it() {
+        let v = vault("embeds");
+        put(&v, "Attachments/2026/shot.png", "png");
+        put(&v, "A.md", "![[shot.png]] and ![[shot.png|300]] and ![[shot.png|the chart|300]] and [[shot.png]]\n");
+        put(&v, "Deep/B.md", "path ![[Attachments/2026/shot.png]] md ![chart](../Attachments/2026/shot.png) code `![[shot.png]]`\n");
+        put(&v, "C.md", "![[other.png]] ![[shot.png.md]]\n");
+        let p = plan(&[s(&v)], &s(&v.join("Attachments/2026/shot.png")), &s(&v.join("Attachments/2026/traffic.png"))).unwrap();
+        assert_eq!((p.links, p.edits.len()), (6, 2));
+        apply(&p).unwrap();
+        assert!(v.join("Attachments/2026/traffic.png").is_file() && !v.join("Attachments/2026/shot.png").exists());
+        assert_eq!(read(&v, "A.md"), "![[traffic.png]] and ![[traffic.png|300]] and ![[traffic.png|the chart|300]] and [[traffic.png]]\n");
+        assert_eq!(read(&v, "Deep/B.md"), "path ![[Attachments/2026/traffic.png]] md ![chart](../Attachments/2026/traffic.png) code `![[shot.png]]`\n");
+        assert_eq!(read(&v, "C.md"), "![[other.png]] ![[shot.png.md]]\n");
+    }
+
+    #[test]
+    fn moving_an_attachment_to_another_folder_keeps_its_embeds_and_its_extension() {
+        let v = vault("embed-move");
+        put(&v, "Attachments/2026/a.pdf", "pdf");
+        put(&v, "Elsewhere/a.pdf", "other");
+        put(&v, "N.md", "![[Attachments/2026/a.pdf]] ![[a.pdf]]\n");
+        // a second a.pdf: the bare name was ambiguous, so it stays alone; the path one is rewritten
+        mv(&v, "Attachments/2026/a.pdf", "Moved/a.pdf").unwrap();
+        assert_eq!(read(&v, "N.md"), "![[Moved/a.pdf]] ![[a.pdf]]\n");
+        assert!(mv(&v, "Moved/a.pdf", "Moved/a.png").is_err(), "an attachment keeps its extension");
+    }
+
+    #[test]
+    fn an_embed_by_path_keeps_its_path_and_an_ambiguous_bare_one_is_left_alone() {
+        let v = vault("embed-ambiguous");
+        put(&v, "One/x.png", "1");
+        put(&v, "Two/x.png", "2");
+        put(&v, "N.md", "![[One/x.png]] ![[x.png]]\n");
+        mv(&v, "One/x.png", "Three/x.png").unwrap();
+        assert_eq!(read(&v, "N.md"), "![[Three/x.png]] ![[x.png]]\n");
     }
 
     #[test]

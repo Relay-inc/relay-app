@@ -1,4 +1,4 @@
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
@@ -82,12 +82,17 @@ export const pastedFiles = () => invoke<string[]>("pasted_files");
 /** Text on the clipboard, written by the app (the webview's clipboard API is refused now and then). */
 export const copyText = (text: string) => invoke("copy_text", { text });
 /** Files dragged over the window from Finder: `over` while they hover, then the dropped paths. */
-export const onFileDrop = (handler: (event: { over: boolean; paths?: string[] }) => void) =>
+export const onFileDrop = (
+  handler: (event: { over: boolean; paths?: string[]; at?: { x: number; y: number } }) => void,
+) =>
   getCurrentWebview().onDragDropEvent(e => {
     const { type } = e.payload;
-    if (type === "enter" || type === "over") handler({ over: true });
-    else if (type === "leave") handler({ over: false });
-    else handler({ over: false, paths: e.payload.paths });
+    if (type === "leave") return handler({ over: false });
+    // where the pointer is, in the page's own pixels (Tauri gives physical ones)
+    const ratio = window.devicePixelRatio || 1;
+    const at = { x: e.payload.position.x / ratio, y: e.payload.position.y / ratio };
+    if (type === "enter" || type === "over") handler({ over: true, at });
+    else handler({ over: false, paths: e.payload.paths, at });
   });
 
 // ---------- settings, language, windows
@@ -180,6 +185,30 @@ export const writeNote = (target: string, text: string, expect: string, force: b
 /** The Pages tab's file operations: paths absolute, answers relative to the workspace. */
 export const createNote = (parent: string, name: string, folder: boolean) =>
   invoke<string>("create_note", { parent, name, folder });
+/** What a page's embeds are (src-tauri/src/attach.rs `info`): one answer per target, in order. */
+export type EmbedInfo = {
+  target: string;
+  missing?: boolean;
+  path?: string; // absolute
+  rel?: string; // in the workspace
+  kind?: "image" | "pdf" | "audio" | "note" | "file";
+  size?: number;
+  pages?: number | null;
+  thumb?: string | null; // a PDF's first page, as a data URL
+  text?: string; // a note's text
+};
+export const embedInfo = (page: string, targets: string[]) => invoke<EmbedInfo[]>("embed_info", { page, targets });
+/** One file's answer when it was added to a page: where it is and what to embed it by, or too large (not copied). */
+export type Attached = { path: string; link: string } | { tooLarge: true; name: string; size: number };
+/** Files at paths (dropped, copied in Finder, picked) copied into the page's attachments folder. */
+export const attachCopy = (page: string, paths: string[]) => invoke<Attached[]>("attach_copy", { page, paths });
+/** A pasted file's bytes (base64) saved under `name` in the page's attachments folder. */
+export const attachSave = (page: string, name: string, data: string) =>
+  invoke<Attached>("attach_save", { page, name, data });
+/** The folder, in the page's workspace, a file added to it is copied to ("Attachments/2026"). */
+export const attachDest = (page: string) => invoke<string>("attach_dest", { page });
+/** A workspace file as an address the webview loads (the `relay-file` scheme of attach.rs, not file://). */
+export const fileUrl = (path: string) => convertFileSrc(path, "relay-file");
 export const freePageName = (parent: string, name: string) => invoke<string>("free_page_name", { parent, name });
 export const duplicateNote = (target: string) => invoke<string>("duplicate_note", { target });
 export const movePath = (from: string, to: string, dry: boolean) =>

@@ -5,6 +5,7 @@
 // opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
+import * as embeds from "./fixtures/embeds";
 import * as vault from "./fixtures/vault";
 import * as conv from "./fixtures/conversations";
 import * as integ from "./fixtures/integrations";
@@ -509,6 +510,20 @@ function handle(cmd: string, a: Args): unknown {
       if (!type) return Promise.reject("not a picture");
       return [type, pngBase64(120, 80, "#e8efe3", "#3f8f4f")];
     }
+    // files inside a page (src-tauri/src/attach.rs)
+    case "embed_info":
+      return embeds.info(a.targets as string[]);
+    case "attach_dest":
+      return "Attachments/2026";
+    case "attach_save":
+      attached.push({ page: String(a.page), name: String(a.name), bytes: String(a.data).length });
+      return { path: `Attachments/2026/${a.name}`, link: a.name };
+    case "attach_copy":
+      return (a.paths as string[]).map(path => {
+        const name = path.split("/").pop()!;
+        attached.push({ page: String(a.page), name });
+        return name === embeds.DUMP ? { tooLarge: true, name, size: 312_000_000 } : { path: `Attachments/2026/${name}`, link: name };
+      });
     case "open_file":
       return String(a.path).includes("missing") ? Promise.reject("not found") : null;
     case "snapshot": {
@@ -743,6 +758,7 @@ function handle(cmd: string, a: Args): unknown {
       diskChanged = false;
       const hash = `h${++writes}`;
       written.set(String(a.target), { text: String(a.text), hash });
+      lastSaved = String(a.target);
       return { hash };
     }
     case "shared_vault_admin": {
@@ -1508,6 +1524,8 @@ mockIPC((cmd, args) => {
   if (!POLLS.has(cmd) && !cmd.startsWith("plugin:event|")) settle();
   return handle(cmd, a);
 });
+// the relay-file scheme of the backend (attach.rs) has no server here: a file's address is the picture or clip it stands for
+internals().convertFileSrc = (path: string) => embeds.fileSrc(decodeURIComponent(path));
 // a window that makes no call at all is ready too
 setTimeout(settle, 0);
 
@@ -1635,9 +1653,15 @@ const VAULT_FINDINGS = [
 const trashed = new Map<string, string[]>();
 // fixture linked: notes outside the projects' folders that point at them (about:, context:, with:)
 const linkedOn = fixture.startsWith("linked");
+// fixture embeds (K4): the Northwind Portal page holds a picture, a PDF, an audio file and a section of another note
+const embedsOn = fixture.startsWith("embeds");
 const pageList = () =>
   pages ??
-  (linkedOn ? [...vault.notes.filter(n => vault.flat(n)), vault.FLAT_NOTE, ...vault.linkedPaths] : vault.notes);
+  (linkedOn
+    ? [...vault.notes.filter(n => vault.flat(n)), vault.FLAT_NOTE, ...vault.linkedPaths]
+    : embedsOn
+      ? [...vault.notes, embeds.FINDINGS_NOTE]
+      : vault.notes);
 const pageRel = (p: unknown) => String(p).replace(vault.VAULT, "").replace(/^\//, "");
 // shared-live: the Mac's document of the page, which the editor and the mock peers share, and the cursors sent
 const liveDoc = new Y.Doc();
@@ -1693,13 +1717,20 @@ function threadsOf(all: Comment[]) {
     });
 }
 
-const written = new Map<string, { text: string; hash: string }>();
+const written = new Map<string, { text: string; hash: string }>(
+  embedsOn ? Object.entries(embeds.texts).map(([path, text]) => [path, { text, hash: "h0" }]) : [],
+);
+// the files added to a page (attach_copy, attach_save), for the checks
+const attached: { page: string; name: string; bytes?: number }[] = [];
 const eventNotes = new Map<string, string>(); // a calendar event's id -> the note that holds it (`event:`)
 let writes = 0;
 let diskChanged = false;
 let followupMode: "ok" | "slow" | "fail" = "ok"; // the same for the follow-up mail
 let wrapupMode: "ok" | "slow" | "fail" = "ok"; // what a meeting's wrap-up draft does (ai_write)
+let lastSaved = ""; // the page write_note saved last, which __harness.written gives
 let lastPage = ""; // the page read_note last read, which __harness.editOutside changes
+// Tauri gives a drop's position in physical pixels; the harness is given the page's own
+const physical = (at: { x: number; y: number }) => ({ x: at.x * devicePixelRatio, y: at.y * devicePixelRatio });
 const harness = {
   // the app has asked for the orchestrator's workers (orchestrator-closed-empty waits for it)
   workersRead: false,
@@ -1763,13 +1794,23 @@ const harness = {
   /** a permission card that turns up in the next `pending` poll */
   addPending: (request: (typeof pending)[number]) => void pending.push(request),
   /** files dragged in from Finder: Tauri's drag-enter, then drag-drop with the paths (the webview's onDragDropEvent) */
-  dropPaths: async (paths: string[]) => {
-    const position = { x: 400, y: 300 };
+  dropPaths: async (paths: string[], at = { x: 400, y: 300 }) => {
+    const position = physical(at);
     emit("tauri://drag-enter", { paths, position });
     await nextTask();
     emit("tauri://drag-drop", { paths, position });
     await nextTask();
   },
+  /** files hovering over the window at `position` (the drop's insertion line shows), not dropped yet */
+  dropHover: async (paths: string[], at = { x: 400, y: 300 }) => {
+    const position = physical(at);
+    emit("tauri://drag-enter", { paths, position });
+    await nextTask();
+    emit("tauri://drag-over", { position });
+    await nextTask();
+  },
+  /** the files added to a page so far (attach_copy, attach_save) */
+  attached: () => structuredClone(attached),
   /** what a fresh session ran on when the model and effort were left to the CLI (read_agent's `resolved`) */
   resolved: (key: string, model = "opus", effort = "high") =>
     emitAgent(key, { type: "resolved", model, effort, default_model: true, default_effort: true }),
@@ -1786,7 +1827,7 @@ const harness = {
     eventNotes.set(event, path);
   },
   /** what the page editor saved last (write_note) */
-  written: () => [...written.values()].pop()?.text ?? null,
+  written: () => (lastSaved ? written.get(lastSaved)?.text : [...written.values()].pop()?.text) ?? null,
   /** someone changed a note on disk: the next save without force is refused */
   changeOnDisk: () => void (diskChanged = true),
   teamComments: () => void (teamComments = true),
