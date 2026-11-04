@@ -119,6 +119,8 @@ export const snapshot = () => invoke<Snapshot>("snapshot");
 export const vaultNotes = () => invoke<VaultNotes>("vault_notes");
 /** The path of the meeting note whose `event:` is `event`, among the notes of `day` (YYYY-MM-DD); null when none. */
 export const noteByEvent = (day: string, event: string) => invoke<string | null>("note_by_event", { day, event });
+/** The folder a new note of `kind` for `day` (YYYY-MM-DD) goes into, relative to the vault (made when missing). */
+export const noteHome = (kind: "meeting", day: string) => invoke<string>("note_home", { kind, day });
 export const readNote = (target: string) => invoke<unknown>("read_note", { target });
 /** Writes a page over its note; rejects with "changed" when the file is no longer the text with hash `expect`, unless
  *  `force`. Resolves to the new text's hash. */
@@ -700,11 +702,18 @@ export const meetingRecordStart = (
     meeting,
   });
 };
-/** Stops, then writes the audio and transcript into the vault, `onProgress` 0..1 while it transcribes. */
-export const meetingRecordStop = (title: string, me: string, others: string, onProgress: (done: number) => void) => {
+/** Stops, then writes the audio and transcript into the vault, `onProgress` 0..1 while it transcribes. `note`: the
+ *  meeting note's name, which the transcript names as its meeting (null for none). */
+export const meetingRecordStop = (
+  title: string,
+  note: string | null,
+  me: string,
+  others: string,
+  onProgress: (done: number) => void,
+) => {
   const channel = new Channel<number>();
   channel.onmessage = onProgress;
-  return invoke<Recording>("meeting_record_stop", { title, me, others, onProgress: channel });
+  return invoke<Recording>("meeting_record_stop", { title, note, me, others, onProgress: channel });
 };
 /** The folders of recordings a failure kept, newest first; their names are their start times (20261029-152600). */
 export const meetingKept = () =>
@@ -715,13 +724,14 @@ export const meetingKept = () =>
 export const meetingRecordRetry = (
   folder: string,
   title: string,
+  note: string | null,
   me: string,
   others: string,
   onProgress: (done: number) => void,
 ) => {
   const channel = new Channel<number>();
   channel.onmessage = onProgress;
-  return invoke<Recording>("meeting_record_retry", { folder, title, me, others, onProgress: channel });
+  return invoke<Recording>("meeting_record_retry", { folder, title, note, me, others, onProgress: channel });
 };
 export const meetingRecordCancel = () => invoke("meeting_record_cancel");
 

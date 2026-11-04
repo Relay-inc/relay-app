@@ -92,9 +92,12 @@ fn front(text: &str, key: &str) -> Option<String> {
 pub fn note_by_event(vault: &str, day: &str, event: &str) -> Option<String> {
     let root = PathBuf::from(canon(vault));
     if day.is_empty() || event.is_empty() { return None; }
-    let found = walk(&root, |p, n| {
-        n.starts_with(day) && n.ends_with(".md") && fs::read_to_string(p).ok().is_some_and(|t| front(&t, "event").as_deref() == Some(event))
-    })?;
+    let hit = |p: &Path, n: &str| n.starts_with(day) && n.ends_with(".md") && fs::read_to_string(p).ok().is_some_and(|t| front(&t, "event").as_deref() == Some(event));
+    // the meetings' own folder first; the whole vault for a note made before there was one, or moved elsewhere
+    let home = crate::homes::year_of(day).map(|y| crate::homes::home(&root, "meeting", y));
+    let mut entries = home.and_then(|h| fs::read_dir(h).ok()).into_iter().flatten().flatten();
+    let found = entries.find_map(|e| { let p = e.path(); hit(&p, &e.file_name().to_string_lossy()).then_some(p) })
+        .or_else(|| walk(&root, hit))?;
     Some(rel(&root, &found))
 }
 
@@ -324,6 +327,9 @@ mod tests {
         // another day's note is not read, and an unknown id finds nothing
         assert_eq!(note_by_event(v, "2026-11-04", "abc@300"), None);
         assert_eq!(note_by_event(v, "2026-11-04", "nope"), None);
+        // in the meetings' folder
+        put(&d, "Calendar/Meetings/2026/2026-11-04 Beacon sync.md", "---\nevent: \"abc@400\"\n---\n");
+        assert_eq!(note_by_event(v, "2026-11-04", "abc@400").as_deref(), Some("Calendar/Meetings/2026/2026-11-04 Beacon sync.md"));
     }
 
     fn det(root: &Path) -> Value { let (v, m) = detect(root.to_str().unwrap()); status(&v, &m) }

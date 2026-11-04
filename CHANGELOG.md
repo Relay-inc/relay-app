@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- New meeting notes go into `Calendar/Meetings/<year>/` and link their project in `about:` when the title names one. A recording's transcript is saved as a note next to its meeting (`….transcript.md`, linked to the meeting note) and its audio goes to `Attachments/<year>/` (or Obsidian's attachment folder). A vault can choose other folders under `homes` in `.relay/config.json`. Existing notes stay where they are and are still found.
+
 ## [0.0.46] - 2026-11-04
 
 ### Added

@@ -134,8 +134,11 @@ export async function chatAbout(meeting: Meeting, how: MeetingChat) {
   // and what of it is the user's (points, ticked steps) stays with the conversation until it is merged back (calendar/prep)
   let prep;
   let keep = null;
+  const note = await meetingNote(meeting).catch(() => null);
+  // where the note is, or goes: the conversation writes there, not in a folder of its choosing
+  const folder = note ? "" : await backend.noteHome("meeting", meetingDay(meeting.start)).catch(() => "");
+  const path = note?.path ?? (folder ? `${folder}/${meetingNoteName(meeting)}.md` : undefined);
   if (how === "prep") {
-    const note = await meetingNote(meeting).catch(() => null);
     const existing = note ? (briefingIn(note.text) ?? "") : "";
     const code = meetingLanguage(note?.text ?? null, voiceOf(settings().voice).language) ?? "nl";
     prep = { language: new Intl.DisplayNames(["nl"], { type: "language" }).of(code) ?? code, code, existing };
@@ -151,7 +154,7 @@ export async function chatAbout(meeting: Meeting, how: MeetingChat) {
     prep: keep ?? undefined,
   });
   await select(key);
-  sendMsg(meetingPrompt(meeting, how, timeOf, undefined, prep));
+  sendMsg(meetingPrompt(meeting, how, timeOf, undefined, prep, path));
 }
 
 // ---------- what the notes say, for Today's day strip, now card and wrap-ups owed. Read when Today opens and with the

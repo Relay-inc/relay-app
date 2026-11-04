@@ -67,6 +67,7 @@ export function meetingPrompt(
   time: (iso: string) => string,
   timeZone?: string,
   prep: { language: string; code: string; existing: string } = { language: "", code: "", existing: "" },
+  path?: string,
 ) {
   const people = meeting.people.map(person => (person.name ? `${person.name} <${person.email}>` : person.email));
   const details = [
@@ -79,7 +80,8 @@ export function meetingPrompt(
   ]
     .filter(Boolean)
     .join("\n");
-  const note = quoted(meetingNoteName(meeting, timeZone));
+  // the note's path in the vault (its own, or where a new one goes), so the conversation does not pick a folder
+  const note = quoted(path ?? meetingNoteName(meeting, timeZone));
   // the prep asks for the briefing's fixed shape in the meeting's language, and keeps what a briefing already has of
   // the user's (their points, the steps they ticked): handed over as data, the same way as the invite
   const ask =
