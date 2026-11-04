@@ -3,6 +3,7 @@ import {
   isSystemPage,
   pagesModel,
   pageTree,
+  noteName,
   placeOf,
   recentPages,
   type PageFolder,
@@ -11,13 +12,14 @@ import {
 import { noteKey, pageKey, VIEW } from "../../domain/navigation/keys";
 import { pageOf } from "../../domain/navigation/views";
 import { ORCH } from "../../domain/orchestrator/rules";
-import { chatVault, inWorkspace } from "../../domain/conversations/rules";
+import { chatVault, inWorkspace, vaultChoices } from "../../domain/conversations/rules";
+import { noteIn } from "../../domain/conversations/files";
 import * as backend from "../../infrastructure/backend";
 import { t } from "../../shared/i18n";
 import { storage } from "../../infrastructure/storage";
 import { useConversationsStore } from "../conversations/store";
 import { newChatHere } from "../conversations/chats";
-import { typeInto } from "../conversations/actions";
+import { attachPaths, typeInto } from "../conversations/actions";
 import { filesOn, settings } from "../settings/settings";
 import { useWorkspaceStore } from "../workspace/store";
 import { contexts, loadNotes, loadSnapshot, projectName } from "../workspace/vault";
@@ -373,8 +375,51 @@ export function followPageLink(link: string, drawer: boolean, heading = "") {
  *  with the note's path typed in. */
 export function askAboutPage(path: string) {
   const key = newChatHere(pageProject(path)?.key ?? null);
-  typeInto(key, `\`${path}\` `);
+  typeInto(key, `\`${abs(path)}\` `);
   return select(key);
+}
+
+/** The key of the project a note belongs to (its own note, or one in its folder), null for none. */
+function noteProject(path: string) {
+  const own = pageProject(path);
+  if (own) return own.key;
+  const { about } = placeOf(build().model, path.split("/").slice(0, -1).join("/"));
+  return about
+    ? (build()
+        .model.contexts.flatMap(c => c.projects)
+        .find(p => noteName(p.note) === about)?.key ?? null)
+    : null;
+}
+/** A note of `folder` as a chip in the open conversation's composer: its absolute path, which the agent reads from
+ *  wherever the conversation runs (a project's may run in its code repo).
+ *  A conversation that runs in another workspace than the note's refuses. */
+export async function mentionNote(path: string, folder = activeFolder()) {
+  const { selected } = useNavigationStore.getState();
+  const chat = useConversationsStore.getState().chats[selected];
+  const other = chat ? chatVault(chat, useWorkspaceStore.getState().snap) !== folder : folder !== activeFolder();
+  if (other) {
+    toast(t("composer.noteOtherWorkspace"));
+    return false;
+  }
+  await attachPaths([`${isMain(folder) ? useWorkspaceStore.getState().notes.root : folder}/${path}`]);
+  return true;
+}
+/** The note an attached file is (it sits under a workspace and is markdown): its workspace folder and its path there. */
+export function attachedNote(file: string) {
+  const main = useWorkspaceStore.getState().notes.root;
+  const found = noteIn(file, [main, ...vaultChoices(settings()).map(choice => choice.folder)]);
+  return found && { folder: found.root === main ? settings().vault : found.root, path: found.path };
+}
+/** Add to conversation: the note as a chip in the open conversation when it is one of the note's project (or the note
+ *  has none and it is a general one), else in a new conversation of the note's project. */
+export async function addToConversation(path: string, folder = activeFolder()) {
+  if (folder !== activeFolder()) return toast(t("composer.noteOtherWorkspace"));
+  const { selected } = useNavigationStore.getState();
+  const chat = useConversationsStore.getState().chats[selected];
+  const project = noteProject(path);
+  const here = chat && !chat.closed && selected !== ORCH && (chat.project ?? null) === project;
+  if (!here) await select(newChatHere(project));
+  await mentionNote(path, folder);
 }
 
 /** The notes Relay's conversations read and wrote this week: Recent in the Pages tab. */
