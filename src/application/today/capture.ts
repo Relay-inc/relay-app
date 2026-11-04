@@ -6,8 +6,8 @@ import { settings } from "../settings/settings";
 import { useConversationsStore } from "../conversations/store";
 
 // Closing a conversation, or leaving it idle for IDLE_MS after a turn: Claude reads it once more and writes what
-// belongs in the vault straight in (lib.rs capture_vault). Nothing is shown or asked; the vault's git history is the
-// review. Off with Settings › General.
+// belongs in the vault straight in (lib.rs capture_vault). Nothing is asked; what it wrote is one entry in the page's
+// Changes feed, to keep or undo. Off with Settings › General.
 
 /** User messages before a conversation is worth reading: a quick question has nothing for the vault. */
 const MIN_TURNS = 3;
@@ -32,7 +32,7 @@ function capture(key: string) {
   const turns = (messages[key] ?? []).filter(message => message.kind === "me").length;
   if (turns < MIN_TURNS || turns <= (readAt.get(key) ?? 0)) return;
   readAt.set(key, turns);
-  queue = queue.then(() => backend.captureVault(key).catch(error => console.error("capture", error)));
+  queue = queue.then(() => backend.captureVault(key, chat.title).catch(error => console.error("capture", error)));
 }
 
 /** A conversation that just closed. */

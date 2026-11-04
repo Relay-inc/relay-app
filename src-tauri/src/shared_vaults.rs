@@ -74,6 +74,8 @@ pub struct Changed { pub fp: String, pub name: String }
 /// Run the rounds now, without waiting for the interval: a vault was just made or joined.
 static NOW: AtomicBool = AtomicBool::new(false);
 pub fn sync_now() { NOW.store(true, Ordering::Relaxed); }
+/// Whether a round is still asked for and not yet taken.
+pub fn pending() -> bool { NOW.load(Ordering::Relaxed) }
 /// Taken by the loop in lib.rs: whether a round was asked for since it last looked.
 pub fn asked() -> bool { NOW.swap(false, Ordering::Relaxed) }
 

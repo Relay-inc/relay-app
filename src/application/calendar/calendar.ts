@@ -13,7 +13,7 @@ import {
   type MeetingChat,
 } from "../../domain/calendar/rules";
 import type { Meeting } from "../../domain/calendar/types";
-import { keepFrom } from "../../domain/calendar/briefing";
+import { prepRunFor } from "../../domain/calendar/briefing";
 import { digestOf, owedFrom } from "../../domain/today/day";
 import { useWorkspaceStore } from "../workspace/store";
 import { calendarOn as isCalendarOn } from "../../domain/settings/types";
@@ -142,7 +142,7 @@ export async function chatAbout(meeting: Meeting, how: MeetingChat) {
     const existing = note ? (briefingIn(note.text) ?? "") : "";
     const code = meetingLanguage(note?.text ?? null, voiceOf(settings().voice).language) ?? "nl";
     prep = { language: new Intl.DisplayNames(["nl"], { type: "language" }).of(code) ?? code, code, existing };
-    keep = keepFrom(existing, { id: meeting.id, title: meeting.title, start: meeting.start });
+    keep = prepRunFor(existing, { id: meeting.id, title: meeting.title, start: meeting.start }, note?.text ?? null);
   }
   // under the meeting's project, so its prep and its note sit with the project's other work
   const key = startChat(meetingProjectOf(meeting), {

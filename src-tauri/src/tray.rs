@@ -27,10 +27,11 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
 }
 
 /// Menu ids of the tray, which the app-wide menu handler leaves alone.
-pub fn owns(id: &str) -> bool { id == "tray-open" || id.starts_with("rem|") }
+pub fn owns(id: &str) -> bool { id == "tray-open" || id == "tray-capture" || id.starts_with("rem|") }
 
 fn on_menu(app: &AppHandle, id: &str) {
     if id == "tray-open" { super::windows::show_active(app); return; }
+    if id == "tray-capture" { super::anywhere::open_capture(app); return; }
     let parts: Vec<&str> = id.split('|').collect();
     let ["rem", action, rid, rest @ ..] = parts.as_slice() else { return };
     if let Ok((file, log, _)) = rem_ctx(app) {
@@ -92,6 +93,7 @@ fn build(rows: &[Value], lang: &str, icons: &BTreeMap<String, PathBuf>) -> muda:
     let menu = Menu::new();
     let mut looks = vec![];
     menu.append(&MenuItem::with_id("tray-open", t("tray.open"), true, None))?;
+    menu.append(&MenuItem::with_id("tray-capture", t("tray.capture"), true, None))?;
     menu.append(&P::separator())?;
     for (key, f) in GROUPS {
         let items: Vec<&Value> = rows.iter().filter(|r| f(days(r))).collect();

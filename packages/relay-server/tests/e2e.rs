@@ -949,6 +949,124 @@ fn two_macs_share_a_vault_through_the_server() {
     std::fs::remove_dir_all(&b).ok();
 }
 
+/// Tidy structure in a shared workspace (src-tauri/src/tidy.rs): 40 notes leave the flat Calendar/ for their homes in
+/// one go, far over the delete brake. With the moves passed as allowances (path and hash, as `Hub::let_through` keeps
+/// them) the next round is the only one: 40 pushed, the 40 old paths deleted on the server, nothing held, and the other
+/// Mac gets all of it in its next (the brake itself: sync.rs `moved_files_pass_the_brake…`).
+#[test]
+fn a_tidy_of_many_notes_is_one_round_through_the_server() {
+    use relay_remote::sync::{self, Filter, Guard, Mode, Walker};
+    use relay_remote::vault::{Keys, VaultKey};
+    let s = start("tidy");
+    let lid = device("tidy-laptop");
+    let (l, _) = client::pair(&pair_line(&s), &lid, "laptop").unwrap();
+    let laptop = Client::new(&l.host, l.port, &l.fp, lid);
+    let vault = laptop.vault_create("Team").unwrap().id;
+    let key = Keys::from(VaultKey::generate());
+    let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
+    let cid = device("tidy-colleague");
+    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let colleague = Client::new(&line.host, line.port, &line.fp, cid);
+    let dir = |t: &str| { let d = std::env::temp_dir().join(format!("relay-tidy-{t}-{}", std::process::id())); std::fs::remove_dir_all(&d).ok(); std::fs::create_dir_all(&d).unwrap(); d };
+    let (a, b) = (dir("a"), dir("b"));
+    let keep = |_: &str, _: &[u8]| Ok(());
+    let round = |c: &Client, k: &Keys, root: &std::path::Path, base: &mut sync::Manifest, w: &mut Walker, moved: &[(String, String)], allowed: &[String]| {
+        let guard = Guard { allow_deletes: false, allowed, moved, keep: &keep };
+        let (next, r) = sync::run(Mode::TwoWay, root, base, w, &Filter::vault_default(), &c.sealed(&vault, k.clone()), &|p| sync::conflict_copy(p, "mac", "now"), &|_| false, &guard, &|_, _| {});
+        *base = next;
+        r
+    };
+    let (mut ba, mut bb, mut wa, mut wb) = (sync::Manifest::new(), sync::Manifest::new(), Walker::default(), Walker::default());
+    std::fs::create_dir_all(a.join("Calendar")).unwrap();
+    let names: Vec<String> = (0..40).map(|i| format!("2026-10-{:02} Sync {i}.md", i % 28 + 1)).collect();
+    for n in &names { std::fs::write(a.join("Calendar").join(n), format!("---\ntype: Meeting\n---\n{n}\n")).unwrap(); }
+    assert_eq!(round(&laptop, &key, &a, &mut ba, &mut wa, &[], &[]).pushed.len(), 40);
+    assert_eq!(round(&colleague, &theirs, &b, &mut bb, &mut wb, &[], &[]).pulled.len(), 40);
+
+    // the move on disk, and what the app keeps of it: the old path with the hash its content had
+    std::fs::create_dir_all(a.join("Calendar/Meetings/2026")).unwrap();
+    let moved: Vec<(String, String)> = names.iter().map(|n| {
+        let from = format!("Calendar/{n}");
+        let hash = sync::sha256_hex(&std::fs::read(a.join(&from)).unwrap());
+        std::fs::rename(a.join(&from), a.join("Calendar/Meetings/2026").join(n)).unwrap();
+        (from, hash)
+    }).collect();
+    let r = round(&laptop, &key, &a, &mut ba, &mut wa, &moved, &[]);
+    assert_eq!((r.pushed.len(), r.deleted_remote.len(), r.held.len(), r.errors.len()), (40, 40, 0, 0), "{r:?}");
+    // the other Mac sees the same content arrive at the new paths in that round: moves, not held deletes
+    let r = round(&colleague, &theirs, &b, &mut bb, &mut wb, &[], &[]);
+    assert_eq!((r.pulled.len(), r.deleted_local.len(), r.held.len()), (40, 40, 0), "{r:?}");
+    assert!(names.iter().all(|n| b.join("Calendar/Meetings/2026").join(n).is_file() && !b.join("Calendar").join(n).exists()));
+    std::fs::remove_dir_all(&a).ok();
+    std::fs::remove_dir_all(&b).ok();
+}
+
+/// Filing the Inbox in a shared workspace (src-tauri/src/inbox.rs `accept`): each note gets its frontmatter written and is
+/// moved to its folder, 40 of them with Accept all, far over the delete brake. The allowance is the hash the note had
+/// before it was written (what `pagefiles::plan` keeps in `gone`, which the server still holds): one round pushes the
+/// 40 new notes and deletes the 40 old paths, and the member's Mac gets moves, with 0 held. The frontmatter is written
+/// after the move, because a member's Mac only reads a delete as a move while the content that arrives is the content that
+/// left (a note edited in the same round would be held there).
+#[test]
+fn filing_the_inbox_of_a_shared_workspace_holds_nothing_on_a_members_mac() {
+    use relay_remote::sync::{self, Filter, Guard, Mode, Walker};
+    use relay_remote::vault::{Keys, VaultKey};
+    let s = start("inbox");
+    let lid = device("inbox-laptop");
+    let (l, _) = client::pair(&pair_line(&s), &lid, "laptop").unwrap();
+    let laptop = Client::new(&l.host, l.port, &l.fp, lid);
+    let vault = laptop.vault_create("Team").unwrap().id;
+    let key = Keys::from(VaultKey::generate());
+    let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
+    let cid = device("inbox-colleague");
+    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let colleague = Client::new(&line.host, line.port, &line.fp, cid);
+    let dir = |t: &str| { let d = std::env::temp_dir().join(format!("relay-inbox-{t}-{}", std::process::id())); std::fs::remove_dir_all(&d).ok(); std::fs::create_dir_all(&d).unwrap(); d };
+    let (a, b) = (dir("a"), dir("b"));
+    let keep = |_: &str, _: &[u8]| Ok(());
+    let round = |c: &Client, k: &Keys, root: &std::path::Path, base: &mut sync::Manifest, w: &mut Walker, moved: &[(String, String)]| {
+        let guard = Guard { allow_deletes: false, allowed: &[], moved, keep: &keep };
+        let (next, r) = sync::run(Mode::TwoWay, root, base, w, &Filter::vault_default(), &c.sealed(&vault, k.clone()), &|p| sync::conflict_copy(p, "mac", "now"), &|_| false, &guard, &|_, _| {});
+        *base = next;
+        r
+    };
+    let (mut ba, mut bb, mut wa, mut wb) = (sync::Manifest::new(), sync::Manifest::new(), Walker::default(), Walker::default());
+    std::fs::create_dir_all(a.join("Inbox")).unwrap();
+    let names: Vec<String> = (0..40).map(|i| format!("2026-10-{:02} {:04}.md", i % 28 + 1, 900 + i)).collect();
+    for n in &names { std::fs::write(a.join("Inbox").join(n), format!("capture {n}\n")).unwrap(); }
+    assert_eq!(round(&laptop, &key, &a, &mut ba, &mut wa, &[]).pushed.len(), 40);
+    assert_eq!(round(&colleague, &theirs, &b, &mut bb, &mut wb, &[]).pulled.len(), 40);
+
+    // the filing in a shared workspace (inbox.rs `accept` with `defer`): the note moves as it is, its old path let through
+    // with the hash it had; the frontmatter is written in a round after (`finish`)
+    std::fs::create_dir_all(a.join("Contexts/Agency/Documents")).unwrap();
+    let moved: Vec<(String, String)> = names.iter().enumerate().map(|(i, n)| {
+        let from = format!("Inbox/{n}");
+        let hash = sync::sha256_hex(&std::fs::read(a.join(&from)).unwrap());
+        std::fs::rename(a.join(&from), a.join(format!("Contexts/Agency/Documents/Note {i}.md"))).unwrap();
+        (from, hash)
+    }).collect();
+    let r = round(&laptop, &key, &a, &mut ba, &mut wa, &moved);
+    assert_eq!((r.pushed.len(), r.deleted_remote.len(), r.held.len(), r.errors.len()), (40, 40, 0, 0), "{r:?}");
+    // the member's Mac sees the same content arrive at the new paths: moves, not held deletes
+    let r = round(&colleague, &theirs, &b, &mut bb, &mut wb, &[]);
+    assert_eq!((r.pulled.len(), r.deleted_local.len(), r.held.len()), (40, 40, 0), "{r:?}");
+    // then the frontmatter, an edit like any other
+    for i in 0..40 {
+        let p = a.join(format!("Contexts/Agency/Documents/Note {i}.md"));
+        let old = std::fs::read_to_string(&p).unwrap();
+        std::fs::write(&p, format!("---\ntype: Document\nabout: \"[[Northwind Portal]]\"\n---\n\n{old}")).unwrap();
+    }
+    let r = round(&laptop, &key, &a, &mut ba, &mut wa, &[]);
+    assert_eq!((r.pushed.len(), r.held.len(), r.errors.len()), (40, 0, 0), "{r:?}");
+    let r = round(&colleague, &theirs, &b, &mut bb, &mut wb, &[]);
+    assert_eq!((r.pulled.len(), r.held.len()), (40, 0), "{r:?}");
+    assert!((0..40).all(|i| std::fs::read_to_string(b.join(format!("Contexts/Agency/Documents/Note {i}.md"))).is_ok_and(|t| t.starts_with("---\ntype: Document"))));
+    assert!(std::fs::read_dir(b.join("Inbox")).map_or(true, |d| d.count() == 0));
+    std::fs::remove_dir_all(&a).ok();
+    std::fs::remove_dir_all(&b).ok();
+}
+
 /// A shared vault's live channel against the real binary (docs/workspaces.md, Live channel): two members get each
 /// other's sealed frames within moments, a short drop resumes from where it was, a restart of the server starts over
 /// and the rounds catch up, the walls hold (an outsider, another version, a frame too big), and a member removed loses

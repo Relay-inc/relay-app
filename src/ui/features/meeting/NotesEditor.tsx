@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { EditorSelection, EditorState, Prec, type Range } from "@codemirror/state";
+import { Compartment, EditorSelection, EditorState, Prec, type Range } from "@codemirror/state";
 import {
   Decoration,
   EditorView,
@@ -27,8 +27,10 @@ import {
   type Marker,
 } from "../../../domain/calendar/meeting-view";
 import { GLYPHS } from "./markers";
-import { livePreview } from "../workspace/livePreview";
+import { livePreview, showMarkdown } from "../workspace/livePreview";
+import { formatting } from "../workspace/formatting";
 import { useT } from "../../hooks/useT";
+import { useEditorStore } from "../../../application/navigation/editor";
 import "../../styles/page-editor.css";
 
 const SAVE_AFTER = 800; // ms after the last keystroke
@@ -211,6 +213,24 @@ export function NotesEditor({
   });
   const hint = t("meet.notesHint");
   const label = t("meet.notesLabel");
+  const [format] = useState(() => ({
+    toolbar: t("fmt.toolbar"),
+    bold: t("fmt.bold"),
+    italic: t("fmt.italic"),
+    strike: t("fmt.strike"),
+    code: t("fmt.code"),
+    link: t("fmt.link"),
+    target: t("fmt.target"),
+    removeLink: t("fmt.removeLink"),
+  }));
+  const raw = useEditorStore(s => s.showMarkdown);
+  const mode = useRef(new Compartment()); // Show markdown, changed while the editor lives
+  const rawNow = useRef(raw);
+  const apply = useRef<(on: boolean) => void>(() => {});
+  useEffect(() => {
+    rawNow.current = raw;
+    apply.current(raw);
+  }, [raw]);
   useEffect(() => {
     let timer = 0;
     let saved = first;
@@ -231,7 +251,9 @@ export function NotesEditor({
           drawSelection(),
           EditorView.lineWrapping,
           markdown({ base: markdownLanguage }),
+          mode.current.of(showMarkdown.of(rawNow.current)),
           livePreview((link, drawer) => void followPageLink(link, drawer)),
+          formatting(format), // the lines' time and marker are not for Turn into: no such button
           Prec.high(lines),
           EditorView.atomicRanges.of(v => v.plugin(lines)?.glyphs ?? Decoration.none),
           stampFirst,
@@ -258,6 +280,7 @@ export function NotesEditor({
         ],
       }),
     });
+    apply.current = on => view.dispatch({ effects: mode.current.reconfigure(showMarkdown.of(on)) });
     apiRef.current = {
       quote: (who, text) => quote(view, who, text),
       discard: () => (saved = view.state.doc.toString()), // a Reload: what is typed is not written
@@ -269,6 +292,6 @@ export function NotesEditor({
       write(); // leaving the view saves what was typed
       view.destroy();
     };
-  }, [first, hint, label, apiRef]);
+  }, [first, hint, label, apiRef, format]);
   return <div ref={host} className="page-editor notes-editor" />;
 }

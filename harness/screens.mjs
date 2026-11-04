@@ -89,7 +89,9 @@ const meetingBriefing = async (fixture, title, briefed = false) => {
         window.__harness.meetingNote(
           id,
           "Calendar/2026-10-01 Daily standup.md",
-          ["---", "type: Meeting", `event: "${id}"`, "---", "", "# Daily standup", "", ...brief, "## Notes", ""].join("\n"),
+          ["---", "type: Meeting", `event: "${id}"`, "---", "", "# Daily standup", "", ...brief, "## Notes", ""].join(
+            "\n",
+          ),
         );
       },
       [BRIEFING],
@@ -104,39 +106,42 @@ const meetingBriefing = async (fixture, title, briefed = false) => {
 const meetingLive = async fixture => {
   await open(page, server.url, { fixture });
   const start = Math.floor((await page.evaluate(() => window.__harness.now)) / 1000);
-  await page.evaluate(([start, BRIEFING_]) => {
-    const id = `northwind@${start}`;
-    window.__harness.meetingNote(
-      id,
-      "Calendar/2026-10-01 Northwind sync Tom.md",
-      [
-        "---",
-        "type: Meeting",
-        `event: "${id}"`,
-        "with:",
-        '  - "Tom Willems"',
-        "created: 2026-10-01",
-        "language: nl",
-        "---",
-        "",
-        "# Northwind sync Tom",
-        "[[2026-10-01|Thursday October 1st, 2026]]",
-        "",
-        ...BRIEFING_,
-        "## Notes",
-        "- [09:31] Sprint 23 demo: API-koppeling werkt op staging, geen issues",
-        "- [09:33] = Pricing-simulator komt in sprint 24, niet 25",
-        "- [09:35] Lena bouwt de rapport-API los van de rest",
-        "- [09:38] ! Agenda in het kanaal posten zodat Sofie het weet",
-        "- [09:40] ? Wie neemt de beveiligingsaudit op? Tom checkt met Sofie",
-        '- [09:44] > Me: "Oké, zaterdag de vijftiende dan. Zes tot acht uur?"',
-        "",
-      ].join("\n"),
-    );
-    window.__harness.deepLink(
-      `relay://meeting?do=note&uid=northwind&start=${start}&end=${start + 1800}&title=${encodeURIComponent("Northwind sync Tom")}&with=${encodeURIComponent("Tom Willems <tom@northwind.example>")}`,
-    );
-  }, [start, BRIEFING]);
+  await page.evaluate(
+    ([start, BRIEFING_]) => {
+      const id = `northwind@${start}`;
+      window.__harness.meetingNote(
+        id,
+        "Calendar/2026-10-01 Northwind sync Tom.md",
+        [
+          "---",
+          "type: Meeting",
+          `event: "${id}"`,
+          "with:",
+          '  - "Tom Willems"',
+          "created: 2026-10-01",
+          "language: nl",
+          "---",
+          "",
+          "# Northwind sync Tom",
+          "[[2026-10-01|Thursday October 1st, 2026]]",
+          "",
+          ...BRIEFING_,
+          "## Notes",
+          "- [09:31] Sprint 23 demo: API-koppeling werkt op staging, geen issues",
+          "- [09:33] = Pricing-simulator komt in sprint 24, niet 25",
+          "- [09:35] Lena bouwt de rapport-API los van de rest",
+          "- [09:38] ! Agenda in het kanaal posten zodat Sofie het weet",
+          "- [09:40] ? Wie neemt de beveiligingsaudit op? Tom checkt met Sofie",
+          '- [09:44] > Me: "Oké, zaterdag de vijftiende dan. Zes tot acht uur?"',
+          "",
+        ].join("\n"),
+      );
+      window.__harness.deepLink(
+        `relay://meeting?do=note&uid=northwind&start=${start}&end=${start + 1800}&title=${encodeURIComponent("Northwind sync Tom")}&with=${encodeURIComponent("Tom Willems <tom@northwind.example>")}`,
+      );
+    },
+    [start, BRIEFING],
+  );
   await waitText("Start notes");
   await click("Record");
   const said = [
@@ -148,7 +153,10 @@ const meetingLive = async fixture => {
     [0, "Dan werk ik die vier velden uit in een ticket."],
   ].map(([track, text], i) => ({ at: 1020 + i * 14, track, text }));
   await page.evaluate(lines => window.__harness.recordingTick(1104, 0.35, 0.2, { lines, upto: 1100 }), said);
-  await waitText("Dan werk ik die vier velden", 4000).catch(async e => { await page.screenshot({ path: `${dir}/debug.png` }); throw e; });
+  await waitText("Dan werk ik die vier velden", 4000).catch(async e => {
+    await page.screenshot({ path: `${dir}/debug.png` });
+    throw e;
+  });
   // the pointer on a turn offers to quote it
   await page.getByText("Kenteken, kilometerstand").hover();
   await settle(page);
@@ -232,7 +240,17 @@ const todayDay = async (variant, dark) => {
         window.__harness.meetingNote(
           e,
           `Calendar/2026-10-01 ${title} (${name}).md`,
-          ["---", "type: Meeting", `event: "${e}"`, ...(body.followed ? ["followed-up: true"] : []), "---", "", `# ${title}`, "", ...body.lines].join("\n"),
+          [
+            "---",
+            "type: Meeting",
+            `event: "${e}"`,
+            ...(body.followed ? ["followed-up: true"] : []),
+            "---",
+            "",
+            `# ${title}`,
+            "",
+            ...body.lines,
+          ].join("\n"),
         );
       };
       const brief = [
@@ -252,9 +270,29 @@ const todayDay = async (variant, dark) => {
         "",
       ];
       // the meeting of 08:30 is wrapped (and followed up) in the mornings, owed its summary in T3
-      if (variant === "t3") note("done", -60, "Northwind sync Tom", { lines: ["## Notes", "- [08:34] Demo liep goed", "- [08:41] ! Agenda posten", ""] });
-      else note("done", -60, "Northwind sync Tom", { followed: true, lines: ["## Notes", "- [08:34] Demo", "", "## Summary", "Kort.", ""] });
-      if (variant === "t1") note("sync", 50, "Northwind sync Tom", { lines: ["## Briefing", "### Goal", "Scope vastleggen.", "", "### My points", "- [ ] Een punt", "", "## Notes", ""] });
+      if (variant === "t3")
+        note("done", -60, "Northwind sync Tom", {
+          lines: ["## Notes", "- [08:34] Demo liep goed", "- [08:41] ! Agenda posten", ""],
+        });
+      else
+        note("done", -60, "Northwind sync Tom", {
+          followed: true,
+          lines: ["## Notes", "- [08:34] Demo", "", "## Summary", "Kort.", ""],
+        });
+      if (variant === "t1")
+        note("sync", 50, "Northwind sync Tom", {
+          lines: [
+            "## Briefing",
+            "### Goal",
+            "Scope vastleggen.",
+            "",
+            "### My points",
+            "- [ ] Een punt",
+            "",
+            "## Notes",
+            "",
+          ],
+        });
       if (variant === "t2") note("sync", 20, "Northwind sync Tom", { lines: [...brief, "## Notes", ""] });
     }, variant);
     // Today again, so it reads them
@@ -684,6 +722,30 @@ const VIEWS = {
     await page.locator("textarea").locator("visible=true").last().click();
     await page.keyboard.type("/");
     await settle(page);
+  },
+  // @ in the composer: the notes to pick from, then a picked note as a chip (issue 370)
+  "composer-note-mention": async () => {
+    await open(page, server.url, { fixture: "kb", sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("Look at @bil");
+    await settle(page);
+  },
+  "composer-note-chip": async () => {
+    await open(page, server.url, { fixture: "kb", sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("Look at @billin");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+  },
+  "composer-note-chip-dark": async () => {
+    await open(page, server.url, { fixture: "kb-dark", sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("Look at @billin");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
   },
   // Relay's own /share-phone in the completion, next to the agent's (PR phone-share)
   "composer-share-slash": async () => {
@@ -1122,6 +1184,198 @@ const VIEWS = {
     await VIEWS["cmd-k"]();
     await page.keyboard.type("export");
     await settle(page, 0);
+  },
+  // K5, #369: ⌘K over names and content; type: and in: typed as text are pills, notes by name above the lines of content with
+  // the match marked, the keys at the bottom
+  "quick-switcher": async (fixture = "kb") => {
+    await open(page, server.url, { fixture, sel: keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.keyboard.type("type:Document in:Agency rate limit");
+    await settle(page, 500);
+  },
+  "quick-switcher-dark": async () => VIEWS["quick-switcher"]("kb-dark"),
+  // an action matching what is typed: New <template> where the open page is, Today's note
+  "quick-switcher-actions": async (fixture = "kb") => {
+    await open(page, server.url, { fixture, sel: keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.keyboard.type("new");
+    await settle(page, 500);
+    await page.keyboard.press("ArrowDown");
+    await settle(page);
+  },
+  // #387: ⌘K as the palette, conversations and commands next to the notes
+  palette: async (fixture = "kb") => {
+    await open(page, server.url, { fixture, sel: keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.keyboard.type("settings");
+    await settle(page, 500);
+    await page.keyboard.press("ArrowDown");
+    await settle(page);
+  },
+  "palette-dark": async () => VIEWS.palette("kb-dark"),
+  "palette-chats": async (fixture = "kb") => {
+    await open(page, server.url, { fixture, sel: keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.keyboard.type("export");
+    await settle(page, 500);
+  },
+  // K1, #369: three notes pinned from their menu stand under Favourites above Recent
+  "pages-favourites": async (fixture = "kb") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
+    for (const name of ["Rate limit findings", "Portal Architecture", "Rate limit test plan"]) {
+      await page.locator(`[data-page$="/${name}.md"]`).first().click({ button: "right" });
+      await click("Add to favourites");
+    }
+    await page.locator('[data-page$="/Rate limit findings.md"]').first().click();
+    await settle(page, 400);
+  },
+  "pages-favourites-dark": async () => VIEWS["pages-favourites"]("kb-dark"),
+  // K2, #366: a note's right rail: the outline (the heading in view marked), 3 backlinks with their line, 2 unlinked
+  // mentions with Link, what is near it and the 2 conversations that used it; the real folder and the about: chip above
+  "page-rail": async (fixture = "kb") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
+    await page.locator('[data-page$="/Hosting plan.md"]').first().click();
+    await waitText("Unlinked mentions");
+    await settle(page, 400);
+  },
+  "page-rail-dark": async () => VIEWS["page-rail"]("kb-dark"),
+  // K, #392: a page with every block type typed into the editor, no markdown showing; `state` is what the cursor does
+  // last: "heading" (in a heading), "selection" (the toolbar over a selected word), "link" (in a link: its popover),
+  // "raw" (Show markdown on)
+  "page-hidden-markdown": async (fixture = "kb", state = "heading") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
+    await page.locator('[data-page$="/Rate limit findings.md"]').first().click();
+    const editor = page.locator(".cm-content");
+    await editor.waitFor();
+    await editor.click();
+    await page.keyboard.press("Meta+End");
+    for (const text of [
+      "## Next steps",
+      "Agree the **window** with Sofie Claes, see [the plan](https://example.com/plan) and [[Northwind Portal]].",
+      "- Send the new key",
+      "- [ ] Call the client",
+      "> Keep the old key for a week",
+      "",
+      "> [!note] Heads up",
+      "> Retry-After is in seconds.",
+      "",
+      "---",
+    ]) {
+      await page.keyboard.insertText("\n");
+      if (text) await page.keyboard.type(text);
+      else await page.keyboard.type(" "); // a blank line (WebKit swallows a second newline in a row)
+    }
+    await settle(page, 300);
+    if (state === "heading") await page.locator(".cm-h2", { hasText: "Next steps" }).click();
+    else if (state === "selection") {
+      const word = page.locator(".cm-strong", { hasText: "window" });
+      await word.dblclick();
+    } else if (state === "link") {
+      const link = page.locator(".cm-link", { hasText: "the plan" });
+      const box = await link.boundingBox();
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await page.locator(".cm-link-input").waitFor();
+    } else if (state === "raw") {
+      await page.keyboard.press("Shift+Meta+m");
+    }
+    await settle(page, 400);
+  },
+  "page-hidden-markdown-dark": async () => VIEWS["page-hidden-markdown"]("kb-dark"),
+  "page-format-toolbar": async () => VIEWS["page-hidden-markdown"]("kb", "selection"),
+  "page-format-toolbar-dark": async () => VIEWS["page-hidden-markdown"]("kb-dark", "selection"),
+  "page-link-popover": async () => VIEWS["page-hidden-markdown"]("kb", "link"),
+  "page-link-popover-dark": async () => VIEWS["page-hidden-markdown"]("kb-dark", "link"),
+  "page-show-markdown": async () => VIEWS["page-hidden-markdown"]("kb", "raw"),
+  // K6 / K12 (issue 371): the Changes feed beside a page, the capture run open with its two diffs
+  "changes-feed": async (fixture = "kb-changes") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Beacon Billing"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Beacon Billing/Documents"]').click();
+    await page.locator('[data-page$="/Billing Spec.md"]').first().click();
+    await waitText("Billing Spec");
+    await page.getByRole("button", { name: /^Changes, \d+ to review/ }).click();
+    await waitText("Pricing check");
+    await settle(page, 400);
+  },
+  "changes-feed-dark": async () => VIEWS["changes-feed"]("kb-changes-dark"),
+  // K1 / K7 (issue 372): the Inbox row with its count in the Pages tab, the Inbox view, Claude's proposals, a row's
+  // destination picker, the dry run of moving the old scratch notes, and the quick capture window
+  "inbox-row": async (fixture = "kb-changes-inbox") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await waitText("Inbox");
+    await settle(page);
+  },
+  "inbox-row-dark": async () => VIEWS["inbox-row"]("kb-changes-inbox-dark"),
+  inbox: async (fixture = "kb-changes-inbox") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator("[data-inbox]").click();
+    await waitText("4 notes");
+    await settle(page);
+  },
+  "inbox-dark": async () => VIEWS.inbox("kb-changes-inbox-dark"),
+  "inbox-filing": async (fixture = "kb-changes-inbox") => {
+    await VIEWS.inbox(fixture);
+    await page.getByRole("button", { name: "File with Claude" }).click();
+    await waitText("Claude proposed a home for each");
+    await settle(page);
+  },
+  "inbox-filing-dark": async () => VIEWS["inbox-filing"]("kb-changes-inbox-dark"),
+  "inbox-edit": async (fixture = "kb-changes-inbox") => {
+    await VIEWS["inbox-filing"](fixture);
+    await page.locator('[data-inbox-note="Inbox/2026-10-01 0830.md"]').getByRole("button", { name: "Edit" }).click();
+    await page.getByRole("combobox", { name: "Destination" }).waitFor();
+    await settle(page);
+  },
+  "inbox-edit-dark": async () => VIEWS["inbox-edit"]("kb-changes-inbox-dark"),
+  "inbox-migrate": async (fixture = "kb-changes-inbox") => {
+    await VIEWS.inbox(fixture);
+    await page.getByRole("button", { name: "Move into Inbox…" }).click();
+    await waitText("Move scratch notes into the vault");
+    await settle(page);
+  },
+  "quick-capture": async (fixture = "kb-changes-inbox") => {
+    await page.setViewportSize({ width: 440, height: 200 });
+    await open(page, server.url, { path: "/capture.html", fixture });
+    await page
+      .getByRole("textbox", { name: "Quick capture" })
+      .fill("Sofie confirms the tax rule Friday → then take the portal live, tell Tom");
+    await settle(page);
+  },
+  "quick-capture-dark": async () => VIEWS["quick-capture"]("kb-changes-inbox-dark"),
+  // Ask Claude as a menu: the page actions
+  "page-actions-menu": async (fixture = "kb-changes") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Beacon Billing"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Beacon Billing/Documents"]').click();
+    await page.locator('[data-page$="/Billing Spec.md"]').first().click();
+    await waitText("Billing Spec");
+    await page.getByRole("button", { name: "Ask Claude" }).click();
+    await settle(page, 300);
+  },
+  // New ▸ from template on a project: the templates of the vault under the folder's own items
+  "pages-new-from-template": async (fixture = "kb") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('[data-project="Northwind Portal"]').click({ button: "right" });
+    await settle(page);
   },
   "deep-link-ask": async () => {
     await open(page, server.url, { sel: keys.switchTo, link: "relay://ask" }); // the link the app was launched with
@@ -1716,6 +1970,63 @@ const VIEWS = {
     await page.locator("[data-finding=context_mismatch] summary").click();
     await settle(page);
   },
+  // Tidy structure (PR 365): the notes outside their home, and the dry run sheet over the check
+  "vault-check-tidy": async () => {
+    await VIEWS["vault-check"]();
+    await page.getByRole("tab", { name: /^Garden/ }).click();
+    await page.getByRole("button", { name: "Tidy structure" }).click();
+    await waitText("Dry run");
+    await waitText("one Undo");
+    await settle(page);
+  },
+  "vault-check-tidy-dark": async () => {
+    await open(page, server.url, { fixture: "dark" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await page.getByRole("button", { name: "Check workspace…" }).click();
+    await page.getByRole("tab", { name: /^Garden/ }).click();
+    await page.getByRole("button", { name: "Tidy structure" }).click();
+    await waitText("one Undo");
+    await settle(page);
+  },
+  // after Apply: the finding is gone, one Undo on offer
+  "vault-check-tidy-applied": async () => {
+    await VIEWS["vault-check-tidy"]();
+    await page.getByRole("button", { name: /^Apply \d+ moves$/ }).click();
+    await waitText("moved to their home");
+    if (await page.locator("[data-garden=outside_home]").count()) throw new Error("the finding stays after Apply");
+    await settle(page);
+  },
+  // the Garden tab (PR 374, K10): one of each problem with its count and action; Tidy structure is the one filled button
+  "vault-check-garden": async () => {
+    await VIEWS["vault-check"]();
+    await page.getByRole("tab", { name: /^Garden/ }).click();
+    await waitText("Notes outside their home");
+    await waitText("Meetings without a project");
+    await waitText("Unused attachments");
+    await settle(page);
+  },
+  "vault-check-garden-dark": async () => {
+    await open(page, server.url, { fixture: "dark" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await page.getByRole("button", { name: "Check workspace…" }).click();
+    await page.getByRole("tab", { name: /^Garden/ }).click();
+    await waitText("Notes outside their home");
+    await settle(page);
+  },
+  // Ask Claude to fix properties: its dry run over the tab, one filled button
+  "vault-check-garden-ask": async () => {
+    await VIEWS["vault-check-garden"]();
+    await page.getByRole("button", { name: "Ask Claude to fix properties" }).click();
+    await waitText("Dry run");
+    await settle(page);
+  },
+  // Move to trash: the dry run of the unused attachments
+  "vault-check-garden-trash": async () => {
+    await VIEWS["vault-check-garden"]();
+    await page.getByRole("button", { name: "Move to trash" }).click();
+    await waitText("one Undo");
+    await settle(page);
+  },
   // after Repair all: what needs a person stays
   "vault-check-repaired": async () => {
     await VIEWS["vault-check"]();
@@ -1730,7 +2041,13 @@ const VIEWS = {
     await page.getByRole("tab", { name: /^Pages/ }).click();
     await page.getByText("Folders", { exact: true }).click({ button: "right" });
     await page.getByRole("button", { name: "Check workspace…" }).click();
-    await waitText("Only an admin");
+    await waitText("Only an admin of this workspace can repair it.");
+    // the Tidy structure finding shows on the Garden tab, its button and so Apply do not
+    await page.getByRole("tab", { name: /^Garden/ }).click();
+    await waitText("Only an admin can tidy the structure");
+    await waitText("Only an admin can move files to the trash");
+    if (await page.getByRole("button", { name: "Tidy structure" }).count())
+      throw new Error("a member sees Tidy structure");
     await settle(page);
   },
   // a project unfolded to its folder, its note open in the drawer, and a top folder unfolded (PR workspace-pages)
@@ -1793,6 +2110,116 @@ const VIEWS = {
     await waitText("Stand van zaken");
     await settle(page);
   },
+  // the Pages tab under a project: its folder, then below "linked here" the notes that point at it (about:, context:,
+  // with:) as Meetings, Threads and People that unfold to the newest four, the same notes nowhere else (K1)
+  "pages-virtual-groups": async (fixture = "linked") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText("linked here");
+    await page.locator('[data-linked-group="meetings"]').click();
+    await waitText("Show all 6");
+    await page.getByText("Show all 6").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  "pages-virtual-groups-dark": async () => VIEWS["pages-virtual-groups"]("linked-dark"),
+  // a collection (K8, K9): the Meetings of a context as a table with the filter chip, the about: cell open on its
+  // listbox; as a board by stage; the Projects board with a card in the air over the lane it sets
+  "collection-table": async (fixture = "linked-collections") => {
+    await VIEWS["collection-open"](fixture, "meetings");
+    await page.getByRole("button", { name: "+ Filter", exact: true }).click();
+    await page.getByRole("option", { name: "about" }).click();
+    await page.getByRole("combobox", { name: "about" }).fill("Northwind Portal");
+    await page.keyboard.press("Enter");
+    await waitText("5 match this view");
+    await page
+      .locator('[role="row"]', { hasText: "2026-10-08 Northwind Portal sync" })
+      .locator('[data-cell="about"] div')
+      .first()
+      .click();
+    await waitText("Writes about: in 2026-10-08 Northwind Portal sync.md");
+    await settle(page);
+  },
+  "collection-table-dark": async () => VIEWS["collection-table"]("linked-collections-dark"),
+  "collection-board": async (fixture = "linked-collections") => {
+    await VIEWS["collection-open"](fixture, "meetings");
+    await page.getByRole("tab", { name: "Board" }).click();
+    await waitText("Stage is worked out from each note");
+    await settle(page);
+  },
+  "collection-board-dark": async () => VIEWS["collection-board"]("linked-collections-dark"),
+  "collection-board-drag": async (fixture = "linked-collections") => {
+    await VIEWS["collection-open"](fixture, "projects");
+    await page.getByRole("tab", { name: "Board" }).click();
+    const card = await page.locator('[data-card$="Atlas Logistics/Atlas Logistics.md"]').boundingBox();
+    const lane = await page.locator('[data-lane="Paused"]').boundingBox();
+    await page.mouse.move(card.x + 20, card.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(card.x + 60, card.y + 40, { steps: 3 });
+    await page.mouse.move(lane.x + lane.width / 2, lane.y + 40, { steps: 8 });
+    await waitText("Drop to set status: Paused");
+    await settle(page);
+  },
+  "collection-board-drag-dark": async () => VIEWS["collection-board-drag"]("linked-collections-dark"),
+  "collection-open": async (fixture, collection) => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    const folder = page.locator('[data-collections="Agency"]');
+    await folder.locator("[aria-expanded]").first().click();
+    await folder.locator(`[data-collection="${collection}"]`).click();
+    await waitText("match this view");
+    await settle(page);
+  },
+  // a project's page with "From links" under its body: meetings, documents, people, open reminders, conversations (K3)
+  "project-auto-sections": async (fixture = "linked") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText("From links");
+    await page.locator("[data-from-links]").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  "project-auto-sections-dark": async () => VIEWS["project-auto-sections"]("linked-dark"),
+  // files inside a page (K4): a picture with its caption, a PDF card, an audio player and a section of another note, in
+  // place of their markdown
+  "page-embeds": async (fixture = "embeds") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText("Next: confirm the window");
+    await page.locator('.cm-embed[data-kind="image"] img').waitFor();
+    await page.locator('.cm-embed[data-kind="note"]').waitFor();
+    await page.locator(".cm-embed-card img").waitFor();
+    await page.locator(".cm-embed").first().scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  "page-embeds-dark": async () => VIEWS["page-embeds"]("embeds-dark"),
+  // the picture selected: its ring, both width handles and the caption with its place and width
+  "page-embeds-selected": async (fixture = "embeds") => {
+    await VIEWS["page-embeds"](fixture);
+    await page.locator('.cm-embed[data-kind="image"] img').click();
+    await settle(page);
+  },
+  "page-embeds-selected-dark": async () => VIEWS["page-embeds-selected"]("embeds-dark"),
+  // files from Finder hovering over a line of the page: the insertion line and what dropping does
+  "page-embeds-drop": async (fixture = "embeds") => {
+    await VIEWS["page-embeds"](fixture);
+    const card = await page.locator('.cm-embed[data-kind="pdf"]').boundingBox();
+    await page.evaluate(
+      ([x, y]) => window.__harness.dropHover(["/Users/me/Downloads/dealer-portal-error.png"], { x, y }),
+      [card.x + 40, card.y + 2],
+    );
+    await settle(page);
+  },
+  "page-embeds-drop-dark": async () => VIEWS["page-embeds-drop"]("embeds-dark"),
+  // a file over 25 MB dropped: refused, the toast says so
+  "page-embeds-toolarge": async (fixture = "embeds") => {
+    await VIEWS["page-embeds"](fixture);
+    await page.evaluate(() => window.__harness.dropPaths(["/Users/me/Downloads/configurator-db-dump.sql.gz"]));
+    await waitText("Too large: 25 MB max per file");
+    await settle(page);
+  },
+  "page-embeds-toolarge-dark": async () => VIEWS["page-embeds-toolarge"]("embeds-dark"),
   // a page's history beside it (ticket 10): three sessions, who and when, what made them, lines added and removed
   "page-history": async () => {
     await VIEWS["page-view"]();
@@ -2006,6 +2433,7 @@ const VIEWS = {
     await VIEWS["pages-shared"]();
     await waitText("Stand van zaken");
     await page.getByRole("button", { name: "Ask Claude" }).click();
+    await page.getByRole("button", { name: "Ask about this page" }).click(); // Ask Claude is a menu since issue 371
     await waitText("New conversation about Team Handbook");
     await settle(page);
   },
@@ -2254,7 +2682,10 @@ const VIEWS = {
   // the cursor on the first line of the notes: its time stays out of the text
   "meeting-live-cursor": async () => {
     await meetingLive("calendar");
-    await page.locator(".notes-editor .cm-line").first().click({ position: { x: 400, y: 8 } });
+    await page
+      .locator(".notes-editor .cm-line")
+      .first()
+      .click({ position: { x: 400, y: 8 } });
     await page.keyboard.press("Home");
     await page.mouse.move(10, 10);
     await settle(page);

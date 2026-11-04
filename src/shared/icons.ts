@@ -5,6 +5,7 @@ import {
   Notification01Icon,
   QrCodeIcon,
   KeyboardIcon,
+  LockIcon,
   LayoutTwoColumnIcon,
   ServerStack01Icon,
   ChartRelationshipIcon,
@@ -56,6 +57,7 @@ import {
   File01Icon,
   Add01Icon,
   Bookmark01Icon,
+  StarIcon,
   FilterHorizontalIcon,
   ArrowUpRight01Icon,
   KanbanIcon,
@@ -128,6 +130,7 @@ const ICONS: Record<string, Icon> = {
   add: Add01Icon,
   down: ArrowDown01Icon,
   bookmark: Bookmark01Icon,
+  star: StarIcon,
   filter: FilterHorizontalIcon,
   out: ArrowUpRight01Icon,
   plus: Add01Icon,
@@ -138,6 +141,7 @@ const ICONS: Record<string, Icon> = {
   workflow: WorkflowSquare01Icon,
   mic: Mic01Icon,
   keyboard: KeyboardIcon,
+  lock: LockIcon,
   qr: QrCodeIcon,
   video: Video01Icon,
   alert: Alert02Icon,
@@ -152,6 +156,22 @@ const solid = { fill: "currentColor", stroke: "none" };
 const EXTRA: Record<string, Icon> = {
   // unread: the envelope with a solid dot in its corner
   unread: [...Mail01Icon.map(own), ["circle", { cx: "19.5", cy: "5", r: "3.2", ...solid }]],
+  // a folder drawn dashed with a link in it: the group of notes that point at a project, which live elsewhere
+  folderLinked: [
+    [
+      "path",
+      {
+        d: "M3.75 6.75a1.5 1.5 0 0 1 1.5-1.5h4.5l2.25 2.25h6.75a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H5.25a1.5 1.5 0 0 1-1.5-1.5z",
+        strokeDasharray: "2.4 2.4",
+      },
+    ],
+    ["path", { d: "M9.9 14.4a1.95 1.95 0 0 0 2.7 0l1.5-1.5a1.95 1.95 0 0 0-2.7-2.7l-.45.45" }],
+  ],
+  // a tray: the Inbox
+  inbox: [
+    ["path", { d: "M3.75 14.25 6 5.25h12l2.25 9v4.5a1.5 1.5 0 0 1-1.5 1.5h-13.5a1.5 1.5 0 0 1-1.5-1.5z" }],
+    ["path", { d: "M3.75 14.25h4.5l1.5 2.25h4.5l1.5-2.25h4.5" }],
+  ],
   stop: [["rect", { x: "6", y: "6", width: "12", height: "12", rx: "2", ...solid }]],
 };
 
