@@ -682,7 +682,7 @@ mod tests {
     }
     #[test]
     fn repos_of_a_project() {
-        let m: HashMap<String, String> = [("relay-inc/relay-app", "Relay"), ("laurentme/vault-app", "Relay"), ("kristoffeys/facturio", "IC")].iter().map(|(a, b)| (a.to_string(), b.to_string())).collect();
+        let m: HashMap<String, String> = [("relay-inc/relay-app", "Relay"), ("laurentme/vault-app", "Relay"), ("acme/ledger", "IC")].iter().map(|(a, b)| (a.to_string(), b.to_string())).collect();
         assert_eq!(repos_line(&m, "Relay"), "The project's code is on GitHub: https://github.com/laurentme/vault-app, https://github.com/relay-inc/relay-app. Match the UI of that codebase (components, spacing, colors, copy).\n\n");
         assert_eq!(repos_line(&m, "None"), "");
     }

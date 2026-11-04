@@ -165,7 +165,7 @@ function emit(event: string, payload: unknown) {
 const emitAgent = (project: string, event: unknown, provider = "claude") => emit("agent", { project, provider, event });
 
 // ---------- the embedded terminals: output goes to the Channel the frontend passed, as the backend does (raw bytes)
-const PROMPT = "kristof@mac ~/vault % ";
+const PROMPT = "alex@mac ~/vault % ";
 const ptys = new Map<number, { channel: number; index: number }>();
 let ptyId = 0;
 function ptyOut(id: number, text: string) {
@@ -756,7 +756,7 @@ function handle(cmd: string, a: Args): unknown {
       // shared-live: an absolute page (another workspace's note) is a document, seeded once from the note's text
       if (!live || !String(a.path).startsWith("/")) return null;
       if (!liveDoc.getText("md").length) liveDoc.getText("md").insert(0, vault.noteText(String(a.path)).text);
-      return { vault: "v1", doc: "d1", state: b64(Y.encodeStateAsUpdate(liveDoc)), me: "me", name: "Kristof" };
+      return { vault: "v1", doc: "d1", state: b64(Y.encodeStateAsUpdate(liveDoc)), me: "me", name: "Alex" };
     }
     case "shared_doc_edit":
       Y.applyUpdate(liveDoc, unb64(String(a.update)), "editor");
@@ -1210,7 +1210,7 @@ function handle(cmd: string, a: Args): unknown {
 
     // GitHub, mail, boards
     case "github_status":
-      return "laurent";
+      return "lena";
     case "github_prs":
       return integ.prs;
     case "github_pr":

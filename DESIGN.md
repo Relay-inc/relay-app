@@ -18,17 +18,17 @@ open. Every column starts with a 48px bar that is also the drag region.
 
 ```
 ┌────────────┬─────────────────────────────────────────────────┬────────────┐
-│ ⌕ Search   │ ▢ Weemaes / Contract on story points    ▦ ⌥ ⌨ ▤ │ Notes    × │  48px
+│ ⌕ Search   │ ▢ Orchard / Contract on story points    ▦ ⌥ ⌨ ▤ │ Notes    × │  48px
 │            ├─────────────────────────────────────────────────┤            │
 │ Waiting  3 │                          Where are we? (you)    │  drawer,   │
 │ Reminders  │   ⌄ 3 steps · 4 s                               │  460px,    │
-│ Productive │   │ Edited Weemaes.md +2 −1  (diff, line nrs)   │  on        │
+│ Productive │   │ Edited Orchard.md +2 −1  (diff, line nrs)   │  on        │
 │ PRs      2 │   The contract moves to story points ...        │  demand    │
 │ GENERAL    │   ┌ Claude wants to use Bash ──────────────┐    │            │
-│ ANTENNA    │   │ gh pr merge 741 --squash  Deny Allow ↵ │    │            │
-│ ▢ Weemaes ●│   └────────────────────────────────────────┘    │            │
+│ BLUEBIRD    │   │ gh pr merge 741 --squash  Deny Allow ↵ │    │            │
+│ ▢ Orchard ●│   └────────────────────────────────────────┘    │            │
 │   ✳ conv  ●│ ┌─────────────────────────────────────────────┐ │            │
-│ ⌁  ☾  ⚙    │ │ Ask something about Weemaes…   + model  ↑ │ │            │
+│ ⌁  ☾  ⚙    │ │ Ask something about Orchard…   + model  ↑ │ │            │
 └────────────┴─┴─────────────────────────────────────────────┴─┴────────────┘
    240px                       flexible                          0 or 460px
 ```

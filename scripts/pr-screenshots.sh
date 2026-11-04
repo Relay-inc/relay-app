@@ -1,7 +1,7 @@
 #!/bin/sh
 # Screenshots for a pull request, without putting images in main's history: the PNGs go into <pr>/ on the pr-assets
 # branch (never merged, one commit per upload on top of the last), and the Markdown to paste into the PR description
-# is printed. The repo is private, so the links show for whoever can see the repo. Running it again for the same PR
+# is printed. The repo is public, so the screenshots must only show the harness's fictional data, never a real vault. Running it again for the same PR
 # replaces that PR's folder: pass all of its screenshots each time. Make the screenshots with the harness, see
 # harness/README.md › Screenshots for a pull request.
 # Usage: scripts/pr-screenshots.sh <pr-number> <file.png>...

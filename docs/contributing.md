@@ -19,6 +19,12 @@ Running Relay from source, the architecture and the tests: [development.md](deve
    cargo test --workspace   # not in CI, run it when you touched Rust
    ```
 
+## Test data
+
+This repository is public. Fixtures, mocks, tests, screenshots and examples use fictional data only: no real clients,
+companies, colleagues, tickets or e-mail addresses (use `example.com`). The harness cast is Northwind, Bluebird Studio,
+Sofie Claes, Tom Willems, Lena Maes and Jonas Peeters.
+
 ## Screenshots
 
 A PR that changes what someone sees shows it in its description. The screenshots come from the harness (the real

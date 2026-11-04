@@ -1,4 +1,4 @@
-import { chromium } from '/Users/laurentmeersman/Documents/Antenna/craft-overnamemarkt/node_modules/playwright-core/index.mjs';
+import { chromium } from 'playwright-core';
 import { readFileSync } from 'fs';
 const snap = readFileSync('snapshot.json', 'utf8');
 const b = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
@@ -30,7 +30,7 @@ console.log('1 doorsturen:', await title(p), JSON.stringify(await p.evaluate(() 
 
 // 2. two projects named -> choice
 p = await page(); await newGen(p);
-await p.fill('#c', 'vergelijk cloet en joule'); await p.press('#c', 'Enter'); await p.waitForTimeout(300);
+await p.fill('#c', 'vergelijk cloet en cobalt'); await p.press('#c', 'Enter'); await p.waitForTimeout(300);
 console.log('2 keuze:', await p.$$eval('[data-route-to]', bs => bs.map(b => b.textContent)));
 await p.click('[data-route-to="Cloet"]'); await p.waitForTimeout(300);
 console.log('  gekozen:', await title(p), JSON.stringify(await p.evaluate(() => window.__sent.map(s => s.project))));
@@ -40,7 +40,7 @@ p = await page(); await newGen(p);
 await p.fill('#c', 'hoe gaat het met de facturatie?'); await p.press('#c', 'Enter'); await p.waitForTimeout(200);
 const key = await p.evaluate(() => window.__sent[0].project);
 const emit = ev => p.evaluate(([k, ev]) => window.__cb[window.__listener]({ event: 'claude', payload: { project: k, event: ev } }), [key, ev]);
-await emit({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'r1', name: 'Read', input: { file_path: '/x/Contexts/Antenna/Portfolio/Weemaes/Weemaes.md' } }] } });
+await emit({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'r1', name: 'Read', input: { file_path: '/x/Contexts/Bluebird/Portfolio/Orchard/Orchard.md' } }] } });
 await emit({ type: 'assistant', message: { content: [{ type: 'text', text: 'De automatische saldofacturatie draait sinds 14/9.' }] } });
 await emit({ type: 'result', subtype: 'success', result: '' });
 await p.waitForTimeout(300);

@@ -795,7 +795,7 @@ mod tests {
 
     #[test]
     fn names_and_folders_stay_inside_the_vault() {
-        assert_eq!(safe_name("Spardex / status: Q4?"), "Spardex status Q4");
+        assert_eq!(safe_name("Northwind / status: Q4?"), "Northwind status Q4");
         assert_eq!(safe_name("  "), "Meeting");
         let vault = std::env::temp_dir().join(format!("relay-att-{}", std::process::id()));
         std::fs::create_dir_all(vault.join(".obsidian")).unwrap();

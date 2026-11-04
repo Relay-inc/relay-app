@@ -437,9 +437,9 @@ mod tests {
         assert!(!none.get_args().any(|a| a.to_string_lossy().contains("mcp__plugin_commonwealth")));
         assert!(!none.get_envs().any(|(k, _)| k == "COMMONWEALTH_SOURCE"));
         assert!(!none.get_envs().any(|(k, _)| k == "COMMONWEALTH_PROJECT"));
-        let opts = json!({"commonwealth_brain": "/b/antenna", "commonwealth_source": "acme/web", "commonwealth_project": "Acme (Web)"});
+        let opts = json!({"commonwealth_brain": "/b/bluebird", "commonwealth_source": "acme/web", "commonwealth_project": "Acme (Web)"});
         let cmd = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap();
-        assert!(cmd.get_envs().any(|(k, v)| k == "COMMONWEALTH_BRAIN_DIR" && v.is_some_and(|v| v == "/b/antenna")));
+        assert!(cmd.get_envs().any(|(k, v)| k == "COMMONWEALTH_BRAIN_DIR" && v.is_some_and(|v| v == "/b/bluebird")));
         assert!(cmd.get_envs().any(|(k, v)| k == "COMMONWEALTH_SOURCE" && v.is_some_and(|v| v == "acme/web")));
         assert!(cmd.get_envs().any(|(k, v)| k == "COMMONWEALTH_PROJECT" && v.is_some_and(|v| v == "Acme (Web)")));
         let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();

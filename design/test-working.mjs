@@ -1,4 +1,4 @@
-import { chromium } from '/Users/laurentmeersman/Documents/Antenna/craft-overnamemarkt/node_modules/playwright-core/index.mjs';
+import { chromium } from 'playwright-core';
 import { readFileSync } from 'fs';
 const snap = readFileSync('snapshot.json', 'utf8');
 const b = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
@@ -12,7 +12,7 @@ await p.goto('http://localhost:1420'); await p.waitForTimeout(700);
 await p.click('[data-add=""]'); await p.fill('#c', 'hoe staat het met de facturatie?'); await p.press('#c', 'Enter'); await p.waitForTimeout(1300);
 console.log('direct na versturen:', (await p.textContent('.working')).replace(/\s+/g, ' ').trim());
 const k = await p.evaluate(() => Object.keys(JSON.parse(localStorage.chats))[0]);
-await p.evaluate(k => window.__cb[window.__l]({ event: 'claude', payload: { project: k, event: { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't', name: 'Read', input: { file_path: '/v/Weemaes.md' } }] } } } }), k);
+await p.evaluate(k => window.__cb[window.__l]({ event: 'claude', payload: { project: k, event: { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't', name: 'Read', input: { file_path: '/v/Orchard.md' } }] } } } }), k);
 await p.waitForTimeout(1100);
 console.log('tijdens een tool:', (await p.textContent('.working')).replace(/\s+/g, ' ').trim());
 await p.screenshot({ path: 'app-working.png' });

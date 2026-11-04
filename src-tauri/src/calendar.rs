@@ -314,7 +314,7 @@ fn bxl(d: &str, t: &str) -> DateTime<Utc> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const ME: &str = "kristof@example.be";
+    const ME: &str = "alex@example.com";
     const ICS: &str = include_str!("../tests/calendar.ics");
 
     fn titles(from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<(String, String)> {
@@ -326,7 +326,7 @@ mod tests {
         let m = |id: &str, title: &str, start: &str| json!({"id": id, "title": title, "start": start});
         let got = once(vec![
             m("a@1", "Weekly", "2026-10-05T08:00:00+00:00"),
-            m("a@1", "Weekly (o2o)", "2026-10-05T08:00:00+00:00"), // the same event, another calendar's title
+            m("a@1", "Weekly (a2a)", "2026-10-05T08:00:00+00:00"), // the same event, another calendar's title
             m("b@1", "  weekly ", "2026-10-05T08:00:00+00:00"),     // a copy under its own UID
             m("a@2", "Weekly", "2026-10-12T08:00:00+00:00"),        // next week's is another meeting
         ]);
@@ -338,7 +338,7 @@ mod tests {
         let got = titles(bxl("2026-10-01", "00:00"), bxl("2026-10-02", "00:00"));
         // the weekly at 10:00 (summer time), the one-off with a folded, escaped title; not the all-day, the solo
         // block, the declined one, the cancelled one or the one marked free
-        assert_eq!(got, vec![("Team software, weekly".into(), "10-01 10:00".into()), ("Habo x Antenna: Statusoverleg".into(), "10-01 13:00".into())]);
+        assert_eq!(got, vec![("Team software, weekly".into(), "10-01 10:00".into()), ("Atlas x Bluebird: Statusoverleg".into(), "10-01 13:00".into())]);
     }
     #[test]
     fn recurring_meetings_follow_their_exceptions() {
@@ -351,12 +351,12 @@ mod tests {
         let m = &meetings(ICS, ME, bxl("2026-10-01", "12:00"), bxl("2026-10-01", "14:00"))[0];
         assert_eq!(m["join"], "https://meet.google.com/vwm-jxnw-cju");
         assert_eq!(m["end"], bxl("2026-10-01", "14:00").to_rfc3339());
-        assert_eq!(m["people"], json!([{ "name": "Doe, John", "email": "john@habo.be" }]), "self and the room are left out");
-        assert_eq!(m["organizer"], "Mina");
+        assert_eq!(m["people"], json!([{ "name": "Doe, John", "email": "john@atlas.example" }]), "self and the room are left out");
+        assert_eq!(m["organizer"], "Lena");
     }
     #[test]
     fn date_only_exceptions_ends_and_too_frequent_rules() {
-        let ics = |rule: &str| format!("BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART;TZID=Europe/Brussels:20261001T100000\nDTEND;TZID=Europe/Brussels:20261001T110000\n{rule}\nUID:r\nSUMMARY:R\nATTENDEE:mailto:x@y.be\nEND:VEVENT\nEND:VCALENDAR\n");
+        let ics = |rule: &str| format!("BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART;TZID=Europe/Brussels:20261001T100000\nDTEND;TZID=Europe/Brussels:20261001T110000\n{rule}\nUID:r\nSUMMARY:R\nATTENDEE:mailto:x@example.com\nEND:VEVENT\nEND:VCALENDAR\n");
         let days = |rule: &str| meetings(&ics(rule), ME, bxl("2026-10-01", "00:00"), bxl("2026-10-30", "00:00")).iter()
             .map(|m| m["start"].as_str().unwrap()[5..10].to_string()).collect::<Vec<_>>();
         assert_eq!(days("RRULE:FREQ=WEEKLY\nEXDATE;VALUE=DATE:20261008"), ["10-01", "10-15", "10-22", "10-29"]);
@@ -366,7 +366,7 @@ mod tests {
     }
     #[test]
     fn join_only_goes_to_a_meeting_host() {
-        let ics = |conf: &str| format!("BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART:20261001T100000Z\nUID:j\nATTENDEE:mailto:x@y.be\nX-GOOGLE-CONFERENCE:{conf}\nEND:VEVENT\nEND:VCALENDAR\n");
+        let ics = |conf: &str| format!("BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART:20261001T100000Z\nUID:j\nATTENDEE:mailto:x@example.com\nX-GOOGLE-CONFERENCE:{conf}\nEND:VEVENT\nEND:VCALENDAR\n");
         let join = |conf: &str| meetings(&ics(conf), ME, bxl("2026-10-01", "00:00"), bxl("2026-10-02", "00:00"))[0]["join"].clone();
         assert_eq!(join("https://meet.google.com/abc-defg-hij"), "https://meet.google.com/abc-defg-hij");
         assert_eq!(join("https://evil.example/login"), "");
@@ -401,7 +401,7 @@ mod tests {
     }
     #[test]
     fn duration_alarms_and_date_time_exdates() {
-        let one = |body: &str| format!("BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART;TZID=Europe/Brussels:20261001T100000\n{body}\nUID:d\nSUMMARY:D\nATTENDEE:mailto:x@y.be\nEND:VEVENT\nEND:VCALENDAR\n");
+        let one = |body: &str| format!("BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART;TZID=Europe/Brussels:20261001T100000\n{body}\nUID:d\nSUMMARY:D\nATTENDEE:mailto:x@example.com\nEND:VEVENT\nEND:VCALENDAR\n");
         let get = |ics: &str| meetings(ics, ME, bxl("2026-10-01", "00:00"), bxl("2026-10-30", "00:00"));
         // no DTEND: the DURATION gives the end
         assert_eq!(get(&one("DURATION:PT30M"))[0]["end"], bxl("2026-10-01", "10:30").to_rfc3339());
@@ -410,17 +410,17 @@ mod tests {
             .map(|m| m["start"].as_str().unwrap()[5..10].to_string()).collect();
         assert_eq!(days, ["10-01", "10-15", "10-22", "10-29"]);
         // an unbalanced block in one event does not hide the next event's properties
-        let ics = "BEGIN:VCALENDAR\nBEGIN:VEVENT\nBEGIN:VALARM\nTRIGGER:-PT5M\nEND:VEVENT\nBEGIN:VEVENT\nDTSTART:20261001T120000Z\nUID:n\nSUMMARY:Next\nATTENDEE:mailto:x@y.be\nEND:VEVENT\nEND:VCALENDAR\n";
+        let ics = "BEGIN:VCALENDAR\nBEGIN:VEVENT\nBEGIN:VALARM\nTRIGGER:-PT5M\nEND:VEVENT\nBEGIN:VEVENT\nDTSTART:20261001T120000Z\nUID:n\nSUMMARY:Next\nATTENDEE:mailto:x@example.com\nEND:VEVENT\nEND:VCALENDAR\n";
         assert_eq!(get(ics).iter().map(|m| m["title"].as_str().unwrap()).collect::<Vec<_>>(), ["Next"]);
     }
     #[test]
     fn only_a_google_address_is_kept() {
-        assert!(url_ok("https://calendar.google.com/calendar/ical/kristof%40example.be/private-0123abcd/basic.ics"));
+        assert!(url_ok("https://calendar.google.com/calendar/ical/alex%40example.com/private-0123abcd/basic.ics"));
         assert!(!url_ok("https://evil.example/calendar/ical/x/basic.ics") && !url_ok("https://calendar.google.com/calendar/ical/x y/basic.ics"));
         assert!(!url_ok("https://calendar.google.com/calendar/ical/x/basic.ics\nurl = file:///etc/passwd"));
-        let mut s = json!({ "calendar": { "feeds": [{ "email": "a@b.be" }, { "email": "no email" }, 3] } });
+        let mut s = json!({ "calendar": { "feeds": [{ "email": "a@example.com" }, { "email": "no email" }, 3] } });
         norm(&mut s);
-        assert_eq!(s["calendar"], json!({ "on": false, "feeds": [{ "email": "a@b.be" }] }));
+        assert_eq!(s["calendar"], json!({ "on": false, "feeds": [{ "email": "a@example.com" }] }));
         assert!(feeds(&s).is_empty(), "off: no feeds");
     }
 }

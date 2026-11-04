@@ -11,7 +11,7 @@ const card = (over: Partial<Card>): Card => ({
   column: "c",
   placement: 0,
   due: null,
-  who: "Kristof",
+  who: "Alex",
   me: true,
   ...over,
 });

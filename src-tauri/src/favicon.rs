@@ -1,6 +1,6 @@
 // Project websites and their favicons: a project's site comes from the vault's icon settings when it is there,
-// else it is guessed: a domain named in the project folder that holds the project's name or an alias (resolvus.be
-// for Resolvus), else the domain named most often on the project note itself (at least twice). No AI.
+// else it is guessed: a domain named in the project folder that holds the project's name or an alias (meridian.be
+// for Meridian), else the domain named most often on the project note itself (at least twice). No AI.
 
 use base64::Engine;
 use regex::Regex;
@@ -16,7 +16,7 @@ use unicode_normalization::UnicodeNormalization;
 const SKIP_DIRS: [&str; 3] = ["/transcripts/", "/_archive/", "/Attachments/"];
 /// Tools and platforms that show up in any note, never a project's own site.
 const NOISE: [&str; 30] = ["notion.so", "notion.com", "claude.ai", "claude.com", "anthropic.com", "github.com", "google.com", "gmail.com",
-    "googleapis.com", "gstatic.com", "weareantenna.be", "combell.com", "productive.io", "sentry.io", "linkedin.com",
+    "googleapis.com", "gstatic.com", "bluebird.example", "combell.com", "productive.io", "sentry.io", "linkedin.com",
     "slack.com", "w3.org", "youtube.com", "apple.com", "microsoft.com", "amazon.com", "openai.com", "figma.com",
     "run.app", "webhosting.be", "vercel.app", "lovable.app", "typekit.net", "licdn.com", "wordpress.org"];
 const UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Safari/605.1.15";
@@ -60,8 +60,8 @@ fn read(f: &Path) -> String { fs::read(f).map(|b| String::from_utf8_lossy(&b).in
 /// The site of the domains: the one named most often, ties to the later name.
 fn best(c: impl Iterator<Item = (usize, String)>) -> String { c.max().map(|(_, d)| d).unwrap_or_default() }
 
-/// The domain a name picks out of the counted ones: it starts with the name (weemaesglas.be for Weemaes, not
-/// filmfestival.be for Trefpunt Festival); a short name (o2o) only as the whole domain name.
+/// The domain a name picks out of the counted ones: it starts with the name (orchardglas.be for Orchard, not
+/// filmfestival.be for Meetpoint Festival); a short name (a2a) only as the whole domain name.
 fn named(counts: &HashMap<String, usize>, name: &str, aliases: &[String]) -> String {
     let all: Vec<&str> = std::iter::once(name).chain(aliases.iter().map(String::as_str)).collect();
     let split = |n: &str| n.split(|c: char| c.is_whitespace() || c == '/' || c == '-').map(compact).collect::<Vec<_>>();
@@ -185,32 +185,32 @@ mod tests {
     #[test]
     fn compact_folds_accents_and_punctuation() {
         assert_eq!(compact("Café Zoë-2"), "cafezoe2");
-        assert_eq!(compact("o2o"), "o2o");
+        assert_eq!(compact("a2a"), "a2a");
     }
 
     #[test]
     fn registrable_keeps_co_and_com_second_levels() {
-        assert_eq!(registrable("WWW.Shop.Resolvus.be"), "resolvus.be");
+        assert_eq!(registrable("WWW.Shop.Meridian.be"), "meridian.be");
         assert_eq!(registrable("foo.co.uk"), "foo.co.uk");
     }
 
     #[test]
     fn guesses_the_domain_the_name_starts() {
-        let c = domains(["see resolvus.be and www.resolvus.be, notion.so, filmfestival.be, o2o.be, o2oshop.be, shop.weemaesglas.be".to_string()]);
-        assert_eq!(c["resolvus.be"], 2);
-        assert_eq!(named(&c, "Resolvus", &[]), "resolvus.be");
-        assert_eq!(named(&c, "Trefpunt Festival", &[]), "");
-        assert_eq!(named(&c, "o2o", &[]), "o2o.be");
-        assert_eq!(named(&c, "Weemaes", &[]), "weemaesglas.be");
-        assert_eq!(named(&c, "Other", &["Resolvus group".to_string()]), "resolvus.be");
+        let c = domains(["see meridian.be and www.meridian.be, notion.so, filmfestival.be, a2a.be, a2ashop.be, shop.orchardglas.be".to_string()]);
+        assert_eq!(c["meridian.be"], 2);
+        assert_eq!(named(&c, "Meridian", &[]), "meridian.be");
+        assert_eq!(named(&c, "Meetpoint Festival", &[]), "");
+        assert_eq!(named(&c, "a2a", &[]), "a2a.be");
+        assert_eq!(named(&c, "Orchard", &[]), "orchardglas.be");
+        assert_eq!(named(&c, "Other", &["Meridian group".to_string()]), "meridian.be");
     }
 
     #[test]
     fn icon_links_largest_first() {
         let html = r#"<link rel="icon" href="/a.png" sizes="32x32"><link rel="apple-touch-icon" href="b.png"><link rel="mask-icon" href="m.svg"><link rel="icon" href="/i.svg?a=1&amp;b=2">"#;
-        let l = icon_links(html, "https://x.be/p/");
+        let l = icon_links(html, "https://example.com/p/");
         assert_eq!(l.iter().map(|(n, u)| format!("{n} {u}")).collect::<Vec<_>>(),
-            ["512 https://x.be/i.svg?a=1&b=2", "180 https://x.be/p/b.png", "32 https://x.be/a.png"]);
+            ["512 https://example.com/i.svg?a=1&b=2", "180 https://example.com/p/b.png", "32 https://example.com/a.png"]);
     }
 
     /// Manual parity check against a real vault: `VAULT=... cargo test --lib parity -- --ignored --nocapture`.
@@ -219,9 +219,9 @@ mod tests {
     fn parity() {
         let v = std::env::var("VAULT").unwrap();
         let notes = Path::new(&v).join("Contexts");
-        for (n, a) in [("Spardex", vec![]), ("o2o", vec![]), ("Scoutsmap", vec![]), ("Elision", vec![]), ("Lemahieu", vec![]), ("Brutsaert", vec![]), ("Smappee", vec![]), ("Aernoudt", vec![]), ("BE Plastics", vec!["TradeHub".to_string()]), ("Archiefpunt", vec![])] {
+        for (n, a) in [("Northwind", vec![]), ("a2a", vec![]), ("Trailmap", vec![]), ("Evergreen", vec![]), ("Larkspur", vec![]), ("Bramwell", vec![]), ("Brightcharge", vec![]), ("Ashdown", vec![]), ("Acme Plastics", vec!["MarketHub".to_string()]), ("Archiefpunt", vec![])] {
             println!("{n} {}", guess(&notes, &["Documents".into(), "Gesprekken".into(), "_archive".into()], n, &a));
         }
-        println!("{:?}", favicon("o2o.be").map(|d| d.len()));
+        println!("{:?}", favicon("a2a.be").map(|d| d.len()));
     }
 }

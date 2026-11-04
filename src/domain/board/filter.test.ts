@@ -14,7 +14,7 @@ const card = (id: string, extra: Partial<Card> = {}): Card => ({
   ...extra,
 });
 const cards = [
-  card("1", { who: "Laurent", state: "doing", status: "In progress", labels: ["contract"] }),
+  card("1", { who: "Lena", state: "doing", status: "In progress", labels: ["contract"] }),
   card("2", { who: "Jana", state: "todo", status: "Backlog" }),
   card("3", { state: "done", status: "Done", labels: ["contract", "client"] }),
 ];
@@ -60,8 +60,8 @@ test("tidy drops values that left the board and empty facets", () => {
   assert.deepEqual(tidy({ who: ["Jana", "Sam"], state: ["gone"] }, cards), { who: ["Jana"] });
 });
 test("presets: saving under a name replaces, junk in storage is dropped", () => {
-  const saved = savePreset(savePreset([], "Mine", { who: ["Jana"] }), "Mine", { who: ["Laurent"], state: [] });
-  assert.deepEqual(saved, [{ name: "Mine", filters: { who: ["Laurent"] } }]);
+  const saved = savePreset(savePreset([], "Mine", { who: ["Jana"] }), "Mine", { who: ["Lena"], state: [] });
+  assert.deepEqual(saved, [{ name: "Mine", filters: { who: ["Lena"] } }]);
   assert.deepEqual(parsePresets(JSON.stringify([...saved, { name: "", filters: {} }, 7, { name: "x" }])), saved);
   assert.deepEqual(parsePresets("not json"), []);
   assert.deepEqual(parsePresets(null), []);

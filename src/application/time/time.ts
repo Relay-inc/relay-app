@@ -12,7 +12,7 @@ import { useTodayStore } from "../today/store";
 
 // "Time from sessions": the day's time per project from when the user wrote in their conversations (Claude Code
 // transcripts, read by the backend), proposed as Productive time entries the user approves one by one. The agent adds
-// the other sources weareantenna/antenna-tools' timesheet skill reads (calendar, Slack, git, other sessions, ...).
+// the other sources acme/team-tools' timesheet skill reads (calendar, Slack, git, other sessions, ...).
 
 /** The day's time lines from the conversations under a project. Other providers' conversations are not counted. */
 async function linesOf(date: string) {

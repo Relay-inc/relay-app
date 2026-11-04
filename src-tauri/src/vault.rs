@@ -323,7 +323,7 @@ mod tests {
     #[test]
     fn new_system_layout() {
         let d = tmp("system");
-        for f in ["System/rules/core/work-state.md", "System/reminders.md", "System/scripts/reminder-digest.py", "Contexts/Antenna/Portfolio/X.md"] { touch(&d, f); }
+        for f in ["System/rules/core/work-state.md", "System/reminders.md", "System/scripts/reminder-digest.py", "Contexts/Bluebird/Portfolio/X.md"] { touch(&d, f); }
         let s = det(&d);
         assert_eq!(s["map"], json!({"workState": "System/rules/core/work-state.md", "reminders": "System/reminders.md", "notes": "Contexts"}));
         assert_eq!(s["ok"], true);
@@ -388,10 +388,10 @@ mod tests {
         assert_eq!(status(&v, &m)["found"]["reminders"], true);
     }
 
-    // Kristof's real vault, read-only; skipped where it does not exist
+    // Alex's real vault, read-only; skipped where it does not exist
     #[test]
-    fn real_vault_of_kristof() {
-        let v = "/Users/kristof/vault";
+    fn real_vault_of_maintainer() {
+        let v = "/Users/alex/vault";
         if !Path::new(v).is_dir() { return; }
         let (v, m) = detect(v);
         println!("{v}: {m}");

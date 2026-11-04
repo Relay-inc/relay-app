@@ -153,7 +153,7 @@ const TOOLS: [string, (i: number) => Record<string, unknown>][] = [
   ["Skill", () => ({ skill: "code-review" })],
   ["TodoWrite", () => ({ todos: [{ content: "Patch", status: "in_progress" }] })],
   ["Write", () => ({ file_path: `${VAULT}/Contexts/Agency/Projects/Beacon Billing/Documents/Billing Spec.md` })],
-  ["mcp__relay-mail__read", () => ({ account: "laurent@example.com", id: "4211" })],
+  ["mcp__relay-mail__read", () => ({ account: "lena@example.com", id: "4211" })],
   ["mcp__claude_ai_Notion__notion-search", () => ({ query: "billing incident" })],
   ["MultiEdit", () => ({ file_path: "/Users/demo/code/beacon/tests/Billing/BalanceSyncTest.php" })],
 ];

@@ -110,7 +110,7 @@ fn pair_launch_reattach_and_walls() {
     let pid = list[0].pid;
 
     // another paired device sees none of it, and cannot take it over or stop it
-    let other = paired(&s, "kristof");
+    let other = paired(&s, "alex");
     assert!(other.list().unwrap().is_empty());
     assert!(other.attach("c:1").unwrap().is_none());
     assert!(other.kill("c:1", pid).is_err());
@@ -142,7 +142,7 @@ fn pair_launch_reattach_and_walls() {
 
     // revoked: an open stream of that device ends within seconds, and the next connection fails
     let mut open = other.launch(&meta("k:1"), &spec(&tmp)).unwrap();
-    let out = bin().args(["revoke", "kristof"]).env("RELAY_SERVER_DATA", &s.data).output().unwrap();
+    let out = bin().args(["revoke", "alex"]).env("RELAY_SERVER_DATA", &s.data).output().unwrap();
     assert!(out.status.success());
     let t = Instant::now();
     let mut rest = String::new();
@@ -578,7 +578,7 @@ fn mirror_sealed_locked_and_synced() {
     assert!(r.pushed.is_empty() && r.pulled.is_empty() && r.errors.is_empty(), "nothing to do after the restart: {r:?}");
 
     // another device has no access to it
-    let other = paired(&s, "kristof");
+    let other = paired(&s, "alex");
     assert!(other.root("vault").manifest().unwrap_err().contains("locked"));
     // a conversation's broker that died with the server is not listed as running after the restart
     assert!(c.list().unwrap().is_empty(), "stale brokers listed after a restart");

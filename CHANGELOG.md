@@ -26,6 +26,7 @@ a PR. Versions follow
 ### Changed
 
 - The notes graph moved from the Brain view into Pages: Graph at the top of the Pages tab draws the notes of the workspace you're in, a click opens the note as a page, and the conversation glow and "Show in graph" on a conversation still light up what it read and wrote (#381).
+- Fictional data in tests, fixtures and examples: the repository is public, so names of real clients, companies and colleagues are gone from fixtures, mocks, comments and this changelog.
 - The vault's meeting notes have one shape: Summary with bullets and **Next Steps**, no separate Decisions, Actions and Open sections. Recording a meeting no longer opens a conversation to write the note; the draft is in the meeting's Wrap-up (#376).
 
 ### Removed
@@ -340,7 +341,7 @@ a PR. Versions follow
 
 ### Added
 
-- **A skill for the board pipeline**: Settings › Projects › pipeline › Skill names a Claude Code skill (for example `ticket-flow:develop` from Antenna's tools) that the agent follows for every ticket. Relay still pushes, opens the PR and moves and comments on the ticket; where the skill would ask a person or post on the ticket, the agent reports it and Relay puts it on the ticket. With a skill set, the skill judges whether a ticket is clear and whether it needs a plan approved (so Relay's pre-flight and Plan first drop out), and with Relay's review on, the skill skips its own review: one review per diff. Relay's checks and review stay the gate before the PR. Empty keeps Relay's own flow (#218)
+- **A skill for the board pipeline**: Settings › Projects › pipeline › Skill names a Claude Code skill (for example `ticket-flow:develop` from your team's tools) that the agent follows for every ticket. Relay still pushes, opens the PR and moves and comments on the ticket; where the skill would ask a person or post on the ticket, the agent reports it and Relay puts it on the ticket. With a skill set, the skill judges whether a ticket is clear and whether it needs a plan approved (so Relay's pre-flight and Plan first drop out), and with Relay's review on, the skill skips its own review: one review per diff. Relay's checks and review stay the gate before the PR. Empty keeps Relay's own flow (#218)
 - **Follow Claude Code's agents**: when Claude Code starts agents in a conversation, an Agents button in its title bar opens their column next to it (crab, what it was asked, the step it is on, how long), running ones first. An agent opens as its own page with the whole transcript (its brief, the tools it ran, what it wrote), followed live while it runs; Esc goes back to the conversation. A click on an agent above the composer opens the same page, instead of its last three messages (#210)
 - **Orchestrator redesign**: the workers list is a column next to the Orchestrator, with its conversation first, then the latest run's workers and the earlier ones; a dot marks the ones waiting on you. A worker opens as a page beside the column: its state, step, question, report, the files it changed (+/− per file, read from git) and flags, with the composer talking to that worker and Esc going back. Reports in the conversation show as worker cards. A worker's question comes with buttons for the answers it offers (and a field for your own); answering on the card or the page sends it to the orchestrator and clears both. A worker that ended without a report offers Ask for the report and Restart. The title bar counts what runs, waits on you and is done; the composer drops the agent, model and effort picks here; an empty Orchestrator explains itself with three tasks to start from (#203)
 
@@ -415,7 +416,7 @@ a PR. Versions follow
 
 ### Fixed
 
-- **Commonwealth notes file under the conversation's project**: a conversation about a project that routes to a brain also passes the project's name (`COMMONWEALTH_PROJECT`). Commonwealth 0.7 matches it against the brain's project list, so notes from a vault conversation about o2o land in `o2o/` instead of under the first o2o repo, and a name the brain doesn't know falls back to the repo as before (#185)
+- **Commonwealth notes file under the conversation's project**: a conversation about a project that routes to a brain also passes the project's name (`COMMONWEALTH_PROJECT`). Commonwealth 0.7 matches it against the brain's project list, so notes from a vault conversation about one project land in its own folder instead of under its first repo, and a name the brain doesn't know falls back to the repo as before (#185)
 
 ### Fixed
 
@@ -495,7 +496,7 @@ a PR. Versions follow
 
 ### Changed
 
-- **Booking time reads every source of the Antenna timesheet skill**: the "Time <date>" conversation still starts from your Relay conversations, and the agent now adds the day's meetings (`relay calendar.meetings` takes a `date`), your Slack messages, your git commits, Claude Code sessions outside Relay (terminal, other repos), and what you edited in Google Drive, Jira, Notion and Figma, the same sources as weareantenna/antenna-tools' timesheet. It skips a source that isn't connected and says so, never counts a meeting twice, and ends with how much of an 8-hour day is still uncovered. A day without Relay conversations is no longer stopped right away (#157)
+- **Booking time reads every source of a team timesheet skill**: the "Time <date>" conversation still starts from your Relay conversations, and the agent now adds the day's meetings (`relay calendar.meetings` takes a `date`), your Slack messages, your git commits, Claude Code sessions outside Relay (terminal, other repos), and what you edited in Google Drive, Jira, Notion and Figma, the same sources as a team timesheet skill. It skips a source that isn't connected and says so, never counts a meeting twice, and ends with how much of an 8-hour day is still uncovered. A day without Relay conversations is no longer stopped right away (#157)
 
 ### Fixed
 
@@ -786,7 +787,7 @@ a PR. Versions follow
 - PRs per project now find their repos: checkouts in the usual code folders are matched to projects by name
 - Settings › Projects is one list of all projects; each opens to its name in Relay, its icon on one line (emoji or website in one field, upload, none, guess again) and its GitHub repositories, which you can add or remove
 - Project icons live in the vault: `.relay/config.json` (`icons`) says per project whether it is an image in `.relay/icons/`, an emoji, or a website whose favicon Relay fetches. Every project without one gets its favicon right away when Relay first opens the vault, and icons set before move there once. Settings › Projects › Project icons overrides any of them (emoji, website, upload, none, guess again), and **Find icons** lets Claude look up a website for every project without an icon (web search only): the client, else the project's own product, else the tool it is about (plesk.com for a Plesk server, n8n.io for n8n automations), so its favicon follows. Icons are also found via apple-touch-icon, /favicon.png and DuckDuckGo's favicon service when a site's page declares none
-- Favicons and the "this conversation is about" suggestion work wherever a vault keeps its project notes, not only under `Projects/` or `Portfolio/`; a project with a short name like o2o gets its site too (only a domain that is exactly its name, o2o.be)
+- Favicons and the "this conversation is about" suggestion work wherever a vault keeps its project notes, not only under `Projects/` or `Portfolio/`; a project with a short name like "ab1" gets its site too (only a domain that is exactly its name)
 
 ### Fixed
 - `/clear` in a Claude Code conversation now empties it in Relay too; before, the old messages stayed on screen even though Claude had started over (#34)

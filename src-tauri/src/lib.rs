@@ -597,18 +597,18 @@ async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Va
     let eb = env_of(&app, &state, p);
     // on the account a new conversation gets now, never one inherited from the app's environment
     let account = account_of(&state, p, "", "sonnet");
-    // the repos linked to a project say a lot about what it is (lemahieu-shopware: a shop)
+    // the repos linked to a project say a lot about what it is (larkspur-shopware: a shop)
     let mut repos: HashMap<String, Vec<String>> = HashMap::new();
     for (r, p) in repo_projects(&eb.vault) { repos.entry(p).or_default().push(r); }
     // ponytail: 80 projects per call, the summaries cut to 300 characters; more projects only happen in big vaults
     let list: Vec<Value> = projects.iter().take(80).map(|x| { let n = x["name"].as_str().unwrap_or("");
         json!({"name": n, "context": x["context"], "about": x["summary"].as_str().unwrap_or("").chars().take(300).collect::<String>(),
             "repos": repos.get(n).cloned().unwrap_or_default()}) }).collect();
-    // the context (Antenna, Freelance, Personal) is the user's own area, not a client: without saying so, every internal
+    // the context (Bluebird, Freelance, Personal) is the user's own area, not a client: without saying so, every internal
     // project of an employer got the employer's site
     let prompt = format!("Pick a website for each project below, so that site's favicon can be the project's icon. The context is the \
         area of work the project sits under (the user's own employer, their freelance work, personal): it is not the client, so never \
-        pick the context's own website. In this order: 1) the client, another company the work is for; 2) otherwise the project's own product or brand (a repo name like facturio can be \
+        pick the context's own website. In this order: 1) the client, another company the work is for; 2) otherwise the project's own product or brand (a repo name like ledgerly can be \
         that product's name); 3) otherwise the main tool, platform or service the project is about (a server panel, an automation \
         tool, a mail server, a SaaS it integrates). Use the name, the context, what it is about and its GitHub repos as clues, and \
         search the web for every project you do not know for sure. Give the most likely official site; use null only for a purely \
@@ -2318,7 +2318,7 @@ fn gh_repo(dir: &str) -> Option<String> {
 fn repo_projects(vault: &str) -> HashMap<String, String> {
     let mut out: HashMap<String, String> = repo_index(vault).into_iter().collect();
     if let Some(r) = relay_config::load(vault).and_then(|c| c["repos"].as_object().cloned()) {
-        // GitHub names are case-insensitive and the PRs are looked up lowercased: "o2o-Bicycle-leasing/x" matches too
+        // GitHub names are case-insensitive and the PRs are looked up lowercased: "a2a-Bicycle-leasing/x" matches too
         out.extend(r.into_iter().filter_map(|(k, v)| Some((k.to_lowercase(), v.as_str()?.to_string()))));
     }
     out.retain(|_, p| !p.is_empty()); // "" in the config: unlinked on purpose
@@ -3191,7 +3191,7 @@ mod github_tests {
     }
     #[test]
     fn gh_slug_reads_every_remote_form() {
-        assert_eq!(super::gh_slug("git@github.com:weareantenna/Weemaes-Backend.git").as_deref(), Some("weareantenna/weemaes-backend"));
+        assert_eq!(super::gh_slug("git@github.com:acme/Orchard-Backend.git").as_deref(), Some("acme/orchard-backend"));
         assert_eq!(super::gh_slug("https://github.com/Acme/vault-app").as_deref(), Some("acme/vault-app"));
         assert_eq!(super::gh_slug("ssh://git@github.com/Acme/check-in.git/").as_deref(), Some("acme/check-in"));
         assert_eq!(super::gh_slug("git@bitbucket.org:x/y.git"), None);
@@ -3203,7 +3203,7 @@ mod github_tests {
         let Ok(v) = std::env::var("VAULT") else { return };
         if super::brain(&v).is_none() { return; }
         let m = super::repo_projects(&v);
-        assert_eq!(m.get("weareantenna/craft-veride").map(String::as_str), Some("Website Onderhoud"));
+        assert_eq!(m.get("acme/craft-harbor").map(String::as_str), Some("Website Onderhoud"));
         println!("{} repos mapped", m.len());
     }
 }
@@ -3221,16 +3221,16 @@ mod mail_tests {
     fn old_mail_settings_heal_and_bad_ones_fail() {
         use serde_json::json;
         // a himalaya account name from before is no email: it falls back to the first account
-        let s = super::norm(json!({"mail": {"on": true, "account": "weareantenna"}}));
+        let s = super::norm(json!({"mail": {"on": true, "account": "work"}}));
         assert_eq!((s["mail"]["accounts"].clone(), s["mail"]["account"].clone()), (json!([]), json!("")));
         let a = |e: &str| json!({"email": e, "keychain_service": "svc", "keychain_account": "acc"});
-        let kept = super::norm(json!({"mail": {"account": "x@y.be", "accounts": [a("x@y.be")]}}));
-        assert_eq!(kept["mail"]["account"], "x@y.be");
+        let kept = super::norm(json!({"mail": {"account": "x@example.com", "accounts": [a("x@example.com")]}}));
+        assert_eq!(kept["mail"]["account"], "x@example.com");
         let ok = |accts: Vec<serde_json::Value>, cur: &str| super::mail_settings_ok(&json!({"account": cur, "accounts": accts}));
-        assert!(ok(vec![a("x@y.be"), a("z@y.be")], "z@y.be") && ok(vec![], ""));
-        assert!(!ok((0..6).map(|i| a(&format!("u{i}@y.be"))).collect(), ""));
-        assert!(!ok(vec![a("x@y.be"), a("X@Y.be")], ""), "the same email twice");
-        assert!(!ok(vec![a("x@y.be")], "other@y.be"), "a sidebar account that is not configured");
+        assert!(ok(vec![a("x@example.com"), a("z@example.com")], "z@example.com") && ok(vec![], ""));
+        assert!(!ok((0..6).map(|i| a(&format!("u{i}@example.com"))).collect(), ""));
+        assert!(!ok(vec![a("x@example.com"), a("X@example.com")], ""), "the same email twice");
+        assert!(!ok(vec![a("x@example.com")], "other@example.com"), "a sidebar account that is not configured");
     }
 }
 

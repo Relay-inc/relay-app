@@ -1336,7 +1336,7 @@ const en = {
   "gh.sidebar": "Sidebar:",
   "gh.show": "Show pull requests",
   "gh.owners": "Owners:",
-  "gh.ownersPh": "Empty is everywhere, e.g. weareantenna",
+  "gh.ownersPh": "Empty is everywhere, e.g. your-org",
   "gh.help":
     "Shows your open PRs and the ones where your review is requested, linked per project through the repos on the project card. Read-only, a click opens the PR on GitHub. The app uses the GitHub CLI login, no token is stored in the app. Not signed in: run <code>gh auth login</code> in the terminal.",
   "gh.recheck": "Check again",
@@ -1495,7 +1495,7 @@ const en = {
   "mail.step2Hint":
     "The code goes straight into the macOS keychain, under the service relay-mail. The app stores it nowhere else and never shows it again. If it is wrong, it is removed right away.",
   "mail.adv":
-    "Open the Keychain Access app and find the item. The item's name is the service, its Account field is the keychain account. For himalaya the service is himalaya-&lt;name&gt;-imap and the account &lt;name&gt;, with the account name from your himalaya config. For example service himalaya-weareantenna-imap and account weareantenna. If macOS asks to allow reading it, choose Always Allow.",
+    "Open the Keychain Access app and find the item. The item's name is the service, its Account field is the keychain account. For himalaya the service is himalaya-&lt;name&gt;-imap and the account &lt;name&gt;, with the account name from your himalaya config. For example service himalaya-work-imap and account wearebluebird. If macOS asks to allow reading it, choose Always Allow.",
   "mail.svcL": "Service",
   "mail.kaccL": "Keychain account",
   "mail.addTest": "Test and add",

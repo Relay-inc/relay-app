@@ -28,7 +28,7 @@ test("noteProperties: values, lists, inline lists and quotes, empty keys left ou
 test("noteTitle: a leading heading is the title, else the file name made readable", () => {
   assert.deepEqual(noteTitle("Contexts/Relay/Relay.md", "# Relay\n\nBody"), { title: "Relay", body: "\nBody" });
   assert.equal(
-    noteTitle("o2o/route-middleware-sees-rendered-refusals.md", "Body").title,
+    noteTitle("a2a/route-middleware-sees-rendered-refusals.md", "Body").title,
     "Route middleware sees rendered refusals",
   );
   assert.equal(noteTitle("Calendar/Plan - Brain view.md", "Body").title, "Plan - Brain view");
@@ -44,13 +44,13 @@ test("noteLinks: existing notes once, by path or name, not the note itself", () 
 });
 
 test("a shared vault's notes: known by name, by its path and by a path inside it", () => {
-  const index = notesIndex("/v", ["Mine.md", "/team/Contexts/Work/Projects/Spardex.md", "/team/Calendar/Standup.md"]);
-  assert.ok(noteKnown(index, "/v", "Spardex"));
+  const index = notesIndex("/v", ["Mine.md", "/team/Contexts/Work/Projects/Northwind.md", "/team/Calendar/Standup.md"]);
+  assert.ok(noteKnown(index, "/v", "Northwind"));
   assert.ok(noteKnown(index, "/v", "/team/Calendar/Standup.md"));
-  assert.ok(noteKnown(index, "/v", "Contexts/Work/Projects/Spardex"), "a path-style link in a team note");
+  assert.ok(noteKnown(index, "/v", "Contexts/Work/Projects/Northwind"), "a path-style link in a team note");
   assert.ok(!noteKnown(index, "/v", "Contexts/Work/Projects/Other"));
   assert.deepEqual(
-    noteLinks(index, "/v", "Mine.md", "[[Calendar/Standup]] and [[Spardex|the project]]").map(link => link.label),
+    noteLinks(index, "/v", "Mine.md", "[[Calendar/Standup]] and [[Northwind|the project]]").map(link => link.label),
     ["Calendar/Standup", "the project"],
   );
 });

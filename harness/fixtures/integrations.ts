@@ -38,13 +38,13 @@ export const mails = Array.from({ length: 60 }, (_, i) => {
     date: iso(NOW - i * 3.3 * HOUR - 11 * 60000),
     unread: i % 3 === 0 || i < 4,
     from: [{ name, email }],
-    to: [{ name: "Laurent", email: MAIL_ACCOUNT }],
+    to: [{ name: "Lena", email: MAIL_ACCOUNT }],
     attachments: i % 5 === 1,
   };
 });
 // the second account (a generic IMAP server): 8 mails over the last week, merged into the one inbox by date
 const STUDIO = [
-  ["Lead form: custom planning tool", "Pieter Janssens", "pieter@janssens-bouw.example"],
+  ["Lead form: custom planning tool", "Tom Willems", "tom@willems-bouw.example"],
   ["Quote request intranet", "Eva Maes", "eva@maes-advocaten.example"],
   ["Your domain renews in 30 days", null, "noreply@registrar.example"],
   ["Re: Wedding photos selection", "Lotte & Bram", "lotte@example.net"],
@@ -60,7 +60,7 @@ export const studioMails = STUDIO.map(([subject, name, email], i) => ({
   date: iso(NOW - (i * 21 + 2) * HOUR - 7 * 60000),
   unread: i < 2,
   from: [{ name, email }],
-  to: [{ name: "Laurent", email: MAIL_ACCOUNT_2 }],
+  to: [{ name: "Lena", email: MAIL_ACCOUNT_2 }],
   attachments: false,
 }));
 export const STUDIO_MAIL = studioMails[0];
@@ -86,7 +86,7 @@ export function mailBody(id: string) {
   const index = mails.findIndex(m => m.id === id);
   const message = mails[index] ?? studioMails.find(m => m.id === id) ?? mails[0];
   const isHtml = index % 3 === 1;
-  const text = `Hi Laurent,\n\nThanks for the update on "${message.subject}". Two things before we sign off:\n\n1. The export should include the VAT column.\n2. Can the viewer role see the invoices?\n\nSee https://northwind.example/acceptance for the list.\n\nKind regards,\n${message.from[0].name ?? message.from[0].email}\n\nOn Wed 30 Sep 2026 at 16:02, Laurent <${MAIL_ACCOUNT}> wrote:\n> Hi,\n> The portal is on staging, the checklist is attached.\n> > Earlier: can we have it before October?\n> Laurent`;
+  const text = `Hi Lena,\n\nThanks for the update on "${message.subject}". Two things before we sign off:\n\n1. The export should include the VAT column.\n2. Can the viewer role see the invoices?\n\nSee https://northwind.example/acceptance for the list.\n\nKind regards,\n${message.from[0].name ?? message.from[0].email}\n\nOn Wed 30 Sep 2026 at 16:02, Lena <${MAIL_ACCOUNT}> wrote:\n> Hi,\n> The portal is on staging, the checklist is attached.\n> > Earlier: can we have it before October?\n> Lena`;
   const html = isHtml
     ? // with the backend's own CSP (src-tauri/src/mail/render.rs), and a signature with a remote logo: blocked until "Load images"
       `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:"></head><body style="font-family:Helvetica,Arial,sans-serif;color:#222;margin:0"><table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7"><tr><td align="center" style="padding:24px"><table width="560" style="background:#fff;border-radius:8px;padding:24px"><tr><td><h1 style="font-size:20px;margin:0 0 12px;color:#1f3a8a">Balance report</h1><p>Dossier <b>D-1042</b> shows two balances since 28 September.</p><table width="100%" style="border-collapse:collapse;font-size:14px"><tr style="background:#eef2ff"><th align="left" style="padding:6px">Date</th><th align="right" style="padding:6px">Amount</th></tr><tr><td style="padding:6px">28/09</td><td align="right" style="padding:6px">€1.240,00</td></tr><tr><td style="padding:6px">29/09</td><td align="right" style="padding:6px">€1.000,00</td></tr></table><p style="margin-top:16px"><a href="https://beacon.example/dossiers/D-1042" style="background:#1f3a8a;color:#fff;padding:8px 14px;border-radius:6px;text-decoration:none">Open dossier</a></p><p style="color:#888;font-size:12px">You receive this because you are on the billing list.</p></td></tr></table></td></tr></table><table style="margin:16px 24px;font-size:13px;color:#444"><tr><td><img src="https://beacon.example/logo.png" width="96" height="24" alt="Beacon"></td></tr><tr><td style="padding-top:8px"><b>Beacon Billing</b><br>Account team<br>+32 9 000 00 00 — Kompasplein 19, 9000 Gent</td></tr></table></body></html>`
@@ -109,7 +109,7 @@ const pr = (number: number, title: string, repo: string, extra: Record<string, u
   draft: false,
   created: iso(NOW - number * 3 * HOUR),
   updated: iso(NOW - number * HOUR),
-  author: "laurent",
+  author: "lena",
   review: null,
   ci: "SUCCESS",
   project: null,
@@ -222,7 +222,7 @@ export function prDetail(repo: string, number: number) {
         },
       ],
     },
-    reviewRequests: { nodes: [{ requestedReviewer: actor("laurent") }] },
+    reviewRequests: { nodes: [{ requestedReviewer: actor("lena") }] },
     comments: {
       nodes: [
         {
@@ -289,7 +289,7 @@ const person = (id: string, first: string, last: string) => ({
   attributes: { first_name: first, last_name: last },
 });
 const PEOPLE = [
-  person("70001", "Laurent", "M."),
+  person("70001", "Lena", "M."),
   person("70002", "Sofie", "Claes"),
   person("70003", "Tom", "Willems"),
   person("70004", "Jonas", "Peeters"),
@@ -880,7 +880,7 @@ const meeting = (
   ...extra,
 });
 export const CALENDAR_URL =
-  "https://calendar.google.com/calendar/ical/laurent%40example.com/private-0123456789abcdef/basic.ics";
+  "https://calendar.google.com/calendar/ical/lena%40example.com/private-0123456789abcdef/basic.ics";
 export const meetings = [
   meeting("retro", "Retro Atlas Logistics", -60, 45, {
     people: [{ name: "Jonas Peeters", email: "jonas@atlas-logistics.example" }],

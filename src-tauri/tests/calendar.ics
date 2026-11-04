@@ -16,9 +16,9 @@ DTEND;TZID=Europe/Brussels:20260903T110000
 RRULE:FREQ=WEEKLY;BYDAY=TH
 EXDATE;TZID=Europe/Brussels:20261008T100000
 UID:weekly@google.com
-ORGANIZER;CN=Laurent:mailto:laurent@example.be
-ATTENDEE;CUTYPE=INDIVIDUAL;PARTSTAT=ACCEPTED;CN=Laurent:mailto:laurent@example.be
-ATTENDEE;CUTYPE=INDIVIDUAL;PARTSTAT=ACCEPTED;CN=kristof@example.be:mailto:kristof@example.be
+ORGANIZER;CN=Lena:mailto:lena@example.com
+ATTENDEE;CUTYPE=INDIVIDUAL;PARTSTAT=ACCEPTED;CN=Lena:mailto:lena@example.com
+ATTENDEE;CUTYPE=INDIVIDUAL;PARTSTAT=ACCEPTED;CN=alex@example.com:mailto:alex@example.com
 SUMMARY:Team software\, weekly
 STATUS:CONFIRMED
 TRANSP:OPAQUE
@@ -28,8 +28,8 @@ DTSTART;TZID=Europe/Brussels:20261015T140000
 DTEND;TZID=Europe/Brussels:20261015T150000
 RECURRENCE-ID;TZID=Europe/Brussels:20261015T100000
 UID:weekly@google.com
-ATTENDEE;PARTSTAT=ACCEPTED:mailto:laurent@example.be
-ATTENDEE;PARTSTAT=ACCEPTED:mailto:kristof@example.be
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:lena@example.com
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:alex@example.com
 SUMMARY:Team software\, moved
 END:VEVENT
 BEGIN:VEVENT
@@ -37,21 +37,21 @@ DTSTART;TZID=Europe/Brussels:20261022T100000
 DTEND;TZID=Europe/Brussels:20261022T110000
 RECURRENCE-ID;TZID=Europe/Brussels:20261022T100000
 UID:weekly@google.com
-ATTENDEE;PARTSTAT=ACCEPTED:mailto:laurent@example.be
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:lena@example.com
 SUMMARY:Team software\, weekly
 STATUS:CANCELLED
 END:VEVENT
 BEGIN:VEVENT
 DTSTART:20261001T110000Z
 DTEND:20261001T120000Z
-UID:habo@google.com
-ORGANIZER;CN=Mina:mailto:mina@example.be
-ATTENDEE;CUTYPE=INDIVIDUAL;PARTSTAT=NEEDS-ACTION;CN="Doe, John":mailto:john@habo.be
+UID:atlas@google.com
+ORGANIZER;CN=Lena:mailto:lena@example.com
+ATTENDEE;CUTYPE=INDIVIDUAL;PARTSTAT=NEEDS-ACTION;CN="Doe, John":mailto:john@atlas.example
 ATTENDEE;CUTYPE=RESOURCE;PARTSTAT=ACCEPTED;CN=Board Room:mailto:room@resource.calendar.google.com
-ATTENDEE;CUTYPE=INDIVIDUAL;PARTSTAT=ACCEPTED:mailto:Kristof@example.be
+ATTENDEE;CUTYPE=INDIVIDUAL;PARTSTAT=ACCEPTED:mailto:Alex@example.com
 X-GOOGLE-CONFERENCE:https://meet.google.com/vwm-jxnw-cju
-SUMMARY:Habo x Ant
- enna: Statusoverleg
+SUMMARY:Atlas x Blu
+ ebird: Statusoverleg
 LOCATION:Kompasplein 19\, Gent
 BEGIN:VALARM
 ACTION:DISPLAY
@@ -63,8 +63,8 @@ BEGIN:VEVENT
 DTSTART;VALUE=DATE:20261001
 DTEND;VALUE=DATE:20261002
 UID:allday@google.com
-ATTENDEE;PARTSTAT=ACCEPTED:mailto:laurent@example.be
-SUMMARY:Verlof Laurent
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:lena@example.com
+SUMMARY:Verlof Lena
 END:VEVENT
 BEGIN:VEVENT
 DTSTART:20261001T060000Z
@@ -76,15 +76,15 @@ BEGIN:VEVENT
 DTSTART:20261001T130000Z
 DTEND:20261001T140000Z
 UID:declined@google.com
-ATTENDEE;PARTSTAT=ACCEPTED:mailto:laurent@example.be
-ATTENDEE;PARTSTAT=DECLINED:mailto:kristof@example.be
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:lena@example.com
+ATTENDEE;PARTSTAT=DECLINED:mailto:alex@example.com
 SUMMARY:Declined one
 END:VEVENT
 BEGIN:VEVENT
 DTSTART:20261001T140000Z
 DTEND:20261001T150000Z
 UID:cancelled@google.com
-ATTENDEE;PARTSTAT=ACCEPTED:mailto:laurent@example.be
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:lena@example.com
 SUMMARY:Cancelled one
 STATUS:CANCELLED
 END:VEVENT
@@ -92,7 +92,7 @@ BEGIN:VEVENT
 DTSTART:20261001T150000Z
 DTEND:20261001T160000Z
 UID:free@google.com
-ATTENDEE;PARTSTAT=ACCEPTED:mailto:laurent@example.be
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:lena@example.com
 SUMMARY:Free one
 TRANSP:TRANSPARENT
 END:VEVENT

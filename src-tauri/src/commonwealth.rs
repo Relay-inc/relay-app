@@ -54,7 +54,7 @@ fn hit(reg: &Registry, repo: &str) -> Option<Hit> {
 pub fn resolve(reg: &Registry, repos: &[String]) -> Option<String> { route(reg, repos).map(|(b, _)| b) }
 /// The brain and the repo that routed to it. That repo is the session's COMMONWEALTH_SOURCE: a vault session runs in the
 /// vault, and without it Commonwealth files every note under "vault".
-// ponytail: a project with several routed repos (o2o) gets the first one, sorted, as its source. Since Commonwealth 0.7
+// ponytail: a project with several routed repos (a2a) gets the first one, sorted, as its source. Since Commonwealth 0.7
 // the session also passes the project name (COMMONWEALTH_PROJECT), which files the notes when the brain's registry
 // knows that name; the repo only decides when it doesn't.
 fn route(reg: &Registry, repos: &[String]) -> Option<(String, String)> {
@@ -76,7 +76,7 @@ pub fn brains(home: &str, repo_projects: &std::collections::HashMap<String, Stri
 /// The brain a project's sessions use and the repo to file their notes under, like `brains` for one project.
 pub fn session(home: &str, repo_projects: &std::collections::HashMap<String, String>, project: &str) -> Option<(String, String)> {
     let mut repos: Vec<String> = repo_projects.iter().filter(|(_, p)| *p == project).map(|(r, _)| r.clone()).collect();
-    repos.sort(); // a checkout's own casing ("o2o-Bicycle-leasing/x") sorts before the config's lowercased key
+    repos.sort(); // a checkout's own casing ("a2a-Bicycle-leasing/x") sorts before the config's lowercased key
     route(&load(home), &repos).filter(|(b, _)| is_brain(b))
 }
 
@@ -153,7 +153,7 @@ mod tests {
     #[test]
     fn unmatched_and_repoless_projects_get_no_brain_even_with_a_default() {
         let r = reg(json!({"defaultBrain": "/b/team", "rules": [{"org": "acme/*"}]}));
-        assert_eq!(resolve(&r, &repos(&["kristoffeys/facturio"])), None);
+        assert_eq!(resolve(&r, &repos(&["other/ledger"])), None);
         assert_eq!(resolve(&r, &[]), None);
         assert_eq!(resolve(&reg(json!({"rules": [{"org": "acme/*"}]})), &repos(&["acme/web"])), None); // matched, but no brain and no default
     }

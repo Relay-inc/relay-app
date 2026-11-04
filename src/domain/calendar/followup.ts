@@ -35,7 +35,7 @@ export function recipients(meeting: Meeting, mine: string[]): Addr[] {
   });
 }
 const EMAIL = /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/;
-/** An address typed into Cc: "name@x.be" or "Name <name@x.be>"; null when it is none. */
+/** An address typed into Cc: "name@example.com" or "Name <name@example.com>"; null when it is none. */
 export function addrOf(text: string): Addr | null {
   const m = /^(.*?)\s*<([^>]+)>$/.exec(text.trim());
   const email = (m ? m[2] : text).trim();

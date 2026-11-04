@@ -1355,7 +1355,7 @@ export default {
   "gh.sidebar": "Seitenleiste:",
   "gh.show": "Pull Requests anzeigen",
   "gh.owners": "Owner:",
-  "gh.ownersPh": "Leer = überall, z. B. weareantenna",
+  "gh.ownersPh": "Leer = überall, z. B. your-org",
   "gh.help":
     "Zeigt deine offenen PRs und die, bei denen dein Review angefragt ist, pro Projekt über die Repos auf der Projektkarte verknüpft. Nur lesend, ein Klick öffnet den PR auf GitHub. Die App nutzt die Anmeldung der GitHub CLI, in der App ist kein Token gespeichert. Nicht angemeldet: <code>gh auth login</code> im Terminal ausführen.",
   "gh.recheck": "Erneut prüfen",
@@ -1515,7 +1515,7 @@ export default {
   "mail.step2Hint":
     "Der Code geht direkt in den macOS-Schlüsselbund, unter dem Dienst relay-mail. Die App speichert ihn nirgends sonst und zeigt ihn nicht mehr an. Stimmt er nicht, wird er sofort wieder entfernt.",
   "mail.adv":
-    "Öffne die App Schlüsselbundverwaltung und such den Eintrag. Sein Name ist der Dienst, sein Feld Account ist das Schlüsselbund-Konto. Für himalaya ist der Dienst himalaya-&lt;name&gt;-imap und das Konto &lt;name&gt;, mit dem Kontonamen aus deiner himalaya-Konfiguration. Zum Beispiel Dienst himalaya-weareantenna-imap und Konto weareantenna. Fragt macOS nach der Erlaubnis zum Lesen, wähl Immer erlauben.",
+    "Öffne die App Schlüsselbundverwaltung und such den Eintrag. Sein Name ist der Dienst, sein Feld Account ist das Schlüsselbund-Konto. Für himalaya ist der Dienst himalaya-&lt;name&gt;-imap und das Konto &lt;name&gt;, mit dem Kontonamen aus deiner himalaya-Konfiguration. Zum Beispiel Dienst himalaya-work-imap und Konto wearebluebird. Fragt macOS nach der Erlaubnis zum Lesen, wähl Immer erlauben.",
   "mail.svcL": "Dienst",
   "mail.kaccL": "Schlüsselbund-Konto",
   "mail.addTest": "Testen und hinzufügen",

@@ -148,7 +148,7 @@ pub fn icon_kind(v: &str) -> Icon<'_> {
     else if v.contains('.') && !v.contains(char::is_whitespace) { Icon::Site(v) }
     else { Icon::Emoji(v) }
 }
-/// A website as typed (https://www.spardex.be/nl) to the domain the favicon is fetched from.
+/// A website as typed (https://www.northwind.be/nl) to the domain the favicon is fetched from.
 pub fn site_of(s: &str) -> Option<String> {
     let d = s.trim().trim_start_matches("https://").trim_start_matches("http://").split(['/', '?', '#']).next()?.trim_start_matches("www.").to_lowercase();
     (d.contains('.') && d.chars().all(|c| c.is_ascii_alphanumeric() || ".-".contains(c))).then_some(d)
@@ -288,21 +288,21 @@ fn work_state(file: &Path) -> (Vec<String>, Vec<String>) {
 }
 fn is_date(s: &str) -> bool { s.len() == 10 && s.chars().enumerate().all(|(i, c)| if i == 4 || i == 7 { c == '-' } else { c.is_ascii_digit() }) }
 
-/// A name to compare: lowercase letters and digits, without a "(…)" suffix, so "BE Plastics (TradeHub)",
-/// "be-plastics" and "be_plastics" all become "beplastics".
+/// A name to compare: lowercase letters and digits, without a "(…)" suffix, so "Acme Plastics (MarketHub)",
+/// "acme-plastics" and "acme_plastics" all become "beplastics".
 fn key(s: &str) -> String { s.split('(').next().unwrap_or(s).chars().filter(char::is_ascii_alphanumeric).map(|c| c.to_ascii_lowercase()).collect() }
 /// The project a checkout belongs to: a project whose name is the folder or repo name, or its first words
-/// ("be-plastics-backend" -> "BE Plastics", "o2o-platform" -> "o2o"). Whole words only, never part of one.
+/// ("acme-plastics-backend" -> "Acme Plastics", "a2a-platform" -> "a2a"). Whole words only, never part of one.
 fn project_of<'a>(names: &[&str], by_key: &HashMap<String, &'a String>) -> Option<&'a String> {
     names.iter().find_map(|n| {
         let words: Vec<&str> = n.split(['-', '_', '.', ' ']).filter(|w| !w.is_empty()).collect();
-        // the longest leading run of words that is a project, so "be-plastics" wins over a project called "be"
+        // the longest leading run of words that is a project, so "acme-plastics" wins over a project called "be"
         (1..=words.len()).rev().find_map(|i| by_key.get(&key(&words[..i].concat())).copied())
     })
 }
 /// GitHub repo -> project: the vault's own index/repos.json in its brain folder when there is one, then the
 /// checkouts in the usual code folders, and one level into a folder that is not a checkout itself
-/// (~/projects/antenna/spardex).
+/// (~/projects/bluebird/northwind).
 fn repos(vault: &str, projects: &[String]) -> Map<String, Value> {
     let mut out = Map::new();
     for (repo, note) in crate::repo_index(vault) {
@@ -334,40 +334,40 @@ mod tests {
         let v = std::env::temp_dir().join(format!("relay-icons-{}", std::process::id()));
         let vs = v.to_string_lossy().into_owned();
         fs::create_dir_all(&v).unwrap();
-        save(&vs, &json!({"version": 1, "sites": {"o2o": "o2o.be", "Spardex": ""}})).unwrap();
+        save(&vs, &json!({"version": 1, "sites": {"a2a": "a2a.be", "Northwind": ""}})).unwrap();
         // a 1x1 png
         let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
-        let projects = json!({"Lemahieu": {"icon": "🛒", "label": "L"}, "BE Plastics (TradeHub)": {"img": png}}).as_object().unwrap().clone();
+        let projects = json!({"Larkspur": {"icon": "🛒", "label": "L"}, "Acme Plastics (MarketHub)": {"img": png}}).as_object().unwrap().clone();
         let mut moved = migrate_icons(&vs, &projects).unwrap(); moved.sort();
-        assert_eq!(moved, ["BE Plastics (TradeHub)", "Lemahieu"]);
+        assert_eq!(moved, ["Acme Plastics (MarketHub)", "Larkspur"]);
         let i = icons(&vs);
-        assert_eq!(i["o2o"]["value"], "o2o.be");
-        assert_eq!(i["Spardex"]["value"], "");
-        assert_eq!(i["Lemahieu"]["icon"], "🛒");
-        let f = i["BE Plastics (TradeHub)"]["value"].as_str().unwrap().to_string();
-        assert!(f.starts_with("icons/be-plastics-tradehub-") && i["BE Plastics (TradeHub)"]["img"].as_str().unwrap().starts_with("data:image/png;base64,"));
+        assert_eq!(i["a2a"]["value"], "a2a.be");
+        assert_eq!(i["Northwind"]["value"], "");
+        assert_eq!(i["Larkspur"]["icon"], "🛒");
+        let f = i["Acme Plastics (MarketHub)"]["value"].as_str().unwrap().to_string();
+        assert!(f.starts_with("icons/acme-plastics-markethub-") && i["Acme Plastics (MarketHub)"]["img"].as_str().unwrap().starts_with("data:image/png;base64,"));
         // the tray only gets image files, never an emoji or a site
         let files = icon_files(&vs);
-        assert_eq!(files.keys().collect::<Vec<_>>(), ["BE Plastics (TradeHub)"]);
-        assert!(files["BE Plastics (TradeHub)"].exists());
+        assert_eq!(files.keys().collect::<Vec<_>>(), ["Acme Plastics (MarketHub)"]);
+        assert!(files["Acme Plastics (MarketHub)"].exists());
         assert!(load(&vs).unwrap().get("sites").is_none(), "sites became icons");
         assert!(migrate_icons(&vs, &projects).is_none(), "only once");
-        set_icon(&vs, "BE Plastics (TradeHub)", "site", "https://www.be-plastics.com/nl").unwrap();
-        assert_eq!(icons(&vs)["BE Plastics (TradeHub)"]["value"], "be-plastics.com");
+        set_icon(&vs, "Acme Plastics (MarketHub)", "site", "https://www.acme-plastics.com/nl").unwrap();
+        assert_eq!(icons(&vs)["Acme Plastics (MarketHub)"]["value"], "acme-plastics.com");
         assert!(!path(&vs).with_file_name(&f).exists(), "the old file goes");
         // the site's favicon is stored beside it: the site stays the entry, the tray gets the file
-        set_icon(&vs, "BE Plastics (TradeHub)", "favicon", png).unwrap();
+        set_icon(&vs, "Acme Plastics (MarketHub)", "favicon", png).unwrap();
         let i = icons(&vs);
-        assert_eq!(i["BE Plastics (TradeHub)"]["value"], "be-plastics.com", "a website set by hand stays");
-        assert!(i["BE Plastics (TradeHub)"]["img"].as_str().unwrap().starts_with("data:image/png;base64,"));
-        assert!(icon_files(&vs)["BE Plastics (TradeHub)"].exists());
+        assert_eq!(i["Acme Plastics (MarketHub)"]["value"], "acme-plastics.com", "a website set by hand stays");
+        assert!(i["Acme Plastics (MarketHub)"]["img"].as_str().unwrap().starts_with("data:image/png;base64,"));
+        assert!(icon_files(&vs)["Acme Plastics (MarketHub)"].exists());
         // another site drops the old site's icon, a guess (no entry) becomes the file itself
-        set_icon(&vs, "BE Plastics (TradeHub)", "site", "plastics.be").unwrap();
-        assert!(icons(&vs)["BE Plastics (TradeHub)"]["img"].is_null(), "no icon of the old site");
+        set_icon(&vs, "Acme Plastics (MarketHub)", "site", "plastics.be").unwrap();
+        assert!(icons(&vs)["Acme Plastics (MarketHub)"]["img"].is_null(), "no icon of the old site");
         set_icon(&vs, "Guessed", "favicon", png).unwrap();
         assert!(icons(&vs)["Guessed"]["value"].as_str().unwrap().starts_with("icons/guessed-"));
-        set_icon(&vs, "Lemahieu", "reset", "").unwrap();
-        assert!(!icons(&vs).contains_key("Lemahieu"));
+        set_icon(&vs, "Larkspur", "reset", "").unwrap();
+        assert!(!icons(&vs).contains_key("Larkspur"));
         assert!(set_icon(&vs, "x", "emoji", "a.b").is_err());
         fs::remove_dir_all(&v).ok();
     }
@@ -385,17 +385,17 @@ mod tests {
         let d = std::env::temp_dir().join(format!("relay-cfg-{}", std::process::id()));
         fs::create_dir_all(&d).unwrap();
         let f = d.join("work-state.md");
-        fs::write(&f, "# Work State\n## State Vocabulary\n| State | Meaning |\n|---|---|\n| Active | x |\n## Antenna\n| Project | State | Last | Left |\n|---|---|---|---|\n| Spardex | Active | 2026-10-01 | x |\n| [[BE Plastics (TradeHub)]] | Active | 2026-09-29 | y |\n### Meersman\n| Klant | Actief | 2026-01-02 | z |\n").unwrap();
+        fs::write(&f, "# Work State\n## State Vocabulary\n| State | Meaning |\n|---|---|\n| Active | x |\n## Bluebird\n| Project | State | Last | Left |\n|---|---|---|---|\n| Northwind | Active | 2026-10-01 | x |\n| [[Acme Plastics (MarketHub)]] | Active | 2026-09-29 | y |\n### Studio\n| Klant | Actief | 2026-01-02 | z |\n").unwrap();
         let (p, c) = work_state(&f);
-        assert_eq!(p, ["Spardex", "BE Plastics (TradeHub)", "Klant"]);
-        assert_eq!(c, ["Antenna", "Meersman"]);
-        assert_eq!(key("BE Plastics (TradeHub)"), key("be-plastics"));
-        let ps = ["BE Plastics (TradeHub)".to_string(), "o2o".to_string(), "Spardex".to_string()];
+        assert_eq!(p, ["Northwind", "Acme Plastics (MarketHub)", "Klant"]);
+        assert_eq!(c, ["Bluebird", "Studio"]);
+        assert_eq!(key("Acme Plastics (MarketHub)"), key("acme-plastics"));
+        let ps = ["Acme Plastics (MarketHub)".to_string(), "a2a".to_string(), "Northwind".to_string()];
         let by: HashMap<String, &String> = ps.iter().map(|p| (key(p), p)).collect();
-        assert_eq!(project_of(&["be-plastics-backend"], &by), Some(&ps[0]));
-        assert_eq!(project_of(&["o2o-platform"], &by), Some(&ps[1]));
-        assert_eq!(project_of(&["spardex"], &by), Some(&ps[2]));
-        assert_eq!(project_of(&["spardexer", "blog"], &by), None, "never part of a word");
+        assert_eq!(project_of(&["acme-plastics-backend"], &by), Some(&ps[0]));
+        assert_eq!(project_of(&["a2a-platform"], &by), Some(&ps[1]));
+        assert_eq!(project_of(&["northwind"], &by), Some(&ps[2]));
+        assert_eq!(project_of(&["northwinder", "blog"], &by), None, "never part of a word");
         fs::remove_dir_all(&d).ok();
     }
     #[test]
