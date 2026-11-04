@@ -87,7 +87,7 @@ One shape for every meeting note: `## Summary`, flat bullets, `**Topic**` blocks
 
 ## 4. Write
 
-1. Write `## Summary` after `## Notes`, which stays as the user typed it, and keep a `## Briefing` and a `## Recording` (the transcript link and audio) where they are. Relay's Wrap-up writes the same shape from the app.
+1. Write `## Summary` after `## Notes`, which stays as the user typed it, and keep a `## Briefing` where it is. The audio embed (`![[… .m4a]]`) and the `Transcript: [[…]]` link sit right under the date line below the H1, before the first `##`: the only H2s of a meeting note are `## Briefing`, `## Notes` and `## Summary`. Relay's Wrap-up writes the same shape from the app.
 2. Frontmatter: `one-liner:` from the summary, `modified:` today, `about:` extended with discovered projects that have a note.
 3. Confirm in one line. Do not re-print the note.
 

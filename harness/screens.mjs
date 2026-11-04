@@ -2138,6 +2138,9 @@ const VIEWS = {
     await meetingWrapup("calendar", "ok");
     await click("Accept");
     await waitText("Saved to note ✓");
+    // one decision added to the project's note: it reads "Added ✓", the other is still a click
+    await page.getByRole("button", { name: "Add to Northwind Portal note" }).first().click();
+    await waitText("Added ✓");
     await page.mouse.move(900, 600);
     await settle(page);
   },
@@ -2145,6 +2148,9 @@ const VIEWS = {
     await meetingWrapup("calendar-dark", "ok");
     await click("Accept");
     await waitText("Saved to note ✓");
+    // one decision added to the project's note: it reads "Added ✓", the other is still a click
+    await page.getByRole("button", { name: "Add to Northwind Portal note" }).first().click();
+    await waitText("Added ✓");
     await page.mouse.move(900, 600);
     await settle(page);
   },

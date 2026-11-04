@@ -3,8 +3,6 @@ import { notesIn } from "../../../domain/calendar/meeting-view";
 import { summaryIn, transcriptIn } from "../../../domain/calendar/wrapup";
 import type { Meeting } from "../../../domain/calendar/types";
 import { generateDraft, useWrapupStore } from "../../../application/calendar/wrapup";
-import { openDetail } from "../../../application/navigation/panel";
-import { noteKey } from "../../../domain/navigation/keys";
 import { useT } from "../../hooks/useT";
 import { WrapDraft } from "./WrapDraft";
 import { WrapSteps } from "./WrapSteps";
@@ -54,12 +52,7 @@ export function WrapupStep({
     );
   return (
     <div className="flex-1 min-h-0 grid grid-cols-[3fr_2fr]">
-      <WrapDraft
-        meeting={meeting}
-        wrap={wrap}
-        noteText={note?.text ?? ""}
-        onOpen={() => note && openDetail(noteKey(note.path))}
-      />
+      <WrapDraft meeting={meeting} wrap={wrap} noteText={note?.text ?? ""} />
       <WrapSteps meeting={meeting} wrap={wrap} noteText={note?.text ?? ""} />
     </div>
   );

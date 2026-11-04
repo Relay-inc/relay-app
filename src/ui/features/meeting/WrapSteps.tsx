@@ -1,8 +1,10 @@
 import { useRef } from "react";
+import { Icon } from "../../components/Icon";
 import type { Meeting } from "../../../domain/calendar/types";
 import {
   addDecision,
   editStep,
+  openResult,
   retryStep,
   savedSteps,
   ticketBoard,
@@ -27,12 +29,14 @@ function StepCard({
   i,
   step,
   locked,
+  saved,
 }: {
   meeting: Meeting;
   id: string;
   i: number;
   step: StepState;
   locked: boolean;
+  saved: boolean;
 }) {
   const { t, locale } = useT();
   const date = useRef<HTMLInputElement>(null);
@@ -41,6 +45,31 @@ function StepCard({
   const day = new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short" }).format(
     new Date(`${step.due}T12:00:00`),
   );
+  // accepted: a result, not choices (a step that failed keeps its chips and Retry)
+  if (saved && step.status !== "failed")
+    return (
+      <div className="flex items-start gap-2.25 px-3 py-2.5 rounded-[10px] border border-separator">
+        {step.status === "busy" ? (
+          <span className="spinner mt-1.25" />
+        ) : (
+          <Icon name="check" className="glyph size-3.75 mt-0.75 flex-none text-add-fg" />
+        )}
+        <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+          <span className="text-sm leading-snug">{step.text}</span>
+          {step.result ? (
+            <span className="text-xs text-secondary">
+              {step.url ? (
+                <button className="cursor-pointer hover:text-label" onClick={() => void openResult(step.url)}>
+                  {step.result} ↗
+                </button>
+              ) : (
+                step.result
+              )}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    );
   return (
     <div className="px-3 py-2.5 rounded-[10px] border border-separator">
       <label className="flex items-start gap-2.25 text-sm leading-snug">
@@ -115,7 +144,8 @@ function StepCard({
 export function WrapSteps({ meeting, wrap, noteText }: { meeting: Meeting; wrap: Wrap | undefined; noteText: string }) {
   const { t } = useT();
   const project = meetingProjectOf(meeting);
-  const locked = !wrap || wrap.phase === "saving" || wrap.phase === "saved";
+  const saved = wrap?.phase === "saved";
+  const locked = !wrap || wrap.phase === "saving";
   return (
     <section
       aria-label={t("meet.wrap.steps")}
@@ -136,9 +166,11 @@ export function WrapSteps({ meeting, wrap, noteText }: { meeting: Meeting; wrap:
       ) : wrap?.phase === "error" ? null : wrap ? (
         <div className="flex flex-col gap-2.5 mt-2.5">
           {wrap.steps.length ? (
-            wrap.steps.map((step, i) => (
-              <StepCard key={i} meeting={meeting} id={meeting.id} i={i} step={step} locked={locked} />
-            ))
+            wrap.steps.map((step, i) =>
+              step.on || !saved ? (
+                <StepCard key={i} meeting={meeting} id={meeting.id} i={i} step={step} locked={locked} saved={saved} />
+              ) : null,
+            )
           ) : (
             <span className="text-[13px] text-secondary">{t("meet.wrap.noSteps")}</span>
           )}
@@ -164,7 +196,7 @@ export function WrapSteps({ meeting, wrap, noteText }: { meeting: Meeting; wrap:
                 </span>
                 <span className="flex-1 min-w-0">{decision.text}</span>
                 {decision.status === "done" ? (
-                  <span className="text-xs text-add-fg whitespace-nowrap">{t("meet.wrap.added")}</span>
+                  <span className="text-xs text-secondary whitespace-nowrap">{t("meet.wrap.added")}</span>
                 ) : (
                   <button
                     disabled={!project || !wrap.canDecide || decision.status === "busy"}

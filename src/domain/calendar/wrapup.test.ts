@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   builtFrom,
+  hasDecision,
   parseDraft,
   summaryIn,
   summarySection,
@@ -56,10 +57,10 @@ test("the summary section ends with Next Steps as plain bullets, none when there
 });
 
 const note =
-  "---\ntype: Meeting\n---\n# T\n\n## Briefing\nG\n\n## Notes\n- [09:31] a\n\n## Recording\n![[A/x.m4a]]\n[[A/x|Transcript]]\n";
-test("the summary goes after the notes and before the recording, the rest as it was", () => {
+  "---\ntype: Meeting\n---\n# T\n[[2026-11-04|November 4th, 2026]]\n\n![[A/x.m4a]]\nTranscript: [[A/x]]\n\n## Briefing\nG\n\n## Notes\n- [09:31] a\n";
+test("the summary goes after the notes, the rest as it was", () => {
   const out = withSummary(note, "## Summary\nKort.");
-  assert.equal(out, note.replace("\n## Recording", "\n## Summary\nKort.\n\n## Recording"));
+  assert.equal(out, `${note}\n## Summary\nKort.\n`);
   assert.equal(summaryIn(out), "Kort.");
   assert.equal(meetingStage(out, false), "wrapped");
   assert.equal(meetingStage(note, false), "briefed");
@@ -68,23 +69,34 @@ test("the summary goes after the notes and before the recording, the rest as it 
 test("a summary already there is replaced in place, and put back the same changes nothing", () => {
   const once = withSummary(note, "## Summary\nKort.");
   const twice = withSummary(once, "## Summary\nAnders.\n\n**Next Steps**\n- x");
-  assert.equal(twice, note.replace("\n## Recording", "\n## Summary\nAnders.\n\n**Next Steps**\n- x\n\n## Recording"));
+  assert.equal(twice, `${note}\n## Summary\nAnders.\n\n**Next Steps**\n- x\n`);
   assert.equal(withSummary(once, "## Summary\nKort."), once);
 });
 
-test("a note without notes gets the summary before its recording, else at the end", () => {
-  assert.equal(withSummary("# T\n\n## Recording\nx\n", "## Summary\nS"), "# T\n\n## Summary\nS\n\n## Recording\nx\n");
+test("a note without notes gets the summary at the end", () => {
   assert.equal(withSummary("# T\n\n## Briefing\nG\n", "## Summary\nS"), "# T\n\n## Briefing\nG\n\n## Summary\nS\n");
 });
 
-test("the recording's files go in once, and the transcript is found again", () => {
+test("the recording's files go under the date line before the first section, never twice", () => {
   const rec = { audio: "A/x.m4a", transcript: "A/x.md" };
-  const out = withRecording("# T\n\n## Notes\n- a\n", rec, "Transcript");
-  assert.equal(out, "# T\n\n## Notes\n- a\n\n## Recording\n![[A/x.m4a]]\n[[A/x|Transcript]]\n");
-  assert.equal(withRecording(out, rec, "Transcript"), out);
+  const head = "---\ntype: Meeting\n---\n# T\n[[2026-11-04|November 4th, 2026]]\n\n";
+  const out = withRecording(`${head}## Notes\n- a\n`, rec);
+  assert.equal(out, `${head}![[A/x.m4a]]\nTranscript: [[A/x]]\n\n## Notes\n- a\n`);
+  assert.equal(withRecording(out, rec), out);
   assert.equal(transcriptIn(out), "A/x.md");
-  assert.equal(transcriptIn("# T\n"), null);
-  assert.equal(withRecording("# T\n", { audio: null, transcript: "A/y.md" }, "T"), "# T\n\n## Recording\n[[A/y|T]]\n");
+  assert.equal(transcriptIn("# T\n\n## Notes\n"), null);
+  // a second recording of the same meeting goes under the first
+  const second = withRecording(out, { audio: "A/y.m4a", transcript: "A/y.md" });
+  assert.equal(
+    second,
+    `${head}![[A/x.m4a]]\nTranscript: [[A/x]]\n![[A/y.m4a]]\nTranscript: [[A/y]]\n\n## Notes\n- a\n`,
+  );
+  assert.equal(transcriptIn(second), "A/y.md");
+  assert.equal(withRecording(second, rec), second);
+  // no audio kept: the transcript only; a note with no section at all
+  assert.equal(withRecording("# T\n", { audio: null, transcript: "A/z.md" }), "# T\n\nTranscript: [[A/z]]\n");
+  // a mention in a section is not the note's recording
+  assert.equal(transcriptIn("# T\n\n## Notes\nTranscript: [[A/q]]\n"), null);
 });
 
 test("a decision is one dated line at the end of the project's decisions, once", () => {
@@ -95,6 +107,10 @@ test("a decision is one dated line at the end of the project's decisions, once",
     "# P\n\n## Status\ns\n\n## Decisions\n- 2026-10-01: old ([[x]])\n- 2026-11-04: Simulator in sprint 24 ([[2026-11-04 Spardex sync]])\n\n## Open\n- [ ] o\n",
   );
   assert.equal(withDecision(out, "2026-11-04", "Simulator in sprint 24", "2026-11-04 Spardex sync"), out);
+  // added on another day: still there, not added again
+  assert.equal(withDecision(out, "2026-12-01", "Simulator in sprint 24", "2026-11-04 Spardex sync"), out);
+  assert.ok(hasDecision(out, "Simulator in sprint 24", "2026-11-04 Spardex sync"));
+  assert.ok(!hasDecision(out, "Simulator in sprint 25", "2026-11-04 Spardex sync"));
   assert.equal(
     withDecision("# P\n\n## Decisions\n", "2026-11-04", "x", "n"),
     "# P\n\n## Decisions\n- 2026-11-04: x ([[n]])\n",

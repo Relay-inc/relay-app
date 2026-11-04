@@ -88,10 +88,10 @@ function span(text: string, name: string) {
   return { from: heading.index, end: next ? heading.index + heading[0].length + next.index : text.length };
 }
 /** The note with its `## Summary` replaced by `section`; one it has not got goes after `## Notes`, else before
- *  `## Recording`, else at the end. The rest is as it was. */
+ *  at the end. The rest is as it was. */
 export function withSummary(text: string, section: string) {
   const had = span(text, "Summary");
-  const at = had ?? span(text, "Notes") ?? span(text, "Recording");
+  const at = had ?? span(text, "Notes");
   if (had)
     return `${text.slice(0, had.from)}${section}\n\n${text.slice(had.end).replace(/^\n+/, "")}`.replace(/\n+$/, "\n");
   if (at) {
@@ -114,24 +114,46 @@ export function summaryIn(text: string) {
     : null;
 }
 
-/** The recording's files in the note, as `## Recording` (the audio embedded when it was kept, the transcript linked). A
- *  note that has the section keeps it. Paths are the vault's, as the recorder gives them. */
-export function withRecording(text: string, recording: { audio: string | null; transcript: string }, label: string) {
-  if (span(text, "Recording")) return text;
-  const link = (path: string) => path.replace(/\.md$/, "");
-  const lines = [recording.audio ? `![[${recording.audio}]]` : "", `[[${link(recording.transcript)}|${label}]]`].filter(
-    Boolean,
-  );
-  return `${text.replace(/\n*$/, "\n\n")}## Recording\n${lines.join("\n")}\n`;
+// ---------- the recording's files: under the date line, before the first H2, as the vault's notes have them
+const AUDIO = /^!\[\[.+\]\]$/;
+const TRANSCRIPT = /^Transcript: \[\[(.+)\]\]$/;
+/** The note with the recording's files under its H1 and date line (`![[audio]]`, `Transcript: [[transcript]]`), before
+ *  the first `## ` section. A second recording adds its lines under the first; a line already there is not added again.
+ *  Paths are the vault's, as the recorder gives them. */
+export function withRecording(text: string, recording: { audio: string | null; transcript: string }) {
+  const first = /^## /m.exec(text);
+  const at = first ? first.index : text.length;
+  const head = text.slice(0, at);
+  const want = [
+    recording.audio ? `![[${recording.audio}]]` : "",
+    `Transcript: [[${recording.transcript.replace(/\.md$/, "")}]]`,
+  ].filter(Boolean);
+  const lines = head.split("\n");
+  const add = want.filter(line => !lines.includes(line));
+  if (!add.length) return text;
+  const last = lines.reduce((at, line, i) => (AUDIO.test(line) || TRANSCRIPT.test(line) ? i : at), -1);
+  if (last >= 0) {
+    lines.splice(last + 1, 0, ...add);
+    return `${lines.join("\n")}${text.slice(at)}`;
+  }
+  return `${head.replace(/\n*$/, "\n\n")}${add.join("\n")}\n${first ? "\n" : ""}${text.slice(at)}`;
 }
-/** The transcript a note links in `## Recording` (its vault path, `.md` added), or null. */
+/** The transcript a note links under its date line (its vault path, `.md` added; the latest recording's), or null. */
 export function transcriptIn(text: string) {
-  const s = span(text, "Recording");
-  const m = s && /\[\[([^\]|]+)\|[^\]]*\]\]/.exec(text.slice(s.from, s.end));
-  return m ? `${m[1]}.md` : null;
+  const first = /^## /m.exec(text);
+  const found = text
+    .slice(0, first ? first.index : text.length)
+    .split("\n")
+    .flatMap(line => TRANSCRIPT.exec(line)?.[1] ?? []);
+  return found.length ? `${found[found.length - 1]}.md` : null;
 }
 
 // ---------- a decision into its project's note
+/** Whether a decisions section already holds this decision from this meeting, whatever day it was added. */
+export const hasDecision = (section: string, decision: string, from: string) => {
+  const tail = `: ${decision.replace(/\s+/g, " ").trim()} ([[${from}]])`;
+  return section.split("\n").some(line => /^- \d{4}-\d\d-\d\d/.test(line) && line.slice(12) === tail);
+};
 const DECISIONS = ["Decisions", "Beslissingen", "Décisions", "Entscheidungen"];
 /** The project note with one dated line added at the end of its decisions section (`## Decisions`, or the same in
  *  Dutch, French or German); null when the note has none. `from` is the meeting note's name, linked. */
@@ -141,7 +163,7 @@ export function withDecision(text: string, day: string, decision: string, from: 
     if (!s) continue;
     const body = text.slice(s.from, s.end).replace(/\n+$/, "");
     const line = `- ${day}: ${decision.replace(/\s+/g, " ").trim()} ([[${from}]])`;
-    if (body.split("\n").includes(line)) return text;
+    if (hasDecision(body, decision, from)) return text;
     return `${text.slice(0, s.from)}${body}\n${line}\n${s.end < text.length ? "\n" : ""}${text.slice(s.end).replace(/^\n+/, "")}`;
   }
   return null;

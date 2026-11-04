@@ -8,17 +8,7 @@ import { OUTLINE, SMALL_OUTLINE, SMALL_PRIMARY } from "./buttons";
 /** The summary side of Wrap-up: the draft in its dashed card with Accept, Edit and Regenerate, a quiet line on what it is
  *  built from; while it is written, lines where the text will be; if it failed, why and Retry; once accepted, the summary
  *  as it is in the note. */
-export function WrapDraft({
-  meeting,
-  wrap,
-  noteText,
-  onOpen,
-}: {
-  meeting: Meeting;
-  wrap: Wrap | undefined;
-  noteText: string;
-  onOpen: () => void;
-}) {
+export function WrapDraft({ meeting, wrap, noteText }: { meeting: Meeting; wrap: Wrap | undefined; noteText: string }) {
   const { t } = useT();
   const [editing, setEditing] = useState<string | null>(null);
   const saved = !wrap || wrap.phase === "saved";
@@ -42,11 +32,7 @@ export function WrapDraft({
           </span>
         )}
         <span className="flex-1" />
-        {saved ? (
-          <button className={SMALL_OUTLINE} onClick={onOpen}>
-            {t("today.openNote")}
-          </button>
-        ) : failed ? null : editing !== null ? (
+        {saved || failed ? null : editing !== null ? (
           <>
             <button className={SMALL_OUTLINE} onClick={() => setEditing(null)}>
               {t("today.cancelEdit")}
