@@ -124,7 +124,7 @@ function tab(back: boolean) {
 }
 
 /** The / menu on an empty line: the kinds of block, filtered as you type; Enter puts the block's markdown there. */
-function slashSource(words: BlockWords) {
+function slashSource(words: BlockWords, pickFile: (view: EditorView, at: number) => void) {
   return (ctx: CompletionContext) => {
     const typed = ctx.matchBefore(/^\s*\/[\w-]*$/);
     if (!typed) return null;
@@ -141,6 +141,16 @@ function slashSource(words: BlockWords) {
         if (item.kind === "link") startCompletion(view);
       },
     }));
+    // File: pick files, copy them into the attachments folder and embed them where the slash was
+    options.push({
+      label: words.kind("file"),
+      boost: 99 - SLASH.length,
+      detail: "![[",
+      apply: (view: EditorView, _c: Completion, _from: number, to: number) => {
+        view.dispatch({ changes: { from: slash, to } });
+        pickFile(view, slash);
+      },
+    });
     return { from: slash + 1, options, validFor: /^[\w-]*$/ };
   };
 }
@@ -343,9 +353,13 @@ function handle(words: BlockWords) {
 }
 
 /** Everything above, for a page's editor; `notes` lists the workspace's note paths for [[ completion. */
-export function blockEditing(words: BlockWords, notes: () => string[]) {
+export function blockEditing(
+  words: BlockWords,
+  notes: () => string[],
+  pickFile: (view: EditorView, at: number) => void,
+) {
   return [
-    autocompletion({ override: [slashSource(words), wikiSource(notes)], icons: false }),
+    autocompletion({ override: [slashSource(words, pickFile), wikiSource(notes)], icons: false }),
     keymap.of([
       { key: "Tab", run: tab(false) },
       { key: "Shift-Tab", run: tab(true) },

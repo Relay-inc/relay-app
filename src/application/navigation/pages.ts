@@ -316,14 +316,34 @@ export function propertyValues(key: string) {
     );
   return values.get(id)!;
 }
+// the heading an Open on an embedded section asks for, until the page's editor has scrolled to it
+const headings = new Map<string, string>();
+const headingWatchers = new Set<(page: string) => void>();
+/** The editor of `page` calls this when it is made, and when a heading is asked of a page already open: the heading to
+ *  scroll to (and forget), or undefined. */
+export const takeHeading = (page: string) => {
+  const heading = headings.get(page);
+  headings.delete(page);
+  return heading;
+};
+export function onHeading(listener: (page: string) => void) {
+  headingWatchers.add(listener);
+  return () => void headingWatchers.delete(listener);
+}
 /** A [[link]] in a page: the note of the workspace shown it names opens as a page, or in the right drawer with
- *  `drawer` (⌘-click), as a link in a conversation does. */
-export function followPageLink(link: string, drawer: boolean) {
+ *  `drawer` (⌘-click), as a link in a conversation does. With a `heading` (Open on an embedded section) the page opens
+ *  at it. */
+export function followPageLink(link: string, drawer: boolean, heading = "") {
   if (drawer) return openDetail(noteKey(link));
   const name = (/\.md$/i.test(link) ? link : `${link}.md`).toLowerCase();
   const paths = workspacePaths();
   const path = paths.find(p => p.toLowerCase() === name) ?? paths.find(p => p.toLowerCase().endsWith(`/${name}`));
-  return path ? openPage(path) : openDetail(noteKey(link));
+  if (!path) return openDetail(noteKey(link));
+  if (heading) {
+    headings.set(target(path), heading);
+    headingWatchers.forEach(listener => listener(target(path)));
+  }
+  return openPage(path);
 }
 /** Ask Claude about a page: a new conversation in the page's workspace (its project's, when it is a project's note)
  *  with the note's path typed in. */

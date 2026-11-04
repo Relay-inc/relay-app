@@ -334,6 +334,103 @@ const SCENARIOS = {
     );
     s.check("with its 2 meetings", (await flat.textContent())?.includes("2") ?? false);
   },
+  // files inside a page (#368, K4): an image, a PDF, audio and a section of a note drawn in place of their markdown; a
+  // screenshot pasted, files dropped (with the insertion line) and a 312 MB one refused with the toast
+  async embeds(s) {
+    await s.load({ fixture: "embeds" });
+    const { page } = s;
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    s.check("the page opens", await waitText(page, "Next: confirm the window"));
+    const image = page.locator('.cm-embed[data-kind="image"] img').first();
+    await image.waitFor({ timeout: 4000 });
+    s.check("the picture loads", await image.evaluate(i => i.complete && i.naturalWidth > 0));
+    s.check("its width is the |560", (await image.evaluate(i => Math.round(i.parentElement.clientWidth))) === 560);
+    s.check(
+      "its caption is the alt text",
+      ((await page.locator(".cm-embed-caption").first().textContent()) ?? "").includes("Configurator traffic, last 7 days"),
+    );
+    const content = await page.locator(".cm-content").innerText();
+    s.check("no embed markdown shows", !content.includes("![[") && !content.includes("|560"));
+    const card = page.locator('.cm-embed[data-kind="pdf"]');
+    const cardText = (await card.textContent()) ?? "";
+    s.check(
+      "the PDF is a card with its name, pages and size",
+      cardText.includes("Hosting quote cluster 2026.pdf") && cardText.includes("6 pages") && /1[.,]2 MB/.test(cardText),
+    );
+    await card.getByRole("button", { name: "Open" }).click();
+    s.check(
+      "Open opens the PDF from where it is",
+      (await s.calls("open_file")).some(c => String(c.args.path).endsWith("Attachments/2026/Hosting quote cluster 2026.pdf")),
+    );
+    const player = page.locator('.cm-embed[data-kind="audio"]');
+    await player.getByRole("button", { name: "Play" }).click();
+    s.check(
+      "the audio plays",
+      await page
+        .waitForFunction(() => document.querySelector(".cm-embed-audio audio")?.currentTime > 0.2, null, { timeout: 4000 })
+        .then(
+          () => true,
+          () => false,
+        ),
+    );
+    await player.getByRole("button", { name: "Pause" }).click();
+    s.check("with its clock", ((await player.textContent()) ?? "").includes("/ 0:32"));
+    const note = page.locator('.cm-embed[data-kind="note"]');
+    const noteText = (await note.textContent()) ?? "";
+    s.check(
+      "an embedded section shows only that section",
+      noteText.includes("60 requests per minute") && !noteText.includes("An API key per client") && !noteText.includes("retried twice"),
+    );
+    // the picture selected: a ring and two handles; dragging one writes |<width>
+    await image.click();
+    s.check("a click selects the picture", (await page.locator(".cm-embed-selected .cm-embed-grip-right").count()) === 1);
+    const grip = await page.locator(".cm-embed-grip-right").boundingBox();
+    await page.mouse.move(grip.x + 3, grip.y + 14);
+    await page.mouse.down();
+    await page.mouse.move(grip.x - 197, grip.y + 14, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForFunction(() => /\|360\]\]/.test(window.__harness.written() ?? ""), null, { timeout: 4000 }).catch(() => {});
+    s.check("the width handle writes |360", /\|a?[^|\]]*\|360\]\]/.test((await page.evaluate(() => window.__harness.written())) ?? ""));
+    // a screenshot pasted at the end of the page
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.evaluate(() => {
+      const png = Uint8Array.from(
+        atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="),
+        c => c.charCodeAt(0),
+      );
+      const data = new DataTransfer();
+      data.items.add(new File([png], "image.png", { type: "image/png" }));
+      document.querySelector(".cm-content").dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    });
+    const stamped = /^Pasted image \d{14}\.png$/;
+    await page.waitForFunction(() => window.__harness.attached().length > 0, null, { timeout: 4000 });
+    s.check("a pasted screenshot is saved as Pasted image <stamp>.png", (await page.evaluate(() => window.__harness.attached())).every(a => stamped.test(a.name)));
+    await page.waitForFunction(() => /!\[\[Pasted image \d{14}\.png\]\]/.test(window.__harness.written() ?? ""), null, { timeout: 4000 }).catch(() => {});
+    s.check("and embedded where the cursor was", /!\[\[Pasted image \d{14}\.png\]\]\s*$/.test((await page.evaluate(() => window.__harness.written())) ?? ""));
+    s.check("it shows as a picture", (await page.locator('.cm-embed[data-kind="image"]').count()) === 2);
+    // files hovering: the insertion line between two lines, then dropped there
+    const target = await page.locator('.cm-embed[data-kind="pdf"]').boundingBox();
+    const at = { x: target.x + 40, y: target.y + 4 };
+    await page.evaluate(([paths, at]) => window.__harness.dropHover(paths, at), [["/Users/me/Downloads/dealer-portal-error.png"], at]);
+    const mark = page.locator(".cm-file-drop");
+    s.check("the drop shows its line and what happens", await mark.isVisible() && ((await mark.textContent()) ?? "").includes("Copy to Attachments/2026 and embed"));
+    await page.evaluate(([paths, at]) => window.__harness.dropPaths(paths, at), [["/Users/me/Downloads/dealer-portal-error.png"], at]);
+    await page.waitForFunction(() => /dealer-portal-error\.png/.test(window.__harness.written() ?? ""), null, { timeout: 4000 }).catch(() => {});
+    const written = (await page.evaluate(() => window.__harness.written())) ?? "";
+    s.check("a drop is embedded on its own line before the line it landed on", /!\[\[dealer-portal-error\.png\]\]\n!\[\[Hosting quote cluster 2026\.pdf\]\]/.test(written));
+    s.check("the line is gone after the drop", !(await mark.isVisible()));
+    // 312 MB: refused, the toast says so, nothing is embedded
+    await page.evaluate(() => window.__harness.dropPaths(["/Users/me/Downloads/configurator-db-dump.sql.gz"]));
+    s.check("a file over 25 MB gets the toast", await waitText(page, "Too large: 25 MB max per file"));
+    s.check("and no embed", !((await page.evaluate(() => window.__harness.written())) ?? "").includes("configurator-db-dump"));
+    // Open on the section: the note opens with the cursor on its heading
+    await note.getByRole("button", { name: "Open" }).click();
+    s.check("Open shows the note", await waitText(page, "retried twice"));
+    const opened = await page.locator(".cm-content").innerText();
+    s.check("at the section's heading", opened.includes("## Rate limits"));
+  },
   async send(s) {
     await s.load(); // a first load reads the fixture keys
     await s.load({ sel: s.keys.switchTo });

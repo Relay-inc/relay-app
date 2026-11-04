@@ -1882,6 +1882,42 @@ const VIEWS = {
     await settle(page);
   },
   "project-auto-sections-dark": async () => VIEWS["project-auto-sections"]("linked-dark"),
+  // files inside a page (K4): a picture with its caption, a PDF card, an audio player and a section of another note, in
+  // place of their markdown
+  "page-embeds": async (fixture = "embeds") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText("Next: confirm the window");
+    await page.locator('.cm-embed[data-kind="image"] img').waitFor();
+    await page.locator('.cm-embed[data-kind="note"]').waitFor();
+    await page.locator(".cm-embed-card img").waitFor();
+    await page.locator(".cm-embed").first().scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  "page-embeds-dark": async () => VIEWS["page-embeds"]("embeds-dark"),
+  // the picture selected: its ring, both width handles and the caption with its place and width
+  "page-embeds-selected": async (fixture = "embeds") => {
+    await VIEWS["page-embeds"](fixture);
+    await page.locator('.cm-embed[data-kind="image"] img').click();
+    await settle(page);
+  },
+  "page-embeds-selected-dark": async () => VIEWS["page-embeds-selected"]("embeds-dark"),
+  // files from Finder hovering over a line of the page: the insertion line and what dropping does
+  "page-embeds-drop": async (fixture = "embeds") => {
+    await VIEWS["page-embeds"](fixture);
+    const card = await page.locator('.cm-embed[data-kind="pdf"]').boundingBox();
+    await page.evaluate(([x, y]) => window.__harness.dropHover(["/Users/me/Downloads/dealer-portal-error.png"], { x, y }), [card.x + 40, card.y + 2]);
+    await settle(page);
+  },
+  "page-embeds-drop-dark": async () => VIEWS["page-embeds-drop"]("embeds-dark"),
+  // a file over 25 MB dropped: refused, the toast says so
+  "page-embeds-toolarge": async (fixture = "embeds") => {
+    await VIEWS["page-embeds"](fixture);
+    await page.evaluate(() => window.__harness.dropPaths(["/Users/me/Downloads/configurator-db-dump.sql.gz"]));
+    await waitText("Too large: 25 MB max per file");
+    await settle(page);
+  },
   // a page's history beside it (ticket 10): three sessions, who and when, what made them, lines added and removed
   "page-history": async () => {
     await VIEWS["page-view"]();

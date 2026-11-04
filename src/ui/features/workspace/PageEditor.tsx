@@ -15,11 +15,16 @@ import {
   adoptPage,
   followPageLink,
   loadPage,
+  onHeading,
   pageTextIs,
   savePage,
+  takeHeading,
   watchPage,
   workspacePaths,
 } from "../../../application/navigation/pages";
+import { attachDest, attachPaths, forgetEmbeds } from "../../../application/navigation/embeds";
+import { dropTarget } from "../../../application/conversations/attachments";
+import { dropText, headingAt } from "../../../domain/workspace/embeds";
 import { headAfter, lineChanges, merge3, oneChange } from "../../../domain/workspace/merge";
 import { LOCAL, openSharedPage, type Peer, type SharedPage } from "../../../application/workspace/coedit";
 import { yAnchor, ySpan } from "../../../application/workspace/anchors";
@@ -27,6 +32,8 @@ import { findQuote, type Span } from "../../../domain/workspace/comments";
 import { useT } from "../../hooks/useT";
 import { livePreview } from "./livePreview";
 import { blockEditing, type BlockWords } from "./blocks";
+import { attachEditing, embeds, pickAndEmbed } from "./embeds";
+import { fileDrop } from "./fileDrop";
 import "../../styles/page-editor.css";
 
 const SAVE_AFTER = 1000; // ms after the last keystroke
@@ -267,7 +274,13 @@ function Editor(props: {
           EditorView.lineWrapping,
           markdown({ base: markdownLanguage }),
           livePreview((link, drawer) => void followPageLink(link, drawer)),
-          blockEditing(words, () => workspacePaths()), // before the keymap below: Tab in a table moves between cells
+          embeds(page),
+          attachEditing(page),
+          blockEditing(
+            words,
+            () => workspacePaths(),
+            (v, at) => pickAndEmbed(page, v, at),
+          ), // before the keymap below: Tab in a table moves between cells
           keymap.of([
             { key: "Mod-Alt-m", run: () => (hooks.current?.onKey(), true) },
             // on a shared document ⌘Z undoes only what was typed here (Y.UndoManager with this Mac's origin)
@@ -325,6 +338,34 @@ function Editor(props: {
         ],
       }),
     });
+    // files dragged in from Finder: the line they would land on, then copied into the attachments folder and embedded
+    forgetEmbeds(page);
+    const drop = fileDrop(view, {
+      dest: () => attachDest(page),
+      add: async (paths, at) => {
+        const links = await attachPaths(page, paths);
+        if (!links.length) return;
+        const { from, insert } = dropText(view.state.doc.toString(), at, links);
+        view.dispatch({
+          changes: { from, insert },
+          selection: { anchor: from + insert.length - 1 },
+          userEvent: "input.drop",
+        });
+      },
+    });
+    const stopDrops = dropTarget(drop);
+    // Open on an embedded section: the page opens with the cursor on that heading
+    const reveal = () => {
+      const heading = takeHeading(page);
+      const at = heading === undefined ? null : headingAt(view.state.doc.toString(), heading);
+      if (at !== null)
+        view.dispatch({
+          selection: { anchor: at },
+          effects: EditorView.scrollIntoView(at, { y: "start", yMargin: 24 }),
+        });
+    };
+    reveal();
+    const stopHeadings = onHeading(p => p === page && reveal());
     // the page's comments: in body offsets; a shared document's anchors are on its whole text, after the head
     hooks.current?.onApi({
       selection: () => {
@@ -442,6 +483,9 @@ function Editor(props: {
       });
     return () => {
       closed = true;
+      stopDrops();
+      stopHeadings();
+      drop.destroy();
       hooks.current?.onApi(null);
       shared?.close();
       onPeers?.([]);

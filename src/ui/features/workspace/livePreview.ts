@@ -73,6 +73,9 @@ function decorate(view: EditorView): DecorationSet {
         const name = node.name;
         // an Obsidian callout's [!type] is not a link: the Blockquote below shows it as the callout's title
         if (name === "Link" && state.sliceDoc(node.from, node.from + 2) === "[!") return false;
+        // a picture from a file of the workspace is an embed (embeds.ts draws it); a web picture stays the text it is
+        if (name === "Image" && !/^!\[[^\]]*\]\(<?[a-z][\w+.-]*:/i.test(state.sliceDoc(node.from, node.to)))
+          return false;
         if (HEADINGS[name]) {
           out.push(line(`cm-h cm-h${HEADINGS[name]}`).range(state.doc.lineAt(node.from).from));
         } else if (name === "HeaderMark" && !isRaw(node.from)) {
@@ -138,6 +141,7 @@ function decorate(view: EditorView): DecorationSet {
     for (const m of text.matchAll(WIKILINK)) {
       const start = from + m.index;
       const end = start + m[0].length;
+      if (text[m.index - 1] === "!") continue; // ![[embed]]: embeds.ts
       const target = m[1].replace(/#.*$/, "").trim();
       const labelFrom = m[2] ? start + 2 + m[1].length + 1 : start + 2;
       const labelTo = end - 2;

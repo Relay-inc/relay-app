@@ -332,3 +332,279 @@
   padding-left: 8px;
   color: var(--secondary);
 }
+
+/* Files inside a page (embeds.ts): a picture with its caption and handles, a PDF or file card, an audio player and an
+   embedded note, all in the live preview in place of the embed's markdown */
+.page-editor .cm-embed {
+  display: inline-block;
+  vertical-align: top;
+  max-width: 100%;
+  margin: 4px 0;
+  cursor: default;
+}
+/* the caret of a selected embed would be as tall as it: the embed's ring says it is selected */
+.page-editor .cm-on-embed .cm-cursor {
+  display: none !important;
+}
+.page-editor .cm-embed-figure {
+  position: relative;
+  margin: 0;
+  width: fit-content;
+  max-width: 100%;
+}
+.page-editor .cm-embed-frame {
+  max-width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--well);
+}
+.page-editor .cm-embed-selected .cm-embed-frame {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.page-editor .cm-embed-image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.page-editor .cm-embed-grip {
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 28px;
+  margin-top: -14px;
+  border-radius: 3px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg);
+  cursor: ew-resize;
+  display: none;
+  touch-action: none;
+}
+.page-editor .cm-embed-grip-left {
+  left: -5px;
+}
+.page-editor .cm-embed-grip-right {
+  right: -5px;
+}
+.page-editor .cm-embed-selected .cm-embed-grip {
+  display: block;
+}
+.page-editor .cm-embed-caption {
+  width: 0; /* the caption follows the picture's width, it does not widen the figure */
+  min-width: 100%;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--secondary);
+  text-align: center;
+}
+.page-editor .cm-embed-caption:empty {
+  display: none;
+}
+.page-editor .cm-embed-meta {
+  display: none;
+}
+.page-editor .cm-embed-selected .cm-embed-meta {
+  display: inline;
+}
+.page-editor .cm-embed-meta > span:first-child {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.page-editor .cm-embed-meta::before,
+.page-editor .cm-embed-meta > span:first-child::after {
+  content: " · ";
+}
+.page-editor .cm-embed-caption:has(> span:first-child:empty) .cm-embed-meta::before {
+  content: "";
+}
+.page-editor .cm-embed-card,
+.page-editor .cm-embed-audio {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 560px;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--separator-strong);
+}
+.page-editor .cm-embed-selected .cm-embed-card,
+.page-editor .cm-embed-selected .cm-embed-audio,
+.page-editor .cm-embed-selected .cm-embed-note {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.page-editor .cm-embed-thumb {
+  width: 44px;
+  height: 56px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid var(--separator-strong);
+  background: var(--bg);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--tertiary);
+}
+.page-editor .cm-embed-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.page-editor .cm-embed-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+.page-editor .cm-embed-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+.page-editor .cm-embed-sub {
+  font-size: 12px;
+  color: var(--secondary);
+}
+.page-editor .cm-embed-open {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--separator-strong);
+  background: transparent;
+  color: var(--label);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.page-editor .cm-embed-open:hover {
+  background: var(--fill-2);
+}
+.page-editor .cm-embed-audio {
+  padding: 10px 12px;
+}
+.page-editor .cm-embed-audio .cm-embed-text {
+  flex: none;
+  width: 170px;
+}
+.page-editor .cm-embed-play {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 0;
+  background: var(--label);
+  color: var(--bg);
+  cursor: pointer;
+}
+.page-editor .cm-embed-wave {
+  flex: 1;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+}
+.page-editor .cm-embed-bar {
+  flex: 1;
+  border-radius: 1px;
+  background: var(--separator-strong);
+}
+.page-editor .cm-embed-bar-done {
+  background: var(--accent);
+}
+.page-editor .cm-embed-note {
+  width: 560px;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 4px 0 4px 14px;
+  border-left: 3px solid var(--separator-strong);
+}
+.page-editor .cm-embed-note-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.page-editor .cm-embed-spacer {
+  flex: 1;
+}
+.page-editor .cm-embed-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent-text);
+  cursor: pointer;
+}
+.page-editor .cm-embed-note-title {
+  margin-top: 4px;
+  font-weight: 600;
+  font-size: 14px;
+}
+.page-editor .cm-embed-note-body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--secondary);
+}
+.page-editor .cm-embed-missing {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px dashed var(--separator-strong);
+  font-size: 12.5px;
+  color: var(--tertiary);
+}
+/* where dropped files would land (fileDrop.ts): a line between two lines of the page with what happens */
+.page-editor .cm-file-drop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 20px;
+  z-index: 15;
+  pointer-events: none;
+}
+.page-editor .cm-file-drop[hidden] {
+  display: none;
+}
+.page-editor .cm-file-drop-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 9px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+.page-editor .cm-file-drop-dot {
+  position: absolute;
+  left: -4px;
+  top: 6px;
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: var(--bg);
+}
+.page-editor .cm-file-drop-label {
+  position: absolute;
+  left: 50%;
+  top: -1px;
+  transform: translateX(-50%);
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 11px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
