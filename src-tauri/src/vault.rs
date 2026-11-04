@@ -80,6 +80,24 @@ pub fn note(vault: &str, target: &str) -> Option<(String, String)> {
     Some((rel(&root, &real), fs::read_to_string(&real).ok()?))
 }
 
+/// The value of a frontmatter key (one-line scalar, quotes off), None without frontmatter or key.
+fn front(text: &str, key: &str) -> Option<String> {
+    let (head, _) = text.strip_prefix("---\n")?.split_once("\n---")?;
+    head.lines().find_map(|l| l.strip_prefix(key)?.strip_prefix(':')).map(|v| crate::commonwealth::unquote(v.trim()))
+}
+
+/// The meeting note of calendar event `event` (its id), as a path relative to the vault: the note whose frontmatter
+/// `event:` is it, found among the notes named after the meeting's `day` (YYYY-MM-DD) only, so a rename of the event
+/// still finds it and a poll stays cheap.
+pub fn note_by_event(vault: &str, day: &str, event: &str) -> Option<String> {
+    let root = PathBuf::from(canon(vault));
+    if day.is_empty() || event.is_empty() { return None; }
+    let found = walk(&root, |p, n| {
+        n.starts_with(day) && n.ends_with(".md") && fs::read_to_string(p).ok().is_some_and(|t| front(&t, "event").as_deref() == Some(event))
+    })?;
+    Some(rel(&root, &found))
+}
+
 /// A note's text as Relay last read or wrote it: what `write_note` compares the file with before writing over it.
 pub fn text_hash(text: &str) -> String { relay_remote::sync::sha256_hex(text.as_bytes()) }
 
@@ -281,6 +299,25 @@ mod tests {
         fs::create_dir_all(p.parent().unwrap()).unwrap();
         fs::write(p, "").unwrap();
     }
+    fn put(root: &Path, rel: &str, text: &str) {
+        let p = root.join(rel);
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(p, text).unwrap();
+    }
+    #[test]
+    fn a_meeting_note_is_found_by_its_event_in_the_days_notes_whatever_its_name() {
+        let d = tmp("event");
+        let v = d.to_str().unwrap();
+        put(&d, "Calendar/2026-11-04 Renamed sync.md", "---\ntype: Meeting\nevent: \"abc@100\"\n---\n# x\n");
+        put(&d, "Calendar/2026-11-04 Other.md", "---\nevent: abc@200\n---\n");
+        put(&d, "Calendar/2026-11-05 Later.md", "---\nevent: \"abc@300\"\n---\n");
+        assert_eq!(note_by_event(v, "2026-11-04", "abc@100").as_deref(), Some("Calendar/2026-11-04 Renamed sync.md"));
+        assert_eq!(note_by_event(v, "2026-11-04", "abc@200").as_deref(), Some("Calendar/2026-11-04 Other.md"));
+        // another day's note is not read, and an unknown id finds nothing
+        assert_eq!(note_by_event(v, "2026-11-04", "abc@300"), None);
+        assert_eq!(note_by_event(v, "2026-11-04", "nope"), None);
+    }
+
     fn det(root: &Path) -> Value { let (v, m) = detect(root.to_str().unwrap()); status(&v, &m) }
 
     #[test]

@@ -19,6 +19,27 @@ use tauri::{AppHandle, Manager, State};
 
 const RATE: usize = 16_000;
 
+/// The meeting's transcription language, locked once known: given at start (the note's, or Settings'), else guessed
+/// from the words of the first windows that say enough, until then the model hears it itself (auto). From then on every
+/// window and the pass at Stop get it. Whisper honours it; Parakeet ignores it.
+#[derive(Default)]
+struct Language(Option<String>);
+impl Language {
+    fn see(&mut self, text: &str) {
+        if self.0.is_none() { self.0 = guess_language(text).map(str::to_string); }
+    }
+}
+/// The language `text` is in, by the stopwords of the vault's languages (related.rs): at least 12 words, 3 stopwords and
+/// twice the runner-up's; None when it is not clear.
+fn guess_language(text: &str) -> Option<&'static str> {
+    let words: Vec<String> = text.split(|c: char| !c.is_alphabetic()).filter(|w| !w.is_empty()).map(str::to_lowercase).collect();
+    if words.len() < 12 { return None; }
+    let n = |list: &[&str]| words.iter().filter(|w| list.contains(&w.as_str())).count();
+    let (en, nl) = (n(super::related::STOP_EN), n(super::related::STOP_NL));
+    let (best, top, other) = if en >= nl { ("en", en, nl) } else { ("nl", nl, en) };
+    (top >= 3 && top >= 2 * other).then_some(best)
+}
+
 /// A track's audio at 16 kHz that live transcription has not taken yet: (index of its first sample, the samples).
 type Heard = Arc<Mutex<(usize, Vec<f32>)>>;
 struct Track { stop: Arc<AtomicBool>, level: Arc<AtomicU32>, heard: Heard, done: JoinHandle<Result<(), String>> }
@@ -30,6 +51,7 @@ struct Live {
     upto: Vec<usize>,                     // per track: the samples before this index are transcribed
     fresh: Vec<Value>,                    // lines the bar has not been sent yet
     gave_up: bool,                        // the model stalled: the rest waits for Stop
+    language: Language,
     closed: bool,
 }
 struct Session {
@@ -133,7 +155,7 @@ fn listen(app: AppHandle, heard: Vec<Heard>, live: Arc<Mutex<Live>>, on: Arc<Ato
             let (text, used) = match next(&tail) {
                 Next::Wait => continue,
                 Next::Skip(n) => (None, n),
-                Next::Speech(a, b) => match region_text(&app, &tail[a..b]) {
+                Next::Speech(a, b) => match region_text(&app, &tail[a..b], live.lock().unwrap().language.0.clone()) {
                     Ok(Some(segments)) => (Some((from + a, segments)), b),
                     _ => { live.lock().unwrap().gave_up = true; return; }
                 },
@@ -141,6 +163,7 @@ fn listen(app: AppHandle, heard: Vec<Heard>, live: Arc<Mutex<Live>>, on: Arc<Ato
             let mut l = live.lock().unwrap();
             if l.closed { return; }
             if let Some((at, segments)) = text {
+                l.language.see(&segments.iter().map(|g| g.2.as_str()).collect::<Vec<_>>().join(" "));
                 let at = at as f32 / RATE as f32;
                 for (s, e, text) in segments {
                     let text = text.trim().to_string();
@@ -161,14 +184,16 @@ fn listen(app: AppHandle, heard: Vec<Heard>, live: Arc<Mutex<Live>>, on: Arc<Ato
 }
 
 /// Starts recording: the microphone always, what the Mac plays when the tap works. `on_tick` gets the seconds and the
-/// two levels (0..1) four times a second. Answers whether the Mac's audio is in it, and why not.
+/// two levels (0..1) four times a second. `language` is the meeting's (see `Language`); `meeting` is kept in the folder
+/// (`meeting.json`), so a retry after a failure still knows which meeting it is. Answers whether the Mac's audio is in it, and why not.
 #[tauri::command]
-pub fn meeting_record_start(app: AppHandle, state: State<MeetingRec>, on_tick: Channel<Value>) -> Result<Value, String> {
+pub fn meeting_record_start(app: AppHandle, state: State<MeetingRec>, language: Option<String>, meeting: Option<Value>, on_tick: Channel<Value>) -> Result<Value, String> {
     let mut session = state.session.lock().unwrap();
     if session.is_some() { return Err("already recording".into()); }
     super::dictation::meeting_model_ready(&app)?;
     let dir = recordings(&app)?.join(chrono::Local::now().format("%Y%m%d-%H%M%S").to_string());
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    if let Some(m) = &meeting { write_meta(&dir, m, language.as_deref())?; }
     let mic = cpal::default_host().default_input_device().ok_or("no microphone")?;
     let mut tracks = vec![("me", track(mic, dir.join("me.wav"))?)];
     let (system, why) = match tap::Tap::create() {
@@ -180,7 +205,7 @@ pub fn meeting_record_start(app: AppHandle, state: State<MeetingRec>, on_tick: C
     };
     let ticking = Arc::new(AtomicBool::new(true));
     let levels: Vec<_> = tracks.iter().map(|(name, t)| (*name, t.level.clone())).collect();
-    let live = Arc::new(Mutex::new(Live { upto: vec![0; tracks.len()], ..Default::default() }));
+    let live = Arc::new(Mutex::new(Live { upto: vec![0; tracks.len()], language: Language(language), ..Default::default() }));
     let heard: Vec<Heard> = tracks.iter().map(|(_, t)| t.heard.clone()).collect();
     let (on, listening) = (ticking.clone(), live.clone());
     let (listener, listened) = mpsc::channel::<()>();
@@ -205,8 +230,8 @@ pub fn meeting_record_start(app: AppHandle, state: State<MeetingRec>, on_tick: C
     Ok(answer)
 }
 
-/// What live transcription had when the recording stopped: its lines and, per track, how far they reach.
-type Done = (Vec<(usize, f32, f32, String)>, Vec<usize>);
+/// What live transcription had when the recording stopped: its lines, per track how far they reach, and the language.
+type Done = (Vec<(usize, f32, f32, String)>, Vec<usize>, Language);
 fn end(state: &MeetingRec) -> Result<(PathBuf, Done), String> {
     let session = state.session.lock().unwrap().take().ok_or("not recording")?;
     session.ticking.store(false, Relaxed);
@@ -216,7 +241,7 @@ fn end(state: &MeetingRec) -> Result<(PathBuf, Done), String> {
     session.listened.recv_timeout(Duration::from_secs(15)).ok();
     let mut l = session.live.lock().unwrap();
     l.closed = true;
-    let heard = (std::mem::take(&mut l.lines), std::mem::take(&mut l.upto));
+    let heard = (std::mem::take(&mut l.lines), std::mem::take(&mut l.upto), std::mem::take(&mut l.language));
     Ok((session.dir, heard)) // the tap goes with the session
 }
 
@@ -235,12 +260,24 @@ pub async fn meeting_record_stop(app: AppHandle, state: State<'_, MeetingRec>, t
     save(app, dir, title, me, others, heard, on_progress).await
 }
 
-/// The folders of recordings a failure kept (one that worked or was cancelled is gone), newest first: what a restart
-/// finds again. Not the one being recorded.
+/// The recordings a failure kept (one that worked or was cancelled is gone), newest first: what a restart finds
+/// again, as {folder, meeting} (the meeting from `meeting.json`, null for an older recording). Not the one being recorded.
 #[tauri::command]
-pub fn meeting_kept(app: AppHandle, state: State<MeetingRec>) -> Result<Vec<String>, String> {
+pub fn meeting_kept(app: AppHandle, state: State<MeetingRec>) -> Result<Vec<Value>, String> {
     let busy = state.session.lock().unwrap().as_ref().map(|s| s.dir.clone());
-    Ok(kept(&recordings(&app)?, busy.as_deref()))
+    let root = recordings(&app)?;
+    Ok(kept(&root, busy.as_deref()).into_iter().map(|f| json!({ "meeting": read_meta(&root.join(&f)), "folder": f })).collect())
+}
+
+const META: &str = "meeting.json";
+/// The meeting a recording is of, with its language, next to the audio.
+fn write_meta(dir: &Path, meeting: &Value, language: Option<&str>) -> Result<(), String> {
+    let mut m = meeting.clone();
+    m["language"] = json!(language);
+    std::fs::write(dir.join(META), m.to_string()).map_err(|e| e.to_string())
+}
+fn read_meta(dir: &Path) -> Option<Value> {
+    serde_json::from_str(&std::fs::read_to_string(dir.join(META)).ok()?).ok()
 }
 
 fn recordings(app: &AppHandle) -> Result<PathBuf, String> {
@@ -263,7 +300,8 @@ pub async fn meeting_record_retry(app: AppHandle, state: State<'_, MeetingRec>, 
     let dir = recordings(&app)?.join(&folder);
     // only a folder this app made: its name is a start time, no path
     if started(&dir).is_none() || !dir.join("me.wav").is_file() { return Err("no kept recording".into()); }
-    save(app, dir, title, me, others, (vec![], vec![]), on_progress).await
+    let language = Language(read_meta(&dir).and_then(|m| m["language"].as_str().map(str::to_string)));
+    save(app, dir, title, me, others, (vec![], vec![], language), on_progress).await
 }
 
 /// When a recording started: its folder's name.
@@ -308,11 +346,11 @@ fn within<T: Send + 'static>(limit: Duration, f: impl FnOnce() -> T + Send + 'st
 /// What a window says, as (start, end, text) in seconds from the window's start: the model's segments, or the whole
 /// window as one when it gives none. When the call stalls the model is dropped from its slot (see
 /// `with_meeting_model`), so the second try loads a fresh one; None when that stalls too.
-fn region_text(app: &AppHandle, samples: &[f32]) -> Result<Option<Vec<(f32, f32, String)>>, String> {
+fn region_text(app: &AppHandle, samples: &[f32], language: Option<String>) -> Result<Option<Vec<(f32, f32, String)>>, String> {
     let len = samples.len() as f32 / RATE as f32;
     for _ in 0..2 {
-        let (app, samples) = (app.clone(), samples.to_vec());
-        let done = within(STALL, move || super::dictation::with_meeting_model(&app, |model, options|
+        let (app, samples, language) = (app.clone(), samples.to_vec(), language.clone());
+        let done = within(STALL, move || super::dictation::with_meeting_model(&app, language, |model, options|
             model.transcribe(&samples, options).map(|r| match r.segments {
                 Some(segs) if !segs.is_empty() => segs.into_iter().map(|g| (g.start, g.end.max(g.start), g.text)).collect(),
                 _ => vec![(0.0, len, r.text)],
@@ -341,7 +379,7 @@ fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, speakers: [
     let stem = free_stem(&folder, &format!("{} {}", started.format("%Y-%m-%d %H%M"), safe_name(title)));
     // the speech of both tracks in windows of up to 25 s, transcribed in turn: one model call per window, not per
     // stretch (whisper pays for a full 30 s window on every call, and most stretches are a second or two)
-    let (done, upto) = heard;
+    let (done, upto, mut language) = heard;
     // a track that hardly said anything is left out of the transcript and the audio: the Mac's in a meeting in the
     // room (a notification or two), the microphone's when you only listened
     let used: Vec<bool> = tracks.iter().map(|(_, s)| said_something(s)).collect();
@@ -354,12 +392,13 @@ fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, speakers: [
     let mut stalled = 0;
     for (n, (t, (a, b))) in regions.iter().enumerate() {
         let secs = |i: usize| i as f32 / RATE as f32;
-        let segments = match region_text(app, &tracks[*t].1[*a..*b])? {
+        let segments = match region_text(app, &tracks[*t].1[*a..*b], language.0.clone())? {
             Some(segments) => { stalled = 0; segments }
             // two windows in a row means the model is gone, not one unlucky call: keep the recording, try later
             None if stalled >= 1 => return Err("the speech model stopped answering, try again later".into()),
             None => { stalled += 1; vec![(0.0, secs(b - a), SKIPPED.into())] }
         };
+        language.see(&segments.iter().map(|g| g.2.as_str()).collect::<Vec<_>>().join(" "));
         // a line per segment at its own time, so turns between the tracks and the echo check stay as fine as before
         for (from, to, text) in segments {
             let text = text.trim();
@@ -381,7 +420,7 @@ fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, speakers: [
     std::fs::write(&md, format!("# {title}\n\n{}", transcript(drop_echo(lines)))).map_err(|e| e.to_string())?;
     let rel = |p: &Path| p.strip_prefix(vault).unwrap_or(p).to_string_lossy().to_string();
     let seconds = tracks.iter().map(|(_, s)| s.len()).max().unwrap_or(0) / RATE;
-    Ok(json!({ "audio": audio.as_deref().map(rel), "transcript": rel(&md), "seconds": seconds }))
+    Ok(json!({ "audio": audio.as_deref().map(rel), "transcript": rel(&md), "seconds": seconds, "language": language.0 }))
 }
 
 /// Where Obsidian puts attachments: its attachmentFolderPath, the vault root when unset or relative to the note.
@@ -673,6 +712,46 @@ mod tests {
         assert!(!said_something(&[quiet(300.0), tone(0.5), quiet(300.0), tone(0.5)].concat()));
         assert!(!said_something(&vec![0.0; 16_000 * 60]));
         assert!(said_something(&[quiet(60.0), tone(4.0), quiet(2.0), tone(3.0), quiet(60.0)].concat()));
+    }
+
+    #[test]
+    fn language_is_guessed_from_stopwords_or_not_at_all() {
+        let nl = "ik denk dat we het niet met een nieuwe planning kunnen doen omdat het veel te laat is voor de klant";
+        let en = "I think that we should have this done before they want more from the team and that will be very good";
+        assert_eq!(guess_language(nl), Some("nl"));
+        assert_eq!(guess_language(en), Some("en"));
+        // too few words, no stopwords, French and German (no list) and a tie say nothing
+        assert_eq!(guess_language("dat het niet met een"), None);
+        assert_eq!(guess_language("alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu"), None);
+        assert_eq!(guess_language("nous avons dit que les clients veulent une autre version pour la semaine prochaine dans le projet"), None);
+        assert_eq!(guess_language("wir haben gesagt dass die Kunden eine andere Version für die nächste Woche im Projekt wollen"), None);
+        assert_eq!(guess_language("dat het niet that with this alpha beta gamma delta epsilon zeta eta"), None);
+    }
+
+    #[test]
+    fn language_locks_on_the_first_clear_window_and_stays() {
+        let mut l = Language::default();
+        l.see("dat het niet");
+        assert_eq!(l.0, None);
+        l.see("ik denk dat we het niet met een nieuwe planning kunnen doen omdat het veel te laat is voor de klant");
+        assert_eq!(l.0.as_deref(), Some("nl"));
+        l.see("I think that we should have this done before they want more from the team and that will be very good");
+        assert_eq!(l.0.as_deref(), Some("nl"));
+        // one given at the start is never replaced
+        let mut given = Language(Some("fr".into()));
+        given.see("ik denk dat we het niet met een nieuwe planning kunnen doen omdat het veel te laat is voor de klant");
+        assert_eq!(given.0.as_deref(), Some("fr"));
+    }
+
+    #[test]
+    fn the_meeting_of_a_recording_is_kept_beside_it() {
+        let dir = std::env::temp_dir().join(format!("relay-meta-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(read_meta(&dir).is_none());
+        write_meta(&dir, &json!({ "id": "u@1", "title": "Sync", "people": [] }), Some("nl")).unwrap();
+        let m = read_meta(&dir).unwrap();
+        assert_eq!((m["id"].as_str(), m["title"].as_str(), m["language"].as_str()), (Some("u@1"), Some("Sync"), Some("nl")));
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

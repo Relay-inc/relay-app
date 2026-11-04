@@ -13,6 +13,18 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- A meeting note remembers which calendar event it belongs to (`event:` in its frontmatter), so renaming the event
+  no longer loses its note and briefing.
+
+### Fixed
+
+- A recorded meeting is transcribed in one language: the note's `language:`, else the language set in Settings, else
+  the one it hears in the first minute. Dutch meetings no longer come out with English or Spanish fragments, and the
+  language is written into the meeting note.
+- A kept recording you retry after a restart keeps its meeting, so the summary starts like after any recording.
+
 ## [0.0.45] - 2026-11-04
 
 ### Added

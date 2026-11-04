@@ -104,8 +104,10 @@ fn with_model<T>(loaded: &Loaded, m: &'static Model, dir: &Path, f: impl FnOnce(
 /// Err("model") when that model is not downloaded. The model is out of its slot while `f` runs, not behind the lock:
 /// a call that hangs (whisper on Metal after a sleep) then leaves the slot empty for the next one to load afresh,
 /// instead of holding the lock for good. Whatever dictation loaded meanwhile stays in the slot.
-pub(crate) fn with_meeting_model<T>(app: &AppHandle, f: impl FnOnce(&mut dyn SpeechModel, &TranscribeOptions) -> Result<T, String>) -> Result<T, String> {
-    let (m, language) = picked(app, true)?;
+/// `language` (the meeting's, see meeting.rs) wins over Settings; Parakeet ignores it and hears the language itself.
+pub(crate) fn with_meeting_model<T>(app: &AppHandle, language: Option<String>, f: impl FnOnce(&mut dyn SpeechModel, &TranscribeOptions) -> Result<T, String>) -> Result<T, String> {
+    let (m, set) = picked(app, true)?;
+    let language = language.unwrap_or(set);
     let dir = models_dir(app)?.join(m.id);
     if !installed(&dir) { return Err("model".into()); }
     let options = TranscribeOptions { language: (!language.is_empty()).then_some(language), ..Default::default() };

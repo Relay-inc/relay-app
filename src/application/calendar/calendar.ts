@@ -6,6 +6,8 @@ import {
   briefingIn,
   meetingNoteName,
   withBriefing,
+  withEvent,
+  meetingDay,
   joinable,
   meetingPrompt,
   soon,
@@ -113,7 +115,9 @@ export async function meetingChat(id: string, how: MeetingChat, fallback?: Meeti
 }
 /** A meeting's note, when the vault has it (read fresh: the note may change in Obsidian or by an agent at any time). */
 export async function meetingNote(meeting: Meeting) {
-  const note = (await backend.readNote(meetingNoteName(meeting)).catch(() => null)) as {
+  // the note that carries the event's id, whatever it is called now; else the name the prompts give it
+  const named = await backend.noteByEvent(meetingDay(meeting.start), meeting.id).catch(() => null);
+  const note = (await backend.readNote(named ?? meetingNoteName(meeting)).catch(() => null)) as {
     path: string;
     text: string;
     hash: string;
@@ -126,7 +130,7 @@ export async function meetingNote(meeting: Meeting) {
 export async function saveBriefing(meeting: Meeting, body: string) {
   const note = await meetingNote(meeting);
   if (!note || briefingIn(note.text) === null) return null;
-  const text = withBriefing(note.text, body);
+  const text = withEvent(withBriefing(note.text, body), meeting.id);
   const { hash } = await backend.writeNote(note.path, text, note.hash, false);
   return { path: note.path, text, hash };
 }
