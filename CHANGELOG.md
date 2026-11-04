@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.46] - 2026-11-04
+
 ### Added
 
 - Today is built around your meetings: the day as a strip of hours with each meeting's stage (planned, briefed, live, wrapped, followed up), how much of the working day is free, a card above the queue for the next meeting (with its briefing and Join when it starts within 30 minutes, the recording while you record), and one row for the meetings of the last three days that still need their summary. Press M to open the next or running meeting (#379).
@@ -26,7 +28,7 @@ a PR. Versions follow
 ### Changed
 
 - The notes graph moved from the Brain view into Pages: Graph at the top of the Pages tab draws the notes of the workspace you're in, a click opens the note as a page, and the conversation glow and "Show in graph" on a conversation still light up what it read and wrote (#381).
-- Fictional data in tests, fixtures and examples: the repository is public, so names of real clients, companies and colleagues are gone from fixtures, mocks, comments and this changelog.
+- Fictional data in tests, fixtures and examples: the repository is public, so names of real clients, companies and colleagues are gone from fixtures, mocks, comments and this changelog (#380).
 - The vault's meeting notes have one shape: Summary with bullets and **Next Steps**, no separate Decisions, Actions and Open sections. Recording a meeting no longer opens a conversation to write the note; the draft is in the meeting's Wrap-up (#376).
 
 ### Removed
