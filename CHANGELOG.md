@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- While a turn runs, Enter now holds your message as a chip above the composer and sends it when the turn ends; click a chip to edit it, drag to reorder, × to remove. ⌥Enter steers instead: it ends the running turn (what it wrote so far stays) and sends your message at once. Claude Code can steer; Codex and OpenCode queue on both keys. Both keys can be changed in Settings › Shortcuts (#PR).
+- While a turn runs, Enter now holds your message as a chip above the composer and sends it when the turn ends; click a chip to edit it, drag to reorder, × to remove. ⌥Enter steers instead: it ends the running turn (what it wrote so far stays) and sends your message at once. Claude Code can steer; Codex and OpenCode queue on both keys. Both keys can be changed in Settings › Shortcuts (#400).
 
 ### Changed
 
