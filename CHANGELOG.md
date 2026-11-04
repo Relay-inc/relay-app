@@ -15,11 +15,15 @@ a PR. Versions follow
 
 ### Added
 
+- A meeting is transcribed while you record it: the recording bar shows the latest lines and how far the transcript
+  got, and after Stop only the last few seconds are left to do.
 - Record a meeting that is not in your calendar: "Record a meeting now" on top of Today starts recording at once,
   and the transcript and meeting note follow as for any recorded meeting.
 
 ### Changed
 
+- A track that hardly said anything (the Mac's in a meeting in the room, a notification or two) is left out of the
+  transcript and the audio.
 - Transcribing a recorded meeting is several times faster: the speech model hears up to 25 seconds at a time instead
   of every short stretch on its own (a 2-hour meeting went from about 1,200 model calls to about 330) (#359).
 

@@ -1684,8 +1684,8 @@ const harness = {
   nextTask,
   nextPaint,
   /** a meeting recording's quarter-second tick: the time and both levels (0..1) */
-  recordingTick: (secs: number, me = 0.3, others = 0.2) =>
-    meetingTicks && sendTo(meetingTicks.channel, meetingTicks.index++, { secs, me, others }),
+  recordingTick: (secs: number, me = 0.3, others = 0.2, extra: Record<string, unknown> = {}) =>
+    meetingTicks && sendTo(meetingTicks.channel, meetingTicks.index++, { secs, me, others, ...extra }),
   /** the composer's dictation hearing something */
   dictationLevel: (level: number) => dictationLevels && sendTo(dictationLevels.channel, dictationLevels.index++, level),
   /** a setting changed in the Settings window: saved, and the main window told (settings-changed) */

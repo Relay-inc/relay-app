@@ -29,8 +29,24 @@ const Meter = ({ label, level }: { label: string; level: number }) => (
  *  transcription's progress, or why it failed. */
 export function RecordingBar() {
   const { t, locale } = useT();
-  const { meeting, title, phase, secs, me, others, system, heard, why, progress, error, retry, kept } =
-    useRecordingStore();
+  const {
+    meeting,
+    title,
+    phase,
+    secs,
+    me,
+    others,
+    system,
+    heard,
+    why,
+    progress,
+    error,
+    retry,
+    kept,
+    lines,
+    upto,
+    live,
+  } = useRecordingStore();
   useEffect(() => {
     loadKept();
   }, []);
@@ -55,6 +71,20 @@ export function RecordingBar() {
               {t("rec.stop")}
             </button>
           </div>
+          {lines.length ? (
+            <div className="grid gap-1 rounded-lg bg-fill px-2.5 py-2 text-xs">
+              {lines.slice(-3).map(line => (
+                <p key={`${line.track}-${line.at}`} className="line-clamp-2">
+                  <span className="text-tertiary tabular-nums">{clock(Math.floor(line.at))}</span>{" "}
+                  <span className="font-medium text-secondary">{t(line.track ? "rec.others" : "rec.me")}</span>{" "}
+                  {line.text}
+                </p>
+              ))}
+            </div>
+          ) : null}
+          <p className="text-xs text-tertiary">
+            {live ? t("rec.liveUpto", { time: clock(upto) }) : t("rec.liveStopped")}
+          </p>
           <p className="text-xs text-secondary">
             {!system
               ? t("rec.noSystem", { why: why || "?" })

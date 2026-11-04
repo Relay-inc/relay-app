@@ -1799,6 +1799,8 @@ export default {
   "rec.others": "Anderen",
   "rec.mac": "Mac",
   "rec.consent": "Laat iedereen in de meeting weten dat je opneemt.",
+  "rec.liveUpto": "Getranscribeerd tot {time}, de rest volgt terwijl je praat",
+  "rec.liveStopped": "Live transcript gepauzeerd: de rest wordt na Stop getranscribeerd",
   "rec.noSystem":
     "Enkel je microfoon wordt opgenomen, het geluid van de Mac niet: {why}. Sta Relay toe in Systeeminstellingen › Privacy en beveiliging › Scherm- en systeemaudio-opname.",
   "rec.silentMac":

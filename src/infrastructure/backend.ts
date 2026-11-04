@@ -684,7 +684,17 @@ export const dictationCancel = () => invoke("dictation_cancel");
 
 // ---------- recording a meeting (src-tauri/src/meeting.rs)
 /** A quarter-second tick while recording: the seconds, and the levels (0..1) of `me` and, when tapped, `others`. */
-export type RecordingTick = { secs: number; me?: number; others?: number };
+/** A line live transcription heard: seconds into the recording, the track (0 me, 1 the Mac) and the text. */
+export type LiveLine = { at: number; track: number; text: string };
+/** `lines`: new since the last tick; `upto`: seconds transcribed so far; `live` false once the model stalled. */
+export type RecordingTick = {
+  secs: number;
+  me?: number;
+  others?: number;
+  lines?: LiveLine[];
+  upto?: number;
+  live?: boolean;
+};
 /** Starts recording the microphone and, when macOS allows it, what the Mac plays (`system`, else `why` not). */
 export const meetingRecordStart = (onTick: (tick: RecordingTick) => void) => {
   const channel = new Channel<RecordingTick>();

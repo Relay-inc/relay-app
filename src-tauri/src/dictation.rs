@@ -271,7 +271,7 @@ fn record(stopped: mpsc::Receiver<()>, ready: mpsc::Sender<Result<(), String>>, 
 
 /// Linear interpolation between the microphone's rate and Parakeet's. Fine for speech that is downsampled; a
 /// windowed-sinc resampler would only matter for music.
-fn resample(input: &[f32], from: u32, to: u32) -> Vec<f32> {
+pub(crate) fn resample(input: &[f32], from: u32, to: u32) -> Vec<f32> {
     if from == to || input.is_empty() { return input.to_vec(); }
     let step = from as f64 / to as f64;
     let n = (input.len() as f64 / step) as usize;

@@ -1823,6 +1823,8 @@ export default {
   "rec.others": "Les autres",
   "rec.mac": "Mac",
   "rec.consent": "Prévenez tout le monde dans la réunion que vous enregistrez.",
+  "rec.liveUpto": "Transcrit jusqu'à {time}, la suite pendant que vous parlez",
+  "rec.liveStopped": "Transcription en direct en pause : la suite sera transcrite après Arrêter",
   "rec.noSystem":
     "Seul votre micro est enregistré, pas le son du Mac : {why}. Autorisez Relay dans Réglages Système › Confidentialité et sécurité › Enregistrement de l'écran et de l'audio système.",
   "rec.silentMac":
