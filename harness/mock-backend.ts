@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|brain|plugins|plugins-dark|shared|shared-invite|shared-member|shared-keeper|shared-live|shared-live-dark, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-keeper|shared-live|shared-live-dark, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
@@ -135,8 +135,6 @@ const orchOn = fixture === "orch" || fixture === "orch-plain" || fixture === "or
 const orchEmpty = fixture === "orch-empty";
 // orch-closed: an empty conversation, and workers the backend still reports whose conversations were all closed
 const orchClosed = fixture === "orch-closed";
-// Commonwealth installed, with one brain (Settings › Integrations)
-const brainOn = fixture === "brain";
 // plugins (fixture "plugins"): the secrets in the keychain, per plugin id; the tools the example server has
 const pluginSecrets = new Map<string, Set<string>>(
   (settings.plugins ?? []).map((p: { id: string; secrets: string[] }) => [p.id, new Set(p.secrets)]),
@@ -1186,21 +1184,6 @@ function handle(cmd: string, a: Args): unknown {
       return integ.usageLimits;
     case "usage_tokens":
       return integ.usageTokens();
-
-    // Commonwealth, the team brain: not installed, except in fixture "brain" (one brain)
-    case "commonwealth_status":
-      return {
-        plugin: brainOn,
-        cli: brainOn ? "/usr/local/bin/commonwealth" : null,
-        hint: "npm i -g @cmnwlth/cli",
-        projects: brainOn ? [{ project: "Northwind Portal", brain: graph.BRAIN, name: "team-brain" }] : [],
-      };
-    case "commonwealth_join":
-      return [
-        `Brain: /Users/you/.commonwealth/brains/${String(a.remote).replace(/^.*[:/]([^/]+)\/([^/]+?)(\.git)?$/, "$1-$2")} (cloned)`,
-        "  org:northwind/*  → this brain",
-        "Next: install the plugin (`claude plugin install commonwealth@commonwealth`) and start a new session.",
-      ].join("\n");
 
     // the Pages graph and Recent
     case "notes_graph":

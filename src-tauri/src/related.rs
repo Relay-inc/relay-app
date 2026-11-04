@@ -47,21 +47,21 @@ fn mtime(p: &Path) -> i64 {
 /// What the graph needs of a note: its title (frontmatter `title:`, else the file name), kind (`kind:` or `type:`),
 /// tags, the notes it points at (every [[wikilink]], frontmatter included, and the ids under `relates:`), and whether
 /// it is a hub that links everything (a generated index note, a contributor). Tags and links joined by newlines.
-// ponytail: a line parser, not YAML, like commonwealth::read_note. Ceiling: a title in a block scalar.
+// ponytail: a line parser, not YAML. Ceiling: a title in a block scalar.
 pub fn parse(rel: &str, text: &str) -> (String, String, String, String, bool) {
     let stem = rel.rsplit('/').next().unwrap_or(rel).trim_end_matches(".md").to_string();
     let (head, body) = text.strip_prefix("---\n").and_then(|r| r.split_once("\n---")).unwrap_or(("", text));
-    let get = |k: &str| head.lines().find_map(|l| l.strip_prefix(k)?.strip_prefix(':')).map(|v| crate::commonwealth::unquote(v.trim())).unwrap_or_default();
+    let get = |k: &str| head.lines().find_map(|l| l.strip_prefix(k)?.strip_prefix(':')).map(|v| vault::unquote(v.trim())).unwrap_or_default();
     // the `- item` lines under a key, or its inline [a, b]
     let list = |k: &str| -> Vec<String> {
         let inline = get(k);
         if let Some(i) = inline.strip_prefix('[').and_then(|i| i.strip_suffix(']')) {
-            return i.split(',').map(|x| crate::commonwealth::unquote(x.trim())).filter(|x| !x.is_empty()).collect();
+            return i.split(',').map(|x| vault::unquote(x.trim())).filter(|x| !x.is_empty()).collect();
         }
         if !inline.is_empty() { return vec![inline]; }
         let mut lines = head.lines().skip_while(|l| l.strip_prefix(k).and_then(|r| r.strip_prefix(':')).is_none()).skip(1);
         let mut out = vec![];
-        while let Some(item) = lines.next().and_then(|l| l.trim_start().strip_prefix("- ")) { out.push(crate::commonwealth::unquote(item.trim())); }
+        while let Some(item) = lines.next().and_then(|l| l.trim_start().strip_prefix("- ")) { out.push(vault::unquote(item.trim())); }
         out
     };
     let title = Some(get("title")).filter(|t| !t.is_empty()).unwrap_or(stem);
