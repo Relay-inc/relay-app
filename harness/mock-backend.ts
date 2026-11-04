@@ -1295,6 +1295,15 @@ function handle(cmd: string, a: Args): unknown {
           decisions: ["Indicata simulator in sprint 24", "Migratie op zaterdag 15 nov, 06:00"],
         });
       }
+      // the follow-up mail after a meeting (prompts/meetings/followup.md)
+      if (/opvolgmail na een meeting/.test(a.system)) {
+        if (followupMode === "slow") return new Promise(() => {});
+        if (followupMode === "fail") return Promise.reject("claude exited with code 1");
+        return JSON.stringify({
+          subject: "Recap Sprint review Northwind Portal – 1 okt",
+          body: "Hoi allemaal,\n\nKort verslag van de sprint review. De Indicata auto-simulatie gaat mee in sprint 24, en de hosting migratie plannen we op zaterdag 15 november van 06:00 tot 08:00.\n\nVolgende stappen\n- Ik: agenda in het kanaal posten, zodat Pieter het weet (vandaag)\n- Ik: Indicata-velden voor de simulator uitwerken (ticket)\n- Sofie: met Pieter afstemmen wie de beveiligingsaudit opneemt\n\nGroetjes",
+        });
+      }
       if (/git commit message/.test(a.system)) return git.commitMessage;
       // a PR to a ticket: the invoice PR is ticket 300, anything else none
       if (/koppelt een pull request/.test(a.system)) return /Invoice/.test(a.text) ? "300" : "geen";
@@ -1661,6 +1670,7 @@ const written = new Map<string, { text: string; hash: string }>();
 const eventNotes = new Map<string, string>(); // a calendar event's id -> the note that holds it (`event:`)
 let writes = 0;
 let diskChanged = false;
+let followupMode: "ok" | "slow" | "fail" = "ok"; // the same for the follow-up mail
 let wrapupMode: "ok" | "slow" | "fail" = "ok"; // what a meeting's wrap-up draft does (ai_write)
 let lastPage = ""; // the page read_note last read, which __harness.editOutside changes
 const harness = {
@@ -1740,6 +1750,7 @@ const harness = {
   liveTail: (key = conv.LONG_KEY) => conv.liveTail().forEach(event => emitAgent(key, event)),
   /** how a meeting's wrap-up draft goes: written, never finishing (the skeleton), or failing */
   wrapupMode: (mode: "ok" | "slow" | "fail") => void (wrapupMode = mode),
+  followupMode: (mode: "ok" | "slow" | "fail") => void (followupMode = mode),
   /** a note in the vault with this text (a project's, with its decisions) */
   setNote: (path: string, text: string) => void written.set(path, { text, hash: `h${++writes}` }),
   /** a meeting note in the vault: its text, found by the event it belongs to */
