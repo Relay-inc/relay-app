@@ -296,8 +296,13 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
     rm.retain(|p, _| !hold.contains(p));
     let (mut acts, clashes) = plan(mode, base, &local, &rm, copy_name, mergeable);
     let moved = |p: &String| rm.get(p).is_some_and(|e| guard.moved.iter().any(|(m, h)| m == p && *h == e.hash));
+    // a delete whose content arrives at another path in this same round is a move (a rename, Tidy structure), not a loss
+    let hash_of = |m: &Manifest, p: &String| m.get(p).map(|e| e.hash.clone());
+    let arriving: HashSet<String> = acts.iter().filter_map(|a| match a { Action::Pull(p) => hash_of(&rm, p), Action::Push(p) => hash_of(&local, p), _ => None }).collect();
     let braked = |a: &Action| match a {
         Action::DeleteRemote(p) if moved(p) => false,
+        Action::DeleteLocal(p) if hash_of(&local, p).is_some_and(|h| arriving.contains(&h)) => false,
+        Action::DeleteRemote(p) if hash_of(&rm, p).is_some_and(|h| arriving.contains(&h)) => false,
         Action::DeleteLocal(p) | Action::DeleteRemote(p) => !guard.allowed.contains(p),
         _ => false,
     };
@@ -803,6 +808,23 @@ mod tests {
         t.put("left.md", "x");
         let (_, r) = run(Mode::Replica, &t.0, &base, &mut w, &Filter::vault_default(), &mem, &|p| p.into(), &|_| false, &shut, &|_, _| {});
         assert_eq!((r.deleted_remote.len(), r.held.len()), (10, 0));
+    }
+    #[test] fn a_delete_whose_content_arrives_elsewhere_is_a_move() {
+        let (t, mut w, mem) = (Tmp::new("renamed"), Walker::default(), Mem::default());
+        for i in 0..30 { t.put(&format!("n/{i:02}.md"), &format!("note {i}")); }
+        let (base, _) = round(&t, &Manifest::new(), &mut w, &mem);
+        // 10 renamed there: over the cap of 6 as deletes, but each one's content comes back under its new name
+        for i in 0..10 { let old = format!("n/{i:02}.md"); let text = mem.read(&old).unwrap(); mem.files.borrow_mut().remove(&old); mem.set(&format!("m/{i:02}.md"), &text); }
+        let shut = Guard { allow_deletes: false, allowed: &[], moved: &[], keep: &|_, _| Ok(()) };
+        let (_, r) = round_with(&t, &base, &mut w, &mem, &shut);
+        assert_eq!((r.pulled.len(), r.deleted_local.len(), r.held.len()), (10, 10, 0), "{r:?}");
+        // 10 deleted there with nothing arriving: held
+        let (t2, mut w2, mem2) = (Tmp::new("deleted"), Walker::default(), Mem::default());
+        for i in 0..30 { t2.put(&format!("n/{i:02}.md"), &format!("note {i}")); }
+        let (base2, _) = round(&t2, &Manifest::new(), &mut w2, &mem2);
+        for i in 0..10 { mem2.files.borrow_mut().remove(&format!("n/{i:02}.md")); }
+        let (_, r) = round_with(&t2, &base2, &mut w2, &mem2, &shut);
+        assert_eq!((r.deleted_local.len(), r.held.len()), (0, 10));
     }
     #[test] fn moved_files_pass_the_brake_only_as_remote_deletes_of_the_same_content() {
         let (t, mut w, mem) = (Tmp::new("moved"), Walker::default(), Mem::default());

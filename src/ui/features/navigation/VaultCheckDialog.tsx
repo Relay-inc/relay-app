@@ -192,7 +192,7 @@ export function VaultCheckDialog({ workspace, onClose }: { workspace: string; on
             ))
           )}
         </div>
-        <div className="flex items-center justify-end gap-2 pt-1">
+        <div className={`flex items-center justify-end gap-2 pt-1 ${tidying ? "invisible" : ""}`}>
           {fixable.length && !admin ? <p className="flex-1 text-xs text-tertiary">{t("vc.adminOnly")}</p> : null}
           <button type="button" className="btn cursor-pointer" onClick={onClose} autoFocus>
             {t("vc.close")}

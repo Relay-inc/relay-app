@@ -993,11 +993,9 @@ fn a_tidy_of_many_notes_is_one_round_through_the_server() {
     }).collect();
     let r = round(&laptop, &key, &a, &mut ba, &mut wa, &moved, &[]);
     assert_eq!((r.pushed.len(), r.deleted_remote.len(), r.held.len(), r.errors.len()), (40, 40, 0, 0), "{r:?}");
-    // the other Mac pulls the 40 at once; its 40 deletes are any other delete to it, held until its user lets them through
+    // the other Mac sees the same content arrive at the new paths in that round: moves, not held deletes
     let r = round(&colleague, &theirs, &b, &mut bb, &mut wb, &[], &[]);
-    assert_eq!((r.pulled.len(), r.deleted_local.len(), r.held.len()), (40, 0, 40), "{r:?}");
-    let r = round(&colleague, &theirs, &b, &mut bb, &mut wb, &[], &r.held);
-    assert_eq!((r.deleted_local.len(), r.held.len()), (40, 0), "{r:?}");
+    assert_eq!((r.pulled.len(), r.deleted_local.len(), r.held.len()), (40, 40, 0), "{r:?}");
     assert!(names.iter().all(|n| b.join("Calendar/Meetings/2026").join(n).is_file() && !b.join("Calendar").join(n).exists()));
     std::fs::remove_dir_all(&a).ok();
     std::fs::remove_dir_all(&b).ok();
