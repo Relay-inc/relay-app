@@ -1,7 +1,7 @@
 import { VIEW, opened } from "./keys.ts";
 
 // What the middle column shows: a view, a provider's board, a terminal session or an app conversation.
-export const { wait: WAIT, reminders: REM, prs: PRS, mail: MAIL, graph: GRAPH, usage: USAGE } = VIEW;
+export const { wait: WAIT, reminders: REM, prs: PRS, mail: MAIL, graph: GRAPH, usage: USAGE, inbox: INBOX_VIEW } = VIEW;
 
 /** The id of the provider whose board a selection key opens (application/navigation's `boardOf` gives the provider). */
 export const boardIdOf = (key: string) => {

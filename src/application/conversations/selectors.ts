@@ -3,7 +3,18 @@ import * as rules from "../../domain/conversations/rules";
 import type { Item } from "../../domain/conversations/types";
 import type { Project } from "../../domain/workspace/types";
 import { isTerminal, termSid } from "../../domain/navigation/keys";
-import { WAIT, REM, PRS, MAIL, GRAPH, USAGE, isView, pluginIdOf, reviewOf } from "../../domain/navigation/views";
+import {
+  WAIT,
+  REM,
+  PRS,
+  MAIL,
+  GRAPH,
+  USAGE,
+  INBOX_VIEW,
+  isView,
+  pluginIdOf,
+  reviewOf,
+} from "../../domain/navigation/views";
 import { useWorkspaceStore } from "../workspace/store";
 import { useNavigationStore } from "../navigation/store";
 import { ghOn, settings } from "../settings/settings";
@@ -23,6 +34,7 @@ import { phoneCommands } from "./phoneShare";
 import { useDraftsStore } from "./drafts";
 import { useReviewStore } from "../today/review";
 import { useGraphStore } from "../navigation/graph";
+import { useInboxStore } from "../inbox/store";
 import { activeFolder } from "../navigation/workspaces";
 
 // Reads over the conversations as they are now, in the UI language set last. Components call them inside
@@ -70,6 +82,7 @@ const VIEW_ICONS: Record<string, string> = {
   [PRS]: "pr",
   [MAIL]: "mail",
   [GRAPH]: "graph",
+  [INBOX_VIEW]: "inbox",
   [ORCH]: "agent",
 };
 
@@ -98,6 +111,10 @@ function viewSummary(key: string) {
     const n = useGraphStore.getState().graphs[activeFolder()]?.nodes.length;
     return n ? t("bar.graphNotes", { n: n.toLocaleString() }) : "";
   }
+  if (key === INBOX_VIEW) {
+    const n = useInboxStore.getState().notes[activeFolder()]?.length;
+    return n ? t("inbox.toFile", { n }) : "";
+  }
   if (key === ORCH) {
     const counts = workerCounts();
     return counts.running + counts.need + counts.done ? t("orch.counts", counts) : t("bar.orchIdle");
@@ -125,6 +142,7 @@ export function chatBar(key: string) {
     [USAGE]: "nav.usage",
     [MAIL]: "nav.mail",
     [GRAPH]: "nav.graph",
+    [INBOX_VIEW]: "nav.inbox",
     [REM]: "nav.reminders",
     [WAIT]: "nav.today",
     [ORCH]: "nav.orch",

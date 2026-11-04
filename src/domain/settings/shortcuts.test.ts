@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   bindingLabel,
   bindingOf,
+  bindingsOf,
+  COMMANDS,
   isBinding,
   pickedDigit,
   pressed,
@@ -107,4 +109,16 @@ test("⌃1 to ⌃9 switch workspaces, changeable, and leave a key the answers on
   assert.equal(workspaceKeyLabel(cards, 2), "");
   // and ⌃2 is taken for another command
   assert.equal(refusal(plain, "app.settings", "ctrl+Digit2")?.by, "app.workspace2");
+});
+
+test("quick capture's key is nobody else's: no Relay command has it and it is not Finder's or the browsers' ⌘⇧N", () => {
+  const [capture] = bindingsOf(none, "app.capture");
+  assert.equal(bindingLabel(capture), "⌃⌥⌘N");
+  assert.equal(refusal(none, "app.capture", capture), null);
+  for (const id of Object.keys(COMMANDS) as (keyof typeof COMMANDS)[])
+    if (id !== "app.capture") assert.ok(!bindingsOf(none, id).includes(capture), id);
+  // another command's key, and ⌘N (a new window), are refused for it
+  assert.deepEqual(refusal(none, "app.capture", "meta+KeyN"), { why: "taken", by: "app.newWindow" });
+  // a dictation shortcut on the same key is refused too
+  assert.deepEqual(refusal(none, "app.capture", "shift+meta+KeyD", ["shift+meta+KeyD"]), { why: "taken" });
 });

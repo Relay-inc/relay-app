@@ -6,7 +6,8 @@
     "main",
     "main-*",
     "settings",
-    "dictation-pill"
+    "dictation-pill",
+    "capture"
   ],
   "permissions": [
     "core:default",

@@ -1244,6 +1244,52 @@ const VIEWS = {
     await settle(page, 400);
   },
   "changes-feed-dark": async () => VIEWS["changes-feed"]("kb-changes-dark"),
+  // K1 / K7 (issue 372): the Inbox row with its count in the Pages tab, the Inbox view, Claude's proposals, a row's
+  // destination picker, the dry run of moving the old scratch notes, and the quick capture window
+  "inbox-row": async (fixture = "kb-changes-inbox") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await waitText("Inbox");
+    await settle(page);
+  },
+  "inbox-row-dark": async () => VIEWS["inbox-row"]("kb-changes-inbox-dark"),
+  inbox: async (fixture = "kb-changes-inbox") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator("[data-inbox]").click();
+    await waitText("4 notes");
+    await settle(page);
+  },
+  "inbox-dark": async () => VIEWS.inbox("kb-changes-inbox-dark"),
+  "inbox-filing": async (fixture = "kb-changes-inbox") => {
+    await VIEWS.inbox(fixture);
+    await page.getByRole("button", { name: "File with Claude" }).click();
+    await waitText("Claude proposed a home for each");
+    await settle(page);
+  },
+  "inbox-filing-dark": async () => VIEWS["inbox-filing"]("kb-changes-inbox-dark"),
+  "inbox-edit": async (fixture = "kb-changes-inbox") => {
+    await VIEWS["inbox-filing"](fixture);
+    await page.locator('[data-inbox-note="Inbox/2026-10-01 0830.md"]').getByRole("button", { name: "Edit" }).click();
+    await page.getByRole("combobox", { name: "Destination" }).waitFor();
+    await settle(page);
+  },
+  "inbox-edit-dark": async () => VIEWS["inbox-edit"]("kb-changes-inbox-dark"),
+  "inbox-migrate": async (fixture = "kb-changes-inbox") => {
+    await VIEWS.inbox(fixture);
+    await page.getByRole("button", { name: "Move into Inbox…" }).click();
+    await waitText("Move scratch notes into the vault");
+    await settle(page);
+  },
+  "quick-capture": async (fixture = "kb-changes-inbox") => {
+    await page.setViewportSize({ width: 440, height: 200 });
+    await open(page, server.url, { path: "/capture.html", fixture });
+    await page
+      .getByRole("textbox", { name: "Quick capture" })
+      .fill("Sofie confirms the tax rule Friday → then take the portal live, tell Tom");
+    await settle(page);
+  },
+  "quick-capture-dark": async () => VIEWS["quick-capture"]("kb-changes-inbox-dark"),
   // Ask Claude as a menu: the page actions
   "page-actions-menu": async (fixture = "kb-changes") => {
     await open(page, server.url, { fixture });

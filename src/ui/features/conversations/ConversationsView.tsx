@@ -4,6 +4,7 @@ import {
   pageOf,
   pluginIdOf,
   GRAPH,
+  INBOX_VIEW,
   MAIL,
   PRS,
   REM,
@@ -32,6 +33,7 @@ import { useUiRequest } from "../../hooks/useUiRequest";
 import { SelectedView } from "../../app/SelectedView";
 import { PullRequestsView } from "../pull-requests/PullRequestsView";
 import { GraphView } from "../workspace/GraphView";
+import { InboxView } from "../inbox/InboxView";
 import { MailView } from "../mail/MailView";
 import { TodayView } from "../today/TodayView";
 import { ReviewView } from "../today/ReviewView";
@@ -111,6 +113,7 @@ export function ConversationsView({ className }: { className: string }) {
     selected === PRS ||
     selected === MAIL ||
     selected === GRAPH ||
+    selected === INBOX_VIEW ||
     selected === WAIT ||
     !!review ||
     !!meeting ||
@@ -197,6 +200,8 @@ export function ConversationsView({ className }: { className: string }) {
           <PullRequestsView className="flex-1" />
         ) : selected === GRAPH ? (
           <GraphView className="flex-1" />
+        ) : selected === INBOX_VIEW ? (
+          <InboxView className="flex-1" />
         ) : selected === WAIT ? (
           <TodayView className="flex-1" />
         ) : review ? (

@@ -1,5 +1,5 @@
 import { t } from "../../shared/i18n";
-import { WAIT, PRS, MAIL, GRAPH, isView, boardIdOf, type Tool } from "../../domain/navigation/views";
+import { WAIT, PRS, MAIL, GRAPH, INBOX_VIEW, isView, boardIdOf, type Tool } from "../../domain/navigation/views";
 import { provider } from "../../shared/plugins";
 import { isTerminal } from "../../domain/navigation/keys";
 import { ORCH } from "../../domain/orchestrator/rules";
@@ -11,6 +11,7 @@ import { newChat, newChatHere, dropEmptyDraft, markSeen } from "../conversations
 import { typedOf } from "../conversations/drafts";
 import { ensureHistory } from "../conversations/history";
 import { loadGraph } from "./graph";
+import { loadInboxNotes } from "../inbox/inbox";
 import { loadPrs, loadProjectRepos } from "../pull-requests/prs";
 import { loadMails } from "../mail/mail";
 import { searchProjects } from "../../domain/navigation/project-search";
@@ -66,6 +67,7 @@ export async function select(key: string, tool: Tool | null = null) {
   if (key === WAIT) loadTodayCards();
   if (key === MAIL) loadMails();
   if (key === GRAPH) loadGraph();
+  if (key === INBOX_VIEW) void loadInboxNotes();
   request(isView(key) ? "scroll-top" : "scroll-bottom");
   if (!isView(key)) request("focus-composer");
 }

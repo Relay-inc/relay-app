@@ -9,6 +9,7 @@ export const VIEW = {
   mail: "__mail",
   graph: "__brain", // the Brain view had it: a stored selection opens the Pages graph
   usage: "__usage",
+  inbox: "__inbox", // the Pages tab's Inbox: notes dropped in without a place, filed from there
 } as const;
 type ViewKey = (typeof VIEW)[keyof typeof VIEW];
 const VIEWS: readonly string[] = Object.values(VIEW);

@@ -29,6 +29,9 @@ export const COMMANDS = {
   "app.workspace8": { scope: "app", keys: ["ctrl+Digit8"] },
   "app.workspace9": { scope: "app", keys: ["ctrl+Digit9"] },
   "app.sidebarTab": { scope: "app", keys: ["meta+Period"] },
+  // registered with macOS (anywhere.rs), so it works from any app. ⌘⇧N would be Finder's New Folder and every browser's
+  // private window: three modifiers keep it clear of those
+  "app.capture": { scope: "app", keys: ["ctrl+alt+meta+KeyN"] },
   "chat.send": { scope: "chat", keys: ["Enter"] },
   "chat.find": { scope: "chat", keys: ["meta+KeyF", "ctrl+KeyF"] },
   "card.confirm": { scope: "card", keys: ["Enter"] },

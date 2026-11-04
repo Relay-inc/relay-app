@@ -14,6 +14,7 @@ import * as graph from "./fixtures/graph";
 import * as git from "./fixtures/git";
 import * as files from "./fixtures/files";
 import * as kb from "./fixtures/kb";
+import * as inbox from "./fixtures/inbox";
 import * as Y from "yjs";
 // the example plugin's real view: the harness serves it from a blob, where the app has the relay-plugin:// scheme
 import diceView from "../packages/plugin-example/view.html?raw";
@@ -192,6 +193,10 @@ const voiceModels = [
   { id: "moonshine-base", mb: 55, langs: ["en"], auto: true, installed: false, downloading: false },
 ];
 const scratch = new Map<string, { id: string; text: string; modified: number }[]>();
+// fixture kb-changes-inbox: the Inbox's notes and the old scratch notes (fixtures/inbox.ts)
+const inboxOn = fixture.includes("inbox");
+let legacyLeft = inboxOn ? structuredClone(inbox.legacy) : [];
+let migratedScratch: typeof legacyLeft = [];
 let scratchId = 0;
 const NOW_S = Math.floor(NOW / 1000);
 // the machine's GitHub and repos (fixture "github"), changed by Disconnect, Connect and Push
@@ -1202,6 +1207,109 @@ function handle(cmd: string, a: Args): unknown {
       scratch.set(a.project, list);
       return id;
     }
+    // the Inbox and quick capture (K7): the notes are the written ones under Inbox/, as inbox.rs lists them
+    case "inbox_list":
+      return [...written.keys()]
+        .filter(k => k.startsWith(`${inbox.DIR}/`))
+        .sort()
+        .reverse()
+        .map((path, i) => ({ path, text: written.get(path)!.text, modified: NOW_S - i * 60 }));
+    case "inbox_home":
+      return inbox.homes[String(a.kind).toLowerCase()] ?? null;
+    case "inbox_propose": {
+      const items = [...written.keys()]
+        .filter(k => k.startsWith(`${inbox.DIR}/`))
+        .sort()
+        .reverse()
+        .map(path => {
+          const given = inbox.notes.find(n => n.path === path)?.proposal;
+          const stem = path.split("/").pop()!.replace(/\.md$/, "");
+          return { path, ...(given ?? { title: stem, type: "", dest: inbox.DIR, links: [] }) };
+        })
+        .map(({ path, title, type, dest, links }) => ({ path, title, type, dest, links }));
+      return { at: inbox.proposedAt, items };
+    }
+    case "inbox_accept": {
+      const filed: { path: string; to: string }[] = [];
+      const failed: { path: string; error: string }[] = [];
+      const files: Change["files"] = [];
+      for (const item of a.items as {
+        path: string;
+        title: string;
+        type: string;
+        dest: string;
+        links: { k: string; v: string }[];
+      }[]) {
+        const before = noteNow(item.path);
+        if (before === null) {
+          failed.push({ path: item.path, error: `not in the Inbox: ${item.path}` });
+          continue;
+        }
+        const to = `${item.dest}/${item.title}.md`;
+        const after = inbox.filed(before, item);
+        putNote(item.path, null);
+        putNote(to, after);
+        pages = [...pageList().filter(p => p !== item.path), to];
+        files.push(
+          { path: item.path, before, after: null, state: "open" },
+          { path: to, before: null, after, state: "open" },
+        );
+        filed.push({ path: item.path, to });
+      }
+      if (files.length) {
+        const kinds = [...new Set(filed.map((_, i) => (a.items as { type: string }[])[i]?.type || "Note"))];
+        const count = (k: string) => (a.items as { type: string }[]).filter(x => (x.type || "Note") === k).length;
+        const reason = `Filed ${filed.length} ${filed.length === 1 ? "capture" : "captures"}: ${kinds.map(k => `${count(k)} ${k}`).join(", ")}`;
+        changes = [
+          { id: `${Date.now()}-${changes.length}`, at: Date.now(), source: "inbox", subject: "", reason, files },
+          ...changes,
+        ];
+        emit("changes-changed", null);
+      }
+      emit("inbox-changed", null);
+      return { filed, failed };
+    }
+    // scratch notes of before: still in .relay/notes until the migration moves them into the Inbox (scratch.rs)
+    case "scratch_pending":
+      return legacyLeft.map((m, i) => ({ project: m.project, id: m.id, to: inbox.migratedName(i) }));
+    case "scratch_migrate": {
+      const moved = legacyLeft;
+      moved.forEach((m, i) => {
+        const to = inbox.migratedName(i);
+        written.set(`${inbox.DIR}/${to}.md`, { text: `---\nabout: "[[${m.project}]]"\n---\n\n${m.text}`, hash: "h0" });
+        pages = [...pageList(), `${inbox.DIR}/${to}.md`];
+        scratch.set(m.project, [{ id: to, text: m.text, modified: NOW_S }, ...(scratch.get(m.project) ?? [])]);
+      });
+      migratedScratch = moved;
+      legacyLeft = [];
+      emit("inbox-changed", null);
+      return moved.length;
+    }
+    case "scratch_migrate_undo": {
+      migratedScratch.forEach((m, i) => {
+        const to = inbox.migratedName(i);
+        written.delete(`${inbox.DIR}/${to}.md`);
+        pages = pageList().filter(p => p !== `${inbox.DIR}/${to}.md`);
+        scratch.set(
+          m.project,
+          (scratch.get(m.project) ?? []).filter(n => n.id !== to),
+        );
+      });
+      legacyLeft = migratedScratch;
+      migratedScratch = [];
+      emit("inbox-changed", null);
+      return { back: legacyLeft.length, left: 0 };
+    }
+    // the capture window's save: a note in the Inbox, named for the minute (inbox.rs `capture`)
+    case "quick_capture_save": {
+      const path = `${inbox.DIR}/2026-10-01 0930.md`;
+      putNote(path, `${String(a.text).trimEnd()}\n`);
+      pages = [...pageList(), path];
+      emit("inbox-changed", null);
+      return path;
+    }
+    case "quick_capture_hide":
+      return null;
     case "scratch_delete":
       scratch.set(
         a.project,
@@ -1280,6 +1388,13 @@ function handle(cmd: string, a: Args): unknown {
       const current = noteNow(f.path);
       if (current !== f.after) return { merge: true, current, before: f.before, after: f.after };
       putNote(f.path, f.before);
+      // a note that is back in the vault, or gone from it, is in the Pages list too
+      pages =
+        f.before === null
+          ? pageList().filter(p => p !== f.path)
+          : pageList().includes(f.path)
+            ? pageList()
+            : [...pageList(), f.path];
       f.state = "undone";
       return { merge: false };
     }
@@ -1297,15 +1412,32 @@ function handle(cmd: string, a: Args): unknown {
       return null;
     }
     case "change_record": {
-      const files = (a.files as { path: string; before: string | null; after: string | null }[]).filter(f => f.before !== f.after);
+      const files = (a.files as { path: string; before: string | null; after: string | null }[]).filter(
+        f => f.before !== f.after,
+      );
       if (files.length) {
-        changes = [{ id: `${Date.now()}-${changes.length}`, at: Date.now(), source: String(a.source), subject: String(a.subject), reason: String(a.reason), files: files.map(f => ({ ...f, state: "open" })) }, ...changes];
+        changes = [
+          {
+            id: `${Date.now()}-${changes.length}`,
+            at: Date.now(),
+            source: String(a.source),
+            subject: String(a.subject),
+            reason: String(a.reason),
+            files: files.map(f => ({ ...f, state: "open" })),
+          },
+          ...changes,
+        ];
         emit("changes-changed", null);
       }
       return null;
     }
     case "capture_vault":
-      recordChange("capture", String(a.title ?? ""), kb.capture.reason, kb.capture.files.map(f => [f.path, f.after]));
+      recordChange(
+        "capture",
+        String(a.title ?? ""),
+        kb.capture.reason,
+        kb.capture.files.map(f => [f.path, f.after]),
+      );
       return null;
     case "favourites":
       return kbOn ? favourites : [];
@@ -1757,7 +1889,7 @@ if (!keepState) for (const k of Object.keys(sessionStorage)) if (k.startsWith("m
 const pageList = () =>
   pages ??
   (kbOn
-    ? [...vault.notes, ...kb.paths, ...(sketchOn ? [kb.untyped.path] : [])]
+    ? [...vault.notes, ...kb.paths, ...(sketchOn ? [kb.untyped.path] : []), ...(inboxOn ? inbox.paths : [])]
     : linkedOn
       ? [...vault.notes.filter(n => vault.flat(n)), vault.FLAT_NOTE, ...vault.linkedPaths]
       : embedsOn
@@ -1822,15 +1954,26 @@ const written = new Map<string, { text: string; hash: string }>(
   embedsOn
     ? Object.entries(embeds.texts).map(([path, text]) => [path, { text, hash: "h0" }])
     : kbOn
-      ? Object.entries(kb.texts).map(([path, text]) => [path, { text, hash: "h0" }])
+      ? [...Object.entries(kb.texts), ...(inboxOn ? Object.entries(inbox.texts) : [])].map(([path, text]) => [
+          path,
+          { text, hash: "h0" },
+        ])
       : [],
 );
 // the Changes feed (K6, issue 371): the real one is src-tauri/src/changes.rs, which has its own tests. Kept in memory.
-type Change = { id: string; at: number; source: string; subject: string; reason: string; files: { path: string; before: string | null; after: string | null; state: string }[] };
+type Change = {
+  id: string;
+  at: number;
+  source: string;
+  subject: string;
+  reason: string;
+  files: { path: string; before: string | null; after: string | null; state: string }[];
+};
 let changes: Change[] = changesOn ? kb.seedChanges() : [];
 if (sketchOn) written.set(kb.untyped.path, { text: kb.untyped.text, hash: "h0" });
 if (changesOn) {
-  for (const e of changes) for (const f of e.files) if (f.after !== null) written.set(f.path, { text: f.after, hash: "h0" });
+  for (const e of changes)
+    for (const f of e.files) if (f.after !== null) written.set(f.path, { text: f.after, hash: "h0" });
 }
 const noteKey = (path: string) => [...written.keys()].find(k => k === path || k.endsWith(`/${path}`)) ?? path;
 const noteNow = (path: string) => written.get(noteKey(path))?.text ?? null;
@@ -1840,7 +1983,9 @@ const putNote = (path: string, text: string | null) => {
 };
 /** A job's writes as one entry, as changes.rs records them: the notes that differ from `before`. */
 function recordChange(source: string, subject: string, reason: string, edits: [string, string | null][]) {
-  const files = edits.map(([path, after]) => ({ path, before: noteNow(path), after, state: "open" })).filter(f => f.before !== f.after);
+  const files = edits
+    .map(([path, after]) => ({ path, before: noteNow(path), after, state: "open" }))
+    .filter(f => f.before !== f.after);
   for (const f of files) putNote(f.path, f.after);
   if (!files.length) return;
   changes = [{ id: `${Date.now()}-${changes.length}`, at: Date.now(), source, subject, reason, files }, ...changes];
@@ -1851,13 +1996,20 @@ function mockAction(action: string, path: string, selection: string | null): [st
   const text = noteNow(path) ?? "";
   if (action === "properties") {
     const has = /^---\n[\s\S]*?\btype:/.test(text);
-    const next = has ? text : /^---\n/.test(text) ? text.replace("---\n", "---\ntype: Document\n") : `---\ntype: Document\ncontext: "[[Agency]]"\n---\n${text}`;
+    const next = has
+      ? text
+      : /^---\n/.test(text)
+        ? text.replace("---\n", "---\ntype: Document\n")
+        : `---\ntype: Document\ncontext: "[[Agency]]"\n---\n${text}`;
     return [has ? "Nothing to change" : "Added type: Document and context: Agency", [[path, next]]];
   }
   if (action === "summarise") {
     const at = text.indexOf("\n", text.indexOf("# ")) + 1;
     const about = selection ? "the selected text" : "the note";
-    return [`Summarised ${about} in a Summary section`, [[path, `${text.slice(0, at)}\n## Summary\nA short summary of ${about}.\n${text.slice(at)}`]]];
+    return [
+      `Summarised ${about} in a Summary section`,
+      [[path, `${text.slice(0, at)}\n## Summary\nA short summary of ${about}.\n${text.slice(at)}`]],
+    ];
   }
   return [`Ran ${action}`, [[path, `${text}\n<!-- ${action} -->\n`]]];
 }
@@ -1961,7 +2113,13 @@ const harness = {
   wrapupMode: (mode: "ok" | "slow" | "fail") => void (wrapupMode = mode),
   followupMode: (mode: "ok" | "slow" | "fail") => void (followupMode = mode),
   /** a capture run finished (what capture_vault does): two notes edited, one entry in the Changes feed */
-  capture: () => recordChange("capture", kb.capture.subject, kb.capture.reason, kb.capture.files.map(f => [f.path, f.after])),
+  capture: () =>
+    recordChange(
+      "capture",
+      kb.capture.subject,
+      kb.capture.reason,
+      kb.capture.files.map(f => [f.path, f.after]),
+    ),
   /** a note's text now, as the backend has it (a page's saves and a job's writes) */
   noteText: (path: string) => noteNow(path),
   /** a note's text typed by the user outside the editor flow: what an Undo finds when the note was edited since the run */
