@@ -55,7 +55,8 @@ const unfold = async name => {
 // the Meeting view: a meeting's card on Today opens it
 const BRIEFING = [
   "## Briefing",
-  "**Goal:** Scope van de Indicata auto-simulatie vastleggen voor sprint 24.",
+  "### Goal",
+  "Scope van de Indicata auto-simulatie vastleggen voor sprint 24.",
   "",
   "### Since last time",
   "- [x] Thomas deelt de Indicata API-docs",
@@ -2080,6 +2081,7 @@ const VIEWS = {
   // action, a decision, a question, a quote) next to the live transcript, in light and dark
   "meeting-briefing": async () => meetingBriefing("calendar", "Daily standup", true),
   "meeting-briefing-empty": async () => meetingBriefing("calendar", "Sprint review Northwind Portal"),
+  "meeting-briefing-empty-dark": async () => meetingBriefing("calendar-dark", "Sprint review Northwind Portal"),
   "meeting-live": async () => meetingLive("calendar"),
   "meeting-briefing-dark": async () => meetingBriefing("calendar-dark", "Daily standup", true),
   "meeting-live-dark": async () => meetingLive("calendar-dark"),

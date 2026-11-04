@@ -171,24 +171,23 @@ export function BriefingStep({
             </button>
           </section>
         ) : null}
+        {!text && !prep ? (
+          <aside className="mt-4 p-4 rounded-xl border border-dashed border-separator-strong bg-sidebar">
+            <div className="flex flex-col gap-1.5 text-xs text-secondary">
+              {(["goal", "since", "threads", "points"] as const).map(key => (
+                <span key={key}>
+                  <span className="font-semibold text-label">{t(`meet.skel.${key}`)}</span> · —
+                </span>
+              ))}
+            </div>
+            <button className={`${PRIMARY} mt-3.5`} onClick={() => meetingChat(meeting.id, "prep")}>
+              {claude ? <Glyph svg={claude} className="glyph size-3.5 flex-none" /> : null}
+              {t("meet.prep")}
+            </button>
+            <p className="m-0 mt-2 max-w-[60ch] text-xs leading-snug text-secondary">{t("today.briefingHint")}</p>
+          </aside>
+        ) : null}
       </div>
-      {/* planned: what the briefing will hold, and the one thing to do about it */}
-      {!text && !prep ? (
-        <aside className="absolute top-5.5 right-7 w-75 p-3.5 rounded-xl border border-dashed border-separator-strong bg-sidebar">
-          <div className="flex flex-col gap-1.5 text-xs text-secondary">
-            {(["goal", "since", "threads", "points"] as const).map(key => (
-              <span key={key}>
-                <span className="font-semibold text-label">{t(`meet.skel.${key}`)}</span> · —
-              </span>
-            ))}
-          </div>
-          <button className={`${PRIMARY} w-full justify-center mt-3`} onClick={() => meetingChat(meeting.id, "prep")}>
-            {claude ? <Glyph svg={claude} className="glyph size-3.5 flex-none" /> : null}
-            {t("meet.prep")}
-          </button>
-          <p className="m-0 mt-2 text-xs leading-snug text-secondary">{t("today.briefingHint")}</p>
-        </aside>
-      ) : null}
     </div>
   );
 }
