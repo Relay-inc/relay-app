@@ -21,11 +21,15 @@ const OUTLINE = `${ACT} border border-separator-strong text-label hover:bg-fill 
 function BriefingBody({ text, onTick }: { text: string; onTick: (n: number) => void }) {
   const { lang } = useT();
   const version = useWorkspaceStore(s => s.notesVersion);
-  let n = 0;
-  const html = markdownHtml(text, version, lang).replace(
-    /<input (checked="" )?disabled="" type="checkbox">/g,
-    (_, checked) => `<input type="checkbox" data-task="${n++}"${checked ? " checked" : ""}>`,
-  );
+  const box = /<input (checked="" )?disabled="" type="checkbox">/g;
+  const raw = markdownHtml(text, version, lang);
+  const checked = [...raw.matchAll(box)].map(m => !!m[1]);
+  const html = raw
+    .split(/<input (?:checked="" )?disabled="" type="checkbox">/)
+    .flatMap((part, i) =>
+      i < checked.length ? [part, `<input type="checkbox" data-task="${i}"${checked[i] ? " checked" : ""}>`] : [part],
+    )
+    .join("");
   return (
     <div
       className="md-brief select-text"
