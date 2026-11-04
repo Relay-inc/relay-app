@@ -58,6 +58,7 @@ import type { Meeting, Meetings } from "../domain/calendar/types";
 import type { PrDetail, PRs } from "../domain/pull-requests/types";
 import type { NotesGraph, Touch } from "../domain/graph/types";
 import type { LinkedNote } from "../domain/workspace/linked";
+import type { Row as CollectionRow } from "../domain/collections/rules";
 import type { RailData } from "../domain/workspace/rail";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
 import type { OrchEvent, Worker } from "../domain/orchestrator/types";
@@ -537,6 +538,13 @@ export const githubStatus = () => invoke<string>("github_status");
 export const notesGraph = (folder: string) => invoke<NotesGraph>("notes_graph", { folder });
 /** The notes of a workspace that point at another through `about:`, `context:` or `with:`. */
 export const notesLinked = (folder: string) => invoke<LinkedNote[]>("notes_linked", { folder });
+/** Every note of a workspace with its frontmatter values: what the collections' table and board are made of. */
+export const notesCollection = (folder: string) => invoke<CollectionRow[]>("notes_collection", { folder });
+/** The saved collection views of a workspace (`.relay/views/<name>.json`). */
+export const viewsList = (workspace: string) => invoke<{ name: string; view: unknown }[]>("views_list", { workspace });
+export const viewSave = (workspace: string, name: string, view: unknown) =>
+  invoke<void>("view_save", { workspace, name, view });
+export const viewDelete = (workspace: string, name: string) => invoke<void>("view_delete", { workspace, name });
 /** A note's right rail: its backlinks and unlinked mentions with the line around each, and the notes near it. `path` is
  *  the note in the workspace `folder`. */
 export const noteRail = (folder: string, path: string) => invoke<RailData>("note_rail", { folder, path });

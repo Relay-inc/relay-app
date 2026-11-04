@@ -33,6 +33,8 @@ import { newChatHere } from "../../../application/conversations/chats";
 import { select } from "../../../application/navigation/navigation";
 import { GRAPH, INBOX_VIEW } from "../../../domain/navigation/views";
 import { loadInboxNotes, useInboxStore } from "../../../application/inbox/inbox";
+import { loadViews } from "../../../application/collections/collections";
+import { CollectionRows, SavedViewRows } from "./CollectionRows";
 import { toast } from "../../../application/navigation/navigation";
 import { activeFolder, workspaces } from "../../../application/navigation/workspaces";
 import { loadLinked } from "../../../application/navigation/linked";
@@ -108,6 +110,9 @@ export function PagesView() {
   useEffect(() => {
     void loadInboxNotes(workspaceShown);
   }, [notesVersion, workspaceShown]);
+  useEffect(() => {
+    void loadViews(workspaceShown);
+  }, [workspaceShown]);
 
   const onMenu = (path: string, kind: MenuKind) => (e: MouseEvent) => {
     e.preventDefault();
@@ -399,6 +404,7 @@ export function PagesView() {
         meta={inboxCount ? { kind: "badge", n: inboxCount } : undefined}
         onClick={() => select(INBOX_VIEW)}
       />
+      <SavedViewRows />
       {model.contexts.map(context => {
         const id = `pages:ctx:${context.name}`;
         const tint = CONTEXT_TINTS[context.index % CONTEXT_TINTS.length];
@@ -458,6 +464,7 @@ export function PagesView() {
             {collapsed[id] || !context.folder ? null : (
               <LinkedRows name={context.name} inside={context.folder} base={`ctx:${context.name}`} />
             )}
+            {collapsed[id] ? null : <CollectionRows context={context.name} />}
           </div>
         );
       })}

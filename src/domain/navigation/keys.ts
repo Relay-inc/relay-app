@@ -10,6 +10,7 @@ export const VIEW = {
   graph: "__brain", // the Brain view had it: a stored selection opens the Pages graph
   usage: "__usage",
   inbox: "__inbox", // the Pages tab's Inbox: notes dropped in without a place, filed from there
+  collection: "__coll", // a collection of notes as a table or a board (the view itself is in the collections store)
 } as const;
 type ViewKey = (typeof VIEW)[keyof typeof VIEW];
 const VIEWS: readonly string[] = Object.values(VIEW);

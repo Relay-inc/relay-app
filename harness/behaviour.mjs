@@ -331,11 +331,18 @@ const SCENARIOS = {
     await group.click();
     const rows = page.locator('[data-linked] [data-page^="Calendar/Meetings/"]');
     s.check("the newest 4 show first", (await rows.count()) === 4);
+    // Show all opens the collection (#373): Meetings about the project, 6 rows, the about: chip, no other project's
     await page.getByText("Show all 6").click();
-    s.check("Show all lists all 6", (await rows.count()) === 6);
+    s.check("Show all opens the Meetings collection", await waitText(page, "6 match this view"));
+    s.check(
+      "filtered on about: Northwind Portal",
+      ((await page.locator('[data-filter="about"]').textContent()) ?? "").includes("Northwind Portal"),
+    );
+    const titles = page.locator('[role="row"] [data-cell="title"]');
+    s.check("it lists all 6", (await titles.count()) === 6);
     s.check(
       "another project's meeting is not among them",
-      (await page.locator('[data-page*="Atlas Logistics sync"]').count()) === 0,
+      (await page.locator('[data-cell="title"]', { hasText: "Atlas Logistics sync" }).count()) === 0,
     );
     await rows.first().click();
     await page.locator("[data-breadcrumb]").waitFor();
@@ -351,6 +358,152 @@ const SCENARIOS = {
     );
     s.check("with its 2 meetings", (await flat.textContent())?.includes("2") ?? false);
   },
+  // collections (#373, K8): Meetings in a context lists every type: Meeting note with that context:, a filter about:
+  // narrows it, editing the about: cell writes only that note's frontmatter, and a saved view comes back after a restart
+  async collectionTable(s) {
+    const kb = { fixture: "linked-collections", keep: true };
+    await s.load(kb);
+    const { page } = s;
+    const note = p => page.evaluate(x => window.__harness.noteText(x), p);
+    const open = async (collection, context = "Agency") => {
+      await page.getByRole("tab", { name: /^Pages/ }).click();
+      const folder = page.locator(`[data-collections="${context}"]`);
+      if (!(await folder.locator(`[data-collection="${collection}"]`).count()))
+        await click(folder.getByRole("button", { name: "Collections" }).or(folder.locator("[aria-expanded]").first()));
+      await click(folder.locator(`[data-collection="${collection}"]`));
+    };
+    await open("meetings");
+    s.check("the Meetings collection opens", await waitText(page, "9 match this view"));
+    s.check("in the context", await hasText(page, "in Agency"));
+    const titles = page.locator('[role="row"] [data-cell="title"]');
+    s.check("it lists the 9 meetings with context: Agency, no thread or person", (await titles.count()) === 9);
+    // filter about: Northwind Portal
+    await click(button(page, "+ Filter"));
+    await click(page.getByRole("option", { name: "about" }));
+    await page.getByRole("combobox", { name: "about" }).fill("Northwind Portal"); // an input with a list is a combobox
+    await page.keyboard.press("Enter");
+    s.check(
+      "the about: filter narrows it to 6",
+      (await waitText(page, "6 match this view")) && (await titles.count()) === 6,
+    );
+    s.check(
+      "the chip is there",
+      ((await page.locator('[data-filter="about"]').textContent()) ?? "").includes("Northwind Portal"),
+    );
+    // editing the about: cell writes that note's frontmatter and nothing else
+    const file = "Calendar/Meetings/2026/2026-10-08 Northwind Portal sync.md";
+    const before = await note(file);
+    const cell = page
+      .locator('[role="row"]', { hasText: "2026-10-08 Northwind Portal sync" })
+      .locator('[data-cell="about"]');
+    await click(cell.locator("div").first());
+    s.check(
+      "the cell opens a listbox of projects, the link ticked",
+      await waitText(page, "Writes about: in 2026-10-08 Northwind Portal sync.md"),
+    );
+    s.check(
+      "with the one linked ticked",
+      (await page.getByRole("option", { name: /^N\s*Northwind Portal/ }).getAttribute("aria-selected")) === "true",
+    );
+    await click(page.getByRole("option", { name: /Atlas Logistics/ }));
+    await settle(page, 300);
+    const writes = await s.calls("write_note");
+    const after = await note(file);
+    s.check("one write_note, to that note", writes.length === 1 && writes[0].args.target === file);
+    s.check(
+      "only the about: line changed, every other byte kept",
+      after === before.replace('about: "[[Northwind Portal]]"', 'about: "[[Atlas Logistics]]"') && after !== before,
+    );
+    s.check("it left the filtered table", (await titles.count()) === 5);
+    // sort and save the view
+    await click(page.getByRole("button", { name: /^Sort / }));
+    await click(page.getByRole("option", { name: "Title" }));
+    await click(button(page, "Save view"));
+    await page.getByRole("textbox", { name: "View name" }).fill("Portal meetings");
+    await click(button(page, "Save"));
+    await settle(page, 200);
+    const saved = await s.calls("view_save");
+    s.check(
+      "Save view writes the view with its filter and sort",
+      saved.length === 1 &&
+        saved[0].args.name === "Portal meetings" &&
+        saved[0].args.view.filters[0].is === "Northwind Portal" &&
+        saved[0].args.view.sort.key === "title",
+    );
+    s.check("its file is named", await hasText(page, ".relay/views/Portal meetings.json"));
+    await settle(page, 500);
+    // restart: the saved view reopens with its filter and sort
+    await s.load(kb);
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await click(page.locator("[data-saved-views] [aria-expanded]").first());
+    await click(page.locator('[data-saved-view="Portal meetings"]'));
+    s.check("the saved view reopens with its about: filter", await waitText(page, "Northwind Portal"));
+    s.check(
+      "and its sort",
+      (await button(page, "Sort Title ↓").count()) === 1 && (await page.locator('[data-filter="about"]').count()) === 1,
+    );
+    // a note that was not meant to be touched stays as it was
+    s.check(
+      "the other meeting notes are untouched",
+      (await note("Calendar/Meetings/2026/2026-09-24 Northwind Portal sync.md")).includes(
+        'about: "[[Northwind Portal]]"',
+      ),
+    );
+  },
+
+  // collections (#373, K9): Projects by status as a board; dragging a card to a lane writes status: and only that line;
+  // a meeting's stage is derived, so its board has no moves
+  async collectionBoard(s) {
+    await s.load({ fixture: "linked-collections" });
+    const { page } = s;
+    const note = p => page.evaluate(x => window.__harness.noteText(x), p);
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    const folder = page.locator('[data-collections="Agency"]');
+    await click(folder.locator("[aria-expanded]").first());
+    await click(folder.locator('[data-collection="projects"]'));
+    await waitText(page, "match this view");
+    await click(page.getByRole("tab", { name: "Board" }));
+    const lane = name => page.locator(`[data-lane="${name}"]`);
+    s.check(
+      "the board has the lanes of status:",
+      (await lane("Active").count()) === 1 && (await lane("Paused").count()) === 1,
+    );
+    const card = "Contexts/Agency/Projects/Atlas Logistics/Atlas Logistics.md";
+    const before = await note(card);
+    s.check("Atlas Logistics is Active", (await lane("Active").locator(`[data-card="${card}"]`).count()) === 1);
+    const from = await page.locator(`[data-card="${card}"]`).boundingBox();
+    const to = await lane("Paused").boundingBox();
+    await page.mouse.move(from.x + 20, from.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 40, from.y + 40, { steps: 3 });
+    await page.mouse.move(to.x + to.width / 2, to.y + 30, { steps: 8 });
+    s.check("a card in the air says where it lands", await waitText(page, "Drop to set status: Paused"));
+    await page.mouse.up();
+    await settle(page, 300);
+    const writes = await s.calls("write_note");
+    const after = await note(card);
+    s.check("one write_note for that note", writes.length === 1 && writes[0].args.target === card);
+    s.check(
+      "status: is Paused and nothing else changed, the comment and the keys after it as they were",
+      after === before.replace("status: Active", "status: Paused") && after.includes("# kept as written\npriority: 2"),
+    );
+    s.check("the card is in the Paused lane", (await lane("Paused").locator(`[data-card="${card}"]`).count()) === 1);
+    // a meeting's stage: derived, no moves
+    await page.locator("[data-collections]").first().locator('[data-collection="meetings"]').click();
+    await click(page.getByRole("tab", { name: "Board" }));
+    s.check("the stage lanes", (await lane("planned").count()) === 1 && (await lane("wrapped").count()) === 1);
+    s.check("the board says its cards do not move", await hasText(page, "Stage is worked out from each note"));
+    const meet = page.locator('[data-card^="Calendar/Meetings/"]').first();
+    const mb = await meet.boundingBox();
+    const wb = await lane("wrapped").boundingBox();
+    await page.mouse.move(mb.x + 20, mb.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(wb.x + wb.width / 2, wb.y + 40, { steps: 8 });
+    await page.mouse.up();
+    await settle(page, 300);
+    s.check("dragging a meeting card writes nothing", (await s.calls("write_note")).length === 1);
+  },
+
   // files inside a page (#368, K4): an image, a PDF, audio and a section of a note drawn in place of their markdown; a
   // screenshot pasted, files dropped (with the insertion line) and a 312 MB one refused with the toast
   async embeds(s) {

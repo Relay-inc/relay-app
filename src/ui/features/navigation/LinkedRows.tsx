@@ -1,6 +1,6 @@
-import { useState } from "react";
 import { noteName } from "../../../domain/navigation/pages";
-import { LINKED_KEYS, LINKED_SHOWN, type LinkedKey } from "../../../domain/workspace/linked";
+import { LINKED_KEYS, LINKED_SHOWN } from "../../../domain/workspace/linked";
+import { openCollection } from "../../../application/collections/collections";
 import { linkedOf } from "../../../application/navigation/linked";
 import { openPage, openPagePath, togglePage } from "../../../application/navigation/pages";
 import { useNavigationStore } from "../../../application/navigation/store";
@@ -11,14 +11,13 @@ import { SidebarRow } from "./SidebarRow";
 
 /** The notes that point at a project or a context through `about:`, `context:` or `with:`, under a thin "linked here"
  *  divider: Meetings, Documents, Threads and People, each a folder of its own that unfolds to the newest four and
- *  "Show all". They are not in the project's folder: nothing moved, nothing written. `base` keeps this project's unfolding
+ *  "Show all", which opens the collection (a table of those notes). They are not in the project's folder: nothing moved, nothing written. `base` keeps this project's unfolding
  *  apart from the next one's. */
 export function LinkedRows({ name, inside, base }: { name: string; inside: string; base: string }) {
   const { t } = useT();
   const groups = useDerived(() => linkedOf(name, inside));
   const unfolded = useNavigationStore(s => s.sidebar.pagesOpen);
   const open = useDerived(() => openPagePath());
-  const [all, setAll] = useState<Set<LinkedKey>>(new Set());
   const shown = LINKED_KEYS.filter(key => groups[key].length);
   if (!shown.length) return null;
   return (
@@ -31,7 +30,7 @@ export function LinkedRows({ name, inside, base }: { name: string; inside: strin
         const id = `linked:${base}:${key}`;
         const isOpen = unfolded.has(id);
         const notes = groups[key];
-        const rows = all.has(key) ? notes : notes.slice(0, LINKED_SHOWN);
+        const rows = notes.slice(0, LINKED_SHOWN);
         return (
           <div key={key}>
             <SidebarRow
@@ -61,7 +60,12 @@ export function LinkedRows({ name, inside, base }: { name: string; inside: strin
                   <SidebarRow
                     kind="fold"
                     name={t("pages.linkedAll", { n: notes.length })}
-                    onClick={() => setAll(new Set(all).add(key))}
+                    onClick={() =>
+                      // a context's group is the context's notes, a project's the notes about it
+                      void (base.startsWith("ctx:")
+                        ? openCollection(key, name)
+                        : openCollection(key, "", [{ key: "about", is: name }]))
+                    }
                   />
                 ) : null}
               </div>

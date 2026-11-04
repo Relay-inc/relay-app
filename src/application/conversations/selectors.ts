@@ -11,6 +11,7 @@ import {
   GRAPH,
   USAGE,
   INBOX_VIEW,
+  COLLECTION_VIEW,
   isView,
   pluginIdOf,
   reviewOf,
@@ -35,6 +36,7 @@ import { useDraftsStore } from "./drafts";
 import { useReviewStore } from "../today/review";
 import { useGraphStore } from "../navigation/graph";
 import { useInboxStore } from "../inbox/store";
+import { useCollectionsStore } from "../collections/store";
 import { activeFolder } from "../navigation/workspaces";
 
 // Reads over the conversations as they are now, in the UI language set last. Components call them inside
@@ -83,6 +85,7 @@ const VIEW_ICONS: Record<string, string> = {
   [MAIL]: "mail",
   [GRAPH]: "graph",
   [INBOX_VIEW]: "inbox",
+  [COLLECTION_VIEW]: "rows",
   [ORCH]: "agent",
 };
 
@@ -114,6 +117,10 @@ function viewSummary(key: string) {
   if (key === INBOX_VIEW) {
     const n = useInboxStore.getState().notes[activeFolder()]?.length;
     return n ? t("inbox.toFile", { n }) : "";
+  }
+  if (key === COLLECTION_VIEW) {
+    const { name } = useCollectionsStore.getState();
+    return name ? t("coll.viewOf", { name }) : "";
   }
   if (key === ORCH) {
     const counts = workerCounts();
@@ -156,9 +163,11 @@ export function chatBar(key: string) {
       ? (settings().plugins?.find(plugin => plugin.id === pluginId)?.name ?? "")
       : VIEW_NAMES[key]
         ? t(VIEW_NAMES[key])
-        : review
-          ? `${t("today.kind.review")} ${review.title}`
-          : "";
+        : key === COLLECTION_VIEW
+          ? t(`coll.title.${useCollectionsStore.getState().view.collection}`)
+          : review
+            ? `${t("today.kind.review")} ${review.title}`
+            : "";
   const linkedRef = toolProject ? settings().boards?.[toolProject] : undefined;
   const linked = linkedRef && provider(linkedRef.provider);
   return {

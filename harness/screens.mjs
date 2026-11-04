@@ -2020,6 +2020,53 @@ const VIEWS = {
     await settle(page);
   },
   "pages-virtual-groups-dark": async () => VIEWS["pages-virtual-groups"]("linked-dark"),
+  // a collection (K8, K9): the Meetings of a context as a table with the filter chip, the about: cell open on its
+  // listbox; as a board by stage; the Projects board with a card in the air over the lane it sets
+  "collection-table": async (fixture = "linked-collections") => {
+    await VIEWS["collection-open"](fixture, "meetings");
+    await page.getByRole("button", { name: "+ Filter", exact: true }).click();
+    await page.getByRole("option", { name: "about" }).click();
+    await page.getByRole("combobox", { name: "about" }).fill("Northwind Portal");
+    await page.keyboard.press("Enter");
+    await waitText("6 match this view");
+    await page
+      .locator('[role="row"]', { hasText: "2026-10-08 Northwind Portal sync" })
+      .locator('[data-cell="about"] div')
+      .first()
+      .click();
+    await waitText("Writes about: in 2026-10-08 Northwind Portal sync.md");
+    await settle(page);
+  },
+  "collection-table-dark": async () => VIEWS["collection-table"]("linked-collections-dark"),
+  "collection-board": async (fixture = "linked-collections") => {
+    await VIEWS["collection-open"](fixture, "meetings");
+    await page.getByRole("tab", { name: "Board" }).click();
+    await waitText("Stage is worked out from each note");
+    await settle(page);
+  },
+  "collection-board-dark": async () => VIEWS["collection-board"]("linked-collections-dark"),
+  "collection-board-drag": async (fixture = "linked-collections") => {
+    await VIEWS["collection-open"](fixture, "projects");
+    await page.getByRole("tab", { name: "Board" }).click();
+    const card = await page.locator('[data-card$="Atlas Logistics/Atlas Logistics.md"]').boundingBox();
+    const lane = await page.locator('[data-lane="Paused"]').boundingBox();
+    await page.mouse.move(card.x + 20, card.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(card.x + 60, card.y + 40, { steps: 3 });
+    await page.mouse.move(lane.x + lane.width / 2, lane.y + 40, { steps: 8 });
+    await waitText("Drop to set status: Paused");
+    await settle(page);
+  },
+  "collection-board-drag-dark": async () => VIEWS["collection-board-drag"]("linked-collections-dark"),
+  "collection-open": async (fixture, collection) => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    const folder = page.locator('[data-collections="Agency"]');
+    await folder.locator("[aria-expanded]").first().click();
+    await folder.locator(`[data-collection="${collection}"]`).click();
+    await waitText("match this view");
+    await settle(page);
+  },
   // a project's page with "From links" under its body: meetings, documents, people, open reminders, conversations (K3)
   "project-auto-sections": async (fixture = "linked") => {
     await open(page, server.url, { fixture });

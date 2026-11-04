@@ -640,3 +640,6 @@ export const linkedNotes = () =>
 /** In the linked fixtures Delmas Bakery is a flat project: its note alone, no folder of its own. */
 export const flat = (p: string) => (p.startsWith("Contexts/Agency/Projects/Delmas Bakery/") ? "" : p);
 export const FLAT_NOTE = "Contexts/Agency/Projects/Delmas Bakery.md";
+/** For collections.ts: the fixture's projects and linked notes, as the notes they are. */
+export const projectsList = P;
+export const linkedEntries = linkedList;

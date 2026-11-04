@@ -157,10 +157,12 @@ export function togglePage(path: string, open = !useNavigationStore.getState().s
 /** A note of the workspace shown opens as a page in the middle column. */
 /** A note as a page in the middle column; with Files off in the side drawer, as before pages. */
 export const openPage = (path: string) => openPageIn(activeFolder(), path);
+/** The path a note of workspace `folder` is read and written by: the main vault's relative, another vault's absolute. */
+export const noteTarget = (folder: string, path: string) => (isMain(folder) ? path : `${folder}/${path}`);
 /** A note of any workspace (`folder`, its path in it): in the middle column, or with `beside` in the drawer next to
  *  the open conversation. */
 export function openPageIn(folder: string, path: string, beside = false) {
-  const full = isMain(folder) ? path : `${folder}/${path}`;
+  const full = noteTarget(folder, path);
   return filesOn() && !beside ? select(pageKey(full)) : openDetail(noteKey(full));
 }
 /** A page's note as a path of the workspace shown ("" when the open page is another workspace's). */
