@@ -40,6 +40,28 @@ try {
   await shot("01a-earlier");
   await page.getByRole("button", { name: /Record a meeting now/ }).click();
   await shot("01d-record-now");
+  // live transcription in the big pane: the turns so far and how far it got
+  await page.evaluate(() =>
+    window.__harness.recordingTick(754, 0.35, 0.25, {
+      upto: 731,
+      lines: [
+        { at: 688, track: 1, text: "Shall we start with the export? That is the one the partners asked about." },
+        { at: 702, track: 1, text: "So the export runs every night and the partners pick it up in the morning." },
+        { at: 715, track: 0, text: "Right, and when it fails nobody hears about it until a partner calls." },
+        { at: 719, track: 0, text: "That happened twice last month." },
+        { at: 724, track: 1, text: "Exactly. A mail to the team when the export fails would already help." },
+      ],
+    }),
+  );
+  await shot("01e-live-transcript");
+  // another item takes the pane back; the bar stays, and a click on it opens the transcript again
+  await page.getByRole("button", { name: /1 earlier/ }).click();
+  await page.getByText("Allow relay").first().click();
+  await shot("01f-recording-in-bar");
+  await page
+    .getByRole("button", { name: /Meeting \d\d:\d\d/ })
+    .first()
+    .click();
   await page.getByRole("button", { name: "Cancel" }).first().click();
   await page.getByRole("button", { name: /1 earlier/ }).click();
   await context("Agency");
@@ -53,19 +75,30 @@ try {
   await page.keyboard.press("r");
   await page.waitForTimeout(800);
   await shot("03-mail-compose");
-  await page.locator("textarea").first().evaluate(el => el.blur());
+  await page
+    .locator("textarea")
+    .first()
+    .evaluate(el => el.blur());
   await rowOf("Fix the SSO redirect loop on the portal");
   await shot("04-pr");
   await page.waitForTimeout(500);
   await shot("04b-pr-ticket");
-  await page.getByRole("button", { name: /#301 SSO redirect loop/ }).locator("visible=true").first().click();
+  await page
+    .getByRole("button", { name: /#301 SSO redirect loop/ })
+    .locator("visible=true")
+    .first()
+    .click();
   await shot("04c-ticket-window");
   await page.keyboard.press("Escape");
   await settle(page, 300);
   // the … menu: find the ticket again (a toast says what came out)
   await page.getByRole("button", { name: "More actions" }).locator("visible=true").first().click();
   await shot("04d-more-menu");
-  await page.getByRole("button", { name: /Find the ticket again/ }).locator("visible=true").first().click();
+  await page
+    .getByRole("button", { name: /Find the ticket again/ })
+    .locator("visible=true")
+    .first()
+    .click();
   await page.waitForTimeout(400);
   await shot("04e-found-again");
   // no ticket: not this one, then choose one by hand
@@ -85,7 +118,11 @@ try {
   await page.locator("div.shadow-sm button", { hasText: "Link" }).first().click();
   await page.waitForTimeout(800);
   await shot("04k-board-linked");
-  await page.getByRole("button", { name: /^Review with Claude/ }).locator("visible=true").first().click();
+  await page
+    .getByRole("button", { name: /^Review with Claude/ })
+    .locator("visible=true")
+    .first()
+    .click();
   await page.waitForTimeout(1200);
   await shot("05-review");
   // a second agent on the same diff: its findings join, the line both flagged says so
@@ -95,7 +132,7 @@ try {
   await byText(page, "const back = params.get('returnTo') ?? '/';", false).click();
   await shot("06-review-line");
   // the long file: the diff scrolls down and sideways
-  await page.locator("button[title=\"src/long.ts\"]").first().click();
+  await page.locator('button[title="src/long.ts"]').first().click();
   await settle(page, 300);
   const box = await page.locator("div.overflow-x-auto.font-mono").first().boundingBox();
   await page.mouse.move(box.x + 200, box.y + 150);
@@ -106,7 +143,11 @@ try {
   const scrolled = await page.evaluate(() => {
     const diff = document.querySelector("div.overflow-x-auto.font-mono");
     const column = diff?.closest(".overflow-y-auto");
-    return { down: column?.scrollTop ?? 0, sideways: diff?.scrollLeft ?? 0, wide: diff ? diff.scrollWidth > diff.clientWidth : false };
+    return {
+      down: column?.scrollTop ?? 0,
+      sideways: diff?.scrollLeft ?? 0,
+      wide: diff ? diff.scrollWidth > diff.clientWidth : false,
+    };
   });
   console.log("  diff scroll", JSON.stringify(scrolled));
   await shot("06b-review-scrolled");
@@ -126,7 +167,9 @@ try {
   await settle(page, 200);
   await byText(page, "Snooze: Next week").click();
   const bottom = async () => {
-    await page.evaluate(() => document.querySelectorAll(".overflow-y-auto.border-r").forEach(el => (el.scrollTop = el.scrollHeight)));
+    await page.evaluate(() =>
+      document.querySelectorAll(".overflow-y-auto.border-r").forEach(el => (el.scrollTop = el.scrollHeight)),
+    );
     await settle(page, 200);
   };
   await bottom();
@@ -138,7 +181,10 @@ try {
   await byText(page, "Harbor CRM kick-off", true).click();
   await shot("12-meeting-card");
   // the next meeting, named in the header, opens too
-  await page.locator("button", { hasText: /· then / }).first().click();
+  await page
+    .locator("button", { hasText: /· then / })
+    .first()
+    .click();
   await shot("13-next-meeting-in-header");
   // a meeting whose note has a briefing: the briefing itself, not the Write briefing button
   await byText(page, "Lunch with the accountant", true).click();
@@ -154,7 +200,10 @@ try {
   await rowOf("Acceptance checklist portal v2");
   await page.keyboard.press("r");
   await page.waitForTimeout(800);
-  await page.locator("textarea").first().evaluate(el => el.blur());
+  await page
+    .locator("textarea")
+    .first()
+    .evaluate(el => el.blur());
   await rowOf("Fix the SSO redirect loop on the portal");
   await page.locator('[data-kind="work"]', { hasText: "Acceptance checklist" }).first().click();
   await shot("14-draft-from-sidebar");

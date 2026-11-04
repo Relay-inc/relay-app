@@ -19,8 +19,27 @@ use tauri::{AppHandle, Manager, State};
 
 const RATE: usize = 16_000;
 
-struct Track { stop: Arc<AtomicBool>, level: Arc<AtomicU32>, done: JoinHandle<Result<(), String>> }
-struct Session { dir: PathBuf, tracks: Vec<(&'static str, Track)>, ticking: Arc<AtomicBool>, _tap: Option<tap::Tap> }
+/// A track's audio at 16 kHz that live transcription has not taken yet: (index of its first sample, the samples).
+type Heard = Arc<Mutex<(usize, Vec<f32>)>>;
+struct Track { stop: Arc<AtomicBool>, level: Arc<AtomicU32>, heard: Heard, done: JoinHandle<Result<(), String>> }
+/// What live transcription made of the recording so far. `closed` once Stop took it: a call that returns later is
+/// thrown away, the final pass already covers that audio.
+#[derive(Default)]
+struct Live {
+    lines: Vec<(usize, f32, f32, String)>, // track, start and end in seconds, text
+    upto: Vec<usize>,                     // per track: the samples before this index are transcribed
+    fresh: Vec<Value>,                    // lines the bar has not been sent yet
+    gave_up: bool,                        // the model stalled: the rest waits for Stop
+    closed: bool,
+}
+struct Session {
+    dir: PathBuf,
+    tracks: Vec<(&'static str, Track)>,
+    ticking: Arc<AtomicBool>,
+    live: Arc<Mutex<Live>>,
+    listened: mpsc::Receiver<()>, // closes when the live worker ended
+    _tap: Option<tap::Tap>,
+}
 
 #[derive(Default)]
 pub struct MeetingRec { session: Mutex<Option<Session>> }
@@ -28,8 +47,8 @@ pub struct MeetingRec { session: Mutex<Option<Session>> }
 /// Records `device` into a mono float WAV at its own rate, on a thread that owns the stream (it may not move threads).
 /// The callback only hands the samples over; the thread writes them and keeps the loudest one for the meter.
 fn track(device: cpal::Device, path: PathBuf) -> Result<Track, String> {
-    let (stop, level) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicU32::new(0)));
-    let (stopped, loudest) = (stop.clone(), level.clone());
+    let (stop, level, heard) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicU32::new(0)), Heard::default());
+    let (stopped, loudest, hearing) = (stop.clone(), level.clone(), heard.clone());
     let (ready, started) = mpsc::channel();
     let done = std::thread::spawn(move || {
         let opened = (|| {
@@ -48,15 +67,16 @@ fn track(device: cpal::Device, path: PathBuf) -> Result<Track, String> {
                 None,
             ).map_err(|e| e.to_string())?;
             stream.play().map_err(|e| e.to_string())?;
-            Ok((stream, writer, rx))
+            Ok((stream, writer, rx, Down::new(config.sample_rate())))
         })();
-        let (stream, mut writer, rx) = match opened {
+        let (stream, mut writer, rx, mut down) = match opened {
             Ok(v) => { ready.send(Ok(())).ok(); v }
             Err(e) => { ready.send(Err(e.clone())).ok(); return Err(e); }
         };
         let mut write = |chunk: Vec<f32>| -> Result<(), String> {
             // a positive float orders like its bits
             loudest.fetch_max(chunk.iter().fold(0f32, |a, x| a.max(x.abs())).to_bits(), Relaxed);
+            down.push(&chunk, &mut hearing.lock().unwrap().1);
             chunk.into_iter().try_for_each(|s| writer.write_sample(s)).map_err(|e| e.to_string())
         };
         while !stopped.load(Relaxed) {
@@ -67,7 +87,77 @@ fn track(device: cpal::Device, path: PathBuf) -> Result<Track, String> {
         writer.finalize().map_err(|e| e.to_string())
     });
     started.recv().map_err(|e| e.to_string())??;
-    Ok(Track { stop, level, done })
+    Ok(Track { stop, level, heard, done })
+}
+
+/// Linear interpolation down to 16 kHz as the samples arrive; the position carries over between chunks, so an hour
+/// does not drift against the file afconvert makes at Stop.
+struct Down { step: f64, pos: f64, carry: Vec<f32> }
+impl Down {
+    fn new(rate: u32) -> Self { Down { step: rate as f64 / RATE as f64, pos: 0.0, carry: vec![] } }
+    fn push(&mut self, chunk: &[f32], out: &mut Vec<f32>) {
+        self.carry.extend_from_slice(chunk);
+        while self.pos + 1.0 < self.carry.len() as f64 {
+            let (j, f) = (self.pos as usize, self.pos.fract() as f32);
+            out.push(self.carry[j] + (self.carry[j + 1] - self.carry[j]) * f);
+            self.pos += self.step;
+        }
+        let used = (self.pos as usize).min(self.carry.len());
+        self.carry.drain(..used);
+        self.pos -= used as f64;
+    }
+}
+
+/// What live transcription does next with a track's untranscribed tail.
+#[derive(Debug, PartialEq)]
+enum Next { Speech(usize, usize), Skip(usize), Wait }
+/// The first window of `heard` that can no longer grow: one with a later window after it, or with more silence behind
+/// it than a window bridges. A long silence is skipped, keeping its last seconds for speech that starts in them.
+fn next(heard: &[f32]) -> Next {
+    let wins = windows(speech_regions(heard));
+    match wins.first() {
+        Some(&(a, b)) if wins.len() > 1 || heard.len() - b.min(heard.len()) > WINDOW_PAUSE + RATE => Next::Speech(a, b.min(heard.len())),
+        None if heard.len() > 30 * RATE => Next::Skip(heard.len() - 5 * RATE),
+        _ => Next::Wait,
+    }
+}
+
+/// Transcribes the tracks while they record, window by window, until `on` goes off or the model stalls. Lines go into
+/// `live` (and its `fresh`, for the bar); the audio they cover leaves `heard`.
+fn listen(app: AppHandle, heard: Vec<Heard>, live: Arc<Mutex<Live>>, on: Arc<AtomicBool>) {
+    while on.load(Relaxed) {
+        let mut took = false;
+        for (t, track) in heard.iter().enumerate() {
+            if !on.load(Relaxed) { return; }
+            let (from, tail) = { let h = track.lock().unwrap(); (h.0, h.1.clone()) };
+            let (text, used) = match next(&tail) {
+                Next::Wait => continue,
+                Next::Skip(n) => (None, n),
+                Next::Speech(a, b) => match region_text(&app, &tail[a..b]) {
+                    Ok(Some(segments)) => (Some((from + a, segments)), b),
+                    _ => { live.lock().unwrap().gave_up = true; return; }
+                },
+            };
+            let mut l = live.lock().unwrap();
+            if l.closed { return; }
+            if let Some((at, segments)) = text {
+                let at = at as f32 / RATE as f32;
+                for (s, e, text) in segments {
+                    let text = text.trim().to_string();
+                    if text.is_empty() { continue; }
+                    l.fresh.push(json!({ "at": at + s, "track": t, "text": text }));
+                    l.lines.push((t, at + s, at + e, text));
+                }
+            }
+            l.upto[t] = from + used;
+            drop(l);
+            let mut h = track.lock().unwrap();
+            h.1.drain(..used);
+            h.0 += used;
+            took = true;
+        }
+        if !took { std::thread::sleep(Duration::from_secs(1)); }
+    }
 }
 
 /// Starts recording: the microphone always, what the Mac plays when the tap works. `on_tick` gets the seconds and the
@@ -90,31 +180,50 @@ pub fn meeting_record_start(app: AppHandle, state: State<MeetingRec>, on_tick: C
     };
     let ticking = Arc::new(AtomicBool::new(true));
     let levels: Vec<_> = tracks.iter().map(|(name, t)| (*name, t.level.clone())).collect();
+    let live = Arc::new(Mutex::new(Live { upto: vec![0; tracks.len()], ..Default::default() }));
+    let heard: Vec<Heard> = tracks.iter().map(|(_, t)| t.heard.clone()).collect();
+    let (on, listening) = (ticking.clone(), live.clone());
+    let (listener, listened) = mpsc::channel::<()>();
+    std::thread::spawn(move || { listen(app, heard, listening, on); drop(listener); });
     let on = ticking.clone();
+    let shown = live.clone();
     let started = Instant::now();
     std::thread::spawn(move || while on.load(Relaxed) {
         let mut tick = json!({ "secs": started.elapsed().as_secs() });
         for (name, level) in &levels { tick[*name] = json!(f32::from_bits(level.swap(0, Relaxed)).min(1.0)); }
+        {
+            let mut l = shown.lock().unwrap();
+            if !l.fresh.is_empty() { tick["lines"] = Value::Array(std::mem::take(&mut l.fresh)); }
+            tick["upto"] = json!(l.upto.iter().min().copied().unwrap_or(0) / RATE);
+            if l.gave_up { tick["live"] = json!(false); }
+        }
         if on_tick.send(tick).is_err() { break; }
         std::thread::sleep(Duration::from_millis(250));
     });
     let answer = json!({ "system": system.is_some(), "why": why });
-    *session = Some(Session { dir, tracks, ticking, _tap: system });
+    *session = Some(Session { dir, tracks, ticking, live, listened, _tap: system });
     Ok(answer)
 }
 
-fn end(state: &MeetingRec) -> Result<PathBuf, String> {
+/// What live transcription had when the recording stopped: its lines and, per track, how far they reach.
+type Done = (Vec<(usize, f32, f32, String)>, Vec<usize>);
+fn end(state: &MeetingRec) -> Result<(PathBuf, Done), String> {
     let session = state.session.lock().unwrap().take().ok_or("not recording")?;
     session.ticking.store(false, Relaxed);
     for (_, t) in &session.tracks { t.stop.store(true, Relaxed); }
     for (_, t) in session.tracks { t.done.join().map_err(|_| "a recording thread panicked".to_string())??; }
-    Ok(session.dir) // the tap goes with the session
+    // the window it is on is worth a few seconds' wait; a stalled call is not, the final pass redoes that audio
+    session.listened.recv_timeout(Duration::from_secs(15)).ok();
+    let mut l = session.live.lock().unwrap();
+    l.closed = true;
+    let heard = (std::mem::take(&mut l.lines), std::mem::take(&mut l.upto));
+    Ok((session.dir, heard)) // the tap goes with the session
 }
 
 /// Stops and throws the recording away.
 #[tauri::command]
 pub fn meeting_record_cancel(state: State<MeetingRec>) -> Result<(), String> {
-    let dir = end(&state)?;
+    let (dir, _) = end(&state)?;
     std::fs::remove_dir_all(dir).map_err(|e| e.to_string())
 }
 
@@ -122,8 +231,8 @@ pub fn meeting_record_cancel(state: State<MeetingRec>) -> Result<(), String> {
 /// the two speakers in the transcript, `on_progress` gets 0..1 while it transcribes. Answers the files' vault paths.
 #[tauri::command]
 pub async fn meeting_record_stop(app: AppHandle, state: State<'_, MeetingRec>, title: String, me: String, others: String, on_progress: Channel<f64>) -> Result<Value, String> {
-    let dir = end(&state)?;
-    save(app, dir, title, me, others, on_progress).await
+    let (dir, heard) = end(&state)?;
+    save(app, dir, title, me, others, heard, on_progress).await
 }
 
 /// The folders of recordings a failure kept (one that worked or was cancelled is gone), newest first: what a restart
@@ -154,7 +263,7 @@ pub async fn meeting_record_retry(app: AppHandle, state: State<'_, MeetingRec>, 
     let dir = recordings(&app)?.join(&folder);
     // only a folder this app made: its name is a start time, no path
     if started(&dir).is_none() || !dir.join("me.wav").is_file() { return Err("no kept recording".into()); }
-    save(app, dir, title, me, others, on_progress).await
+    save(app, dir, title, me, others, (vec![], vec![]), on_progress).await
 }
 
 /// When a recording started: its folder's name.
@@ -162,12 +271,12 @@ fn started(dir: &Path) -> Option<chrono::NaiveDateTime> {
     chrono::NaiveDateTime::parse_from_str(&dir.file_name()?.to_string_lossy(), "%Y%m%d-%H%M%S").ok()
 }
 
-async fn save(app: AppHandle, dir: PathBuf, title: String, me: String, others: String, on_progress: Channel<f64>) -> Result<Value, String> {
+async fn save(app: AppHandle, dir: PathBuf, title: String, me: String, others: String, heard: Done, on_progress: Channel<f64>) -> Result<Value, String> {
     let vault = super::need_vault(&app.state::<super::App>())?;
     let keep_audio = app.state::<super::App>().settings.lock().unwrap()["voice"]["keepAudio"] != false;
     let work = dir.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let done = write_out(&app, &work, Path::new(&vault), &title, [&me, &others], keep_audio, &on_progress);
+        let done = write_out(&app, &work, Path::new(&vault), &title, [&me, &others], keep_audio, heard, &on_progress);
         // kept when it failed, so nothing is lost: the error says where it is
         match done {
             Ok(v) => { std::fs::remove_dir_all(&work).ok(); Ok(v) }
@@ -214,7 +323,8 @@ fn region_text(app: &AppHandle, samples: &[f32]) -> Result<Option<Vec<(f32, f32,
     Ok(None)
 }
 
-fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, speakers: [&str; 2], keep_audio: bool, progress: &Channel<f64>) -> Result<Value, String> {
+/// `heard`: what live transcription already did (lines, and per track where they end); only the rest is transcribed.
+fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, speakers: [&str; 2], keep_audio: bool, heard: Done, progress: &Channel<f64>) -> Result<Value, String> {
     // each track as Parakeet takes it: 16 kHz mono 16-bit
     let mut tracks = vec![];
     for (i, name) in ["me", "others"].iter().enumerate() {
@@ -231,8 +341,16 @@ fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, speakers: [
     let stem = free_stem(&folder, &format!("{} {}", started.format("%Y-%m-%d %H%M"), safe_name(title)));
     // the speech of both tracks in windows of up to 25 s, transcribed in turn: one model call per window, not per
     // stretch (whisper pays for a full 30 s window on every call, and most stretches are a second or two)
-    let regions: Vec<(usize, (usize, usize))> = tracks.iter().enumerate().flat_map(|(t, (_, s))| windows(speech_regions(s)).into_iter().map(move |r| (t, r))).collect();
-    let mut lines = vec![];
+    let (done, upto) = heard;
+    // a track that hardly said anything is left out of the transcript and the audio: the Mac's in a meeting in the
+    // room (a notification or two), the microphone's when you only listened
+    let used: Vec<bool> = tracks.iter().map(|(_, s)| said_something(s)).collect();
+    let regions: Vec<(usize, (usize, usize))> = tracks.iter().enumerate().filter(|(t, _)| used[*t]).flat_map(|(t, (_, s))| {
+        let from = upto.get(t).copied().unwrap_or(0).min(s.len());
+        windows(speech_regions(&s[from..])).into_iter().map(move |(a, b)| (t, (from + a, from + b)))
+    }).collect();
+    let mut lines: Vec<Line> = done.into_iter().filter(|(t, ..)| *t < tracks.len() && used[*t])
+        .map(|(t, at, end, text)| Line { at, end, mic: t == 0, who: tracks[t].0, text }).collect();
     let mut stalled = 0;
     for (n, (t, (a, b))) in regions.iter().enumerate() {
         let secs = |i: usize| i as f32 / RATE as f32;
@@ -252,7 +370,9 @@ fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, speakers: [
     // the audio only once the transcript worked, so a failure leaves nothing in the vault and a retry no second copy
     let audio = if keep_audio {
         let mixed = dir.join("mixed.wav");
-        write_mix(&mixed, &tracks.iter().map(|(_, s)| s.as_slice()).collect::<Vec<_>>())?;
+        // all of them when none said anything, so the audio is still there to listen to
+        let heard: Vec<&[f32]> = tracks.iter().zip(&used).filter(|(_, u)| **u || !used.contains(&true)).map(|((_, s), _)| s.as_slice()).collect();
+        write_mix(&mixed, &heard)?;
         let m4a = folder.join(format!("{stem}.m4a"));
         afconvert(&["-f", "m4af", "-d", "aac", "-b", "48000"], &mixed, &m4a)?;
         Some(m4a)
@@ -325,15 +445,20 @@ pub(crate) fn speech_regions(s: &[f32]) -> Vec<(usize, usize)> {
         .collect()
 }
 
+/// Whether a track holds at least 5 s of speech in all: less is a few sounds, not someone talking.
+fn said_something(s: &[f32]) -> bool {
+    speech_regions(s).iter().map(|(a, b)| b - a).sum::<usize>() >= 5 * RATE
+}
+
 /// The stretches of one track joined into windows for the model: the next one joins while the pause before it is at
 /// most 5 s and the window stays within 25 s (what whisper takes in one go, its window is 30 s).
+const WINDOW_PAUSE: usize = 5 * RATE;
+const WINDOW_MAX: usize = 25 * RATE;
 fn windows(regions: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
-    const PAUSE: usize = 5 * RATE;
-    const MAX: usize = 25 * RATE;
     let mut out: Vec<(usize, usize)> = vec![];
     for (a, b) in regions {
         match out.last_mut() {
-            Some(w) if a <= w.1 + PAUSE && b - w.0 <= MAX => w.1 = b,
+            Some(w) if a <= w.1 + WINDOW_PAUSE && b - w.0 <= WINDOW_MAX => w.1 = b,
             _ => out.push((a, b)),
         }
     }
@@ -509,6 +634,45 @@ mod tests {
         assert_eq!(w.len(), 2, "{w:?}");
         assert!(w.iter().all(|(a, b)| b - a <= 25 * RATE));
         assert!(windows(vec![]).is_empty());
+    }
+
+    #[test]
+    fn down_to_16k_in_chunks_keeps_length_and_matches_one_go() {
+        let second: Vec<f32> = (0..48_000).map(|i| (i as f32 * 0.01).sin()).collect();
+        let (mut down, mut out) = (Down::new(48_000), vec![]);
+        for chunk in second.chunks(512) { down.push(chunk, &mut out); }
+        assert!((out.len() as i64 - 16_000).abs() <= 1, "{}", out.len());
+        // ten minutes at 44.1 kHz in 512-sample chunks do not drift: the count follows the rate
+        let (mut down, mut buf, mut total) = (Down::new(44_100), vec![], 0usize);
+        for _ in 0..(600 * 44_100 / 512) { down.push(&[0.0; 512], &mut buf); total += buf.len(); buf.clear(); }
+        assert!((total as i64 - (600 * 44_100 / 512 * 512) as i64 * 16_000 / 44_100).abs() <= 1, "{total}");
+        let whole = super::super::dictation::resample(&second, 48_000, 16_000);
+        assert!(out.iter().zip(&whole).all(|(a, b)| (a - b).abs() < 1e-4));
+    }
+
+    #[test]
+    fn live_takes_a_window_once_nothing_can_join_it() {
+        let tone = |secs: f32| (0..(secs * 16_000.0) as usize).map(|i| (i as f32 * 0.05).sin() * 0.3).collect::<Vec<f32>>();
+        let quiet = |secs: f32| vec![0.0005f32; (secs * 16_000.0) as usize];
+        // speech, then 3 s: the next words could still join it
+        assert_eq!(next(&[tone(2.0), quiet(3.0)].concat()), Next::Wait);
+        // 7 s of quiet after it: done
+        assert!(matches!(next(&[tone(2.0), quiet(7.0)].concat()), Next::Speech(0, b) if b > 2 * RATE && b < 3 * RATE));
+        // a full window and the talk goes on: the first is done
+        assert!(matches!(next(&tone(40.0)), Next::Speech(0, b) if b <= WINDOW_MAX + RATE));
+        // a long silence is skipped but for its last 5 s
+        assert_eq!(next(&quiet(40.0)), Next::Skip(35 * RATE));
+        assert_eq!(next(&quiet(10.0)), Next::Wait);
+    }
+
+    #[test]
+    fn a_track_with_a_few_sounds_said_nothing() {
+        let tone = |secs: f32| (0..(secs * 16_000.0) as usize).map(|i| (i as f32 * 0.05).sin() * 0.3).collect::<Vec<f32>>();
+        let quiet = |secs: f32| vec![0.0005f32; (secs * 16_000.0) as usize];
+        // two notification dings in ten minutes
+        assert!(!said_something(&[quiet(300.0), tone(0.5), quiet(300.0), tone(0.5)].concat()));
+        assert!(!said_something(&vec![0.0; 16_000 * 60]));
+        assert!(said_something(&[quiet(60.0), tone(4.0), quiet(2.0), tone(3.0), quiet(60.0)].concat()));
     }
 
     #[test]

@@ -8,6 +8,8 @@ import {
   meetingRecordStart,
   meetingRecordStop,
 } from "../../infrastructure/backend";
+import type { LiveLine } from "../../infrastructure/backend";
+export type { LiveLine };
 import { settings } from "../settings/settings";
 import { makeStore } from "../make-store";
 import { toast } from "../navigation/navigation";
@@ -32,6 +34,10 @@ type RecordingState = {
   error: string;
   retry: string; // the kept recording (its folder) the error came after, so it can be tried again
   kept: string[]; // the recordings a failure kept, newest first: still there after a restart
+  lines: LiveLine[]; // what live transcription heard so far, the latest ones
+  upto: number; // seconds of the recording it transcribed
+  live: boolean; // false once the model stalled: the rest is transcribed after Stop
+  shown: boolean; // open in Today's big pane (from Record, or a click on the bar), until another item is picked
 };
 export const useRecordingStore = makeStore<RecordingState>(() => ({
   meeting: null,
@@ -47,6 +53,10 @@ export const useRecordingStore = makeStore<RecordingState>(() => ({
   error: "",
   retry: "",
   kept: [],
+  lines: [],
+  upto: 0,
+  live: true,
+  shown: false,
 }));
 const set = (patch: Partial<RecordingState>) => useRecordingStore.setState(patch);
 const rec = () => useRecordingStore.getState();
@@ -55,10 +65,32 @@ const rec = () => useRecordingStore.getState();
 export async function startRecording(id: string, fallback?: Meeting) {
   const meeting = useCalendarStore.getState().list.find(x => x.id === id) ?? fallback;
   if (!meeting || rec().phase !== "idle") return;
-  set({ meeting, phase: "recording", secs: 0, me: 0, others: 0, heard: false, progress: 0, error: "", retry: "" });
+  set({
+    meeting,
+    phase: "recording",
+    secs: 0,
+    me: 0,
+    others: 0,
+    heard: false,
+    progress: 0,
+    error: "",
+    retry: "",
+    lines: [],
+    upto: 0,
+    live: true,
+    shown: true,
+  });
   try {
-    const { system, why } = await meetingRecordStart(({ secs, me = 0, others = 0 }) =>
-      set({ secs, me, others, heard: rec().heard || others > 0 }),
+    const { system, why } = await meetingRecordStart(({ secs, me = 0, others = 0, lines, upto, live }) =>
+      set({
+        secs,
+        me,
+        others,
+        heard: rec().heard || others > 0,
+        ...(lines?.length ? { lines: [...rec().lines, ...lines].sort((a, b) => a.at - b.at) } : {}),
+        ...(upto !== undefined ? { upto } : {}),
+        ...(live === false ? { live: false } : {}),
+      }),
     );
     set({ system, why: why ?? "" });
   } catch (e) {
@@ -84,6 +116,9 @@ export function recordNow() {
     people: [],
   });
 }
+
+/** The recording in Today's big pane: its live transcript, Stop and Cancel. */
+export const showRecording = (shown = true) => set({ shown });
 
 export async function stopRecording() {
   if (rec().phase === "recording") await save(meetingRecordStop);
