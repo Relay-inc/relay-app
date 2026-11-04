@@ -196,13 +196,18 @@ fn within<T: Send + 'static>(limit: Duration, f: impl FnOnce() -> T + Send + 'st
     rx.recv_timeout(limit).ok()
 }
 
-/// The text of one stretch. When the call stalls the model is dropped from its slot (see `with_meeting_model`), so
-/// the second try loads a fresh one; None when that stalls too.
-fn region_text(app: &AppHandle, samples: &[f32]) -> Result<Option<String>, String> {
+/// What a window says, as (start, end, text) in seconds from the window's start: the model's segments, or the whole
+/// window as one when it gives none. When the call stalls the model is dropped from its slot (see
+/// `with_meeting_model`), so the second try loads a fresh one; None when that stalls too.
+fn region_text(app: &AppHandle, samples: &[f32]) -> Result<Option<Vec<(f32, f32, String)>>, String> {
+    let len = samples.len() as f32 / RATE as f32;
     for _ in 0..2 {
         let (app, samples) = (app.clone(), samples.to_vec());
         let done = within(STALL, move || super::dictation::with_meeting_model(&app, |model, options|
-            model.transcribe(&samples, options).map(|r| r.text).map_err(|e| e.to_string())));
+            model.transcribe(&samples, options).map(|r| match r.segments {
+                Some(segs) if !segs.is_empty() => segs.into_iter().map(|g| (g.start, g.end.max(g.start), g.text)).collect(),
+                _ => vec![(0.0, len, r.text)],
+            }).map_err(|e| e.to_string())));
         if let Some(done) = done { return done.map(Some); }
         eprintln!("meeting: a stretch did not transcribe within {STALL:?}");
     }
@@ -224,19 +229,24 @@ fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, speakers: [
     // named by when the recording started (its folder's name), so a retry later in the day keeps the meeting's time
     let started = started(dir).unwrap_or_else(|| chrono::Local::now().naive_local());
     let stem = free_stem(&folder, &format!("{} {}", started.format("%Y-%m-%d %H%M"), safe_name(title)));
-    // every stretch of speech of both tracks, transcribed in turn
-    let regions: Vec<(usize, (usize, usize))> = tracks.iter().enumerate().flat_map(|(t, (_, s))| speech_regions(s).into_iter().map(move |r| (t, r))).collect();
+    // the speech of both tracks in windows of up to 25 s, transcribed in turn: one model call per window, not per
+    // stretch (whisper pays for a full 30 s window on every call, and most stretches are a second or two)
+    let regions: Vec<(usize, (usize, usize))> = tracks.iter().enumerate().flat_map(|(t, (_, s))| windows(speech_regions(s)).into_iter().map(move |r| (t, r))).collect();
     let mut lines = vec![];
     let mut stalled = 0;
     for (n, (t, (a, b))) in regions.iter().enumerate() {
         let secs = |i: usize| i as f32 / RATE as f32;
-        let text = match region_text(app, &tracks[*t].1[*a..*b])? {
-            Some(text) => { stalled = 0; text }
-            // two stretches in a row means the model is gone, not one unlucky call: keep the recording, try later
+        let segments = match region_text(app, &tracks[*t].1[*a..*b])? {
+            Some(segments) => { stalled = 0; segments }
+            // two windows in a row means the model is gone, not one unlucky call: keep the recording, try later
             None if stalled >= 1 => return Err("the speech model stopped answering, try again later".into()),
-            None => { stalled += 1; SKIPPED.into() }
+            None => { stalled += 1; vec![(0.0, secs(b - a), SKIPPED.into())] }
         };
-        if !text.trim().is_empty() { lines.push(Line { at: secs(*a), end: secs(*b), mic: *t == 0, who: tracks[*t].0, text: text.trim().to_string() }); }
+        // a line per segment at its own time, so turns between the tracks and the echo check stay as fine as before
+        for (from, to, text) in segments {
+            let text = text.trim();
+            if !text.is_empty() { lines.push(Line { at: secs(*a) + from, end: secs(*a) + to, mic: *t == 0, who: tracks[*t].0, text: text.to_string() }); }
+        }
         progress.send((n + 1) as f64 / regions.len() as f64).ok();
     }
     // the audio only once the transcript worked, so a failure leaves nothing in the vault and a retry no second copy
@@ -313,6 +323,21 @@ pub(crate) fn speech_regions(s: &[f32]) -> Vec<(usize, usize)> {
         .filter(|(a, b)| b - a >= 10) // under 300 ms is a click, not a word
         .map(|(a, b)| (a.saturating_sub(5) * FRAME, ((b + 5) * FRAME).min(s.len())))
         .collect()
+}
+
+/// The stretches of one track joined into windows for the model: the next one joins while the pause before it is at
+/// most 5 s and the window stays within 25 s (what whisper takes in one go, its window is 30 s).
+fn windows(regions: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
+    const PAUSE: usize = 5 * RATE;
+    const MAX: usize = 25 * RATE;
+    let mut out: Vec<(usize, usize)> = vec![];
+    for (a, b) in regions {
+        match out.last_mut() {
+            Some(w) if a <= w.1 + PAUSE && b - w.0 <= MAX => w.1 = b,
+            _ => out.push((a, b)),
+        }
+    }
+    out
 }
 
 /// A transcribed stretch: when (seconds), from which track, and what was said.
@@ -471,6 +496,19 @@ mod tests {
         // one long stretch is cut at 25 s
         assert_eq!(speech_regions(&tone(60.0)).len(), 3);
         assert!(speech_regions(&quiet(5.0)).is_empty());
+    }
+
+    #[test]
+    fn windows_join_stretches_up_to_25_s_and_keep_long_pauses_apart() {
+        let s = |secs: f32| (secs * RATE as f32) as usize;
+        // 2 s, 3 s pause, 2 s: one window; then a 10 s pause: a new one
+        assert_eq!(windows(vec![(0, s(2.0)), (s(5.0), s(7.0)), (s(17.0), s(18.0))]), vec![(0, s(7.0)), (s(17.0), s(18.0))]);
+        // ten stretches of 4 s with 1 s pauses: 25 s holds five
+        let many: Vec<_> = (0..10).map(|i| (s(i as f32 * 5.0), s(i as f32 * 5.0 + 4.0))).collect();
+        let w = windows(many);
+        assert_eq!(w.len(), 2, "{w:?}");
+        assert!(w.iter().all(|(a, b)| b - a <= 25 * RATE));
+        assert!(windows(vec![]).is_empty());
     }
 
     #[test]
