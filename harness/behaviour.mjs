@@ -1074,7 +1074,8 @@ const SCENARIOS = {
     s.check("the text names them", /@Ben Lauwers/.test(made?.args.text ?? ""));
     await page.keyboard.press("Control+Digit3");
     await click(page.getByRole("button", { name: /^Switch workspace/ }));
-    const inbox = page.getByRole("button", { name: /^Inbox/ });
+    // the Pages tab has an Inbox row of its own (#372): the workspace menu is the last one in the page
+    const inbox = page.getByRole("button", { name: /^Inbox/ }).last();
     s.check("the Inbox counts the thread that mentions you", (await inbox.textContent())?.trim() === "Inbox1");
     await click(inbox);
     await click(page.getByRole("button", { name: /Northwind Portal/ }).first());
@@ -1085,6 +1086,7 @@ const SCENARIOS = {
       "resolving takes it out of the Inbox",
       await page
         .getByRole("button", { name: /^Inbox$/ })
+        .last()
         .waitFor({ timeout: 3000 })
         .then(
           () => true,
@@ -1132,6 +1134,7 @@ const SCENARIOS = {
     await s.load();
     const { page } = s;
     const row = path => page.locator(`[data-page="${path}"]`);
+    const spec = "Contexts/Agency/Projects/Beacon Billing/Documents/Billing Spec.md";
     await click(page.getByRole("tab", { name: /^Pages/ }));
     await click(page.locator('[data-project="Beacon Billing"]'));
     await click(page.locator('[data-folder="Contexts/Agency/Projects/Beacon Billing/Documents"]'));
@@ -2647,16 +2650,18 @@ const SCENARIOS = {
     s.check("with the sheet open the Apply button is the only filled one", (await primary()) === 1);
     await click(button(page, "Move 3 files to trash"), 500);
     s.check("three files went to the trash", (await s.calls("trash_path")).length === 3);
-    s.check(
-      "the dialog closes so the toast with Undo is reachable",
-      (await page.getByRole("tab", { name: /^Garden/ }).count()) === 0,
-    );
+    s.check("the dialog stays open", (await page.getByRole("tab", { name: /^Garden/ }).count()) === 1);
     await click(button(page, "Undo"), 400);
-    s.check("one Undo puts all three back", (await s.calls("restore_path")).length === 3);
-    await click(page.getByRole("button", { name: /^Switch workspace/ }));
-    await click(button(page, "Check workspace…"), 300);
-    await click(page.getByRole("tab", { name: /^Garden/ }), 300);
+    s.check(
+      "one Undo, clicked above the open dialog, puts all three back",
+      (await s.calls("restore_path")).length === 3,
+    );
     s.check("and the row is there again", (await count("unused_attachment")) === 3);
+    // Tidy structure's Undo is reachable above the dialog too
+    await click(button(page, "Tidy structure"), 300);
+    await click(page.getByRole("button", { name: /^Apply \d+ moves$/ }), 500);
+    await click(button(page, "Undo"), 400);
+    s.check("Tidy structure's Undo works with the dialog open", (await s.calls("tidy_undo")).length === 1);
     // Ask Claude to fix properties
     await click(button(page, "Ask Claude to fix properties"), 300);
     s.check(

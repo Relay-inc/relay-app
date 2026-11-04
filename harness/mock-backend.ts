@@ -663,8 +663,8 @@ function handle(cmd: string, a: Args): unknown {
       return { root: vault.VAULT, trash: `.trash/${path.split("/").pop()}`, path };
     }
     case "restore_path":
-      trashed.delete(String(a.path));
       pages = [...pageList(), ...(trashed.get(String(a.path)) ?? [])];
+      trashed.delete(String(a.path));
       return null;
     case "note_by_event":
       return eventNotes.get(String(a.event)) ?? null;

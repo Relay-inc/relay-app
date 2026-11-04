@@ -235,9 +235,8 @@ export function GardenTab({
           onCancel={() => setSheet(null)}
           onApply={() =>
             void run(async () => {
-              await trashPages(paths("unused_attachment"));
-              // the toast with Undo sits under this dialog: close it to reach it
-              onClose();
+              await trashPages(paths("unused_attachment"), reload);
+              setSheet(null);
             })
           }
         />

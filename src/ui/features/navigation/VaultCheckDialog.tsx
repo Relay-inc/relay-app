@@ -81,7 +81,10 @@ export function VaultCheckDialog({ workspace, onClose }: { workspace: string; on
       const done = await tidyApply();
       toast(tn("tidy.done", done.moves.length), () => {
         void tidyUndo()
-          .then(() => toast(t("tidy.undone")))
+          .then(() => {
+            toast(t("tidy.undone"));
+            return read();
+          })
           .catch(e => toast(String(e)));
       });
       setTidying(false);
