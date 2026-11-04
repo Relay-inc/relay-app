@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.47] - 2026-11-04
+
 ### Added
 
 - Vault check › Garden tab: where your notes are decaying, each with a count and an action. Notes outside their home (Tidy structure), meetings without a project (pick one per row, it writes `about:`), broken links (open at the link), orphans, unused attachments (Move to trash, one Undo) and notes without a type (Ask Claude to fix properties, in Changes with Undo). Nothing runs on its own; bulk actions show a dry run first
