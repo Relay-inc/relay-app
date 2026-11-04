@@ -605,7 +605,26 @@ function handle(cmd: string, a: Args): unknown {
       return null;
     // the workspace check: a few of each kind, gone once repaired
     case "vault_check":
-      return VAULT_FINDINGS.filter(f => !repaired.has(f.id) && !(tidied && f.kind === "outside_home"));
+      return VAULT_FINDINGS.filter(f => !repaired.has(f.id));
+    case "vault_garden":
+      return gardenFindings();
+    case "garden_about":
+      gardenDone.add(String(a.path));
+      aboutSet.push([String(a.path), String(a.project)]);
+      return null;
+    case "garden_ask": {
+      const paths = (a.paths as string[]).slice(0, 20);
+      const stem = (p: string) => p.split("/").pop()!.replace(/\.md$/, "");
+      const edits = paths.map(p => [p, mockAction(String(a.action), p, null)[1][0][1]] as [string, string | null]);
+      paths.forEach(p => gardenDone.add(p));
+      recordChange(
+        `action:${a.action}`,
+        paths.length > 1 ? `${stem(paths[0])} +${paths.length - 1}` : stem(paths[0] ?? ""),
+        `Ran ${a.action} on ${paths.length} notes`,
+        edits,
+      );
+      return null;
+    }
     case "tidy_preview":
       return TIDY;
     case "tidy_apply":
@@ -644,6 +663,7 @@ function handle(cmd: string, a: Args): unknown {
       return { root: vault.VAULT, trash: `.trash/${path.split("/").pop()}`, path };
     }
     case "restore_path":
+      trashed.delete(String(a.path));
       pages = [...pageList(), ...(trashed.get(String(a.path)) ?? [])];
       return null;
     case "note_by_event":
@@ -1868,16 +1888,54 @@ const TIDY = {
   notes: 7,
 };
 let tidied = false;
+// the garden: one of each problem, gone when acted on (a project picked, a note fixed, a file trashed)
+const MEETINGS_WITHOUT_PROJECT = [
+  "Calendar/Meetings/2026/2026-10-30 Call Sofie planning Q1.md",
+  "Calendar/Meetings/2026/2026-10-22 Intake Atlas sorting line.md",
+  "Calendar/Meetings/2026/2026-10-14 Bluebird check-in.md",
+];
+const GARDEN_TYPELESS = [
+  "Resources/Notes/Pricing ideas.md",
+  "Resources/Notes/Warehouse layout.md",
+  "Inbox/Call notes.md",
+];
+const UNUSED = [
+  "Attachments/2026/floor-plan-v1.png",
+  "Attachments/2026/scan-0042.pdf",
+  "Attachments/2026/old-logo.svg",
+];
+const gardenDone = new Set<string>();
+const aboutSet: [string, string][] = []; // garden_about calls, for the checks
+const gardenFindings = () => {
+  const left = (paths: string[]) => paths.filter(p => !gardenDone.has(p) && !trashed.has(p));
+  const f = (kind: string, paths: string[], context = "") =>
+    paths.length ? [finding(kind, context, "", paths, false)] : [];
+  return [
+    ...OUTSIDE.map(([kind, , names]) =>
+      finding(
+        "outside_home",
+        "",
+        kind,
+        names.map(n => `Calendar/${n}.md`),
+        false,
+      ),
+    ).filter(() => !tidied),
+    ...f("no_project", left(MEETINGS_WITHOUT_PROJECT)),
+    ...f("broken_link", [
+      "Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md\t12\tPricewise API",
+      "Resources/Notes/Pricing ideas.md\t3\tOld offer",
+    ]),
+    ...f("orphan", [
+      "Resources/Notes/Warehouse layout.md",
+      "Resources/Notes/Old idea.md",
+      "Inbox/Scratch.md",
+      "Resources/Notes/Parking.md",
+    ]),
+    ...f("unused_attachment", left(UNUSED), String(4_300_000)),
+    ...f("no_type", left(GARDEN_TYPELESS)),
+  ];
+};
 const VAULT_FINDINGS = [
-  ...OUTSIDE.map(([kind, , names]) =>
-    finding(
-      "outside_home",
-      "",
-      kind,
-      names.map(n => `Calendar/${n}.md`),
-      false,
-    ),
-  ),
   finding("missing_file", "", "System/rules/core/team.md"),
   finding("orphan_rule", "", "System/rules/gone/context.md", ["Contexts/Gone"], false),
   finding("context_rule", "Agency", "System/rules/agency/context.md"),
@@ -2063,6 +2121,10 @@ function mockAction(action: string, path: string, selection: string | null): [st
         : `---\ntype: Document\ncontext: "[[Agency]]"\n---\n${text}`;
     return [has ? "Nothing to change" : "Added type: Document and context: Agency", [[path, next]]];
   }
+  if (action === "about") {
+    const next = /^---\n/.test(text) ? text.replace("---\n", '---\nabout: "[[Northwind Portal]]"\n') : text;
+    return ["Set about: Northwind Portal", [[path, next]]];
+  }
   if (action === "summarise") {
     const at = text.indexOf("\n", text.indexOf("# ")) + 1;
     const about = selection ? "the selected text" : "the note";
@@ -2164,6 +2226,7 @@ const harness = {
   },
   /** the files added to a page so far (attach_copy, attach_save) */
   attached: () => structuredClone(attached),
+  aboutSet: () => structuredClone(aboutSet),
   /** what a fresh session ran on when the model and effort were left to the CLI (read_agent's `resolved`) */
   resolved: (key: string, model = "opus", effort = "high") =>
     emitAgent(key, { type: "resolved", model, effort, default_model: true, default_effort: true }),

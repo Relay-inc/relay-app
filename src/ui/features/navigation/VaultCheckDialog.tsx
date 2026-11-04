@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   canRepair,
   checkWorkspace,
+  gardenWorkspace,
   repairWorkspace,
   tidyApply,
   tidyPreview,
@@ -9,10 +10,12 @@ import {
   type TidyPlan,
   type VaultFinding,
 } from "../../../application/workspace/check";
-import { outsideKinds } from "../../../domain/workspace/tidy";
+import { gardenTotal } from "../../../domain/workspace/garden";
 import { openPage } from "../../../application/navigation/pages";
 import { toast } from "../../../application/navigation/navigation";
+import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
+import { GardenTab } from "./GardenTab";
 import { TidySheet } from "./TidySheet";
 
 // what each kind of finding says; the ones about a context sit under its name, the rest under Workspace
@@ -30,17 +33,27 @@ const TEXT = {
 /** The workspace check: what the workspace shown lacks so every member's Claude works in it, grouped by context, each
  *  with Repair when Relay can put it right (an admin's, in a shared workspace), and Repair all. A path opens as a page. */
 export function VaultCheckDialog({ workspace, onClose }: { workspace: string; onClose: () => void }) {
-  const { t, tn } = useT();
+  const { t, tn, locale } = useT();
   const [found, setFound] = useState<VaultFinding[] | null>(null);
+  const [garden, setGarden] = useState<VaultFinding[] | null>(null);
+  const [tab, setTab] = useState<"health" | "garden">("health");
+  const [checkedAt, setCheckedAt] = useState("");
   const [busy, setBusy] = useState(false);
   // Tidy structure's dry run: open (`tidying`) with its plan once read
   const [tidying, setTidying] = useState(false);
   const [plan, setPlan] = useState<TidyPlan | null>(null);
   const read = () =>
-    checkWorkspace().then(setFound, e => {
-      toast(String(e));
-      onClose();
-    });
+    Promise.all([checkWorkspace(), gardenWorkspace()]).then(
+      ([health, garden]) => {
+        setFound(health);
+        setGarden(garden);
+        setCheckedAt(new Date().toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }));
+      },
+      e => {
+        toast(String(e));
+        onClose();
+      },
+    );
   useEffect(() => void read(), []); // eslint-disable-line react-hooks/exhaustive-deps
   const admin = canRepair();
   const repair = async (ids: string[]) => {
@@ -79,8 +92,6 @@ export function VaultCheckDialog({ workspace, onClose }: { workspace: string; on
     setBusy(false);
   };
   const fixable = (found ?? []).filter(f => f.fix);
-  const outside = (found ?? []).filter(f => f.kind === "outside_home");
-  const outsideTotal = outside.reduce((n, f) => n + f.paths.length, 0);
   const groups = [...new Set((found ?? []).map(f => f.context))].sort((a, b) =>
     !a ? -1 : !b ? 1 : a.localeCompare(b),
   );
@@ -134,10 +145,31 @@ export function VaultCheckDialog({ workspace, onClose }: { workspace: string; on
           else onClose();
         }}
       >
-        <h2 className="text-base font-semibold">{t("vc.title", { workspace })}</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-base font-semibold">{t("vc.heading")}</h2>
+          <span className="flex-1 min-w-0 truncate text-secondary">{workspace}</span>
+          <div role="tablist" aria-label={t("vc.tabs")} className="flex p-0.5 rounded-lg bg-fill">
+            {(["health", "garden"] as const).map(id => (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={tab === id}
+                className={`h-6 px-3 rounded-md cursor-pointer ${tab === id ? "bg-bg font-medium shadow-sm" : "text-secondary"}`}
+                onClick={() => setTab(id)}
+              >
+                {t(id === "health" ? "vc.tabHealth" : "vc.tabGarden")}
+                {id === "garden" && garden ? (
+                  <span className="ml-1 text-xs text-secondary tabular-nums">{gardenTotal(garden)}</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="min-h-0 overflow-y-auto grid content-start gap-3">
-          {!found ? (
+          {!found || !garden ? (
             <p className="text-secondary">{t("vc.checking")}</p>
+          ) : tab === "garden" ? (
+            <GardenTab found={garden} admin={admin} tidying={tidying} onTidy={tidy} onClose={onClose} reload={read} />
           ) : !found.length ? (
             <p className="text-secondary">{t("vc.clean")}</p>
           ) : (
@@ -147,7 +179,7 @@ export function VaultCheckDialog({ workspace, onClose }: { workspace: string; on
                   {group || t("vc.workspace")}
                 </h3>
                 {found
-                  .filter(f => f.context === group && f.kind !== "outside_home")
+                  .filter(f => f.context === group)
                   .map(f => (
                     <div key={f.id} data-finding={f.kind} className="flex items-start gap-3">
                       <div className="flex-1 min-w-0 text-secondary break-words">{says(f)}</div>
@@ -166,38 +198,25 @@ export function VaultCheckDialog({ workspace, onClose }: { workspace: string; on
                       )}
                     </div>
                   ))}
-                {!group && outside.length ? (
-                  <div data-finding="outside_home" className="flex items-start gap-3">
-                    <span className="flex-none h-6 min-w-8 px-2 grid place-items-center rounded-full bg-accent-soft text-accent-text text-xs font-semibold tabular-nums">
-                      {outsideTotal}
-                    </span>
-                    <div className="flex-1 min-w-0 grid break-words">
-                      <span className="font-semibold">{t("vc.outsideTitle")}</span>
-                      <span className="text-secondary">{t("vc.outsideSub", { kinds: outsideKinds(outside) })}</span>
-                    </div>
-                    {admin ? (
-                      <button
-                        className={`btn flex-none cursor-pointer disabled:opacity-50 ${fixable.length ? "" : "btn-primary"}`}
-                        disabled={busy}
-                        onClick={tidy}
-                      >
-                        {t("vc.tidy")}
-                      </button>
-                    ) : (
-                      <span className="flex-none text-xs text-tertiary">{t("vc.outsideAdmin")}</span>
-                    )}
-                  </div>
-                ) : null}
               </section>
             ))
           )}
         </div>
         <div className={`flex items-center justify-end gap-2 pt-1 ${tidying ? "invisible" : ""}`}>
-          {fixable.length && !admin ? <p className="flex-1 text-xs text-tertiary">{t("vc.adminOnly")}</p> : null}
+          {tab === "garden" ? (
+            <p className="flex-1 flex items-center gap-2 text-xs text-secondary">
+              <Icon name="lock" className="glyph size-3.5" />
+              {t("garden.lock")}
+              <span className="flex-1" />
+              {t("garden.lastCheck", { time: checkedAt })}
+            </p>
+          ) : fixable.length && !admin ? (
+            <p className="flex-1 text-xs text-tertiary">{t("vc.adminOnly")}</p>
+          ) : null}
           <button type="button" className="btn cursor-pointer" onClick={onClose} autoFocus>
             {t("vc.close")}
           </button>
-          {admin && fixable.length ? (
+          {tab === "health" && admin && fixable.length ? (
             <button
               className="btn btn-primary cursor-pointer disabled:opacity-50"
               disabled={busy}

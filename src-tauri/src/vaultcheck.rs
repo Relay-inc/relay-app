@@ -157,10 +157,106 @@ pub fn check(side: &Side, starter: &Starter) -> Vec<Finding> {
             }
         }
     }
-    // notes whose type has a home and that sit elsewhere, by type: Tidy structure moves them, Repair does not
+    out
+}
+
+// ---- the garden: where the vault is decaying. Findings in the shape of the check's, one per kind, `paths` the notes
+// they are about; none has a Repair (`fix` false): each has its own action in the UI, run by the person asking.
+
+/// What the garden leaves alone: the notes the vault runs on.
+const NOT_THEIRS: [&str; 2] = ["System/", "Resources/Templates/"];
+/// Orphans are noisy there: a daily note links out and nothing links back.
+const NOT_ORPHANS: [&str; 3] = ["System/", "Resources/Templates/", "Calendar/Daily/"];
+
+/// Whether a frontmatter key has a value, a list's first item too.
+fn fm_has(fm: &str, key: &str) -> bool {
+    let mut lines = fm.lines();
+    let Some(v) = lines.find_map(|l| l.strip_prefix(key)?.strip_prefix(':')) else { return false };
+    if !v.trim().trim_matches(['"', '\'', '[', ']']).is_empty() { return true; }
+    lines.next().is_some_and(|l| l.trim_start().strip_prefix("- ").is_some_and(|i| !i.trim().is_empty()))
+}
+/// (line, target) of every [[link]], ![[embed]] and local ](link) of a note, outside code fences.
+// ponytail: a line scanner (no markdown parser): inline code spans and %-escapes other than %20 are not understood.
+fn links(text: &str) -> Vec<(usize, String)> {
+    let (mut out, mut fenced) = (vec![], false);
+    for (i, l) in text.lines().enumerate() {
+        if l.trim_start().starts_with("```") || l.trim_start().starts_with("~~~") { fenced = !fenced; continue; }
+        if fenced { continue; }
+        for c in crate::pagefiles::WIKI.captures_iter(l) { out.push((i + 1, c[1].trim().to_string())); }
+        for c in crate::pagefiles::MDLINK.captures_iter(l) {
+            let d = c[1].trim_matches(['<', '>']);
+            if d.contains("://") || d.starts_with("mailto:") || d.starts_with('#') { continue; }
+            out.push((i + 1, d.split('#').next().unwrap_or(d).replace("%20", " ")));
+        }
+    }
+    out
+}
+/// A link's target as the files are keyed: lowercase, no leading `/`, `./` or `../`, no `.md`.
+fn key_of(t: &str) -> String {
+    let mut t = t.trim().trim_start_matches('/');
+    while let Some(r) = t.strip_prefix("./").or_else(|| t.strip_prefix("../")) { t = r; }
+    let t = t.to_lowercase();
+    t.strip_suffix(".md").map(String::from).unwrap_or(t)
+}
+/// A file's path as keys: "a/B.md" is "a/b" and "b", "a/p.png" is "a/p.png" and "p.png".
+fn keys_of(p: &str) -> Vec<String> {
+    let k = if p.ends_with(".md") { key_of(p) } else { p.to_lowercase() };
+    let mut out = vec![k.clone()];
+    out.extend(k.match_indices('/').map(|(i, _)| k[i + 1..].to_string()));
+    out
+}
+
+/// What the garden finds: `outside_home` (`path` the type, as Tidy structure), `no_project` (meetings without `about:`,
+/// newest first), `broken_link` (paths "note<TAB>line<TAB>target"), `orphan`, `unused_attachment` (`context` their total
+/// bytes) and `no_type`. A kind with nothing found is not listed.
+pub fn garden(side: &Side) -> Vec<Finding> {
+    let Ok(vault) = fs::canonicalize(&side.vault) else { return vec![] };
+    let all = crate::pagefiles::all_files(&vault);
+    let mut by: std::collections::HashMap<String, Vec<usize>> = Default::default();
+    for (i, p) in all.iter().enumerate() { for k in keys_of(p) { by.entry(k).or_default().push(i); } }
+    let under = |p: &str, skip: &[&str]| skip.iter().any(|s| p.starts_with(s));
+    let mut used = std::collections::HashSet::new();
+    let (mut inc, mut outg, mut about) = (vec![false; all.len()], vec![false; all.len()], vec![false; all.len()]);
+    let (mut no_project, mut broken, mut no_type) = (vec![], vec![], vec![]);
+    for (i, p) in all.iter().enumerate().filter(|(_, p)| p.ends_with(".md")) {
+        if fs::metadata(vault.join(p)).map_or(true, |m| m.len() > 1 << 20) { continue; }
+        let Ok(text) = fs::read_to_string(vault.join(p)) else { continue };
+        let fm = frontmatter(&text).unwrap_or("");
+        about[i] = fm_has(fm, "about");
+        let ours = !under(p, &NOT_THEIRS);
+        if ours {
+            let kind = fm.lines().find_map(|l| l.strip_prefix("type:")).map(|v| v.trim().trim_matches(['"', '\'']).to_lowercase()).unwrap_or_default();
+            if kind.is_empty() { no_type.push(p.clone()); }
+            if kind == "meeting" && !about[i] { no_project.push(p.clone()); }
+        }
+        for (line, target) in links(&text) {
+            match by.get(&key_of(&target)) {
+                Some(hits) => for &j in hits.iter().filter(|j| **j != i) {
+                    if all[j].ends_with(".md") { outg[i] = true; inc[j] = true } else { used.insert(j); }
+                },
+                None if ours => broken.push(format!("{p}\t{line}\t{target}")),
+                None => {}
+            }
+        }
+    }
+    let f = |kind, context: String, path: &str, mut paths: Vec<String>| (!paths.is_empty()).then(|| { paths.sort(); Finding { kind, context, path: path.into(), paths, fix: false } });
+    let mut out = vec![];
+    // notes whose type has a home and that sit elsewhere, by type: Tidy structure moves them
     let mut outside: std::collections::BTreeMap<String, Vec<String>> = Default::default();
     for m in crate::tidy::plan(side).moves { outside.entry(m.kind).or_default().push(m.from); }
-    for (kind, paths) in outside { out.push(f("outside_home", "", kind, paths, false)); }
+    out.extend(outside.into_iter().filter_map(|(kind, paths)| f("outside_home", String::new(), &kind, paths)));
+    out.extend(f("no_project", String::new(), "", no_project).map(|mut x| { x.paths.reverse(); x }));
+    out.extend(f("broken_link", String::new(), "", broken));
+    let orphans = (0..all.len()).filter(|i| all[*i].ends_with(".md") && !inc[*i] && !outg[*i] && !about[*i] && !under(&all[*i], &NOT_ORPHANS)).map(|i| all[i].clone()).collect();
+    out.extend(f("orphan", String::new(), "", orphans));
+    // an attachment: a file other than a note, in a folder named Attachments or where this vault puts them
+    let home = crate::homes::home(&vault, "attachments", "0000");
+    let home = rel(&vault, home.parent().unwrap_or(&vault));
+    let unused: Vec<usize> = (0..all.len()).filter(|i| !all[*i].ends_with(".md") && !used.contains(i) && !under(&all[*i], &NOT_THEIRS)
+        && (all[*i].split('/').rev().skip(1).any(|d| d.eq_ignore_ascii_case("attachments")) || all[*i].starts_with(&format!("{home}/")))).collect();
+    let bytes: u64 = unused.iter().map(|i| fs::metadata(vault.join(&all[*i])).map_or(0, |m| m.len())).sum();
+    out.extend(f("unused_attachment", bytes.to_string(), "", unused.iter().map(|i| all[*i].clone()).collect()));
+    out.extend(f("no_type", String::new(), "", no_type));
     out
 }
 
@@ -301,7 +397,6 @@ mod tests {
     #[test]
     fn notes_outside_their_home_are_found_by_type_and_not_repaired() {
         let root = tmp("home");
-        let s = starter(&root);
         let v = root.join("vault");
         w(&v, "State/ws.md", "## Work\n\n| Project | State | Last Touched | Left Off |\n|---|---|---|---|\n");
         w(&v, "Contexts/Work/Work.md", "---\ntype: Context\n---\n");
@@ -310,9 +405,37 @@ mod tests {
         w(&v, "Calendar/2026-11-04.md", "---\ntype: Daily\n---\n");
         w(&v, "Calendar/Meetings/2026/2026-10-01 Home.md", "---\ntype: Meeting\n---\n");
         let side = Side { vault: v.to_string_lossy().into(), work_state: v.join("State/ws.md").to_string_lossy().into(), notes: v.join("Contexts").to_string_lossy().into() };
-        let found: Vec<Finding> = check(&side, &s).into_iter().filter(|f| f.kind == "outside_home").collect();
+        let found: Vec<Finding> = garden(&side).into_iter().filter(|f| f.kind == "outside_home").collect();
         assert_eq!(kinds(&found), vec!["outside_home  Daily", "outside_home  Meeting"]);
         assert_eq!(found[1].paths, vec!["Calendar/2026-11-03 Sync.md", "Calendar/2026-11-04 Sync.md"]);
+        assert!(found.iter().all(|f| !f.fix));
+    }
+
+    #[test]
+    fn the_garden_finds_one_of_each_problem() {
+        let root = tmp("garden");
+        let v = root.join("vault");
+        w(&v, "System/ws.md", "## Work\n\n| Project | State | Last Touched | Left Off |\n|---|---|---|---|\n");
+        w(&v, "Calendar/2026-11-04 Sync.md", "---\ntype: Meeting\n---\n[[Linked]]\n");
+        w(&v, "Calendar/Meetings/2026/2026-10-01 Ok.md", "---\ntype: Meeting\nabout: \"[[Linked]]\"\n---\n![[chart.png]]\n");
+        w(&v, "Notes/Linked.md", "---\ntype: Note\n---\nsee [[Gone]] and [[Linked]]\n```\n[[In Code]]\n```\n[doc](../Files/a%20b.pdf)\n");
+        w(&v, "Notes/Alone.md", "---\ntype: Note\n---\nnothing\n");
+        w(&v, "Notes/Typeless.md", "no frontmatter, links [[Linked]]\n");
+        w(&v, "Calendar/Daily/2026/2026-11-04.md", "---\ntype: Daily\n---\n");
+        w(&v, "Resources/Templates/T.md", "---\ntype: Meeting\n---\n[[{{x}}]]\n");
+        w(&v, "Attachments/2026/chart.png", "12345");
+        w(&v, "Attachments/2026/unused.png", "123456789");
+        w(&v, "Files/a b.pdf", "pdf");
+        let side = Side { vault: v.to_string_lossy().into(), work_state: v.join("System/ws.md").to_string_lossy().into(), notes: v.join("Contexts").to_string_lossy().into() };
+        let found = garden(&side);
+        let at = |k: &str| found.iter().find(|f| f.kind == k).map(|f| f.paths.clone()).unwrap_or_default();
+        assert_eq!(at("outside_home"), vec!["Calendar/2026-11-04 Sync.md"]);
+        assert_eq!(at("no_project"), vec!["Calendar/2026-11-04 Sync.md"]);
+        assert_eq!(at("broken_link"), vec!["Notes/Linked.md\t4\tGone"]);
+        assert_eq!(at("orphan"), vec!["Notes/Alone.md"]);
+        assert_eq!(at("unused_attachment"), vec!["Attachments/2026/unused.png"]);
+        assert_eq!(found.iter().find(|f| f.kind == "unused_attachment").unwrap().context, "9");
+        assert_eq!(at("no_type"), vec!["Notes/Typeless.md"]);
         assert!(found.iter().all(|f| !f.fix));
     }
 

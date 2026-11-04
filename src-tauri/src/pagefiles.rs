@@ -193,9 +193,9 @@ pub struct Plan {
 }
 
 // a [[link]], its target up to `#` or `|` (a `\|` in a table cell: the backslash goes with the rest)
-static WIKI: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[\[([^\]\|#\n\\]+)((?:\\?#[^\]\|\n\\]*)?(?:\\?\|[^\]\n]*)?)\]\]").unwrap());
+pub(crate) static WIKI: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[\[([^\]\|#\n\\]+)((?:\\?#[^\]\|\n\\]*)?(?:\\?\|[^\]\n]*)?)\]\]").unwrap());
 // a markdown link's destination: <…> or up to a space or `)`, then an optional title
-static MDLINK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"\]\((<[^>\n]+>|[^)\s]+)((?:\s+"[^"\n]*")?)\)"#).unwrap());
+pub(crate) static MDLINK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"\]\((<[^>\n]+>|[^)\s]+)((?:\s+"[^"\n]*")?)\)"#).unwrap());
 
 pub(crate) fn lower(s: &str) -> String { s.to_lowercase() }
 pub(crate) fn base(p: &str) -> &str { p.rsplit('/').next().unwrap_or(p) }

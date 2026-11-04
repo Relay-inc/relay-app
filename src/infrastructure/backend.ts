@@ -233,6 +233,14 @@ export const projectRow = (workspace: string, name: string, context: string, row
  *  for `card_fields` the fields) it is about, `fix` whether Repair puts it right. */
 export type VaultFinding = { id: string; kind: string; context: string; path: string; paths: string[]; fix: boolean };
 export const vaultCheck = (workspace: string) => invoke<VaultFinding[]>("vault_check", { workspace });
+/** The garden (vaultcheck.rs): where the notes decay, in the same shape. */
+export const vaultGarden = (workspace: string) => invoke<VaultFinding[]>("vault_garden", { workspace });
+/** Claude does `action` (properties or about) on these notes in the background, as one entry of the Changes feed. */
+export const gardenAsk = (workspace: string, action: string, paths: string[]) =>
+  invoke("garden_ask", { workspace, action, paths });
+/** A meeting's project picked: its `about:` set to a link to `project`. */
+export const gardenAbout = (workspace: string, path: string, project: string) =>
+  invoke("garden_about", { workspace, path, project });
 export const vaultRepair = (workspace: string, ids: string[]) => invoke<number>("vault_repair", { workspace, ids });
 /** Tidy structure (tidy.rs): every note outside the home of its `type:` and where it goes, with the links the move
  *  rewrites (`links` in `notes` notes) and how many notes of a type with a home already `stay`. */
