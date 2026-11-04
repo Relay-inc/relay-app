@@ -41,11 +41,6 @@ pub const RELAY_TOOL: &str = "Bash(relay *)";
 pub const ORCH_COORD_TOOLS: [&str; 4] = ["mcp__relay-orch__dispatch", "mcp__relay-orch__workers", "mcp__relay-orch__message", "mcp__relay-orch__stop"];
 pub const ORCH_WORKER_TOOLS: [&str; 2] = ["mcp__relay-orch__step", "mcp__relay-orch__report"];
 
-/// The Commonwealth plugin's read tools run without a card in a session the app routed to a brain (opts.commonwealth_brain).
-/// `remember` keeps its card: it stages into a brain the team shares, and a session can take in a mail's text after it
-/// started, which --allowedTools (fixed at spawn) can no longer take back.
-pub const COMMONWEALTH_TOOLS: [&str; 5] = ["mcp__plugin_commonwealth_commonwealth__ask", "mcp__plugin_commonwealth_commonwealth__search", "mcp__plugin_commonwealth_commonwealth__read", "mcp__plugin_commonwealth_commonwealth__list-work-state", "mcp__plugin_commonwealth_commonwealth__who-is"];
-
 pub struct Claude;
 pub static PROVIDER: Claude = Claude;
 
@@ -116,7 +111,7 @@ impl AgentProvider for Claude {
     fn caps(&self) -> Caps {
         Caps { persistent: true, images: true, thinking: true, permissions: true, questions: true, subagents: true, fork: true,
             terminal: true, background: true, effort: true, limits: true, title: true, write: true, accounts: true,
-            live_model: true, control: true, picked: true, remote: true, brain: true }
+            live_model: true, control: true, picked: true, remote: true }
     }
     fn npm_package(&self) -> Option<&'static str> { Some("@anthropic-ai/claude-code") }
     fn self_update(&self) -> &'static [&'static str] { &["update"] }
@@ -172,10 +167,6 @@ impl AgentProvider for Claude {
             mcp["mcpServers"]["relay-orch"] = json!({"type": "sdk", "name": "relay-orch"});
             allowed.extend(if role == "coordinator" { &ORCH_COORD_TOOLS[..] } else { &ORCH_WORKER_TOOLS[..] }.iter().map(|t| t.to_string()));
         }
-        // opts.commonwealth_brain, set by the app for a project whose repos the Commonwealth registry routes: the hooks and
-        // the MCP server treat this vault session as in scope of that brain (COMMONWEALTH_BRAIN_DIR)
-        let brain = env.opt("commonwealth_brain");
-        if !brain.is_empty() { allowed.extend(COMMONWEALTH_TOOLS.iter().map(|t| t.to_string())); }
         let denied: Vec<String> = DENIED.iter().map(|d| d.to_string()).chain(strs("deny")).collect();
         let system = match env.opts["system"].as_str() { Some(s) => format!("{}\n\n{s}", agent_core::envelope::HINT), None => agent_core::envelope::HINT.to_string() };
         let fenced = env.opts["fenced"] == true;
@@ -189,14 +180,6 @@ impl AgentProvider for Claude {
         if !mcp["mcpServers"].as_object().is_some_and(|m| m.is_empty()) { cmd.arg("--mcp-config").arg(mcp.to_string()); }
         // opts.fenced, set by the app in a shared vault: only the servers above, none of the user's own or claude.ai's
         if fenced { cmd.arg("--strict-mcp-config"); }
-        if !brain.is_empty() { cmd.env("COMMONWEALTH_BRAIN_DIR", brain); }
-        // and which project its notes belong to: Commonwealth stamps `source` from the cwd, which is the vault. The
-        // project name is matched against the brain's registry (Commonwealth 0.7, ADR-0047); the repo is the fallback
-        // when the name matches no project there
-        let source = env.opt("commonwealth_source");
-        if !brain.is_empty() && !source.is_empty() { cmd.env("COMMONWEALTH_SOURCE", source); }
-        let project = env.opt("commonwealth_project");
-        if !brain.is_empty() && !project.is_empty() { cmd.env("COMMONWEALTH_PROJECT", project); }
         let ask = strs("ask");
         let mut settings: serde_json::Map<String, Value> = if fenced { serde_json::from_str(fenced_settings()).unwrap() } else { Default::default() };
         if !ask.is_empty() { settings.insert("permissions".into(), json!({"ask": ask})); }
@@ -427,26 +410,6 @@ mod tests {
         let settings: Value = serde_json::from_str(&args[args.iter().position(|a| a == "--settings").unwrap() + 1]).unwrap();
         assert_eq!(settings, json!({"disableAllHooks": true, "autoMemoryEnabled": false, "permissions": {"ask": ["Bash(git push*)"]}}), "no hook and no auto memory there, the asks kept");
         assert!(args[args.iter().position(|a| a == "--mcp-config").unwrap() + 1].contains("relay-mail"));
-    }
-    #[test]
-    fn a_routed_project_gets_its_brain_and_the_commonwealth_tools() {
-        let p = PathBuf::from("/tmp/pending");
-        let l = Launch { key: "c:1", name: "x", model: "", effort: "", resume: None, fork: None, turn: None };
-        let none = PROVIDER.command(&env(&p), &l).unwrap();
-        assert!(!none.get_envs().any(|(k, _)| k == "COMMONWEALTH_BRAIN_DIR"));
-        assert!(!none.get_args().any(|a| a.to_string_lossy().contains("mcp__plugin_commonwealth")));
-        assert!(!none.get_envs().any(|(k, _)| k == "COMMONWEALTH_SOURCE"));
-        assert!(!none.get_envs().any(|(k, _)| k == "COMMONWEALTH_PROJECT"));
-        let opts = json!({"commonwealth_brain": "/b/bluebird", "commonwealth_source": "acme/web", "commonwealth_project": "Acme (Web)"});
-        let cmd = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap();
-        assert!(cmd.get_envs().any(|(k, v)| k == "COMMONWEALTH_BRAIN_DIR" && v.is_some_and(|v| v == "/b/bluebird")));
-        assert!(cmd.get_envs().any(|(k, v)| k == "COMMONWEALTH_SOURCE" && v.is_some_and(|v| v == "acme/web")));
-        assert!(cmd.get_envs().any(|(k, v)| k == "COMMONWEALTH_PROJECT" && v.is_some_and(|v| v == "Acme (Web)")));
-        let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        let (allowed, denied) = (args.iter().position(|a| a == "--allowedTools").unwrap(), args.iter().position(|a| a == "--disallowedTools").unwrap());
-        assert!(args[allowed..denied].contains(&"mcp__plugin_commonwealth_commonwealth__search".to_string()));
-        // staging into a shared brain keeps its card
-        assert!(!args.iter().any(|a| a.contains("commonwealth__remember")));
     }
     #[test]
     fn the_control_pipe_lines() {

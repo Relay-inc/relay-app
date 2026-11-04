@@ -31,7 +31,8 @@ a PR. Versions follow
 
 ### Removed
 
-- The Brain view and its sidebar item are gone, Pages covers browsing and searching the vault. With it went reviewing a Commonwealth brain's staged notes in Relay (promote and reject them with the `commonwealth` CLI); installing Commonwealth and joining a team brain stay in Settings › Integrations (#381).
+- The Brain view and its sidebar item are gone, Pages covers browsing and searching the vault (#381).
+- The Commonwealth integration is gone: no Commonwealth page in Settings › Integrations, and a conversation about a project no longer gets that project's team brain or its read tools without a card. A Commonwealth plugin you installed in Claude Code yourself still loads like any other plugin (#382).
 - Meetings are no longer items in Today's queue, and the folded "earlier" meetings are gone: the strip shows the whole day. The Today count no longer counts a meeting about to start (#379).
 
 ### Fixed

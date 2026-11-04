@@ -2238,23 +2238,6 @@ export default {
   "graph.showIn": "Voir dans le graphe",
   "graph.showInTitle": "Les notes que cette conversation a lues et écrites, éclairées dans le graphe de Pages",
   "bar.graphNotes": "{n} notes",
-  "cw.help":
-    "Le cerveau d'équipe : Claude Code le lit et met ce qu'il apprend en attente de revue, dans le cerveau vers lequel tes propres règles Commonwealth routent les dépôts d'un projet.",
-  "cw.plugin": "Plugin Claude Code",
-  "cw.installed": "Installé",
-  "cw.missing": "Non installé",
-  "cw.install": "Installer",
-  "cw.installing": "Installation…",
-  "cw.cli": "Ligne de commande",
-  "cw.cliFound": "Trouvée dans {path}",
-  "cw.cliMissing": "Introuvable. Installe-la avec <code>{hint}</code>.",
-  "cw.projects": "Cerveau par projet",
-  "cw.team": "Cerveau d'équipe",
-  "cw.teamHelp": "Colle le dépôt du cerveau de ton équipe pour le cloner et y router les dépôts de ses projets.",
-  "cw.join": "Rejoindre",
-  "cw.joining": "Connexion…",
-  "cw.noProjects":
-    "Aucun projet n'a de dépôt qu'une règle Commonwealth route, donc aucune conversation n'utilise de cerveau.",
   "set.tab.plugins": "Plugins",
   "plug.help":
     "Un plugin est un serveur MCP que Relay démarre sur ce Mac. Celui qui apporte une vue obtient une ligne dans la barre latérale. La vue s'exécute dans un bac à sable, sans accès à Relay ni au réseau, et ne peut appeler que les outils que vous autorisez ici. Les secrets vont dans le trousseau.",

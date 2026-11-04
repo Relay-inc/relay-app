@@ -208,15 +208,6 @@ export const mailExperimental = (settings: Settings) => mailOn(settings) && !!se
 /** Files: the Pages tab, a note as a page and what builds on it (Settings › General › Experimental), off until switched
  *  on. Team documents keep syncing in the backend either way. */
 export const filesOn = (settings: Settings) => !!settings.experimental?.files;
-/** Commonwealth, on unless switched off in Settings › Integrations (it needs its Claude Code plugin too). */
-export const cwOn = (settings: Settings) => settings.integrations?.commonwealth?.on !== false;
-/** Commonwealth, the team brain: detected, never configured. Its plugin, its CLI, and the brain per project. */
-export type CommonwealthStatus = {
-  plugin: boolean;
-  cli: string | null;
-  hint: string;
-  projects: { project: string; brain: string | null; name: string | null }[];
-};
 export const calendarOn = (settings: Settings) => !!settings.calendar?.on && !!settings.calendar.feeds?.length;
 /** A message under a settings section: what the last action said, and whether it worked. */
 export type Message = { text: string; ok: boolean };

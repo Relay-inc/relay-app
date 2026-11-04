@@ -14,7 +14,7 @@ mod tests;
 pub(crate) use account::{account_of, limit_key};
 pub(crate) use pipe::pipe_reply;
 
-use crate::{actions, agents, broker, commonwealth, cw_on, env_of, home, machine_git, machines, mirror, need_vault, orch, provider_of, repo_projects, tr, trc, trc_v, ui_lang_of, App, EnvBuf};
+use crate::{actions, agents, broker, env_of, machine_git, machines, mirror, need_vault, orch, provider_of, tr, trc, trc_v, ui_lang_of, App, EnvBuf};
 use agent_core::{AgentProvider, Image, Launch, Turn, IMAGE_TYPES};
 use plan::{Running, Step};
 use serde_json::{json, Value};
@@ -147,19 +147,6 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         if p.caps().accounts { eb.opts["account"] = json!(account); }
         if orch::is_orch(project) { eb.opts["design"] = json!(false); }
         if caps.control && orch::is_orch(project) { orch::flags(&mut eb.opts, project, &dir, &orch::shared(app, &dir)); } // the orchestrator's coordinator and workers (orch.rs)
-        // the brain of the project this conversation is about, when Commonwealth's registry routes it (commonwealth.rs).
-        // Only on this Mac (a brain is a local path), not for a chat that starts out holding a mail, and only in the
-        // main vault: a brain holds the user's own notes, another vault's conversation could write them into that vault
-        let main = crate::all_vaults(&state.settings.lock().unwrap()).first() == Some(&dir);
-        if caps.brain && !from_mail && main && cw_on(state) {
-            if let Some(a) = about {
-                if let Some((b, repo)) = commonwealth::session(&home(), &repo_projects(&dir), a) {
-                    eb.opts["commonwealth_brain"] = json!(b);
-                    eb.opts["commonwealth_source"] = json!(repo);
-                    eb.opts["commonwealth_project"] = json!(a);
-                }
-            }
-        }
         // fenced and started under the vault lock, which the caller holds (taken before `procs`, policy.rs): a vault
         // added meanwhile (policy::hold_for_vault) waits for this
         crate::fence_in(app, state, &mut eb);
