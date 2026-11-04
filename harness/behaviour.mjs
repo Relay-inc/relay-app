@@ -2243,6 +2243,17 @@ const SCENARIOS = {
       "2 conversations used the note",
       (await section("conversations").textContent())?.includes("Wrote") ?? false,
     );
+    // the star in the bar pins the note (the same favourites as the sidebar's menu) and unpins it
+    const fav = page.locator('[data-section="pages:favourites"]');
+    await click(button(page, "Add to favourites"), 400);
+    s.check("the star pins the note", (await s.calls("set_favourites")).at(-1)?.args.paths.join() === hosting);
+    s.check("it stands under Favourites", (await visible(fav.locator(`[data-page="${hosting}"]`)).count()) === 1);
+    s.check(
+      "and the star is filled",
+      (await button(page, "Remove from favourites").getAttribute("aria-pressed")) === "true",
+    );
+    await click(button(page, "Remove from favourites"), 400);
+    s.check("a second click unpins it", (await s.calls("set_favourites")).at(-1)?.args.paths.length === 0);
     // the fold is kept over a restart
     await click(button(page, "Hide right rail"));
     s.check("Hide right rail folds it", (await page.locator("[data-rail]").count()) === 0);

@@ -41,6 +41,7 @@ import { loadLinked } from "../../../application/navigation/linked";
 import { loadRail, railNote, railOpen, setRail, useRailStore } from "../../../application/navigation/rail";
 import { aboutOf } from "../../../domain/workspace/rail";
 import { Rail } from "./Rail";
+import { toggleFavourite, useFavouritesStore } from "../../../application/navigation/favourites";
 
 const EDIT_MAX = 1_000_000; // characters: a bigger note is shown read-only
 
@@ -66,6 +67,7 @@ export function PageView({ target, className }: { target: string; className: str
   const folder = railNote(target).folder;
   useRailStore(s => s.closed); // the rail's fold follows
   const shown = railOpen(folder);
+  const pinned = useFavouritesStore(s => (s.by[folder] ?? []).includes(railNote(target).path));
   const scroller = useRef<HTMLDivElement>(null);
   const path = pagePath(target) || target;
   // the page's own workspace, not the one the sidebar shows
@@ -195,6 +197,15 @@ export function PageView({ target, className }: { target: string; className: str
           </button>
         ) : null}
         <span className="flex-1" />
+        <button
+          className={`size-7 grid place-items-center rounded-md hover:bg-fill ${pinned ? "text-accent-text" : "text-secondary hover:text-label"}`}
+          title={t(pinned ? "pages.unfavourite" : "pages.favourite")}
+          aria-label={t(pinned ? "pages.unfavourite" : "pages.favourite")}
+          aria-pressed={pinned}
+          onClick={() => void toggleFavourite(railNote(target).path)}
+        >
+          <Icon name="star" className={`glyph size-4 ${pinned ? "fill-current" : ""}`} />
+        </button>
         <button
           className={`size-7 grid place-items-center rounded-md ${shown ? "bg-accent-soft text-accent-text" : "text-secondary hover:bg-fill hover:text-label"}`}
           title={t(shown ? "rail.hide" : "rail.show")}
