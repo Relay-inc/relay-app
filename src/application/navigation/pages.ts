@@ -132,14 +132,14 @@ export function pagesView(): {
   total: number;
 } {
   const { workspace, paths, exists, model, system } = build();
-  const { find, touches } = useNavigationStore.getState().sidebar;
+  const { find, touches, recentRemoved } = useNavigationStore.getState().sidebar;
   const root = isMain(workspace) ? useWorkspaceStore.getState().notes.root : workspace;
   const query = find.trim().toLowerCase();
   return {
     model,
     system,
     favourites: favouritesOf(workspace).filter(path => exists.has(path)),
-    recent: recentPages(touches, root, path => exists.has(path)),
+    recent: recentPages(touches, root, path => exists.has(path), 5, recentRemoved[root]),
     found: query ? findPages(paths, query) : null,
     total: model.top.count, // the pages people write in: System not counted, for an admin either
   };
@@ -435,6 +435,22 @@ export async function loadRecent() {
     console.error(e);
   }
 }
+
+/** Take notes off Recent (the notes stay as they are): until a conversation touches one again. Kept over a restart. */
+function removeFromRecent(paths: string[] | null) {
+  const root = rootOf();
+  const { touches } = useNavigationStore.getState().sidebar;
+  set(draft => {
+    const gone = (draft.sidebar.recentRemoved[root] ??= {});
+    for (const touch of touches)
+      if (touch.root === root && (!paths || paths.includes(touch.path)))
+        gone[touch.path] = Math.max(gone[touch.path] ?? 0, touch.at);
+  });
+  storage.set("recentRemoved", useNavigationStore.getState().sidebar.recentRemoved);
+}
+export const removeRecent = (path: string) => removeFromRecent([path]);
+/** Clear: empty Recent. */
+export const clearRecent = () => removeFromRecent(null);
 
 // ---------- managing files: new page or folder, rename and move (links to it follow), duplicate, trash with Undo
 /** The workspace shown's folder, and a path of it as an absolute one ("" is the folder itself). */

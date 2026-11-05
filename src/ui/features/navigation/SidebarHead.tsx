@@ -18,11 +18,12 @@ type Props = Omit<ComponentProps<"div">, "className"> & {
   collapsed: boolean;
   dropBefore: boolean;
   onAdd?: () => void; // the "+" for a new conversation, only when given
+  action?: { label: string; onClick: () => void }; // a text action shown on hover (Recent's Clear)
 };
 
 /** A section header: a square in the context's colour, the name, the count while folded, the "+" for a new conversation
  *  and the fold chevron. */
-export function SidebarHead({ label, tint, count, collapsed, dropBefore, onAdd, ...rest }: Props) {
+export function SidebarHead({ label, tint, count, collapsed, dropBefore, onAdd, action, ...rest }: Props) {
   const { t } = useT();
   const add = (e: MouseEvent) => {
     e.stopPropagation();
@@ -41,6 +42,17 @@ export function SidebarHead({ label, tint, count, collapsed, dropBefore, onAdd, 
       <span>{label}</span>
       {collapsed && count ? <span className="font-medium tabular-nums">{count}</span> : null}
       <span className="flex-1" />
+      {action ? (
+        <button
+          className="hidden group-hover:block px-1 rounded-sm text-xs font-medium normal-case tracking-normal text-tertiary cursor-default hover:text-label"
+          onClick={e => {
+            e.stopPropagation();
+            action.onClick();
+          }}
+        >
+          {action.label}
+        </button>
+      ) : null}
       {onAdd ? (
         <button
           className="hidden group-hover:block w-5 h-4 rounded-md text-base leading-none text-secondary cursor-default hover:bg-fill hover:text-label"

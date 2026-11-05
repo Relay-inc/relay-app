@@ -26,6 +26,7 @@ type Props = Omit<ComponentProps<"div">, "className"> & {
   indent?: boolean; // under its project
   nested?: boolean; // in a folder under its project: one step further in
   closable?: boolean;
+  closeTitle?: string; // the × button's tooltip, "Close" unless given
   closing?: boolean; // being closed: greyed out and pulsing until it is gone
   trail?: Trail;
   subs?: number; // subagents working
@@ -81,6 +82,7 @@ export function SidebarRow({
   indent = false,
   nested = false,
   closable = false,
+  closeTitle,
   closing = false,
   trail = "",
   subs = 0,
@@ -203,8 +205,8 @@ export function SidebarRow({
       {closable && !closing ? (
         <button
           className="hidden group-hover:grid place-items-center size-4 ml-1 flex-none rounded-sm text-sm leading-none cursor-default text-secondary hover:bg-fill-2 hover:text-label"
-          title={t("nav.close")}
-          aria-label={t("nav.close")}
+          title={closeTitle ?? t("nav.close")}
+          aria-label={closeTitle ?? t("nav.close")}
           onClick={fromButton(onClose)}
         >
           ×

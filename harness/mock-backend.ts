@@ -90,7 +90,7 @@ if (fixture === "buddy")
   };
 let vaultOk = !onboarding;
 let pending = [...conv.pending];
-const gitRepos = structuredClone(git.repos);
+const gitRepos = structuredClone(fixture === "git-long" ? git.longRepos : git.repos);
 let reminders = [...vault.reminders];
 let added = 0;
 let actionConfig = integ.actionConfig();
@@ -1123,7 +1123,7 @@ function handle(cmd: string, a: Args): unknown {
       // file), on top of what the harness seeded
       if (keepState) {
         const seeded = Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage.getItem(key) ?? ""]));
-        const kept = ["pagesOpen", "pagesSort", "railClosed"].flatMap(k => {
+        const kept = ["pagesOpen", "pagesSort", "railClosed", "recentRemoved"].flatMap(k => {
           const v = sessionStorage.getItem(`mockUi:${k}`);
           return v == null ? [] : [[k, v]];
         });
@@ -2095,7 +2095,7 @@ type Change = {
   reason: string;
   files: { path: string; before: string | null; after: string | null; state: string }[];
 };
-let changes: Change[] = changesOn ? kb.seedChanges() : [];
+let changes: Change[] = changesOn ? kb.seedChanges(fixture.startsWith("kb-changes-long")) : [];
 if (sketchOn) written.set(kb.untyped.path, { text: kb.untyped.text, hash: "h0" });
 if (tablesOn) written.set(kb.tables.path, { text: kb.tables.text, hash: "h0" });
 if (changesOn) {

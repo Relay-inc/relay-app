@@ -304,6 +304,16 @@ const button = (page, name) => page.getByRole("button", { name, exact: true });
 const listed = async (page, text) => (await visible(byText(page, text)).count()) > 0;
 /** a settings section in the window's sidebar, by its name */
 const navButton = (page, name) => page.getByRole("button", { name: new RegExp(`^${name}\\b`) });
+/** the Pages tab: a context's Collections folder unfolded, one group unfolded, Show all clicked: the collection opens on
+ *  the group's own rule */
+async function openGroup(page, group, context = "Agency") {
+  await page.getByRole("tab", { name: /^Pages/ }).click();
+  const folder = page.locator(`[data-collections="ctx:${context}"]`);
+  if (!(await folder.locator("[data-linked-group]").count())) await click(folder.locator("[aria-expanded]").first());
+  const row = folder.locator(`[data-linked-group="${group}"]`);
+  if ((await row.getAttribute("aria-expanded")) !== "true") await click(row);
+  await click(row.locator("xpath=..").getByText(/^Show all \d+$/));
+}
 async function typeInComposer(page, text) {
   await composer(page).click({ timeout: 4000 });
   await page.keyboard.type(text);
@@ -318,20 +328,51 @@ const focusedPlaceholder = page =>
 
 // ---------- the scenarios
 const SCENARIOS = {
-  // the Pages tab's virtual groups (#367): a project's linked notes, Show all, a click opens the note at its own place,
-  // and a flat project (its note alone) unfolds to its groups too
+  // the Pages tab's Collections folder at every layer (#367, #398): under a context and under a project (folder and
+  // flat) one folder, closed until opened, with the groups of that layer; no "linked here", no group twice; Show all
+  // opens the collection on the group's own rule, as many rows as the group counts; the fold is kept over a reload
   async linked(s) {
-    await s.load({ fixture: "linked" });
+    await s.load({ fixture: "linked", keep: true });
     const { page } = s;
+    const countOf = async group => Number(((await group.textContent()) ?? "").replace(/\D/g, ""));
     await page.getByRole("tab", { name: /^Pages/ }).click();
+    // a context: its Collections folder is there, closed
+    const ctx = page.locator('[data-collections="ctx:Agency"]');
+    s.check(
+      "a context has a Collections folder, closed",
+      (await ctx.count()) === 1 && !(await ctx.locator("[data-linked-group]").count()),
+    );
+    await click(ctx.locator("[aria-expanded]").first());
+    const ctxGroups = await ctx.locator("[data-linked-group]").evaluateAll(els => els.map(e => e.dataset.linkedGroup));
+    s.check(
+      "it lists the groups of a context, none twice",
+      ctxGroups.length === new Set(ctxGroups).size && ctxGroups.includes("projects"),
+    );
+    s.check(
+      "in the context's order",
+      ctxGroups.join() ===
+        ["meetings", "documents", "people", "projects", "threads"].filter(k => ctxGroups.includes(k)).join(),
+    );
+    // a project with a folder
     await page.locator('[data-project="Northwind Portal"]').click();
-    s.check("linked here shows", await waitText(page, "linked here"));
-    const group = page.locator('[data-linked-group="meetings"]');
-    s.check("the group counts 6 meetings", (await group.textContent())?.includes("6") ?? false);
+    const folder = page.locator('[data-collections^="Contexts/Agency/Projects/Northwind Portal"]');
+    s.check(
+      "the project's Collections folder is closed",
+      (await folder.count()) === 1 && !(await folder.locator("[data-linked-group]").count()),
+    );
+    s.check("there is no linked here text", !(await hasText(page, "linked here")));
+    await click(folder.locator("[aria-expanded]").first());
+    const keys = await folder.locator("[data-linked-group]").evaluateAll(els => els.map(e => e.dataset.linkedGroup));
+    s.check(
+      "a project's groups, none twice, no Projects",
+      keys.length === new Set(keys).size && !keys.includes("projects"),
+    );
+    const group = folder.locator('[data-linked-group="meetings"]');
+    s.check("the group counts 6 meetings", (await countOf(group)) === 6);
     await group.click();
-    const rows = page.locator('[data-linked] [data-page^="Calendar/Meetings/"]');
+    const rows = folder.locator('[data-page^="Calendar/Meetings/"]');
     s.check("the newest 4 show first", (await rows.count()) === 4);
-    // Show all opens the collection (#373): Meetings about the project, 6 rows, the about: chip, no other project's
+    // Show all opens the collection (#373): Meetings about the project, 6 rows, no other project's
     await page.getByText("Show all 6").click();
     s.check("Show all opens the Meetings collection", await waitText(page, "6 match this view"));
     s.check(
@@ -356,12 +397,82 @@ const SCENARIOS = {
     );
     // a flat project: no folder, only its note
     await page.locator('[data-project="Delmas Bakery"]').click();
-    s.check("a flat project unfolds to its groups", await waitText(page, "linked here"));
-    const flat = page.locator(
-      '[data-linked="Contexts/Agency/Projects/Delmas Bakery.md"] [data-linked-group="meetings"]',
+    const flat = page.locator('[data-collections="Contexts/Agency/Projects/Delmas Bakery.md"]');
+    s.check(
+      "a flat project has its Collections folder, closed",
+      (await flat.count()) === 1 && !(await flat.locator("[data-linked-group]").count()),
     );
-    s.check("with its 2 meetings", (await flat.textContent())?.includes("2") ?? false);
+    await click(flat.locator("[aria-expanded]").first());
+    s.check("with its 2 meetings", (await countOf(flat.locator('[data-linked-group="meetings"]'))) === 2);
+    // the context's Meetings: Show all opens the collection with as many rows as the group counts
+    const ctxMeetings = ctx.locator('[data-linked-group="meetings"]');
+    const n = await countOf(ctxMeetings);
+    await ctxMeetings.click();
+    await page.getByText(`Show all ${n}`).first().click();
+    s.check("a context's Show all lists the group's count", await waitText(page, `${n} match this view`));
+    // collapse the project's folder again, reload: the fold is kept (Northwind open, Delmas closed)
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await click(ctx.locator("[aria-expanded]").first());
+    s.check("the context's folder folds", !(await ctx.locator("[data-linked-group]").count()));
+    await settle(page, 500); // the UI state is written a moment after a change
+    await s.load({ fixture: "linked", keep: true });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    s.check(
+      "after a reload the context's fold is kept (closed)",
+      (await page.locator('[data-collections="ctx:Agency"]').count()) === 1 &&
+        !(await page.locator('[data-collections="ctx:Agency"] [data-linked-group]').count()),
+    );
+    s.check(
+      "and the flat project's stays open",
+      (await page
+        .locator('[data-collections="Contexts/Agency/Projects/Delmas Bakery.md"] [data-linked-group]')
+        .count()) > 0,
+    );
   },
+  // Recent in the Pages tab: × on a row (hover) takes it off the list only, Delete does the same on a focused row,
+  // Clear on the header empties it; all of it is still so after a restart
+  async recentClose(s) {
+    const kb = { fixture: "default", keep: true };
+    await s.load(kb);
+    const { page } = s;
+    const recent = () => page.locator('[data-section="pages:recent"]');
+    const rows = () => recent().locator("[data-page]");
+    const tab = () => page.getByRole("tab", { name: /^Pages/ }).click();
+    await tab();
+    const n = await rows().count();
+    s.check("Recent lists several notes", n >= 3);
+    const first = await rows().first().getAttribute("data-page");
+    await rows().first().hover();
+    const x = rows().first().getByRole("button", { name: "Remove from Recent" });
+    s.check("a hovered row shows × with its tooltip", (await x.getAttribute("title")) === "Remove from Recent");
+    await click(x);
+    s.check(
+      "× takes it off the list (the next one moves up)",
+      !(await recent().locator(`[data-page="${first}"]`).count()),
+    );
+    s.check(
+      "the note itself is untouched",
+      (await s.calls("delete_page")).length === 0 && (await s.calls("write_note")).length === 0,
+    );
+    await settle(page, 500);
+    await s.load(kb);
+    await tab();
+    s.check("after a reload it is still gone", !(await recent().locator(`[data-page="${first}"]`).count()));
+    // keyboard: Delete on a focused row
+    const second = await rows().first().getAttribute("data-page");
+    await rows().first().focus();
+    await page.keyboard.press("Delete");
+    s.check("Delete on a focused row removes it", !(await recent().locator(`[data-page="${second}"]`).count()));
+    // Clear on the header
+    await recent().getByRole("button").first().hover();
+    await click(recent().getByRole("button", { name: "Clear", exact: true }));
+    s.check("Clear empties Recent and hides the section", (await recent().count()) === 0);
+    await settle(page, 500);
+    await s.load(kb);
+    await tab();
+    s.check("after a reload it stays empty", (await recent().count()) === 0);
+  },
+
   // collections (#373, K8): Meetings in a context lists every type: Meeting note with that context:, a filter about:
   // narrows it, editing the about: cell writes only that note's frontmatter, and a saved view comes back after a restart
   async collectionTable(s) {
@@ -369,16 +480,13 @@ const SCENARIOS = {
     await s.load(kb);
     const { page } = s;
     const note = p => page.evaluate(x => window.__harness.noteText(x), p);
-    const open = async (collection, context = "Agency") => {
-      await page.getByRole("tab", { name: /^Pages/ }).click();
-      const folder = page.locator(`[data-collections="${context}"]`);
-      if (!(await folder.locator(`[data-collection="${collection}"]`).count()))
-        await click(folder.getByRole("button", { name: "Collections" }).or(folder.locator("[aria-expanded]").first()));
-      await click(folder.locator(`[data-collection="${collection}"]`));
-    };
+    const open = group => openGroup(page, group);
     await open("meetings");
     s.check("the Meetings collection opens", await waitText(page, "9 match this view"));
-    s.check("in the context", await hasText(page, "in Agency"));
+    s.check(
+      "on the context's own rule",
+      ((await page.locator('[data-filter="linked"]').textContent()) ?? "").includes("Agency"),
+    );
     const titles = page.locator('[role="row"] [data-cell="title"]');
     s.check("it lists the 9 meetings with context: Agency, no thread or person", (await titles.count()) === 9);
     // filter about: Northwind Portal
@@ -435,7 +543,7 @@ const SCENARIOS = {
       "Save view writes the view with its filter and sort",
       saved.length === 1 &&
         saved[0].args.name === "Portal meetings" &&
-        saved[0].args.view.filters[0].is === "Northwind Portal" &&
+        saved[0].args.view.filters.some(f => f.key === "about" && f.is === "Northwind Portal") &&
         saved[0].args.view.sort.key === "title",
     );
     s.check("its file is named", await hasText(page, ".relay/views/Portal meetings.json"));
@@ -466,9 +574,7 @@ const SCENARIOS = {
     const { page } = s;
     const note = p => page.evaluate(x => window.__harness.noteText(x), p);
     await page.getByRole("tab", { name: /^Pages/ }).click();
-    const folder = page.locator('[data-collections="Agency"]');
-    await click(folder.locator("[aria-expanded]").first());
-    await click(folder.locator('[data-collection="projects"]'));
+    await openGroup(page, "projects");
     await waitText(page, "match this view");
     await click(page.getByRole("tab", { name: "Board" }));
     const lane = name => page.locator(`[data-lane="${name}"]`);
@@ -497,7 +603,7 @@ const SCENARIOS = {
     );
     s.check("the card is in the Paused lane", (await lane("Paused").locator(`[data-card="${card}"]`).count()) === 1);
     // a meeting's stage: derived, no moves
-    await page.locator("[data-collections]").first().locator('[data-collection="meetings"]').click();
+    await openGroup(page, "meetings");
     await click(page.getByRole("tab", { name: "Board" }));
     s.check("the stage lanes", (await lane("planned").count()) === 1 && (await lane("wrapped").count()) === 1);
     s.check("the board says its cards do not move", await hasText(page, "Stage is worked out from each note"));
@@ -2804,6 +2910,48 @@ const SCENARIOS = {
       "backend calls",
       (await s.calls("change_undo")).map(c => c.args.path),
     );
+  },
+
+  // the lists of changed files scroll with the wheel (WebKit): a page's Changes panel with an entry taller than the
+  // panel, a conversation's Git drawer with 40 files and the diff window over the app with a 150-line diff
+  async changesScroll(s) {
+    const wheelAt = async (locator, dy = 600, dx = 40) => {
+      const box = await locator.boundingBox();
+      await s.page.mouse.move(box.x + dx, box.y + 40);
+      await s.page.mouse.wheel(0, dy);
+      await settle(s.page, 200);
+    };
+    const top = el => el.evaluate(e => e.scrollTop);
+    // the Changes panel beside a page: the open entry has 7 notes, the Reviewed rows come after it
+    await s.load({ fixture: "kb-changes-long" });
+    const { page } = s;
+    await openBilling(s);
+    await click(page.getByRole("button", { name: /^Changes, \d+ to review/ }));
+    await waitText(page, "written to the vault by Relay");
+    const panel = page.locator('aside[aria-label="Changes"]');
+    const list = panel.locator(".overflow-y-auto");
+    const last = panel.getByText("Capture from \u201cStart the security audit\u201d chat");
+    s.check("the panel's list is taller than the panel", (await list.evaluate(e => e.scrollHeight > e.clientHeight * 2)) === true);
+    await wheelAt(panel.locator("[data-file]").first());
+    s.check("the wheel over a diff scrolls the list", (await top(list)) > 0);
+    for (let i = 0; i < 12; i++) await wheelAt(list, 800);
+    const [lb, pb] = [await last.boundingBox(), await list.boundingBox()];
+    s.check("the last Reviewed row comes into view", !!lb && lb.y >= pb.y && lb.y + lb.height <= pb.y + pb.height + 1);
+    s.check("the panel keeps its width", (await panel.boundingBox()).width === 580);
+    // a conversation's changes in the Git drawer, and one file's diff in the window over the app
+    await s.load({ fixture: "git-long", sel: s.keys.long });
+    await page.evaluate(() => window.__harness.changeSettings({ gitDrawer: true }));
+    await click(button(page, "Git"));
+    await waitText(page, "Report01.php");
+    const files = page.locator(".relay-drawer .overflow-y-auto").first();
+    await wheelAt(page.getByText("Report05.php").first(), 3000, 20);
+    s.check("the wheel scrolls the drawer's file list", (await top(files)) > 0);
+    s.check("down to the last file", await page.getByText("Report40.php").first().isVisible());
+    await click(page.getByText("Report01.php").first());
+    const diff = page.locator(".ticket-window .overflow-y-auto").first();
+    await wheelAt(diff, 800, 300);
+    s.check("the wheel scrolls the diff window", (await top(diff)) > 0);
+    s.check("its width stays the window's", (await diff.evaluate(e => e.scrollWidth <= e.clientWidth)) === true);
   },
 
   // issue 371: Undo on a note the user edited since shows the merge and writes nothing until it is applied

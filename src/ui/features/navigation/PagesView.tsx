@@ -4,6 +4,7 @@ import { noteName, sortPages } from "../../../domain/navigation/pages";
 import { CONTEXT_TINTS } from "../../../domain/navigation/sidebar";
 import {
   addToConversation,
+  clearRecent,
   copyPagePath,
   duplicatePage,
   isProjectNote,
@@ -11,6 +12,7 @@ import {
   openPagePath,
   pagesView,
   placeIn,
+  removeRecent,
   projectEntry,
   PROJECT_STATES,
   revealPage,
@@ -34,7 +36,7 @@ import { select } from "../../../application/navigation/navigation";
 import { GRAPH, INBOX_VIEW } from "../../../domain/navigation/views";
 import { loadInboxNotes, useInboxStore } from "../../../application/inbox/inbox";
 import { loadViews } from "../../../application/collections/collections";
-import { CollectionRows, SavedViewRows } from "./CollectionRows";
+import { SavedViewRows } from "./CollectionRows";
 import { toast } from "../../../application/navigation/navigation";
 import { activeFolder, workspaces } from "../../../application/navigation/workspaces";
 import { loadLinked } from "../../../application/navigation/linked";
@@ -52,7 +54,7 @@ import { PageFileDialog, type PageFileAsk } from "./PageFileDialog";
 import { MigrateDialog } from "./MigrateDialog";
 import { ProjectDialog, type ProjectAsk } from "./ProjectDialog";
 import { VaultCheckDialog } from "./VaultCheckDialog";
-import { LinkedRows } from "./LinkedRows";
+import { Collections } from "./Collections";
 
 const FAVOURITES = "pages:favourites";
 const NO_TIMES: Record<string, number> = {};
@@ -275,7 +277,7 @@ export function PagesView() {
   });
 
   // rows a level deeper sit in a wrapper one step in, not SidebarRow's own `indent`, so a tree goes as deep as it is
-  const note = (path: string) => (
+  const note = (path: string, onRemove?: () => void) => (
     <SidebarRow
       key={path}
       kind="view"
@@ -283,6 +285,9 @@ export function PagesView() {
       data-page={path}
       name={noteName(path)}
       selected={open === path}
+      closable={!!onRemove}
+      closeTitle={t("pages.recentRemove")}
+      onClose={onRemove}
       onClick={() => openPage(path)}
       onContextMenu={onMenu(path, "note")}
       {...drag(path)}
@@ -326,6 +331,7 @@ export function PagesView() {
     label: string,
     tint: (typeof CONTEXT_TINTS)[number] | "" = "",
     onContextMenu?: (e: MouseEvent) => void,
+    action?: { label: string; onClick: () => void },
   ) => (
     <SidebarHead
       label={label}
@@ -335,6 +341,7 @@ export function PagesView() {
       dropBefore={false}
       onClick={() => toggleSection(id)}
       onContextMenu={onContextMenu}
+      action={action}
     />
   );
 
@@ -390,9 +397,24 @@ export function PagesView() {
         </div>
       ) : null}
       {recent.length ? (
-        <div className="mt-3">
-          {head(RECENT, t("pages.recent"))}
-          {collapsed[RECENT] ? null : recent.map(path => note(path))}
+        <div className="mt-3" data-section={RECENT}>
+          {head(RECENT, t("pages.recent"), "", undefined, { label: t("pages.recentClear"), onClick: clearRecent })}
+          {collapsed[RECENT]
+            ? null
+            : recent.map(path => (
+                // Delete or Backspace on a focused row takes it off Recent, as its ×
+                <div
+                  key={path}
+                  onKeyDown={e => {
+                    if (e.target !== e.currentTarget.firstElementChild || (e.key !== "Delete" && e.key !== "Backspace"))
+                      return;
+                    e.preventDefault();
+                    removeRecent(path);
+                  }}
+                >
+                  {note(path, () => removeRecent(path))}
+                </div>
+              ))}
         </div>
       ) : null}
       <SidebarRow
@@ -446,7 +468,8 @@ export function PagesView() {
                         project.folder,
                         project.note,
                         "",
-                        <LinkedRows
+                        <Collections
+                          layer="project"
                           name={noteName(project.note)}
                           inside={project.folder.path}
                           base={project.folder.path}
@@ -454,17 +477,16 @@ export function PagesView() {
                       )
                     ) : isOpen ? (
                       <div className="ml-4">
-                        <LinkedRows name={noteName(project.note)} inside="" base={project.note} />
+                        <Collections layer="project" name={noteName(project.note)} inside="" base={project.note} />
                       </div>
                     ) : null}
                   </div>
                 );
               })
             )}
-            {collapsed[id] || !context.folder ? null : (
-              <LinkedRows name={context.name} inside={context.folder} base={`ctx:${context.name}`} />
+            {collapsed[id] ? null : (
+              <Collections layer="context" name={context.name} inside="" base={`ctx:${context.name}`} />
             )}
-            {collapsed[id] ? null : <CollectionRows context={context.name} />}
           </div>
         );
       })}

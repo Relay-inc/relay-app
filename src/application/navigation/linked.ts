@@ -22,6 +22,7 @@ export async function loadLinked(folder = activeFolder()) {
   }
 }
 
-/** What points at `name` in the workspace shown, outside the folder `inside`. */
-export const linkedOf = (name: string, inside = ""): LinkedGroups =>
-  linkedTo(useLinkedStore.getState().by[activeFolder()] ?? [], name, inside);
+/** What points at `name` in the workspace shown, outside the folder `inside`; `apart`: projects in a group of their own
+ *  (a context's). */
+export const linkedOf = (name: string, inside = "", apart = false): LinkedGroups =>
+  linkedTo(useLinkedStore.getState().by[activeFolder()] ?? [], name, inside, apart);
