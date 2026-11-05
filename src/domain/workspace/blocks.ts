@@ -1,6 +1,8 @@
 // Notion-like editing on a page's markdown (ui/features/workspace/blocks.ts): what the / menu inserts, turning a block
-// into another kind, moving a block, and adding a row or column to a table. Pure text in, text out: the markdown stays
+// into another kind, moving a block and a new table. Pure text in, text out: the markdown stays
 // what Obsidian reads.
+
+import { formatTable, newTable } from "./tables.ts";
 
 export type BlockKind =
   | "text"
@@ -18,6 +20,9 @@ export type BlockKind =
   | "link"
   | "file";
 
+/** A new table: three columns, a header and two rows, empty; the caret goes in the first header cell. */
+const NEW_TABLE = formatTable(newTable(["", "", ""], 2)).join("\n");
+
 /** What a / item puts on its (empty) line, and where the cursor goes in it. */
 export const SLASH: { kind: BlockKind; insert: string; caret: number }[] = [
   { kind: "h1", insert: "# ", caret: 2 },
@@ -29,7 +34,7 @@ export const SLASH: { kind: BlockKind; insert: string; caret: number }[] = [
   { kind: "quote", insert: "> ", caret: 2 },
   { kind: "callout", insert: "> [!note]\n> ", caret: 12 },
   { kind: "code", insert: "```\n\n```", caret: 4 },
-  { kind: "table", insert: "| Column | Column |\n| --- | --- |\n|  |  |", caret: 36 },
+  { kind: "table", insert: NEW_TABLE, caret: 2 },
   { kind: "divider", insert: "---\n", caret: 4 },
   { kind: "link", insert: "[[", caret: 2 },
 ];
@@ -88,43 +93,6 @@ export function moveBlock(text: string, from: number, to: number, at: number, sp
   if (rest[pos] === "\n") return rest.slice(0, pos) + (spaced ? "\n" : "") + block + "\n" + rest.slice(pos); // on a blank line
   const after = pos >= 2 && rest[pos - 2] !== "\n" && spaced ? "\n" : ""; // the line before is text: a blank line first
   return rest.slice(0, pos) + after + block + sep + rest.slice(pos);
-}
-
-const cells = (row: string) =>
-  row
-    .trim()
-    .replace(/^\||\|$/g, "")
-    .split("|").length;
-
-/** An empty row for a table whose header is `header`. */
-export const tableRow = (header: string) => "|" + "  |".repeat(cells(header));
-
-/** A table's lines with a column added at the end. */
-export function tableAddColumn(table: string): string {
-  return table
-    .split("\n")
-    .map((row, i) => {
-      const trimmed = row.replace(/\s+$/, "");
-      const base = trimmed.endsWith("|") ? trimmed : trimmed + " |";
-      return base + (i === 0 ? " Column |" : i === 1 ? " --- |" : "  |");
-    })
-    .join("\n");
-}
-
-/** Where each cell of a table row starts: after its | and the space after it. */
-export function cellStarts(row: string): number[] {
-  const end = row.replace(/\s+$/, "").length;
-  const starts: number[] = [];
-  for (let i = row.indexOf("|"); i >= 0 && i < end - 1; i = row.indexOf("|", i + 1))
-    starts.push(row[i + 1] === " " ? i + 2 : i + 1);
-  return starts;
-}
-/** Tab in a table row: the start of the next cell, or null in the last one. `col` is the cursor's offset in the row. */
-export const nextCell = (row: string, col: number) => cellStarts(row).find(start => start > col) ?? null;
-/** Shift-Tab: the start of the cell before the cursor's, or null in the first one. */
-export function prevCell(row: string, col: number): number | null {
-  const starts = cellStarts(row).filter(start => start <= col);
-  return starts.length > 1 ? starts[starts.length - 2] : null;
 }
 
 /** A pasted URL over selected text makes a link of it. */

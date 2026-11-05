@@ -1956,13 +1956,21 @@ const kbOn = fixture.startsWith("kb");
 const changesOn = fixture.startsWith("kb-changes");
 // kb-sketch: the same notes without a feed, and the one note that has no type: (Fix properties)
 const sketchOn = changesOn || fixture === "kb-sketch";
+// kb-tables (-dark): one more note, holding the tables the table editing is tried on
+const tablesOn = fixture.startsWith("kb-tables");
 const keepState = query.get("keep") === "1";
 let favourites: string[] = keepState ? JSON.parse(sessionStorage.getItem("mockFavourites") || "[]") : [];
 if (!keepState) for (const k of Object.keys(sessionStorage)) if (k.startsWith("mock")) sessionStorage.removeItem(k);
 const pageList = () =>
   pages ??
   (kbOn
-    ? [...vault.notes, ...kb.paths, ...(sketchOn ? [kb.untyped.path] : []), ...(inboxOn ? inbox.paths : [])]
+    ? [
+        ...vault.notes,
+        ...kb.paths,
+        ...(sketchOn ? [kb.untyped.path] : []),
+        ...(tablesOn ? [kb.tables.path] : []),
+        ...(inboxOn ? inbox.paths : []),
+      ]
     : linkedOn
       ? [...vault.notes.filter(n => vault.flat(n)), vault.FLAT_NOTE, ...vault.linkedPaths]
       : embedsOn
@@ -2089,6 +2097,7 @@ type Change = {
 };
 let changes: Change[] = changesOn ? kb.seedChanges(fixture.startsWith("kb-changes-long")) : [];
 if (sketchOn) written.set(kb.untyped.path, { text: kb.untyped.text, hash: "h0" });
+if (tablesOn) written.set(kb.tables.path, { text: kb.tables.text, hash: "h0" });
 if (changesOn) {
   for (const e of changes)
     for (const f of e.files) if (f.after !== null) written.set(f.path, { text: f.after, hash: "h0" });

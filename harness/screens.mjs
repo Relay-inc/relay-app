@@ -1299,6 +1299,37 @@ const VIEWS = {
   "page-link-popover": async () => VIEWS["page-hidden-markdown"]("kb", "link"),
   "page-link-popover-dark": async () => VIEWS["page-hidden-markdown"]("kb-dark", "link"),
   "page-show-markdown": async () => VIEWS["page-hidden-markdown"]("kb", "raw"),
+  // K, tables: the Vendor overview page (fixture kb-tables) with a grid for its tables; `state` is what the pointer does:
+  // "cursor" (the caret in a cell), "hover" (a cell hovered, its row grip and the column grip showing, the column menu
+  // open), "wide" (the wide table scrolled to its last columns)
+  "page-tables": async (fixture = "kb-tables", state = "cursor") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
+    await page.locator('[data-page$="/Vendor overview.md"]').first().click();
+    await page.locator(".cm-content").waitFor();
+    await settle(page, 300);
+    if (state === "cursor") {
+      await page.locator(".cm-tcell", { hasText: "Atlas Logistics" }).first().click();
+      await page.keyboard.press("End");
+    } else if (state === "hover") {
+      await page.locator(".cm-tcell", { hasText: "Tom Willems" }).first().hover();
+      await page.locator(".cm-table-col-grip").click();
+    } else if (state === "wide") {
+      await page
+        .locator(".cm-trow", { hasText: "Question" })
+        .first()
+        .evaluate(row => row.scrollTo({ left: row.scrollWidth }));
+      await page.locator(".cm-tcell", { hasText: "Asked on the call" }).first().click();
+    }
+    await settle(page, 400);
+  },
+  "page-tables-dark": async () => VIEWS["page-tables"]("kb-tables-dark"),
+  "page-tables-hover": async () => VIEWS["page-tables"]("kb-tables", "hover"),
+  "page-tables-hover-dark": async () => VIEWS["page-tables"]("kb-tables-dark", "hover"),
+  "page-tables-wide": async () => VIEWS["page-tables"]("kb-tables", "wide"),
+  "page-tables-wide-dark": async () => VIEWS["page-tables"]("kb-tables-dark", "wide"),
   // K6 / K12 (issue 371): the Changes feed beside a page, the capture run open with its two diffs
   "changes-feed": async (fixture = "kb-changes") => {
     await open(page, server.url, { fixture });

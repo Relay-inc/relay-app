@@ -1569,6 +1569,174 @@ const SCENARIOS = {
       /\*\*bold\*\*/.test(await written()) && /\[go here\]\(https:\/\/example\.com\/b\)/.test(await written()),
     );
   },
+  // tables in the page editor are a grid you edit in place: click a cell, type, Tab, Enter, the hover controls, Backspace,
+  // pasted tab-separated data, Show markdown; each asserts the file's text
+  async pageTables(s) {
+    await s.load({ fixture: "kb-tables" });
+    const { page } = s;
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
+    await page.locator('[data-page$="/Vendor overview.md"]').first().click();
+    const editor = page.locator(".cm-content");
+    await editor.waitFor();
+    const written = async () => (await page.evaluate(() => window.__harness.written())) ?? "";
+    const saved = async re => {
+      for (let i = 0; i < 20 && !re.test(await written()); i++) await page.waitForTimeout(200);
+      return re.test(await written());
+    };
+    const paste = text =>
+      page.evaluate(t => {
+        const data = new DataTransfer();
+        data.setData("text/plain", t);
+        const e = new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true });
+        document.querySelector(".cm-content").dispatchEvent(e);
+        return e.defaultPrevented;
+      }, text);
+    const rowsOf = async () => (await written()).split("\n").filter(l => l.startsWith("|"));
+    const cell = text => page.locator(".cm-tcell", { hasText: text }).first();
+    await settle(page, 300);
+    const shown = await editor.innerText();
+    s.check(
+      "a table is a grid without its pipes",
+      (await page.locator(".cm-trow").count()) === 7 && !/\|\s*:?-{2}/.test(shown),
+    );
+    s.check(
+      "the header is styled and aligned from the delimiter row",
+      await page.locator(".cm-thead .cm-ta-right").first().isVisible(),
+    );
+    const first = await page.locator(".cm-trow").first().boundingBox();
+    const second = await page.locator(".cm-trow").nth(1).boundingBox();
+    const cols = async n =>
+      page
+        .locator(".cm-trow")
+        .nth(n)
+        .locator(".cm-tcell")
+        .evaluateAll(a => a.map(c => Math.round(c.getBoundingClientRect().left)));
+    s.check(
+      "the columns line up from row to row",
+      JSON.stringify(await cols(0)) === JSON.stringify(await cols(1)) && second.y > first.y,
+    );
+    s.check(
+      "a wide table scrolls inside itself, not the page",
+      await page.evaluate(() => {
+        const row = [...document.querySelectorAll(".cm-trow")].find(r => r.scrollWidth > r.clientWidth);
+        return !!row && document.documentElement.scrollWidth <= document.documentElement.clientWidth;
+      }),
+    );
+    // click a cell, type: only that cell changes, the columns are padded again
+    await cell("Atlas Logistics").click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" Ltd");
+    s.check(
+      "typing changes the cell and re-pads the columns",
+      await saved(/\n\| Atlas Logistics Ltd +\| Sofie Claes +\| 1\.240,00 +\|\n/),
+    );
+    const lens = (await rowsOf()).slice(0, 5).map(l => l.length);
+    s.check("every row of the table is the same width in the file", new Set(lens).size === 1);
+    await page.keyboard.press("Tab");
+    await page.keyboard.type("X");
+    s.check("Tab goes to the next cell", await saved(/\| XSofie Claes +\|/));
+    await page.keyboard.type("|y");
+    s.check("a | typed in a cell is stored as \\|", await saved(/\| X\\\|ySofie Claes +\|/));
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.type("!");
+    s.check("Shift+Tab goes back", await saved(/\| !Atlas Logistics Ltd +\|/));
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Q");
+    s.check("Enter moves to the cell below", await saved(/\| QHarbour \\\| Docks +\|/));
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.type("U");
+    s.check("↑ moves up in the same column", await saved(/\| U\*\*Bluebird Studio\*\* +\|/));
+    // Backspace never takes a pipe
+    await page.keyboard.press("Home");
+    const before = await written();
+    await page.keyboard.press("Backspace");
+    await settle(page, 200);
+    s.check("Backspace at a cell's start changes nothing", (await written()) === before);
+    // the hover controls
+    const tbl = async () => {
+      const lines = (await written()).split("\n");
+      const from = lines.findIndex(l => l.startsWith("| Vendor"));
+      const to = lines.findIndex((l, n) => n > from && !l.startsWith("|"));
+      return lines.slice(from, to);
+    };
+    const tableIs = async (test, tries = 20) => {
+      for (let n = 0; n < tries; n++) {
+        if (test(await tbl())) return true;
+        await page.waitForTimeout(200);
+      }
+      return false;
+    };
+    const blank = l => /^\|[ |]+$/.test(l);
+    await cell("Bluebird Studio").hover();
+    await page.locator(".cm-table-row-grip").waitFor({ state: "visible" });
+    await page.locator(".cm-table-row-grip").click();
+    await page.getByRole("menuitem", { name: "Insert row below" }).click();
+    s.check("a row grip adds a row below", await tableIs(t => t.length === 6 && blank(t[4])));
+    await page.keyboard.press("Backspace");
+    s.check(
+      "Backspace in an empty row's first cell removes the row",
+      await tableIs(t => t.length === 5 && !t.some(blank)),
+    );
+    await page.keyboard.press("Meta+z");
+    s.check("and one undo brings it back", await tableIs(t => t.length === 6 && blank(t[4])));
+    await page.keyboard.press("Meta+z");
+    await cell("Monthly cost").hover();
+    await page.locator(".cm-table-col-grip").click();
+    await page.getByRole("menuitem", { name: "Insert column right" }).click();
+    s.check("a column grip adds a column", await tableIs(t => t[0].split("|").length === 6 && /\| --- \|$/.test(t[1])));
+    await cell("Monthly cost").hover();
+    await page.locator(".cm-table-col-grip").click();
+    await page.getByRole("menuitem", { name: "Align center" }).click();
+    s.check(
+      "a column's alignment is written to the delimiter row",
+      await tableIs(t => /\| :-+ +\| :-+: +\| :-+: +\| -+ +\|$/.test(t[1])),
+    );
+    await cell("Monthly cost").hover();
+    await page.locator(".cm-table-col-grip").click();
+    await page.getByRole("menuitem", { name: "Move column left" }).click();
+    s.check(
+      "a column moves with its cells",
+      await tableIs(t => /^\| Vendor +\| Monthly cost +\| Contact +\|/.test(t[0])),
+    );
+    await cell("Monthly cost").hover();
+    await page.locator(".cm-table-col-grip").click();
+    await page.getByRole("menuitem", { name: "Delete column" }).click();
+    s.check(
+      "a column is deleted",
+      await tableIs(t => t[0].split("|").length === 5 && !/Monthly cost/.test(t.join("\n"))),
+    );
+    // pasted data
+    await cell("Contact").click();
+    s.check("pasting tab-separated data inside a table is taken", await paste("Plan\tSeats\nBasic\t5\nPro\t25"));
+    s.check(
+      "it fills the cells from the caret, adding rows and a column",
+      await tableIs(
+        t =>
+          /^\| Vendor +\| Plan +\| Seats +\|$/.test(t[0]) &&
+          /\| Basic +\| 5 +\|$/.test(t[2]) &&
+          /\| Pro +\| 25 +\|$/.test(t[3]),
+      ),
+    );
+    await page.locator(".cm-line", { hasText: "Closing line." }).click();
+    await page.keyboard.press("End");
+    await page.keyboard.insertText("\n");
+    await page.keyboard.insertText("\n");
+    s.check(
+      "tab-separated data on an empty line makes a table",
+      (await paste("Name\tCity\nSofie Claes\tGhent")) &&
+        (await saved(/\| Name +\| City +\|\n\| -+ +\| -+ +\|\n\| Sofie Claes +\| Ghent +\|/)),
+    );
+    await page.keyboard.type("x");
+    s.check("the caret is in the table's first header cell", await saved(/\| xName +\|/));
+    // Show markdown draws the file's text
+    await page.keyboard.press("Shift+Meta+m");
+    const raw = await editor.innerText();
+    s.check("Show markdown shows the pipes and the delimiter row", /\| xName/.test(raw) && /\| -{3,}/.test(raw));
+    await page.keyboard.press("Shift+Meta+m");
+  },
   async mail(s) {
     await s.load();
     const { page, keys } = s;
