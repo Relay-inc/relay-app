@@ -45,7 +45,16 @@ modified:
 # Topic
 ```
 
-Required: `type`, `source`, `context`, `about`, `original` (rough notes without transcript get `original: notes`). Resolve people against `Contexts/*/People/`. Ask only for what is missing and cannot be inferred. Recurring meetings with an existing series note inherit `with:` and `about:` from it. For a Meeting, `with:` set before processing is read-only.
+Required: `type`, `source`, `context`, `about`, `original` (rough notes without transcript get `original: notes`). Recurring meetings with an existing series note inherit `with:` and `about:` from it.
+
+**Resolve before asking.** A note made from a calendar invite or a recording often has only email addresses in `with:` and no `context:` or `about:`. Fill them from the vault, in this order:
+
+1. **People:** each bare email or name in `with:` is looked up in `Contexts/*/People/*.md` by `email:`, name or alias. One match: replace it with `"[[Jane Doe]]"`. No match or several: keep it as it was.
+2. **Context:** empty `context:` takes the `context:` of the resolved people when they agree. No person resolved: look for a note with `domain:` equal to the email's domain (`example.com` for `jane@example.com`) and take its `context:`.
+3. **About:** empty `about:` gets each resolved person's `company:` when it links a note (a client, supplier or project), plus any note found by `domain:`.
+4. **Still missing:** ask the user. When nobody can answer (a recording processed in the background), leave the field empty and name the unresolved emails in the final reply. Never create a Person or company note on your own.
+
+For a Meeting, `with:` set before processing is read-only apart from step 1: attendees are never added or removed.
 
 ## 2. Gather context
 
