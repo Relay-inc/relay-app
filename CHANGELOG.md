@@ -16,6 +16,7 @@ a PR. Versions follow
 ### Fixed
 
 - A meeting note from a recording gets its people, `context:` and `about:` filled from the vault: attendee emails are matched to Person notes, a company note's `domain:` is the fallback, and what stays unknown is named instead of asked when nobody is there to answer.
+- Back to the notes in a meeting's Wrap-up no longer blanks the window when nothing was recorded: the transcript panel rendered in a loop until React gave up. The mail composer's recipient fields had the same loop waiting for them.
 
 
 ## [0.0.48] - 2026-11-05
