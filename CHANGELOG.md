@@ -13,6 +13,9 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+
+## [0.0.48] - 2026-11-05
+
 ### Added
 
 - Tables in a page are a real grid, also with the cursor outside them: no pipes or `---` row, a bold header, columns aligned as the markdown says (`:--`, `:-:`, `--:`), a wide table scrolling inside itself. Click a cell and type: the columns are re-padded as you go, a `|` is stored as `\|`, Tab / ⇧Tab / Enter / the arrows move between cells, Backspace never takes a pipe, ⌘A selects the cell first. Hover a table for the row and column menus (insert, move, delete, align); `/table` makes a 3-column table with the cursor in its first header cell; pasting tab-separated data from Sheets, Excel or Numbers makes a table or fills cells from the cursor. The file stays a plain markdown table. (#407)
