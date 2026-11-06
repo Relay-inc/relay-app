@@ -6,6 +6,7 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { Related } from "../domain/related/rules";
+import type { NoteType } from "../domain/workspace/noteTypes";
 import type { CommentThread, Member } from "../domain/workspace/comments";
 import type { Change, Merge } from "../domain/workspace/changes";
 import type { TidyMove, TidyPlan } from "../domain/workspace/tidy";
@@ -564,6 +565,8 @@ export const findNotes = (folder: string, query: string) =>
   invoke<{ names: NameHit[]; content: ContentHit[] }>("find_notes", { folder, query });
 /** When each note of a workspace last changed (seconds), for a folder sorted by modified. */
 export const noteTimes = (folder: string) => invoke<Record<string, number>>("note_times", { folder });
+/** The note types of a workspace, resolved: the defaults with the vault's own on top (src-tauri/src/types.rs). */
+export const noteTypes = (workspace: string) => invoke<NoteType[]>("note_types", { workspace });
 /** The templates New ▸ offers in a workspace. */
 export const noteTemplates = (workspace: string) => invoke<string[]>("note_templates", { workspace });
 /** A new note from a template, saved in its type's home or in `folder`; returns its path in the workspace. */

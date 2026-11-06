@@ -1,0 +1,151 @@
+[
+  {
+    "name": "Context",
+    "template": "Context",
+    "fields": [{ "key": "area", "kind": "text" }]
+  },
+  {
+    "name": "Project",
+    "aliases": ["product", "platform", "initiative", "feature"],
+    "template": "Project",
+    "required": ["context"],
+    "fields": [
+      { "key": "context", "kind": "link", "target": "Context" },
+      { "key": "status", "kind": "select", "values": ["Active", "Blocked", "Quiet", "Paused", "Closed"] },
+      { "key": "phase", "kind": "text" },
+      { "key": "next", "kind": "text" },
+      { "key": "index", "kind": "text" },
+      { "key": "last", "kind": "date" },
+      { "key": "people", "kind": "people", "target": "Person" }
+    ],
+    "collection": {
+      "id": "projects",
+      "columns": [
+        { "key": "title", "kind": "title" },
+        { "key": "type", "kind": "text" },
+        { "key": "status", "kind": "status" },
+        { "key": "context", "kind": "links" },
+        { "key": "updated", "kind": "time" }
+      ],
+      "sort": { "key": "title", "dir": "asc" },
+      "board": "status",
+      "derived": ["type", "updated"]
+    }
+  },
+  {
+    "name": "Meeting",
+    "home": "meeting",
+    "template": "Meeting",
+    "required": ["context"],
+    "fields": [
+      { "key": "context", "kind": "link", "target": "Context" },
+      { "key": "about", "kind": "link", "target": "Project" },
+      { "key": "with", "kind": "people", "target": "Person" },
+      { "key": "date", "kind": "date" },
+      { "key": "source", "kind": "text" },
+      { "key": "one-liner", "kind": "text" }
+    ],
+    "collection": {
+      "id": "meetings",
+      "columns": [
+        { "key": "date", "kind": "date" },
+        { "key": "title", "kind": "title" },
+        { "key": "stage", "kind": "stage" },
+        { "key": "about", "kind": "links" },
+        { "key": "with", "kind": "people" },
+        { "key": "language", "kind": "text" },
+        { "key": "followed-up", "kind": "followed" }
+      ],
+      "sort": { "key": "date", "dir": "desc" },
+      "board": "stage",
+      "derived": ["stage", "followed-up"]
+    }
+  },
+  {
+    "name": "Person",
+    "template": "Person",
+    "fields": [
+      { "key": "context", "kind": "link", "target": "Context" },
+      { "key": "company", "kind": "text" },
+      { "key": "title", "kind": "text" },
+      { "key": "email", "kind": "text" }
+    ],
+    "collection": {
+      "id": "people",
+      "columns": [
+        { "key": "title", "kind": "title" },
+        { "key": "role", "kind": "text" },
+        { "key": "context", "kind": "links" },
+        { "key": "about", "kind": "links" }
+      ],
+      "sort": { "key": "title", "dir": "asc" },
+      "board": "role",
+      "derived": []
+    }
+  },
+  {
+    "name": "Document",
+    "template": "Document",
+    "required": ["context"],
+    "fields": [
+      { "key": "document-type", "kind": "text" },
+      { "key": "document-status", "kind": "text" },
+      { "key": "context", "kind": "link", "target": "Context" },
+      { "key": "about", "kind": "link", "target": "Project" },
+      { "key": "archive", "kind": "check" }
+    ],
+    "collection": {
+      "id": "documents",
+      "rest": true,
+      "columns": [
+        { "key": "title", "kind": "title" },
+        { "key": "type", "kind": "text" },
+        { "key": "about", "kind": "links" },
+        { "key": "status", "kind": "status" },
+        { "key": "updated", "kind": "time" }
+      ],
+      "sort": { "key": "updated", "dir": "desc" },
+      "board": "status",
+      "derived": ["type", "updated"]
+    }
+  },
+  {
+    "name": "Thread",
+    "home": "thread",
+    "template": "Thread",
+    "required": ["context"],
+    "fields": [
+      { "key": "context", "kind": "link", "target": "Context" },
+      { "key": "about", "kind": "link", "target": "Project" },
+      { "key": "with", "kind": "people", "target": "Person" },
+      { "key": "source", "kind": "text" },
+      { "key": "period", "kind": "text" },
+      { "key": "one-liner", "kind": "text" }
+    ],
+    "collection": {
+      "id": "threads",
+      "columns": [
+        { "key": "date", "kind": "date" },
+        { "key": "title", "kind": "title" },
+        { "key": "about", "kind": "links" },
+        { "key": "with", "kind": "people" },
+        { "key": "status", "kind": "status" }
+      ],
+      "sort": { "key": "date", "dir": "desc" },
+      "board": "status",
+      "derived": []
+    }
+  },
+  {
+    "name": "Daily",
+    "aliases": ["journal"],
+    "home": "daily",
+    "fields": [{ "key": "date", "kind": "date" }]
+  },
+  {
+    "name": "Transcript",
+    "home": "meeting"
+  },
+  { "name": "Reference", "template": "Reference", "fields": [{ "key": "source-url", "kind": "text" }] },
+  { "name": "Framework", "template": "Framework", "fields": [{ "key": "domain", "kind": "text" }] }
+]

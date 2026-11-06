@@ -660,6 +660,7 @@ export default {
   "props.kind.check": "Case à cocher",
   "props.remove": "Supprimer",
   "props.move": "Glisser pour déplacer",
+  "props.invalid": "Pas l'une des valeurs autorisées",
   "props.open": "Ouvrir la note",
   "props.addItem": "Ajouter…",
   "block.text": "Texte",

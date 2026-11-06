@@ -4,8 +4,6 @@
 import { noteName } from "../navigation/pages.ts";
 import { DEFS } from "../collections/rules.ts";
 
-const PROJECT_KINDS = DEFS.projects.kinds as string[];
-
 /** A note that points at another: where it is, its kind (`type:`), the file's mtime (seconds), what its `about:`,
  *  `context:` and `with:` name, the date of a meeting, its stage, and a person's role. */
 export type LinkedNote = {
@@ -41,7 +39,7 @@ export const LINKED_SHOWN = 4;
 const nameOfLink = (link: string) => noteName(link).trim().toLowerCase();
 const groupOf = (note: LinkedNote, apart: boolean): LinkedKey => {
   const kind = note.k.toLowerCase();
-  if (apart && PROJECT_KINDS.includes(kind)) return "projects";
+  if (apart && (DEFS.projects.kinds as string[]).includes(kind)) return "projects";
   return kind === "meeting" ? "meetings" : kind === "thread" ? "threads" : kind === "person" ? "people" : "documents";
 };
 const byNewest = (a: LinkedNote, b: LinkedNote) =>

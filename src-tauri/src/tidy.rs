@@ -16,17 +16,6 @@ pub struct Move { pub kind: String, pub from: String, pub to: String, pub rename
 /// What the plan found: the notes to move, and how many of the notes that have a home already sit in it.
 pub struct Tidy { pub moves: Vec<Move>, pub stay: usize }
 
-/// The home a type goes to (a key of homes.rs), None for a type without one. A transcript sits with its meeting; a
-/// journal is a daily note when it is named for a day.
-pub(crate) fn home_of(kind: &str, stem: &str) -> Option<&'static str> {
-    match kind.to_lowercase().as_str() {
-        "meeting" | "transcript" => Some("meeting"),
-        "thread" => Some("thread"),
-        "daily" => Some("daily"),
-        "journal" if dated(stem) => Some("daily"),
-        _ => None,
-    }
-}
 /// A name or value that starts with a day, YYYY-MM-DD.
 pub(crate) fn dated(s: &str) -> bool {
     let b = s.as_bytes();
@@ -64,6 +53,7 @@ pub fn plan(side: &Side) -> Tidy {
     let all = pagefiles::all_files(&vault);
     let mut taken: HashSet<String> = all.iter().map(|p| p.to_lowercase()).collect();
     let projects = project_dirs(side, &vault);
+    let types = crate::types::load(&vault);
     let skip = |p: &str| p.starts_with("System/") || p.starts_with("Resources/Templates/") || projects.iter().any(|d| p.strip_prefix(d.as_str()).is_some_and(|r| r.starts_with('/')));
     let (mut moves, mut stay) = (vec![], 0);
     for p in all.iter().filter(|p| p.to_lowercase().ends_with(".md") && !skip(p)) {
@@ -72,9 +62,9 @@ pub fn plan(side: &Side) -> Tidy {
         let name = p.rsplit('/').next().unwrap_or(p);
         let stem = name.strip_suffix(".md").unwrap_or(name);
         let Some(kind) = field(fm, "type") else { continue };
-        let Some(home) = home_of(&kind, stem) else { continue };
+        let Some(home) = crate::types::home_of(&types, &kind, stem) else { continue };
         let Some(year) = year_of(stem, fm) else { continue };
-        let Ok(dir) = homes::home(&vault, home, &year).strip_prefix(&vault).map(|d| d.to_string_lossy().into_owned()) else { continue };
+        let Ok(dir) = homes::home(&vault, &home, &year).strip_prefix(&vault).map(|d| d.to_string_lossy().into_owned()) else { continue };
         if p.rsplit_once('/').map_or("", |(d, _)| d) == dir { stay += 1; continue; }
         let (to, renamed) = free(&dir, name, &taken);
         taken.insert(to.to_lowercase());
@@ -185,6 +175,17 @@ mod tests {
         assert_eq!(t.moves.iter().map(|m| m.renamed).collect::<Vec<_>>(), [false, true, true]);
         w(&v, ".relay/config.json", r#"{"homes":{"meeting":"Meetings/{yyyy}"}}"#);
         assert_eq!(plan(&s).moves[0].to, "Meetings/2026/2026-11-05 Sync.md");
+    }
+
+    #[test]
+    fn a_type_without_a_home_in_the_registry_is_not_moved() {
+        let v = tmp("no-home");
+        w(&v, "Calendar/2026-11-05 Sync.md", &note("Meeting", "", "a", "id-a"));
+        w(&v, "Calendar/2026-11-05 Sync.transcript.md", &note("Transcript", "", "b", "id-b"));
+        let s = side(&v, "none.md");
+        assert_eq!(plan(&s).moves.len(), 2);
+        w(&v, ".relay/config.json", r#"{"types":{"Meeting":{"home":null}}}"#);
+        assert_eq!(pairs(&plan(&s)), vec![("Calendar/2026-11-05 Sync.transcript.md", "Calendar/Meetings/2026/2026-11-05 Sync.transcript.md")]);
     }
 
     #[test]

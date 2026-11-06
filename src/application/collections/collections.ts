@@ -16,6 +16,7 @@ import {
   withFrontmatter,
   type PropertyValue,
 } from "../../domain/workspace/properties";
+import { setTypes } from "../../domain/workspace/noteTypes";
 import { COLLECTION_VIEW } from "../../domain/navigation/views";
 import { select, toast } from "../navigation/navigation";
 import { noteTarget } from "../navigation/pages";
@@ -30,9 +31,24 @@ import { useCollectionsStore } from "./store";
 const set = useCollectionsStore.setState;
 const st = () => useCollectionsStore.getState();
 
+/** The workspace's note types, read again: the collections' columns and the Properties editors follow them. */
+export async function loadTypes(folder = activeFolder()) {
+  try {
+    const types = await backend.noteTypes(folder);
+    if (JSON.stringify(st().types) === JSON.stringify(types)) return;
+    setTypes(types);
+    set(draft => {
+      draft.types = types;
+    });
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 /** The workspace's notes with their values, read again; the store only changes when they did. */
 export async function loadRows(folder = activeFolder()) {
   try {
+    await loadTypes(folder);
     const rows = await backend.notesCollection(folder);
     if (JSON.stringify(st().rows[folder]) === JSON.stringify(rows)) return;
     set(draft => {

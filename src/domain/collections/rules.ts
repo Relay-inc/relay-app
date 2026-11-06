@@ -2,6 +2,7 @@
 // (related.rs `collection`: every note with its keys' values); this is the query on them. Nothing is written here: an
 // edit goes through the note's own frontmatter (domain/workspace/properties.ts).
 import { noteName } from "../navigation/pages.ts";
+import { noteTypes, type NoteType } from "../workspace/noteTypes.ts";
 
 /** A note as the index lists it: where it is, its title and `type:` ("" without one), the file's mtime (seconds), the
  *  `date:` (or the date its name starts with), the stage of a meeting (derived from its text), and every frontmatter
@@ -35,70 +36,33 @@ type Def = {
   derived: string[];
 };
 const col = (key: string, kind: ColumnKind): Column => ({ key, kind });
-export const DEFS: Record<CollectionId, Def> = {
-  meetings: {
-    kinds: ["meeting"],
-    columns: [
-      col("date", "date"),
-      col("title", "title"),
-      col("stage", "stage"),
-      col("about", "links"),
-      col("with", "people"),
-      col("language", "text"),
-      col("followed-up", "followed"),
-    ],
-    sort: { key: "date", dir: "desc" },
-    board: "stage",
-    derived: ["stage", "followed-up"],
-  },
-  documents: {
-    kinds: "rest",
-    columns: [
-      col("title", "title"),
-      col("type", "text"),
-      col("about", "links"),
-      col("status", "status"),
-      col("updated", "time"),
-    ],
-    sort: { key: "updated", dir: "desc" },
-    board: "status",
-    derived: ["type", "updated"],
-  },
-  people: {
-    kinds: ["person"],
-    columns: [col("title", "title"), col("role", "text"), col("context", "links"), col("about", "links")],
-    sort: { key: "title", dir: "asc" },
-    board: "role",
-    derived: [],
-  },
-  projects: {
-    kinds: ["project", "product", "platform", "initiative", "feature"],
-    columns: [
-      col("title", "title"),
-      col("type", "text"),
-      col("status", "status"),
-      col("context", "links"),
-      col("updated", "time"),
-    ],
-    sort: { key: "title", dir: "asc" },
-    board: "status",
-    derived: ["type", "updated"],
-  },
-  threads: {
-    kinds: ["thread"],
-    columns: [
-      col("date", "date"),
-      col("title", "title"),
-      col("about", "links"),
-      col("with", "people"),
-      col("status", "status"),
-    ],
-    sort: { key: "date", dir: "desc" },
-    board: "status",
-    derived: [],
-  },
+const NONE: Def = { kinds: [], columns: [], sort: { key: "title", dir: "asc" }, board: "", derived: [] };
+/** The collections as the registry defines them (domain/workspace/noteTypes.ts): each type with a `collection` gives the
+ *  columns, sort and board of its collection and the `type:` values it lists. Built again when the registry changes. */
+let built: { from: NoteType[]; defs: Partial<Record<CollectionId, Def>>; taken: Set<string> } | null = null;
+const defs = () => {
+  const from = noteTypes();
+  if (built?.from === from) return built;
+  const out: Partial<Record<CollectionId, Def>> = {};
+  for (const type of from) {
+    const c = type.collection;
+    if (!c) continue;
+    const names = [type.name, ...(type.aliases ?? [])].map(n => n.toLowerCase());
+    out[c.id as CollectionId] = {
+      kinds: c.rest ? "rest" : names,
+      columns: c.columns.map(x => col(x.key, x.kind as ColumnKind)),
+      sort: c.sort,
+      board: c.board,
+      derived: c.derived,
+    };
+  }
+  const taken = new Set(Object.values(out).flatMap(def => (def.kinds === "rest" ? [] : def.kinds)));
+  return (built = { from, defs: out, taken });
 };
-const TAKEN = new Set(Object.values(DEFS).flatMap(def => (def.kinds === "rest" ? [] : def.kinds)));
+export const DEFS = new Proxy({} as Record<CollectionId, Def>, {
+  get: (_, id) => defs().defs[id as CollectionId] ?? NONE,
+});
+const taken = () => defs().taken;
 /** The stages a meeting board has lanes for, in the order of a meeting's life. */
 export const STAGES = ["planned", "briefed", "wrapped"];
 /** The values `status:` is offered with before the notes teach others. */
@@ -156,8 +120,8 @@ export function inCollection(row: Row, collection: CollectionId, grouped = false
   const kind = row.k.toLowerCase();
   // a tree group's documents are every note that is no meeting, thread or person (an untyped one too)
   if (grouped && collection === "documents")
-    return apart ? !TAKEN.has(kind) : !["meeting", "thread", "person"].includes(kind);
-  return kinds === "rest" ? !!kind && !TAKEN.has(kind) : kinds.includes(kind);
+    return apart ? !taken().has(kind) : !["meeting", "thread", "person"].includes(kind);
+  return kinds === "rest" ? !!kind && !taken().has(kind) : kinds.includes(kind);
 }
 const matches = (row: Row, f: Filter) => {
   const values = valuesOf(row, f.key);

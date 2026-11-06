@@ -1,8 +1,11 @@
+import type { NoteType } from "../../domain/workspace/noteTypes";
 import { newView, type Row, type SavedView, type View } from "../../domain/collections/rules";
 import { makeStore } from "../make-store";
 
 // The collections' state: the notes' rows and the saved views per workspace folder, and the view being looked at.
 type CollectionsState = {
+  /** the note types of the workspace last read (domain/workspace/noteTypes.ts holds them for the rules) */
+  types: NoteType[];
   rows: Record<string, Row[]>;
   views: Record<string, SavedView[]>;
   /** what is open: the view with its changes, and the saved view it came from ("" for a built-in one) */
@@ -10,6 +13,7 @@ type CollectionsState = {
   name: string;
 };
 export const useCollectionsStore = makeStore<CollectionsState>(() => ({
+  types: [],
   rows: {},
   views: {},
   view: newView("meetings"),

@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { setTypes, type NoteType } from "./noteTypes.ts";
 import {
   frontmatterOf,
   moveProperty,
@@ -130,4 +132,33 @@ test("frontmatter in a head: read, replace, add when missing", () => {
   assert.equal(withFrontmatter(head, "type: X"), "---\ntype: X\n---\n# Relay\n");
   assert.equal(withFrontmatter("# Relay\n", "type: X"), "---\ntype: X\n---\n# Relay\n");
   assert.equal(frontmatterOf("# Relay\n"), null);
+});
+
+test("a type's field decides the editor, a select keeps a value outside its list as invalid", () => {
+  const types = JSON.parse(
+    readFileSync(new URL("../../../src-tauri/resources/types.json", import.meta.url), "utf8"),
+  ) as NoteType[];
+  setTypes(types);
+  const kinds = (yaml: string) => Object.fromEntries(readProperties(yaml)!.map(p => [p.key, p]));
+  const ok = kinds("type: Project\nstatus: Active\ncontext: Work\nlast:\npeople:\nphase: 2026-11-05");
+  assert.equal(ok.status.kind, "select");
+  assert.deepEqual(ok.status.options, ["Active", "Blocked", "Quiet", "Paused", "Closed"]);
+  assert.equal(ok.status.invalid, false);
+  assert.equal(ok.context.kind, "link"); // not a [[link]] yet: the field says link
+  assert.equal(ok.last.kind, "date");
+  assert.equal(ok.people.kind, "list");
+  assert.equal(ok.phase.kind, "text"); // looks like a date, the field says text
+  const bad = kinds("type: Project\nstatus: Someday\n").status;
+  assert.deepEqual([bad.kind, bad.value, bad.invalid], ["select", "Someday", true]);
+  // the value is not dropped: an edit elsewhere leaves the line as it is
+  assert.equal(
+    setProperty("type: Project\nstatus: Someday\nphase: a", "phase", "b"),
+    "type: Project\nstatus: Someday\nphase: b",
+  );
+  // an unknown type or key falls back to the value
+  assert.equal(kinds("type: Podcast\nstatus: Active").status.kind, "text");
+  assert.equal(kinds("type: Project\nsomething: 2026-11-05").something.kind, "date");
+  // a value that does not fit the field (a list under a select) stays what it is
+  assert.equal(kinds("type: Project\nstatus:\n  - a\n  - b").status.kind, "list");
+  setTypes([]);
 });

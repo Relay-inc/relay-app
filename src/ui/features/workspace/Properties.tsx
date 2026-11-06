@@ -13,6 +13,7 @@ import { noteName } from "../../../domain/navigation/pages";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { PropertyValue } from "./NoteDetail";
+import { useCollectionsStore } from "../../../application/collections/store";
 
 const FIELD =
   "h-7 w-full min-w-0 px-2 rounded-md bg-transparent text-label outline-none hover:bg-fill-2 focus:bg-fill-2 placeholder:text-tertiary";
@@ -34,6 +35,7 @@ export function Properties({
   children?: ReactNode;
 }) {
   const { t } = useT();
+  useCollectionsStore(s => s.types); // the editors follow the registry once it is read
   const rows = readProperties(yaml);
   const [kinds, setKinds] = useState<Record<string, PropertyKind>>({}); // a new, still empty key's kind
   const [dragging, setDragging] = useState<string | null>(null);
@@ -131,6 +133,25 @@ function Field({ row, set }: { row: Property; set: (value: Value) => void }) {
         aria-label={key}
         onChange={e => set(e.target.value || null)}
       />
+    );
+  if (kind === "select")
+    return (
+      <select
+        className={`${FIELD} ${row.invalid ? "text-bad" : ""}`}
+        value={typeof value === "string" ? value : ""}
+        aria-label={key}
+        aria-invalid={row.invalid}
+        title={row.invalid ? t("props.invalid") : undefined}
+        onChange={e => set(e.target.value || null)}
+      >
+        <option value=""></option>
+        {row.invalid ? <option value={String(value)}>{String(value)}</option> : null}
+        {row.options?.map(option => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
     );
   if (kind === "raw")
     return <span className="flex-1 px-2 font-mono text-xs text-secondary whitespace-pre-wrap">{String(value)}</span>;

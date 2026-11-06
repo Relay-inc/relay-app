@@ -652,6 +652,7 @@ export default {
   "props.kind.check": "Kontrollkästchen",
   "props.remove": "Entfernen",
   "props.move": "Zum Verschieben ziehen",
+  "props.invalid": "Keiner der erlaubten Werte",
   "props.open": "Notiz öffnen",
   "props.addItem": "Hinzufügen…",
   "block.text": "Text",

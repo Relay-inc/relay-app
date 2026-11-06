@@ -15,7 +15,7 @@ pub const KEYS: [(&str, bool, bool); 3] = [
 ];
 pub const REMINDERS: &str = "reminders.md";
 /// The brain folder of the known layouts: System/ in the new one, Resources/Meta/Claude/ in the old one.
-const BRAINS: [&str; 2] = ["System", "Resources/Meta/Claude"];
+pub(crate) const BRAINS: [&str; 2] = ["System", "Resources/Meta/Claude"];
 
 /// The path with symlinks resolved, or as given (without a trailing slash) when it does not exist.
 pub fn canon(p: &str) -> String {

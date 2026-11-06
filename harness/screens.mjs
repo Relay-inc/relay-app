@@ -1039,7 +1039,10 @@ const VIEWS = {
   },
   "card-subtask-parent": async () => {
     await VIEWS["card-detail"]();
-    await page.locator(".ticket-window").getByRole("button", { name: /VAT column per rate/ }).click();
+    await page
+      .locator(".ticket-window")
+      .getByRole("button", { name: /VAT column per rate/ })
+      .click();
     await waitText("Subtask of #300");
   },
   // Start conversation on a ticket with a screenshot: the picture is attached in the new conversation's composer (#251)
@@ -2382,6 +2385,14 @@ const VIEWS = {
   "page-properties": async () => {
     await VIEWS["page-view-dark"]();
     await page.getByLabel("status", { exact: true }).hover();
+    await settle(page);
+  },
+  // a typed page (#418): `status:` of a Project is a select with the registry's allowed values, not free text
+  "page-properties-select": async () => {
+    await open(page, server.url, { fixture: "linked-collections" });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('select[aria-label="status"]').waitFor();
     await settle(page);
   },
   // status changed from the header: only that line of the file changes, saved with the body's text

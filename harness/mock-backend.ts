@@ -4,6 +4,7 @@
 // events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-keeper|shared-live|shared-live-dark, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
+import noteTypeDefaults from "../src-tauri/resources/types.json";
 import { NOW, pngBase64 } from "./fixtures/util";
 import * as embeds from "./fixtures/embeds";
 import * as vault from "./fixtures/vault";
@@ -1389,6 +1390,8 @@ function handle(cmd: string, a: Args): unknown {
       return kbOn ? kb.find(a.folder === vault.VAULT, String(a.query)) : { names: [], content: [] };
     case "note_times":
       return Object.fromEntries(pageList().map((p, i) => [p, NOW_S - i * 3600]));
+    case "note_types":
+      return noteTypeDefaults;
     case "note_templates":
       return kbOn ? kb.templates : [];
     case "new_from_template": {

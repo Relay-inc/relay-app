@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { setTypes, type NoteType } from "./noteTypes.ts";
 import { attendees, linkedTo, shownSections, type LinkedNote } from "./linked.ts";
+
+// the registry the app ships: what counts as a project comes from it
+setTypes(
+  JSON.parse(readFileSync(new URL("../../../src-tauri/resources/types.json", import.meta.url), "utf8")) as NoteType[],
+);
 
 const note = (p: string, o: Partial<LinkedNote> = {}): LinkedNote => ({
   p,

@@ -645,6 +645,7 @@ const en = {
   "props.kind.check": "Checkbox",
   "props.remove": "Remove",
   "props.move": "Drag to move",
+  "props.invalid": "Not one of the allowed values",
   "props.open": "Open the note",
   "props.addItem": "Add…",
   "block.text": "Text",

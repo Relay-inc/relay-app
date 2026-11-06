@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { setTypes, type NoteType } from "../workspace/noteTypes.ts";
 import {
+  DEFS,
   commonFolder,
   evaluate,
   grouped,
@@ -14,6 +17,12 @@ import {
   stageOf,
   type Row,
 } from "./rules.ts";
+
+// the registry the app ships (Rust resolves it; the tests read the same file)
+const defaults = JSON.parse(
+  readFileSync(new URL("../../../src-tauri/resources/types.json", import.meta.url), "utf8"),
+) as NoteType[];
+setTypes(defaults);
 
 const row = (p: string, k: string, props: Record<string, string[]>, extra: Partial<Row> = {}): Row => ({
   p,
@@ -197,4 +206,18 @@ test("the linked filter is the tree group's rule: about: or context:, outside it
   assert.deepEqual(names("meetings"), ["2026-10-01 A", "2026-09-01 B"]);
   assert.deepEqual(names("documents").sort(), ["Loose", "Ref"]); // untyped counts, the project's own folder does not
   assert.deepEqual(names("people"), ["Sofie Claes"]);
+});
+
+test("the collections' columns come from the registry", () => {
+  const meeting = defaults.find(t => t.name === "Meeting")!;
+  setTypes(defaults);
+  assert.deepEqual(DEFS.meetings.columns.map(c => c.key).slice(0, 3), ["date", "title", "stage"]);
+  setTypes(
+    defaults.map(t =>
+      t === meeting ? { ...t, collection: { ...t.collection!, columns: [{ key: "room", kind: "text" }] } } : t,
+    ),
+  );
+  assert.deepEqual(DEFS.meetings.columns, [{ key: "room", kind: "text" }]);
+  assert.deepEqual(DEFS.projects.kinds, ["project", "product", "platform", "initiative", "feature"]);
+  setTypes(defaults);
 });

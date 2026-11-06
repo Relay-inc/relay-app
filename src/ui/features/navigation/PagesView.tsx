@@ -35,7 +35,7 @@ import { newChatHere } from "../../../application/conversations/chats";
 import { select } from "../../../application/navigation/navigation";
 import { GRAPH, INBOX_VIEW } from "../../../domain/navigation/views";
 import { loadInboxNotes, useInboxStore } from "../../../application/inbox/inbox";
-import { loadViews } from "../../../application/collections/collections";
+import { loadTypes, loadViews } from "../../../application/collections/collections";
 import { SavedViewRows } from "./CollectionRows";
 import { toast } from "../../../application/navigation/navigation";
 import { activeFolder, workspaces } from "../../../application/navigation/workspaces";
@@ -113,6 +113,7 @@ export function PagesView() {
     void loadInboxNotes(workspaceShown);
   }, [notesVersion, workspaceShown]);
   useEffect(() => {
+    void loadTypes(workspaceShown);
     void loadViews(workspaceShown);
   }, [workspaceShown]);
 

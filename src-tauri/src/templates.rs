@@ -4,7 +4,7 @@
 // note is the one note a day: opened when it is there, made once when not.
 
 use crate::vault::rel_to as rel;
-use crate::{homes, projects, tidy, vault};
+use crate::{homes, projects, vault};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -44,9 +44,9 @@ pub fn create(vault: &Path, template: &str, folder: &str, about: &str, context: 
     if !list(&v).iter().any(|n| n == template) { return Err(format!("no template {template}")); }
     let raw = fs::read_to_string(vault.join(DIR).join(format!("{template}.md"))).map_err(|e| e.to_string())?;
     let kind = vault::split(&raw).and_then(|(fm, _)| vault::field(fm, "type")).unwrap_or_else(|| template.to_string());
-    let home = tidy::home_of(&kind, today);
+    let home = crate::types::home_of(&crate::types::load(vault), &kind, today);
     let (about, context) = (safe(about), safe(context));
-    let dir = match home {
+    let dir = match &home {
         Some(h) => homes::home(vault, h, homes::year_of(today).ok_or("not a day")?),
         None => {
             if folder.split('/').any(|s| s == ".." || s.starts_with('.')) || folder.starts_with('/') { return Err(format!("not a folder of the vault: {folder}")); }

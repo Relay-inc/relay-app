@@ -651,6 +651,7 @@ export default {
   "props.kind.check": "Vinkje",
   "props.remove": "Verwijderen",
   "props.move": "Sleep om te verplaatsen",
+  "props.invalid": "Niet een van de toegestane waarden",
   "props.open": "Notitie openen",
   "props.addItem": "Toevoegen…",
   "block.text": "Tekst",

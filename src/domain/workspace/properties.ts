@@ -1,13 +1,15 @@
 import { Document, isMap, isScalar, isSeq, parseDocument } from "yaml";
+import { fieldOf, type Field } from "./noteTypes.ts";
 
 // A page's properties: its frontmatter as rows to edit. An edit rewrites only the lines of the key it touches, the
 // rest of the frontmatter (comments, quoting, order, keys Relay does not understand) stays byte for byte.
 
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
 
-export type PropertyKind = "text" | "date" | "list" | "link" | "check" | "raw";
+export type PropertyKind = "text" | "date" | "list" | "link" | "check" | "select" | "raw";
 export type PropertyValue = string | number | boolean | null | string[];
-export type Property = { key: string; value: PropertyValue; kind: PropertyKind };
+/** `options` and `invalid` only for a `select`: the allowed values, and whether the value is outside them. */
+export type Property = { key: string; value: PropertyValue; kind: PropertyKind; options?: string[]; invalid?: boolean };
 
 const LINK = /^\[\[[^\]\n]+\]\]$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -74,9 +76,44 @@ function valueOf(lines: string, after: number): { value: PropertyValue; kind: Pr
   return { value: kind === "raw" ? JSON.stringify(value) : value, kind };
 }
 
-/** The frontmatter's keys in order with their values and editor kinds; null when it can't be edited safely. */
+const OF_FIELD = {
+  text: "text",
+  date: "date",
+  select: "select",
+  link: "link",
+  people: "list",
+  check: "check",
+} as const;
+/** The editor the registry gives a key (domain/workspace/noteTypes.ts) when the value fits it, else the one the value says
+ *  (`kindOf`). A select's value outside its allowed values stays, flagged `invalid`. */
+function typed(p: Property, field: Field | undefined): Property {
+  if (!field) return p;
+  const kind: PropertyKind = OF_FIELD[field.kind];
+  const v = p.value;
+  const fits =
+    v === null ||
+    ((kind === "list"
+      ? Array.isArray(v)
+      : kind === "check"
+        ? typeof v === "boolean"
+        : typeof v === "string" || (kind === "text" && typeof v === "number")) &&
+      (kind !== "date" || DATE.test(String(v))));
+  if (!fits || p.kind === "raw") return p;
+  return kind === "select"
+    ? { ...p, kind, options: field.values ?? [], invalid: v !== null && !field.values?.includes(String(v)) }
+    : { ...p, kind };
+}
+
+/** The frontmatter's keys in order with their values and editor kinds (from the note's type when the registry knows the
+ *  key); null when it can't be edited safely. */
 export function readProperties(yaml: string): Property[] | null {
-  return spans(yaml + "\n")?.map(({ key, value, kind }) => ({ key, value, kind })) ?? null;
+  const list = spans(yaml + "\n");
+  const type = list?.find(s => s.key === "type")?.value;
+  return (
+    list?.map(({ key, value, kind }) =>
+      typed({ key, value, kind }, typeof type === "string" ? fieldOf(type, key) : undefined),
+    ) ?? null
+  );
 }
 
 /** One key's lines as Relay writes them: a [[link]] double-quoted, an empty value as `key:`. */
