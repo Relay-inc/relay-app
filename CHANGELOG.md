@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- Productive subtasks show again: a parent card counts its done subtasks (1/3), the ticket window lists them under the description (a row opens the subtask) and a subtask links back to its parent. The board's task list leaves subtasks out, as Productive's own board does, and the ticket never asked for them
 - A meeting note from a recording gets its people, `context:` and `about:` filled from the vault: attendee emails are matched to Person notes, a company note's `domain:` is the fallback, and what stays unknown is named instead of asked when nobody is there to answer.
 - Back to the notes in a meeting's Wrap-up no longer blanks the window when nothing was recorded: the transcript panel rendered in a loop until React gave up. The mail composer's recipient fields had the same loop waiting for them.
 
