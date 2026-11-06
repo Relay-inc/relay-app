@@ -16,7 +16,7 @@ a PR. Versions follow
 ### Added
 
 - One registry of note types (Project, Meeting, Person and the rest) that Tidy, new notes, Collections and the page properties all read: a Project's status is now a select with its allowed values, and Relay writes the same structure to `rules/vault/types.md` for every Claude session. Override a type under `types` in `.relay/config.json`. (#428)
-- A view inside a page: `/` → View puts a table or board of a collection in the text, filtered on the page itself (`about: this`), so the same block shows each project's own meetings. Cells and cards edit the notes; the block is a `relay-view` code block, and the Project template has one. (#PR)
+- A view inside a page: `/` → View puts a table or board of a collection in the text, filtered on the page itself (`about: this`), so the same block shows each project's own meetings. Cells and cards edit the notes; the block is a `relay-view` code block, and the Project template has one. (#430)
 
 ### Changed
 
