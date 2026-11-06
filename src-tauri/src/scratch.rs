@@ -1,12 +1,10 @@
 // Scratch notes per project, the notes drawer's: Inbox notes of the vault (inbox.rs) with `about: "[[<Project>]]"`, so
 // Claude, Obsidian and search see them and filing moves them out like any capture. A note's id is its file name in
-// the Inbox, checked on every call. Before, they were plain files in <vault>/.relay/notes/<project>/<id>.md: those are
-// moved into the Inbox by `migrate`, which shows what it would do first (`plan`) and keeps a journal for its Undo.
+// the Inbox, checked on every call. Before, they were plain files in <vault>/.relay/notes/<project>/<id>.md.
 
 use crate::inbox;
 use serde_json::{json, Value};
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// The project name as a folder name: no path separators, no leading dot; empty or over 120 chars is refused.
@@ -22,7 +20,6 @@ fn valid_id(id: &str) -> bool { !id.is_empty() && id.len() <= 100 && !id.starts_
 pub fn dir(vault: &str, project: &str) -> Result<PathBuf, String> {
     Ok(PathBuf::from(vault).join(".relay/notes").join(folder(project)?))
 }
-fn legacy_id(id: &str) -> bool { !id.is_empty() && id.len() <= 32 && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()) }
 fn about(project: &str) -> String { format!("[[{}]]", project.trim()) }
 fn is_about(text: &str, project: &str) -> bool {
     inbox::split(text).0.and_then(|fm| crate::vault::field(fm, "about")).is_some_and(|a| a.eq_ignore_ascii_case(&about(project)))
@@ -81,85 +78,6 @@ pub fn delete(vault: &str, project: &str, id: &str) -> Result<(), String> {
     }
 }
 
-// ---------- the notes of before: .relay/notes/<project>/<id>.md
-
-/// One note still in `.relay/notes`, and where it goes: the project, its old id, its text, its name in the Inbox.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Move { pub project: String, pub id: String, pub text: String, pub to: String }
-
-fn journal(vault: &str) -> PathBuf { Path::new(vault).join(".relay/scratch-migration.json") }
-
-/// What `migrate` would do now, read and not written: every old note, named for the minute it was last changed
-/// (a name taken gets a number), the newest first.
-pub fn plan(vault: &str) -> Vec<Move> {
-    let mut old: Vec<(u64, Move)> = vec![];
-    for d in fs::read_dir(Path::new(vault).join(".relay/notes")).into_iter().flatten().flatten() {
-        let project = d.file_name().to_string_lossy().into_owned();
-        if !d.path().is_dir() || folder(&project).is_err() { continue; }
-        for e in fs::read_dir(d.path()).into_iter().flatten().flatten() {
-            let p = e.path();
-            let id = p.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
-            if p.extension().and_then(|s| s.to_str()) != Some("md") || !legacy_id(&id) { continue; }
-            let Ok(text) = fs::read_to_string(&p) else { continue };
-            old.push((modified(&p), Move { project: project.clone(), id, text, to: String::new() }));
-        }
-    }
-    old.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.id.cmp(&b.1.id)));
-    let mut taken: std::collections::HashSet<String> = fs::read_dir(inbox::dir(Path::new(vault))).into_iter().flatten().flatten().map(|e| e.file_name().to_string_lossy().to_lowercase()).collect();
-    old.into_iter().map(|(m, mut mv)| {
-        let secs = i64::try_from(m).unwrap_or(0);
-        let when = chrono::DateTime::from_timestamp(secs, 0).unwrap_or_default().with_timezone(&chrono::Local);
-        let stem = when.format("%Y-%m-%d %H%M").to_string();
-        let name = (0..).map(|i| if i == 0 { stem.clone() } else { format!("{stem} {i}") }).find(|n| !taken.contains(&format!("{n}.md").to_lowercase())).unwrap();
-        taken.insert(format!("{name}.md").to_lowercase());
-        mv.to = name;
-        mv
-    }).collect()
-}
-
-/// Move every old note into the Inbox with `about:` set, and write the journal Undo needs. Each note is written to its
-/// new place before the old file goes, so a stop halfway loses nothing. Returns the moves made.
-pub fn migrate(vault: &str) -> Result<Vec<Move>, String> {
-    let moves = plan(vault);
-    if moves.is_empty() { return Ok(moves); }
-    let dir = inbox::dir(Path::new(vault));
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let mut done: Vec<Move> = vec![];
-    for m in &moves {
-        let text = with_about(&m.project, &m.text);
-        let mut f = crate::pagefiles::new_file(&dir.join(format!("{}.md", m.to))).map_err(|e| e.to_string())?;
-        f.write_all(text.as_bytes()).map_err(|e| e.to_string())?;
-        fs::remove_file(dir_of(vault, m)?).map_err(|e| e.to_string())?;
-        done.push(m.clone());
-    }
-    let entries: Vec<Value> = done.iter().map(|m| json!({"project": m.project, "id": m.id, "text": m.text, "to": m.to})).collect();
-    fs::write(journal(vault), json!({"moves": entries}).to_string()).map_err(|e| e.to_string())?;
-    // the folders that are empty now go; one that holds anything else stays
-    for d in fs::read_dir(Path::new(vault).join(".relay/notes")).into_iter().flatten().flatten() { fs::remove_dir(d.path()).ok(); }
-    Ok(done)
-}
-fn dir_of(vault: &str, m: &Move) -> Result<PathBuf, String> { Ok(dir(vault, &m.project)?.join(format!("{}.md", m.id))) }
-
-/// Put the last migration back: each note into `.relay/notes` as it was, unless it was edited since (it stays in the
-/// Inbox, and counts in the second number). Returns (put back, left).
-pub fn undo(vault: &str) -> Result<(usize, usize), String> {
-    let j: Value = serde_json::from_str(&fs::read_to_string(journal(vault)).map_err(|_| "nothing to undo".to_string())?).map_err(|e| e.to_string())?;
-    let (mut back, mut left) = (0, 0);
-    for m in j["moves"].as_array().into_iter().flatten() {
-        let (project, id, text, to) = (m["project"].as_str().unwrap_or(""), m["id"].as_str().unwrap_or(""), m["text"].as_str().unwrap_or(""), m["to"].as_str().unwrap_or(""));
-        if !legacy_id(id) || !valid_id(to) { left += 1; continue; }
-        let at = file(vault, to)?;
-        let (target, same) = (dir(vault, project)?, fs::read_to_string(&at).is_ok_and(|now| now == with_about(project, text)));
-        if !same { left += 1; continue; }
-        fs::create_dir_all(&target).map_err(|e| e.to_string())?;
-        fs::write(target.join(format!("{id}.md")), text).map_err(|e| e.to_string())?;
-        fs::remove_file(&at).map_err(|e| e.to_string())?;
-        back += 1;
-    }
-    fs::remove_file(journal(vault)).ok();
-    Ok((back, left))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -168,11 +86,6 @@ mod tests {
         fs::remove_dir_all(&d).ok();
         fs::create_dir_all(&d).unwrap();
         d.to_string_lossy().into_owned()
-    }
-    fn old(v: &str, project: &str, id: &str, text: &str) {
-        let d = dir(v, project).unwrap();
-        fs::create_dir_all(&d).unwrap();
-        fs::write(d.join(format!("{id}.md")), text).unwrap();
     }
 
     #[test]
@@ -204,32 +117,5 @@ mod tests {
         assert!(fs::read_to_string(&p).unwrap().contains("type: Document") && list(&v, "Beacon").unwrap()[0]["text"] == "hello 3");
         delete(&v, "Beacon", &id).unwrap();
         assert!(list(&v, "Beacon").unwrap().as_array().unwrap().is_empty());
-    }
-
-    #[test]
-    fn the_migration_shows_its_plan_moves_the_notes_and_one_undo_puts_them_back() {
-        let v = tmp("migrate");
-        old(&v, "Beacon", "lxyz1", "Ask Eva about the tax rule");
-        old(&v, "Atlas Logistics", "lxyz2", "Rates for Q1");
-        fs::create_dir_all(Path::new(&v).join("Inbox")).unwrap();
-        let p = plan(&v);
-        assert_eq!(p.len(), 2);
-        assert!(p.iter().all(|m| m.to.len() >= 15 && m.to.as_bytes()[10] == b' '), "named for the minute: {p:?}");
-        assert_ne!(p[0].to, p[1].to, "two notes of one minute get two names");
-        // the plan is only read
-        assert!(dir(&v, "Beacon").unwrap().join("lxyz1.md").exists() && list(&v, "Beacon").unwrap().as_array().unwrap().is_empty());
-        let done = migrate(&v).unwrap();
-        assert_eq!(done.len(), 2);
-        assert_eq!(list(&v, "Beacon").unwrap()[0]["text"], "Ask Eva about the tax rule");
-        assert_eq!(list(&v, "Atlas Logistics").unwrap()[0]["text"], "Rates for Q1");
-        assert!(plan(&v).is_empty() && !Path::new(&v).join(".relay/notes/Beacon").exists());
-        // one note edited since stays; the other goes back
-        let edited = list(&v, "Beacon").unwrap()[0]["id"].as_str().unwrap().to_string();
-        save(&v, "Beacon", Some(edited), "Ask Eva, then Sam").unwrap();
-        assert_eq!(undo(&v).unwrap(), (1, 1));
-        assert_eq!(fs::read_to_string(dir(&v, "Atlas Logistics").unwrap().join("lxyz2.md")).unwrap(), "Rates for Q1");
-        assert_eq!(list(&v, "Beacon").unwrap()[0]["text"], "Ask Eva, then Sam");
-        assert!(undo(&v).is_err(), "one Undo per migration");
-        fs::remove_dir_all(&v).ok();
     }
 }

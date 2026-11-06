@@ -194,10 +194,8 @@ const voiceModels = [
   { id: "moonshine-base", mb: 55, langs: ["en"], auto: true, installed: false, downloading: false },
 ];
 const scratch = new Map<string, { id: string; text: string; modified: number }[]>();
-// fixture kb-changes-inbox: the Inbox's notes and the old scratch notes (fixtures/inbox.ts)
+// fixture kb-changes-inbox: the Inbox's notes (fixtures/inbox.ts)
 const inboxOn = fixture.includes("inbox");
-let legacyLeft = inboxOn ? structuredClone(inbox.legacy) : [];
-let migratedScratch: typeof legacyLeft = [];
 let scratchId = 0;
 const NOW_S = Math.floor(NOW / 1000);
 // the machine's GitHub and repos (fixture "github"), changed by Disconnect, Connect and Push
@@ -1289,37 +1287,6 @@ function handle(cmd: string, a: Args): unknown {
       }
       emit("inbox-changed", null);
       return { filed, failed };
-    }
-    // scratch notes of before: still in .relay/notes until the migration moves them into the Inbox (scratch.rs)
-    case "scratch_pending":
-      return legacyLeft.map((m, i) => ({ project: m.project, id: m.id, to: inbox.migratedName(i) }));
-    case "scratch_migrate": {
-      const moved = legacyLeft;
-      moved.forEach((m, i) => {
-        const to = inbox.migratedName(i);
-        written.set(`${inbox.DIR}/${to}.md`, { text: `---\nabout: "[[${m.project}]]"\n---\n\n${m.text}`, hash: "h0" });
-        pages = [...pageList(), `${inbox.DIR}/${to}.md`];
-        scratch.set(m.project, [{ id: to, text: m.text, modified: NOW_S }, ...(scratch.get(m.project) ?? [])]);
-      });
-      migratedScratch = moved;
-      legacyLeft = [];
-      emit("inbox-changed", null);
-      return moved.length;
-    }
-    case "scratch_migrate_undo": {
-      migratedScratch.forEach((m, i) => {
-        const to = inbox.migratedName(i);
-        written.delete(`${inbox.DIR}/${to}.md`);
-        pages = pageList().filter(p => p !== `${inbox.DIR}/${to}.md`);
-        scratch.set(
-          m.project,
-          (scratch.get(m.project) ?? []).filter(n => n.id !== to),
-        );
-      });
-      legacyLeft = migratedScratch;
-      migratedScratch = [];
-      emit("inbox-changed", null);
-      return { back: legacyLeft.length, left: 0 };
     }
     // the capture window's save: a note in the Inbox, named for the minute (inbox.rs `capture`)
     case "quick_capture_save": {

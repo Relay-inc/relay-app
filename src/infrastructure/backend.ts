@@ -734,12 +734,6 @@ export const scratchList = (project: string) => invoke<ScratchFile[]>("scratch_l
 export const scratchSave = (project: string, id: string | null, text: string) =>
   invoke<string>("scratch_save", { project, id, text });
 export const scratchDelete = (project: string, id: string) => invoke("scratch_delete", { project, id });
-/** What moving a workspace's old scratch notes (`.relay/notes`) into its Inbox would do, nothing written. */
-export type ScratchMove = { project: string; id: string; to: string };
-export const scratchPending = (workspace: string) => invoke<ScratchMove[]>("scratch_pending", { workspace });
-export const scratchMigrate = (workspace: string) => invoke<number>("scratch_migrate", { workspace });
-export const scratchMigrateUndo = (workspace: string) =>
-  invoke<{ back: number; left: number }>("scratch_migrate_undo", { workspace });
 
 // ---------- the Inbox and quick capture (src-tauri/src/inbox.rs, anywhere.rs)
 export const inboxList = (workspace: string) => invoke<InboxNote[]>("inbox_list", { workspace });

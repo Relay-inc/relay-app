@@ -1,12 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { clockTime } from "../../../shared/format";
-import {
-  acceptAll,
-  fileWithClaude,
-  loadInboxNotes,
-  loadPending,
-  useInboxStore,
-} from "../../../application/inbox/inbox";
+import { acceptAll, fileWithClaude, loadInboxNotes, useInboxStore } from "../../../application/inbox/inbox";
 import { keeps, type InboxNote } from "../../../domain/inbox/rules";
 import { activeFolder } from "../../../application/navigation/workspaces";
 import { bindingLabel } from "../../../domain/settings/shortcuts";
@@ -16,14 +10,13 @@ import { Icon } from "../../components/Icon";
 import { Toast } from "../conversations/Toast";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { InboxRow } from "./InboxRow";
-import { ScratchMove } from "./ScratchMove";
 
 const NONE: InboxNote[] = [];
 // Quick capture's default key (Settings › Shortcuts can change it): the empty state names it
 const CAPTURE_KEY = bindingLabel("ctrl+alt+meta+KeyN");
 
 /** The Inbox (K7): the notes dropped in without a place, newest first. File with Claude asks for a home for each and
- *  nothing moves until a row is accepted. The old scratch notes outside the vault offer their move above the list. */
+ *  nothing moves until a row is accepted. */
 export function InboxView({ className }: { className: string }) {
   const { t, tn, locale } = useT();
   const folder = useDerived(() => activeFolder());
@@ -32,10 +25,8 @@ export function InboxView({ className }: { className: string }) {
   const skipped = useInboxStore(s => s.skipped);
   const busy = useInboxStore(s => s.busy);
   const toast = useNavigationStore(s => s.toast);
-  const [moving, setMoving] = useState(false);
   useEffect(() => {
     void loadInboxNotes(folder);
-    void loadPending(folder);
   }, [folder]);
   const items = proposal?.items ?? [];
   const sub = proposal
@@ -61,7 +52,7 @@ export function InboxView({ className }: { className: string }) {
               {t("inbox.acceptAll")}
             </button>
             <button
-              className={`btn ${moving ? "" : "btn-primary"} px-3 inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50`}
+              className={`btn btn-primary px-3 inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50`}
               disabled={busy !== "" || !notes.length}
               onClick={() => void fileWithClaude()}
             >
@@ -69,7 +60,6 @@ export function InboxView({ className }: { className: string }) {
               {busy === "propose" ? t("inbox.filing") : t("inbox.fileWith")}
             </button>
           </header>
-          <ScratchMove workspace={folder} open={moving} onOpen={setMoving} />
           {notes.length ? (
             <>
               <div className="border border-separator rounded-xl">

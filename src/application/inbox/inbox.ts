@@ -29,7 +29,7 @@ export async function loadInboxNotes(folder = activeFolder()) {
     console.error(e);
   }
 }
-/** Something wrote to the Inbox from outside this view (quick capture, a migration): every reader asks again. */
+/** Something wrote to the Inbox from outside this view (quick capture): every reader asks again. */
 export async function inboxChanged() {
   set(draft => {
     draft.version++;
@@ -148,35 +148,4 @@ async function undoFiling(folder: string, count: number) {
 /** Accept all: every proposal that moves its note. */
 export const acceptAll = () => accept((st().proposal[activeFolder()]?.items ?? []).map(item => item.path));
 
-// ---------- the scratch notes of before, in .relay/notes: moved into the Inbox after a dry run, with one Undo
-/** What moving the workspace's old scratch notes would do, read now. */
-export async function loadPending(folder: string) {
-  const list = await backend.scratchPending(folder).catch(() => []);
-  set(draft => {
-    draft.pending[folder] = list;
-  });
-  return list;
-}
-export const pendingIn = (folder: string) => st().pending[folder] ?? [];
-/** Moves them (the dry run was shown), then the toast offers the one Undo. */
-export async function migrateScratch(folder: string) {
-  try {
-    const n = await backend.scratchMigrate(folder);
-    await loadPending(folder);
-    await inboxChanged();
-    toast(tn("inbox.migrated", n), async () => {
-      try {
-        await backend.scratchMigrateUndo(folder);
-      } catch (e) {
-        toast(String(e));
-      }
-      await loadPending(folder);
-      await inboxChanged();
-    });
-  } catch (e) {
-    toast(String(e));
-  }
-}
-
 export { useInboxStore };
-export type { PendingMove } from "./store";

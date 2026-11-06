@@ -1,6 +1,5 @@
-// Fixture inbox (K7, issue 372): four notes in the Inbox with the proposals Claude would make for them, two old scratch
-// notes still in .relay/notes, and the answers of the backend's inbox_* and scratch_* commands (src-tauri/src/inbox.rs and
-// scratch.rs, which have their own tests). Fictional data only.
+// Fixture inbox (K7, issue 372): four notes in the Inbox with the proposals Claude would make for them, and the answers of
+// the backend's inbox_* commands (src-tauri/src/inbox.rs, which has its own tests). Fictional data only.
 import { NOW } from "./util";
 
 export const DIR = "Inbox";
@@ -65,13 +64,6 @@ export const homes: Record<string, string> = {
   daily: "Calendar/Daily/2026",
   thread: "Calendar/Threads/2026",
 };
-/** Scratch notes of before, still in `.relay/notes/<project>/<id>.md`. */
-export const legacy = [
-  { project: "Northwind Portal", id: "lxyz1", text: "Ask Sofie about the rate limit window" },
-  { project: "Beacon Billing", id: "lxyz2", text: "Plate cache: 24 h, check the invoice run" },
-];
-/** The name a migrated note gets: the minute it was last changed. */
-export const migratedName = (i: number) => `2026-09-2${i} 1015`;
 /** The frontmatter a filed note gets, as inbox.rs `filed_text` writes it. */
 export function filed(text: string, p: Proposal) {
   const links = p.links.map(l => `${l.k}: "[[${l.v}]]"`).join("\n");

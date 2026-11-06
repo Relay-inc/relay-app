@@ -1364,7 +1364,7 @@ const VIEWS = {
   },
   "changes-feed-long-dark": async () => VIEWS["changes-feed-long"]("kb-changes-long-dark"),
   // K1 / K7 (issue 372): the Inbox row with its count in the Pages tab, the Inbox view, Claude's proposals, a row's
-  // destination picker, the dry run of moving the old scratch notes, and the quick capture window
+  // destination picker, and the quick capture window
   "inbox-row": async (fixture = "kb-changes-inbox") => {
     await open(page, server.url, { fixture });
     await page.getByRole("tab", { name: /^Pages/ }).click();
@@ -1394,12 +1394,6 @@ const VIEWS = {
     await settle(page);
   },
   "inbox-edit-dark": async () => VIEWS["inbox-edit"]("kb-changes-inbox-dark"),
-  "inbox-migrate": async (fixture = "kb-changes-inbox") => {
-    await VIEWS.inbox(fixture);
-    await page.getByRole("button", { name: "Move into Inbox…" }).click();
-    await waitText("Move scratch notes into the vault");
-    await settle(page);
-  },
   "quick-capture": async (fixture = "kb-changes-inbox") => {
     await page.setViewportSize({ width: 440, height: 200 });
     await open(page, server.url, { path: "/capture.html", fixture });
