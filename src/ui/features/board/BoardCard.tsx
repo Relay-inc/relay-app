@@ -23,6 +23,22 @@ const CARD_AT_REST = "border border-card-edge shadow-card hover:border-card-edge
 const CARD_SELECTED = "border border-accent shadow-[0_0_0_.5px_var(--accent),0_0_0_4px_var(--accent-soft)]";
 const CARD_DRAGGED = "fixed left-0 top-0 z-40 pointer-events-none opacity-95 shadow-lg";
 
+/** How many of a card's subtasks are done, of all of them ("3/8"), when it has any. */
+export function SubtaskCount({ subtasks }: { subtasks: Card["subtasks"] }) {
+  const { t } = useT();
+  if (!subtasks?.total) return null;
+  const done = subtasks.total - subtasks.open;
+  return (
+    <span
+      className="inline-flex items-center gap-1 tabular-nums"
+      title={t("kb.subtasksDone", { done, total: subtasks.total })}
+    >
+      <Icon name="list" className="glyph size-3" />
+      {done}/{subtasks.total}
+    </span>
+  );
+}
+
 /** One card. Pressing it reports where it was grabbed (the board drags it with pointer events, the Mac webview does
  *  not deliver HTML drag and drop reliably), Enter or Space opens it. `ghost` is the copy that follows the pointer,
  *  `selected` the card shown in the ticket window. */
@@ -92,7 +108,7 @@ export function BoardCard({
         <div className="text-[13px] font-medium leading-[1.4] text-pretty">{card.title}</div>
       </div>
       {path && <div className={`text-[11px] text-secondary ${card.state ? "pl-5.5" : ""}`}>{path}</div>}
-      {(!!card.labels?.length || dueDay || touched) && (
+      {(!!card.labels?.length || dueDay || touched || !!card.subtasks) && (
         <div
           className={`flex items-center gap-1.5 text-[11px] text-secondary tabular-nums ${card.state ? "pl-5.5" : ""}`}
         >
@@ -101,6 +117,7 @@ export function BoardCard({
               {name}
             </span>
           ))}
+          <SubtaskCount subtasks={card.subtasks} />
           {dueDay && (
             <span className={`inline-flex items-center gap-1 font-medium ${dueDay.tone}`}>
               <Icon name="cal" className="glyph size-3" />

@@ -2,6 +2,7 @@ import type { Card } from "../../../domain/board/types";
 import { useT } from "../../hooks/useT";
 import { Avatar } from "../../components/Avatar";
 import { Ring } from "./Ring";
+import { SubtaskCount } from "./BoardCard";
 import { due, numbered, updated } from "./format";
 
 /** One card as a row of the list view; `selected` while it is open in the ticket window. */
@@ -25,6 +26,9 @@ export function BoardRow({ card, selected, onOpen }: { card: Card; selected: boo
           {name}
         </span>
       ))}
+      <span className="text-[11px] text-secondary">
+        <SubtaskCount subtasks={card.subtasks} />
+      </span>
       <span className="w-[130px] flex-none truncate text-[11px] text-tertiary">
         {[card.folder, card.list].filter(Boolean).join(" › ")}
       </span>

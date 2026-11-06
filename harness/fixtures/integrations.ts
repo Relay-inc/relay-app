@@ -357,6 +357,29 @@ const TASKS = TASK_TITLES.map((title, i) => ({
     creator: { data: { type: "people", id: "70002" } },
   },
 }));
+// the first card has three subtasks, one of them closed: the count on its card, the list in its ticket window
+Object.assign(TASKS[0].attributes, { subtask_count: 3, open_subtask_count: 2 });
+const SUBTASKS = ["CSV column order", "VAT column per rate", "Export button in the list"].map((title, i) => ({
+  ...TASKS[0],
+  id: String(900200 + i),
+  attributes: {
+    ...TASKS[0].attributes,
+    title,
+    number: 320 + i,
+    closed: i === 0,
+    subtask_placement: i + 1,
+    subtask_count: 0,
+    open_subtask_count: 0,
+    description: `<p>${title}.</p>`,
+    tag_list: [],
+  },
+  relationships: {
+    ...TASKS[0].relationships,
+    parent_task: { data: { type: "tasks", id: TASKS[0].id } },
+    workflow_status: { data: { type: "workflow_statuses", id: STATUSES[[3, 1, 0][i]].id } },
+    assignee: { data: i === 2 ? null : { type: "people", id: PEOPLE[i].id } },
+  },
+}));
 export const CARD_TITLE = TASK_TITLES[0];
 /** The public 100x100 thumb of the picture attachment; integration_thumb turns it into a data URL. */
 export const THUMB_URL = "https://files.example/thumb/invoice-list.png";
@@ -439,9 +462,16 @@ export function productive(method: string, path: string, body: unknown): unknown
       [...LISTS, { id: "p1", type: "projects", attributes: { name: "Northwind Portal" } }],
     );
   }
+  if (p === "/tasks" && f("parent_task_id") !== null)
+    return page(f("parent_task_id") === TASKS[0].id ? SUBTASKS : [], [...PEOPLE, ...STATUSES]);
   if (p === "/tasks") return page(TASKS, [...LISTS, ...PEOPLE, ...STATUSES]);
   if (p.startsWith("/tasks/"))
-    return one(TASKS.find(x => x.id === p.split("/")[2]) ?? TASKS[0], [...LISTS, ...PEOPLE, ...STATUSES]);
+    return one([...TASKS, ...SUBTASKS].find(x => x.id === p.split("/")[2]) ?? TASKS[0], [
+      ...LISTS,
+      ...PEOPLE,
+      ...STATUSES,
+      TASKS[0],
+    ]);
   if (p === "/comments") {
     const ids = (f("task_id") || "").split(",");
     return page(
@@ -922,7 +952,9 @@ export const todayMeetings = (variant: string) => {
       ...extra,
     });
   const day = [
-    meeting("squad", "Platform squad refinement", 90, 60, { people: [{ name: "Lena Maes", email: "lena@northwind.example" }] }),
+    meeting("squad", "Platform squad refinement", 90, 60, {
+      people: [{ name: "Lena Maes", email: "lena@northwind.example" }],
+    }),
     meeting("sprint", "Northwind – Platform sprint meeting", 270, 90, {
       people: [
         { name: "Tom Willems", email: "tom@northwind.example" },
@@ -931,13 +963,19 @@ export const todayMeetings = (variant: string) => {
         { name: "Kim Peeters", email: "kim@northwind.example" },
       ],
     }),
-    meeting("vendor", "Vendor follow-up call", 420, 30, { people: [{ name: "Vendor Co", email: "info@vendor.example" }] }),
+    meeting("vendor", "Vendor follow-up call", 420, 30, {
+      people: [{ name: "Vendor Co", email: "info@vendor.example" }],
+    }),
   ];
   if (variant === "empty") return [];
   if (variant === "t1") return [northwind("done", -60, 30), northwind("sync", 50, 30), ...day];
   if (variant === "t2") return [northwind("done", -60, 30), northwind("sync", 20, 30), ...day];
   // t3: this one is being recorded, the earlier one ended without its summary
-  return [northwind("done", -60, 30), meeting("live", "Northwind – Platform sprint meeting", -42, 90, { people: day[1].people }), ...day.filter(m => !m.id.startsWith("sprint"))];
+  return [
+    northwind("done", -60, 30),
+    meeting("live", "Northwind – Platform sprint meeting", -42, 90, { people: day[1].people }),
+    ...day.filter(m => !m.id.startsWith("sprint")),
+  ];
 };
 /** The second calendar of the calendar fixture does not load, so Waiting says so. */
 export const calendarErrors = (feeds: string[]) =>
