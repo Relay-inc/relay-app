@@ -1959,6 +1959,8 @@ const changesOn = fixture.startsWith("kb-changes");
 const sketchOn = changesOn || fixture === "kb-sketch";
 // kb-tables (-dark): one more note, holding the tables the table editing is tried on
 const tablesOn = fixture.startsWith("kb-tables");
+// kb-views: the Northwind Portal page holds a table and a board of its meetings, which are notes of their own
+const viewsOn = fixture.startsWith("kb-views");
 const keepState = query.get("keep") === "1";
 let favourites: string[] = keepState ? JSON.parse(sessionStorage.getItem("mockFavourites") || "[]") : [];
 if (!keepState) for (const k of Object.keys(sessionStorage)) if (k.startsWith("mock")) sessionStorage.removeItem(k);
@@ -1970,6 +1972,7 @@ const pageList = () =>
         ...kb.paths,
         ...(sketchOn ? [kb.untyped.path] : []),
         ...(tablesOn ? [kb.tables.path] : []),
+        ...(viewsOn ? Object.keys(kb.views.notes) : []),
         ...(inboxOn ? inbox.paths : []),
       ]
     : linkedOn
@@ -2099,6 +2102,9 @@ type Change = {
 let changes: Change[] = changesOn ? kb.seedChanges(fixture.startsWith("kb-changes-long")) : [];
 if (sketchOn) written.set(kb.untyped.path, { text: kb.untyped.text, hash: "h0" });
 if (tablesOn) written.set(kb.tables.path, { text: kb.tables.text, hash: "h0" });
+if (viewsOn)
+  for (const [path, text] of [[kb.views.path, kb.views.text], ...Object.entries(kb.views.notes)])
+    written.set(path, { text, hash: "h0" });
 if (changesOn) {
   for (const e of changes)
     for (const f of e.files) if (f.after !== null) written.set(f.path, { text: f.after, hash: "h0" });

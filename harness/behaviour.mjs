@@ -618,6 +618,59 @@ const SCENARIOS = {
     s.check("dragging a meeting card writes nothing", (await s.calls("write_note")).length === 1);
   },
 
+  // views in a page (#421): a ```relay-view block is the table or board of Collections, filtered on the page itself; an
+  // edit writes the note it belongs to and never the block
+  async pageViews(s) {
+    await s.load({ fixture: "kb-views" });
+    const { page } = s;
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    const blocks = page.locator(".cm-view-block");
+    await blocks.first().waitFor();
+    await settle(page, 400);
+    const table = blocks.first();
+    s.check(
+      "two blocks drawn, the markdown of them not shown",
+      (await blocks.count()) === 2 && !(await page.locator(".cm-content").innerText()).includes("relay-view"),
+    );
+    s.check(
+      "the table is capped at 8 rows of this page's 10 meetings, none of another project's",
+      (await table.locator('[role="row"]').count()) === 9 &&
+        !(await table.innerText()).includes("Billing sync") &&
+        (await table.innerText()).includes("8 of 10 shown"),
+    );
+    s.check("the board has its lanes", (await blocks.last().locator("[data-lane]").count()) === 3);
+    const file = "Calendar/Meetings/2026/2026-11-12 Quarter planning.md";
+    const before = await page.evaluate(x => window.__harness.noteText(x), file);
+    await click(
+      table
+        .locator('[role="row"]', { hasText: "Quarter planning" })
+        .locator('[data-cell="about"]')
+        .locator("div")
+        .first(),
+    );
+    await click(page.getByRole("option", { name: /Atlas Logistics/ }));
+    await settle(page, 400);
+    const writes = await s.calls("write_note");
+    s.check("one write_note, to that meeting", writes.length === 1 && writes[0].args.target === file);
+    const after = await page.evaluate(x => window.__harness.noteText(x), file);
+    s.check(
+      "only its about: changed",
+      after === before.replace('about: "[[Northwind Portal]]"', 'about: "[[Atlas Logistics]]"') && after !== before,
+    );
+    s.check(
+      "it left the page's view",
+      (await table.innerText()).includes("9 notes") && !(await table.innerText()).includes("Quarter planning"),
+    );
+    await page.locator(".cm-content").click({ position: { x: 5, y: 5 } });
+    await page.keyboard.press("Shift+Meta+m");
+    await settle(page, 400);
+    s.check(
+      "Show markdown draws the block as the text it is",
+      (await page.locator(".cm-content").innerText()).includes("about: this") && (await blocks.count()) === 0,
+    );
+  },
+
   // files inside a page (#368, K4): an image, a PDF, audio and a section of a note drawn in place of their markdown; a
   // screenshot pasted, files dropped (with the insertion line) and a 312 MB one refused with the toast
   async embeds(s) {
@@ -2931,7 +2984,10 @@ const SCENARIOS = {
     const panel = page.locator('aside[aria-label="Changes"]');
     const list = panel.locator(".overflow-y-auto");
     const last = panel.getByText("Capture from \u201cStart the security audit\u201d chat");
-    s.check("the panel's list is taller than the panel", (await list.evaluate(e => e.scrollHeight > e.clientHeight * 2)) === true);
+    s.check(
+      "the panel's list is taller than the panel",
+      (await list.evaluate(e => e.scrollHeight > e.clientHeight * 2)) === true,
+    );
     await wheelAt(panel.locator("[data-file]").first());
     s.check("the wheel over a diff scrolls the list", (await top(list)) > 0);
     for (let i = 0; i < 12; i++) await wheelAt(list, 800);

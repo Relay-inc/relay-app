@@ -1339,6 +1339,20 @@ const VIEWS = {
     }
     await settle(page, 400);
   },
+  // K, views in a page: the Northwind Portal page (fixture kb-views) with a table and a board of its meetings
+  "page-views": async (fixture = "kb-views", state = "table") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator(".cm-view-block").first().waitFor();
+    await settle(page, 600);
+    if (state === "board") {
+      await page.locator(".cm-view-block").last().scrollIntoViewIfNeeded();
+      await settle(page, 400);
+    }
+  },
+  "page-views-board": async () => VIEWS["page-views"]("kb-views", "board"),
+  "page-views-dark": async () => VIEWS["page-views"]("kb-views-dark"),
   "page-tables-dark": async () => VIEWS["page-tables"]("kb-tables-dark"),
   "page-tables-hover": async () => VIEWS["page-tables"]("kb-tables", "hover"),
   "page-tables-hover-dark": async () => VIEWS["page-tables"]("kb-tables-dark", "hover"),

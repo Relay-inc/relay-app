@@ -21,3 +21,10 @@ aliases: []
 ## Open
 
 ## Decisions
+
+## Meetings
+
+```relay-view
+collection: meetings
+about: this
+```

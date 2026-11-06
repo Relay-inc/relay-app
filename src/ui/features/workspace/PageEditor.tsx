@@ -35,6 +35,7 @@ import { livePreview, showMarkdown } from "./livePreview";
 import { formatting, type FormatWords } from "./formatting";
 import { useEditorStore } from "../../../application/navigation/editor";
 import { blockEditing, type BlockWords } from "./blocks";
+import { viewBlocks } from "./viewBlocks";
 import { attachEditing, embeds, pickAndEmbed } from "./embeds";
 import { fileDrop } from "./fileDrop";
 import "../../styles/page-editor.css";
@@ -316,6 +317,7 @@ function Editor(props: {
           livePreview((link, drawer) => void followPageLink(link, drawer)),
           formatting(format),
           embeds(page),
+          viewBlocks(page),
           attachEditing(page),
           blockEditing(
             words,

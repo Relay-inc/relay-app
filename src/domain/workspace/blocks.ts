@@ -3,6 +3,7 @@
 // what Obsidian reads.
 
 import { formatTable, newTable } from "./tables.ts";
+import { NEW_VIEW } from "./views.ts";
 
 export type BlockKind =
   | "text"
@@ -16,6 +17,7 @@ export type BlockKind =
   | "callout"
   | "code"
   | "table"
+  | "view"
   | "divider"
   | "link"
   | "file";
@@ -35,6 +37,7 @@ export const SLASH: { kind: BlockKind; insert: string; caret: number }[] = [
   { kind: "callout", insert: "> [!note]\n> ", caret: 12 },
   { kind: "code", insert: "```\n\n```", caret: 4 },
   { kind: "table", insert: NEW_TABLE, caret: 2 },
+  { kind: "view", insert: NEW_VIEW, caret: NEW_VIEW.length },
   { kind: "divider", insert: "---\n", caret: 4 },
   { kind: "link", insert: "[[", caret: 2 },
 ];

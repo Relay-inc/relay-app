@@ -274,7 +274,37 @@ export const tables = {
     "| V2 | Bluebird Studio | Can the invoices be delivered as UBL instead of PDF? | Tom Willems | Intake | 2026-11-19 | Open | Asked on the call |\n\n" +
     "Closing line.\n",
 };
-/** A note without `type:`: what Fix properties is for. */
+/** The Northwind Portal page for fixture kb-views: a table and a board of its meetings (`about: this`), and the ten
+ *  meetings that are about it (more than the table shows) next to one about another project. */
+const meetingTitles = [
+  ["2026-09-03", "Kickoff", "Sofie Claes"],
+  ["2026-09-10", "Scope review", "Tom Willems"],
+  ["2026-09-17", "Design check-in", "Sofie Claes"],
+  ["2026-09-24", "Sprint demo", "Tom Willems"],
+  ["2026-10-01", "Data migration", "Sofie Claes"],
+  ["2026-10-08", "Vendor call", "Tom Willems"],
+  ["2026-10-15", "Release planning", "Sofie Claes"],
+  ["2026-10-22", "Retro", "Tom Willems"],
+  ["2026-10-29", "Handover", "Sofie Claes"],
+  ["2026-11-12", "Quarter planning", "Tom Willems"],
+] as const;
+const meetingPath = (date: string, title: string) => `Calendar/Meetings/2026/${date} ${title}.md`;
+const meeting = (date: string, title: string, who: string, about: string) =>
+  `---\ntype: Meeting\ncontext: "[[Agency]]"\nabout: "[[${about}]]"\nwith:\n  - "[[${who}]]"\ndate: ${date}\n---\n# ${title}\n\n` +
+  (date < "2026-10-20" ? "## Summary\nAgreed the next steps.\n" : "## Briefing\n**Next action:** bring the numbers.\n");
+export const views = {
+  path: "Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md",
+  text:
+    '---\ntype: Project\ncontext: "[[Agency]]"\nstatus: Active\n---\n# Northwind Portal\n\n' +
+    "A customer portal for Northwind: orders, invoices and support in one place.\n\n## Meetings\n\n" +
+    "```relay-view\ncollection: meetings\nabout: this\n```\n\n## Board\n\n" +
+    "```relay-view\ncollection: meetings\nlayout: board\nabout: this\n```\n\nClosing line.\n",
+  notes: {
+    ...Object.fromEntries(meetingTitles.map(([d, t, w]) => [meetingPath(d, t), meeting(d, t, w, "Northwind Portal")])),
+    [meetingPath("2026-10-02", "Billing sync")]: meeting("2026-10-02", "Billing sync", "Tom Willems", "Beacon Billing"),
+  } as Record<string, string>,
+};
+/** A note without `type:': what Fix properties is for. */
 export const untyped = {
   path: `${docs}/Pricing sketch.md`,
   text: "# Pricing sketch\n\nPer-plate pricing for the sandbox, to discuss on Friday.\n",
@@ -331,7 +361,12 @@ export function seedChanges(long = false) {
     ? [
         { ...capture.files[0], after: `${capture.files[0].after}\n${lots(120)}\n${"x".repeat(400)}\n` },
         capture.files[1],
-        ...[1, 2, 3, 4, 5].map(n => ({ ...filed, path: `${docs}/Migration step ${n}.md`, before: null, after: lots(30) })),
+        ...[1, 2, 3, 4, 5].map(n => ({
+          ...filed,
+          path: `${docs}/Migration step ${n}.md`,
+          before: null,
+          after: lots(30),
+        })),
       ]
     : capture.files;
   return [
