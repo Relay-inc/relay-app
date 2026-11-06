@@ -16,7 +16,7 @@ a PR. Versions follow
 ### Added
 
 - One registry of note types (Project, Meeting, Person and the rest) that Tidy, new notes, Collections and the page properties all read: a Project's status is now a select with its allowed values, and Relay writes the same structure to `rules/vault/types.md` for every Claude session. Override a type under `types` in `.relay/config.json`. (#428)
-- Pages shows contexts, projects and their notes by type; the Folders section is behind a remembered "Show files" toggle, untyped notes sit in an Unsorted group with Tidy, and a new page from a project or context asks for its type (#PRNUM)
+- Pages shows contexts, projects and their notes by type; the Folders section is behind a remembered "Show files" toggle, untyped notes sit in an Unsorted group with Tidy, and a new page from a project or context asks for its type (#436)
 
 ### Changed
 
