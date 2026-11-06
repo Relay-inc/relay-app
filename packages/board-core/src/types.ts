@@ -25,7 +25,11 @@ export type Card = { id: string; title: string; number: string; column: string; 
   in?: Record<string, string>;
   /** What the tracker knows beyond the column, all optional (a provider fills what it has; the board hides what no card has):
    *  its workflow status (name and kind), the folder (Productive board) and task list it sits in, labels, and the last update as an ISO time. */
-  status?: string; state?: State; tone?: Tone; folder?: string; list?: string; labels?: string[]; updated?: string };
+  status?: string; state?: State; tone?: Tone; folder?: string; list?: string; labels?: string[]; updated?: string;
+  /** its subtasks, when it has any: how many are still open of all of them */
+  subtasks?: { open: number; total: number } };
+/** A subtask as the ticket window lists it, or the parent a subtask belongs to (only id, number and title). */
+export type SubCard = { id: string; number: string; title: string; closed?: boolean; state?: State; tone?: Tone; who?: string };
 /** A card for the ticket window, in a shape every provider's detail can fill: the app draws it, the provider only maps. `description` and the feed's `html` are sanitised HTML. */
 export type CardView = {
   title: string; number: string; closed: boolean; url: string;
@@ -43,6 +47,10 @@ export type CardView = {
   /** the choices for the status and assignee pickers, once known; without them those two show as text */
   statuses?: (Opt & { state?: State; tone?: Tone })[]; people?: Opt[];
   files: { id: string; name: string; size: number; url: string; thumb?: string }[] | null;
+  /** its subtasks in the tracker's order, closed ones too; null or absent until known */
+  subtasks?: SubCard[] | null;
+  /** the task this one is a subtask of */
+  parent?: SubCard;
   feed: { at: string; who: string; html: string; change: string; files: { id: string; name: string; size: number; url: string; thumb?: string }[] }[];
 };
 /** A way to lay out the columns, when a provider has more than one: Productive's task lists or workflow statuses. */

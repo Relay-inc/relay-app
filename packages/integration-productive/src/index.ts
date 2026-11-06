@@ -1,4 +1,4 @@
-import { currentLocale, queryText, translator, type BoardProvider, type BoardRef, type Card, type CardView, type Ctx, type Opt, type State, type Tone } from "@relay/board-core";
+import { currentLocale, queryText, translator, type BoardProvider, type BoardRef, type Card, type CardView, type Ctx, type Opt, type State, type SubCard, type Tone } from "@relay/board-core";
 import { toneOf } from "@relay/board-core/tone";
 import { safeUrl } from "@relay/board-core/detail";
 import strings, { type Key } from "./locales";
@@ -83,8 +83,14 @@ const onComment = (x: any) => x.attributes?.attachable_type === "comment" || !!x
 const pick = (included: any[], type: string, rel: any) => included.find((i: any) => i.type === type && i.id === rel?.data?.id);
 const taskUrl = (ref: BoardRef, id: string) => `https://app.productive.io/${orgSlug}/projects/${ref.project}/tasks/task/${id}`;
 
-// one task from its API record, its comments and its activities
-function build(ref: BoardRef, task: any, inc: any[], cs: any[], csInc: any[], acts: any[], actsInc: any[], atts: any[] | null) {
+// a subtask in the ticket window's list, or the parent a subtask belongs to
+const subOf = (x: any, inc: any[]): SubCard => ({ id: x.id, number: String(x.attributes?.number ?? ""), title: x.attributes?.title ?? "",
+  closed: !!x.attributes?.closed, state: x.attributes?.closed ? "done" : stateOf(pick(inc, "workflow_statuses", x.relationships?.workflow_status)?.attributes.category_id),
+  who: person(pick(inc, "people", x.relationships?.assignee)) });
+
+// one task from its API record, its comments, its activities and (null until fetched) its attachments and subtasks
+function build(ref: BoardRef, task: any, inc: any[], cs: any[], csInc: any[], acts: any[], actsInc: any[], atts: any[] | null,
+  subs: { data: any[]; included: any[] } | null = null) {
   const a = task.attributes, rel = task.relationships, id = task.id;
   const custom = Object.entries(a.custom_fields || {}).map(([fid, v]) => {
     const f = fields?.get(fid), vals = (Array.isArray(v) ? v : [v]).map(x => f?.opts.get(String(x)) || String(x));
@@ -98,6 +104,7 @@ function build(ref: BoardRef, task: any, inc: any[], cs: any[], csInc: any[], ac
         k === "description" ? t("descChanged") : `${LABEL[k] ? t(LABEL[k]) : k}: ${from?.value ?? t("empty")} → ${to?.value ?? t("empty")}`).join(", ")).join(", "), files: [] as File_[] }))]
     .filter(f => f.html || f.change || f.files.length).sort((x, y) => y.at.localeCompare(x.at));
   const list = pick(inc, "task_lists", rel.task_list)?.attributes.name || "";
+  const parent = pick(inc, "tasks", rel.parent_task);
   return { title: a.title, number: a.number, closed: a.closed, description: clean(a.description), created: a.created_at, creator: person(pick(inc, "people", rel.creator)),
     board: boardNames.get(ref.board) || "", list, url: taskUrl(ref, id), project: ref.project,
     statusId: rel.workflow_status?.data?.id ?? "", assigneeId: rel.assignee?.data?.id ?? "",
@@ -105,6 +112,9 @@ function build(ref: BoardRef, task: any, inc: any[], cs: any[], csInc: any[], ac
     assignee: person(pick(inc, "people", rel.assignee)), due: a.due_date || "", labels: (a.tag_list || []) as string[],
     // the task's own attachments; null until fetched (the background load skips them)
     files: atts && atts.filter(x => live(x) && !onComment(x)).map(fileOf),
+    // the background load has the count only (on the card), the list comes with the task itself
+    subtasks: subs && [...subs.data].sort((x, y) => (x.attributes.subtask_placement ?? 0) - (y.attributes.subtask_placement ?? 0)).map(x => subOf(x, subs.included)),
+    parent: parent ? { id: parent.id, number: String(parent.attributes.number ?? ""), title: parent.attributes.title ?? "" } : undefined,
     fields: ([[t("status"), pick(inc, "workflow_statuses", rel.workflow_status)?.attributes.name || "", "status"], [t("taskList"), list],
       [t("assignee"), person(pick(inc, "people", rel.assignee)), "assignee"], [t("start"), a.start_date || ""], [t("due"), [a.due_date, a.due_time].filter(Boolean).join(" ")],
       [t("estimate"), hours(a.initial_estimate)], [t("worked"), hours(a.worked_time)], [t("remaining"), hours(a.remaining_time)],
@@ -151,7 +161,9 @@ function toCard(c: Ctx, ref: BoardRef, x: any, included: any[], o: Opts | null):
     column: x.relationships.task_list?.data?.id ?? "", in: { status: sid }, who: who?.attributes.first_name || "", whoName: person(who), me: !!who && who.id === String(c.config.user || ""),
     status: status?.name, state, tone: o?.statuses.find(s => s.id === sid)?.tone ?? toneOf(state, status?.name || "", state !== "doing"),
     folder: boardNames.get(ref.board), list: pick(included, "task_lists", x.relationships.task_list)?.attributes.name, labels: x.attributes.tag_list || [],
-    updated: x.attributes.last_activity_at || x.attributes.updated_at };
+    updated: x.attributes.last_activity_at || x.attributes.updated_at,
+    // the board's /tasks leaves subtasks out, as Productive's own board does: the parent card counts them
+    subtasks: x.attributes.subtask_count ? { open: x.attributes.open_subtask_count ?? 0, total: x.attributes.subtask_count } : undefined };
 }
 
 const productive: BoardProvider<Key> = {
@@ -228,10 +240,12 @@ const productive: BoardProvider<Key> = {
     cached: id => details.get(id),
     /** A task fresh from Productive, also when the background load already had it. */
     async fetch(c, ref, id) {
-      const [tk, cs, acts, atts] = await Promise.all([c.call("GET", `/tasks/${id}?include=workflow_status,assignee,task_list,creator`),
+      const [tk, cs, acts, atts, subs] = await Promise.all([c.call("GET", `/tasks/${id}?include=workflow_status,assignee,task_list,creator,parent_task`),
         all(c, `/comments?filter[task_id]=${id}&include=creator,attachments`), all(c, `/activities?filter[task_id]=${id}&include=creator`),
-        all(c, `/attachments?filter[task_id]=${id}`), ready(c), optsOf(c, ref.project).catch(() => null)]);
-      const task = build(ref, tk.data, tk.included || [], cs.data, cs.included, acts.data, acts.included, atts.data);
+        all(c, `/attachments?filter[task_id]=${id}`),
+        // open and closed, as Productive lists them under the task
+        all(c, `/tasks?filter[parent_task_id]=${id}&include=workflow_status,assignee`), ready(c), optsOf(c, ref.project).catch(() => null)]);
+      const task = build(ref, tk.data, tk.included || [], cs.data, cs.included, acts.data, acts.included, atts.data, subs);
       details.set(id, task);
       return task;
     },
@@ -242,7 +256,8 @@ const productive: BoardProvider<Key> = {
         description: tk.description, status: tk.statusId ? { id: tk.statusId, name: tk.statusName, state: tk.state, tone: o?.statuses.find(s => s.id === tk.statusId)?.tone } : undefined,
         editLabels: true, folder: tk.board,
         assignee: tk.assigneeId ? { id: tk.assigneeId, name: tk.assignee } : undefined, due: tk.due, labels: tk.labels,
-        statuses: o?.statuses, people: o?.people, files: tk.files, feed: tk.feed };
+        statuses: o?.statuses, people: o?.people, files: tk.files, feed: tk.feed,
+        subtasks: tk.subtasks, parent: tk.parent };
     },
     /** comment, status, assignee, attach: done in Productive, then the task read again */
     async act(c, ref, id, action, { value, files, mentions = [], hidden = false }) {

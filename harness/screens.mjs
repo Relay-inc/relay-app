@@ -1031,6 +1031,17 @@ const VIEWS = {
     await click(markers.card);
     await waitText("Amount excl. VAT");
   },
+  // a ticket's subtasks under its description (one closed), and a subtask opened from there names its parent
+  "card-subtasks": async () => {
+    await VIEWS["card-detail"]();
+    await page.locator(".ticket-window").getByText("Subtasks", { exact: false }).first().scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  "card-subtask-parent": async () => {
+    await VIEWS["card-detail"]();
+    await page.locator(".ticket-window").getByRole("button", { name: /VAT column per rate/ }).click();
+    await waitText("Subtask of #300");
+  },
   // Start conversation on a ticket with a screenshot: the picture is attached in the new conversation's composer (#251)
   "ticket-chat-pictures": async () => {
     await VIEWS["card-detail"]();
