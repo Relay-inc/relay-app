@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Changed
 
-- Less CPU and no UI stalls while a terminal conversation is open: the list of running sessions is read at most every 2.5 seconds instead of with every poll, and the polls for questions, subagents, the sidebar and sending a message no longer run on the UI thread. The vault is scanned once per refresh instead of once per project, and `claude --version` is not run again for every message.
+- Less CPU and no UI stalls while a terminal conversation is open: the list of running sessions is read at most every 2.5 seconds instead of with every poll, and the polls for questions, subagents, the sidebar and sending a message no longer run on the UI thread. The vault is scanned once per refresh instead of once per project, and `claude --version` is not run again for every message. (#414)
 
 ### Fixed
 
