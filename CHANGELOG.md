@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- Type `/meeting Kickoff` (or any note type with a home) in a page to make that note from its template with the page's project as `about:`, link it where you typed and open it beside the page; one Undo takes the link out and moves the note to the trash, and a title that names an existing note of that type links it instead (#PR).
 - One registry of note types (Project, Meeting, Person and the rest) that Tidy, new notes, Collections and the page properties all read: a Project's status is now a select with its allowed values, and Relay writes the same structure to `rules/vault/types.md` for every Claude session. Override a type under `types` in `.relay/config.json`. (#428)
 
 ### Changed

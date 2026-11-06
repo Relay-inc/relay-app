@@ -34,6 +34,8 @@ import { useT } from "../../hooks/useT";
 import { livePreview, showMarkdown } from "./livePreview";
 import { formatting, type FormatWords } from "./formatting";
 import { useEditorStore } from "../../../application/navigation/editor";
+import { noteTypes } from "../../../domain/workspace/noteTypes";
+import { existingTyped, newTypedNote } from "../../../application/navigation/kb";
 import { blockEditing, type BlockWords } from "./blocks";
 import { attachEditing, embeds, pickAndEmbed } from "./embeds";
 import { fileDrop } from "./fileDrop";
@@ -234,6 +236,11 @@ function Editor(props: {
       deleteColumn: t("table.deleteColumn"),
     },
     handle: t("block.handle"),
+    typed: {
+      ask: type => t("slash.ask", { type }),
+      create: (type, title) => t("slash.create", { type, title }),
+      link: (type, title) => t("slash.link", { type, title }),
+    },
   }));
   const [format] = useState<FormatWords>(() => ({
     toolbar: t("fmt.toolbar"),
@@ -321,6 +328,11 @@ function Editor(props: {
             words,
             () => workspacePaths(),
             (v, at) => pickAndEmbed(page, v, at),
+            {
+              types: noteTypes,
+              existing: existingTyped,
+              make: (type, title, link) => newTypedNote(type, title, page, link),
+            },
           ), // before the keymap below: Tab in a table moves between cells
           keymap.of([
             { key: "Mod-Alt-m", run: () => (hooks.current?.onKey(), true) },

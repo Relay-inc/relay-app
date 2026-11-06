@@ -1397,7 +1397,8 @@ function handle(cmd: string, a: Args): unknown {
     case "new_from_template": {
       const day = new Date(NOW).toISOString().slice(0, 10);
       const home = a.template === "Meeting" ? `Calendar/Meetings/${day.slice(0, 4)}` : String(a.folder);
-      const name = a.template === "Meeting" ? `${day} ${a.about ? `${a.about} ` : ""}Meeting` : String(a.template);
+      const title = String(a.title || a.template);
+      const name = a.template === "Meeting" ? `${day} ${a.about ? `${a.about} ` : ""}${title}` : title;
       const path = `${home ? `${home}/` : ""}${name}.md`;
       const links = [a.context && `context: "[[${a.context}]]"`, a.about && `about: "[[${a.about}]]"`].filter(Boolean);
       pages = [...pageList(), path];
