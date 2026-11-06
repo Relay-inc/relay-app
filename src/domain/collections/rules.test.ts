@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { commonFolder } from "../workspace/garden.ts";
 import {
-  commonFolder,
   evaluate,
   grouped,
   isDerived,
@@ -171,8 +171,8 @@ test("date presets", () => {
 });
 
 test("the folder the notes share", () => {
-  assert.equal(commonFolder(evaluate(rows, newView("meetings"))), "Calendar/Meetings/2026/");
-  assert.equal(commonFolder(rows), "");
+  assert.equal(commonFolder(evaluate(rows, newView("meetings")).map(r => r.p)), "Calendar/Meetings/2026/");
+  assert.equal(commonFolder(rows.map(r => r.p)), "");
 });
 
 test("a links cell offers the projects of its type and what the rows name already", () => {

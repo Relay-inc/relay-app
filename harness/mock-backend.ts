@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-keeper|shared-live|shared-live-dark, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-member-dark|shared-keeper|shared-live|shared-live-dark, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
@@ -62,7 +62,8 @@ settings = { ...settings, experimental: { files: fixture !== "files-off" } };
 // shared-invite: the same, opened by an invite link (shared_vault_pending_invite); shared-member: a Mac that joined
 // the vault with a link, its server not one of its machines; shared-keeper: that member, made admin on the server,
 // which Members (shared_vault_info) finds: the backend then keeps the server under Machines
-const member = fixture === "shared-member" || fixture === "shared-keeper";
+// shared-member-dark: shared-member in the dark theme (the vault check's member view, issue 425)
+const member = fixture === "shared-member" || fixture === "shared-member-dark" || fixture === "shared-keeper";
 // shared-rekey: someone left the vault, and the key change waits for a member whose Relay has no public key yet
 // shared-live (-dark): "shared", and a page of the side vault is a shared document two mock peers edit (ticket 9)
 const live = fixture === "shared-live" || fixture === "shared-live-dark";
@@ -1933,8 +1934,12 @@ const gardenFindings = () => {
     ...f("no_type", left(GARDEN_TYPELESS)),
   ];
 };
+// one of every health kind (issue 425)
 const VAULT_FINDINGS = [
+  finding("claude_link", "", ".claude"),
   finding("missing_file", "", "System/rules/core/team.md"),
+  finding("context_note", "Studio", "Contexts/Studio/Studio.md"),
+  finding("context_heading", "Studio", "Contexts/Personal/State/work-state.md"),
   finding("orphan_rule", "", "System/rules/gone/context.md", ["Contexts/Gone"], false),
   finding("context_rule", "Agency", "System/rules/agency/context.md"),
   finding("card_fields", "Agency", "Contexts/Agency/Projects/Beacon Billing/Beacon Billing.md", ["status", "last"]),

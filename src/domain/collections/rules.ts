@@ -240,16 +240,6 @@ export function grouped(rows: Row[], key: string, collection: CollectionId, toda
   return lanes(rows, key, collection, today).filter(l => l.rows.length);
 }
 
-/** The folder most of a list's notes share ("Calendar/Meetings/"), "" when they share none. */
-export function commonFolder(rows: Row[]) {
-  if (!rows.length) return "";
-  const dirs = rows.map(r => r.p.split("/").slice(0, -1));
-  const first = dirs[0];
-  let n = 0;
-  while (n < first.length && dirs.every(d => d[n] === first[n])) n++;
-  return n ? `${first.slice(0, n).join("/")}/` : "";
-}
-
 /** A view's `.relay/views` file keeps only what a view is; a file somebody edited by hand is read back as far as it fits. */
 export function readView(value: unknown): View | null {
   const v = value as Partial<View> | null;
