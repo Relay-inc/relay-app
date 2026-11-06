@@ -567,6 +567,8 @@ export const findNotes = (folder: string, query: string) =>
   invoke<{ names: NameHit[]; content: ContentHit[] }>("find_notes", { folder, query });
 /** When each note of a workspace last changed (seconds), for a folder sorted by modified. */
 export const noteTimes = (folder: string) => invoke<Record<string, number>>("note_times", { folder });
+/** The notes of a workspace with an `icon:` key, {path: its value}. */
+export const noteIcons = (folder: string) => invoke<Record<string, string>>("note_icons", { folder });
 /** The templates New ▸ offers in a workspace. */
 export const noteTemplates = (workspace: string) => invoke<string[]>("note_templates", { workspace });
 /** A new note from a template, saved in its type's home or in `folder`; returns its path in the workspace. */

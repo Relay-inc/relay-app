@@ -2519,6 +2519,31 @@ const VIEWS = {
     await page.locator("[data-page-icon] svg").waitFor();
     await settle(page);
   },
+  // page icons in the Pages tree (issue 427): Launch checklist's icon: 🚀 in place of the file glyph, the other pages
+  // keep it; the Northwind Portal row keeps its config picture (its note has no icon:)
+  "pages-tree-icons": async (fixture = "kb") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"] img').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
+    const launch = page.locator('[data-page$="/Launch checklist.md"]', { hasText: "🚀" }).first();
+    await launch.click();
+    if (await page.locator('[data-page$="/Brand notes.md"]', { hasText: "🚀" }).count()) throw new Error("an icon on a page without");
+    await settle(page, 300);
+  },
+  "pages-tree-icons-dark": async () => VIEWS["pages-tree-icons"]("kb-dark"),
+  // an icon set in the project note's header shows on its project row, no restart
+  "pages-tree-icon-set": async () => {
+    await VIEWS["typed-meeting"]("kb", "Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md");
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"] img').waitFor();
+    await page.getByRole("button", { name: "Page icon" }).click();
+    await page.getByRole("textbox", { name: "Page icon" }).fill("🧭");
+    await page.keyboard.press("Enter");
+    await page.locator('[data-project="Northwind Portal"]', { hasText: "🧭" }).waitFor({ timeout: 4000 });
+    if (await page.locator('[data-project="Northwind Portal"] img').count()) throw new Error("the config picture stayed");
+    await settle(page, 300);
+  },
   // Add cover from a file: copied into the attachments folder, cover: written, the banner above the title
   "page-cover-added": async () => {
     await VIEWS["typed-meeting"]("kb", "Contexts/Agency/People/Tom Willems.md");

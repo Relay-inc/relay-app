@@ -660,6 +660,18 @@ pub fn times(dir: &Path, root: &str) -> Result<Value, String> {
     })
 }
 
+/// The notes of `root` with an `icon:` key, {path: its first value}, for the Pages tree's rows (issue 427). Whether it is
+/// one emoji is the frontend's call (decor.ts `emojiOf`), as for the page header.
+pub fn icons(dir: &Path, root: &str) -> Result<Value, String> {
+    with(dir, root, |c| {
+        let rows = c
+            .prepare("SELECT path, json_extract(props, '$.icon[0]') AS icon FROM meta WHERE icon IS NOT NULL")?
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows.into_iter().map(|(p, i)| (p, json!(i))).collect::<serde_json::Map<_, _>>().into())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -694,6 +706,26 @@ mod tests {
         assert_eq!(sync["props"]["about"], json!(["Northwind Portal"]));
         assert_eq!(sync["props"]["context"], json!(["Agency"]));
         assert_eq!(rows.iter().find(|r| r["p"] == "Loose.md").unwrap()["k"], "");
+        fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn icons_lists_the_notes_with_an_icon_and_follows_an_edit() {
+        let d = std::env::temp_dir().join(format!("relay-icons-{}", std::process::id()));
+        fs::remove_dir_all(&d).ok();
+        fs::create_dir_all(d.join("Docs")).unwrap();
+        let v = vault::canon(d.to_str().unwrap());
+        let db = d.join("index");
+        fs::write(d.join("Docs/Launch.md"), "---\ntype: Document\nicon: 🚀\n---\n# Launch\n").unwrap();
+        fs::write(d.join("Docs/Plain.md"), "---\ntype: Document\n---\nno icon\n").unwrap();
+        fs::write(d.join("Loose.md"), "just text").unwrap();
+        assert_eq!(icons(&db, &v).unwrap(), json!({"Docs/Launch.md": "🚀"}));
+        // the header writes icon: and the save touches the file (lib.rs write_note): the next read has it
+        let plain = d.join("Docs/Plain.md");
+        fs::write(&plain, "---\ntype: Document\nicon: \"🧭\"\n---\nno icon\n").unwrap();
+        filetime_bump(&plain);
+        touched(&vault::canon_path(&plain));
+        assert_eq!(icons(&db, &v).unwrap(), json!({"Docs/Launch.md": "🚀", "Docs/Plain.md": "🧭"}));
         fs::remove_dir_all(&d).ok();
     }
 
