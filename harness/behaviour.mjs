@@ -2931,7 +2931,10 @@ const SCENARIOS = {
     const panel = page.locator('aside[aria-label="Changes"]');
     const list = panel.locator(".overflow-y-auto");
     const last = panel.getByText("Capture from \u201cStart the security audit\u201d chat");
-    s.check("the panel's list is taller than the panel", (await list.evaluate(e => e.scrollHeight > e.clientHeight * 2)) === true);
+    s.check(
+      "the panel's list is taller than the panel",
+      (await list.evaluate(e => e.scrollHeight > e.clientHeight * 2)) === true,
+    );
     await wheelAt(panel.locator("[data-file]").first());
     s.check("the wheel over a diff scrolls the list", (await top(list)) > 0);
     for (let i = 0; i < 12; i++) await wheelAt(list, 800);
@@ -3542,6 +3545,33 @@ const SCENARIOS = {
     s.check("Show right rail brings it back", (await page.locator("[data-rail]").count()) === 1);
   },
 
+  // #420: a fresh vault has no Folders section; "Show files" brings it back and a restart (keep) keeps it; Unsorted lists
+  // the untyped notes with a count, capped at ten until Show all; a typed note with a context sits in its type group
+  async pagesByType(s) {
+    await s.load({ fixture: "linked-unsorted", files: "off", keep: true });
+    const { page } = s;
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    s.check("no Folders section on a fresh vault", !(await hasText(page, "Folders")));
+    s.check("Unsorted counts the untyped notes", await hasText(page, "Unsorted 12"));
+    await click(page.locator('[data-section="pages:unsorted"] [role="button"]').first());
+    s.check("capped at ten", (await page.locator('[data-section="pages:unsorted"] [data-page]').count()) === 10);
+    await click(page.getByText("Show all 12"));
+    s.check(
+      "Show all lists them all",
+      (await page.locator('[data-section="pages:unsorted"] [data-page]').count()) === 12,
+    );
+    s.check(
+      "a meeting with a context but no project is in its type group",
+      (await page.locator('[data-type-group="Meeting"]').count()) === 1,
+    );
+    await click(page.locator("[data-files-toggle]"));
+    s.check("Show files brings the Folders section back", await hasText(page, "Folders"));
+    await page.waitForTimeout(1000); // the UI state file is written after a pause
+    await s.load({ fixture: "linked-unsorted", files: "off", keep: true });
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    s.check("the choice survives a restart", await hasText(page, "Folders"));
+  },
+
   // New ▸ from template on a folder and Today's note in the Pages tab: a Meeting in a project is saved in its home
   // with about: set, Today's note is made once
   async newFromTemplate(s) {
@@ -3550,7 +3580,7 @@ const SCENARIOS = {
     await click(page.getByRole("tab", { name: /^Pages/ }));
     await click(page.locator('[data-project="Northwind Portal"]'));
     await page.locator('[data-project="Northwind Portal"]').click({ button: "right" });
-    s.check("the project's menu lists the templates", await hasText(page, "New from template"));
+    s.check("the project's menu lists the templates", await hasText(page, "New page of type"));
     await click(button(page, "Meeting"));
     const made = await s.calls("new_from_template");
     s.check(

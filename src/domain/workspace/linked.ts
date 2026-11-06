@@ -34,6 +34,8 @@ export const LAYER_KEYS: Record<"context" | "project", LinkedKey[]> = {
 };
 /** The newest this many rows show in the tree before "Show all". */
 export const LINKED_SHOWN = 4;
+/** The newest this many untyped notes show under Unsorted before "Show all". */
+export const UNSORTED_SHOWN = 10;
 
 // a link goes by the note's name, as in Obsidian: `Contexts/Studio/Beacon` and `Beacon.md` are both Beacon
 const nameOfLink = (link: string) => noteName(link).trim().toLowerCase();
@@ -68,6 +70,30 @@ export function linkedTo(notes: LinkedNote[], name: string, inside = "", apart =
   out.people.sort((a, b) => a.t.localeCompare(b.t));
   return out;
 }
+
+/** The typed notes of a context that sit in no project (a `context:` naming it, no `about:`), one group per type by
+ *  the name `label` gives its `type:`, groups by name, notes newest first. `skip`: notes the tree shows elsewhere (the
+ *  projects' own). */
+export function typedIn(notes: LinkedNote[], context: string, label: (kind: string) => string, skip: Set<string>) {
+  const key = context.trim().toLowerCase();
+  const groups = new Map<string, LinkedNote[]>();
+  for (const note of notes) {
+    if (!note.k || note.about.length || skip.has(note.p) || !note.context.some(link => nameOfLink(link) === key))
+      continue;
+    const name = label(note.k);
+    groups.set(name, [...(groups.get(name) ?? []), note]);
+  }
+  return [...groups]
+    .map(([type, list]) => ({ type, notes: list.sort(byNewest) }))
+    .sort((a, b) => a.type.localeCompare(b.type));
+}
+
+/** The notes without a `type:`, newest first, but the ones `hidden` (the vault's own). */
+export const unsortedOf = (rows: { p: string; k: string; at: number }[], hidden: (path: string) => boolean) =>
+  rows
+    .filter(row => !row.k && !hidden(row.p))
+    .sort((a, b) => b.at - a.at || a.p.localeCompare(b.p, undefined, { numeric: true }))
+    .map(row => row.p);
 
 /** Who a meeting was with: one person by name, several by first name ("Sam, Noor, Milan"). */
 export function attendees(note: LinkedNote) {

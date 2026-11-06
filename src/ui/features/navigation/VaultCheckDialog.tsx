@@ -32,11 +32,19 @@ const TEXT = {
 
 /** The workspace check: what the workspace shown lacks so every member's Claude works in it, grouped by context, each
  *  with Repair when Relay can put it right (an admin's, in a shared workspace), and Repair all. A path opens as a page. */
-export function VaultCheckDialog({ workspace, onClose }: { workspace: string; onClose: () => void }) {
+export function VaultCheckDialog({
+  workspace,
+  tab: first = "health",
+  onClose,
+}: {
+  workspace: string;
+  tab?: "health" | "garden";
+  onClose: () => void;
+}) {
   const { t, tn, locale } = useT();
   const [found, setFound] = useState<VaultFinding[] | null>(null);
   const [garden, setGarden] = useState<VaultFinding[] | null>(null);
-  const [tab, setTab] = useState<"health" | "garden">("health");
+  const [tab, setTab] = useState<"health" | "garden">(first);
   const [checkedAt, setCheckedAt] = useState("");
   const [busy, setBusy] = useState(false);
   // Tidy structure's dry run: open (`tidying`) with its plan once read

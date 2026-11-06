@@ -1859,6 +1859,32 @@ const VIEWS = {
     await waitText("Folders");
     await settle(page);
   },
+  // #420: a fresh vault: contexts, projects and type groups, no Folders section, Unsorted and "Show files" at the bottom
+  "pages-by-type": async () => {
+    await open(page, server.url, { fixture: "linked-unsorted", files: "off" });
+    await page.setViewportSize({ width: 1440, height: 1500 }); // the whole tree in one picture
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await waitText("Show files");
+    await page.locator('[data-type-group="Meeting"]').first().click();
+    await page.locator('[data-type-group="Meeting"]').first().scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // "Show files" brings the Folders section back
+  "pages-files-shown": async () => {
+    await VIEWS["pages-by-type"]();
+    await page.locator("[data-files-toggle]").click();
+    await waitText("Hide files");
+    await settle(page);
+  },
+  // Unsorted unfolded: the untyped notes, newest first, capped
+  "pages-unsorted": async () => {
+    await open(page, server.url, { fixture: "linked-unsorted", files: "off" });
+    await page.setViewportSize({ width: 1440, height: 1500 }); // the whole tree in one picture
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-section="pages:unsorted"] [role="button"]').first().click();
+    await page.locator('[data-section="pages:unsorted"]').scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   // the admin's Pages tab: the notes the vault runs on (CLAUDE.md, rules, templates) under System, unfolded
   "pages-system": async () => {
     await VIEWS["pages-tab"]();

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { setTypes, type NoteType } from "./noteTypes.ts";
-import { attendees, linkedTo, shownSections, type LinkedNote } from "./linked.ts";
+import { attendees, linkedTo, shownSections, typedIn, unsortedOf, type LinkedNote } from "./linked.ts";
 
 // the registry the app ships: what counts as a project comes from it
 setTypes(
@@ -111,4 +111,38 @@ test("at a context, projects are a group of their own and not also documents; at
   const project = linkedTo([note("Features/Search.md", { k: "Feature", about: ["Harbor"] })], "Harbor");
   assert.equal(project.projects.length, 0);
   assert.equal(project.documents.length, 1);
+});
+
+test("a typed note with a context and no project is in that context's type group", () => {
+  const label = (k: string) => k.toUpperCase();
+  const notes = [
+    note("Docs/Brief.md", { k: "Document", context: ["Northwind"], at: 1 }),
+    note("Docs/Plan.md", { k: "Document", context: ["Contexts/Northwind"], at: 2 }),
+    meeting("2026-11-05", { context: ["Northwind"] }),
+    note("Docs/InProject.md", { context: ["Northwind"], about: ["Beacon"] }),
+    note("Docs/Untyped.md", { k: "", context: ["Northwind"] }),
+    note("Docs/Other.md", { context: ["Harbor"] }),
+  ];
+  const groups = typedIn(notes, "Northwind", label, new Set());
+  assert.deepEqual(
+    groups.map(g => [g.type, g.notes.map(n => n.t)]),
+    [
+      ["DOCUMENT", ["Plan", "Brief"]],
+      ["MEETING", ["2026-11-05 Sync"]],
+    ],
+  );
+  assert.equal(typedIn(notes, "Northwind", label, new Set(["Docs/Brief.md"]))[0].notes.length, 1);
+});
+
+test("Unsorted lists the notes without a type, newest first, without the hidden ones", () => {
+  const rows = [
+    { p: "a.md", k: "", at: 1 },
+    { p: "b.md", k: "", at: 3 },
+    { p: "c.md", k: "Meeting", at: 9 },
+    { p: "CLAUDE.md", k: "", at: 8 },
+  ];
+  assert.deepEqual(
+    unsortedOf(rows, p => p === "CLAUDE.md"),
+    ["b.md", "a.md"],
+  );
 });

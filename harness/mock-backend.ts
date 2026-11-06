@@ -41,6 +41,20 @@ function seedStorage() {
   localStorage.setItem("sel", JSON.stringify(query.get("sel") || "__wait"));
   localStorage.setItem("pvProject", "p1");
   localStorage.setItem("pvBoard", "f1");
+  // the Pages tab hides its Folders section by default; the harness shows it so the views that click through folders
+  // keep working, ?files=off is a fresh vault
+  if (query.get("files") !== "off")
+    localStorage.setItem(
+      "pagesOpen",
+      JSON.stringify(
+        [
+          vault.VAULT,
+          vault.TEAM_VAULT,
+          ...vault.sharedVaults.map(v => v.folder),
+          ...vault.memberVaults.map(v => v.folder),
+        ].map(folder => `files:${folder}`),
+      ),
+    );
   if (fixture === "linear") {
     localStorage.setItem("linearProject", integ.LINEAR_TEAM);
     localStorage.setItem("linearBoard", `cycle_${integ.LINEAR_TEAM}`);
@@ -1962,6 +1976,9 @@ const tablesOn = fixture.startsWith("kb-tables");
 const keepState = query.get("keep") === "1";
 let favourites: string[] = keepState ? JSON.parse(sessionStorage.getItem("mockFavourites") || "[]") : [];
 if (!keepState) for (const k of Object.keys(sessionStorage)) if (k.startsWith("mock")) sessionStorage.removeItem(k);
+// fixture linked-unsorted (#420): a dozen notes without a type: (Unsorted, capped at ten)
+const unsortedOn = fixture === "linked-unsorted";
+const unsorted = Array.from({ length: 12 }, (_, i) => `Scratch/Idea ${i + 1}.md`);
 const pageList = () =>
   pages ??
   (kbOn
@@ -1973,7 +1990,12 @@ const pageList = () =>
         ...(inboxOn ? inbox.paths : []),
       ]
     : linkedOn
-      ? [...vault.notes.filter(n => vault.flat(n)), vault.FLAT_NOTE, ...vault.linkedPaths]
+      ? [
+          ...vault.notes.filter(n => vault.flat(n)),
+          vault.FLAT_NOTE,
+          ...vault.linkedPaths,
+          ...(unsortedOn ? unsorted : []),
+        ]
       : embedsOn
         ? [...vault.notes, embeds.FINDINGS_NOTE]
         : vault.notes);
@@ -1988,7 +2010,9 @@ const keptViews = (list: { name: string; view: unknown }[]) => {
 };
 // a note's text: what was written, else the fixture's own (collections.ts), else the generic note
 const textOfNote = (path: string): string =>
-  written.get(path)?.text ?? coll.texts[path] ?? String(vault.noteText(path).text);
+  written.get(path)?.text ??
+  coll.texts[path] ??
+  (unsorted.includes(path) ? `# ${path.slice(8, -3)}\n\nA loose thought.\n` : String(vault.noteText(path).text));
 /** The index's row for a note (related.rs `collection`): its type, date, stage and every frontmatter key's values. */
 function collectionRow(path: string, text: string) {
   const head = /^---\n([\s\S]*?)\n---/.exec(text)?.[1] ?? "";
