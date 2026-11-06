@@ -44,6 +44,11 @@ pub const ORCH_WORKER_TOOLS: [&str; 2] = ["mcp__relay-orch__step", "mcp__relay-o
 pub struct Claude;
 pub static PROVIDER: Claude = Claude;
 
+/// `claude agents --json`, as the last 2.5 s read it: the sidebar's polls and the vault snapshot ask within seconds
+/// of each other, and each ask spawns claude.
+pub fn agents_raw(env: &Env) -> Option<String> {
+    agent_core::run_cached(env.bin, env.path, &["agents", "--json"], std::time::Duration::from_millis(2500))
+}
 /// The oldest Claude Code seen taking every flag `command` passes (`--thinking-display` is not in its changelog, so
 /// this is the oldest build checked, not the release that added it). An older one stops each turn on "unknown option".
 const MIN_VERSION: [u32; 3] = [2, 1, 294];
@@ -289,7 +294,7 @@ impl AgentProvider for Claude {
     }
     /// Sessions Claude Code knows about, including the ones in the terminal and in the background.
     fn sessions(&self, env: &Env) -> Vec<Value> {
-        let mut list: Vec<Value> = agent_core::run(env.bin, env.path, &["agents", "--json"]).and_then(|o| serde_json::from_str(&o).ok()).unwrap_or_default();
+        let mut list: Vec<Value> = agents_raw(env).and_then(|o| serde_json::from_str(&o).ok()).unwrap_or_default();
         for a in list.iter_mut() {
             let sid = a["sessionId"].as_str().unwrap_or("").to_string();
             if a["status"] == "busy" && agent_core::safe_id(&sid) && subagents::turn_ended(&PathBuf::from(format!("{}/{sid}.jsonl", transcripts_of(env, &sid)))) { a["status"] = json!("idle"); }

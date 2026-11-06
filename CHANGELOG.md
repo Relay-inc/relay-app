@@ -16,9 +16,11 @@ a PR. Versions follow
 ### Changed
 
 - Relay stays responsive when many notes change at once, like after a git pull or a long Claude run: the notes list and the related notes are refreshed once per burst instead of once per note, and the note list is read off the main thread. (#415)
+- Less CPU and no UI stalls while a terminal conversation is open: the list of running sessions is read at most every 2.5 seconds instead of with every poll, and the polls for questions, subagents, the sidebar and sending a message no longer run on the UI thread. The vault is scanned once per refresh instead of once per project, and `claude --version` is not run again for every message. (#414)
 
 ### Fixed
 
+- Productive subtasks show on the board and in the ticket window: a parent card counts its done subtasks (1/3), the ticket window lists them under the description (a row opens the subtask) and a subtask links back to its parent. The board's task list leaves subtasks out, as Productive's own board does, and the ticket never asked for them
 - A meeting note from a recording gets its people, `context:` and `about:` filled from the vault: attendee emails are matched to Person notes, a company note's `domain:` is the fallback, and what stays unknown is named instead of asked when nobody is there to answer.
 - Back to the notes in a meeting's Wrap-up no longer blanks the window when nothing was recorded: the transcript panel rendered in a loop until React gave up. The mail composer's recipient fields had the same loop waiting for them.
 

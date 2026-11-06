@@ -4,7 +4,7 @@ import { buildTicket, pipelineOfBoard, ticketBuildState } from "../../../applica
 import { useDerived } from "../../hooks/useDerived";
 import { picturesOf } from "../../../domain/pipeline/rules";
 import { openBoardCard, ticketChat } from "../../../application/board/board";
-import { cardAct, cardOf, closeTicket } from "../../../application/navigation/panel";
+import { cardAct, cardOf, closeTicket, openCard } from "../../../application/navigation/panel";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { Icon } from "../../components/Icon";
 import { Modal } from "../../components/Modal";
@@ -16,6 +16,7 @@ import { TicketFiles } from "./TicketFiles";
 import { TicketHeading } from "./TicketHeading";
 import { TicketSidebar } from "./TicketSidebar";
 import { TicketLinked } from "./TicketLinked";
+import { TicketSubtasks } from "./TicketSubtasks";
 import { numbered } from "./format";
 import "../../styles/board.css";
 import { ColumnResize } from "../navigation/ColumnResize";
@@ -58,6 +59,8 @@ export function BoardTicket({
   const projectName = board.projects?.find(p => p.id === board.project)?.name ?? "";
   const where = [projectName, view?.board].filter(Boolean).join(" · ");
   const act = (action: string, value: string, files: File[] = []) => cardAct(modal, action, { value, files });
+  // a subtask or the parent: in the same window, on the board the open card came from
+  const openRelated = (id: string) => openCard(provider, useNavigationStore.getState().panel.cardRefs[modal], id);
   const startChat = () =>
     ticketChat(
       provider,
@@ -79,6 +82,17 @@ export function BoardTicket({
         <ColumnResize column="ticketSide" />
         <div className="overflow-y-auto px-10 pt-7 pb-8 flex flex-col gap-7 select-text cursor-auto">
           {actErr && <div className="err-box">{actErr}</div>}
+          {view.parent && (
+            <button
+              type="button"
+              className="self-start -mb-5 border-0 bg-transparent p-0 text-xs text-secondary hover:text-label cursor-default"
+              onClick={() => openRelated(view.parent!.id)}
+            >
+              {t("kb.subtaskOf", {
+                task: [view.parent.number && numbered(view.parent.number), view.parent.title].filter(Boolean).join(" "),
+              })}
+            </button>
+          )}
           <h2 className="m-0 text-xl leading-snug font-semibold tracking-tight text-pretty">
             {view.closed && (
               <span className="text-xs font-normal text-secondary border border-separator rounded-sm px-1 mr-1.5 align-middle">
@@ -96,6 +110,7 @@ export function BoardTicket({
           ) : (
             <div className="text-sm text-tertiary">{t("kb.noDesc")}</div>
           )}
+          <TicketSubtasks subtasks={view.subtasks} onOpen={openRelated} />
           {view.files && (
             <section className="flex flex-col gap-2">
               <TicketHeading>{t("kb.files")}</TicketHeading>

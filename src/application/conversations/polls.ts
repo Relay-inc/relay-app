@@ -5,6 +5,7 @@ import { attachedIn, readsAttached } from "../../domain/conversations/files";
 import { push } from "../../domain/conversations/events";
 import type { Pending } from "../../domain/conversations/types";
 import * as backend from "../../infrastructure/backend";
+import { singleFlight } from "../../shared/single-flight";
 import { useConversationsStore, type ConversationsState } from "./store";
 import { terminalSessions } from "./selectors";
 import { flush, notify } from "./events";
@@ -75,11 +76,15 @@ export function setSessions(next: Partial<Pick<ConversationsState, "agentsList" 
   });
 }
 let agentsAt = 0;
+/** The providers' sessions; the polls that ask while one is running share its answer (the backend spawns processes for it). */
+export const fetchAgents = singleFlight(() => {
+  agentsAt = Date.now();
+  return backend.agents();
+});
 /** The providers' sessions, which of them the app started, and each app conversation's session. */
 export async function pollAgents() {
-  agentsAt = Date.now();
   const [agentsList, appSids, sidOf, machines] = await Promise.all([
-    backend.agents(),
+    fetchAgents(),
     backend.appSids(),
     backend.appSessions().catch(() => cs().sidOf),
     backend.chatMachines().catch(() => cs().machines), // older backends have no machines
