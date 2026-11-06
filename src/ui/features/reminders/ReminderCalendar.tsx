@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { leadingDays } from "../../../domain/collections/calendar";
 import { isoDate } from "../../../domain/reminders/rules";
 import { Icon } from "../../components/Icon";
 import { useDismiss } from "../../hooks/useDismiss";
@@ -46,7 +47,7 @@ export function ReminderCalendar({ onPick, onClose }: { onPick: (date: string) =
   const now = new Date();
   const today = isoDate(now.getFullYear(), now.getMonth(), now.getDate());
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth();
-  const blanks = (new Date(year, month, 1).getDay() + 6) % 7; // Monday first
+  const blanks = leadingDays(year, month); // Monday first
   const dayCount = new Date(year, month + 1, 0).getDate();
 
   return (

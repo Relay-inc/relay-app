@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- The Meetings collection has a Calendar layout next to Table and Board: a month (Monday first) or a week, each meeting on its `date:` day with its stage, a click opens it, and the meetings without a date listed under the grid. Filters and the context apply as in the table, and a saved view keeps Calendar. Threads get it too. The collections' "today" is now the local date, so just after midnight a meeting of yesterday counts as over.
+
 ### Changed
 
 - Relay stays responsive when many notes change at once, like after a git pull or a long Claude run: the notes list and the related notes are refreshed once per burst instead of once per note, and the note list is read off the main thread. (#415)

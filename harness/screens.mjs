@@ -2233,6 +2233,28 @@ const VIEWS = {
     await settle(page);
   },
   "collection-board-drag-dark": async () => VIEWS["collection-board-drag"]("linked-collections-dark"),
+  // the Meetings as a calendar (issue 423): the month it opens on, today ringed, the undated meeting under the grid; the
+  // month before; the week of today, Monday to Sunday
+  "collection-calendar": async (fixture = "linked-collections") => {
+    await VIEWS["collection-open"](fixture, "meetings");
+    await page.getByRole("tab", { name: "Calendar" }).click();
+    await waitText("No date (1)");
+    await settle(page);
+  },
+  "collection-calendar-dark": async () => VIEWS["collection-calendar"]("linked-collections-dark"),
+  "collection-calendar-prev": async (fixture = "linked-collections") => {
+    await VIEWS["collection-calendar"](fixture);
+    await page.getByRole("button", { name: "Previous month" }).click();
+    await waitText("September 2026");
+    await settle(page);
+  },
+  "collection-calendar-week": async (fixture = "linked-collections") => {
+    await VIEWS["collection-calendar"](fixture);
+    await page.getByRole("tab", { name: "Week" }).click();
+    await page.locator(`section[data-day="2026-09-28"]`).waitFor();
+    await settle(page);
+  },
+  "collection-calendar-week-dark": async () => VIEWS["collection-calendar-week"]("linked-collections-dark"),
   "collection-open": async (fixture, collection) => {
     await open(page, server.url, { fixture });
     await page.getByRole("tab", { name: /^Pages/ }).click();

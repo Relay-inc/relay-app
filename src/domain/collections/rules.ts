@@ -2,6 +2,7 @@
 // (related.rs `collection`: every note with its keys' values); this is the query on them. Nothing is written here: an
 // edit goes through the note's own frontmatter (domain/workspace/properties.ts).
 import { noteName } from "../navigation/pages.ts";
+import { isoDate } from "../reminders/rules.ts";
 
 /** A note as the index lists it: where it is, its title and `type:` ("" without one), the file's mtime (seconds), the
  *  `date:` (or the date its name starts with), the stage of a meeting (derived from its text), and every frontmatter
@@ -111,11 +112,14 @@ export type Filter = { key: string; is?: string; from?: string; to?: string; out
  *  shows already) and not that note itself (`apart`: a context's group Projects is its own, so Documents has none of
  *  them); a person is also in when a note that is in names them in `with:`. */
 export const LINKED = "linked";
-/** A collection as it is shown: which, in which context (""= any), table or board, what narrows and orders it. */
+/** Whether a collection can be shown as a calendar: it has a date column. */
+export const hasCalendar = (collection: CollectionId) => DEFS[collection].columns.some(c => c.kind === "date");
+/** A collection as it is shown: which, in which context (""= any), table, board or calendar, what narrows and orders
+ *  it. */
 export type View = {
   collection: CollectionId;
   context: string;
-  layout: "table" | "board";
+  layout: "table" | "board" | "calendar";
   filters: Filter[];
   sort: Sort | null;
   group: string;
@@ -209,8 +213,12 @@ export function evaluate(rows: Row[], view: View): Row[] {
 /** The key a board groups by: the picked one, else the collection's own. */
 export const boardKey = (view: View) => view.group || DEFS[view.collection].board;
 
+/** Today as the local date (yyyy-mm-dd), what a collection's "today" is: at 00:30 in Brussels it is already today, while
+ *  UTC is still on yesterday. */
+export const localToday = (now = new Date()) => isoDate(now.getFullYear(), now.getMonth(), now.getDate());
+
 /** A meeting's stage as the board sorts it: one that is over (its date before `today`) and not wrapped is "unwrapped". */
-export const stageOf = (row: Row, today: string): string =>
+export const stageOf = (row: Row, today = localToday()): string =>
   row.stage && row.stage !== "wrapped" && row.date && row.date < today ? "unwrapped" : row.stage;
 
 export type Lane = { value: string; rows: Row[] };
@@ -262,7 +270,10 @@ export function readView(value: unknown): View | null {
   return {
     collection: v.collection as CollectionId,
     context: typeof v.context === "string" ? v.context : "",
-    layout: v.layout === "board" ? "board" : "table",
+    layout:
+      v.layout === "board" || (v.layout === "calendar" && hasCalendar(v.collection as CollectionId))
+        ? v.layout
+        : "table",
     filters,
     sort: sort as Sort | null,
     group: typeof v.group === "string" ? v.group : "",

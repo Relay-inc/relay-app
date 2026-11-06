@@ -1,11 +1,19 @@
 import { useState } from "react";
-import { DEFS, range, type Column, type Filter, type View } from "../../../domain/collections/rules";
+import {
+  DEFS,
+  hasCalendar,
+  localToday,
+  range,
+  type Column,
+  type Filter,
+  type View,
+} from "../../../domain/collections/rules";
 import { addFilter, removeFilter, setGroup, setLayout, setSort } from "../../../application/collections/collections";
 import { useT } from "../../hooks/useT";
 import { MenuItem, PILL, PillMenu } from "./PillMenu";
 import { columnLabel } from "./labels";
 
-/** Table | Board, the filter chips with "+ Filter", then Sort and Group by (K8, K9). */
+/** Table | Board (| Calendar with a date column), the filter chips with "+ Filter", then Sort and Group by (K8, K9). */
 export function CollectionToolbar({ view, values }: { view: View; values: (key: string) => string[] }) {
   const { t, any } = useT();
   const def = DEFS[view.collection];
@@ -14,7 +22,7 @@ export function CollectionToolbar({ view, values }: { view: View; values: (key: 
   return (
     <div className="flex items-center flex-wrap gap-2 mt-3.5 pb-3 border-b border-separator text-xs">
       <div role="tablist" aria-label={t("coll.layout")} className="flex p-0.5 rounded-lg bg-fill-2 text-[13px]">
-        {(["table", "board"] as const).map(layout => (
+        {(["table", "board", ...(hasCalendar(view.collection) ? (["calendar"] as const) : [])] as const).map(layout => (
           <button
             key={layout}
             role="tab"
@@ -63,45 +71,45 @@ export function CollectionToolbar({ view, values }: { view: View; values: (key: 
           ))
         }
       </PillMenu>
-      <PillMenu label={t("coll.group")} value={group ? columnLabel(any, group) : t("coll.none")}>
-        {close => (
-          <>
-            {view.layout === "table" ? (
-              <MenuItem
-                selected={!group}
-                onClick={() => {
-                  setGroup("");
-                  close();
-                }}
-              >
-                {t("coll.none")}
-              </MenuItem>
-            ) : null}
-            {def.columns
-              .filter(column => column.key !== "title")
-              .map(column => (
+      {view.layout === "calendar" ? null : (
+        <PillMenu label={t("coll.group")} value={group ? columnLabel(any, group) : t("coll.none")}>
+          {close => (
+            <>
+              {view.layout === "table" ? (
                 <MenuItem
-                  key={column.key}
-                  selected={group === column.key}
+                  selected={!group}
                   onClick={() => {
-                    setGroup(column.key);
+                    setGroup("");
                     close();
                   }}
                 >
-                  {columnLabel(any, column.key)}
+                  {t("coll.none")}
                 </MenuItem>
-              ))}
-          </>
-        )}
-      </PillMenu>
+              ) : null}
+              {def.columns
+                .filter(column => column.key !== "title")
+                .map(column => (
+                  <MenuItem
+                    key={column.key}
+                    selected={group === column.key}
+                    onClick={() => {
+                      setGroup(column.key);
+                      close();
+                    }}
+                  >
+                    {columnLabel(any, column.key)}
+                  </MenuItem>
+                ))}
+            </>
+          )}
+        </PillMenu>
+      )}
     </div>
   );
 }
 
 const filterText = (t: ReturnType<typeof useT>["t"], f: Filter) =>
   f.is !== undefined ? f.is : f.from || f.to ? `${f.from ?? ""} – ${f.to ?? ""}` : t("coll.none");
-
-const TODAY = () => new Date().toISOString().slice(0, 10);
 
 /** "+ Filter": a property, then its value (a date's range as a preset, else typed with the values the notes have). */
 function AddFilter({ columns, values }: { columns: Column[]; values: (key: string) => string[] }) {
@@ -128,7 +136,7 @@ function AddFilter({ columns, values }: { columns: Column[]; values: (key: strin
             <MenuItem
               key={preset}
               onClick={() => {
-                addFilter(range(column.key, preset, TODAY()));
+                addFilter(range(column.key, preset, localToday()));
                 setKey("");
                 close();
               }}
