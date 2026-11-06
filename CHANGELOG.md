@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- Less CPU and no UI stalls while a terminal conversation is open: the list of running sessions is read at most every 2.5 seconds instead of with every poll, and the polls for questions, subagents, the sidebar and sending a message no longer run on the UI thread. The vault is scanned once per refresh instead of once per project, and `claude --version` is not run again for every message. (#414)
+
 ### Fixed
 
 - Productive subtasks show on the board and in the ticket window: a parent card counts its done subtasks (1/3), the ticket window lists them under the description (a row opens the subtask) and a subtask links back to its parent. The board's task list leaves subtasks out, as Productive's own board does, and the ticket never asked for them
