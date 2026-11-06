@@ -12,7 +12,10 @@ test("overlapping calls share one load, a later call starts a new one", async ()
 
 test("a failed load does not stick", async () => {
   let fail = true;
-  const load = singleFlight(async () => { if (fail) throw new Error("x"); return 1; });
+  const load = singleFlight(async () => {
+    if (fail) throw new Error("x");
+    return 1;
+  });
   await assert.rejects(load());
   fail = false;
   assert.equal(await load(), 1);
