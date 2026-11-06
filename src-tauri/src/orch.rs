@@ -602,10 +602,6 @@ pub fn tainted(app: &AppHandle, key: &str) -> bool {
 fn marked(app: &AppHandle) -> Vec<String> {
     std::fs::read_to_string(data_dir(app).join("orch-tainted.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
 }
-pub fn unmark(app: &AppHandle, key: &str) {
-    let m: Vec<String> = marked(app).into_iter().filter(|k| k != key).collect();
-    std::fs::write(data_dir(app).join("orch-tainted.json"), json!(m).to_string()).ok();
-}
 fn mark(app: &AppHandle, key: &str) {
     let mut m = marked(app);
     if !m.iter().any(|k| k == key) { m.push(key.into()); std::fs::write(data_dir(app).join("orch-tainted.json"), json!(m).to_string()).ok(); }

@@ -1351,8 +1351,6 @@ function handle(cmd: string, a: Args): unknown {
       return [...phoneShared];
     case "notify":
     case "open_settings_window":
-    case "reset":
-    case "move_chat":
       return null;
     case "usage_limits":
       return integ.usageLimits;
