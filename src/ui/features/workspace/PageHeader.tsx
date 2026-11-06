@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { readProperties, setProperty, type PropertyValue } from "../../../domain/workspace/properties";
+import { DECOR_KEYS } from "../../../domain/workspace/decor";
 import { headerOf, type Header, type Slot } from "../../../domain/types/header";
 import { activeFolder } from "../../../application/navigation/workspaces";
 import { followPageLink } from "../../../application/navigation/pages";
@@ -79,7 +80,7 @@ export function PageHeader({
       <Properties
         yaml={yaml}
         onChange={onChange}
-        hide={header ? ["type", ...header.slots.map(s => s.field.key)] : []}
+        hide={[...DECOR_KEYS, ...(header ? ["type", ...header.slots.map(s => s.field.key)] : [])]}
         suggest={header?.absent ?? []}
       >
         {children}

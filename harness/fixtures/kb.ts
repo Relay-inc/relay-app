@@ -143,6 +143,25 @@ notes.push(
       "First call with Northwind about the portal.\n",
   },
 );
+// page icons and covers (issue 424): a page with its own icon and a cover, and one whose cover: names a missing file
+notes.push(
+  {
+    path: `${docs}/Launch checklist.md`,
+    type: "Document",
+    context: "Agency",
+    tags: [],
+    text:
+      '---\ntype: Document\ncontext: "[[Agency]]"\nicon: 🚀\ncover: "[[Kickoff banner.png]]"\n---\n# Launch checklist\n\n' +
+      "- [ ] DNS switched by Tom\n- [ ] Sofie signs off the invoices page\n",
+  },
+  {
+    path: `${docs}/Brand notes.md`,
+    type: "Document",
+    context: "Agency",
+    tags: [],
+    text: '---\ntype: Document\ncontext: "[[Agency]]"\ncover: "[[missing-banner.png]]"\n---\n# Brand notes\n\nColours and type for the portal.\n',
+  },
+);
 /** The project note as a typed Project (issue 419), in place of the generic note: its rail groups the meetings about it. */
 export const PROJECT = "Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md";
 const projectText =

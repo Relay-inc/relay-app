@@ -17,6 +17,7 @@ a PR. Versions follow
 
 - Note types live in one registry, `.relay/types.json` in the vault: each type's fields, required keys, home, template and collection columns. Tidy, Collections, new notes and the Properties panel read it (a field with a fixed list of values, like a project's `status`, gets a select that marks a value outside the list), Relay writes it out as the Claude rule `System/rules/vault/types.md`, and the starter vault's hook checks notes against it.
 - A typed page has a header made from its type: the type, where it belongs (Context › Project), and the type's fields, each with its editor. A link field only offers notes of its type (`with:` people, `about:` projects and contexts) and can create a missing one, like a new person in the context's People folder; an empty `context:` or `about:` shows as a slot to fill, and "Add property" offers the type's missing fields first. The right rail groups backlinks by relation, like "Meetings about this project".
+- A page can carry an emoji icon and a cover picture, saved as `icon:` and `cover:` in its frontmatter. Hover the header for Add icon and Add cover; the cover is copied into the attachments folder and shown as a banner above the title. The note's own icon wins over its project's icon, and a cover whose file is gone just isn't shown.
 
 ### Changed
 
