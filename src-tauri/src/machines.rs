@@ -129,7 +129,6 @@ impl Machines {
     }
     pub fn set_bind(&self, key: &str, b: Bind) { let mut m = self.binds.lock().unwrap(); m.insert(key.into(), b); self.save(&m); }
     pub fn unbind(&self, key: &str) { let mut m = self.binds.lock().unwrap(); if m.remove(key).is_some() { self.save(&m); } }
-    pub fn rebind(&self, from: &str, to: &str) { let mut m = self.binds.lock().unwrap(); if let Some(b) = m.remove(from) { m.insert(to.into(), b); self.save(&m); } }
 
     /// The machine's Info: the poller's, else asked now.
     pub fn info(&self, m: &Value) -> Result<Info, String> {
@@ -237,11 +236,9 @@ mod tests {
         ms.set_bind("c:1", Bind { machine: "0123456789ab".into(), cwd: "/x".into() });
         // once bound, the folder in the bind wins, also after a reload
         assert_eq!(Machines::load(&d).unwrap().bind_for(&s, "c:1", true, None).unwrap().1.cwd, "/x");
-        ms.rebind("c:1", "c:9");
-        assert!(ms.bind_of("c:1").is_none() && ms.bind_of("c:9").is_some());
-        assert_eq!(ms.chat_machines(&s)["c:9"]["machine"], "LServer");
+        assert_eq!(ms.chat_machines(&s)["c:1"]["machine"], "LServer");
         ms.forget("0123456789ab");
-        assert!(ms.bind_of("c:9").is_none());
+        assert!(ms.bind_of("c:1").is_none());
         std::fs::remove_dir_all(d).ok();
     }
 }

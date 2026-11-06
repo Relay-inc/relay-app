@@ -52,11 +52,6 @@ pub fn add_link(app: &AppHandle, machine: &str, link: &str) {
 }
 /// Forget a machine: the phones trusted there go with it.
 pub fn forget(app: &AppHandle, machine: &str) { update(app, |f| f.phones.remove(machine)); }
-/// A conversation moved to another key (move_chat): its share goes along.
-pub fn rekey(app: &AppHandle, from: &str, to: &str) {
-    if with(app, |f| f.shared.contains_key(from)) { update(app, |f| if let Some(t) = f.shared.remove(from) { f.shared.insert(to.into(), t); }); }
-}
-
 /// Whether the conversation `key` is shared with the phone.
 pub fn is_shared(app: &AppHandle, key: &str) -> bool { with(app, |f| f.shared.contains_key(key)) }
 

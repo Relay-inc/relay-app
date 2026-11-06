@@ -71,7 +71,7 @@ transparent over the macOS sidebar material in Tauri; the mock gives `html` the 
 Commands answered with stubs (no real effect): `pick_folder` (`pickFolder`, cancelled by default), `pick_path` (cancelled), `open_file` (recorded in `calls`, rejects "not found" for a path containing `missing`), `read_image` (a small PNG for png/jpg/jpeg/gif/webp, rejects otherwise), `mail_connect`, `mail_test`,
 `integration_token`, `integration_import`, `favicons`, `find_icon_sites` (nothing found), `set_project_icon`,
 `set_project_repos`, `ignore_repo`, `ai_title` (first five words), `stop`, `bg`, `open_terminal`, `notify`, `open_settings_window`,
-`reset`, `move_chat`, `plugin:opener|open_url`, `running` (`{}`: no process of the app runs a turn).
+`plugin:opener|open_url`, `running` (`{}`: no process of the app runs a turn).
 With state in memory: `reminder` (done drops a row or moves a repeating one on, push moves it) and `reminder_add`
 change the snapshot, so undo works; reminder ids are 8 hex characters as the backend makes them. `set_settings` keeps
 the settings but emits no `settings-changed`. `set_action_config` keeps the extension's entry, `action_config` returns
