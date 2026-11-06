@@ -647,6 +647,7 @@ const en = {
   "props.move": "Drag to move",
   "props.open": "Open the note",
   "props.addItem": "Add…",
+  "props.invalid": "Not one of the values this type allows",
   "block.text": "Text",
   "block.h1": "Heading 1",
   "block.h2": "Heading 2",

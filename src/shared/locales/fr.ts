@@ -662,6 +662,7 @@ export default {
   "props.move": "Glisser pour déplacer",
   "props.open": "Ouvrir la note",
   "props.addItem": "Ajouter…",
+  "props.invalid": "Pas une valeur que ce type permet",
   "block.text": "Texte",
   "block.h1": "Titre 1",
   "block.h2": "Titre 2",

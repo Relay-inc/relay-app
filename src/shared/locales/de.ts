@@ -654,6 +654,7 @@ export default {
   "props.move": "Zum Verschieben ziehen",
   "props.open": "Notiz öffnen",
   "props.addItem": "Hinzufügen…",
+  "props.invalid": "Kein Wert, den dieser Typ erlaubt",
   "block.text": "Text",
   "block.h1": "Überschrift 1",
   "block.h2": "Überschrift 2",

@@ -17,6 +17,7 @@ import * as kb from "./fixtures/kb";
 import * as inbox from "./fixtures/inbox";
 import * as coll from "./fixtures/collections";
 import * as Y from "yjs";
+import { SHIPPED } from "../src/domain/types/registry";
 // the example plugin's real view: the harness serves it from a blob, where the app has the relay-plugin:// scheme
 import diceView from "../packages/plugin-example/view.html?raw";
 
@@ -1370,6 +1371,9 @@ function handle(cmd: string, a: Args): unknown {
       return linkedOn ? vault.linkedNotes() : [];
     // the collections (issue 373): every note with its frontmatter values, read from the note's text as related.rs does;
     // the saved views are in sessionStorage with ?keep=1 (a restart), else in memory
+    // the type registry (issue 418): the shipped one
+    case "note_types":
+      return SHIPPED;
     case "notes_collection":
       return pageList().map(path => collectionRow(path, textOfNote(path)));
     case "views_list":

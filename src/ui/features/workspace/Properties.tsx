@@ -1,15 +1,19 @@
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { followPageLink, propertyValues, workspacePaths } from "../../../application/navigation/pages";
 import {
   moveProperty,
   readProperties,
   removeProperty,
   setProperty,
+  typed,
   type Property,
   type PropertyKind,
   type PropertyValue as Value,
 } from "../../../domain/workspace/properties";
 import { noteName } from "../../../domain/navigation/pages";
+import { activeFolder } from "../../../application/navigation/workspaces";
+import { loadTypes, registryOf } from "../../../application/types/types";
+import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { PropertyValue } from "./NoteDetail";
@@ -21,7 +25,8 @@ const LINK = /^\[\[([^\]\n]+)\]\]$/;
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** A page's properties as rows to edit, the way Obsidian shows them: text (offering the values the key has elsewhere in
- *  the workspace), a date picker, chips for a list, a [[note]] link, a checkbox. Each change hands the new frontmatter to
+ *  the workspace), a date picker, chips for a list, a [[note]] link, a checkbox, and a select for a key the note's type
+ *  gives a list of values (the type registry also picks the editor of a key that is still empty). Each change hands the new frontmatter to
  *  `onChange`; a key is removed with its ×, moved by dragging its name, added at the bottom. `children` go last (the
  *  project's conversations). Frontmatter that does not parse shows read-only. */
 export function Properties({
@@ -34,7 +39,11 @@ export function Properties({
   children?: ReactNode;
 }) {
   const { t } = useT();
-  const rows = readProperties(yaml);
+  const folder = useDerived(() => activeFolder());
+  const registry = useDerived(() => registryOf(folder));
+  useEffect(() => void loadTypes(folder), [folder]);
+  const read = readProperties(yaml);
+  const rows = read && typed(read, registry);
   const [kinds, setKinds] = useState<Record<string, PropertyKind>>({}); // a new, still empty key's kind
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -132,6 +141,28 @@ function Field({ row, set }: { row: Property; set: (value: Value) => void }) {
         onChange={e => set(e.target.value || null)}
       />
     );
+  if (kind === "select") {
+    const current = value === null ? "" : String(value);
+    const invalid = !!current && !row.values?.includes(current);
+    return (
+      <select
+        className={invalid ? FIELD.replace("text-label", "text-bad") : FIELD}
+        value={current}
+        aria-label={key}
+        aria-invalid={invalid}
+        title={invalid ? t("props.invalid") : undefined}
+        onChange={e => set(e.target.value || null)}
+      >
+        <option value="" />
+        {invalid ? <option value={current}>{current}</option> : null}
+        {row.values?.map(v => (
+          <option key={v} value={v}>
+            {v}
+          </option>
+        ))}
+      </select>
+    );
+  }
   if (kind === "raw")
     return <span className="flex-1 px-2 font-mono text-xs text-secondary whitespace-pre-wrap">{String(value)}</span>;
   if (kind === "list") return <ListField name={key} items={Array.isArray(value) ? value : []} set={set} />;

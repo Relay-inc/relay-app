@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- Note types live in one registry, `.relay/types.json` in the vault: each type's fields, required keys, home, template and collection columns. Tidy, Collections, new notes and the Properties panel read it (a field with a fixed list of values, like a project's `status`, gets a select that marks a value outside the list), Relay writes it out as the Claude rule `System/rules/vault/types.md`, and the starter vault's hook checks notes against it.
+
 ### Changed
 
 - Relay stays responsive when many notes change at once, like after a git pull or a long Claude run: the notes list and the related notes are refreshed once per burst instead of once per note, and the note list is read off the main thread. (#415)
