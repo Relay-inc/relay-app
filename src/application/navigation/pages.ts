@@ -28,6 +28,7 @@ import { copy, select, toast } from "./navigation";
 import { openDetail } from "./panel";
 import { useNavigationStore } from "./store";
 import { makeStore } from "../make-store";
+import { trailing } from "../trailing";
 import { loadLinked } from "./linked";
 import { favouritesOf, followFavourites } from "./favourites";
 import { activeFolder, workspaces } from "./workspaces";
@@ -286,11 +287,15 @@ function byClaude(page: string) {
     ),
   );
 }
+// the watcher sends one event per changed file: the walks wait for the burst to end
+const reload = trailing(() => {
+  void loadNotes();
+  void loadLinked();
+}, 300);
 /** A note changed outside Relay (the file watcher): the Pages tab reads which notes exist again, and an open page that
  *  holds another text than the file gets the file's, to merge. */
 export async function noteChanged({ path, hash, relinked }: backend.NoteChange) {
-  void loadNotes();
-  void loadLinked();
+  reload();
   const by = relinked ? "relay" : byClaude(path) ? "claude" : "disk";
   // another workspace's note (an absolute path): if it is a shared document, its file change becomes an edit of it
   if (hash && path.startsWith("/")) void backend.sharedDocAbsorb(path, by).catch(() => {});

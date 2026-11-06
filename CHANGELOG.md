@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- Relay stays responsive when many notes change at once, like after a git pull or a long Claude run: the notes list and the related notes are refreshed once per burst instead of once per note, and the note list is read off the main thread.
+
 ### Fixed
 
 - A meeting note from a recording gets its people, `context:` and `about:` filled from the vault: attendee emails are matched to Person notes, a company note's `domain:` is the fallback, and what stays unknown is named instead of asked when nobody is there to answer.

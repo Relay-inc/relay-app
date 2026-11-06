@@ -92,6 +92,9 @@ pub fn start(app: &AppHandle) {
             while let Ok(more) = rx.recv_timeout(Duration::from_millis(300)) { files.extend(more); }
             files.sort();
             files.dedup();
+            // the related index walks the folders again at its next query (Relay's own writes included; a moved or deleted
+            // folder has no extension)
+            for f in files.iter().filter(|f| f.extension().is_none_or(|e| e == "md")) { crate::related::touched(f); }
             // a file in a shared workspace changed (a save, Claude, Obsidian): its round runs now, not at the next 10 s.
             // ponytail: a round's own pulls land here too and cost one more round that finds nothing
             let shared: Vec<String> = shared_vaults::list(&app.state::<App>().settings.lock().unwrap()).into_iter().map(|v| vault::canon(&v.folder)).collect();
