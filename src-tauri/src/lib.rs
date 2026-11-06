@@ -439,8 +439,9 @@ struct App {
 }
 
 fn data_dir(app: &AppHandle) -> PathBuf {
+    static MADE: std::sync::Once = std::sync::Once::new();
     let d = app.path().app_data_dir().expect("app data dir");
-    fs::create_dir_all(d.join("pending")).ok();
+    MADE.call_once(|| { fs::create_dir_all(d.join("pending")).ok(); });
     d
 }
 fn pending_dir(app: &AppHandle) -> PathBuf { data_dir(app).join("pending") }
@@ -471,15 +472,18 @@ fn mapped(st: &Value, k: &str) -> String {
 /// Everything the sidebar shows, read from the mapped paths (snapshot.rs). Also returns the vault
 /// status, so the UI can switch off what the vault lacks (e.g. reminder actions without a script).
 #[tauri::command]
-fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
+async fn snapshot(app: AppHandle) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || snapshot_now(&app, &app.state::<App>())).await.map_err(|e| e.to_string())?
+}
+fn snapshot_now(app: &AppHandle, state: &App) -> Result<Value, String> {
     let (st, lang) = { let s = state.settings.lock().unwrap(); (vault_of(&s), ui_lang_of(&s)) };
     let v = st["vault"].as_str().unwrap();
     if v.is_empty() { return Err(tr(lang, "err.no_vault_set")); }
     if st["ok"] != true { return Err(tr_v(lang, "err.no_vault", v)); }
     // the first time a vault is used, its .relay/config.json is written from what is detected
     relay_config::ensure(v, &st["map"]);
-    let mut snap = snapshot::snapshot(v, &mapped(&st, "workState"), &mapped(&st, "notes"), chrono::Local::now().date_naive(), &state.path,
-        &data_dir(&app).join("topics.json"), &home())?;
+    let mut snap = snapshot::snapshot(v, &mapped(&st, "workState"), &mapped(&st, "notes"), chrono::Local::now().date_naive(),
+        agent_claude::agents_raw(&env_of(app, state, &agent_claude::PROVIDER).env()), &data_dir(app).join("topics.json"), &home())?;
     // every vault's projects, each by its lasting key (policy::project_key), shown by its label
     let s = state.settings.lock().unwrap().clone();
     let mut all: Vec<(String, Value)> = snap["projects"].as_array().cloned().unwrap_or_default().into_iter().map(|p| (v.to_string(), p)).collect();
@@ -515,9 +519,9 @@ fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
     // every workspace's contexts, also those without a project yet: the Pages tab shows them
     snap["contexts"] = json!(all_vaults(&s).iter().filter_map(|w| side_for(&s, w).ok().map(|x| (w.clone(), json!(projects::listed(&x))))).collect::<serde_json::Map<_, _>>());
     snap["vault"] = st;
-    let (file, _, _) = rem_ctx(&app)?;
+    let (file, _, _) = rem_ctx(app)?;
     snap["reminders"] = reminders::list(&file, chrono::Local::now().date_naive()).into();
-    tray::refresh(&app); // the file may have changed outside the app
+    tray::refresh(app); // the file may have changed outside the app
     Ok(snap)
 }
 
@@ -1867,9 +1871,10 @@ fn in_terminal(st: &App, cmd: &str) -> Result<(), String> {
 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
+async fn send(app: AppHandle, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
         model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, told: Option<String>, context: Option<String>, machine: Option<String>, about: Option<String>, vault: Option<String>) -> Result<(), String> {
-    session::send(&app, &state, session::Msg { project, text, images, name, fork, model, effort, provider, mail, told, context, machine, about, vault })
+    tauri::async_runtime::spawn_blocking(move || session::send(&app, &app.state::<App>(), session::Msg { project, text, images, name, fork, model, effort, provider, mail, told, context, machine, about, vault }))
+        .await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -2163,12 +2168,15 @@ fn app_sessions(state: State<App>) -> Value {
 
 /// Read-only history of any session in the vault, e.g. one that is open in the terminal, from byte offset `from`.
 #[tauri::command]
-fn history_sid(app: AppHandle, state: State<App>, sid: String, from: Option<u64>, provider: Option<String>) -> Value {
+async fn history_sid(app: AppHandle, sid: String, from: Option<u64>, provider: Option<String>) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || history_sid_now(&app, &app.state::<App>(), sid, from, provider)).await.map_err(|e| e.to_string())
+}
+fn history_sid_now(app: &AppHandle, state: &App, sid: String, from: Option<u64>, provider: Option<String>) -> Value {
     let p = agents::get_or_first(provider.as_deref());
     if !p.valid_session(&sid) { return json!({"items": [], "next": 0}); }
     // the vault of the conversation with this session, where its transcript is
     let v = state.sids.lock().unwrap().values().find(|s| s.sid == sid).map(|s| s.vault.clone()).unwrap_or_default();
-    let (items, next) = p.history(&in_vault(env_of(&app, &state, p), v).env(), &sid, from.unwrap_or(0));
+    let (items, next) = p.history(&in_vault(env_of(app, state, p), v).env(), &sid, from.unwrap_or(0));
     json!({"items": items, "next": next})
 }
 
@@ -2202,11 +2210,14 @@ fn sid_of(state: &App, key: &str) -> Option<(&'static dyn AgentProvider, String)
 
 /// Subagents per conversation key, only for keys that ever spawned one.
 #[tauri::command]
-fn subagents(app: AppHandle, state: State<App>, keys: Vec<String>) -> Value {
+async fn subagents(app: AppHandle, keys: Vec<String>) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || subagents_now(&app, &app.state::<App>(), keys)).await.map_err(|e| e.to_string())
+}
+fn subagents_now(app: &AppHandle, state: &App, keys: Vec<String>) -> Value {
     let mut out = serde_json::Map::new();
     for k in keys {
-        let Some((p, sid)) = sid_of(&state, &k).filter(|(p, _)| p.caps().subagents) else { continue };
-        let list = p.subagents(&env_for(&app, &state, p, &k).env(), &sid);
+        let Some((p, sid)) = sid_of(state, &k).filter(|(p, _)| p.caps().subagents) else { continue };
+        let list = p.subagents(&env_for(app, state, p, &k).env(), &sid);
         if !list.is_empty() { out.insert(k, json!(list)); }
     }
     Value::Object(out)
@@ -2227,11 +2238,13 @@ fn running(state: State<App>) -> HashMap<String, u32> {
 
 /// The open permission requests and questions of every provider.
 #[tauri::command]
-fn pending(app: AppHandle, state: State<App>) -> Vec<Value> {
-    // the work machines' cards as their poller last saw them (machines.rs), after this Mac's own
-    let mut list = pending::list(&pending_dir(&app));
-    list.extend(state.machines.pending());
-    list
+async fn pending(app: AppHandle) -> Result<Vec<Value>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        // the work machines' cards as their poller last saw them (machines.rs), after this Mac's own
+        let mut list = pending::list(&pending_dir(&app));
+        list.extend(app.state::<App>().machines.pending());
+        list
+    }).await.map_err(|e| e.to_string())
 }
 
 /// The user's decision. A provider that raised the request in its own protocol gets it over stdin.
@@ -2264,14 +2277,30 @@ fn answer(app: AppHandle, state: State<App>, id: String, decision: Value) -> Res
 /// Not the ones this Mac's relay-server runs for other devices (This Mac as a machine): they are those devices'
 /// conversations, their transcripts sealed in the mirror, so here they could only show as a terminal nobody can follow.
 #[tauri::command]
-fn agents(app: AppHandle, state: State<App>) -> Value {
+async fn agents(app: AppHandle) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || agents_cached(&app, &app.state::<App>())).await.map_err(|e| e.to_string())
+}
+/// `agents_now` as it was within the last 2.5 s. The open terminal asks every 2 s and the sidebar and the snapshot ask
+/// too, each ask runs ps and a process per provider. Holding the lock while it runs makes overlapping asks share it.
+fn agents_cached(app: &AppHandle, state: &App) -> Value {
+    static LAST: Mutex<Option<(std::time::Instant, Value)>> = Mutex::new(None);
+    ttl_cached(&LAST, std::time::Duration::from_millis(2500), || agents_now(app, state))
+}
+fn ttl_cached(slot: &Mutex<Option<(std::time::Instant, Value)>>, ttl: std::time::Duration, make: impl FnOnce() -> Value) -> Value {
+    let mut last = slot.lock().unwrap();
+    if let Some((_, v)) = last.as_ref().filter(|(at, _)| at.elapsed() < ttl) { return v.clone(); }
+    let v = make();
+    *last = Some((std::time::Instant::now(), v.clone()));
+    v
+}
+fn agents_now(app: &AppHandle, state: &App) -> Value {
     let on = agents::enabled(&state.settings.lock().unwrap());
     let server_work = relay_server::data_dir().join("work");
     let ps = Command::new("/bin/ps").args(["-axo", "pid=,ppid=,command="]).output().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
     let ours = under_broker(&ps);
     let mut out = vec![];
     for p in on.into_iter().filter(|p| p.caps().background) {
-        for mut a in p.sessions(&env_of(&app, &state, p).env()) {
+        for mut a in p.sessions(&env_of(app, state, p).env()) {
             if runs_for_server(&a, &server_work) { continue; }
             a["provider"] = json!(p.id());
             // the app's own process is listed before its session id reaches app_sids: marked, so the sidebar does not
@@ -3729,5 +3758,20 @@ mod terminal_tests {
         assert_eq!(terminal_of("auto", |_| false), "terminal");
         assert_eq!(terminal_of("iterm", |_| false), "iterm");
         assert_eq!(terminal_of("bogus", |_| true), "terminal");
+    }
+}
+
+#[cfg(test)]
+mod ttl_tests {
+    use super::*;
+    use std::time::Duration;
+    #[test]
+    fn ttl_cached_answers_within_the_ttl_and_refreshes_after() {
+        let slot = Mutex::new(None);
+        let n = std::cell::Cell::new(0);
+        let make = || { n.set(n.get() + 1); json!(n.get()) };
+        assert_eq!(ttl_cached(&slot, Duration::from_secs(60), make), json!(1));
+        assert_eq!(ttl_cached(&slot, Duration::from_secs(60), make), json!(1));
+        assert_eq!(ttl_cached(&slot, Duration::ZERO, make), json!(2));
     }
 }

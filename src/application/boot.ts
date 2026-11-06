@@ -28,7 +28,7 @@ import { listenToPill } from "./conversations/pill";
 import { terminalOf } from "./conversations/selectors";
 import { onAgentEvent } from "./conversations/events";
 import { ensureHistory, tailTerm, tailOutside } from "./conversations/history";
-import { pollPending, pollAgents, pollSubs, agentsStale, setSessions } from "./conversations/polls";
+import { pollPending, pollAgents, pollSubs, agentsStale, fetchAgents, setSessions } from "./conversations/polls";
 import { closeChat, reopenLast } from "./conversations/actions";
 import { watchDesign } from "./design/design";
 import { loadAgents, sawDefaults } from "./agents/agents";
@@ -248,7 +248,7 @@ async function pickStartView() {
 // a terminal conversation that is open in the app: new transcript lines and its busy state every 2 s
 async function followOpenTerminal() {
   if (!isTerminal(selected())) return;
-  const [, agentsList] = await Promise.all([tailTerm(selected()), backend.agents()]);
+  const [, agentsList] = await Promise.all([tailTerm(selected()), fetchAgents()]);
   setSessions({ agentsList });
 }
 
