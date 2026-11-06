@@ -67,7 +67,8 @@ fn scan(root: &Path, name: &str) -> Option<PathBuf> { walk(root, |_, n| n == nam
 pub fn notes(vault: &str) -> (String, Vec<String>) {
     let root = PathBuf::from(canon(vault));
     let mut out = vec![];
-    walk(&root, |p, n| { if n.ends_with(".md") { out.push(rel(&root, p)); } false });
+    // the walk starts at the canonical root and follows no symlink, so a file's path is already its real one
+    walk(&root, |p, n| { if n.ends_with(".md") { out.push(rel_to(&root, p)); } false });
     (root.to_string_lossy().into_owned(), out)
 }
 

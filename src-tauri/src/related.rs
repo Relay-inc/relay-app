@@ -13,6 +13,15 @@ use std::time::UNIX_EPOCH;
 
 // the open index per folder; a folder's file is named after its path
 static INDEX: Mutex<Option<HashMap<String, Connection>>> = Mutex::new(None);
+// when each folder's index last matched the folder; `touched` (the watcher saw a change) forgets them
+static SYNCED: Mutex<Option<HashMap<String, std::time::Instant>>> = Mutex::new(None);
+// a change the watcher misses (a folder it does not watch) is picked up after this long
+const RESYNC: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// `file` changed (or was added, moved or removed): the next query of the folder it is in walks the folder again.
+pub fn touched(file: &Path) {
+    if let Some(m) = SYNCED.lock().unwrap().as_mut() { m.retain(|root, _| !file.starts_with(root)); }
+}
 
 // words that say nothing about a topic, in the languages the vault is written in (English, then Dutch; the meeting
 // recorder also tells the two apart by them, see meeting.rs)
@@ -252,7 +261,12 @@ fn with<T>(dir: &Path, root: &str, f: impl FnOnce(&Connection) -> rusqlite::Resu
         map.insert(root.to_string(), open(&dir.join(name)).map_err(|e| e.to_string())?);
     }
     let c = map.get_mut(root).unwrap();
-    sync(c, root).map_err(|e| e.to_string())?;
+    let fresh = SYNCED.lock().unwrap().as_ref().and_then(|m| m.get(root)).is_some_and(|t| t.elapsed() < RESYNC);
+    if !fresh {
+        // marked before the walk: a change during it makes the next query walk again
+        SYNCED.lock().unwrap().get_or_insert_with(HashMap::new).insert(root.to_string(), std::time::Instant::now());
+        sync(c, root).map_err(|e| e.to_string())?;
+    }
     f(c).map_err(|e| e.to_string())
 }
 
@@ -695,6 +709,7 @@ mod tests {
         // a deleted note leaves the index, a new one comes in
         fs::remove_file(d.join("Contexts/A/Bramwell.md")).unwrap();
         fs::write(d.join("Contexts/A/Prijzen.md"), "de prijscascade per klant").unwrap();
+        touched(&vault::canon_path(&d));
         assert_eq!(paths("prijscascade"), vec!["Contexts/A/Prijzen.md"]);
     }
 
@@ -744,6 +759,9 @@ mod tests {
         // linking the mention moves it to the backlinks
         std::thread::sleep(std::time::Duration::from_millis(1100)); // the index follows the mtime, in seconds
         w("Docs/D.md", "Weekly [[Hosting plan|hosting plan]] on Wednesdays.\n");
+        // nothing told the index: no new walk, the old answer
+        assert_eq!(rail(&db, &v, "Docs/Hosting plan.md").unwrap()["backlinks"].as_array().unwrap().len(), 4);
+        touched(&vault::canon_path(&d));
         let r = rail(&db, &v, "Docs/Hosting plan.md").unwrap();
         assert!(r["mentions"].as_array().unwrap().is_empty());
         assert_eq!(r["backlinks"].as_array().unwrap().len(), 5);
@@ -855,6 +873,7 @@ mod tests {
         assert_eq!(l[0]["stage"], "wrapped");
         // a new note joins, an old index without refs is rebuilt
         fs::write(d.join("Calendar/Other.md"), "---\ntype: Thread\nabout: Beacon\n---\n").unwrap();
+        touched(&vault::canon_path(&d));
         assert_eq!(linked(&idx, &root).unwrap().as_array().unwrap().len(), 2);
         fs::remove_dir_all(&d).ok();
     }
@@ -933,6 +952,7 @@ mod tests {
         assert_eq!(l, vec!["Sprint scope.md"]);
         // a note changed on disk is found at once
         fs::write(d.join("Contexts/Clients/Northwind/Notes.md"), "---\ntype: Document\n---\nzebra\n").unwrap();
+        touched(&vault::canon_path(&d));
         filetime_bump(&d.join("Contexts/Clients/Northwind/Notes.md"));
         assert_eq!(paths(&found(&d, "zebra"), "content"), vec!["Notes.md"]);
         fs::remove_dir_all(&d).ok();

@@ -1396,6 +1396,7 @@ fn write_note(state: State<App>, target: String, text: String, expect: String, f
     let roots: Vec<String> = std::iter::once(v).chain(extra_vaults(&state.settings.lock().unwrap())).collect();
     let hash = vault::write_note(&roots, &target, &text, &expect, force)?;
     changes::typed(&vault::resolve(&vault::canon(&roots[0]), &target), &hash);
+    related::touched(&vault::resolve(&vault::canon(&roots[0]), &target)); // the watcher is a moment behind
     watch::wrote(&roots[0], &target, &hash); // not an outside change: the watcher stays quiet about it
     // a shared workspace's note that is a document: the page's save becomes an edit of it
     if let Some((id, folder, rel)) = shared_note(&state, &target) { state.shared.absorb(&id, &folder, &rel, "relay"); }
@@ -1749,13 +1750,17 @@ async fn property_values(state: State<'_, App>, folder: String, key: String) -> 
 /// The notes a conversation may link to, {root (the main vault, canonical), notes}: the main vault's relative to it,
 /// the shared vaults' as absolute paths.
 #[tauri::command]
-fn vault_notes(state: State<App>) -> Result<Value, String> {
-    let (root, mut notes) = vault::notes(&need_vault(&state)?);
-    for e in extra_vaults(&state.settings.lock().unwrap()) {
-        let (r, list) = vault::notes(&e);
-        notes.extend(list.into_iter().map(|n| format!("{r}/{n}")));
-    }
-    Ok(json!({"root": root, "notes": notes}))
+async fn vault_notes(state: State<'_, App>) -> Result<Value, String> {
+    let main = need_vault(&state)?;
+    let extra = extra_vaults(&state.settings.lock().unwrap());
+    tauri::async_runtime::spawn_blocking(move || {
+        let (root, mut notes) = vault::notes(&main);
+        for e in extra {
+            let (r, list) = vault::notes(&e);
+            notes.extend(list.into_iter().map(|n| format!("{r}/{n}")));
+        }
+        Ok(json!({"root": root, "notes": notes}))
+    }).await.map_err(|e| e.to_string())?
 }
 
 /// The vault notes closest to what a conversation is about, [{path, title, snippet}], from the full-text index.
