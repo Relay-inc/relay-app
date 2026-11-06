@@ -124,14 +124,12 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         bind.cwd = machines::cwd_or_vault(bind.cwd, &info);
         let mut eb = env_of(app, state, p);
         // that machine's paths and its claude; no mail tools there, and the mode comes with the mirrored settings
-        eb.opts["mail"] = json!(false);
-        eb.opts["design"] = json!(false);
-        eb.opts["machine"] = json!(true);
+        eb.grants = agent_core::Grants { mail: false, design: false, machine: true, ..eb.grants };
         // at its first start, the project's repo the page made ready there (machine_git.rs): the agent gets its folder
         // and a line saying where it is. The conversation itself stays in the vault, so the vault's rules load
         let repo = if resume.is_none() { machine_git::ready(project, &bind.machine) } else { None };
-        if let Some(r) = &repo { eb.opts["system"] = json!(machine_git::repo_line(eb.opts["system"].as_str(), r)); }
-        let eb = EnvBuf { home: info.home.clone(), vault: bind.cwd.clone(), path: info.path.clone(), bin: info.claude.clone(), pending: PathBuf::from(&info.pending), opts: eb.opts };
+        if let Some(r) = &repo { eb.grants.system = Some(machine_git::repo_line(eb.grants.system.as_deref(), r)); }
+        let eb = EnvBuf { home: info.home.clone(), vault: bind.cwd.clone(), path: info.path.clone(), bin: info.claude.clone(), pending: PathBuf::from(&info.pending), grants: eb.grants, opts: eb.opts };
         let mut cmd = p.command(&eb.env(), &l)?;
         cmd.current_dir(&bind.cwd).env("PATH", &info.path);
         // the mirror gives the session there what Claude Code here has: context, plugins, permissions, the vault's memory
@@ -145,8 +143,8 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         let mut eb = env_of(app, state, p);
         eb.vault = dir.clone();
         if p.caps().accounts { eb.opts["account"] = json!(account); }
-        if orch::is_orch(project) { eb.opts["design"] = json!(false); }
-        if caps.control && orch::is_orch(project) { orch::flags(&mut eb.opts, project, &dir, &orch::shared(app, &dir)); } // the orchestrator's coordinator and workers (orch.rs)
+        if orch::is_orch(project) { eb.grants.design = false; }
+        if caps.control && orch::is_orch(project) { orch::flags(&mut eb.grants, project, &dir, &orch::shared(app, &dir)); } // the orchestrator's coordinator and workers (orch.rs)
         // fenced and started under the vault lock, which the caller holds (taken before `procs`, policy.rs): a vault
         // added meanwhile (policy::hold_for_vault) waits for this
         crate::fence_in(app, state, &mut eb);
@@ -154,7 +152,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
         let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();
         cmd.current_dir(&dir).env("PATH", format!("{bin}{}", state.path)).env(actions::CONVERSATION, project);
-        (broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?, eb.opts["mail"] == true, false)
+        (broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?, eb.grants.mail, false)
     };
     let broker::Conn { agent, mut stdin, frames, backlog } = c;
     // the orchestrator's tools are answered over this Mac's pipe: its conversations never run on a machine (see send)

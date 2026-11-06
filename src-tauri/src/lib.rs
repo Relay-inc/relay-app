@@ -602,9 +602,9 @@ fn project_icons(app: AppHandle, state: State<App>) -> Value {
 #[tauri::command]
 async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Value>) -> Result<Value, String> {
     let p = agents::enabled(&state.settings.lock().unwrap()).into_iter().find(|p| p.id() == "claude").ok_or_else(|| trc("err.icons_no_claude"))?;
-    let eb = env_of(&app, &state, p);
+    let mut eb = env_of(&app, &state, p);
     // on the account a new conversation gets now, never one inherited from the app's environment
-    let account = account_of(&state, p, "", "sonnet");
+    eb.opts["account"] = json!(account_of(&state, p, "", "sonnet"));
     // the repos linked to a project say a lot about what it is (larkspur-shopware: a shop)
     let mut repos: HashMap<String, Vec<String>> = HashMap::new();
     for (r, p) in repo_projects(&eb.vault) { repos.entry(p).or_default().push(r); }
@@ -623,13 +623,9 @@ async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Va
         personal topic, a meeting or a plan with no company, product or tool behind it. Answer with only a JSON object \
         {{\"<project name>\": \"domain.tld\" or null}}, no other text.\n\n{}", serde_json::to_string(&list).unwrap());
     // the prompt on stdin: --allowedTools takes a list and would swallow it as an argument
+    let mut c = agent_claude::oneshot(&eb.env(), agent_claude::OneShot { model: Some("sonnet"), tools: &["WebSearch"], allowed: &["WebSearch"], ..Default::default() });
+    c.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let out = tauri::async_runtime::spawn_blocking(move || -> std::io::Result<std::process::Output> {
-        let mut c = Command::new(&eb.bin);
-        c.args(["-p", "--model", "sonnet", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config",
-                "--tools", "WebSearch", "--allowedTools", "WebSearch"])
-            .current_dir(std::env::temp_dir()).env("PATH", &eb.path).env_remove("ANTHROPIC_API_KEY")
-            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
-        if account.is_empty() { c.env_remove("CLAUDE_CONFIG_DIR"); } else { c.env("CLAUDE_CONFIG_DIR", &account); }
         let mut c = c.spawn()?;
         c.stdin.take().unwrap().write_all(prompt.as_bytes())?;
         c.wait_with_output()
@@ -655,18 +651,11 @@ async fn claude_run(app: &AppHandle, state: &State<'_, App>, mut eb: EnvBuf, acc
     let mut child = {
         let _gate = state.vault_gate.lock().unwrap();
         fence_in(app, state, &mut eb);
-        let deny: Vec<String> = eb.opts["deny"].as_array().into_iter().flatten().filter_map(Value::as_str).map(String::from).collect();
-        let mut c = Command::new(&eb.bin);
-        c.arg("-p");
-        if let Some(sid) = &resume { c.args(["--resume", sid, "--fork-session"]); }
-        c.args(["--no-session-persistence", "--model", "sonnet", "--strict-mcp-config",
-                "--tools", tools, "--allowedTools", tools])
-            .args(if deny.is_empty() { vec![] } else { std::iter::once("--disallowedTools".to_string()).chain(deny).collect() })
-            // in a shared vault no hook runs here either, as in the conversation it closes
-            .args(if eb.opts["fenced"] == true { vec!["--settings", agent_claude::fenced_settings()] } else { vec![] })
-            .current_dir(&eb.vault).env("PATH", &eb.path).env_remove("ANTHROPIC_API_KEY")
-            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
-        if account.is_empty() { c.env_remove("CLAUDE_CONFIG_DIR"); } else { c.env("CLAUDE_CONFIG_DIR", &account); }
+        eb.opts["account"] = json!(account);
+        // the fence's denies and, in a shared vault, no hook either, as in the conversation it closes
+        let mut c = agent_claude::oneshot(&eb.env(), agent_claude::OneShot { cwd: Some(&eb.vault), model: Some("sonnet"), tools: &[tools], allowed: &[tools],
+            own_settings: true, fork_of: resume.as_deref(), ..Default::default() });
+        c.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
         let child = c.spawn().map_err(|e| e.to_string())?;
         policy::CAPTURES.lock().unwrap().push(child.id());
         child
@@ -1816,9 +1805,9 @@ fn env_for(app: &AppHandle, st: &App, p: &dyn AgentProvider, key: &str) -> EnvBu
 fn in_vault(mut eb: EnvBuf, vault: String) -> EnvBuf { if !vault.is_empty() { eb.vault = vault; } eb }
 
 /// A provider's Env, owned, so it can go to a blocking thread.
-struct EnvBuf { home: String, vault: String, path: String, bin: String, pending: PathBuf, opts: Value }
+struct EnvBuf { home: String, vault: String, path: String, bin: String, pending: PathBuf, grants: agent_core::Grants, opts: Value }
 impl EnvBuf {
-    fn env(&self) -> agent_core::Env<'_> { agent_core::Env { home: &self.home, vault: &self.vault, path: &self.path, bin: &self.bin, pending: &self.pending, opts: &self.opts } }
+    fn env(&self) -> agent_core::Env<'_> { agent_core::Env { home: &self.home, vault: &self.vault, path: &self.path, bin: &self.bin, pending: &self.pending, grants: &self.grants, opts: &self.opts } }
 }
 fn env_of(app: &AppHandle, st: &App, p: &dyn AgentProvider) -> EnvBuf {
     // the accounts conversations were recorded on, also one removed from the list since: its transcripts are still there
@@ -1826,7 +1815,8 @@ fn env_of(app: &AppHandle, st: &App, p: &dyn AgentProvider) -> EnvBuf {
     let s = st.settings.lock().unwrap();
     let mut opts = s["agents"]["providers"][p.id()].clone();
     // a provider with a control pipe gets the relay-mail tools only when mail is on and an account is set up; set by the app, never the user
-    if p.caps().control && opts.is_object() { opts["mail"] = json!(mail_on(&s)); opts["design"] = json!(true); }
+    let mut grants = agent_core::Grants::default();
+    if p.caps().control && opts.is_object() { grants.mail = mail_on(&s); grants.design = true; }
     // the account calls run on unless they say otherwise (spawn, limits): the active one
     if p.caps().accounts && opts.is_object() {
         opts["account"] = opts["active"].clone();
@@ -1834,7 +1824,7 @@ fn env_of(app: &AppHandle, st: &App, p: &dyn AgentProvider) -> EnvBuf {
         for d in recorded { if !list.iter().any(|a| a["dir"] == d.as_str()) { list.push(json!({"name": "", "dir": d})); } }
         opts["accounts"] = json!(list);
     }
-    EnvBuf { home: home(), vault: s["vault"].as_str().unwrap_or("").into(), path: st.path.clone(), bin: agents::bin(&s, p, &home(), &st.path), pending: pending_dir(app), opts }
+    EnvBuf { home: home(), vault: s["vault"].as_str().unwrap_or("").into(), path: st.path.clone(), bin: agents::bin(&s, p, &home(), &st.path), pending: pending_dir(app), grants, opts }
 }
 /// Files is on: the Pages tab, a note as a page and what builds on it (Settings › General › Experimental). Team documents
 /// keep syncing without it, so a Mac with it off never lets a workspace's notes go stale.
@@ -2135,7 +2125,7 @@ async fn move_conversation(app: AppHandle, key: String, to: String, mail: bool, 
 fn move_to(app: &AppHandle, key: &str, to: &str, mail: bool, about: Option<&str>, choice: Option<&str>) -> Result<(), String> {
     let state = app.state::<App>();
     let sess = state.sids.lock().unwrap().get(key).cloned().ok_or_else(|| trc("err.move_no_session"))?;
-    if !agents::get(&sess.provider).is_ok_and(|p| p.caps().remote) { return Err(trc("err.move_only_claude")); }
+    let p = agents::get(&sess.provider).ok().filter(|p| p.caps().remote).ok_or_else(|| trc("err.move_only_claude"))?;
     let from = state.machines.bind_of(key);
     if from.as_ref().map_or("", |b| b.machine.as_str()) == to { return Ok(()); }
     if machines::Machines::find(&state.settings.lock().unwrap(), to).is_some_and(|m| machines::shared_only(&m)) { return Err(trc("err.machine_shared_only")); }
@@ -2151,10 +2141,9 @@ fn move_to(app: &AppHandle, key: &str, to: &str, mail: bool, about: Option<&str>
     let vault = need_vault(&state)?;
     let find = |id: &str| machines::Machines::find(&settings, id).ok_or_else(|| trc("err.no_machine"));
     let up = |m: &Value| state.machines.info(m).map_err(|e| trc_v("err.machine_down", &format!("{}: {e}", m["name"].as_str().unwrap_or(""))));
-    let p: &'static dyn AgentProvider = &agent_claude::PROVIDER;
     // this Mac's transcript folder for the session, on the account it was recorded on
     let here = || { let mut eb = in_vault(env_of(app, &state, p), sess.vault.clone()); eb.opts["account"] = json!(sess.account); eb };
-    let mac = [vault.clone(), format!("{}/.claude/projects/{}/memory", home(), agent_claude::slug(&vault))];
+    let mac = [vault.clone(), p.memory_dir(&env_of(app, &state, p).env()).ok_or_else(|| trc("err.move_only_claude"))?];
     // work in a repo there stays there: asked about (or pushed) while the agent still runs, so nothing changed yet
     if let (Some(b), true, Some(a)) = (&from, to.is_empty(), about) {
         let m = find(&b.machine)?;
@@ -2163,14 +2152,13 @@ fn move_to(app: &AppHandle, key: &str, to: &str, mail: bool, about: Option<&str>
     // the agent stops first, so the transcript is complete; a failed move leaves the conversation where it was
     if let Some(mut x) = state.procs.lock().unwrap().remove(key) { x.child.kill().ok(); }
     let (data, roots) = match &from {
-        None => (fs::read(PathBuf::from(agent_claude::transcripts_of(&here().env(), &sess.sid)).join(format!("{}.jsonl", sess.sid))).map_err(|e| format!("transcript: {e}"))?, mac.clone()),
+        None => (p.read_session(&here().env(), &sess.sid)?, mac.clone()),
         Some(b) => { let m = find(&b.machine)?; let info = up(&m)?; (state.machines.client(&m).session_get(&sess.sid)?, machines::roots_on(&info)) }
     };
     let text = String::from_utf8(data).map_err(|_| "transcript: not UTF-8".to_string())?;
     if to.is_empty() {
         let text = machines::rewrite(&text, &roots, &mac);
-        let to = PathBuf::from(agent_claude::transcripts(&here().env())).join(format!("{}.jsonl", sess.sid));
-        relay_remote::sync::write_atomic(&to, text.as_bytes(), None).map_err(|e| format!("transcript: {e}"))?;
+        p.write_session(&here().env(), &sess.sid, text.as_bytes())?;
         state.machines.unbind(key);
     } else {
         let m = find(to)?;
@@ -3184,13 +3172,15 @@ async fn machine_pair_phone(app: AppHandle, state: State<'_, App>, id: String) -
 /// How this Mac starts Claude on a machine, for a conversation its phone starts there: Claude's settings here without
 /// the mail tools (answered by this app) or this Mac's accounts (the machine has its own login), and the mirror's flags
 /// for the vault there, as `spawn` (session/mod.rs) adds them.
-fn machine_profile(mut opts: Value, info: &relay_remote::proto::Info, notify: &str) -> Value {
-    if let Some(o) = opts.as_object_mut() {
-        o.insert("mail".into(), json!(false));
-        for k in ["account", "accounts", "active"] { o.remove(k); }
-    }
+fn machine_profile(mut opts: Value, mut grants: agent_core::Grants, info: &relay_remote::proto::Info, notify: &str) -> Value {
+    grants.mail = false;
+    if let Some(o) = opts.as_object_mut() { for k in ["account", "accounts", "active"] { o.remove(k); } }
+    // ponytail: the grants also go in `opts` under their old keys, for a relay-server from before `grants` (it reads
+    // the fence from there); drop once every server runs a version that reads `grants`
+    if opts.is_null() { opts = json!({}); }
+    if let (Some(o), Value::Object(g)) = (opts.as_object_mut(), json!(grants)) { o.extend(g); }
     let (args, env) = mirror::session_args(info, &format!("{}/vault", info.work));
-    json!({"opts": opts, "args": args, "env": env, "notify": notify})
+    json!({"opts": opts, "grants": grants, "args": args, "env": env, "notify": notify})
 }
 /// The ntfy topic a machine sends this Mac's phone notifications to: made from the mirror's key, so nobody guesses it
 /// and the phone (which has the key from pairing) knows it without being told.
@@ -3507,7 +3497,8 @@ pub fn run() {
                     st.mirrors.round(&data_dir(&h), m, &client, &info, &vault);
                     let Ok(p) = agents::get("claude") else { continue };
                     let notify = mirror::key(&data_dir(&h), id).map(|k| ntfy_url(&k)).unwrap_or_default();
-                    let profile = machine_profile(env_of(&h, &st, p).opts, &info, &notify);
+                    let eb = env_of(&h, &st, p);
+                    let profile = machine_profile(eb.opts, eb.grants, &info, &notify);
                     let text = profile.to_string();
                     if profiles.get(id) != Some(&text) && client.profile_put(&profile).is_ok() { profiles.insert(id.into(), text); }
                 }
@@ -3635,11 +3626,15 @@ mod machine_tests {
     #[test]
     fn a_machine_profile_keeps_mail_and_accounts_here() {
         let info = relay_remote::proto::Info { work: "/w/abc".into(), ..Default::default() };
-        let p = machine_profile(json!({"mail": true, "account": "/a", "accounts": [{"dir": "/a"}], "active": "/a", "permission": "plan"}), &info, "https://ntfy.sh/t");
+        let p = machine_profile(json!({"account": "/a", "accounts": [{"dir": "/a"}], "active": "/a", "permission": "plan"}), agent_core::Grants { mail: true, design: true, ..Default::default() }, &info, "https://ntfy.sh/t");
         assert_eq!(p["notify"], "https://ntfy.sh/t");
         let url = ntfy_url(&"a".repeat(64));
         assert!(url.starts_with("https://ntfy.sh/relay-") && url.len() == "https://ntfy.sh/relay-".len() + 32 && url != ntfy_url(&"b".repeat(64)));
-        assert_eq!(p["opts"], json!({"mail": false, "permission": "plan"}));
+        assert_eq!(p["opts"]["permission"], "plan");
+        assert!(p["opts"]["account"].is_null() && p["opts"]["accounts"].is_null() && p["opts"]["active"].is_null());
+        // a relay-server from before `grants` reads them from `opts`
+        assert_eq!((p["opts"]["mail"].as_bool(), p["opts"]["design"].as_bool()), (Some(false), Some(true)));
+        assert_eq!((p["grants"]["mail"].as_bool(), p["grants"]["design"].as_bool()), (Some(false), Some(true))); // the mail tools are answered here
         let args: Vec<&str> = p["args"].as_array().unwrap().iter().filter_map(|a| a.as_str()).collect();
         assert_eq!(args[..2], ["--add-dir", "/w/abc/context"]);
         assert!(args.iter().any(|a| a.contains("/w/abc/memory"))); // the vault's memory: it runs in the vault there

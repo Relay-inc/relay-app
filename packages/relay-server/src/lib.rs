@@ -517,7 +517,7 @@ impl Server {
         let pending = self.data.join("pending");
         // Claude files a session under the folder as it resolves it (/tmp is /private/tmp on a Mac)
         let cwd = fs::canonicalize(cwd).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| cwd.to_string());
-        let env = agent_core::Env { home: &self.info.home, vault: &cwd, path: &self.info.path, bin: &self.info.claude, pending: &pending, opts: &Value::Null };
+        let env = agent_core::Env { home: &self.info.home, vault: &cwd, path: &self.info.path, bin: &self.info.claude, pending: &pending, grants: &agent_core::NO_GRANTS, opts: &Value::Null };
         let (items, next) = agent_claude::PROVIDER.history(&env, sid, from);
         json!({"items": items, "next": next})
     }
@@ -609,9 +609,12 @@ impl Server {
         let s = |k: &str| req[k].as_str().unwrap_or("");
         let cwd = self.mirror.work_of(ns).join("vault").to_string_lossy().into_owned();
         let pending = self.data.join("pending").join(ns);
-        let mut opts = profile["opts"].clone();
-        if opts.is_object() { opts["mail"] = json!(false); }
-        let env = agent_core::Env { home: &self.info.home, vault: &cwd, path: &self.info.path, bin: &self.info.claude, pending: &pending, opts: &opts };
+        let opts = profile["opts"].clone();
+        // no mail tools: those are answered by the laptop
+        // a profile put by an app from before `grants` has them in `opts` under the same keys
+        let given = if profile["grants"].is_object() { &profile["grants"] } else { &profile["opts"] };
+        let grants = agent_core::Grants { mail: false, ..serde_json::from_value(given.clone()).unwrap_or_default() };
+        let env = agent_core::Env { home: &self.info.home, vault: &cwd, path: &self.info.path, bin: &self.info.claude, pending: &pending, grants: &grants, opts: &opts };
         let launch = agent_core::Launch { key: s("key"), name: s("name"), model: s("model"), effort: s("effort"), resume: Some(s("resume")).filter(|x| !x.is_empty()), fork: None, turn: None };
         let mut cmd = match agent_claude::PROVIDER.command(&env, &launch) { Ok(c) => c, Err(e) => return bang(&mut w, &e) };
         cmd.current_dir(&cwd).env("PATH", &self.info.path);

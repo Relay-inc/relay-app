@@ -4,12 +4,12 @@
 //! `opencode models` (the configured providers); history, the session list and token usage with cost from its
 //! SQLite storage (see [`store`]). OpenCode reports no plan or rate limits.
 
-use agent_core::{usage, AgentProvider, Caps, Choice, Detect, Env, Event, Launch, Parser, Terminal, Turn};
+use agent_core::{home, usage, AgentProvider, Caps, Choice, Detect, Env, Event, Launch, LastBin, Memo, Parser, Terminal, Turn};
 use serde_json::{json, Value};
 use std::path::Path;
 use std::process::Command;
 use std::sync::Mutex;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
 pub mod bridge;
 pub mod events;
@@ -23,20 +23,17 @@ pub static PROVIDER: OpenCode = OpenCode;
 /// the permission cards), or leaves permissions to the user's own OpenCode config.
 pub const PERMS: [&str; 2] = ["ask", "config"];
 fn pick<'a>(env: &'a Env, key: &str, from: &[&'a str]) -> &'a str { from.iter().copied().find(|c| *c == env.opt(key)).unwrap_or(from[0]) }
-fn home() -> String { std::env::var("HOME").unwrap_or_default() }
 
 /// The program the last `detect` saw (the settings' override), for the model list, which has no env.
-static BIN: Mutex<String> = Mutex::new(String::new());
+static BIN: LastBin = LastBin::new();
 /// `opencode models --verbose` takes a second or two: kept for a few minutes per program.
-static MODELS: Mutex<Option<(String, Instant, (Vec<Choice>, Vec<Choice>))>> = Mutex::new(None);
+static MODELS: Memo<(Vec<Choice>, Vec<Choice>)> = Memo::new();
 fn models_of(bin: &str) -> (Vec<Choice>, Vec<Choice>) {
     if !Path::new(bin).is_file() { return (vec![], vec![]); }
-    let mut m = MODELS.lock().unwrap();
-    if let Some((b, at, v)) = m.as_ref() { if b == bin && at.elapsed() < Duration::from_secs(300) { return v.clone(); } }
-    let path = std::env::var("PATH").unwrap_or_default();
-    let v = agent_core::run(bin, &path, &["models", "--verbose"]).map(|s| store::parse_models(&s)).unwrap_or_default();
-    *m = Some((bin.into(), Instant::now(), v.clone()));
-    v
+    MODELS.get(bin, Duration::from_secs(300), || {
+        let path = std::env::var("PATH").unwrap_or_default();
+        agent_core::run(bin, &path, &["models", "--verbose"]).map(|s| store::parse_models(&s)).unwrap_or_default()
+    })
 }
 
 /// The usage query, again only when the database changed (its -wal file is where new messages land first).
@@ -65,7 +62,7 @@ impl AgentProvider for OpenCode {
     }
     fn detect(&self, env: &Env) -> Detect {
         let installed = Path::new(env.bin).is_file();
-        *BIN.lock().unwrap() = env.bin.into();
+        BIN.set(env.bin);
         let version = if installed { agent_core::version(env.bin, env.path) } else { None };
         // providers log in with `opencode auth login` or run on an API key in the environment, and OpenCode Zen's free
         // models need neither: there is no one login to check
@@ -119,8 +116,7 @@ impl AgentProvider for OpenCode {
         store::query(&store::db(env.home), &store::sessions_sql(&[&d[0], &d[1]])).map(|r| store::sessions_of(&r)).unwrap_or_default()
     }
     fn terminal(&self, env: &Env, t: Terminal) -> Option<String> {
-        let q = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
-        let bin = if env.bin == self.default_bin(env.home) { "opencode".to_string() } else { q(env.bin) };
+        let (q, bin) = (agent_core::quote_sh, agent_core::command_for(env, &self.default_bin(env.home), "opencode"));
         match t {
             Terminal::Resume(s) if store::valid(s) => Some(format!("cd {} && {bin} --session {s}", q(env.vault))),
             Terminal::New(_) => Some(format!("cd {} && {bin}", q(env.vault))),
@@ -145,8 +141,7 @@ impl AgentProvider for OpenCode {
 
 impl OpenCode {
     fn bin(&self) -> String {
-        let b = BIN.lock().unwrap().clone();
-        if b.is_empty() { self.default_bin(&home()) } else { b }
+        BIN.get_or(|| self.default_bin(&home()))
     }
 }
 
@@ -155,7 +150,7 @@ mod tests {
     use super::*;
     use std::io::{BufRead, BufReader, Write};
     use std::path::PathBuf;
-    fn env<'a>(p: &'a Path, opts: &'a Value) -> Env<'a> { Env { home: "/Users/me", vault: "/Users/me/my vault", path: "/usr/bin", bin: "/opt/opencode", pending: p, opts } }
+    fn env<'a>(p: &'a Path, opts: &'a Value) -> Env<'a> { Env { home: "/Users/me", vault: "/Users/me/my vault", path: "/usr/bin", bin: "/opt/opencode", pending: p, grants: &agent_core::NO_GRANTS, opts } }
 
     #[test]
     fn spawn_args_settings_and_terminal() {

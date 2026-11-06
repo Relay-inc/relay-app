@@ -4,12 +4,12 @@
 //! history, the session list and token usage with pi's cost are read from its session files (see [`session`]). Pi
 //! reports no plan or rate limits.
 
-use agent_core::{usage, AgentProvider, Caps, Choice, Detect, Env, Event, Launch, Parser, Terminal, Turn};
+use agent_core::{home, usage, AgentProvider, Caps, Choice, Detect, Env, Event, Launch, LastBin, Memo, Parser, Terminal, Turn};
 use serde_json::{json, Value};
 use std::path::Path;
 use std::process::Command;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 pub mod events;
 pub mod session;
@@ -27,20 +27,17 @@ fn pi_commands(result: &Value) -> Value {
         .map(|c| json!({"name": c["name"], "description": c["description"].as_str().unwrap_or("")})));
     Value::Array(commands)
 }
-fn home() -> String { std::env::var("HOME").unwrap_or_default() }
 
 /// The program the last `detect` saw (the settings' override), for the model list, which has no env.
-static BIN: Mutex<String> = Mutex::new(String::new());
+static BIN: LastBin = LastBin::new();
 /// `pi --list-models`, kept for a few minutes per program.
-static MODELS: Mutex<Option<(String, Instant, Vec<Choice>)>> = Mutex::new(None);
+static MODELS: Memo<Vec<Choice>> = Memo::new();
 fn models_of(bin: &str) -> Vec<Choice> {
     if !Path::new(bin).is_file() { return vec![]; }
-    let mut m = MODELS.lock().unwrap();
-    if let Some((b, at, v)) = m.as_ref() { if b == bin && at.elapsed() < Duration::from_secs(300) { return v.clone(); } }
-    let path = std::env::var("PATH").unwrap_or_default();
-    let v = agent_core::run(bin, &path, &["--list-models"]).map(|s| session::parse_models(&s)).unwrap_or_default();
-    *m = Some((bin.into(), Instant::now(), v.clone()));
-    v
+    MODELS.get(bin, Duration::from_secs(300), || {
+        let path = std::env::var("PATH").unwrap_or_default();
+        agent_core::run(bin, &path, &["--list-models"]).map(|s| session::parse_models(&s)).unwrap_or_default()
+    })
 }
 
 static LOGS: Mutex<Option<session::Logs>> = Mutex::new(None);
@@ -65,7 +62,7 @@ impl AgentProvider for Pi {
     }
     fn detect(&self, env: &Env) -> Detect {
         let installed = Path::new(env.bin).is_file();
-        *BIN.lock().unwrap() = env.bin.into();
+        BIN.set(env.bin);
         let version = if installed { agent_core::version(env.bin, env.path) } else { None };
         // pi logs in per provider (`/login` in pi, or an API key in the environment): there is no one login to check
         let note = if !installed { Some("npm install -g @earendil-works/pi-coding-agent".into()) }
@@ -116,8 +113,7 @@ impl AgentProvider for Pi {
         })
     }
     fn terminal(&self, env: &Env, t: Terminal) -> Option<String> {
-        let q = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
-        let bin = if env.bin == self.default_bin(env.home) { "pi".to_string() } else { q(env.bin) };
+        let (q, bin) = (agent_core::quote_sh, agent_core::command_for(env, &self.default_bin(env.home), "pi"));
         match t {
             Terminal::Resume(s) if self.valid_session(s) => Some(format!("cd {} && {bin} --session {s}", q(env.vault))),
             Terminal::New(_) => Some(format!("cd {} && {bin}", q(env.vault))),
@@ -131,8 +127,7 @@ impl AgentProvider for Pi {
 
 impl Pi {
     fn bin(&self) -> String {
-        let b = BIN.lock().unwrap().clone();
-        if b.is_empty() { self.default_bin(&home()) } else { b }
+        BIN.get_or(|| self.default_bin(&home()))
     }
 }
 
@@ -148,7 +143,7 @@ mod tests {
     }
     use super::*;
     use std::path::PathBuf;
-    fn env<'a>(p: &'a Path, opts: &'a Value) -> Env<'a> { Env { home: "/Users/me", vault: "/Users/me/my vault", path: "/usr/bin", bin: "/opt/pi", pending: p, opts } }
+    fn env<'a>(p: &'a Path, opts: &'a Value) -> Env<'a> { Env { home: "/Users/me", vault: "/Users/me/my vault", path: "/usr/bin", bin: "/opt/pi", pending: p, grants: &agent_core::NO_GRANTS, opts } }
     fn args(c: &Command) -> Vec<String> { c.get_args().map(|a| a.to_string_lossy().into_owned()).collect() }
 
     #[test]
