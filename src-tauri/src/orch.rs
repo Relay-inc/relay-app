@@ -164,7 +164,7 @@ fn update(app: &AppHandle, key: &str, f: impl FnOnce(&mut Worker)) -> Option<Wor
     Some(out)
 }
 
-// ---------- the flags a conversation of the orchestrator starts with (agent-claude reads them from its opts)
+// ---------- the flags a conversation of the orchestrator starts with (agent-claude reads them from its grants)
 
 const COORD_PROMPT: &str = prompt::text(include_str!("../../prompts/orchestrator/coordinator.md"));
 
@@ -172,12 +172,11 @@ const WORKER_PROMPT: &str = prompt::text(include_str!("../../prompts/orchestrato
 
 /// The extra start flags of a coordinator or worker: role, its system prompt and its tools. Permissions are the
 /// user's own, as in any other conversation: no extra asks or denies.
-pub fn flags(opts: &mut Value, key: &str, vault: &str, shared: &Shared) {
+pub fn flags(grants: &mut agent_core::Grants, key: &str, vault: &str, shared: &Shared) {
     if !is_orch(key) { return; }
-    if !opts.is_object() { *opts = json!({}); }
     let coord = key == COORD;
-    opts["orch"] = json!(if coord { "coordinator" } else { "worker" });
-    opts["system"] = json!(prompt::fill(if coord { COORD_PROMPT } else { WORKER_PROMPT }, &[("shared", &shared.listed(vault))]));
+    grants.orch = Some(if coord { "coordinator" } else { "worker" }.into());
+    grants.system = Some(prompt::fill(if coord { COORD_PROMPT } else { WORKER_PROMPT }, &[("shared", &shared.listed(vault))]));
 }
 
 // ---------- the relay-orch MCP server
@@ -970,18 +969,18 @@ mod tests {
     fn keys_and_flags() {
         assert!(is_orch(COORD) && !is_worker(COORD) && is_worker("c:orch-w-abc") && !is_orch("c:abc"));
         let sh = Shared { files: vec!["/v/Brain/work-state.md".into(), "/v/reminders.md".into()], dirs: vec!["/v/Brain/index".into()] };
-        let mut o = json!(null);
+        let mut o = agent_core::Grants::default();
         flags(&mut o, "c:abc", "/v", &sh);
-        assert!(o.is_null(), "a normal conversation gets nothing");
+        assert_eq!(o, agent_core::Grants::default(), "a normal conversation gets nothing");
         flags(&mut o, COORD, "/v", &sh);
-        assert!(o["system"].as_str().unwrap().contains("Brain/work-state.md, reminders.md, Brain/index/"), "the prompt names the vault's own files");
-        assert_eq!(o["orch"], "coordinator");
-        assert!(o["deny"].is_null() && o["ask"].is_null(), "the user's own permissions, as in any conversation");
-        let mut o = json!({"mail": true});
+        assert!(o.system.as_deref().unwrap().contains("Brain/work-state.md, reminders.md, Brain/index/"), "the prompt names the vault's own files");
+        assert_eq!(o.orch.as_deref(), Some("coordinator"));
+        assert!(o.deny.is_empty(), "the user's own permissions, as in any conversation");
+        let mut o = agent_core::Grants { mail: true, ..Default::default() };
         flags(&mut o, "c:orch-w-1", "/v", &sh);
-        assert_eq!((o["orch"].as_str(), o["mail"].as_bool()), (Some("worker"), Some(true)));
-        assert!(o["deny"].is_null() && o["ask"].is_null(), "a worker too");
-        assert!(!o["system"].as_str().unwrap().contains("{{"));
+        assert_eq!((o.orch.as_deref(), o.mail), (Some("worker"), true));
+        assert!(o.deny.is_empty(), "a worker too");
+        assert!(!o.system.unwrap().contains("{{"));
     }
 
     #[test]
@@ -1140,9 +1139,9 @@ mod tests {
     fn prompts_render_without_placeholders() {
         let sh = Shared { files: vec!["/v/Brain/work-state.md".into()], dirs: vec![] };
         for key in [COORD, "c:orch-w-1"] {
-            let mut o = json!(null);
+            let mut o = agent_core::Grants::default();
             flags(&mut o, key, "/v", &sh);
-            assert!(!o["system"].as_str().unwrap().contains("{{"), "{key}");
+            assert!(!o.system.unwrap().contains("{{"), "{key}");
         }
         let mut w = Worker { ticket: Some(json!({"number": "#5", "title": "T"})), task: "task".into(), ..Default::default() };
         let mut heads = vec![review_head(&w, "abc")];

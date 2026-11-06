@@ -4,7 +4,7 @@
 //! the answer back through [`AgentProvider::respond`]. History, the session list, token usage and rate limits are
 //! read from `$CODEX_HOME` (default `~/.codex`): the rollouts under sessions/ and the thread index state_5.sqlite.
 
-use agent_core::{usage, AgentProvider, Caps, Choice, Detect, Env, Event, Launch, Parser, Terminal, Turn};
+use agent_core::{home, usage, AgentProvider, Caps, Choice, Detect, Env, Event, Launch, Parser, Terminal, Turn};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -40,7 +40,6 @@ fn codex_commands(skills: &Value) -> Value {
     }
     Value::Array(commands)
 }
-fn home() -> String { std::env::var("HOME").unwrap_or_default() }
 
 static LOGS: Mutex<Option<rollout::Logs>> = Mutex::new(None);
 fn with_logs<T>(env: &Env, since: i64, f: impl FnOnce(&rollout::Logs) -> T) -> T {
@@ -134,8 +133,7 @@ impl AgentProvider for Codex {
         })
     }
     fn terminal(&self, env: &Env, t: Terminal) -> Option<String> {
-        let q = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
-        let bin = if env.bin == self.default_bin(env.home) { "codex".to_string() } else { q(env.bin) };
+        let (q, bin) = (agent_core::quote_sh, agent_core::command_for(env, &self.default_bin(env.home), "codex"));
         match t {
             Terminal::Resume(s) if agent_core::safe_id(s) => Some(format!("cd {} && {bin} resume {s}", q(env.vault))),
             Terminal::New(_) => Some(format!("cd {} && {bin}", q(env.vault))),
@@ -206,7 +204,7 @@ mod tests {
         use super::*;
         let (home, path) = (std::env::var("HOME").unwrap(), std::env::var("PATH").unwrap());
         let bin = PROVIDER.default_bin(&home);
-        let env = Env { home: &home, vault: "/tmp", path: &path, bin: &bin, pending: Path::new("/tmp"), opts: &Value::Null };
+        let env = Env { home: &home, vault: "/tmp", path: &path, bin: &bin, pending: Path::new("/tmp"), grants: &agent_core::NO_GRANTS, opts: &Value::Null };
         let out = PROVIDER.write(&env, "Answer with one word.", "Run `ls ~` and give its output; if you cannot run commands, answer NO_TOOLS.").unwrap();
         assert_eq!(out, "NO_TOOLS");
     }
@@ -218,7 +216,7 @@ mod tests {
     }
     use super::*;
     use std::io::{BufRead, BufReader, Write};
-    fn env<'a>(p: &'a Path, opts: &'a Value) -> Env<'a> { Env { home: "/Users/me", vault: "/Users/me/my vault", path: "/usr/bin", bin: "/opt/codex", pending: p, opts } }
+    fn env<'a>(p: &'a Path, opts: &'a Value) -> Env<'a> { Env { home: "/Users/me", vault: "/Users/me/my vault", path: "/usr/bin", bin: "/opt/codex", pending: p, grants: &agent_core::NO_GRANTS, opts } }
 
     #[test]
     fn spawn_args_and_settings() {

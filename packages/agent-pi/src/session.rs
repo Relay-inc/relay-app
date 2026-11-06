@@ -77,15 +77,7 @@ pub fn sid_of(path: &Path) -> String {
     stem.rsplit_once('_').map_or(stem.clone(), |(_, id)| id.to_string())
 }
 /// A session's file, by its name.
-pub fn find(dir: &Path, sid: &str) -> Option<PathBuf> {
-    let want = format!("_{sid}.jsonl");
-    for e in std::fs::read_dir(dir).ok()?.flatten() {
-        let p = e.path();
-        if p.is_dir() { if let Some(f) = find(&p, sid) { return Some(f); } }
-        else if p.to_string_lossy().ends_with(&want) { return Some(p); }
-    }
-    None
-}
+pub fn find(dir: &Path, sid: &str) -> Option<PathBuf> { agent_core::find_session_file(dir, sid, '_') }
 
 /// What a session file said before the lines read now: its session and folder, its name or first message.
 #[derive(Clone, Default)]
@@ -95,11 +87,7 @@ pub struct Meta { pub session: String, pub cwd: String, pub updated: i64, pub ti
 #[derive(Default)]
 pub struct Logs { pub vault: String, pub tail: Tail<Record>, pub meta: HashMap<PathBuf, Meta> }
 
-fn under(cwd: &str, dir: &str) -> bool { !dir.is_empty() && (cwd == dir || cwd.starts_with(&format!("{dir}/"))) }
-/// In the vault: pi keeps the folder's real path (/tmp is /private/tmp).
-pub fn in_vault(cwd: &str, vault: &str) -> bool {
-    under(cwd, vault) || std::fs::canonicalize(vault).is_ok_and(|v| under(cwd, &v.to_string_lossy()))
-}
+pub use agent_core::usage::in_vault;
 
 /// Whole new lines of one session file as token records. A forked session starts with a copy of its parent's
 /// entries (same ids and times): one already counted is skipped.

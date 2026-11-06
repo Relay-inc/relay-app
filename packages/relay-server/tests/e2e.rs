@@ -480,7 +480,7 @@ fn real_claude_through_the_server() {
     let cwd = std::fs::canonicalize(&cwd).unwrap().to_string_lossy().into_owned();
     let pending = PathBuf::from(&info.pending);
     let opts = json!({});
-    let env = Env { home: &info.home, vault: &cwd, path: &info.path, bin: &info.claude, pending: &pending, opts: &opts };
+    let env = Env { home: &info.home, vault: &cwd, path: &info.path, bin: &info.claude, pending: &pending, grants: &agent_core::NO_GRANTS, opts: &opts };
     let l = Launch { key: "c:claude", name: "relay e2e", model: "haiku", effort: "", resume: None, fork: None, turn: None };
     let mut cmd = agent_claude::PROVIDER.command(&env, &l).unwrap();
     cmd.current_dir(&cwd).env("PATH", &info.path);

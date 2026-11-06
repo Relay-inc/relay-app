@@ -21,6 +21,8 @@ pub mod peer;
 pub mod pending;
 pub mod prompt;
 pub mod usage;
+pub mod util;
+pub use util::*;
 
 /// What a provider can do. The webview hides what is false (the effort pick, the terminal button, the
 /// subagents strip, image paste, …) and the app skips the calls.
@@ -75,14 +77,39 @@ pub struct Env<'a> {
     pub bin: &'a str,
     /// The pending folder: `<id>.json` requests, `<id>.answer.json` answers.
     pub pending: &'a Path,
+    /// What the app grants or fences for this conversation.
+    pub grants: &'a Grants,
     /// The provider's own settings, `settings.agents.providers.<id>` (`on`, `bin` and the keys of its
-    /// options, see `options` in src/types.ts). Null when there are none.
+    /// options, see `options` in src/types.ts), and the account keys of [`Caps::accounts`]. Null when there are none.
     pub opts: &'a Value,
 }
 impl Env<'_> {
     /// A string option, "" when unset.
     pub fn opt(&self, key: &str) -> &str { self.opts[key].as_str().unwrap_or("") }
 }
+
+/// What the app grants or fences for one conversation, as opposed to the provider's own settings ([`Env::opts`]):
+/// set per start by the app, read by the provider that can honour it (so far Claude Code's `command` and `terminal`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Grants {
+    /// Extra tool rules the conversation may never use (the fence around other vaults and the app's own data).
+    pub deny: Vec<String>,
+    /// A shared vault, or another vault than the main one: only the app's own MCP servers, no hooks, no auto memory.
+    pub fenced: bool,
+    /// The relay-mail tools, answered by the app over the control pipe.
+    pub mail: bool,
+    /// The relay-design tools, answered by the app over the control pipe.
+    pub design: bool,
+    /// Runs on a work machine: the mode comes with the machine's mirrored settings.
+    pub machine: bool,
+    /// The orchestrator's role, "coordinator" or "worker": the relay-orch tools.
+    pub orch: Option<String>,
+    /// Appended to the system prompt (after [`envelope::HINT`]).
+    pub system: Option<String>,
+}
+/// No grants, for a call that is not a conversation (and for tests).
+pub static NO_GRANTS: Grants = Grants { deny: Vec::new(), fenced: false, mail: false, design: false, machine: false, orch: None, system: None };
 
 /// Installed, which version, logged in. `None` where the provider cannot tell.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -250,6 +277,12 @@ pub trait AgentProvider: Sync {
 
     /// A session's messages from byte offset `from` of its transcript, and the offset to continue from.
     fn history(&self, env: &Env, sid: &str, from: u64) -> (Vec<Event>, u64);
+    /// `caps.remote`: a session's whole transcript, as moving the conversation to another machine takes it along.
+    fn read_session(&self, _env: &Env, _sid: &str) -> Result<Vec<u8>, String> { Err("unsupported".into()) }
+    /// `caps.remote`: stores a transcript as the session's own for `env`'s vault and account, so a resume finds it.
+    fn write_session(&self, _env: &Env, _sid: &str, _bytes: &[u8]) -> Result<(), String> { Err("unsupported".into()) }
+    /// `caps.remote`: the folder of the provider's own memory for `env`'s vault, whose paths move with a conversation.
+    fn memory_dir(&self, _env: &Env) -> Option<String> { None }
     /// Sessions outside the app (terminal, background), each `{id, sessionId, name?, kind, status, state?}`
     /// with status "busy" | "idle" and kind "interactive" | "background".
     fn sessions(&self, _env: &Env) -> Vec<Value> { vec![] }
