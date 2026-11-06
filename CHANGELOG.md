@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Changed
 
-- Relay stays responsive when many notes change at once, like after a git pull or a long Claude run: the notes list and the related notes are refreshed once per burst instead of once per note, and the note list is read off the main thread.
+- Relay stays responsive when many notes change at once, like after a git pull or a long Claude run: the notes list and the related notes are refreshed once per burst instead of once per note, and the note list is read off the main thread. (#415)
 
 ### Fixed
 
