@@ -35,6 +35,10 @@ import { livePreview, showMarkdown } from "./livePreview";
 import { baseBlocks } from "./baseBlocks";
 import { formatting, type FormatWords } from "./formatting";
 import { useEditorStore } from "../../../application/navigation/editor";
+import { loadTypes, registryOf } from "../../../application/types/types";
+import { loadRows } from "../../../application/collections/collections";
+import { activeFolder } from "../../../application/navigation/workspaces";
+import { existingTyped, newTypedNote } from "../../../application/navigation/kb";
 import { blockEditing, type BlockWords } from "./blocks";
 import { attachEditing, embeds, pickAndEmbed } from "./embeds";
 import { fileDrop } from "./fileDrop";
@@ -206,6 +210,11 @@ function Editor(props: {
   useEffect(() => {
     hooks.current = props.comments;
   });
+  // the / menu's typed items and whether a typed title names a note already
+  useEffect(() => {
+    void loadTypes(activeFolder());
+    void loadRows();
+  }, []);
   const label = t("page.editor");
   const [by] = useState(() => ({
     relay: t("page.updatedLinks"),
@@ -235,6 +244,11 @@ function Editor(props: {
       deleteColumn: t("table.deleteColumn"),
     },
     handle: t("block.handle"),
+    typed: {
+      ask: type => t("slash.ask", { type }),
+      create: (type, title) => t("slash.create", { type, title }),
+      link: (type, title) => t("slash.link", { type, title }),
+    },
   }));
   const [format] = useState<FormatWords>(() => ({
     toolbar: t("fmt.toolbar"),
@@ -323,6 +337,11 @@ function Editor(props: {
             words,
             () => workspacePaths(),
             (v, at) => pickAndEmbed(page, v, at),
+            {
+              types: () => registryOf(activeFolder()),
+              existing: existingTyped,
+              make: (type, title, link) => newTypedNote(type, title, page, link),
+            },
           ), // before the keymap below: Tab in a table moves between cells
           keymap.of([
             { key: "Mod-Alt-m", run: () => (hooks.current?.onKey(), true) },

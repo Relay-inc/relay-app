@@ -3,6 +3,7 @@
 // what Obsidian reads.
 
 import { formatTable, newTable } from "./tables.ts";
+import { typeOf, type NoteType, type Registry } from "../types/registry.ts";
 
 export type BlockKind =
   | "text"
@@ -61,6 +62,18 @@ export const SLASH: { kind: BlockKind; insert: string; caret: number }[] = [
   { kind: "link", insert: "[[", caret: 2 },
   { kind: "view", insert: NEW_VIEW, caret: NEW_VIEW.length },
 ];
+
+/** The / items of the registry: a type with a home and a template makes a note there (a type without a home has no item). */
+export const typedSlash = (registry: Registry) => registry.types.filter(t => t.home && t.template);
+
+/** The note a typed title already names, a person met before: it is linked, not made again. `rows` are the workspace's
+ *  notes (path, title, `type:`). */
+export const existingNote = (
+  rows: { p: string; t: string; k: string }[],
+  registry: Registry,
+  type: NoteType,
+  title: string,
+) => rows.find(r => typeOf(registry, r.k)?.name === type.name && r.t.toLowerCase() === title.trim().toLowerCase())?.p;
 
 // a line's block marker: a heading's #s, a to-do's or list's mark, a quote's >
 const MARKER = /^(\s*)(#{1,6} |[-*+] \[[ xX]\] |[-*+] |\d+[.)] |> ?)?/;
