@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findPages, isSystemPage, pagesModel, pageTree, placeOf, recentPages, sortPages } from "./pages.ts";
+import { findPages, isSystemPage, pagesModel, pageTree, placeOf, recentPages, sortPages, typedTree } from "./pages.ts";
 
 const paths = [
   "Contexts/Agency/Portfolio/Beacon/Beacon.md",
@@ -117,4 +117,53 @@ test("a new note's place: the project whose folder it is asked in, and that proj
     context: "Agency",
   });
   assert.deepEqual(placeOf(model, "Calendar"), { folder: "Calendar", about: "", context: "" });
+});
+
+test("the tree by type: a project's notes by folder or about:, a context's by context:, the rest loose, no type Unsorted", () => {
+  const notes = [
+    ...paths,
+    "Contexts/Agency/Agency.md",
+    "Calendar/Meetings/2026/2026-10-02 Beacon sync.md",
+    "Calendar/Meetings/2026/2026-10-03 Agency review.md",
+    "Inbox/Loose idea.md",
+    "Inbox/Older idea.md",
+    "Resources/Templates/Meeting.md",
+  ];
+  const model = pagesModel(notes, [{ key: "Beacon", name: "Beacon", label: "Beacon", context: "Agency" }], ["Agency"]);
+  const row = (p: string, k: string, at: number, props: Record<string, string[]> = {}) => ({ p, k, at, props });
+  const tree = typedTree(
+    model,
+    [
+      row("Contexts/Agency/Portfolio/Beacon/Beacon.md", "Project", 9),
+      row("Contexts/Agency/Agency.md", "Context", 9),
+      row("Contexts/Agency/Portfolio/Beacon/Documents/Spec.md", "document", 1),
+      row("Contexts/Agency/Portfolio/Beacon/Log.md", "", 2),
+      row("Calendar/Meetings/2026/2026-10-02 Beacon sync.md", "Meeting", 3, { about: ["Beacon"], context: ["Agency"] }),
+      row("Calendar/Meetings/2026/2026-10-03 Agency review.md", "Meeting", 4, { context: ["Agency"] }),
+      row("Contexts/Agency/Portfolio/Flat.md", "Recipe", 5),
+      row("Calendar/2026-10-01.md", "Daily", 6),
+      row("README.md", "", 1),
+      row("Inbox/Loose idea.md", "", 8),
+      row("Inbox/Older idea.md", "", 7),
+      row("Resources/Templates/Meeting.md", "", 9),
+    ],
+    ["Meeting", "Document", "Daily"],
+  );
+  assert.deepEqual(tree.projects.Beacon, [
+    { type: "Meeting", notes: ["Calendar/Meetings/2026/2026-10-02 Beacon sync.md"] },
+    { type: "Document", notes: ["Contexts/Agency/Portfolio/Beacon/Documents/Spec.md"] },
+  ]);
+  // in the context by its context: (the meeting), or by its folder (no context: given); a type the registry lacks last
+  assert.deepEqual(tree.contexts.Agency, [
+    { type: "Meeting", notes: ["Calendar/Meetings/2026/2026-10-03 Agency review.md"] },
+    { type: "Recipe", notes: ["Contexts/Agency/Portfolio/Flat.md"] },
+  ]);
+  assert.deepEqual(tree.loose, [{ type: "Daily", notes: ["Calendar/2026-10-01.md"] }]);
+  // newest first, inside a project's folder too; the vault's own notes (templates) not
+  assert.deepEqual(tree.unsorted, [
+    "Inbox/Loose idea.md",
+    "Inbox/Older idea.md",
+    "Contexts/Agency/Portfolio/Beacon/Log.md",
+    "README.md",
+  ]);
 });

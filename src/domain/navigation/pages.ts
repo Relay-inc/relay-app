@@ -80,6 +80,64 @@ export function pagesModel(
   return { contexts, top };
 }
 
+/** A type group of the Pages tree: the notes of one `type:`, newest first. */
+export type TypeGroup = { type: string; notes: string[] };
+/** The Pages tree by type (files hidden): per project (by key) and per context (by name) the type groups of the notes
+ *  that belong there, the typed notes of neither (`loose`), and the notes without a `type:` (`unsorted`), newest
+ *  first. */
+export type TypedTree = {
+  projects: Record<string, TypeGroup[]>;
+  contexts: Record<string, TypeGroup[]>;
+  loose: TypeGroup[];
+  unsorted: string[];
+};
+/** Where each note goes in the tree by type: a typed note to every project whose folder holds it or whose name its
+ *  `about:` gives, else to the context its `context:` names (or whose folder holds it), else to `loose`; a note without
+ *  `type:` to Unsorted. The contexts' and projects' own notes are their rows, the notes the vault runs on stay out.
+ *  `rows` are the index's (related.rs `collection`), `types` the registry's names: groups in its order, then by name. */
+export function typedTree(
+  model: PagesModel,
+  rows: { p: string; k: string; at: number; props: Record<string, string[]> }[],
+  types: string[],
+): TypedTree {
+  const key = (link: string) => noteName(link).trim().toLowerCase();
+  const inside = (folder: string, path: string) => !!folder && path.startsWith(`${folder}/`);
+  const projects = model.contexts.flatMap(context => context.projects);
+  const own = new Set([
+    ...model.contexts.map(context => `${context.folder}/${context.name}.md`),
+    ...projects.map(project => project.note),
+  ]);
+  const known = (kind: string) => types.find(name => name.toLowerCase() === kind.toLowerCase());
+  const out: TypedTree = { projects: {}, contexts: {}, loose: [], unsorted: [] };
+  const add = (groups: TypeGroup[], row: { p: string; k: string }) => {
+    let group = groups.find(g => g.type.toLowerCase() === row.k.toLowerCase());
+    if (!group) groups.push((group = { type: known(row.k) ?? row.k, notes: [] }));
+    group.notes.push(row.p);
+  };
+  const newest = rows
+    .filter(row => !own.has(row.p) && !isSystemPage(row.p))
+    .sort((a, b) => b.at - a.at || byName(noteName(a.p), noteName(b.p)));
+  for (const row of newest) {
+    if (!row.k.trim()) {
+      out.unsorted.push(row.p);
+      continue;
+    }
+    const about = (row.props.about ?? []).map(key);
+    const its = projects.filter(p => inside(p.folder?.path ?? "", row.p) || about.includes(key(p.note)));
+    for (const project of its) add((out.projects[project.key] ??= []), row);
+    if (its.length) continue;
+    const named = (row.props.context ?? []).map(key);
+    const context =
+      model.contexts.find(c => named.includes(c.name.toLowerCase())) ??
+      model.contexts.find(c => inside(c.folder, row.p));
+    add(context ? (out.contexts[context.name] ??= []) : out.loose, row);
+  }
+  const rank = (type: string) => (known(type) ? types.indexOf(known(type)!) : types.length);
+  for (const groups of [...Object.values(out.projects), ...Object.values(out.contexts), out.loose])
+    groups.sort((a, b) => rank(a.type) - rank(b.type) || byName(a.type, b.type));
+  return out;
+}
+
 // the notes the vault runs on rather than ones people write in: an agent's instructions, its rules, hooks and scripts,
 // the templates. ponytail: one list for every vault, a `system` key in .relay/config.json when a vault lays them out apart
 const SYSTEM_FILES = ["CLAUDE.md", "AGENTS.md"];

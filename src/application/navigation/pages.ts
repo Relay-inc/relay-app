@@ -6,8 +6,10 @@ import {
   noteName,
   placeOf,
   recentPages,
+  typedTree,
   type PageFolder,
   type PagesModel,
+  type TypedTree,
 } from "../../domain/navigation/pages";
 import { noteKey, pageKey, VIEW } from "../../domain/navigation/keys";
 import { pageOf } from "../../domain/navigation/views";
@@ -32,6 +34,9 @@ import { trailing } from "../trailing";
 import { loadLinked } from "./linked";
 import { favouritesOf, followFavourites } from "./favourites";
 import { activeFolder, workspaces } from "./workspaces";
+import { loadRows } from "../collections/collections";
+import { useCollectionsStore } from "../collections/store";
+import { registryOf } from "../types/types";
 
 // The sidebar's two tabs: Chats (the conversations, as before) and Pages (the notes of the workspace shown).
 const set = useNavigationStore.setState;
@@ -146,6 +151,28 @@ export function pagesView(): {
   };
 }
 
+/** The Pages tab shows the folders of the workspace shown (Show files), else its notes by type. Only an admin has the
+ *  switch; it is kept per workspace over a restart. */
+export const filesShown = (folder = activeFolder()) =>
+  isAdmin(folder) && !!useNavigationStore.getState().sidebar.pagesFiles[folder];
+export function showFiles(on: boolean, folder = activeFolder()) {
+  set(draft => {
+    if (on) draft.sidebar.pagesFiles[folder] = true;
+    else delete draft.sidebar.pagesFiles[folder];
+  });
+  storage.set("pagesFiles", useNavigationStore.getState().sidebar.pagesFiles);
+}
+/** The notes of the workspace shown by type: per project and context, the rest, and Unsorted (`loadRows` reads them). */
+export function typedView(): TypedTree {
+  const { workspace, model } = build();
+  const rows = useCollectionsStore.getState().rows[workspace] ?? [];
+  return typedTree(
+    model,
+    rows,
+    registryOf(workspace).types.map(type => type.name),
+  );
+}
+
 /** Folders and projects unfolded in the Pages tab, by path, kept over a restart. `open` unfolds or folds it either
  *  way, else it toggles. */
 export function togglePage(path: string, open = !useNavigationStore.getState().sidebar.pagesOpen.has(path)) {
@@ -208,6 +235,7 @@ export async function savePage(page: string, text: string, force = false): Promi
       draft.panel.detail[pageKey(page)] = { ...read, text, hash, modified: Date.now() };
     });
     void loadLinked(); // its about:, context: or with: may have changed
+    if (!filesShown()) void loadRows(); // and its type:
     return "";
   } catch (e) {
     if (String(e) === "changed") return "changed";
@@ -291,6 +319,7 @@ function byClaude(page: string) {
 const reload = trailing(() => {
   void loadNotes();
   void loadLinked();
+  if (!filesShown()) void loadRows(); // a `type:` set or taken off moves the note in the tree by type
 }, 300);
 /** A note changed outside Relay (the file watcher): the Pages tab reads which notes exist again, and an open page that
  *  holds another text than the file gets the file's, to merge. */
