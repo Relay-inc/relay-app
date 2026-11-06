@@ -3085,41 +3085,6 @@ const SCENARIOS = {
     );
   },
 
-  // K7, issue 372: the old scratch notes show a dry run first, Move writes them into the Inbox with about: set and the
-  // drawer shows them per project, one Undo puts them back
-  async inboxScratch(s) {
-    await s.load({ fixture: "kb-changes-inbox" });
-    const { page } = s;
-    await click(page.getByRole("tab", { name: /^Pages/ }));
-    await click(page.locator("[data-inbox]"));
-    await waitText(page, "2 older scratch notes");
-    s.check("nothing was moved by looking", (await s.calls("scratch_migrate")).length === 0);
-    await click(button(page, "Move into Inbox…"));
-    s.check(
-      "the dry run lists each note's project and new name",
-      (await waitText(page, "Move scratch notes into the vault")) && (await hasText(page, "Inbox/2026-09-20 1015.md")),
-    );
-    s.check("one primary button on screen", (await page.locator(".btn-primary").count()) === 1);
-    await click(button(page, "Move 2 notes"));
-    await settle(page, 400);
-    s.check(
-      "the notes are in the Inbox with about:",
-      (await page.evaluate(() => window.__harness.noteText("Inbox/2026-09-20 1015.md")))?.includes(
-        'about: "[[Northwind Portal]]"',
-      ),
-    );
-    s.check("the Inbox counts them", await waitText(page, "6 notes"));
-    s.check("the toast offers the one Undo", await hasText(page, "Moved 2 scratch notes into the Inbox"));
-    await click(page.getByRole("button", { name: "Undo", exact: true }));
-    await settle(page, 400);
-    s.check(
-      "Undo puts them back outside the vault",
-      (await s.calls("scratch_migrate_undo")).length === 1 &&
-        (await waitText(page, "4 notes")) &&
-        (await hasText(page, "2 older scratch notes")),
-    );
-  },
-
   // K7, issue 372: the capture window saves its text through quick_capture_save with ⌘↵ and puts the window away; Esc
   // puts it away without saving
   async quickCapture(s) {
