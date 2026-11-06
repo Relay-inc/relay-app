@@ -1,20 +1,21 @@
-import { createElement, useEffect } from "react";
+import { createElement, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { cellValues, readBase, showBase, viewOf } from "../../../domain/collections/bases";
-import { kindOfKey, type Column, type Row } from "../../../domain/collections/rules";
+import { kindOfKey, newView, type Column, type Row } from "../../../domain/collections/rules";
 import { loadRows, useCollectionsStore } from "../../../application/collections/collections";
 import { activeFolder } from "../../../application/navigation/workspaces";
 import { loadTypes, registryOf } from "../../../application/types/types";
 import { openLink } from "../../../application/settings/window";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
-import { CellValue } from "../collections/CollectionCell";
+import { CellEditor, CellValue } from "../collections/CollectionCell";
+import { CollectionBoard } from "../collections/CollectionBoard";
 import { columnLabel } from "../collections/labels";
 import { WIDTH } from "../collections/CollectionTable";
 
 // A view inside a page (issue 421): an Obsidian base, from a fenced `base` block or an embedded `.base` file, drawn as
-// a read-only table over the collections' rows. `this` is the page it is in. A base Relay can't draw exactly shows
-// "Open in Obsidian" instead. The rows come from the collections store, so the view follows every edit made there.
+// a table (a cell edited writes that note's frontmatter, never the block) or, grouped by a property, a board. `this` is
+// the page it is in. A base Relay can't draw exactly shows "Open in Obsidian" instead. The rows come from the collections store, so the view follows every edit made there.
 
 const NONE: Row[] = [];
 /** The most rows a page shows of one view; the rest are a count. */
@@ -49,6 +50,7 @@ export function BaseView({ page, source, viewName }: { page: string; source: str
   const folder = useDerived(() => activeFolder());
   const rows = useCollectionsStore(s => s.rows[folder]) ?? NONE;
   const registry = useDerived(() => registryOf(folder));
+  const [editing, setEditing] = useState<{ path: string; key: string } | null>(null);
   useEffect(() => {
     void loadRows(folder);
     void loadTypes(folder);
@@ -80,11 +82,33 @@ export function BaseView({ page, source, viewName }: { page: string; source: str
   const groups = shown.groups.map(g => ({ ...g, rows: g.rows.filter(r => capped.has(r)) })).filter(g => g.rows.length);
   const more = shown.rows.length - Math.min(shown.rows.length, MAX_ROWS);
   const today = new Date().toISOString().slice(0, 10);
+  // grouped by a property: a board, its lanes the groups; a card moved to a lane writes that value into its note
+  const lane =
+    view.groupBy && !view.groupBy.property.startsWith("file.") ? view.groupBy.property.replace(/^note\./, "") : "";
+  const head = (
+    <div className="cm-embed-note-head">
+      <span className="cm-embed-sub">{`${view.name} · ${tn("coll.notes", shown.total)}`}</span>
+    </div>
+  );
+  if (lane)
+    return (
+      <div className="cm-base" role="group" aria-label={view.name}>
+        {head}
+        <CollectionBoard
+          rows={shown.rows.slice(0, MAX_ROWS).map(row => asBase(row, order))}
+          view={{ ...newView("documents"), layout: "board", group: lane }}
+          today={today}
+        />
+        {more > 0 ? (
+          <button type="button" className="cm-embed-link" onClick={obsidian}>
+            {t("base.more", { n: more })}
+          </button>
+        ) : null}
+      </div>
+    );
   return (
     <div className="cm-base" role="group" aria-label={view.name}>
-      <div className="cm-embed-note-head">
-        <span className="cm-embed-sub">{`${view.name} · ${tn("coll.notes", shown.total)}`}</span>
-      </div>
+      {head}
       <div role="table" className="text-[13px]" aria-rowcount={shown.rows.length}>
         <div
           role="row"
@@ -115,11 +139,32 @@ export function BaseView({ page, source, viewName }: { page: string; source: str
                   className="grid items-center gap-x-3 h-9 border-t border-separator"
                   style={{ gridTemplateColumns: template }}
                 >
-                  {columns.map((c, i) => (
-                    <div key={order[i]} role="cell" className="min-w-0 truncate">
-                      <CellValue row={shadow} column={c} today={today} />
-                    </div>
-                  ))}
+                  {columns.map((c, i) => {
+                    // a note's own property edits in place, written into that note; file.* and the title don't
+                    const edits = !order[i].startsWith("file.") && c.kind !== "title" && c.kind !== "time";
+                    const open = editing?.path === row.p && editing.key === c.key;
+                    return (
+                      <div
+                        key={order[i]}
+                        role="cell"
+                        data-cell={c.key}
+                        className={`relative min-w-0 ${open ? "z-20" : "truncate"}`}
+                      >
+                        {open ? (
+                          <CellEditor row={shadow} column={c} rows={rows} onClose={() => setEditing(null)} />
+                        ) : edits ? (
+                          <div
+                            className="-mx-1 px-1 py-1 rounded-md cursor-pointer hover:bg-fill min-h-7 flex items-center"
+                            onClick={() => setEditing({ path: row.p, key: c.key })}
+                          >
+                            <CellValue row={shadow} column={c} today={today} />
+                          </div>
+                        ) : (
+                          <CellValue row={shadow} column={c} today={today} />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}

@@ -71,7 +71,7 @@ class EmbedWidget extends WidgetType {
     dom.classList.toggle("cm-embed-selected", this.selected);
     // a click on the embed selects it (the ring and handles of an image), like a click on a block
     dom.addEventListener("mousedown", e => {
-      if ((e.target as HTMLElement).closest("button,a,audio,[data-grip]")) return;
+      if ((e.target as HTMLElement).closest("button,a,audio,[data-grip],.cm-base")) return;
       e.preventDefault();
       view.dispatch({ selection: { anchor: view.posAtDOM(dom) } });
       view.focus();
