@@ -87,7 +87,7 @@ impl Machines {
     pub fn load(data: &Path) -> std::io::Result<Machines> {
         let id = Identity::load_or_create(data, "remote-identity")?;
         let file = data.join("remote.json");
-        let binds = std::fs::read_to_string(&file).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        let binds = crate::util::read_json(&file);
         Ok(Machines { id, file, binds: Mutex::new(binds), seen: Default::default() })
     }
     fn save(&self, b: &HashMap<String, Bind>) { std::fs::write(&self.file, serde_json::to_string(b).unwrap_or_default()).ok(); }

@@ -24,7 +24,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
 use crate::providers::{keychain_get, keychain_set};
-use crate::{fs, home, trc, trc_v, vault, App};
+use crate::{home, trc, trc_v, vault, App};
 
 /// The MCP revision we speak to servers: the last one with the initialize handshake that servers in use implement
 /// (2026-07-28 drops it, a server on that revision still answers an older initialize).
@@ -432,7 +432,7 @@ pub fn claude_servers(cfg: &Value, vault: &str, mcp: &Value) -> Vec<(String, Val
     found.into_iter().collect()
 }
 fn claude_config(state: &App) -> Vec<(String, Value)> {
-    let read = |p: String| fs::read_to_string(p).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()).unwrap_or(Value::Null);
+    let read = |p: String| crate::util::read_json::<Value>(p);
     let v = vault(state);
     claude_servers(&read(format!("{}/.claude.json", home())), &v, &read(format!("{v}/.mcp.json")))
 }

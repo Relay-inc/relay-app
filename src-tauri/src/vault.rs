@@ -22,6 +22,12 @@ pub fn canon(p: &str) -> String {
     fs::canonicalize(p).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| p.trim_end_matches('/').to_string())
 }
 
+/// The path with symlinks resolved, or as given when it does not exist.
+pub fn canon_path(p: &Path) -> PathBuf { fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()) }
+
+/// `p` relative to `root`, or as given when it is not inside.
+pub fn rel_to(root: &Path, p: &Path) -> String { p.strip_prefix(root).unwrap_or(p).to_string_lossy().into_owned() }
+
 /// A mapped path as an absolute one.
 pub fn resolve(vault: &str, rel: &str) -> PathBuf {
     if rel.starts_with('/') { PathBuf::from(rel) } else { Path::new(vault).join(rel) }
@@ -30,7 +36,7 @@ pub fn resolve(vault: &str, rel: &str) -> PathBuf {
 /// `p` relative to the (canonical) vault, symlinks resolved when the target stays inside the vault,
 /// so Resources/Meta/Claude/reminders.md becomes the file it links to.
 fn rel(root: &Path, p: &Path) -> String {
-    let real = fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let real = canon_path(p);
     let r = real.strip_prefix(root).or_else(|_| p.strip_prefix(root)).map(Path::to_path_buf).unwrap_or(real);
     r.to_string_lossy().into_owned()
 }
@@ -80,10 +86,12 @@ pub fn note(vault: &str, target: &str) -> Option<(String, String)> {
     Some((rel(&root, &real), fs::read_to_string(&real).ok()?))
 }
 
-/// The value of a frontmatter key (one-line scalar, quotes off), None without frontmatter or key.
-fn front(text: &str, key: &str) -> Option<String> {
-    let (head, _) = text.strip_prefix("---\n")?.split_once("\n---")?;
-    head.lines().find_map(|l| l.strip_prefix(key)?.strip_prefix(':')).map(|v| unquote(v.trim()))
+/// A note's frontmatter lines (without the fences) and what follows the closing fence, None without frontmatter.
+pub(crate) fn split(text: &str) -> Option<(&str, &str)> { text.strip_prefix("---\n")?.split_once("\n---") }
+
+/// The value of a frontmatter key (one-line scalar, quotes off), None without the key or with an empty value.
+pub(crate) fn field(fm: &str, key: &str) -> Option<String> {
+    fm.lines().find_map(|l| l.strip_prefix(key)?.strip_prefix(':')).map(|v| unquote(v.trim())).filter(|v| !v.is_empty())
 }
 
 /// The meeting note of calendar event `event` (its id), as a path relative to the vault: the note whose frontmatter
@@ -92,7 +100,7 @@ fn front(text: &str, key: &str) -> Option<String> {
 pub fn note_by_event(vault: &str, day: &str, event: &str) -> Option<String> {
     let root = PathBuf::from(canon(vault));
     if day.is_empty() || event.is_empty() { return None; }
-    let hit = |p: &Path, n: &str| n.starts_with(day) && n.ends_with(".md") && fs::read_to_string(p).ok().is_some_and(|t| front(&t, "event").as_deref() == Some(event));
+    let hit = |p: &Path, n: &str| n.starts_with(day) && n.ends_with(".md") && fs::read_to_string(p).ok().is_some_and(|t| split(&t).and_then(|(h, _)| field(h, "event")).as_deref() == Some(event));
     // the meetings' own folder first; the whole vault for a note made before there was one, or moved elsewhere
     let home = crate::homes::year_of(day).map(|y| crate::homes::home(&root, "meeting", y));
     let mut entries = home.and_then(|h| fs::read_dir(h).ok()).into_iter().flatten().flatten();
@@ -120,9 +128,7 @@ pub fn write_note(roots: &[String], target: &str, text: &str, expect: &str, forc
     if !force && text_hash(&fs::read_to_string(&real).map_err(|e| e.to_string())?) != expect {
         return Err("changed".into());
     }
-    let tmp = real.with_extension("md.relay-tmp");
-    fs::write(&tmp, text).map_err(|e| e.to_string())?;
-    fs::rename(&tmp, &real).map_err(|e| { fs::remove_file(&tmp).ok(); e.to_string() })?;
+    crate::util::write_file(&real, text)?;
     Ok(text_hash(text))
 }
 
@@ -130,16 +136,14 @@ pub fn write_note(roots: &[String], target: &str, text: &str, expect: &str, forc
 /// offers to pick from. Only one-line `key: value` scalars count; quotes are taken off.
 pub fn property_values(root: &str, key: &str) -> Vec<String> {
     let root = PathBuf::from(canon(root));
-    let prefix = format!("{key}:");
     let mut count: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     walk(&root, |p, n| {
         if !n.ends_with(".md") { return false; }
         let Ok(text) = fs::read_to_string(p) else { return false };
-        let Some(fm) = text.strip_prefix("---\n").and_then(|t| t.split_once("\n---").map(|(f, _)| f)) else { return false };
+        let Some((fm, _)) = split(&text) else { return false };
         for line in fm.lines() {
-            let Some(v) = line.strip_prefix(&prefix) else { continue };
-            let v = v.trim().trim_matches(|c| c == '"' || c == '\'').trim();
-            if !v.is_empty() && !v.starts_with('[') && !v.starts_with('<') { *count.entry(v.to_string()).or_default() += 1; }
+            let Some(v) = field(line, key) else { continue };
+            if !v.starts_with('[') && !v.starts_with('<') { *count.entry(v).or_default() += 1; }
         }
         false
     });

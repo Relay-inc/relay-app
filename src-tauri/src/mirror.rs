@@ -57,7 +57,7 @@ pub fn key(data: &Path, id: &str) -> Result<String, String> {
 
 /// The switched-on plugins and where they are installed, from ~/.claude: [(name@marketplace, install path)].
 pub fn plugins() -> Vec<(String, PathBuf)> {
-    let read = |p: String| std::fs::read_to_string(p).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()).unwrap_or(Value::Null);
+    let read = |p: String| crate::util::read_json::<Value>(p);
     let settings = read(format!("{}/.claude/settings.json", home()));
     let installed = read(format!("{}/.claude/plugins/installed_plugins.json", home()));
     let on: Vec<String> = match &settings["enabledPlugins"] {
@@ -73,7 +73,7 @@ pub fn plugins() -> Vec<(String, PathBuf)> {
 }
 /// The permission rules here (allow, deny, ask from ~/.claude/settings.json), for the machine's sessions.
 pub fn permissions() -> Value {
-    rules(&std::fs::read_to_string(format!("{}/.claude/settings.json", home())).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null))
+    rules(&crate::util::read_json::<Value>(format!("{}/.claude/settings.json", home())))
 }
 /// And the mode a window here starts in (defaultMode, auto when none is set, as a terminal window starts): the
 /// machine's `claude -p` would otherwise start in manual and ask for every edit.
@@ -124,7 +124,7 @@ fn filter(root: &str, m: &Value) -> Filter {
 impl Mirrors {
     fn base_path(data: &Path, id: &str, root: &str) -> PathBuf { data.join("mirror-base").join(id).join(format!("{root}.json")) }
     fn load_base(data: &Path, id: &str, root: &str) -> Manifest {
-        std::fs::read_to_string(Self::base_path(data, id, root)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+        crate::util::read_json(Self::base_path(data, id, root))
     }
     fn save_base(data: &Path, id: &str, root: &str, b: &Manifest) {
         let p = Self::base_path(data, id, root);

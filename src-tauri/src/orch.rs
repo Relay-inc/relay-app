@@ -148,7 +148,7 @@ fn now() -> i64 { chrono::Utc::now().timestamp_millis() }
 
 fn file(app: &AppHandle) -> PathBuf { data_dir(app).join("orch.json") }
 pub fn load(app: &AppHandle) -> Vec<Worker> {
-    std::fs::read_to_string(file(app)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    crate::util::read_json(file(app))
 }
 fn save(app: &AppHandle, w: &[Worker]) { std::fs::write(file(app), serde_json::to_string(w).unwrap_or_default()).ok(); }
 /// Change one worker on disk and tell the webview.
@@ -271,8 +271,8 @@ fn summary(w: &Worker) -> Value {
 
 fn git(dir: &str, args: &[&str]) -> Option<String> {
     let path = std::env::var("PATH").unwrap_or_default();
-    let o = Command::new("git").arg("-C").arg(dir).args(args).env("PATH", path).output().ok()?;
-    o.status.success().then(|| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    // trim_start too: `status --short` callers have always seen its first line without the leading blank
+    crate::git::ok(dir, args, &path).map(|s| s.trim_start().to_string())
 }
 /// A checkout path the coordinator may use: a git top level, listed in (or inside a folder listed in) the
 /// vault's index/repos.json. Returns the project note name it belongs to.
@@ -600,7 +600,7 @@ pub fn tainted(app: &AppHandle, key: &str) -> bool {
     app.state::<App>().procs.lock().unwrap().get(key).is_some_and(|p| p.tainted) || marked(app).iter().any(|k| k == key)
 }
 fn marked(app: &AppHandle) -> Vec<String> {
-    std::fs::read_to_string(data_dir(app).join("orch-tainted.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    crate::util::read_json(data_dir(app).join("orch-tainted.json"))
 }
 pub fn unmark(app: &AppHandle, key: &str) {
     let m: Vec<String> = marked(app).into_iter().filter(|k| k != key).collect();
@@ -922,7 +922,7 @@ pub(crate) fn inject(app: &AppHandle, key: &str, name: &str, t: &str, model: &st
 #[derive(Serialize, Deserialize, Clone)]
 struct Queued { key: String, name: String, model: String, taint: bool, text: String }
 fn queue(app: &AppHandle) -> Vec<Queued> {
-    std::fs::read_to_string(data_dir(app).join("orch-queue.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    crate::util::read_json(data_dir(app).join("orch-queue.json"))
 }
 fn save_queue(app: &AppHandle, q: &[Queued]) { std::fs::write(data_dir(app).join("orch-queue.json"), serde_json::to_string(q).unwrap_or_default()).ok(); }
 

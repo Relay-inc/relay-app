@@ -16,6 +16,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use agent_core::{pending, usage, AgentProvider, Terminal};
 
 mod actions;
+mod util;
 mod agents;
 mod watch;
 mod anywhere;
@@ -550,7 +551,7 @@ async fn ui_state_set(app: AppHandle, window: tauri::WebviewWindow, key: String,
     let changed = json!({"key": key, "value": value, "from": window.label()});
     tauri::async_runtime::spawn_blocking(move || {
         let _one = UI_STATE.lock().unwrap_or_else(|e| e.into_inner());
-        let mut state: serde_json::Map<String, Value> = fs::read_to_string(&path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        let mut state: serde_json::Map<String, Value> = crate::util::read_json(&path);
         state.insert(key, Value::String(value));
         relay_remote::sync::write_atomic(&path, serde_json::to_string(&state).unwrap().as_bytes(), None).map_err(|e| e.to_string())
     }).await.map_err(|e| e.to_string())??;
@@ -1285,14 +1286,13 @@ async fn inbox_propose(app: AppHandle, state: State<'_, App>, workspace: String)
         let (prompt, paths) = inbox::prompt(&r, FILE_PROMPT, &homes);
         Ok((prompt, paths, inbox::stems(&r)))
     }).await?;
-    if paths.is_empty() { return Ok(json!({"at": now_ms(), "items": []})); }
+    if paths.is_empty() { return Ok(json!({"at": usage::now_ms(), "items": []})); }
     let eb = in_vault(env_of(&app, &state, p), workspace.clone());
     let account = account_of(&state, p, "", "sonnet");
     let answer = claude_run(&app, &state, eb, account, None, prompt, "Read,Glob,Grep").await?;
     let items: Vec<Value> = inbox::parse(&answer, &paths, &known).iter().map(inbox::item_json).collect();
-    Ok(json!({"at": now_ms(), "items": items}))
+    Ok(json!({"at": usage::now_ms(), "items": items}))
 }
-fn now_ms() -> u64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64) }
 /// Accept proposals: each note gets its frontmatter and moves to its folder (pagefiles keeps every link to it). One
 /// entry in the Changes feed holds all of them, source "inbox", so each filing can be undone there. Returns
 /// {filed: [{path, to}], failed: [{path, error}]}; a note that failed stays as it was.
@@ -1463,7 +1463,7 @@ async fn page_history(app: AppHandle, state: State<'_, App>, path: String) -> Re
     on_files(move || {
         let dir = abs.parent().map(|d| d.to_string_lossy().into_owned()).unwrap_or_default();
         let Some(top) = git::top_of(&dir, &env) else { return Ok(json!({"kind": "none", "versions": []})) };
-        let canon = |p: &std::path::Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        let canon = vault::canon_path;
         let rel = canon(&abs).strip_prefix(canon(std::path::Path::new(&top))).map(|r| r.to_string_lossy().into_owned()).map_err(|_| "not in its repo".to_string())?;
         // ponytail: the newest 100 commits of the note; "Load older" when someone needs further back
         Ok(json!({"kind": "git", "versions": git::file_history(&top, &rel, 100, &env)?}))
@@ -2710,9 +2710,9 @@ async fn ticket_pictures(app: AppHandle, provider: String, files: Vec<(String, S
 /// A board provider's credentials from Claude Code's MCP config (board_core::from_claude): ~/.claude.json for the user
 /// and for the vault as a project, and the vault's .mcp.json.
 fn claude_creds(state: &App, p: &providers::Provider) -> Option<(Vec<(String, String)>, serde_json::Map<String, Value>)> {
-    let cfg: Value = fs::read_to_string(format!("{}/.claude.json", home())).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
+    let cfg: Value = crate::util::read_json(format!("{}/.claude.json", home()));
     let v = vault(state);
-    let mcp: Value = fs::read_to_string(format!("{v}/.mcp.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
+    let mcp: Value = crate::util::read_json(format!("{v}/.mcp.json"));
     board_core::from_claude(p, &cfg, &v, &mcp)
 }
 /// Whether the provider can take its credentials from Claude Code, and whether Claude Code has them; the settings
