@@ -196,11 +196,11 @@ export type EmbedInfo = {
   missing?: boolean;
   path?: string; // absolute
   rel?: string; // in the workspace
-  kind?: "image" | "pdf" | "audio" | "note" | "file";
+  kind?: "image" | "pdf" | "audio" | "note" | "base" | "file";
   size?: number;
   pages?: number | null;
   thumb?: string | null; // a PDF's first page, as a data URL
-  text?: string; // a note's text
+  text?: string; // a note's or a base's text
 };
 export const embedInfo = (page: string, targets: string[]) => invoke<EmbedInfo[]>("embed_info", { page, targets });
 /** One file's answer when it was added to a page: where it is and what to embed it by, or too large (not copied). */

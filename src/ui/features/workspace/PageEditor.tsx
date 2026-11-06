@@ -32,6 +32,7 @@ import { yAnchor, ySpan } from "../../../application/workspace/anchors";
 import { findQuote, type Span } from "../../../domain/workspace/comments";
 import { useT } from "../../hooks/useT";
 import { livePreview, showMarkdown } from "./livePreview";
+import { baseBlocks } from "./baseBlocks";
 import { formatting, type FormatWords } from "./formatting";
 import { useEditorStore } from "../../../application/navigation/editor";
 import { blockEditing, type BlockWords } from "./blocks";
@@ -316,6 +317,7 @@ function Editor(props: {
           livePreview((link, drawer) => void followPageLink(link, drawer)),
           formatting(format),
           embeds(page),
+          baseBlocks(page),
           attachEditing(page),
           blockEditing(
             words,

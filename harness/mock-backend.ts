@@ -16,6 +16,7 @@ import * as files from "./fixtures/files";
 import * as kb from "./fixtures/kb";
 import * as inbox from "./fixtures/inbox";
 import * as coll from "./fixtures/collections";
+import * as views from "./fixtures/views";
 import * as Y from "yjs";
 import { SHIPPED } from "../src/domain/types/registry";
 // the example plugin's real view: the harness serves it from a blob, where the app has the relay-plugin:// scheme
@@ -521,7 +522,7 @@ function handle(cmd: string, a: Args): unknown {
     }
     // files inside a page (src-tauri/src/attach.rs)
     case "embed_info":
-      return embeds.info(a.targets as string[]);
+      return (a.targets as string[]).map(t => views.baseInfo(t) ?? embeds.info([t])[0]);
     case "attach_dest":
       return "Attachments/2026";
     case "attach_save":
@@ -1953,6 +1954,8 @@ const trashed = new Map<string, string[]>();
 const linkedOn = fixture.startsWith("linked");
 // fixture embeds (K4): the Northwind Portal page holds a picture, a PDF, an audio file and a section of another note
 const embedsOn = fixture.startsWith("embeds");
+// fixture linked-views (issue 421): the Northwind Portal page holds views inside it (Obsidian bases)
+const viewsOn = fixture.startsWith("linked-views");
 // fixture kb (K5, K1): notes with content to search, templates, favourites
 const kbOn = fixture.startsWith("kb");
 const changesOn = fixture.startsWith("kb-changes");
@@ -2019,7 +2022,8 @@ function collectionRow(path: string, text: string) {
         : /\n## Briefing\n[^\n#]*\S/.test(`\n${body}`)
           ? "briefed"
           : "planned";
-  return { p: path, t: stem, k: kind, at: Math.floor(NOW_S - 3 * 86400), date, stage, props };
+  const links = [...text.matchAll(/\[\[([^\]|#\n]+)/g)].map(x => x[1].trim());
+  return { p: path, t: stem, k: kind, at: Math.floor(NOW_S - 3 * 86400), date, stage, props, links, tags: props.tags ?? [] };
 }
 const pageRel = (p: unknown) => String(p).replace(vault.VAULT, "").replace(/^\//, "");
 // shared-live: the Mac's document of the page, which the editor and the mock peers share, and the cursors sent
@@ -2077,8 +2081,8 @@ function threadsOf(all: Comment[]) {
 }
 
 const written = new Map<string, { text: string; hash: string }>(
-  fixture.startsWith("linked-collections")
-    ? Object.entries(coll.texts).map(([path, text]) => [path, { text, hash: "h0" }])
+  fixture.startsWith("linked-collections") || viewsOn
+    ? Object.entries(viewsOn ? views.texts : coll.texts).map(([path, text]) => [path, { text, hash: "h0" }])
     : embedsOn
       ? Object.entries(embeds.texts).map(([path, text]) => [path, { text, hash: "h0" }])
       : kbOn
