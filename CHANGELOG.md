@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- One registry of note types (Project, Meeting, Person and the rest) that Tidy, new notes, Collections and the page properties all read: a Project's status is now a select with its allowed values, and Relay writes the same structure to `rules/vault/types.md` for every Claude session. Override a type under `types` in `.relay/config.json`. (#PR)
+- One registry of note types (Project, Meeting, Person and the rest) that Tidy, new notes, Collections and the page properties all read: a Project's status is now a select with its allowed values, and Relay writes the same structure to `rules/vault/types.md` for every Claude session. Override a type under `types` in `.relay/config.json`. (#428)
 
 ### Changed
 
