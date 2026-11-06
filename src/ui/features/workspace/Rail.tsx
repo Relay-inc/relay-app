@@ -9,6 +9,9 @@ import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import type { CommentsApi } from "./PageEditor";
+import { plural, relations, typeNameOf } from "../../../domain/types/header";
+import { typeOf } from "../../../domain/types/registry";
+import { registryOf } from "../../../application/types/types";
 
 const INDENT = ["pl-2", "pl-2", "pl-2", "pl-5", "pl-8", "pl-11", "pl-14"]; // by heading level
 
@@ -31,6 +34,17 @@ export function Rail({
   const data = useRailStore(s => s.by[railKey(folder, path)]);
   const conversations = useDerived(() => railConversations(folder, path));
   const name = noteName(path);
+  // backlinks through a typed field get their own group: "Meetings about this project"
+  const registry = useDerived(() => registryOf(folder));
+  const { groups, rest } = relations(data?.backlinks ?? [], registry);
+  const type = (typeOf(registry, typeNameOf(text))?.name ?? "note").toLowerCase();
+  const relation = (kind: string, key: string) =>
+    t(`rail.rel.${key === "about" || key === "with" || key === "context" ? key : "other"}`, {
+      types: plural(kind),
+      type,
+      name,
+      key,
+    });
   const open = (note: { p: string }, line = 0) =>
     line ? openPageAtLine(folder, note.p, line) : openPageIn(folder, note.p);
 
@@ -82,8 +96,13 @@ export function Rail({
       className="w-75 flex-none flex flex-col gap-1 border-l border-separator px-3.5 py-3 overflow-y-auto"
     >
       <Outline target={target} text={text} api={api} scroller={scroller} />
-      <Section title={t("rail.backlinks")} count={data?.backlinks.length ?? 0} id="backlinks">
-        {data?.backlinks.map(note => noteRow(note, false))}
+      {groups.map(g => (
+        <Section key={`${g.kind}|${g.key}`} title={relation(g.kind, g.key)} count={g.notes.length} id="backlinks">
+          {g.notes.map(note => noteRow(note, false))}
+        </Section>
+      ))}
+      <Section title={t("rail.backlinks")} count={rest.length} id="backlinks">
+        {rest.map(note => noteRow(note, false))}
       </Section>
       <Section title={t("rail.unlinked")} count={data?.mentions.length ?? 0} id="unlinked">
         {data?.mentions.map(note => noteRow(note, true))}

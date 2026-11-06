@@ -262,12 +262,15 @@ export function range(key: string, preset: "month" | "quarter" | "days30", today
 }
 
 /** The names a links cell offers: the notes of the type the key points at (`about` the projects, `context` the contexts,
- *  `with` the people) and what the rows already name under it, sorted. */
-export function linkOptions(rows: Row[], key: string): string[] {
-  const kinds = key === "with" ? ["person"] : key === "context" ? ["context"] : DEFS.projects.kinds;
+ *  `with` the people) and what the rows already name under it, sorted. With `target` (the registry field's types) only
+ *  the notes of those types. */
+export function linkOptions(rows: Row[], key: string, target?: string[]): string[] {
+  const kinds =
+    target?.map(t => t.toLowerCase()) ??
+    (key === "with" ? ["person"] : key === "context" ? ["context"] : DEFS.projects.kinds);
   const names = new Map<string, string>();
   const add = (name: string) => names.has(name.toLowerCase()) || names.set(name.toLowerCase(), name);
   for (const row of rows) if (kinds !== "rest" && kinds.includes(row.k.toLowerCase())) add(row.t);
-  for (const row of rows) for (const value of row.props[key] ?? []) add(value);
+  if (!target) for (const row of rows) for (const value of row.props[key] ?? []) add(value);
   return [...names.values()].sort(compare);
 }

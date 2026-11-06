@@ -4,8 +4,18 @@
 import type { Touch } from "../graph/types.ts";
 
 /** A note with the line that brings it here: `line` counts from 1 in its file, `hit` is the matched text as written
- *  (`[[Link]]` for a backlink, the plain words for a mention), with the text around it. */
-export type RailNote = { p: string; t: string; k: string; line: number; before: string; hit: string; after: string };
+ *  (`[[Link]]` for a backlink, the plain words for a mention), with the text around it; `f` the frontmatter key a
+ *  backlink stands under (`about`, `with`), when it has one. */
+export type RailNote = {
+  p: string;
+  t: string;
+  k: string;
+  line: number;
+  before: string;
+  hit: string;
+  after: string;
+  f?: string;
+};
 export type RailData = { backlinks: RailNote[]; mentions: RailNote[]; related: { p: string; t: string; k: string }[] };
 /** A heading of a page: its level, its text and its line in the file (from 1). */
 export type Heading = { level: number; title: string; line: number };

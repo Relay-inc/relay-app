@@ -2387,8 +2387,8 @@ const VIEWS = {
     await page.waitForFunction(() => /\nstatus: Blocked\n/.test(window.__harness.written() ?? ""), null, {
       timeout: 4000,
     });
-    await page.getByRole("button", { name: "Remove: archive" }).click();
-    await page.waitForFunction(() => !/archive:/.test(window.__harness.written() ?? "archive:"), null, {
+    await page.getByRole("button", { name: "Remove: laatst" }).click();
+    await page.waitForFunction(() => !/laatst:/.test(window.__harness.written() ?? "laatst:"), null, {
       timeout: 4000,
     });
     await settle(page);
@@ -2396,9 +2396,11 @@ const VIEWS = {
   // a property added: a link to a note, written as key: "[[Note]]"
   "page-properties-add": async () => {
     await VIEWS["page-view"]();
+    // a Document: its missing fields first (issue 419), any other key under Other…
     await page.getByRole("button", { name: "Add property" }).click();
+    await page.getByRole("button", { name: "Other…" }).click();
     await page.getByRole("textbox", { name: "Property name" }).fill("reviewer");
-    await page.getByRole("combobox", { name: "Type" }).selectOption("link");
+    await page.getByRole("combobox", { name: "Type", exact: true }).selectOption("link");
     await page.getByRole("button", { name: "Add", exact: true }).click();
     const reviewer = page.getByLabel("reviewer", { exact: true });
     await reviewer.fill("Billing Spec");
@@ -2417,13 +2419,60 @@ const VIEWS = {
     await status.fill("Someday");
     await status.press("Enter");
     await page.waitForFunction(() => /\nstatus: Someday\n/.test(window.__harness.written() ?? ""), null, { timeout: 4000 });
-    const type = page.getByLabel("type", { exact: true });
-    await type.fill("Project");
-    await type.press("Enter");
+    await page.getByRole("combobox", { name: "Note type" }).selectOption("Project");
     await page.waitForFunction(() => /type: Project\n/.test(window.__harness.written() ?? ""), null, { timeout: 4000 });
     await page.getByRole("combobox", { name: "status", exact: true }).hover();
     await settle(page);
   },
+  // typed pages (issue 419): a Meeting's header with its type chip, the breadcrumb Agency › Northwind Portal and the
+  // registry's fields, each with its editor; `note` another typed (or untyped) note of fixture kb
+  "typed-meeting": async (fixture = "kb", note = "Calendar/Meetings/2026/2026-10-01 Portal kickoff.md") => {
+    await open(page, server.url, { fixture, sel: `page:${note}` });
+    await page.locator("h1").first().waitFor();
+    await settle(page, 400);
+  },
+  "typed-meeting-dark": async () => VIEWS["typed-meeting"]("kb-dark"),
+  // a Meeting without about: shows it as an empty, highlighted slot
+  "typed-meeting-missing": async () => {
+    await VIEWS["typed-meeting"]("kb", "Calendar/Meetings/2026/2026-09-25 Intro call.md");
+    await page.locator('[data-slot="about"][data-missing]').waitFor();
+    await settle(page);
+  },
+  // the with: picker lists only Person notes and ends with Create Person 'Jane Doe'
+  "typed-with-picker": async (fixture = "kb") => {
+    await VIEWS["typed-meeting"](fixture);
+    await page.getByRole("button", { name: "Add: with" }).click();
+    await page.getByRole("textbox", { name: "Search" }).fill("Jane Doe");
+    await waitText("Create Person ‘Jane Doe’");
+    await settle(page);
+  },
+  "typed-with-picker-dark": async () => VIEWS["typed-with-picker"]("kb-dark"),
+  // the picker's Create makes the person beside the context and links it
+  "typed-person-created": async () => {
+    await VIEWS["typed-with-picker"]();
+    await page.getByText("Create Person ‘Jane Doe’").click();
+    await page.waitForFunction(() => /- "\[\[Jane Doe\]\]"/.test(window.__harness.written() ?? ""), null, {
+      timeout: 4000,
+    });
+    const made = await page.evaluate(() => window.__harness.calls.find(c => c.cmd === "new_from_template")?.args);
+    if (made?.folder !== "Contexts/Agency/People" || made?.title !== "Jane Doe" || made?.context !== "Agency")
+      throw new Error(`Jane Doe made with ${JSON.stringify(made)}`);
+    await settle(page, 300);
+  },
+  "typed-person": async (fixture = "kb") =>
+    VIEWS["typed-meeting"](fixture, "Contexts/Agency/People/Tom Willems.md"),
+  "typed-person-dark": async () => VIEWS["typed-person"]("kb-dark"),
+  // a Project's rail groups the meetings that link to it through about:
+  "typed-project": async (fixture = "kb") => {
+    await VIEWS["typed-meeting"](fixture, "Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md");
+    await waitText("Meetings about this project");
+    await settle(page);
+  },
+  "typed-project-dark": async () => VIEWS["typed-project"]("kb-dark"),
+  // a note without type: keeps the plain properties list
+  "typed-untyped": async (fixture = "kb-sketch") =>
+    VIEWS["typed-meeting"](fixture, "Contexts/Agency/Projects/Northwind Portal/Documents/Pricing sketch.md"),
+  "typed-untyped-dark": async () => VIEWS["typed-untyped"]("kb-sketch-dark"),
   // the file changed on disk since the page read it: the save is refused, the bar offers Reload and Keep mine
   "page-editor-changed-on-disk": async () => {
     await VIEWS["page-view"]();

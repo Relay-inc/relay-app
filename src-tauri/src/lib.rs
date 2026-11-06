@@ -2825,12 +2825,12 @@ fn note_templates(state: State<App>, workspace: String) -> Result<Vec<String>, S
     Ok(templates::list(&vault::canon(&workspace_side(&state, &workspace)?.1.vault)))
 }
 /// A new note from a template, in its type's home or in `folder`, with `about:` and `context:` from where it was asked
-/// for. Returns its path relative to the workspace.
+/// for; a non-empty `title` names it. Returns its path relative to the workspace.
 #[tauri::command]
-async fn new_from_template(app: AppHandle, state: State<'_, App>, workspace: String, template: String, folder: String, about: String, context: String) -> Result<String, String> {
+async fn new_from_template(app: AppHandle, state: State<'_, App>, workspace: String, template: String, folder: String, about: String, context: String, title: String) -> Result<String, String> {
     let (s, side) = workspace_side(&state, &workspace)?;
     on_files(move || {
-        let note = templates::create(std::path::Path::new(&vault::canon(&side.vault)), &template, &folder, &about, &context, &today())?;
+        let note = templates::create(std::path::Path::new(&vault::canon(&side.vault)), &template, &folder, &about, &context, &title, &today())?;
         reindex(&app, &s, &side);
         Ok(note)
     }).await
