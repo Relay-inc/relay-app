@@ -8,7 +8,6 @@ use relay_remote::client::Client;
 use relay_remote::proto::{DeviceCode, Github, Info, RepoStatus};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::process::Command;
 use std::sync::Mutex;
 use tauri::State;
 
@@ -65,7 +64,7 @@ pub async fn machine_repo_to_mac(state: State<'_, App>, id: String, name: String
         let repo = c.repos()?.into_iter().find(|r| r.name == name).ok_or_else(|| trc_v("err.repo_unknown", &name))?;
         let (dir, _) = checkouts.get(&repo.repo.to_lowercase()).ok_or_else(|| trc_v("err.repo_no_checkout", &repo.repo))?;
         let branch = snapshot_branch(m["name"].as_str().unwrap_or(""), m["id"].as_str().unwrap_or(""));
-        let git = |args: &[&str]| Command::new("git").env("PATH", &path).arg("-C").arg(dir).args(args).output().map_err(|e| e.to_string());
+        let git = |args: &[&str]| crate::git::output(dir, args, &path).map_err(|e| e.to_string());
         // fetching into the branch checked out here would change it under the working tree: git refuses, say why first
         let head = git(&["symbolic-ref", "--quiet", "--short", "HEAD"])?;
         if String::from_utf8_lossy(&head.stdout).trim() == branch { return Err(trc_v("err.repo_branch_out", &format!("{branch} ({dir})"))); }

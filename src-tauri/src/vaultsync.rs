@@ -65,8 +65,7 @@ const NOT_CHANGES: &str = ":(exclude).relay/changes";
 /// Stage everything a backup commit holds.
 pub(crate) fn stage_all(vault: &str, path_env: &str) -> Result<String, String> { git(vault, path_env, &["add", "-A", "--", ".", NOT_CHANGES]) }
 fn git(vault: &str, path_env: &str, args: &[&str]) -> Result<String, String> {
-    let o = Command::new("git").arg("-C").arg(vault).args(args).env("PATH", path_env).env("GIT_TERMINAL_PROMPT", "0")
-        .stdin(Stdio::null()).output().map_err(|e| format!("git: {e}"))?;
+    let o = crate::git::output_quiet(vault, args, path_env).map_err(|e| format!("git: {e}"))?;
     if o.status.success() { return Ok(String::from_utf8_lossy(&o.stdout).trim_end().to_string()); }
     // the line that says what went wrong, not the hints git puts after it (a refused push ends on "hint: …")
     let e = String::from_utf8_lossy(&o.stderr);

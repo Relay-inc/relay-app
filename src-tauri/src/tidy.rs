@@ -4,6 +4,7 @@
 // date (nothing says where they go). A name taken in the target folder gets " 2", " 3"…
 
 use crate::migrate::Side;
+use crate::vault::field;
 use crate::{homes, pagefiles};
 use std::collections::HashSet;
 use std::fs;
@@ -30,9 +31,6 @@ pub(crate) fn home_of(kind: &str, stem: &str) -> Option<&'static str> {
 pub(crate) fn dated(s: &str) -> bool {
     let b = s.as_bytes();
     b.len() >= 10 && b[..10].iter().enumerate().all(|(i, c)| if i == 4 || i == 7 { *c == b'-' } else { c.is_ascii_digit() })
-}
-fn field<'a>(fm: &'a str, key: &str) -> Option<&'a str> {
-    fm.lines().find_map(|l| l.strip_prefix(key)?.strip_prefix(':')).map(|v| v.trim().trim_matches(['"', '\''])).filter(|v| !v.is_empty())
 }
 /// The year a note belongs to: its name's day, else its `date:`, else `created:`.
 fn year_of(stem: &str, fm: &str) -> Option<String> {
@@ -74,7 +72,7 @@ pub fn plan(side: &Side) -> Tidy {
         let name = p.rsplit('/').next().unwrap_or(p);
         let stem = name.strip_suffix(".md").unwrap_or(name);
         let Some(kind) = field(fm, "type") else { continue };
-        let Some(home) = home_of(kind, stem) else { continue };
+        let Some(home) = home_of(&kind, stem) else { continue };
         let Some(year) = year_of(stem, fm) else { continue };
         let Ok(dir) = homes::home(&vault, home, &year).strip_prefix(&vault).map(|d| d.to_string_lossy().into_owned()) else { continue };
         if p.rsplit_once('/').map_or("", |(d, _)| d) == dir { stay += 1; continue; }

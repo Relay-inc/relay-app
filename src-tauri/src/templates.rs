@@ -3,7 +3,8 @@
 // the date and the title from today and the note's name; Templater tags Relay does not know stay as text. The daily
 // note is the one note a day: opened when it is there, made once when not.
 
-use crate::{homes, projects, tidy};
+use crate::vault::rel_to as rel;
+use crate::{homes, projects, tidy, vault};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -22,10 +23,6 @@ pub fn list(vault: &str) -> Vec<String> {
 /// A name with nothing a file name or a link can't take.
 fn safe(name: &str) -> String {
     name.chars().filter(|c| !"/\\:[]|#^".contains(*c) && !c.is_control()).collect::<String>().trim().to_string()
-}
-fn rel(vault: &Path, p: &Path) -> String { p.strip_prefix(vault).unwrap_or(p).to_string_lossy().into_owned() }
-fn field<'a>(text: &'a str, key: &str) -> Option<&'a str> {
-    text.strip_prefix("---\n")?.split_once("\n---")?.0.lines().find_map(|l| l.strip_prefix(key)?.strip_prefix(':')).map(|v| v.trim().trim_matches(['"', '\''])).filter(|v| !v.is_empty())
 }
 /// A template filled in for `name`: its date and title tags, `lastSync:` (a sync plugin's stamp on the template itself)
 /// out, `about:` and `context:` set when known.
@@ -46,8 +43,8 @@ pub fn create(vault: &Path, template: &str, folder: &str, about: &str, context: 
     let v = vault.to_string_lossy();
     if !list(&v).iter().any(|n| n == template) { return Err(format!("no template {template}")); }
     let raw = fs::read_to_string(vault.join(DIR).join(format!("{template}.md"))).map_err(|e| e.to_string())?;
-    let kind = field(&raw, "type").unwrap_or(template);
-    let home = tidy::home_of(kind, today);
+    let kind = vault::split(&raw).and_then(|(fm, _)| vault::field(fm, "type")).unwrap_or_else(|| template.to_string());
+    let home = tidy::home_of(&kind, today);
     let (about, context) = (safe(about), safe(context));
     let dir = match home {
         Some(h) => homes::home(vault, h, homes::year_of(today).ok_or("not a day")?),

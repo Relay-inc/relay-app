@@ -6,6 +6,7 @@
 // along (`Carry`): their transcripts are copied first, the sessions point at the new vault once every write worked, the
 // originals go last (lib.rs `migrate_run`).
 
+use crate::vault::rel_to;
 use regex::Regex;
 use relay_remote::sync::Filter;
 use serde_json::{json, Value};
@@ -41,7 +42,6 @@ pub fn cards(side: &Side) -> bool {
 }
 /// One folder or file name: no separator, no `..`, not hidden.
 pub fn plain(s: &str) -> bool { !s.is_empty() && !s.starts_with('.') && !s.contains(['/', '\\']) && s != ".." }
-fn rel(p: &Path, root: &Path) -> String { p.strip_prefix(root).unwrap_or(p).to_string_lossy().into_owned() }
 
 /// Every file under `p` (or `p` itself), links listed apart and never followed.
 fn walk(p: &Path, files: &mut Vec<PathBuf>, links: &mut Vec<PathBuf>) {
@@ -102,7 +102,7 @@ pub fn as_card(text: &str, ctx: &str, row: Option<&str>, today: &str) -> String 
     let last = Some(cell(2)).filter(|d| date.is_match(d)).unwrap_or_else(|| today.to_string());
     let index: String = cell(3).replace(['|', '"'], "'").chars().take(160).collect();
     let status = Some(cell(1)).filter(|s| !s.is_empty()).unwrap_or_else(|| "Active".into());
-    let (fm, body) = match text.strip_prefix("---\n").and_then(|t| t.split_once("\n---")) {
+    let (fm, body) = match crate::vault::split(text) {
         Some((fm, body)) => (fm.to_string(), body.to_string()),
         None => (String::new(), format!("\n{text}")),
     };
@@ -152,15 +152,15 @@ pub fn plan(from: &Side, to: &Side, name: &str, ctx: &str, filter: &Filter, take
     if !known { return Err(format!("no context {ctx} in the target workspace")); }
     let (mut found, mut links) = (vec![], vec![]);
     walk(&root, &mut found, &mut links);
-    let mut skipped: Vec<String> = links.iter().map(|l| rel(l, &src_vault)).collect();
+    let mut skipped: Vec<String> = links.iter().map(|l| rel_to(&src_vault, l)).collect();
     let mut files = vec![];
     for f in found {
         let dst = dst_root.join(f.strip_prefix(&root).unwrap_or(Path::new("")));
         let dst = if f == root { dst_root.clone() } else { dst };
         let size = fs::metadata(&f).map_or(0, |m| m.len());
-        if filter.skips(&rel(&dst, &dst_vault), false) || (filter.max_size > 0 && size > filter.max_size) {
+        if filter.skips(&rel_to(&dst_vault, &dst), false) || (filter.max_size > 0 && size > filter.max_size) {
             if f == note { return Err(format!("{name}.md may not go into that workspace")); }
-            skipped.push(rel(&f, &src_vault));
+            skipped.push(rel_to(&src_vault, &f));
         } else { files.push((f, dst)); }
     }
     // the scratch notes and the icon file, under .relay/: Relay's own, never synced
@@ -168,9 +168,9 @@ pub fn plan(from: &Side, to: &Side, name: &str, ctx: &str, filter: &Filter, take
     for e in fs::read_dir(&sd).into_iter().flatten().flatten().filter(|e| e.file_type().is_ok_and(|t| t.is_file())) { files.push((e.path(), dd.join(e.file_name()))); }
     let (entries, icon) = crate::relay_config::project_entries(&from.vault, name);
     if let Some(f) = icon { files.push((crate::relay_config::path(&from.vault).with_file_name(&f), crate::relay_config::path(&to.vault).with_file_name(&f))); }
-    let mut conflicts: Vec<String> = files.iter().filter(|(_, d)| fs::symlink_metadata(d).is_ok()).map(|(_, d)| rel(d, &dst_vault)).collect();
+    let mut conflicts: Vec<String> = files.iter().filter(|(_, d)| fs::symlink_metadata(d).is_ok()).map(|(_, d)| rel_to(&dst_vault, d)).collect();
     if taken { conflicts.insert(0, name.to_string()); }
-    if let Some((_, d)) = files.iter().find(|(_, d)| through_link(&dst_vault, d)) { return Err(format!("{} lies behind a link", rel(d, &dst_vault))); }
+    if let Some((_, d)) = files.iter().find(|(_, d)| through_link(&dst_vault, d)) { return Err(format!("{} lies behind a link", rel_to(&dst_vault, d))); }
     let owned = [root.clone(), sd].into_iter().filter(|d| d.is_dir()).collect();
     Ok(Plan { name: name.into(), context: ctx.into(), note, files, owned, skipped, conflicts, row: row_of(&from.work_state, name), from_card: cards(from), to_card, entries })
 }
@@ -179,7 +179,7 @@ impl Plan {
     /// What the dialog shows: the files that go (paths in the target), what stays, what is in the way.
     pub fn json(&self, to: &Side) -> Value {
         let dst = fs::canonicalize(&to.vault).unwrap_or_else(|_| PathBuf::from(&to.vault));
-        let notes: Vec<String> = self.files.iter().filter(|(_, d)| !d.starts_with(dst.join(".relay"))).map(|(_, d)| rel(d, &dst)).collect();
+        let notes: Vec<String> = self.files.iter().filter(|(_, d)| !d.starts_with(dst.join(".relay"))).map(|(_, d)| rel_to(&dst, d)).collect();
         let e = &self.entries;
         json!({
             "files": notes,

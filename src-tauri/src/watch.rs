@@ -42,7 +42,7 @@ pub fn moved(root: &Path, files: &[String], edits: &[(String, String)]) {
 /// A shared document's note Relay wrote out (another member's edit, `Docs::export`): announced as relinked, so an open
 /// page takes it in without saying it changed on disk, and its document does not take it as a change.
 pub fn exported(file: &Path) {
-    let p = std::fs::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
+    let p = vault::canon_path(file);
     if let Ok(t) = std::fs::read_to_string(&p) { RELINKED.lock().unwrap().insert(p, vault::text_hash(&t)); }
 }
 

@@ -388,8 +388,7 @@ fn move_it(plan: &Plan, a: &Path, b: &Path) -> io::Result<()> {
 }
 /// Text over a note through a temporary file next to it, removed when it fails.
 fn write(p: &Path, text: &str) -> io::Result<()> {
-    let tmp = tmp_of(p);
-    fs::write(&tmp, text).and_then(|_| fs::rename(&tmp, p)).inspect_err(|_| { fs::remove_file(&tmp).ok(); })
+    relay_remote::sync::write_atomic(p, text.as_bytes(), None)
 }
 /// The first `done` edits undone, each only while the note still holds what was written there, then the move: the
 /// paths that could not be put back.

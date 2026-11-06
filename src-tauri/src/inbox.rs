@@ -20,14 +20,10 @@ const MAX_NOTES: usize = 40;
 
 /// A note without frontmatter: (its frontmatter lines, its body).
 pub fn split(text: &str) -> (Option<&str>, &str) {
-    match text.strip_prefix("---\n").and_then(|t| t.split_once("\n---")) {
+    match crate::vault::split(text) {
         Some((fm, rest)) => (Some(fm), rest.strip_prefix('\n').unwrap_or(rest)),
         None => (None, text),
     }
-}
-/// A frontmatter field's value without quotes.
-pub fn field<'a>(fm: &'a str, key: &str) -> Option<&'a str> {
-    fm.lines().find_map(|l| l.strip_prefix(key)?.strip_prefix(':')).map(|v| v.trim().trim_matches(['"', '\''])).filter(|v| !v.is_empty())
 }
 
 fn stamp(now: chrono::DateTime<chrono::Local>) -> String { now.format("%Y-%m-%d %H%M").to_string() }
@@ -206,9 +202,7 @@ pub fn revert(roots: &[String], root: &Path, f: &Filed) {
     write(&was, &f.before).ok();
 }
 fn write(p: &Path, text: &str) -> Result<(), String> {
-    let tmp = p.with_extension("md.relay-tmp");
-    fs::write(&tmp, text).map_err(|e| e.to_string())?;
-    fs::rename(&tmp, p).map_err(|e| { fs::remove_file(&tmp).ok(); e.to_string() })
+    crate::util::write_file(p, text)
 }
 
 /// "Filed 3 captures: 1 Person, 2 Documents": the reason line of an entry.

@@ -52,13 +52,9 @@ fn mtime(p: &Path) -> i64 {
     fs::metadata(p).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs() as i64)
 }
 
-/// A frontmatter key's value on its own line, unquoted; "" when absent.
-fn fm_get(head: &str, k: &str) -> String {
-    head.lines().find_map(|l| l.strip_prefix(k)?.strip_prefix(':')).map(|v| vault::unquote(v.trim())).unwrap_or_default()
-}
 /// The `- item` lines under a key, or its inline [a, b].
 fn fm_list(head: &str, k: &str) -> Vec<String> {
-    let inline = fm_get(head, k);
+    let inline = vault::field(head, k).unwrap_or_default();
     if let Some(i) = inline.strip_prefix('[').and_then(|i| i.strip_suffix(']')) {
         return i.split(',').map(|x| vault::unquote(x.trim())).filter(|x| !x.is_empty()).collect();
     }
@@ -75,8 +71,8 @@ fn fm_list(head: &str, k: &str) -> Vec<String> {
 // ponytail: a line parser, not YAML. Ceiling: a title in a block scalar.
 pub fn parse(rel: &str, text: &str) -> (String, String, String, String, bool) {
     let stem = rel.rsplit('/').next().unwrap_or(rel).trim_end_matches(".md").to_string();
-    let (head, body) = text.strip_prefix("---\n").and_then(|r| r.split_once("\n---")).unwrap_or(("", text));
-    let get = |k: &str| fm_get(head, k);
+    let (head, body) = vault::split(text).unwrap_or(("", text));
+    let get = |k: &str| vault::field(head, k).unwrap_or_default();
     let list = |k: &str| fm_list(head, k);
     let title = Some(get("title")).filter(|t| !t.is_empty()).unwrap_or(stem);
     let kind = Some(get("kind")).filter(|k| !k.is_empty()).unwrap_or_else(|| get("type")).trim_matches(|c| c == '[' || c == ']').to_string();
@@ -101,7 +97,7 @@ pub fn parse(rel: &str, text: &str) -> (String, String, String, String, bool) {
 // ponytail: a value scanner, not a YAML parser (the workspace has none). Ceiling: a value that is a mapping, or a
 // list item with a comma in a plain (unlinked) name.
 pub fn refs(rel: &str, text: &str) -> String {
-    let (head, body) = text.strip_prefix("---\n").and_then(|r| r.split_once("\n---")).unwrap_or(("", text));
+    let (head, body) = vault::split(text).unwrap_or(("", text));
     let key = |k: &str| -> Vec<String> {
         let mut lines = head.lines();
         let Some(first) = lines.find_map(|l| l.strip_prefix(k)?.strip_prefix(':')) else { return vec![] };
@@ -146,7 +142,7 @@ pub fn refs(rel: &str, text: &str) -> String {
 // ponytail: a line scanner like `refs`, not YAML. Ceiling: a nested mapping (its lines are skipped), a plain scalar
 // with `[[` in the middle of a sentence (read as links).
 pub fn props(text: &str) -> String {
-    let head = text.strip_prefix("---\n").and_then(|r| r.split_once("\n---")).map_or("", |(h, _)| h);
+    let head = vault::split(text).map_or("", |(h, _)| h);
     let mut out = serde_json::Map::new();
     let mut lines = head.lines().peekable();
     while let Some(line) = lines.next() {
@@ -446,7 +442,7 @@ pub fn rail(dir: &Path, root: &str, path: &str) -> Result<Value, String> {
         }
         // the names the note goes by: its file name, its title, its aliases
         let text = read(path);
-        let head = text.strip_prefix("---\n").and_then(|r| r.split_once("\n---")).map_or("", |h| h.0);
+        let head = vault::split(&text).map_or("", |h| h.0);
         let stem = path.rsplit('/').next().unwrap_or(path).trim_end_matches(".md").to_string();
         let mut names: Vec<Vec<char>> = vec![];
         for n in [stem, rows[me].1.clone()].into_iter().chain(fm_list(head, "aliases")) {

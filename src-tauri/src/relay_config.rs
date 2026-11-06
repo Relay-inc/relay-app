@@ -40,8 +40,7 @@ pub fn load(vault: &str) -> Option<Value> {
 pub fn save(vault: &str, cfg: &Value) -> Result<(), String> {
     let p = path(vault);
     fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
-    let tmp = p.with_extension("json.tmp");
-    fs::write(&tmp, serde_json::to_string_pretty(cfg).unwrap() + "\n").and_then(|_| fs::rename(&tmp, &p)).map_err(|e| e.to_string())
+    crate::util::write_file(&p, serde_json::to_string_pretty(cfg).unwrap() + "\n")
 }
 /// The vault's config, created from what is detected when it has none yet.
 pub fn ensure(vault: &str, map: &Value) -> Value {
@@ -149,8 +148,7 @@ pub fn save_view(vault: &str, name: &str, view: &Value) -> Result<(), String> {
     if !view.is_object() { return Err("a view is an object".into()); }
     let p = view_file(vault, name)?;
     fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
-    let tmp = p.with_extension("json.tmp");
-    fs::write(&tmp, serde_json::to_string_pretty(view).unwrap() + "\n").and_then(|_| fs::rename(&tmp, &p)).map_err(|e| e.to_string())
+    crate::util::write_file(&p, serde_json::to_string_pretty(view).unwrap() + "\n")
 }
 pub fn delete_view(vault: &str, name: &str) -> Result<(), String> {
     fs::remove_file(view_file(vault, name)?).map_err(|e| e.to_string())

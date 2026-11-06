@@ -21,7 +21,7 @@ pub(crate) fn notes_root(side: &Side) -> PathBuf {
 }
 fn rel(side: &Side, p: &Path) -> String {
     let vault = fs::canonicalize(&side.vault).unwrap_or_else(|_| PathBuf::from(&side.vault));
-    let p = fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let p = crate::vault::canon_path(p);
     p.strip_prefix(&vault).unwrap_or(&p).to_string_lossy().into_owned()
 }
 fn named(name: &str) -> Result<&str, String> {
@@ -49,7 +49,7 @@ pub fn listed(side: &Side) -> Vec<String> {
 /// `key: value` in a note's frontmatter, replacing the line that is there (and a list under it), else added at its end.
 pub fn set_field(text: &str, key: &str, value: &str) -> String {
     let line = format!("{key}: {value}");
-    let Some((fm, body)) = text.strip_prefix("---\n").and_then(|t| t.split_once("\n---")) else { return format!("---\n{line}\n---\n{text}") };
+    let Some((fm, body)) = crate::vault::split(text) else { return format!("---\n{line}\n---\n{text}") };
     let (mut out, mut found, mut in_list) = (vec![], false, false);
     for l in fm.lines() {
         if in_list && (l.starts_with(' ') || l.starts_with('\t')) { continue; }

@@ -204,7 +204,7 @@ impl Matcher {
 /// (user messages naming a project, project notes Claude read or edited). Recent hits decide, so a
 /// session that moved on to another project follows. Parsing 200 MB once, then only new lines.
 fn topics(items: &mut [Value], projs: &[Value], notes: &Path, vault: &str, cache_file: &Path, home: &str) {
-    let mut cache: Map<String, Value> = fs::read_to_string(cache_file).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    let mut cache: Map<String, Value> = crate::util::read_json(cache_file);
     let transcripts = Path::new(home).join(".claude/projects").join(vault.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect::<String>());
     let (find, names) = (Matcher::new(projs), projs.iter().filter_map(|p| p["name"].as_str()).collect::<HashSet<_>>());
     let (relay_project, auto) = (rx(r"(?s)^<relay-project>.*?</relay-project>\s*"), rx(r"^obsidian-context-management-\w+$"));
@@ -264,8 +264,7 @@ fn topics(items: &mut [Value], projs: &[Value], notes: &Path, vault: &str, cache
     let live: HashSet<&str> = items.iter().filter_map(|i| i["sessionId"].as_str()).collect();
     cache.retain(|k, _| live.contains(k.as_str()));
     if let Some(d) = cache_file.parent() { fs::create_dir_all(d).ok(); }
-    let tmp = cache_file.with_extension("json.tmp");
-    fs::write(&tmp, Value::Object(cache).to_string()).and_then(|_| fs::rename(&tmp, cache_file)).ok();
+    crate::util::write_file(cache_file, Value::Object(cache).to_string()).ok();
 }
 
 #[cfg(test)]

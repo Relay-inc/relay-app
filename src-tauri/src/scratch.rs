@@ -25,7 +25,7 @@ pub fn dir(vault: &str, project: &str) -> Result<PathBuf, String> {
 fn legacy_id(id: &str) -> bool { !id.is_empty() && id.len() <= 32 && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()) }
 fn about(project: &str) -> String { format!("[[{}]]", project.trim()) }
 fn is_about(text: &str, project: &str) -> bool {
-    inbox::split(text).0.and_then(|fm| inbox::field(fm, "about")).is_some_and(|a| a.eq_ignore_ascii_case(&about(project)))
+    inbox::split(text).0.and_then(|fm| crate::vault::field(fm, "about")).is_some_and(|a| a.eq_ignore_ascii_case(&about(project)))
 }
 fn with_about(project: &str, text: &str) -> String { format!("---\nabout: \"{}\"\n---\n\n{}", about(project), text) }
 fn body(text: &str) -> &str { inbox::split(text).1.trim_start_matches('\n') }
@@ -68,9 +68,7 @@ pub fn save(vault: &str, project: &str, id: Option<String>, text: &str) -> Resul
     if !is_about(&now, project) { return Err("not this project's note".into()); }
     // the frontmatter as it is (filing may have added to it), the body is what was typed
     let fm = inbox::split(&now).0.map(|f| format!("---\n{f}\n---\n\n")).unwrap_or_default();
-    let tmp = p.with_extension("tmp");
-    fs::write(&tmp, format!("{fm}{text}")).map_err(|e| e.to_string())?;
-    fs::rename(&tmp, &p).map_err(|e| e.to_string())?;
+    crate::util::write_file(&p, format!("{fm}{text}"))?;
     Ok(id)
 }
 

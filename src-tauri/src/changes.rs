@@ -10,13 +10,14 @@
 // reason (one line), files: [{path, before, after (text, null when the file did not exist / was removed), state
 // ("open" | "kept" | "undone")}]}.
 
+use agent_core::usage::now_ms;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 
-const KEEP_MS: u64 = 30 * 86_400_000;
+const KEEP_MS: i64 = 30 * 86_400_000;
 /// ponytail: a bigger note is neither read before a job nor recorded; a diff view of it would not be readable anyway
 const MAX_BYTES: u64 = 1 << 20;
 
@@ -31,7 +32,7 @@ static TYPED: LazyLock<Mutex<HashMap<PathBuf, String>>> = LazyLock::new(Default:
 
 /// A page's save (`write_note`) wrote this note: the job running now is not its author.
 pub fn typed(file: &Path, hash: &str) {
-    let file = fs::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
+    let file = crate::vault::canon_path(file);
     TYPED.lock().unwrap().insert(file, hash.to_string());
 }
 
@@ -42,7 +43,6 @@ pub fn note_in(root: &Path, path: &str) -> Result<(), String> {
 }
 
 fn dir(root: &Path) -> PathBuf { root.join(".relay").join("changes") }
-fn now_ms() -> u64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64) }
 
 /// The vault's markdown as it is now (what `pagefiles::all_files` lists: nothing hidden, so not `.relay` either).
 pub fn snap(root: &Path) -> Snap {
@@ -95,9 +95,7 @@ fn save(root: &Path, entry: &Value) -> Result<(), String> {
     let d = dir(root);
     fs::create_dir_all(&d).map_err(|e| e.to_string())?;
     let path = d.join(format!("{}.json", entry["id"].as_str().unwrap_or("x")));
-    let tmp = path.with_extension("json.relay-tmp");
-    fs::write(&tmp, entry.to_string()).map_err(|e| e.to_string())?;
-    fs::rename(&tmp, &path).map_err(|e| { fs::remove_file(&tmp).ok(); e.to_string() })
+    crate::util::write_file(&path, entry.to_string())
 }
 fn load(root: &Path, id: &str) -> Result<Value, String> {
     if id.is_empty() || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') { return Err("not a change".into()); }
@@ -105,9 +103,9 @@ fn load(root: &Path, id: &str) -> Result<Value, String> {
     serde_json::from_str(&text).map_err(|e| e.to_string())
 }
 /// Entries older than 30 days go.
-fn prune(root: &Path, now: u64) {
+fn prune(root: &Path, now: i64) {
     for e in fs::read_dir(dir(root)).into_iter().flatten().flatten() {
-        let at = e.file_name().to_string_lossy().split('-').next().and_then(|n| n.parse::<u64>().ok());
+        let at = e.file_name().to_string_lossy().split('-').next().and_then(|n| n.parse::<i64>().ok());
         if at.is_some_and(|at| now.saturating_sub(at) > KEEP_MS) { fs::remove_file(e.path()).ok(); }
     }
 }
@@ -140,9 +138,7 @@ fn put(root: &Path, rel: &str, text: Option<&str>) -> Result<(), String> {
     let file = root.join(rel);
     let Some(text) = text else { return match fs::remove_file(&file) { Ok(()) => Ok(()), Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()), Err(e) => Err(e.to_string()) } };
     if let Some(p) = file.parent() { fs::create_dir_all(p).map_err(|e| e.to_string())?; }
-    let tmp = file.with_extension("md.relay-tmp");
-    fs::write(&tmp, text).map_err(|e| e.to_string())?;
-    fs::rename(&tmp, &file).map_err(|e| { fs::remove_file(&tmp).ok(); e.to_string() })
+    crate::util::write_file(&file, text)
 }
 fn now_text(root: &Path, rel: &str) -> Option<String> { fs::read_to_string(root.join(rel)).ok() }
 fn str_of(v: &Value) -> Option<String> { v.as_str().map(String::from) }

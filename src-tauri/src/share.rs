@@ -24,7 +24,7 @@ struct File { #[serde(default)] shared: BTreeMap<String, String>, #[serde(defaul
 static FILE: Mutex<Option<File>> = Mutex::new(None);
 fn with<T>(app: &AppHandle, f: impl FnOnce(&mut File) -> T) -> T {
     let mut g = FILE.lock().unwrap();
-    let file = g.get_or_insert_with(|| std::fs::read_to_string(path(app)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default());
+    let file = g.get_or_insert_with(|| crate::util::read_json(path(app)));
     f(file)
 }
 fn update<T>(app: &AppHandle, f: impl FnOnce(&mut File) -> T) -> T {

@@ -7,6 +7,7 @@
 
 use crate::migrate::{self, Side};
 use crate::projects;
+use crate::vault::rel_to as rel;
 use regex::Regex;
 use serde_json::{json, Value};
 use std::fs;
@@ -59,13 +60,12 @@ fn notes_in(dir: &Path, out: &mut Vec<PathBuf>) {
         if p.is_dir() { notes_in(&p, out) } else if p.extension().is_some_and(|x| x == "md") { out.push(p) }
     }
 }
-fn rel(vault: &Path, p: &Path) -> String { p.strip_prefix(vault).unwrap_or(p).to_string_lossy().into_owned() }
 /// A vault Relay made: its config folder is System/ (`.claude` links there, or is not there yet).
 fn from_starter(vault: &Path) -> bool {
     match fs::canonicalize(vault.join(".claude")) { Ok(c) => c == vault.join("System"), Err(_) => vault.join("System/rules/core").is_dir() }
 }
 /// The frontmatter of a note, without its fences, or None.
-pub(crate) fn frontmatter(text: &str) -> Option<&str> { text.strip_prefix("---\n").and_then(|t| t.split_once("\n---")).map(|(fm, _)| fm) }
+pub(crate) fn frontmatter(text: &str) -> Option<&str> { crate::vault::split(text).map(|(fm, _)| fm) }
 /// The contexts a note's `context:` names (a value or a list), by their link target.
 fn named_contexts(fm: &str) -> Option<Vec<String>> {
     let link = Regex::new(r"\[\[([^\]|#]+)").unwrap();
