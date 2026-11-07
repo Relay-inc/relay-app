@@ -66,6 +66,9 @@ pub struct Caps {
     /// Echoes a message when it takes it up ([`Event::Picked`]): one sent during a turn waits below the conversation
     /// until then, and often joins that turn.
     pub picked: bool,
+    /// Can end the running turn on its own stdin line and keep what it streamed so far in the session
+    /// ([`AgentProvider::interrupt`]), so a message sent right after it is answered with that in mind.
+    pub steer: bool,
     /// Can run on a work machine (Settings › Machines) and be moved there.
     pub remote: bool,
 }
@@ -272,6 +275,8 @@ pub trait AgentProvider: Sync {
     fn control_reply(&self, _id: &Value, _reply: Result<Value, String>) -> Option<String> { None }
     /// `caps.live_model`: the stdin line that changes the model for the turns after it ("": the CLI's own).
     fn set_model(&self, _model: &str) -> Option<String> { None }
+    /// `caps.steer`: the stdin line that ends the running turn. The process stays up, and the partial answer stays in its session.
+    fn interrupt(&self) -> Option<String> { None }
     /// Slash commands (without the slash) that take no attachments: refused in the webview before they are sent.
     fn text_only_commands(&self) -> Vec<&'static str> { vec![] }
     /// The stdin line answering a request this provider raised as [`Event::Permission`] (relay = true).

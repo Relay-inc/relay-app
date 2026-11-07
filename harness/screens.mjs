@@ -52,6 +52,22 @@ const unfold = async name => {
     .click();
   await settle(page);
 };
+// a turn runs (a message sent), then two more are queued with Enter: chips above the composer and the busy hint
+async function queueTwo() {
+  await page.evaluate(() => (window.__harness.autoReply = false)); // the turn keeps running
+  const field = page.locator("textarea").locator("visible=true").last();
+  for (const text of [
+    "Export the invoices for Northwind",
+    "Then write the test for the export",
+    "Mail Sofie Claes the result",
+  ]) {
+    await field.click();
+    await page.keyboard.type(text);
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+  }
+  await waitText("Mail Sofie Claes the result");
+}
 // the Meeting view: a meeting's card on Today opens it
 const BRIEFING = [
   "## Briefing",
@@ -1171,6 +1187,32 @@ const VIEWS = {
     await page.getByRole("button", { name: "View details" }).click();
     await waitText("All of Claude Code", 10000);
     await settle(page);
+  },
+  // a turn runs and two messages are queued as chips above the composer, the hint naming both keys (#389)
+  "queue-chips": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await queueTwo();
+  },
+  "queue-chips-dark": async () => {
+    await open(page, server.url, { sel: keys.switchTo, fixture: "dark" });
+    await waitText(markers.switchEnd);
+    await queueTwo();
+  },
+  // the same on an agent that cannot steer: ⌥↵ queues too and the hint says so (#389)
+  "queue-chips-codex": async () => {
+    await open(page, server.url);
+    const key = await page.evaluate(() => {
+      const chats = JSON.parse(localStorage.getItem("chats") || "{}");
+      return Object.keys(chats).find(k => chats[k].provider === "codex" && chats[k].project && !chats[k].closed);
+    });
+    await open(page, server.url, { sel: key });
+    await queueTwo();
+  },
+  // Settings › Shortcuts: Send (queues while a turn runs) and Steer, both rebindable (#389)
+  "settings-shortcuts-steer": async () => {
+    await settingsPage("Shortcuts");
+    await intoView("Steer: end the running turn and send now");
   },
   "cmd-k": async () => {
     await open(page, server.url, { sel: keys.switchTo });

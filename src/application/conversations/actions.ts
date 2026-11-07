@@ -11,6 +11,7 @@ import {
 } from "../../domain/conversations/rules";
 import { push, releaseWaiting } from "../../domain/conversations/events";
 import { outgoing, planSend, refusesImages, sendRequest } from "../../domain/conversations/send";
+import { busySend, editQueued, enqueue, moveQueued, removeQueued, type Queued } from "../../domain/conversations/queue";
 import { fileName } from "../../domain/conversations/files";
 import { WAIT } from "../../domain/navigation/views";
 import { isTerminal, termSid } from "../../domain/navigation/keys";
@@ -29,7 +30,7 @@ import { useWorkspaceStore } from "../workspace/store";
 import { findProjects, project as vaultProject, projectName } from "../workspace/vault";
 import { setIcon } from "../workspace/icons";
 import { useConversationsStore } from "./store";
-import { useDraftsStore } from "./drafts";
+import { saveQueue, useDraftsStore } from "./drafts";
 import {
   chatsOf,
   displayTitle,
@@ -291,7 +292,13 @@ function takeTyped() {
 }
 /** Send `forced`, or what is typed in the open conversation with its images and files. `to` sends to a conversation
  *  that is not open (Cmd-K) with its own: the composer, its attachments and the view stay as they are. */
-export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = [], toFiles: string[] = []): Promise<void> {
+export async function sendMsg(
+  forced?: string,
+  to?: string,
+  toImgs: Img[] = [],
+  toFiles: string[] = [],
+  steer = false,
+): Promise<void> {
   // Relay's own commands, typed in the open conversation: handled here, the agent never hears them
   const share = forced === undefined && !to ? phoneCommand(drafts().typed[selected()] ?? "") : null;
   if (share !== null) {
@@ -320,8 +327,45 @@ export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = [], 
       draft.attached = [];
       draft.files = [];
     });
+  // a turn runs: what the composer sends waits behind it (Queue), or ends it first (Steer, where the agent can)
+  const running = forced === undefined && !to && cs().status[key] === "busy";
+  if (running && busySend(steer, chatCaps(key)) === "queue") return hold(key, text, images, files);
   queueMessage(key, text, images, files);
+  // ends the turn, what it streamed so far stays in the session; the message follows on the same pipe
+  if (running) await backend.interrupt(key).catch(() => false);
   await deliver(key, text, images, files);
+}
+// Queue: Relay keeps the message, the agent hears nothing until the turn ends (sendNextQueued)
+function hold(key: string, text: string, images: Img[], files: string[]) {
+  setDrafts(draft => {
+    draft.queue[key] = enqueue(draft.queue[key], { id: crypto.randomUUID(), text, images, files });
+    draft.attached = [];
+    draft.files = [];
+  });
+  saveQueue();
+}
+const changeQueue = (key: string, next: (list: Queued[]) => Queued[]) => {
+  setDrafts(draft => {
+    const list = next(draft.queue[key] ?? []);
+    if (list.length) draft.queue[key] = list;
+    else delete draft.queue[key];
+  });
+  saveQueue();
+};
+/** A chip's text changed. */
+export const editQueuedMessage = (key: string, id: string, text: string) =>
+  changeQueue(key, list => editQueued(list, id, text));
+export const removeQueuedMessage = (key: string, id: string) => changeQueue(key, list => removeQueued(list, id));
+/** A chip dropped on place `to` (0-based). */
+export const moveQueuedMessage = (key: string, id: string, to: number) =>
+  changeQueue(key, list => moveQueued(list, id, to));
+/** A turn ended: the first message held for the conversation is sent. */
+export function sendNextQueued(key: string) {
+  const [next] = drafts().queue[key] ?? [];
+  // a turn running outside the app would fork the transcript (sendMsg refuses it): the message stays held
+  if (!next || cs().status[key] === "busy" || key in cs().outside) return;
+  removeQueuedMessage(key, next.id);
+  void sendMsg(next.text, key, next.images, next.files);
 }
 /** Stop the open conversation's running turn. */
 const stopChat = () => {
@@ -575,6 +619,7 @@ async function hide(key: string) {
     delete draft.waiting[key];
     delete draft.taken[key];
   });
+  changeQueue(key, () => []);
   saveChats();
   // what it leaves for the vault, written straight in (application/today/capture)
   captureOnClose(key);

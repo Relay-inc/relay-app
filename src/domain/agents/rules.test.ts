@@ -43,8 +43,8 @@ test("the CLI's defaults are named once a conversation showed them", () => {
 
 // before agents_status answers, a Claude chat queues mid-turn and may go to a work machine, as before caps existed
 test("what is known of the built-in providers before the status arrives", () => {
-  assert.deepEqual(knownCaps("claude"), { picked: true, remote: true });
-  assert.deepEqual(knownCaps("codex"), { picked: false, remote: false });
+  assert.deepEqual(knownCaps("claude"), { picked: true, steer: true, remote: true });
+  assert.deepEqual(knownCaps("codex"), { picked: false, steer: false, remote: false });
   assert.equal(knownCaps("unknown"), undefined);
   assert.deepEqual(knownTextOnly("codex"), ["compact", "review"]);
   assert.deepEqual(knownTextOnly("pi"), ["compact"]);

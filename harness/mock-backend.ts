@@ -1105,6 +1105,20 @@ function handle(cmd: string, a: Args): unknown {
       if (harness.autoReply)
         setTimeout(() => harness.stream({ key: a.project, deltas: 40, tokensPerDelta: 3, ratePerSecond: 60 }), 30);
       return null;
+    // Steer (src-tauri session::interrupt): the running turn ends at once, as Claude Code's result for an interrupt reads
+    case "interrupt":
+      setTimeout(
+        () =>
+          emitAgent(a.project, {
+            type: "turn_end",
+            ok: true,
+            error: null,
+            usage: { input: 1200, output: 40, cacheRead: 0, cacheWrite: 0 },
+            duration_ms: 900,
+          }),
+        0,
+      );
+      return true;
     case "ai_title":
       return String(a.text).split(/\s+/).slice(0, 5).join(" ");
     // the embedded terminals: a shell that prints a prompt and echoes what is typed

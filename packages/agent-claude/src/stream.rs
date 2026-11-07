@@ -82,6 +82,8 @@ pub struct State {
     spent: f64,
     /// the Bash calls of the conversation whose result has not come yet
     bash: HashSet<String>,
+    /// the turn was ended by an interrupt (Steer): its result is `error_during_execution`, which is no failure
+    interrupted: bool,
 }
 
 impl State {
@@ -130,7 +132,11 @@ impl State {
             }
             _ => {
                 let mut evs = parse(&ev);
+                if ev["type"] == "user" && ev["parent_tool_use_id"].is_null() && user_text(&ev["message"]["content"]).starts_with("[Request interrupted by user") { self.interrupted = true; }
                 for e in &mut evs {
+                    if let Event::TurnEnd { ok, error, .. } = e {
+                        if std::mem::take(&mut self.interrupted) && !*ok { *ok = true; *error = None; }
+                    }
                     if let Event::TurnEnd { usage: Some(u), .. } = e {
                         if let Some(total) = u.cost { u.cost = Some((total - self.spent).max(0.0)); self.spent = total; }
                     }
@@ -313,6 +319,17 @@ mod tests {
         // a plain failure, and a limit text in a turn that went fine, are no limit
         assert!(!parse_all(&[end("error_max_turns")]).iter().any(|e| matches!(e, Event::TurnLimited)));
         assert!(!parse_all(&[json!({"type": "result", "subtype": "success", "is_error": false, "result": "You've hit your limit"})]).iter().any(|e| matches!(e, Event::TurnLimited)));
+    }
+
+    #[test]
+    fn an_interrupted_turn_ends_without_an_error() {
+        // as `claude -p` wrote it for an interrupt control request (2026-11-04): the user line, then a failed result
+        let stop = json!({"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "[Request interrupted by user]"}]}});
+        let end = json!({"type": "result", "subtype": "error_during_execution", "is_error": true, "usage": {}});
+        let ev = parse_all(&[stop, end.clone()]);
+        assert!(matches!(&ev[..], [Event::TurnEnd { ok: true, error: None, .. }]), "{ev:?}");
+        // without the interrupt it is the failure it says, and the mark does not carry to the next turn
+        assert!(matches!(&parse_all(&[end])[..], [Event::TurnEnd { ok: false, error: Some(_), .. }]));
     }
 
     #[test]

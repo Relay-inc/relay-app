@@ -370,6 +370,8 @@ type SendArgs = {
 };
 export const send = (args: SendArgs) => invoke("send", args);
 export const stop = (project: string) => invoke("stop", { project });
+/** Steer: ends the running turn, keeping what it streamed. False when the agent cannot, or nothing runs. */
+export const interrupt = (project: string) => invoke<boolean>("interrupt", { project });
 /** Removes the git worktrees a conversation made; the ones with work git would lose stay. */
 export const dropWorktrees = (project: string) =>
   invoke<{ removed: number; kept: number }>("drop_worktrees", { project });

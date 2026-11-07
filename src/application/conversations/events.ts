@@ -9,6 +9,7 @@ import { loadSnapshot } from "../workspace/vault";
 import { useConversationsStore } from "./store";
 import { label } from "./selectors";
 import { saveChats } from "./chats";
+import { sendNextQueued } from "./actions";
 import { imageUrl } from "./images";
 import { captureWhenIdle } from "../today/capture";
 import { finishPrep } from "../calendar/prep";
@@ -37,6 +38,7 @@ function run(effects: Effect[]) {
   const once = new Set<string>();
   for (const effect of effects) {
     if (effect.kind === "notify") notify(effect.key, effect.body);
+    else if (effect.kind === "queue-next") sendNextQueued(effect.key);
     else if (!once.has(effect.kind)) {
       once.add(effect.kind);
       if (effect.kind === "save-chats") saveChats();

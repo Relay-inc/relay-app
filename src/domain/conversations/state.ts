@@ -2,6 +2,7 @@ import type { Key } from "../../shared/i18n";
 import type { MachineChoice } from "../settings/types";
 import type { RepoWork } from "../settings/machines";
 import type { SlashCommand } from "./commands";
+import type { Queued } from "./queue";
 import type { AgentSession, Chat, ContextUse, Img, Item, Pending, Retry, RouteChoice, SessionOf, Sub } from "./types";
 
 /** A translation, handed to the rules that write text into the state (notes, titles). */
@@ -90,4 +91,6 @@ export type DraftsState = {
   attached: Img[];
   files: string[];
   machine: Record<string, string>;
+  /** Messages Relay holds while a turn runs, per conversation, sent one by one as turns end (queue.ts). */
+  queue: Record<string, Queued[]>;
 };

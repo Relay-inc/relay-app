@@ -19,6 +19,7 @@ a PR. Versions follow
 - A typed page has a header made from its type: the type, where it belongs (Context › Project), and the type's fields, each with its editor. A link field only offers notes of its type (`with:` people, `about:` projects and contexts) and can create a missing one, like a new person in the context's People folder; an empty `context:` or `about:` shows as a slot to fill, and "Add property" offers the type's missing fields first. The right rail groups backlinks by relation, like "Meetings about this project".
 - A page can carry an emoji icon and a cover picture, saved as `icon:` and `cover:` in its frontmatter. Hover the header for Add icon and Add cover; the cover is copied into the attachments folder and shown as a banner above the title. The note's own icon wins over its project's icon, and a cover whose file is gone just isn't shown.
 - The Pages tree shows a page's icon in place of the file glyph, and a project row the emoji of its project note when it has one (else its project icon). Changing the icon in the page header updates the row right away. (#427)
+- While a turn runs, Enter now holds your message as a chip above the composer and sends it when the turn ends; click a chip to edit it, drag to reorder, × to remove. ⌥Enter steers instead: it ends the running turn (what it wrote so far stays) and sends your message at once. Claude Code can steer; Codex and OpenCode queue on both keys. Both keys can be changed in Settings › Shortcuts (#400).
 
 ### Changed
 
