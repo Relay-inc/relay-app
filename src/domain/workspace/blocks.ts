@@ -18,10 +18,32 @@ export type BlockKind =
   | "table"
   | "divider"
   | "link"
-  | "file";
+  | "file"
+  | "view";
 
 /** A new table: three columns, a header and two rows, empty; the caret goes in the first header cell. */
 const NEW_TABLE = formatTable(newTable(["", "", ""], 2)).join("\n");
+
+/** A new view (issue 421): an Obsidian base of the meetings about the page it is in, newest first. */
+export const NEW_VIEW = [
+  "```base",
+  "filters:",
+  "  and:",
+  '    - type == "Meeting"',
+  "    - about.contains(this)",
+  "views:",
+  "  - type: table",
+  "    name: Meetings",
+  "    order:",
+  "      - file.name",
+  "      - date",
+  "      - with",
+  "    sort:",
+  "      - property: date",
+  "        direction: DESC",
+  "```",
+  "",
+].join("\n");
 
 /** What a / item puts on its (empty) line, and where the cursor goes in it. */
 export const SLASH: { kind: BlockKind; insert: string; caret: number }[] = [
@@ -37,6 +59,7 @@ export const SLASH: { kind: BlockKind; insert: string; caret: number }[] = [
   { kind: "table", insert: NEW_TABLE, caret: 2 },
   { kind: "divider", insert: "---\n", caret: 4 },
   { kind: "link", insert: "[[", caret: 2 },
+  { kind: "view", insert: NEW_VIEW, caret: NEW_VIEW.length },
 ];
 
 // a line's block marker: a heading's #s, a to-do's or list's mark, a quote's >

@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { NEW_VIEW } from "../workspace/blocks.ts";
 import { findBaseBlocks, parseStatement, readBase, showBase, viewOf, type Base } from "./bases.ts";
 import type { Row } from "./rules.ts";
 
@@ -135,4 +137,15 @@ test("fenced base blocks are found with their YAML, other fences are not", () =>
     ["views:\n  - type: table\n", "filters: a == 1\n"],
   );
   assert.equal(text.slice(found[0].from, found[0].to), "```base\nviews:\n  - type: table\n```");
+});
+
+test("/View inserts a block of the page's meetings, and the template's block is the same", () => {
+  const [block] = findBaseBlocks(NEW_VIEW);
+  const b = base(block.source);
+  assert.deepEqual(names(b), ["2026-10-20 Review", "2026-10-08 Kickoff"]);
+  const template = readFileSync(
+    new URL("../../../src-tauri/resources/default-vault/Resources/Templates/Project.md", import.meta.url),
+    "utf8",
+  );
+  assert.equal(findBaseBlocks(template)[0]?.source, block.source);
 });

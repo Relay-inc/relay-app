@@ -695,6 +695,7 @@ export default {
   "block.divider": "Séparateur",
   "block.link": "Lien vers une page",
   "block.file": "Fichier",
+  "block.view": "Vue",
   "attach.tooLarge": "Trop volumineux : 25 Mo maximum par fichier",
   "attach.tooLargeDetail": "{name} fait {size} · Les fichiers jusqu'à 25 Mo peuvent aller dans une note",
   "attach.drop": "Copier dans {folder} et intégrer",
