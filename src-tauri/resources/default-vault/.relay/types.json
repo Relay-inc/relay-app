@@ -1,0 +1,123 @@
+{
+  "version": 1,
+  "types": [
+    {
+      "name": "Context",
+      "template": "Resources/Templates/Context.md",
+      "fields": [
+        { "key": "area", "kind": "text" },
+        { "key": "created", "kind": "date" }
+      ]
+    },
+    {
+      "name": "Project",
+      "template": "Resources/Templates/Project.md",
+      "required": ["context"],
+      "fields": [
+        { "key": "context", "kind": "link", "target": ["Context"] },
+        { "key": "status", "kind": "select", "values": ["Active", "Blocked", "Quiet", "Paused", "Closed"] },
+        { "key": "phase", "kind": "text" },
+        { "key": "next", "kind": "text" },
+        { "key": "index", "kind": "text" },
+        { "key": "last", "kind": "date" },
+        { "key": "people", "kind": "people", "target": ["Person"] }
+      ],
+      "columns": ["title", "type", "status", "context", "updated"],
+      "sort": { "key": "title", "dir": "asc" }
+    },
+    {
+      "name": "Meeting",
+      "home": "meeting",
+      "template": "Resources/Templates/Meeting.md",
+      "required": ["context"],
+      "fields": [
+        { "key": "context", "kind": "link", "target": ["Context"] },
+        { "key": "about", "kind": "link", "target": ["Project", "Context"] },
+        { "key": "with", "kind": "people", "target": ["Person"] },
+        { "key": "date", "kind": "date" },
+        { "key": "language", "kind": "text" },
+        { "key": "one-liner", "kind": "text" },
+        { "key": "created", "kind": "date" }
+      ],
+      "columns": ["date", "title", "stage", "about", "with", "language", "followed-up"],
+      "sort": { "key": "date", "dir": "desc" }
+    },
+    {
+      "name": "Person",
+      "template": "Resources/Templates/Person.md",
+      "fields": [
+        { "key": "context", "kind": "link", "target": ["Context"] },
+        { "key": "about", "kind": "link", "target": ["Project"] },
+        { "key": "role", "kind": "text" },
+        { "key": "company", "kind": "text" },
+        { "key": "email", "kind": "text" }
+      ],
+      "columns": ["title", "role", "context", "about"],
+      "sort": { "key": "title", "dir": "asc" }
+    },
+    {
+      "name": "Document",
+      "template": "Resources/Templates/Document.md",
+      "required": ["context"],
+      "fields": [
+        { "key": "context", "kind": "link", "target": ["Context"] },
+        { "key": "about", "kind": "link", "target": ["Project", "Context"] },
+        { "key": "document-type", "kind": "text" },
+        { "key": "document-status", "kind": "text" },
+        { "key": "archive", "kind": "check" },
+        { "key": "created", "kind": "date" }
+      ],
+      "columns": ["title", "type", "about", "status", "updated"],
+      "sort": { "key": "updated", "dir": "desc" }
+    },
+    {
+      "name": "Thread",
+      "home": "thread",
+      "template": "Resources/Templates/Thread.md",
+      "required": ["context"],
+      "fields": [
+        { "key": "context", "kind": "link", "target": ["Context"] },
+        { "key": "about", "kind": "link", "target": ["Project", "Context"] },
+        { "key": "with", "kind": "people", "target": ["Person"] },
+        { "key": "period", "kind": "text" },
+        { "key": "one-liner", "kind": "text" },
+        { "key": "created", "kind": "date" }
+      ],
+      "columns": ["date", "title", "about", "with", "status"],
+      "sort": { "key": "date", "dir": "desc" }
+    },
+    {
+      "name": "Daily",
+      "home": "daily",
+      "fields": [{ "key": "created", "kind": "date" }]
+    },
+    {
+      "name": "Journal",
+      "home": "daily",
+      "fields": [{ "key": "created", "kind": "date" }]
+    },
+    {
+      "name": "Transcript",
+      "home": "meeting",
+      "fields": [{ "key": "meeting", "kind": "link", "target": ["Meeting"] }]
+    },
+    {
+      "name": "Reference",
+      "template": "Resources/Templates/Reference.md",
+      "fields": [
+        { "key": "source-url", "kind": "text" },
+        { "key": "source-author", "kind": "text" },
+        { "key": "source-date", "kind": "date" },
+        { "key": "context", "kind": "link", "target": ["Context"] }
+      ]
+    },
+    {
+      "name": "Framework",
+      "template": "Resources/Templates/Framework.md",
+      "fields": [
+        { "key": "domain", "kind": "text" },
+        { "key": "source", "kind": "text" }
+      ]
+    }
+  ]
+}

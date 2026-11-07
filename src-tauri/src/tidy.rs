@@ -1,4 +1,4 @@
-// Tidy structure: the notes whose type has a home (homes.rs) but that sit somewhere else, and where each would go. The
+// Tidy structure: the notes whose type has a home (the type registry, types.rs) but that sit somewhere else, and where each would go. The
 // plan is only ever read: the move itself, with its link rewrites, is pagefiles::plan_batch/apply_batch. Not moved:
 // notes under System/ or Resources/Templates/, in a project's folder, hidden ones, and notes without a `type:` or a
 // date (nothing says where they go). A name taken in the target folder gets " 2", " 3"…
@@ -16,17 +16,6 @@ pub struct Move { pub kind: String, pub from: String, pub to: String, pub rename
 /// What the plan found: the notes to move, and how many of the notes that have a home already sit in it.
 pub struct Tidy { pub moves: Vec<Move>, pub stay: usize }
 
-/// The home a type goes to (a key of homes.rs), None for a type without one. A transcript sits with its meeting; a
-/// journal is a daily note when it is named for a day.
-pub(crate) fn home_of(kind: &str, stem: &str) -> Option<&'static str> {
-    match kind.to_lowercase().as_str() {
-        "meeting" | "transcript" => Some("meeting"),
-        "thread" => Some("thread"),
-        "daily" => Some("daily"),
-        "journal" if dated(stem) => Some("daily"),
-        _ => None,
-    }
-}
 /// A name or value that starts with a day, YYYY-MM-DD.
 pub(crate) fn dated(s: &str) -> bool {
     let b = s.as_bytes();
@@ -64,6 +53,7 @@ pub fn plan(side: &Side) -> Tidy {
     let all = pagefiles::all_files(&vault);
     let mut taken: HashSet<String> = all.iter().map(|p| p.to_lowercase()).collect();
     let projects = project_dirs(side, &vault);
+    let types = crate::types::load(&vault);
     let skip = |p: &str| p.starts_with("System/") || p.starts_with("Resources/Templates/") || projects.iter().any(|d| p.strip_prefix(d.as_str()).is_some_and(|r| r.starts_with('/')));
     let (mut moves, mut stay) = (vec![], 0);
     for p in all.iter().filter(|p| p.to_lowercase().ends_with(".md") && !skip(p)) {
@@ -72,7 +62,7 @@ pub fn plan(side: &Side) -> Tidy {
         let name = p.rsplit('/').next().unwrap_or(p);
         let stem = name.strip_suffix(".md").unwrap_or(name);
         let Some(kind) = field(fm, "type") else { continue };
-        let Some(home) = home_of(&kind, stem) else { continue };
+        let Some(home) = types.home_of(&kind, stem) else { continue };
         let Some(year) = year_of(stem, fm) else { continue };
         let Ok(dir) = homes::home(&vault, home, &year).strip_prefix(&vault).map(|d| d.to_string_lossy().into_owned()) else { continue };
         if p.rsplit_once('/').map_or("", |(d, _)| d) == dir { stay += 1; continue; }
@@ -166,6 +156,20 @@ mod tests {
             ], "{shape}");
             assert_eq!(t.stay, 2, "{shape}");
         }
+    }
+
+    #[test]
+    fn a_type_whose_home_the_registry_drops_stays_where_it_is() {
+        let v = tmp("registry");
+        let ws = fixture(&v, "table");
+        let mut reg: serde_json::Value = serde_json::from_str(include_str!("../resources/default-vault/.relay/types.json")).unwrap();
+        for t in reg["types"].as_array_mut().unwrap() { if t["name"] == "Meeting" { t.as_object_mut().unwrap().remove("home"); } }
+        w(&v, ".relay/types.json", &reg.to_string());
+        assert_eq!(pairs(&plan(&side(&v, ws))), vec![
+            ("Calendar/2026-11-04 Beacon sync.transcript.md", "Calendar/Meetings/2026/2026-11-04 Beacon sync.transcript.md"),
+            ("Calendar/2026-11-04.md", "Calendar/Daily/2026/2026-11-04.md"),
+            ("Calendar/Beacon thread.md", "Calendar/Threads/2025/Beacon thread.md"),
+        ]);
     }
 
     #[test]

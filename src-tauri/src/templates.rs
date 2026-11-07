@@ -1,10 +1,10 @@
-// New notes from the vault's templates (`Resources/Templates/`): a note of a type that has a home (homes.rs: meeting,
-// thread, daily) is saved there, any other where it was asked for. `context:` and `about:` come from where it was asked,
+// New notes from the vault's templates (`Resources/Templates/`): a note of a type that has a home (types.rs: meeting,
+// thread, daily by default) is saved there, any other where it was asked for. `context:` and `about:` come from where it was asked,
 // the date and the title from today and the note's name; Templater tags Relay does not know stay as text. The daily
 // note is the one note a day: opened when it is there, made once when not.
 
 use crate::vault::rel_to as rel;
-use crate::{homes, projects, tidy, vault};
+use crate::{homes, projects, vault};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -44,7 +44,8 @@ pub fn create(vault: &Path, template: &str, folder: &str, about: &str, context: 
     if !list(&v).iter().any(|n| n == template) { return Err(format!("no template {template}")); }
     let raw = fs::read_to_string(vault.join(DIR).join(format!("{template}.md"))).map_err(|e| e.to_string())?;
     let kind = vault::split(&raw).and_then(|(fm, _)| vault::field(fm, "type")).unwrap_or_else(|| template.to_string());
-    let home = tidy::home_of(&kind, today);
+    let types = crate::types::load(vault);
+    let home = types.home_of(&kind, today);
     let (about, context) = (safe(about), safe(context));
     let dir = match home {
         Some(h) => homes::home(vault, h, homes::year_of(today).ok_or("not a day")?),

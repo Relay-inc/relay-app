@@ -6,6 +6,7 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { Related } from "../domain/related/rules";
+import type { Registry } from "../domain/types/registry";
 import type { CommentThread, Member } from "../domain/workspace/comments";
 import type { Change, Merge } from "../domain/workspace/changes";
 import type { TidyMove, TidyPlan } from "../domain/workspace/tidy";
@@ -547,6 +548,8 @@ export const notesGraph = (folder: string) => invoke<NotesGraph>("notes_graph", 
 /** The notes of a workspace that point at another through `about:`, `context:` or `with:`. */
 export const notesLinked = (folder: string) => invoke<LinkedNote[]>("notes_linked", { folder });
 /** Every note of a workspace with its frontmatter values: what the collections' table and board are made of. */
+/** The workspace's type registry (types.rs). */
+export const noteTypes = (workspace: string) => invoke<Registry>("note_types", { workspace });
 export const notesCollection = (folder: string) => invoke<CollectionRow[]>("notes_collection", { folder });
 /** The saved collection views of a workspace (`.relay/views/<name>.json`). */
 export const viewsList = (workspace: string) => invoke<{ name: string; view: unknown }[]>("views_list", { workspace });

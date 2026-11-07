@@ -653,6 +653,7 @@ export default {
   "props.move": "Sleep om te verplaatsen",
   "props.open": "Notitie openen",
   "props.addItem": "Toevoegen…",
+  "props.invalid": "Geen waarde die dit type toelaat",
   "block.text": "Tekst",
   "block.h1": "Kop 1",
   "block.h2": "Kop 2",

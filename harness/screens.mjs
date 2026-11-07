@@ -2409,6 +2409,21 @@ const VIEWS = {
     await page.getByRole("button", { name: "Add property" }).click();
     await settle(page);
   },
+  // the note's type gives its keys their editors (issue 418): as a Project, status is a select of the registry's
+  // values, and a value outside them shows as invalid instead of being dropped
+  "page-properties-select": async () => {
+    await VIEWS["page-view"]();
+    const status = page.getByLabel("status", { exact: true });
+    await status.fill("Someday");
+    await status.press("Enter");
+    await page.waitForFunction(() => /\nstatus: Someday\n/.test(window.__harness.written() ?? ""), null, { timeout: 4000 });
+    const type = page.getByLabel("type", { exact: true });
+    await type.fill("Project");
+    await type.press("Enter");
+    await page.waitForFunction(() => /type: Project\n/.test(window.__harness.written() ?? ""), null, { timeout: 4000 });
+    await page.getByRole("combobox", { name: "status", exact: true }).hover();
+    await settle(page);
+  },
   // the file changed on disk since the page read it: the save is refused, the bar offers Reload and Keep mine
   "page-editor-changed-on-disk": async () => {
     await VIEWS["page-view"]();
