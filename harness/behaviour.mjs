@@ -61,6 +61,7 @@ const READS = new Set([
   "plugin:window|theme",
   "find_notes",
   "note_times",
+  "note_icons",
   "note_templates",
   "favourites",
   "note_rail",

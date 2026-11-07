@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { coverOf, emojiOf, pageIcon } from "./decor.ts";
+import { coverOf, emojiOf, iconOf, pageIcon } from "./decor.ts";
 import { removeProperty, setProperty } from "./properties.ts";
 
 test("decor: an icon is exactly one grapheme", () => {
@@ -32,4 +32,13 @@ test("decor: the note's icon wins over its project's, which wins over none", () 
   assert.deepEqual(pageIcon("icon: ab", { value: "🚚", icon: "🚚" }), { project: { value: "🚚", icon: "🚚" } });
   assert.equal(pageIcon("type: Project", { value: "", img: null }), null);
   assert.equal(pageIcon(""), null);
+});
+
+test("decor: a project row in the Pages tree, from the index's icon: value", () => {
+  const config = { value: "🚚", icon: "🚚" };
+  assert.deepEqual(iconOf(undefined, config), { project: config }); // no icon: on the project note: the config's
+  assert.deepEqual(iconOf("🚀", config), { emoji: "🚀" }); // icon: set: the emoji
+  assert.deepEqual(iconOf("ab", config), { project: config }); // not one emoji: as if unset
+  assert.deepEqual(iconOf("🚀"), { emoji: "🚀" }); // a page row
+  assert.equal(iconOf(undefined), null); // the file glyph
 });

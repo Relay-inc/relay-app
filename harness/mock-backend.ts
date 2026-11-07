@@ -1358,6 +1358,13 @@ function handle(cmd: string, a: Args): unknown {
     // sessionStorage with ?keep=1, so a reload shows them back the way `.relay/config.json` does after a restart.
     case "find_notes":
       return kbOn ? kb.find(a.folder === vault.VAULT, String(a.query)) : { names: [], content: [] };
+    case "note_icons":
+      return Object.fromEntries(
+        pageList().flatMap(path => {
+          const icon = collectionRow(path, textOfNote(path)).props.icon?.[0];
+          return icon ? [[path, icon]] : [];
+        }),
+      );
     case "note_times":
       return Object.fromEntries(pageList().map((p, i) => [p, NOW_S - i * 3600]));
     case "note_templates":

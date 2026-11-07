@@ -16,10 +16,12 @@ export function emojiOf(text: unknown): string | null {
 
 const valueOf = (yaml: string, key: string) => readProperties(yaml)?.find(row => row.key === key)?.value;
 
-/** Which icon a page shows (its header here, its row in the Pages tree in #427): the note's own `icon:` when it is one
- *  emoji, else its project's icon from config (an emoji or a picture), else null (the caller's file glyph). */
-export function pageIcon(yaml: string, project?: ProjectIcon): { emoji: string } | { project: ProjectIcon } | null {
-  const emoji = emojiOf(valueOf(yaml, "icon"));
+/** Which icon a page shows (its header, its row in the Pages tree): the note's own `icon:` when it is one emoji, else
+ *  its project's icon from config (an emoji or a picture), else null (the caller's file glyph). */
+export const pageIcon = (yaml: string, project?: ProjectIcon) => iconOf(valueOf(yaml, "icon"), project);
+/** pageIcon from the `icon:` value itself: the Pages tree has it from the index (backend `noteIcons`), not the text. */
+export function iconOf(icon: unknown, project?: ProjectIcon): { emoji: string } | { project: ProjectIcon } | null {
+  const emoji = emojiOf(icon);
   if (emoji) return { emoji };
   return project && (project.img || project.icon) ? { project } : null;
 }
