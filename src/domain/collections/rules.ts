@@ -15,6 +15,9 @@ export type Row = {
   date: string;
   stage: "" | "planned" | "briefed" | "wrapped";
   props: Record<string, string[]>;
+  /** every note it links to (body and frontmatter, by name) and its frontmatter `tags:`, for a base's filters */
+  links?: string[];
+  tags?: string[];
 };
 
 export type CollectionId = "meetings" | "documents" | "people" | "projects" | "threads";
@@ -75,6 +78,12 @@ export function defOf(collection: CollectionId, registry: Registry = SHIPPED) {
   const columns = (type?.columns?.length ? type.columns : ["title"]).map(key => col(key, kind(key)));
   const sort: Sort = type?.sort ?? { key: "title", dir: "asc" };
   return { ...DEFS[collection], columns, sort };
+}
+/** How a column of a frontmatter key draws when no collection says (a base's column): by the kind any type gives the
+ *  key in the registry, `date` and `status` by their name. */
+export function kindOfKey(key: string, registry: Registry = SHIPPED): ColumnKind {
+  const field = registry.types.flatMap(t => t.fields ?? []).find(f => f.key === key);
+  return field ? FIELD_KIND[field.kind] : key === "date" ? "date" : key === "status" ? "status" : "text";
 }
 const TAKEN = new Set(Object.values(DEFS).flatMap(def => (def.kinds === "rest" ? [] : def.kinds)));
 /** The stages a meeting board has lanes for, in the order of a meeting's life. */
