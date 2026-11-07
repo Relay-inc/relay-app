@@ -1365,7 +1365,8 @@ function handle(cmd: string, a: Args): unknown {
     case "new_from_template": {
       const day = new Date(NOW).toISOString().slice(0, 10);
       const home = a.template === "Meeting" ? `Calendar/Meetings/${day.slice(0, 4)}` : String(a.folder);
-      const name = a.template === "Meeting" ? `${day} ${a.about ? `${a.about} ` : ""}Meeting` : String(a.template);
+      const title = String(a.title || "") || String(a.template);
+      const name = a.template === "Meeting" ? `${day} ${a.about ? `${a.about} ` : ""}${title}` : title;
       const path = `${home ? `${home}/` : ""}${name}.md`;
       const links = [a.context && `context: "[[${a.context}]]"`, a.about && `about: "[[${a.about}]]"`].filter(Boolean);
       pages = [...pageList(), path];
@@ -1923,8 +1924,8 @@ const embedsOn = fixture.startsWith("embeds");
 // fixture kb (K5, K1): notes with content to search, templates, favourites
 const kbOn = fixture.startsWith("kb");
 const changesOn = fixture.startsWith("kb-changes");
-// kb-sketch: the same notes without a feed, and the one note that has no type: (Fix properties)
-const sketchOn = changesOn || fixture === "kb-sketch";
+// kb-sketch (-dark): the same notes without a feed, and the one note that has no type: (Fix properties)
+const sketchOn = changesOn || fixture.startsWith("kb-sketch");
 // kb-tables (-dark): one more note, holding the tables the table editing is tried on
 const tablesOn = fixture.startsWith("kb-tables");
 const keepState = query.get("keep") === "1";

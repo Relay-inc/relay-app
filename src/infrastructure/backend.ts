@@ -570,8 +570,14 @@ export const noteTimes = (folder: string) => invoke<Record<string, number>>("not
 /** The templates New ▸ offers in a workspace. */
 export const noteTemplates = (workspace: string) => invoke<string[]>("note_templates", { workspace });
 /** A new note from a template, saved in its type's home or in `folder`; returns its path in the workspace. */
-export const newFromTemplate = (workspace: string, template: string, folder: string, about: string, context: string) =>
-  invoke<string>("new_from_template", { workspace, template, folder, about, context });
+export const newFromTemplate = (
+  workspace: string,
+  template: string,
+  folder: string,
+  about: string,
+  context: string,
+  title = "",
+) => invoke<string>("new_from_template", { workspace, template, folder, about, context, title });
 /** Today's note of a workspace, made once; returns its path in the workspace. */
 export const dailyNote = (workspace: string) => invoke<string>("daily_note", { workspace });
 /** The notes pinned above Recent, kept in the workspace's `.relay/config.json`. */

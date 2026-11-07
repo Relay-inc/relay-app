@@ -13,6 +13,7 @@ import {
 import { noteName } from "../../../domain/navigation/pages";
 import { activeFolder } from "../../../application/navigation/workspaces";
 import { loadTypes, registryOf } from "../../../application/types/types";
+import type { TypeField } from "../../../domain/types/registry";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
@@ -32,10 +33,14 @@ const today = () => new Date().toISOString().slice(0, 10);
 export function Properties({
   yaml,
   onChange,
+  hide = [],
+  suggest = [],
   children,
 }: {
   yaml: string;
   onChange: (yaml: string) => void;
+  hide?: string[]; // keys the page header shows (a typed note's fields)
+  suggest?: TypeField[]; // what "Add property" offers before any other key: the type's fields the note lacks
   children?: ReactNode;
 }) {
   const { t } = useT();
@@ -43,7 +48,7 @@ export function Properties({
   const registry = useDerived(() => registryOf(folder));
   useEffect(() => void loadTypes(folder), [folder]);
   const read = readProperties(yaml);
-  const rows = read && typed(read, registry);
+  const rows = read && typed(read, registry).filter(row => !hide.includes(row.key));
   const [kinds, setKinds] = useState<Record<string, PropertyKind>>({}); // a new, still empty key's kind
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -105,7 +110,8 @@ export function Properties({
         );
       })}
       <AddProperty
-        taken={rows.map(row => row.key)}
+        taken={read.map(row => row.key)}
+        suggest={suggest}
         dropping={!!dragging}
         onDrop={() => drop(null)}
         onAdd={(key, kind) => {
@@ -121,7 +127,7 @@ export function Properties({
 }
 
 /** One value's editor, by kind. */
-function Field({ row, set }: { row: Property; set: (value: Value) => void }) {
+export function Field({ row, set }: { row: Property; set: (value: Value) => void }) {
   const { t } = useT();
   const list = useId();
   const { key, value, kind } = row;
@@ -301,20 +307,31 @@ function ListField({ name, items, set }: { name: string; items: string[]; set: (
   );
 }
 
-/** "Add property" at the bottom: a name and a kind; also where a dragged key lands to go last. */
+const KIND_OF: Record<TypeField["kind"], PropertyKind> = {
+  text: "text",
+  select: "text",
+  date: "date",
+  link: "link",
+  people: "list",
+  check: "check",
+};
+/** "Add property" at the bottom: the type's missing fields first (`suggest`), then "Other" for a name and a kind; also
+ *  where a dragged key lands to go last. */
 function AddProperty({
   taken,
+  suggest,
   dropping,
   onDrop,
   onAdd,
 }: {
   taken: string[];
+  suggest: TypeField[];
   dropping: boolean;
   onDrop: () => void;
   onAdd: (key: string, kind: PropertyKind) => void;
 }) {
   const { t } = useT();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState<false | "menu" | "other">(false);
   const [kind, setKind] = useState<PropertyKind>("text");
   const [error, setError] = useState(false);
   const add = (input: HTMLInputElement | null) => {
@@ -336,7 +353,25 @@ function AddProperty({
         onDrop();
       }}
     >
-      {open ? (
+      {open === "menu" ? (
+        <div className="flex flex-wrap items-center gap-1.5 py-0.5" role="group" aria-label={t("props.add")}>
+          {suggest.map(field => (
+            <button
+              key={field.key}
+              className="h-6.5 px-2 rounded-md border border-separator text-label hover:bg-fill"
+              onClick={() => {
+                onAdd(field.key, KIND_OF[field.kind]);
+                setOpen(false);
+              }}
+            >
+              {field.key}
+            </button>
+          ))}
+          <button className="h-6.5 px-2 rounded-md text-secondary hover:bg-fill" onClick={() => setOpen("other")}>
+            {t("props.other")}
+          </button>
+        </div>
+      ) : open ? (
         <form
           className="flex items-center gap-2 h-8"
           onSubmit={e => {
@@ -380,7 +415,7 @@ function AddProperty({
       ) : (
         <button
           className="flex items-center gap-1.5 h-7 px-1 rounded-md text-tertiary hover:text-label"
-          onClick={() => setOpen(true)}
+          onClick={() => setOpen(suggest.length ? "menu" : "other")}
         >
           <Icon name="plus" className="glyph size-3" />
           {t("props.add")}
