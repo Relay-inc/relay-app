@@ -29,19 +29,17 @@ import { noteTitle } from "../../../domain/workspace/rules";
 import { frontmatterOf, withFrontmatter } from "../../../domain/workspace/properties";
 import { noteName } from "../../../domain/navigation/pages";
 import { clockTime } from "../../../shared/format";
-import { isImg } from "../../../shared/icons";
 import { agoOf } from "./ago";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Markdown } from "../../components/Markdown";
 import { Icon } from "../../components/Icon";
 import { Note } from "../../components/Note";
-import { ProjectImg } from "../../components/ProjectImg";
 import { FRONTMATTER } from "./NoteDetail";
 import { PageEditor, type CommentsApi, type HeadWriter } from "./PageEditor";
 import { PageComments } from "./PageComments";
 import type { Peer } from "../../../application/workspace/coedit";
-import { PageHeader } from "./PageHeader";
+import { PageTop } from "./PageTop";
 import { PageHistory, VersionDiff } from "./PageHistory";
 import { LinkedSections } from "./LinkedSections";
 import { loadLinked } from "../../../application/navigation/linked";
@@ -313,16 +311,9 @@ export function PageView({ target, className }: { target: string; className: str
             </div>
           ) : (
             <article className="w-full max-w-180 mx-auto pt-10 px-8 pb-16 flex flex-col gap-6">
-              <PageHeader
-                icon={
-                  isImg(icon?.img) ? (
-                    <ProjectImg url={icon.img} className="size-6 object-contain" />
-                  ) : icon?.icon ? (
-                    icon.icon
-                  ) : (
-                    <Icon name="file" className="glyph size-5 text-secondary" />
-                  )
-                }
+              <PageTop
+                page={target}
+                project={icon}
                 title={title}
                 yaml={frontmatterOf(head) ?? ""}
                 onChange={yaml => {
@@ -347,7 +338,7 @@ export function PageView({ target, className }: { target: string; className: str
                     </dd>
                   </>
                 ) : null}
-              </PageHeader>
+              </PageTop>
               <div className="h-px bg-separator" />
               {picked ? (
                 <VersionDiff

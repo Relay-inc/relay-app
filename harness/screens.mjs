@@ -2473,6 +2473,65 @@ const VIEWS = {
   "typed-untyped": async (fixture = "kb-sketch") =>
     VIEWS["typed-meeting"](fixture, "Contexts/Agency/Projects/Northwind Portal/Documents/Pricing sketch.md"),
   "typed-untyped-dark": async () => VIEWS["typed-untyped"]("kb-sketch-dark"),
+  // page icons and covers (issue 424): a page with its own icon and a cover banner; `note` another page of fixture kb
+  "page-icon-cover": async (fixture = "kb", note = "Contexts/Agency/Projects/Northwind Portal/Documents/Launch checklist.md") => {
+    await VIEWS["typed-meeting"](fixture, note);
+    await page.locator("[data-page-cover] img").waitFor();
+    await settle(page, 300);
+  },
+  "page-icon-cover-dark": async () => VIEWS["page-icon-cover"]("kb-dark"),
+  // cover: names a missing file: no banner, no error; hovering the header offers Add icon and Add cover (whose Remove drops
+  // the key)
+  "page-cover-missing": async (fixture = "kb") => {
+    await VIEWS["typed-meeting"](fixture, "Contexts/Agency/Projects/Northwind Portal/Documents/Brand notes.md");
+    await page.locator("h1").hover();
+    await waitText("Add cover");
+    if (await page.locator("[data-page-cover]").count()) throw new Error("a banner for a missing cover");
+    await settle(page);
+  },
+  "page-cover-missing-dark": async () => VIEWS["page-cover-missing"]("kb-dark"),
+  // a project page without icon: keeps the project's icon; the icon field refuses "ab"
+  "page-icon-project": async (fixture = "kb") => {
+    await VIEWS["typed-meeting"](fixture, "Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md");
+    await page.getByRole("button", { name: "Page icon" }).click();
+    await page.getByRole("textbox", { name: "Page icon" }).fill("ab");
+    await page.keyboard.press("Enter");
+    await waitText("Only one emoji");
+    if (/\nicon:/.test((await page.evaluate(() => window.__harness.written())) ?? "")) throw new Error("ab was written");
+    await settle(page);
+  },
+  "page-icon-project-dark": async () => VIEWS["page-icon-project"]("kb-dark"),
+  // one emoji is written as icon: and wins over the project's icon
+  "page-icon-project-set": async () => {
+    await VIEWS["page-icon-project"]();
+    await page.getByRole("textbox", { name: "Page icon" }).fill("🚀");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => /\nicon: 🚀\n/.test(window.__harness.written() ?? ""), null, { timeout: 4000 });
+    await page.locator("[data-page-icon]", { hasText: "🚀" }).waitFor();
+    await settle(page);
+  },
+  // Remove drops icon: and the file glyph is back
+  "page-icon-removed": async () => {
+    await VIEWS["page-icon-cover"]();
+    await page.getByRole("button", { name: "Page icon" }).click();
+    await page.locator("[data-icon-popover]").getByRole("button", { name: "Remove" }).click();
+    await page.waitForFunction(() => !/\nicon:/.test(window.__harness.written() ?? "icon:"), null, { timeout: 4000 });
+    await page.locator("[data-page-icon] svg").waitFor();
+    await settle(page);
+  },
+  // Add cover from a file: copied into the attachments folder, cover: written, the banner above the title
+  "page-cover-added": async () => {
+    await VIEWS["typed-meeting"]("kb", "Contexts/Agency/People/Tom Willems.md");
+    await page.evaluate(() => (window.__harness.pickFiles = ["/Users/sofie/Desktop/Kickoff banner.png"]));
+    await page.locator("h1").hover();
+    await page.getByRole("button", { name: "Add cover" }).click();
+    await page.getByRole("button", { name: "Choose image…" }).click();
+    await page.waitForFunction(() => /\ncover: "\[\[Kickoff banner\.png\]\]"\n/.test(window.__harness.written() ?? ""), null, {
+      timeout: 4000,
+    });
+    await page.locator("[data-page-cover] img").waitFor();
+    await settle(page);
+  },
   // the file changed on disk since the page read it: the save is refused, the bar offers Reload and Keep mine
   "page-editor-changed-on-disk": async () => {
     await VIEWS["page-view"]();
