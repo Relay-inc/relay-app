@@ -669,6 +669,7 @@ export default {
   "block.divider": "Trennlinie",
   "block.link": "Link zu Seite",
   "block.file": "Datei",
+  "block.view": "Ansicht",
   "attach.tooLarge": "Zu groß: maximal 25 MB pro Datei",
   "attach.tooLargeDetail": "{name} ist {size} groß · Dateien bis 25 MB passen in eine Notiz",
   "attach.drop": "Nach {folder} kopieren und einbetten",

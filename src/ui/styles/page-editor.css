@@ -692,6 +692,9 @@
   color: var(--tertiary);
 }
 /* a view inside the page (BaseView.tsx): an Obsidian base as a table, the page's width */
+.page-editor .cm-embed[data-kind="base"] {
+  display: block;
+}
 .page-editor .cm-base {
   padding: 4px 0;
   font-size: 13px;
