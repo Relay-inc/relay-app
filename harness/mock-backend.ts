@@ -18,6 +18,7 @@ import * as inbox from "./fixtures/inbox";
 import * as coll from "./fixtures/collections";
 import * as Y from "yjs";
 import { SHIPPED } from "../src/domain/types/registry";
+import { vaultChoices } from "../src/domain/conversations/rules";
 // the example plugin's real view: the harness serves it from a blob, where the app has the relay-plugin:// scheme
 import diceView from "../packages/plugin-example/view.html?raw";
 
@@ -90,6 +91,13 @@ if (fixture === "buddy")
     integrations: { ...settings.integrations, buddy: { on: true, host: "api.eu.buddy.works" } },
     buddy: { [vault.projectNames[0]]: { workspace: "acme", project: "web-shop" } },
   };
+// the Pages tab with its folders shown in every workspace, as the views from before issue 420 expect; ?typed=1 opens
+// on the tree by type, the app's default (a fresh vault)
+if (!query.get("typed") && !onboarding)
+  localStorage.setItem(
+    "pagesFiles",
+    JSON.stringify(Object.fromEntries(vaultChoices(settings).map(choice => [choice.folder, true]))),
+  );
 let vaultOk = !onboarding;
 let pending = [...conv.pending];
 const gitRepos = structuredClone(fixture === "git-long" ? git.longRepos : git.repos);
@@ -611,6 +619,16 @@ function handle(cmd: string, a: Args): unknown {
     case "garden_about":
       gardenDone.add(String(a.path));
       aboutSet.push([String(a.path), String(a.project)]);
+      {
+        // the note's about: set, as lib.rs `garden_about` writes it: the Pages tab's tree by type moves it (issue 420)
+        const path = String(a.path);
+        const about = `about: "[[${a.project}]]"`;
+        const text = textOfNote(path);
+        const next = text.startsWith("---\n")
+          ? `---\n${about}\n${text.slice(4).replace(/^about:.*\n/m, "")}`
+          : `---\n${about}\n---\n${text}`;
+        written.set(path, { text: next, hash: `h${Date.now()}` });
+      }
       return null;
     case "garden_ask": {
       const paths = (a.paths as string[]).slice(0, 20);
@@ -1123,7 +1141,7 @@ function handle(cmd: string, a: Args): unknown {
       // file), on top of what the harness seeded
       if (keepState) {
         const seeded = Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage.getItem(key) ?? ""]));
-        const kept = ["pagesOpen", "pagesSort", "railClosed", "recentRemoved"].flatMap(k => {
+        const kept = ["pagesOpen", "pagesSort", "pagesFiles", "railClosed", "recentRemoved"].flatMap(k => {
           const v = sessionStorage.getItem(`mockUi:${k}`);
           return v == null ? [] : [[k, v]];
         });
@@ -1343,7 +1361,9 @@ function handle(cmd: string, a: Args): unknown {
     case "note_types":
       return SHIPPED;
     case "notes_collection":
-      return pageList().map(path => collectionRow(path, textOfNote(path)));
+      // the main vault's notes; another workspace's are not indexed here
+      if (a.folder && a.folder !== vault.VAULT) return [];
+      return [...new Set(pageList())].map(path => collectionRow(path, textOfNote(path)));
     case "views_list":
       return savedViews();
     case "view_save": {
@@ -1937,7 +1957,10 @@ const embedsOn = fixture.startsWith("embeds");
 const kbOn = fixture.startsWith("kb");
 const changesOn = fixture.startsWith("kb-changes");
 // kb-sketch (-dark): the same notes without a feed, and the one note that has no type: (Fix properties)
-const sketchOn = changesOn || fixture.startsWith("kb-sketch");
+// kb-unsorted: the sketch and a dozen more notes without a type, for the Pages tab's Unsorted (issue 420)
+const unsortedOn = fixture.startsWith("kb-unsorted");
+const unsortedPaths = unsortedOn ? Array.from({ length: 12 }, (_, i) => `Inbox/Loose note ${i + 1}.md`) : [];
+const sketchOn = changesOn || fixture.startsWith("kb-sketch") || unsortedOn;
 // kb-tables (-dark): one more note, holding the tables the table editing is tried on
 const tablesOn = fixture.startsWith("kb-tables");
 const keepState = query.get("keep") === "1";
@@ -1950,6 +1973,7 @@ const pageList = () =>
         ...vault.notes,
         ...kb.paths,
         ...(sketchOn ? [kb.untyped.path] : []),
+        ...unsortedPaths,
         ...(tablesOn ? [kb.tables.path] : []),
         ...(inboxOn ? inbox.paths : []),
       ]
@@ -2079,6 +2103,7 @@ type Change = {
 };
 let changes: Change[] = changesOn ? kb.seedChanges(fixture.startsWith("kb-changes-long")) : [];
 if (sketchOn) written.set(kb.untyped.path, { text: kb.untyped.text, hash: "h0" });
+for (const path of unsortedPaths) written.set(path, { text: "Jotted down, no type yet.\n", hash: "h0" });
 if (tablesOn) written.set(kb.tables.path, { text: kb.tables.text, hash: "h0" });
 if (changesOn) {
   for (const e of changes)

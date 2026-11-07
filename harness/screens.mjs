@@ -1861,12 +1861,14 @@ const VIEWS = {
     await page.locator('[data-page="CLAUDE.md"]').scrollIntoViewIfNeeded();
     await settle(page);
   },
-  // a member's Pages tab of the shared workspace: no System section, its CLAUDE.md nowhere
+  // a member's Pages tab of the shared workspace: no System section, its CLAUDE.md nowhere; the tree by type, without
+  // Show files, which is an admin's (issue 420)
   "pages-system-member": async () => {
     await open(page, server.url, { fixture: "shared-member" });
     await page.keyboard.press("Control+Digit3");
     await page.getByRole("tab", { name: /^Pages/ }).click();
-    await waitText("Folders");
+    await waitText("Today's note");
+    if (await page.locator("[data-show-files]").count()) throw new Error("a member sees Show files");
     await settle(page);
   },
   // a page open in Personal, its bar naming Personal (fixture shared, workspaces kept apart)
@@ -2191,6 +2193,61 @@ const VIEWS = {
   },
   "pages-recent-close-dark": async () => VIEWS["pages-recent-close"]("dark"),
   "pages-virtual-groups-dark": async () => VIEWS["pages-virtual-groups"]("linked-dark"),
+  // the Pages tab of a fresh vault (issue 420): no Folders, a project unfolded to its notes by type, one type group
+  // open, the typed notes of no context, and Unsorted (no type:) with its Tidy on hover, capped with Show all
+  "pages-by-type": async (fixture = "kb-unsorted") => {
+    await open(page, server.url, { fixture, typed: true });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Beacon Billing"]').click();
+    await page.locator('[data-type-group="Document"]').first().click();
+    await page.locator('[data-section="pages:unsorted"] [role="button"]').first().click();
+    if (await page.getByText("Folders", { exact: true }).count()) throw new Error("Folders shown by default");
+    await page.locator('[data-section="pages:unsorted"] [role="button"]').first().hover();
+    await waitText("Show all 13");
+    await settle(page);
+  },
+  "pages-by-type-dark": async () => VIEWS["pages-by-type"]("kb-unsorted-dark"),
+  // New page on a project with the files hidden: it asks for a type (the registry's, with a template)
+  "pages-by-type-new": async () => {
+    await open(page, server.url, { fixture: "kb", typed: true });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Beacon Billing"]').click({ button: "right" });
+    await waitText("Meeting");
+    await settle(page);
+  },
+  // Show files brings the Folders back, and the choice holds over a restart (a reload that keeps the UI state)
+  "pages-show-files": async () => {
+    await open(page, server.url, { fixture: "kb", typed: true, keep: true });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator("[data-show-files]").click();
+    await waitText("Folders");
+    await settle(page, 400);
+    await open(page, server.url, { fixture: "kb", typed: true, keep: true });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await waitText("Folders");
+    await page.getByText("Folders", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // a note's icon: on its row in a type group too (issue 427): Launch checklist's 🚀 under Northwind Portal's Document,
+  // and the project row keeps its config picture (its note has no icon:)
+  "pages-by-type-icons": async () => {
+    await open(page, server.url, { fixture: "kb", typed: true });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"] img').click();
+    await page.locator('[data-type-group="Document"]').first().click();
+    const launch = page.locator('[data-page$="/Launch checklist.md"]', { hasText: "🚀" }).first();
+    await launch.waitFor({ timeout: 4000 });
+    if (await page.locator('[data-page$="/Brand notes.md"]', { hasText: "🚀" }).count()) throw new Error("an icon on a page without");
+    await launch.scrollIntoViewIfNeeded();
+    await settle(page, 300);
+  },
+  // Unsorted's Tidy opens the vault check
+  "pages-unsorted-tidy": async () => {
+    await VIEWS["pages-by-type"]();
+    await page.locator('[data-section="pages:unsorted"]').getByRole("button", { name: "Tidy", exact: true }).click();
+    await page.getByRole("dialog").first().waitFor();
+    await settle(page, 600);
+  },
   // a collection (K8, K9): the Meetings of a context as a table with the filter chip, the about: cell open on its
   // listbox; as a board by stage; the Projects board with a card in the air over the lane it sets
   "collection-table": async (fixture = "linked-collections") => {

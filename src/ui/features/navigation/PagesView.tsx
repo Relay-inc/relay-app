@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from "react";
-import type { PageFolder } from "../../../domain/navigation/pages";
+import type { PageFolder, TypeGroup } from "../../../domain/navigation/pages";
 import { noteName, sortPages } from "../../../domain/navigation/pages";
 import { CONTEXT_TINTS } from "../../../domain/navigation/sidebar";
 import {
@@ -7,6 +7,8 @@ import {
   clearRecent,
   copyPagePath,
   duplicatePage,
+  filesShown,
+  isAdmin,
   isProjectNote,
   openPage,
   openPagePath,
@@ -17,8 +19,13 @@ import {
   PROJECT_STATES,
   revealPage,
   setProjectState,
+  showFiles,
   togglePage,
+  typedView,
 } from "../../../application/navigation/pages";
+import { loadRows } from "../../../application/collections/collections";
+import { setAbout } from "../../../application/workspace/check";
+import { loadTypes, registryOf } from "../../../application/types/types";
 import { isFavourite, loadFavourites, toggleFavourite } from "../../../application/navigation/favourites";
 import {
   loadTemplates,
@@ -66,10 +73,19 @@ const RECENT = "pages:recent";
 const FOLDERS = "pages:folders";
 // unfolded like a folder (pagesOpen)
 const SYSTEM = "pages:system";
+// the tree by type: the typed notes outside every context, and the notes without a type; both unfolded like System
+const LOOSE = "pages:loose";
+const UNSORTED = "pages:unsorted";
+// a type group or Unsorted lists the newest this many notes before "Show all"
+const SHOWN = 8;
+// a new page by type: not the ones with their own New (New context, New project)
+const OWN_NEW = ["context", "project"];
 
-/** The sidebar's Pages tab: the notes of the workspace shown. Recent, its contexts with their projects (a project
- *  unfolds to its folder), then its top folders; the search lists the notes it finds instead. A note opens as a page,
- *  and Graph on top draws them all with their links.
+/** The sidebar's Pages tab: the notes of the workspace shown. Recent, its contexts with their projects, by type: a
+ *  project unfolds to its notes' type groups, a context lists those of its notes outside its projects, then the typed
+ *  notes of no context and Unsorted (no `type:`, with Tidy). Show files (an admin's, kept per workspace) brings the
+ *  folders back: a project unfolds to its folder and its Collections, the top folders follow. The search lists the
+ *  notes it finds instead. A note opens as a page, and Graph on top draws them all with their links.
  *  An admin finds the notes the vault runs on (CLAUDE.md, rules, scripts, templates) folded under System, a member not.
  *  Right-click: new page or folder, rename, move, duplicate, delete (to the trash, with Undo); on a context a new
  *  project, on the top a new context; on a project its state, a new conversation, a delete, a move or copy to another
@@ -77,6 +93,8 @@ const SYSTEM = "pages:system";
 export function PagesView() {
   const { t } = useT();
   const { model, system, recent, found, favourites } = useDerived(() => pagesView());
+  const files = useDerived(() => filesShown());
+  const typed = useDerived(() => typedView());
   const open = useDerived(() => openPagePath());
   const unfolded = useNavigationStore(s => s.sidebar.pagesOpen);
   const collapsed = useNavigationStore(s => s.sidebar.collapsed);
@@ -87,7 +105,8 @@ export function PagesView() {
   const [menu, setMenu] = useState<{ x: number; y: number; path: string; kind: MenuKind } | null>(null);
   const [ask, setAsk] = useState<PageFileAsk | null>(null);
   const [projectAsk, setProjectAsk] = useState<ProjectAsk | null>(null);
-  const [checking, setChecking] = useState(false);
+  // the vault check, open ("" for all of it) or opened on one kind of finding
+  const [checking, setChecking] = useState<string | null>(null);
   const [migrating, setMigrating] = useState<{ project: string; to: string; mode: "move" | "copy" } | null>(null);
   const [dropOn, setDropOn] = useState<string | null>(null);
   const menuElement = useRef<HTMLDivElement>(null);
@@ -118,7 +137,12 @@ export function PagesView() {
   }, [notesVersion, workspaceShown]);
   useEffect(() => {
     void loadViews(workspaceShown);
+    void loadTypes(workspaceShown);
   }, [workspaceShown]);
+  // the tree by type reads every note's type: again when the notes that exist change
+  useEffect(() => {
+    if (!files) void loadRows(workspaceShown);
+  }, [notesVersion, workspaceShown, files]);
 
   const onMenu = (path: string, kind: MenuKind) => (e: MouseEvent) => {
     e.preventDefault();
@@ -143,6 +167,18 @@ export function PagesView() {
           ...list.map(name => ({ id: `tpl${SEP}${name}${SEP}${folder}`, label: name, icon: "file" })),
         ]
       : [];
+  };
+  // New page from a project or context with the files hidden: one item per type of the registry with a template,
+  // made in the type's home (or here) with `about:` and `context:` from this place
+  const typeItems = (folder: string): MenuItem[] => {
+    const templates = templatesOf();
+    const types = registryOf(workspaceShown).types.flatMap(type => {
+      const template = type.template ? noteName(type.template) : "";
+      return !OWN_NEW.includes(type.name.toLowerCase()) && templates.includes(template)
+        ? [{ id: `tpl${SEP}${template}${SEP}${folder}`, label: type.name, icon: "file" }]
+        : [];
+    });
+    return types.length ? [{ id: "", label: t("pages.newPage"), head: true }, ...types] : templateItems(folder);
   };
   const fileItems = (kind: "note" | "folder" | "top", path = ""): MenuItem[] => [
     ...(kind === "note"
@@ -190,16 +226,18 @@ export function PagesView() {
     const folder = model.contexts.find(context => context.name === name)?.folder ?? "";
     return [
       { id: "project", label: t("pages.newProject") },
-      ...(folder ? [...inFolder(folder), ...templateItems(folder), ...where(folder)] : []),
+      ...(folder && !files ? [...typeItems(folder), ...where(folder)] : []),
+      ...(folder && files ? [...inFolder(folder), ...templateItems(folder), ...where(folder)] : []),
     ];
   };
   const projectItems = (key: string): MenuItem[] => {
     const project = projectEntry(key);
     if (!project) return migrateItems(key);
     const folder = project.folder?.path ?? "";
+    const at = folder || project.note.split("/").slice(0, -1).join("/");
     return [
-      ...(folder ? inFolder(folder) : []),
-      ...templateItems(folder || project.note.split("/").slice(0, -1).join("/")),
+      ...(folder && files ? inFolder(folder) : []),
+      ...(files ? templateItems(at) : typeItems(at)),
       { id: "open", label: t("pages.openNote") },
       { id: "chat", label: t("nav.newChat") },
       { id: "", label: t("pages.projectState"), head: true },
@@ -221,7 +259,11 @@ export function PagesView() {
       : kind === "context"
         ? contextItems(path)
         : kind === "top"
-          ? [{ id: "context", label: t("pages.newContext") }, ...fileItems(kind), { id: "check", label: t("vc.menu") }]
+          ? [
+              { id: "context", label: t("pages.newContext") },
+              ...(files ? fileItems(kind) : []),
+              { id: "check", label: t("vc.menu") },
+            ]
           : fileItems(kind, path);
   // a project's own note keeps its name and place: the project is known by it
   const guarded = (path: string, then: () => void) => (isProjectNote(path) ? toast(t("pages.projectNote")) : then());
@@ -239,7 +281,7 @@ export function PagesView() {
     else if (id.startsWith("reveal:")) void revealPage(arg);
     else if (id.startsWith("copy:")) void copyPagePath(arg);
     else if (id === "context") setProjectAsk({ kind: "context" });
-    else if (id === "check") setChecking(true);
+    else if (id === "check") setChecking("");
     else if (id === "project") setProjectAsk({ kind: "project", context: path });
     else if (target.kind === "project" && id === "open") openPage(projectEntry(path)?.note ?? "");
     else if (target.kind === "project" && id === "chat") select(newChatHere(path));
@@ -279,6 +321,28 @@ export function PagesView() {
       guarded(path, () => setAsk({ kind: "move", path, into: folder }));
     },
   });
+  // with the files hidden a note dropped onto a project gets its `about:`, the file stays where it is
+  const dropOnProject = (key: string, project: string) =>
+    files
+      ? {}
+      : {
+          onDragOver: (e: DragEvent) => {
+            if (!e.dataTransfer.types.includes("text/x-relay-page")) return;
+            e.preventDefault();
+            setDropOn(key);
+          },
+          onDragLeave: () => setDropOn(null),
+          onDrop: (e: DragEvent) => {
+            e.preventDefault();
+            setDropOn(null);
+            const path = e.dataTransfer.getData("text/x-relay-page");
+            if (!/\.md$/i.test(path) || path === project) return;
+            void setAbout(path, noteName(project)).then(
+              () => loadRows(),
+              e => toast(String(e)),
+            );
+          },
+        };
 
   // rows a level deeper sit in a wrapper one step in, not SidebarRow's own `indent`, so a tree goes as deep as it is
   const note = (path: string, onRemove?: () => void) => (
@@ -331,6 +395,42 @@ export function PagesView() {
       </div>
     );
   };
+  // the newest SHOWN notes, then "Show all n", which lists the rest in place
+  const capped = (id: string, notes: string[]) => {
+    const all = unfolded.has(`${id}:all`) || notes.length <= SHOWN;
+    return (
+      <>
+        {(all ? notes : notes.slice(0, SHOWN)).map(path => note(path))}
+        {all ? null : (
+          <SidebarRow
+            kind="fold"
+            name={t("pages.collAll", { n: notes.length })}
+            onClick={() => togglePage(`${id}:all`, true)}
+          />
+        )}
+      </>
+    );
+  };
+  // a project's, a context's or the loose notes' type groups, each unfolding to its notes newest first
+  const typeGroups = (groups: TypeGroup[] = [], base: string) =>
+    groups.map(group => {
+      const id = `type:${base}:${group.type}`;
+      const isOpen = unfolded.has(id);
+      return (
+        <div key={group.type}>
+          <SidebarRow
+            kind="folder"
+            icon="folderLinked"
+            aria-expanded={isOpen}
+            data-type-group={group.type}
+            name={group.type}
+            meta={{ kind: "count", n: group.notes.length }}
+            onClick={() => togglePage(id)}
+          />
+          {isOpen ? <div className="ml-4">{capped(id, group.notes)}</div> : null}
+        </div>
+      );
+    });
   const head = (
     id: string,
     label: string,
@@ -349,6 +449,18 @@ export function PagesView() {
       action={action}
     />
   );
+  // a section folded until unfolded, with its count while folded (System, No context, Unsorted)
+  const fold = (id: string, label: string, count = 0, action?: { label: string; onClick: () => void }) => (
+    <SidebarHead
+      label={label}
+      tint=""
+      count={count}
+      collapsed={!unfolded.has(id)}
+      dropBefore={false}
+      onClick={() => togglePage(id)}
+      action={action}
+    />
+  );
 
   const overlays = (
     <>
@@ -363,8 +475,12 @@ export function PagesView() {
       ) : null}
       {ask ? <PageFileDialog ask={ask} onClose={() => setAsk(null)} /> : null}
       {projectAsk ? <ProjectDialog ask={projectAsk} onClose={() => setProjectAsk(null)} /> : null}
-      {checking ? (
-        <VaultCheckDialog workspace={workspaces().find(w => w.active)?.name ?? ""} onClose={() => setChecking(false)} />
+      {checking !== null ? (
+        <VaultCheckDialog
+          workspace={workspaces().find(w => w.active)?.name ?? ""}
+          kind={checking || undefined}
+          onClose={() => setChecking(null)}
+        />
       ) : null}
       {migrating ? (
         <MigrateDialog {...migrating} from={homeOf(migrating.project)} onClose={() => setMigrating(null)} />
@@ -451,8 +567,14 @@ export function PagesView() {
                 const isOpen = unfolded.has(at);
                 // the project note's icon: emoji, else the project's icon from config (decor.ts)
                 const shown = iconOf(noteIcons[project.note], icons[project.key]);
+                const groups = typed.projects[project.key] ?? [];
+                const count = files ? project.count : groups.reduce((n, group) => n + group.notes.length, 1);
                 return (
-                  <div key={project.key}>
+                  <div
+                    key={project.key}
+                    className={dropOn === project.key ? "rounded-md ring-2 ring-accent" : ""}
+                    {...dropOnProject(project.key, project.note)}
+                  >
                     <SidebarRow
                       kind="proj"
                       tint={tint}
@@ -462,7 +584,7 @@ export function PagesView() {
                       img={shown && "project" in shown ? (shown.project.img ?? null) : null}
                       emoji={shown ? ("emoji" in shown ? shown.emoji : (shown.project.icon ?? "")) : ""}
                       selected={open === project.note}
-                      meta={project.count > 1 ? { kind: "count", n: project.count } : undefined}
+                      meta={count > 1 ? { kind: "count", n: count } : undefined}
                       // opens its note and unfolds; a click on it open again folds it
                       onClick={() => {
                         togglePage(at, !(isOpen && open === project.note));
@@ -470,7 +592,9 @@ export function PagesView() {
                       }}
                       onContextMenu={onMenu(project.key, "project")}
                     />
-                    {isOpen && project.folder ? (
+                    {isOpen && !files ? (
+                      <div className="ml-4">{typeGroups(groups, project.key)}</div>
+                    ) : isOpen && project.folder ? (
                       contents(
                         project.folder,
                         project.note,
@@ -491,35 +615,66 @@ export function PagesView() {
                 );
               })
             )}
-            {collapsed[id] ? null : (
+            {collapsed[id] ? null : files ? (
               <Collections layer="context" name={context.name} inside="" base={`ctx:${context.name}`} />
+            ) : (
+              <>
+                {typeGroups(typed.contexts[context.name], `ctx:${context.name}`)}
+                <SavedViewRows context={context.name} />
+              </>
             )}
           </div>
         );
       })}
-      <div
-        className={`mt-3 ${dropOn === "" ? "rounded-md ring-2 ring-accent" : ""}`}
-        onContextMenu={onMenu("", "top")}
-        {...drop("")}
-      >
-        {head(FOLDERS, t("pages.folders"))}
-        {collapsed[FOLDERS] ? null : (
-          <>
-            {model.top.folders.map(folder => renderFolder(folder))}
-            {sortPages(model.top.notes, sorts[`${workspaceShown}|`] ?? "name", times).map(path => note(path))}
-          </>
-        )}
-      </div>
+      {files ? (
+        <div
+          className={`mt-3 ${dropOn === "" ? "rounded-md ring-2 ring-accent" : ""}`}
+          onContextMenu={onMenu("", "top")}
+          {...drop("")}
+        >
+          {head(FOLDERS, t("pages.folders"), "", undefined, {
+            label: t("pages.hideFiles"),
+            onClick: () => showFiles(false),
+          })}
+          {collapsed[FOLDERS] ? null : (
+            <>
+              {model.top.folders.map(folder => renderFolder(folder))}
+              {sortPages(model.top.notes, sorts[`${workspaceShown}|`] ?? "name", times).map(path => note(path))}
+            </>
+          )}
+        </div>
+      ) : (
+        <>
+          {typed.loose.length ? (
+            <div className="mt-3" data-section={LOOSE}>
+              {fold(
+                LOOSE,
+                t("pages.noContext"),
+                typed.loose.reduce((n, group) => n + group.notes.length, 0),
+              )}
+              {unfolded.has(LOOSE) ? typeGroups(typed.loose, LOOSE) : null}
+            </div>
+          ) : null}
+          {typed.unsorted.length ? (
+            <div className="mt-3" data-section={UNSORTED}>
+              {fold(UNSORTED, t("pages.unsorted"), typed.unsorted.length, {
+                label: t("pages.tidy"),
+                // Unsorted is the notes without a type: the check opens on that group (Fix properties)
+                onClick: () => setChecking("no_type"),
+              })}
+              {unfolded.has(UNSORTED) ? capped(UNSORTED, typed.unsorted) : null}
+            </div>
+          ) : null}
+          {isAdmin(workspaceShown) ? (
+            <div className="mt-3" onContextMenu={onMenu("", "top")}>
+              <SidebarRow kind="fold" data-show-files name={t("pages.showFiles")} onClick={() => showFiles(true)} />
+            </div>
+          ) : null}
+        </>
+      )}
       {system ? (
         <div className="mt-3" data-section={SYSTEM}>
-          <SidebarHead
-            label={t("pages.system")}
-            tint=""
-            count={0}
-            collapsed={!unfolded.has(SYSTEM)}
-            dropBefore={false}
-            onClick={() => togglePage(SYSTEM)}
-          />
+          {fold(SYSTEM, t("pages.system"))}
           {unfolded.has(SYSTEM) ? (
             <>
               {system.folders.map(folder => renderFolder(folder, `${SYSTEM}/`))}
