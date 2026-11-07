@@ -164,6 +164,11 @@ test("a view read from a file keeps what fits and refuses what is not a collecti
       group: "",
     },
   );
+  // a calendar is kept for a collection with a date column, read as a table for one without
+  assert.equal(readView({ collection: "meetings", layout: "calendar" })?.layout, "calendar");
+  assert.equal(readView({ collection: "threads", layout: "calendar" })?.layout, "calendar");
+  assert.equal(readView({ collection: "people", layout: "calendar" })?.layout, "table");
+  assert.equal(readView({ collection: "documents", layout: "calendar" })?.layout, "table");
 });
 
 test("date presets", () => {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { commonFolder, evaluate, scoped, valuesOf, type View } from "../../../domain/collections/rules";
+import { commonFolder, evaluate, localToday, scoped, valuesOf, type View } from "../../../domain/collections/rules";
 import { loadRows, loadViews, saveView, useCollectionsStore } from "../../../application/collections/collections";
 import { activeFolder } from "../../../application/navigation/workspaces";
 import { loadTypes, registryOf } from "../../../application/types/types";
@@ -9,14 +9,15 @@ import { useDismiss } from "../../hooks/useDismiss";
 import { useT } from "../../hooks/useT";
 import { Toast } from "../conversations/Toast";
 import { CollectionBoard } from "./CollectionBoard";
+import { CollectionCalendar } from "./CollectionCalendar";
 import { CollectionTable } from "./CollectionTable";
 import { CollectionToolbar } from "./CollectionToolbar";
 import { columnLabel } from "./labels";
 
 const NONE: never[] = [];
 
-/** A collection (K8 table, K9 board): the notes of a type in a context, narrowed by filters, as one line each or as
- *  cards in lanes. Save view keeps what is shown as `.relay/views/<name>.json`. */
+/** A collection (K8 table, K9 board, calendar): the notes of a type in a context, narrowed by filters, as one line each,
+ *  as cards in lanes or on the days of their date. Save view keeps what is shown as `.relay/views/<name>.json`. */
 export function CollectionView({ className }: { className: string }) {
   const { t, tn } = useT();
   const folder = useDerived(() => activeFolder());
@@ -30,7 +31,7 @@ export function CollectionView({ className }: { className: string }) {
     void loadViews(folder);
     void loadTypes(folder);
   }, [folder]);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const inScope = scoped(rows, view);
   const shown = evaluate(rows, view, registry);
   const about = view.filters.find(f => (f.key === "about" || f.key === "linked") && f.is !== undefined)?.is;
@@ -67,8 +68,10 @@ export function CollectionView({ className }: { className: string }) {
         />
         {view.layout === "table" ? (
           <CollectionTable rows={shown} all={rows} view={view} registry={registry} today={today} />
-        ) : (
+        ) : view.layout === "board" ? (
           <CollectionBoard rows={shown} view={view} today={today} />
+        ) : (
+          <CollectionCalendar rows={shown} today={today} />
         )}
         {view.layout === "table" ? (
           <p className="mt-2 text-xs text-secondary">{t("coll.hint", { n: inScope.length })}</p>
