@@ -140,7 +140,7 @@ fn tick(app: &AppHandle) {
 
 /// What waited while the app was closed, then a look every 30 s.
 pub fn start(app: &AppHandle) {
-    *QUEUE.lock().unwrap() = std::fs::read_to_string(file(app)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    *QUEUE.lock().unwrap() = crate::util::read_json(file(app));
     let app = app.clone();
     std::thread::spawn(move || loop {
         tick(&app);

@@ -3,6 +3,8 @@ import {
   isSystemPage,
   pagesModel,
   pageTree,
+  noteName,
+  placeOf,
   recentPages,
   type PageFolder,
   type PagesModel,
@@ -10,13 +12,14 @@ import {
 import { noteKey, pageKey, VIEW } from "../../domain/navigation/keys";
 import { pageOf } from "../../domain/navigation/views";
 import { ORCH } from "../../domain/orchestrator/rules";
-import { chatVault, inWorkspace } from "../../domain/conversations/rules";
+import { chatVault, inWorkspace, vaultChoices } from "../../domain/conversations/rules";
+import { noteIn } from "../../domain/conversations/files";
 import * as backend from "../../infrastructure/backend";
-import { t } from "../../shared/i18n";
+import { t, tn } from "../../shared/i18n";
 import { storage } from "../../infrastructure/storage";
 import { useConversationsStore } from "../conversations/store";
 import { newChatHere } from "../conversations/chats";
-import { typeInto } from "../conversations/actions";
+import { attachPaths, typeInto } from "../conversations/actions";
 import { filesOn, settings } from "../settings/settings";
 import { useWorkspaceStore } from "../workspace/store";
 import { contexts, loadNotes, loadSnapshot, projectName } from "../workspace/vault";
@@ -25,6 +28,9 @@ import { copy, select, toast } from "./navigation";
 import { openDetail } from "./panel";
 import { useNavigationStore } from "./store";
 import { makeStore } from "../make-store";
+import { trailing } from "../trailing";
+import { loadLinked } from "./linked";
+import { favouritesOf, followFavourites } from "./favourites";
 import { activeFolder, workspaces } from "./workspaces";
 
 // The sidebar's two tabs: Chats (the conversations, as before) and Pages (the notes of the workspace shown).
@@ -117,38 +123,49 @@ function build(): Built {
   return built;
 }
 /** The Pages tab: the workspace's contexts with their projects, its top folders, the notes the vault runs on (for an
- *  admin, else null), the recent notes, or the search's. */
+ *  admin, else null), the pinned and the recent notes, or the search's. */
 export function pagesView(): {
   model: PagesModel;
   system: PageFolder | null;
+  favourites: string[];
   recent: string[];
   found: string[] | null;
   total: number;
 } {
   const { workspace, paths, exists, model, system } = build();
-  const { find, touches } = useNavigationStore.getState().sidebar;
+  const { find, touches, recentRemoved } = useNavigationStore.getState().sidebar;
   const root = isMain(workspace) ? useWorkspaceStore.getState().notes.root : workspace;
   const query = find.trim().toLowerCase();
   return {
     model,
     system,
-    recent: recentPages(touches, root, path => exists.has(path)),
+    favourites: favouritesOf(workspace).filter(path => exists.has(path)),
+    recent: recentPages(touches, root, path => exists.has(path), 5, recentRemoved[root]),
     found: query ? findPages(paths, query) : null,
     total: model.top.count, // the pages people write in: System not counted, for an admin either
   };
 }
 
-/** Folders and projects unfolded in the Pages tab, by path; not kept over a restart. `open` unfolds or folds it
- *  either way, else it toggles. */
-export const togglePage = (path: string, open = !useNavigationStore.getState().sidebar.pagesOpen.has(path)) =>
+/** Folders and projects unfolded in the Pages tab, by path, kept over a restart. `open` unfolds or folds it either
+ *  way, else it toggles. */
+export function togglePage(path: string, open = !useNavigationStore.getState().sidebar.pagesOpen.has(path)) {
   set(draft => {
     if (open) draft.sidebar.pagesOpen.add(path);
     else draft.sidebar.pagesOpen.delete(path);
   });
+  storage.set("pagesOpen", [...useNavigationStore.getState().sidebar.pagesOpen]);
+}
 /** A note of the workspace shown opens as a page in the middle column. */
 /** A note as a page in the middle column; with Files off in the side drawer, as before pages. */
-export const openPage = (path: string) =>
-  filesOn() ? select(pageKey(target(path))) : openDetail(noteKey(target(path)));
+export const openPage = (path: string) => openPageIn(activeFolder(), path);
+/** The path a note of workspace `folder` is read and written by: the main vault's relative, another vault's absolute. */
+export const noteTarget = (folder: string, path: string) => (isMain(folder) ? path : `${folder}/${path}`);
+/** A note of any workspace (`folder`, its path in it): in the middle column, or with `beside` in the drawer next to
+ *  the open conversation. */
+export function openPageIn(folder: string, path: string, beside = false) {
+  const full = noteTarget(folder, path);
+  return filesOn() && !beside ? select(pageKey(full)) : openDetail(noteKey(full));
+}
 /** A page's note as a path of the workspace shown ("" when the open page is another workspace's). */
 export function pagePath(page: string) {
   if (isMain(activeFolder())) return page.startsWith("/") ? "" : page;
@@ -162,6 +179,9 @@ export function pageProject(path: string) {
     .model.contexts.flatMap(context => context.projects)
     .find(project => project.note === path);
 }
+/** The context whose note this page is, in the workspace shown. */
+export const pageContext = (path: string) =>
+  build().model.contexts.find(context => !!context.folder && path === `${context.folder}/${context.name}.md`);
 /** A page as read: its text, its hash (what a save checks the file against) and when it was changed, or why it could not
  *  be read. */
 export type Page = { path: string; text: string; hash: string; modified: number } | { err: string };
@@ -187,6 +207,7 @@ export async function savePage(page: string, text: string, force = false): Promi
     set(draft => {
       draft.panel.detail[pageKey(page)] = { ...read, text, hash, modified: Date.now() };
     });
+    void loadLinked(); // its about:, context: or with: may have changed
     return "";
   } catch (e) {
     if (String(e) === "changed") return "changed";
@@ -266,10 +287,15 @@ function byClaude(page: string) {
     ),
   );
 }
+// the watcher sends one event per changed file: the walks wait for the burst to end
+const reload = trailing(() => {
+  void loadNotes();
+  void loadLinked();
+}, 300);
 /** A note changed outside Relay (the file watcher): the Pages tab reads which notes exist again, and an open page that
  *  holds another text than the file gets the file's, to merge. */
 export async function noteChanged({ path, hash, relinked }: backend.NoteChange) {
-  void loadNotes();
+  reload();
   const by = relinked ? "relay" : byClaude(path) ? "claude" : "disk";
   // another workspace's note (an absolute path): if it is a shared document, its file change becomes an edit of it
   if (hash && path.startsWith("/")) void backend.sharedDocAbsorb(path, by).catch(() => {});
@@ -310,21 +336,97 @@ export function propertyValues(key: string) {
     );
   return values.get(id)!;
 }
+// the heading an Open on an embedded section asks for, until the page's editor has scrolled to it
+const headings = new Map<string, string>();
+const headingWatchers = new Set<(page: string) => void>();
+/** The editor of `page` calls this when it is made, and when a heading is asked of a page already open: the heading to
+ *  scroll to (and forget), or undefined. */
+export const takeHeading = (page: string) => {
+  const heading = headings.get(page);
+  headings.delete(page);
+  return heading;
+};
+export function onHeading(listener: (page: string) => void) {
+  headingWatchers.add(listener);
+  return () => void headingWatchers.delete(listener);
+}
+/** The marker a line to open at is kept under in `headings`: `LINE` + the line's number in the file. */
+export const LINE = "\u0000line:";
+/** The page `page` (a page key's target) scrolls to a line of its file, its editor's cursor there: in the middle of the
+ *  window, or with `top` at its top (the rail's outline). */
+export function revealLine(page: string, line: number, top = false) {
+  headings.set(page, `${LINE}${line}${top ? ":top" : ""}`);
+  headingWatchers.forEach(listener => listener(page));
+}
+/** A note of any workspace opened at a line (⌘K's content matches, a backlink): the editor puts its cursor there. */
+export function openPageAtLine(folder: string, path: string, line: number) {
+  revealLine(isMain(folder) ? path : `${folder}/${path}`, line);
+  return openPageIn(folder, path);
+}
 /** A [[link]] in a page: the note of the workspace shown it names opens as a page, or in the right drawer with
- *  `drawer` (⌘-click), as a link in a conversation does. */
-export function followPageLink(link: string, drawer: boolean) {
+ *  `drawer` (⌘-click), as a link in a conversation does. With a `heading` (Open on an embedded section) the page opens
+ *  at it. */
+export function followPageLink(link: string, drawer: boolean, heading = "") {
   if (drawer) return openDetail(noteKey(link));
   const name = (/\.md$/i.test(link) ? link : `${link}.md`).toLowerCase();
   const paths = workspacePaths();
   const path = paths.find(p => p.toLowerCase() === name) ?? paths.find(p => p.toLowerCase().endsWith(`/${name}`));
-  return path ? openPage(path) : openDetail(noteKey(link));
+  if (!path) return openDetail(noteKey(link));
+  if (heading) {
+    headings.set(target(path), heading);
+    headingWatchers.forEach(listener => listener(target(path)));
+  }
+  return openPage(path);
 }
 /** Ask Claude about a page: a new conversation in the page's workspace (its project's, when it is a project's note)
  *  with the note's path typed in. */
 export function askAboutPage(path: string) {
   const key = newChatHere(pageProject(path)?.key ?? null);
-  typeInto(key, `\`${path}\` `);
+  typeInto(key, `\`${abs(path)}\` `);
   return select(key);
+}
+
+/** The key of the project a note belongs to (its own note, or one in its folder), null for none. */
+function noteProject(path: string) {
+  const own = pageProject(path);
+  if (own) return own.key;
+  const { about } = placeOf(build().model, path.split("/").slice(0, -1).join("/"));
+  return about
+    ? (build()
+        .model.contexts.flatMap(c => c.projects)
+        .find(p => noteName(p.note) === about)?.key ?? null)
+    : null;
+}
+/** A note of `folder` as a chip in the open conversation's composer: its absolute path, which the agent reads from
+ *  wherever the conversation runs (a project's may run in its code repo).
+ *  A conversation that runs in another workspace than the note's refuses. */
+export async function mentionNote(path: string, folder = activeFolder()) {
+  const { selected } = useNavigationStore.getState();
+  const chat = useConversationsStore.getState().chats[selected];
+  const other = chat ? chatVault(chat, useWorkspaceStore.getState().snap) !== folder : folder !== activeFolder();
+  if (other) {
+    toast(t("composer.noteOtherWorkspace"));
+    return false;
+  }
+  await attachPaths([`${isMain(folder) ? useWorkspaceStore.getState().notes.root : folder}/${path}`]);
+  return true;
+}
+/** The note an attached file is (it sits under a workspace and is markdown): its workspace folder and its path there. */
+export function attachedNote(file: string) {
+  const main = useWorkspaceStore.getState().notes.root;
+  const found = noteIn(file, [main, ...vaultChoices(settings()).map(choice => choice.folder)]);
+  return found && { folder: found.root === main ? settings().vault : found.root, path: found.path };
+}
+/** Add to conversation: the note as a chip in the open conversation when it is one of the note's project (or the note
+ *  has none and it is a general one), else in a new conversation of the note's project. */
+export async function addToConversation(path: string, folder = activeFolder()) {
+  if (folder !== activeFolder()) return toast(t("composer.noteOtherWorkspace"));
+  const { selected } = useNavigationStore.getState();
+  const chat = useConversationsStore.getState().chats[selected];
+  const project = noteProject(path);
+  const here = chat && !chat.closed && selected !== ORCH && (chat.project ?? null) === project;
+  if (!here) await select(newChatHere(project));
+  await mentionNote(path, folder);
 }
 
 /** The notes Relay's conversations read and wrote this week: Recent in the Pages tab. */
@@ -339,6 +441,22 @@ export async function loadRecent() {
   }
 }
 
+/** Take notes off Recent (the notes stay as they are): until a conversation touches one again. Kept over a restart. */
+function removeFromRecent(paths: string[] | null) {
+  const root = rootOf();
+  const { touches } = useNavigationStore.getState().sidebar;
+  set(draft => {
+    const gone = (draft.sidebar.recentRemoved[root] ??= {});
+    for (const touch of touches)
+      if (touch.root === root && (!paths || paths.includes(touch.path)))
+        gone[touch.path] = Math.max(gone[touch.path] ?? 0, touch.at);
+  });
+  storage.set("recentRemoved", useNavigationStore.getState().sidebar.recentRemoved);
+}
+export const removeRecent = (path: string) => removeFromRecent([path]);
+/** Clear: empty Recent. */
+export const clearRecent = () => removeFromRecent(null);
+
 // ---------- managing files: new page or folder, rename and move (links to it follow), duplicate, trash with Undo
 /** The workspace shown's folder, and a path of it as an absolute one ("" is the folder itself). */
 const rootOf = () => (isMain(activeFolder()) ? useWorkspaceStore.getState().notes.root : activeFolder());
@@ -352,6 +470,8 @@ export const freePageName = (folder: string) =>
   backend.freePageName(abs(folder), t("pages.untitled")).catch(() => t("pages.untitled"));
 /** A project's own note can't be renamed or moved here: the project is keyed by its name. */
 export const isProjectNote = (path: string) => !!pageProject(path);
+/** Where a new note is asked for in `folder` of the workspace shown: the project and context it sits under. */
+export const placeIn = (folder: string) => placeOf(build().model, folder);
 /** Every folder of the workspace shown, for Move to…. */
 export function pageFolders() {
   const all = new Set<string>();
@@ -387,6 +507,7 @@ export async function movePage(from: string, to: string) {
   try {
     const { path } = await backend.movePath(abs(from), abs(to), false);
     await loadSnapshot();
+    followFavourites(from, path);
     if (open === from) openPage(path);
     else if (open.startsWith(`${from}/`)) openPage(path + open.slice(from.length));
   } catch (e) {
@@ -412,6 +533,23 @@ export async function trashPage(path: string) {
   } catch (e) {
     fail(e);
   }
+}
+/** Files into the workspace's .trash/ as one run, with one Undo that puts them all back. */
+export async function trashPages(paths: string[], undone?: () => unknown) {
+  const gone: Awaited<ReturnType<typeof backend.trashPath>>[] = [];
+  try {
+    for (const path of paths) gone.push(await backend.trashPath(abs(path)));
+  } catch (e) {
+    fail(e);
+  }
+  await loadSnapshot();
+  if (!gone.length) return;
+  toast(tn("garden.trashed", gone.length), () => {
+    void Promise.all(gone.map(g => backend.restorePath(g.root, g.trash, g.path)))
+      .then(loadSnapshot)
+      .then(undone)
+      .catch(fail);
+  });
 }
 const noteLabel = (path: string) => path.split("/").pop()!.replace(/\.md$/i, "");
 export const revealPage = (path: string) => backend.openFile(abs(path), true).catch(fail);

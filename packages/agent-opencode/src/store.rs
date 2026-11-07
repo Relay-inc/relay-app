@@ -6,10 +6,7 @@
 
 use agent_core::{usage::Record, Choice, Event};
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-
-const SQLITE: &str = "/usr/bin/sqlite3";
+use std::path::PathBuf;
 
 pub fn data_dir(home: &str) -> PathBuf {
     std::env::var_os("XDG_DATA_HOME").filter(|v| !v.is_empty()).map(|d| PathBuf::from(d).join("opencode"))
@@ -17,15 +14,7 @@ pub fn data_dir(home: &str) -> PathBuf {
 }
 pub fn db(home: &str) -> PathBuf { data_dir(home).join("opencode.db") }
 
-/// `select …` as JSON rows, read-only; None when there is no database or no sqlite3.
-pub fn query(db: &Path, sql: &str) -> Option<Vec<Value>> {
-    if !db.is_file() { return None; }
-    let out = Command::new(SQLITE).arg("-readonly").arg("-json").arg(db).arg(sql).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
-    if !out.status.success() { return None; }
-    let s = String::from_utf8_lossy(&out.stdout);
-    if s.trim().is_empty() { Some(vec![]) } else { serde_json::from_str(&s).ok() }
-}
-fn quote(s: &str) -> String { format!("'{}'", s.replace('\'', "''")) }
+pub use agent_core::sqlite::{query, quote};
 
 /// The folder or below it, as given or as its real path (opencode keeps the real one: /private/tmp for /tmp).
 fn under(col: &str, dirs: &[&str]) -> String {
@@ -93,20 +82,7 @@ pub fn history_sql(sid: &str) -> String {
 }
 
 /// Epoch ms as RFC 3339 (UTC).
-pub fn rfc3339(ms: i64) -> String {
-    let (days, rem) = (ms.div_euclid(86_400_000), ms.rem_euclid(86_400_000));
-    // civil from days (Howard Hinnant)
-    let z = days + 719468;
-    let era = z.div_euclid(146097);
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = yoe + era * 400 + i64::from(m <= 2);
-    format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}.{:03}Z", rem / 3_600_000, rem / 60_000 % 60, rem / 1000 % 60, rem % 1000)
-}
+pub fn rfc3339(ms: i64) -> String { agent_core::usage::rfc3339(ms, true) }
 
 /// The rows of [`history_sql`] from message `from` on, as events, and the message count to continue from: only
 /// whole messages (an assistant message still running is read again next time).

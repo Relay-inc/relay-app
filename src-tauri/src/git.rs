@@ -4,20 +4,28 @@
 // reports as changed in that checkout, so nothing outside it is staged or deleted.
 use serde_json::{json, Value};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::ffi::OsStr;
+use std::process::{Command, Output, Stdio};
 
+/// `git -C dir args` with `path_env` as PATH: the one place git is started, for this module and the others that ask it.
+pub(crate) fn output(dir: impl AsRef<OsStr>, args: &[&str], path_env: &str) -> std::io::Result<Output> {
+    Command::new("git").arg("-C").arg(dir).args(args).env("PATH", path_env).output()
+}
+/// `output` that never prompts (a push that needs a password fails instead of hanging) and reads no stdin.
+pub(crate) fn output_quiet(dir: &str, args: &[&str], path_env: &str) -> std::io::Result<Output> {
+    Command::new("git").arg("-C").arg(dir).args(args).env("PATH", path_env).env("GIT_TERMINAL_PROMPT", "0").stdin(Stdio::null()).output()
+}
 fn git(dir: &str, args: &[&str], path_env: &str) -> Option<(bool, String)> {
-    let o = Command::new("git").arg("-C").arg(dir).args(args).env("PATH", path_env).output().ok()?;
+    let o = output(dir, args, path_env).ok()?;
     Some((o.status.success(), String::from_utf8_lossy(&o.stdout).into_owned()))
 }
-fn ok(dir: &str, args: &[&str], path_env: &str) -> Option<String> {
+pub(crate) fn ok(dir: &str, args: &[&str], path_env: &str) -> Option<String> {
     git(dir, args, path_env).filter(|(s, _)| *s).map(|(_, o)| o.trim_end().to_string())
 }
 /// git that changes something: its stdout, or everything git said as the error (a hook prints its failure on either).
 /// Never a prompt: a push that needs a password fails instead of hanging.
 fn run(dir: &str, args: &[&str], path_env: &str) -> Result<String, String> {
-    let o = Command::new("git").arg("-C").arg(dir).args(args).env("PATH", path_env).env("GIT_TERMINAL_PROMPT", "0")
-        .stdin(Stdio::null()).output().map_err(|e| format!("git: {e}"))?;
+    let o = output_quiet(dir, args, path_env).map_err(|e| format!("git: {e}"))?;
     if o.status.success() { return Ok(String::from_utf8_lossy(&o.stdout).into_owned()); }
     let said: Vec<String> = [&o.stderr, &o.stdout].iter().map(|b| String::from_utf8_lossy(b).trim().to_string()).filter(|s| !s.is_empty()).collect();
     Err(if said.is_empty() { format!("git {} failed", args[0]) } else { said.join("\n") })

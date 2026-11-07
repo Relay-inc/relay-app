@@ -1,21 +1,10 @@
 import { autocompletion, startCompletion, type Completion, type CompletionContext } from "@codemirror/autocomplete";
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { type EditorState } from "@codemirror/state";
-import { EditorView, ViewPlugin, keymap } from "@codemirror/view";
-import {
-  SLASH,
-  TURN_INTO,
-  cellStarts,
-  moveBlock,
-  nextCell,
-  pasteLink,
-  prevCell,
-  tableAddColumn,
-  tableRow,
-  turnInto,
-  type BlockKind,
-} from "../../../domain/workspace/blocks";
+import { EditorView, ViewPlugin } from "@codemirror/view";
+import { SLASH, TURN_INTO, moveBlock, pasteLink, turnInto, type BlockKind } from "../../../domain/workspace/blocks";
 import { noteName } from "../../../domain/navigation/pages";
+import { tableCommands, tableEditing, type TableWords } from "./tables";
 
 // Notion-like editing in a page's editor (PageEditor.tsx): the / menu, [[ completion, a block's handle (drag to move,
 // click for its menu), Tab between a table's cells and a pasted URL over a selection as a link. The text stays markdown:
@@ -26,8 +15,7 @@ export type BlockWords = {
   turnInto: string;
   duplicate: string;
   remove: string;
-  addRow: string;
-  addColumn: string;
+  table: TableWords;
   handle: string;
 };
 
@@ -81,50 +69,8 @@ function replaceAll(view: EditorView, next: string) {
   });
 }
 
-function tableOf(state: EditorState, pos: number) {
-  const inner = syntaxTree(state).resolveInner(pos, -1);
-  for (let node: typeof inner | null = inner; node; node = node.parent) if (node.name === "Table") return node;
-  return null;
-}
-const DELIMITER = /^\s*\|?\s*:?-{3,}/;
-
-/** Tab and Shift-Tab in a table: the next or previous cell, the delimiter row skipped; Tab in the last cell adds a row. */
-function tab(back: boolean) {
-  return (view: EditorView) => {
-    const { state } = view;
-    const pos = state.selection.main.head;
-    const table = tableOf(state, pos);
-    if (!table) return false;
-    let line = state.doc.lineAt(pos);
-    const col = back ? prevCell(line.text, pos - line.from) : nextCell(line.text, pos - line.from);
-    if (col !== null) {
-      view.dispatch({ selection: { anchor: line.from + col } });
-      return true;
-    }
-    const first = state.doc.lineAt(table.from).number;
-    const last = state.doc.lineAt(Math.max(table.from, table.to - 1)).number;
-    let n = line.number + (back ? -1 : 1);
-    if (n >= first && n <= last && DELIMITER.test(state.doc.line(n).text)) n += back ? -1 : 1;
-    if (back) {
-      if (n < first) return true;
-      line = state.doc.line(n);
-      const starts = cellStarts(line.text);
-      view.dispatch({ selection: { anchor: line.from + (starts[starts.length - 1] ?? 0) } });
-      return true;
-    }
-    if (n > last) {
-      const row = tableRow(state.doc.line(first).text);
-      view.dispatch({ changes: { from: line.to, insert: "\n" + row }, selection: { anchor: line.to + 3 } });
-      return true;
-    }
-    line = state.doc.line(n);
-    view.dispatch({ selection: { anchor: line.from + (cellStarts(line.text)[0] ?? 0) } });
-    return true;
-  };
-}
-
 /** The / menu on an empty line: the kinds of block, filtered as you type; Enter puts the block's markdown there. */
-function slashSource(words: BlockWords) {
+function slashSource(words: BlockWords, pickFile: (view: EditorView, at: number) => void) {
   return (ctx: CompletionContext) => {
     const typed = ctx.matchBefore(/^\s*\/[\w-]*$/);
     if (!typed) return null;
@@ -141,6 +87,16 @@ function slashSource(words: BlockWords) {
         if (item.kind === "link") startCompletion(view);
       },
     }));
+    // File: pick files, copy them into the attachments folder and embed them where the slash was
+    options.push({
+      label: words.kind("file"),
+      boost: 99 - SLASH.length,
+      detail: "![[",
+      apply: (view: EditorView, _c: Completion, _from: number, to: number) => {
+        view.dispatch({ changes: { from: slash, to } });
+        pickFile(view, slash);
+      },
+    });
     return { from: slash + 1, options, validFor: /^[\w-]*$/ };
   };
 }
@@ -252,19 +208,12 @@ function handle(words: BlockWords) {
           );
         menu.append(Object.assign(document.createElement("hr"), { className: "cm-block-menu-sep" }));
         if (block.name === "Table") {
-          item(words.addRow, () => {
-            const header = view.state.doc.lineAt(block.from).text;
-            view.dispatch({ changes: { from: block.to, insert: "\n" + tableRow(header) } });
-          });
-          item(words.addColumn, () =>
-            view.dispatch({
-              changes: {
-                from: block.from,
-                to: block.to,
-                insert: tableAddColumn(view.state.sliceDoc(block.from, block.to)),
-              },
-            }),
-          );
+          // the row and column the caret is in (the first ones when it is elsewhere): the keyboard's way to the grips
+          const cmds =
+            tableCommands(view, view.state.selection.main.head, words.table) ??
+            tableCommands(view, block.from, words.table);
+          for (const [label, run] of [...(cmds?.rows ?? []), ...(cmds?.cols ?? [])]) item(label, run);
+          menu.append(Object.assign(document.createElement("hr"), { className: "cm-block-menu-sep" }));
         }
         item(words.duplicate, () =>
           view.dispatch({ changes: { from: block.to, insert: "\n" + view.state.sliceDoc(block.from, block.to) } }),
@@ -343,13 +292,14 @@ function handle(words: BlockWords) {
 }
 
 /** Everything above, for a page's editor; `notes` lists the workspace's note paths for [[ completion. */
-export function blockEditing(words: BlockWords, notes: () => string[]) {
+export function blockEditing(
+  words: BlockWords,
+  notes: () => string[],
+  pickFile: (view: EditorView, at: number) => void,
+) {
   return [
-    autocompletion({ override: [slashSource(words), wikiSource(notes)], icons: false }),
-    keymap.of([
-      { key: "Tab", run: tab(false) },
-      { key: "Shift-Tab", run: tab(true) },
-    ]),
+    autocompletion({ override: [slashSource(words, pickFile), wikiSource(notes)], icons: false }),
+    tableEditing(words.table),
     handle(words),
     EditorView.domEventHandlers({
       paste(e, view) {

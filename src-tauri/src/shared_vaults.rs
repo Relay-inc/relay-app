@@ -74,6 +74,8 @@ pub struct Changed { pub fp: String, pub name: String }
 /// Run the rounds now, without waiting for the interval: a vault was just made or joined.
 static NOW: AtomicBool = AtomicBool::new(false);
 pub fn sync_now() { NOW.store(true, Ordering::Relaxed); }
+/// Whether a round is still asked for and not yet taken.
+pub fn pending() -> bool { NOW.load(Ordering::Relaxed) }
 /// Taken by the loop in lib.rs: whether a round was asked for since it last looked.
 pub fn asked() -> bool { NOW.swap(false, Ordering::Relaxed) }
 
@@ -244,7 +246,7 @@ impl Hub {
                     if e.file_name().to_string_lossy().as_ref() < cutoff.as_str() { std::fs::remove_dir_all(e.path()).ok(); }
                 }
                 std::fs::create_dir_all(&v.folder).ok();
-                let base: Manifest = std::fs::read_to_string(base_path(data, &v.id)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+                let base: Manifest = crate::util::read_json(base_path(data, &v.id));
                 let remote = client(v, me).sealed(&v.id, key.clone());
                 // the keys first: a new one taken, the members pinned, this Mac's keys sent, a due rotation made
                 // (admin); every change saved before anything goes on (docs/workspaces.md, Key rotation)

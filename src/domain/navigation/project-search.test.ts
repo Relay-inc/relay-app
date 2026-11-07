@@ -30,3 +30,15 @@ test("results are capped without changing the source list", () => {
   assert.deepEqual(names("relay", 2), ["Relay", "Relay Docs"]);
   assert.equal(projects[0].name, "Relay Docs");
 });
+
+test("conversations match on title and, through the context, on the project's name", () => {
+  const chats = [
+    { name: "Contact sync strategy", context: "Harbor CRM", aliases: [] },
+    { name: "Release notes", context: "Harbor CRM", aliases: [] },
+    { name: "Contact import", context: "Northwind", aliases: [] },
+  ];
+  const titles = (query: string) => searchProjects(chats, query).map(c => c.name);
+  assert.deepEqual(titles("sync"), ["Contact sync strategy"]);
+  assert.deepEqual(titles("harbor"), ["Contact sync strategy", "Release notes"]);
+  assert.deepEqual(titles("contact northwind"), ["Contact import"]);
+});

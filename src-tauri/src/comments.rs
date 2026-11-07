@@ -84,7 +84,7 @@ pub fn save_seen(path: &Path, seen: &std::collections::BTreeSet<String>) {
 /// A new entry from the page or an agent, checked: what it may hold, and when. `mentions`: members a comment or reply
 /// mentions (16 hex each), at most 20; others are left out.
 pub fn entry(kind: &str, on: &str, text: &str, quote: &str, anchor: &Value, mentions: &[String]) -> Result<Value, String> {
-    let at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+    let at = agent_core::usage::now_ms();
     let mut m: Vec<&String> = mentions.iter().filter(|m| member_id(m)).collect();
     m.dedup();
     m.truncate(MENTIONS_MAX);
@@ -109,19 +109,17 @@ pub fn new_key() -> String { relay_remote::tls::random_secret()[..16].to_string(
 fn file(root: &Path, rel: &str) -> PathBuf { root.join(".relay").join("comments").join(format!("{rel}.json")) }
 /// A note of this Mac's own: its entries (each by "", this Mac).
 pub fn read_local(root: &Path, rel: &str) -> Vec<Entry> {
-    let all: Vec<Value> = std::fs::read_to_string(file(root, rel)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    let all: Vec<Value> = crate::util::read_json(file(root, rel));
     all.into_iter().filter_map(|v| Some((v["id"].as_str()?.to_string(), String::new(), v))).collect()
 }
 /// One entry added to a note of this Mac's own.
 pub fn add_local(root: &Path, rel: &str, key: &str, mut v: Value) -> Result<(), String> {
     let path = file(root, rel);
-    let mut all: Vec<Value> = std::fs::read_to_string(&path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    let mut all: Vec<Value> = crate::util::read_json(&path);
     v["id"] = json!(key);
     all.push(v);
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
-    let tmp = path.with_extension("json.relay-tmp");
-    std::fs::write(&tmp, serde_json::to_string(&all).unwrap()).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, &path).map_err(|e| { std::fs::remove_file(&tmp).ok(); e.to_string() })
+    crate::util::write_file(&path, serde_json::to_string(&all).unwrap())
 }
 
 /// The workspace folder (one of `roots`) a note is in and its path there; None when it is in none, is no .md file or

@@ -5,6 +5,8 @@ import { clearPrep } from "../conversations/chats";
 import { useConversationsStore } from "../conversations/store";
 import { meetingNote } from "./calendar";
 import { saveBriefing } from "./meeting-view";
+import { recordWrite } from "../navigation/changes";
+import { t } from "../../shared/i18n";
 
 // A prep rewrites the briefing, and Claude may drop what is the user's in it. What the user owns (their points, the
 // steps they ticked) is kept with the prep's conversation when it starts, and put back into the briefing when its turn
@@ -33,8 +35,15 @@ export async function finishPrep(key: string, atStart = false) {
     // the briefing is still the one the prep was asked about: it has not written yet, the snapshot waits for its next turn
     const state = prepState(run, now);
     if (state === "wait" && !atStart) return; // at start the prep is dead: nothing more will be written
-    const merged = state === "merge" && now !== null ? mergePrep(run, now) : null;
-    if (merged !== null && merged !== now) await saveBriefing(meeting, merged);
+    const owned = run.points.length > 0 || run.ticked.length > 0; // nothing of the user's to put back: the prep's own text stands
+    const merged = state === "merge" && now !== null && owned ? mergePrep(run, now) : null;
+    let after = note?.text ?? null;
+    if (merged !== null && merged !== now) after = (await saveBriefing(meeting, merged))?.text ?? after;
+    // the prep's write, as one entry of the Changes feed: the note as it was when the prep started against the note now
+    if (state === "merge" && note && after !== null && run.before !== undefined)
+      await recordWrite("prep", run.meeting.title, t("changes.reasonPrep", { title: run.meeting.title }), [
+        { path: note.path, before: run.before, after },
+      ]);
   } catch {
     return;
   }

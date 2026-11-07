@@ -6,6 +6,9 @@ import { startRecording, useRecordingStore, type LiveLine } from "../../../appli
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 
+// one empty list: a new [] per call is a new snapshot to the store, and React renders again forever
+const NONE: LiveLine[] = [];
+
 /** A speaker's lines that follow each other as one turn, as in the transcript the vault gets. */
 const turnsOf = (lines: LiveLine[]) =>
   lines.reduce<{ at: number; track: number; text: string }[]>((turns, line) => {
@@ -30,7 +33,7 @@ export function Transcript({
   const { t } = useT();
   const mine = useRecordingStore(s => s.phase !== "idle" && s.meeting?.id === meeting.id);
   const busy = useRecordingStore(s => s.phase !== "idle");
-  const lines = useRecordingStore(s => (mine ? s.lines : []));
+  const lines = useRecordingStore(s => (mine ? s.lines : NONE));
   const { secs, upto, live, startedAt } = useRecordingStore();
   const scroller = useRef<HTMLDivElement>(null);
   const [following, setFollowing] = useState(true);

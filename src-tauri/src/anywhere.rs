@@ -11,6 +11,10 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 const PILL: &str = "dictation-pill";
+const CAPTURE: &str = "capture";
+/// Quick capture's key (Settings › Shortcuts, `app.capture`) as the Mac writes it for global-hotkey. ⌘⇧N is Finder's New
+/// Folder and every browser's private window, so a key registered for the whole Mac must not be it: ⌃⌥⌘N is nobody's.
+const CAPTURE_KEY: &str = "ctrl+alt+meta+KeyN";
 // when the shortcut went down while nothing recorded: a release after 400 ms ends a held recording
 static PRESSED: Mutex<Option<Instant>> = Mutex::new(None);
 // where the running recording's text goes
@@ -33,6 +37,36 @@ fn wanted(settings: &Value) -> (Vec<(String, Target)>, String) {
     };
     let list = [one("chatOn", "chatShortcut", "alt+shift+Space", Target::Chat), one("pasteOn", "pasteShortcut", "ctrl+alt+Space", Target::Paste)];
     (list.into_iter().flatten().collect(), voice["mode"].as_str().unwrap_or("both").to_string())
+}
+
+/// The shortcut that opens quick capture, in global-hotkey's spelling.
+fn capture_shortcut(settings: &Value) -> String {
+    settings["shortcuts"]["app.capture"][0].as_str().filter(|s| !s.is_empty()).unwrap_or(CAPTURE_KEY).replace("meta", "super")
+}
+
+/// Quick capture: its small window, made once and kept hidden; every call brings it forward (over a full-screen app too)
+/// and tells the page to take the focus.
+pub fn open_capture(app: &AppHandle) {
+    let a = app.clone();
+    app.run_on_main_thread(move || {
+        let app = &a;
+        if app.get_webview_window(CAPTURE).is_none() {
+            let lang = super::ui_lang_of(&app.state::<super::App>().settings.lock().unwrap());
+            let built = tauri::WebviewWindowBuilder::new(app, CAPTURE, tauri::WebviewUrl::App("capture.html".into()))
+                .title(super::tr(lang, "capture")).inner_size(440.0, 200.0).resizable(false).minimizable(false).maximizable(false)
+                .always_on_top(true).visible_on_all_workspaces(true).center().visible(false).build();
+            if let Err(e) = built { eprintln!("capture window: {e}"); return; }
+        }
+        let Some(w) = app.get_webview_window(CAPTURE) else { return };
+        w.show().ok();
+        w.set_focus().ok();
+        app.emit_to(CAPTURE, "capture-open", ()).ok();
+    }).ok();
+}
+/// The capture window out of the way (Esc, or after Save): what was typed stays for the next time unless it was saved.
+#[tauri::command]
+pub fn quick_capture_hide(app: AppHandle) {
+    if let Some(w) = app.get_webview_window(CAPTURE) { w.hide().ok(); }
 }
 
 /// Registers the shortcuts, or takes them away, as the settings say. Called at the start and after every save.
@@ -62,6 +96,9 @@ pub fn apply(app: &AppHandle) {
         });
         if let Err(e) = registered { eprintln!("dictation: shortcut {shortcut}: {e}"); }
     }
+    let key = capture_shortcut(&settings);
+    let opened = shortcuts.on_shortcut(key.as_str(), |app, _, event| { if event.state == ShortcutState::Pressed { open_capture(app); } });
+    if let Err(e) = opened { eprintln!("capture: shortcut {key}: {e}"); }
 }
 
 /// Settings records a new shortcut (Voice, Shortcuts): the registered ones and the menu bar's step aside until it is
@@ -247,7 +284,7 @@ mod mac {
 
 #[cfg(test)]
 mod tests {
-    use super::{wanted, Target};
+    use super::{capture_shortcut, wanted, Target};
     use serde_json::json;
 
     #[test]
@@ -258,5 +295,12 @@ mod tests {
         assert_eq!(wanted(&both), (vec![("shift+super+KeyD".into(), Target::Chat), ("ctrl+alt+Space".into(), Target::Paste)], "hold".into()));
         // the composer's switch does not register anything with macOS
         assert_eq!(wanted(&json!({ "voice": { "on": true, "shortcut": "alt+Space" } })).0, vec![]);
+    }
+    #[test]
+    fn the_capture_key_parses_and_a_saved_one_wins() {
+        assert!(capture_shortcut(&json!({})).parse::<tauri_plugin_global_shortcut::Shortcut>().is_ok());
+        assert_eq!(capture_shortcut(&json!({})), "ctrl+alt+super+KeyN");
+        assert_eq!(capture_shortcut(&json!({"shortcuts": {"app.capture": ["shift+meta+KeyJ"]}})), "shift+super+KeyJ");
+        assert_eq!(capture_shortcut(&json!({"shortcuts": {"app.capture": [""]}})), "ctrl+alt+super+KeyN");
     }
 }

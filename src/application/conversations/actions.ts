@@ -10,9 +10,9 @@ import {
   waitsForPickup,
 } from "../../domain/conversations/rules";
 import { push, releaseWaiting } from "../../domain/conversations/events";
-import { outgoing, planSend, refusesImages } from "../../domain/conversations/send";
+import { outgoing, planSend, refusesImages, sendRequest } from "../../domain/conversations/send";
 import { busySend, editQueued, enqueue, moveQueued, removeQueued, type Queued } from "../../domain/conversations/queue";
-import { fileName, withFiles } from "../../domain/conversations/files";
+import { fileName } from "../../domain/conversations/files";
 import { WAIT } from "../../domain/navigation/views";
 import { isTerminal, termSid } from "../../domain/navigation/keys";
 import { ORCH } from "../../domain/orchestrator/rules";
@@ -231,25 +231,23 @@ async function deliver(key: string, text: string, images: Img[], files: string[]
     // ponytail: a machine cannot read this Mac's paths; upload the files over the connection when that is needed
     if (files.length && machineChoice(key).value) throw new Error(t("file.remote"));
     await readyRepo(key);
-    await backend.send({
-      project: key,
-      // attached files go as their paths after the message: the agent reads them where they are
-      text: withFiles(sent, files),
-      images: images.map(image => ({ media_type: image.mt, data: image.data })),
-      name,
-      fork: conversation?.fork ?? null,
-      mail: !!conversation?.fromMail,
-      model: picks("model", key).value,
-      effort: picks("effort", key).value,
-      provider: chatAgent(key),
-      // where it runs, as the composer shows it; the backend only reads it at the first spawn
-      machine: machineChoice(key).value,
-      told: told || null,
-      about: conversation?.project ?? null,
-      context: context || null,
-      // the vault picked for a general conversation, a project's runs in its project's vault
-      vault: (!conversation?.project && conversation?.vault) || null,
-    });
+    await backend.send(
+      sendRequest({
+        key,
+        sent,
+        files,
+        images,
+        name,
+        conversation,
+        model: picks("model", key).value,
+        effort: picks("effort", key).value,
+        provider: chatAgent(key),
+        // where it runs, as the composer shows it; the backend only reads it at the first spawn
+        machine: machineChoice(key).value,
+        told,
+        context,
+      }),
+    );
     if (told && cs().chats[key]) {
       set(draft => {
         draft.chats[key].told = told;

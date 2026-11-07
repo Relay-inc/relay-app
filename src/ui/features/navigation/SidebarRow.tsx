@@ -16,15 +16,17 @@ type Props = Omit<ComponentProps<"div">, "className"> & {
   name: string;
   icon?: string; // a named icon, or `svg`: a provider's own glyph
   svg?: string;
+  lead?: ReactNode; // a glyph of its own in the icon's place (a meeting's stage)
   box?: string; // the grid `svg` is drawn on
   img?: string | null; // a project's icon: an image, else an emoji, else the folder
-  emoji?: string;
+  emoji?: string; // a project's or a page's (issue 427), in place of its glyph
   tint?: Tint;
   selected?: boolean;
   unseen?: boolean;
   indent?: boolean; // under its project
   nested?: boolean; // in a folder under its project: one step further in
   closable?: boolean;
+  closeTitle?: string; // the × button's tooltip, "Close" unless given
   closing?: boolean; // being closed: greyed out and pulsing until it is gone
   trail?: Trail;
   subs?: number; // subagents working
@@ -70,6 +72,7 @@ export function SidebarRow({
   name,
   icon = "",
   svg = "",
+  lead: own,
   box = "0 0 16 16",
   img = null,
   emoji = "",
@@ -79,6 +82,7 @@ export function SidebarRow({
   indent = false,
   nested = false,
   closable = false,
+  closeTitle,
   closing = false,
   trail = "",
   subs = 0,
@@ -137,10 +141,13 @@ export function SidebarRow({
 
   const glyphClass = `glyph ${kind === "conv" ? (indent ? "size-3.25" : "size-3.75") : indent ? "size-3.5" : "size-4"} flex-none ${glyphColor}`;
   let lead: ReactNode = glyph(glyphClass);
-  if (kind === "fold") lead = null;
+  const emojiLead = <span className="w-4 flex-none text-center text-sm leading-none">{emoji}</span>;
+  if (own) lead = <span className="size-4 flex-none grid place-items-center text-secondary">{own}</span>;
+  else if (kind === "fold") lead = null;
+  else if (kind !== "proj" && emoji) lead = emojiLead;
   else if (kind === "proj") {
     if (isImg(img)) lead = <ProjectImg url={img} className="size-4 flex-none object-contain rounded-xs" />;
-    else if (emoji) lead = <span className="w-4 flex-none text-center text-sm leading-none">{emoji}</span>;
+    else if (emoji) lead = emojiLead;
     // no icon of its own: its initial (or a short all-caps first word, "BE") on a small tile in its context's colour
     else
       lead = (
@@ -200,8 +207,8 @@ export function SidebarRow({
       {closable && !closing ? (
         <button
           className="hidden group-hover:grid place-items-center size-4 ml-1 flex-none rounded-sm text-sm leading-none cursor-default text-secondary hover:bg-fill-2 hover:text-label"
-          title={t("nav.close")}
-          aria-label={t("nav.close")}
+          title={closeTitle ?? t("nav.close")}
+          aria-label={closeTitle ?? t("nav.close")}
           onClick={fromButton(onClose)}
         >
           ×

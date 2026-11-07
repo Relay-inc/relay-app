@@ -8,7 +8,10 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant, SystemTime};
 use std::process::{Command, Stdio};
 
 /// The most characters of text a provider's `write` takes: it cuts the rest (the instruction does not count).
@@ -21,6 +24,8 @@ pub mod peer;
 pub mod pending;
 pub mod prompt;
 pub mod usage;
+pub mod util;
+pub use util::*;
 
 /// What a provider can do. The webview hides what is false (the effort pick, the terminal button, the
 /// subagents strip, image paste, …) and the app skips the calls.
@@ -78,14 +83,39 @@ pub struct Env<'a> {
     pub bin: &'a str,
     /// The pending folder: `<id>.json` requests, `<id>.answer.json` answers.
     pub pending: &'a Path,
+    /// What the app grants or fences for this conversation.
+    pub grants: &'a Grants,
     /// The provider's own settings, `settings.agents.providers.<id>` (`on`, `bin` and the keys of its
-    /// options, see `options` in src/types.ts). Null when there are none.
+    /// options, see `options` in src/types.ts), and the account keys of [`Caps::accounts`]. Null when there are none.
     pub opts: &'a Value,
 }
 impl Env<'_> {
     /// A string option, "" when unset.
     pub fn opt(&self, key: &str) -> &str { self.opts[key].as_str().unwrap_or("") }
 }
+
+/// What the app grants or fences for one conversation, as opposed to the provider's own settings ([`Env::opts`]):
+/// set per start by the app, read by the provider that can honour it (so far Claude Code's `command` and `terminal`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Grants {
+    /// Extra tool rules the conversation may never use (the fence around other vaults and the app's own data).
+    pub deny: Vec<String>,
+    /// A shared vault, or another vault than the main one: only the app's own MCP servers, no hooks, no auto memory.
+    pub fenced: bool,
+    /// The relay-mail tools, answered by the app over the control pipe.
+    pub mail: bool,
+    /// The relay-design tools, answered by the app over the control pipe.
+    pub design: bool,
+    /// Runs on a work machine: the mode comes with the machine's mirrored settings.
+    pub machine: bool,
+    /// The orchestrator's role, "coordinator" or "worker": the relay-orch tools.
+    pub orch: Option<String>,
+    /// Appended to the system prompt (after [`envelope::HINT`]).
+    pub system: Option<String>,
+}
+/// No grants, for a call that is not a conversation (and for tests).
+pub static NO_GRANTS: Grants = Grants { deny: Vec::new(), fenced: false, mail: false, design: false, machine: false, orch: None, system: None };
 
 /// Installed, which version, logged in. `None` where the provider cannot tell.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -255,6 +285,12 @@ pub trait AgentProvider: Sync {
 
     /// A session's messages from byte offset `from` of its transcript, and the offset to continue from.
     fn history(&self, env: &Env, sid: &str, from: u64) -> (Vec<Event>, u64);
+    /// `caps.remote`: a session's whole transcript, as moving the conversation to another machine takes it along.
+    fn read_session(&self, _env: &Env, _sid: &str) -> Result<Vec<u8>, String> { Err("unsupported".into()) }
+    /// `caps.remote`: stores a transcript as the session's own for `env`'s vault and account, so a resume finds it.
+    fn write_session(&self, _env: &Env, _sid: &str, _bytes: &[u8]) -> Result<(), String> { Err("unsupported".into()) }
+    /// `caps.remote`: the folder of the provider's own memory for `env`'s vault, whose paths move with a conversation.
+    fn memory_dir(&self, _env: &Env) -> Option<String> { None }
     /// Sessions outside the app (terminal, background), each `{id, sessionId, name?, kind, status, state?}`
     /// with status "busy" | "idle" and kind "interactive" | "background".
     fn sessions(&self, _env: &Env) -> Vec<Value> { vec![] }
@@ -308,14 +344,89 @@ pub fn run(bin: &str, path: &str, args: &[&str]) -> Option<String> {
 pub fn which(name: &str, path: &str) -> Option<String> {
     path.split(':').map(|d| format!("{d}/{name}")).find(|p| Path::new(p).is_file())
 }
-/// The first line of `bin --version`, the way most CLIs answer it.
+/// The first line of `bin --version`, the way most CLIs answer it. Read once per binary file and modification time:
+/// a conversation start asks every time, and each ask would spawn the CLI.
 pub fn version(bin: &str, path: &str) -> Option<String> {
-    run(bin, path, &["--version"]).and_then(|o| o.lines().next().map(|l| l.trim().to_string())).filter(|l| !l.is_empty())
+    type Seen = HashMap<(PathBuf, SystemTime), Option<String>>;
+    static SEEN: LazyLock<Mutex<Seen>> = LazyLock::new(Default::default);
+    let file = if bin.contains('/') { Some(bin.to_string()) } else { which(bin, path) };
+    let key = file.and_then(|f| { let f = PathBuf::from(f); let m = f.metadata().and_then(|m| m.modified()).ok()?; Some((f, m)) });
+    if let Some(v) = key.as_ref().and_then(|k| SEEN.lock().unwrap().get(k).cloned()) { return v; }
+    let v = run(bin, path, &["--version"]).and_then(|o| o.lines().next().map(|l| l.trim().to_string())).filter(|l| !l.is_empty());
+    if let Some(k) = key { SEEN.lock().unwrap().insert(k, v.clone()); }
+    v
+}
+
+/// `run`, but killed (and None) when it has not exited within `within`.
+pub fn run_within(bin: &str, path: &str, args: &[&str], within: Duration) -> Option<String> {
+    use std::io::Read;
+    let mut child = Command::new(bin).args(args).env("PATH", path).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
+    let mut out = child.stdout.take()?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || { let mut b = vec![]; out.read_to_end(&mut b).ok(); tx.send(b).ok(); });
+    let Ok(raw) = rx.recv_timeout(within) else { child.kill().ok(); child.wait().ok(); return None };
+    child.wait().ok().filter(|s| s.success())?;
+    Some(String::from_utf8_lossy(&raw).into_owned())
+}
+
+/// `run` (at most 15 s), but a result younger than `ttl` is returned as it was. Callers that ask within it share one
+/// spawn, also when they ask at the same time: the lock is held while it runs. Only the last result is kept, per command.
+// ponytail: one lock for every command; per-command locks if a second caller with a slow command shows up
+pub fn run_cached(bin: &str, path: &str, args: &[&str], ttl: Duration) -> Option<String> {
+    type Last = HashMap<String, (Instant, Option<String>)>;
+    static LAST: LazyLock<Mutex<Last>> = LazyLock::new(Default::default);
+    let key = format!("{bin}\0{path}\0{}", args.join("\0"));
+    let mut last = LAST.lock().unwrap();
+    if let Some((_, out)) = last.get(&key).filter(|(at, _)| at.elapsed() < ttl) { return out.clone(); }
+    let out = run_within(bin, path, args, Duration::from_secs(15));
+    last.insert(key, (Instant::now(), out.clone()));
+    out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn script(name: &str, body: &str) -> (PathBuf, PathBuf) {
+        let d = std::env::temp_dir().join(format!("agent-core-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let (bin, log) = (d.join("tool"), d.join("calls"));
+        std::fs::write(&log, "").unwrap();
+        std::fs::write(&bin, format!("#!/bin/sh\necho x >> '{}'\n{body}\n", log.display())).unwrap();
+        std::fs::set_permissions(&bin, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        (bin, log)
+    }
+    fn calls(log: &Path) -> usize { std::fs::read_to_string(log).unwrap().lines().count() }
+    #[test]
+    fn version_is_read_once_per_binary_and_mtime() {
+        let (bin, log) = script("version", "echo '1.2.3 (Tool)'");
+        let b = bin.to_str().unwrap();
+        assert_eq!(version(b, "/usr/bin:/bin").as_deref(), Some("1.2.3 (Tool)"));
+        assert_eq!(version(b, "/usr/bin:/bin").as_deref(), Some("1.2.3 (Tool)"));
+        assert_eq!(calls(&log), 1);
+        std::fs::File::options().write(true).open(&bin).unwrap().set_modified(SystemTime::now() + Duration::from_secs(5)).unwrap();
+        version(b, "/usr/bin:/bin");
+        assert_eq!(calls(&log), 2, "a changed binary is asked again");
+    }
+    #[test]
+    fn run_cached_answers_within_the_ttl_and_refreshes_after() {
+        let (bin, log) = script("cached", "echo out");
+        let b = bin.to_str().unwrap();
+        let long = Duration::from_secs(60);
+        assert_eq!(run_cached(b, "/bin", &["a"], long).as_deref(), Some("out\n"));
+        run_cached(b, "/bin", &["a"], long);
+        assert_eq!(calls(&log), 1);
+        run_cached(b, "/bin", &["a"], Duration::ZERO);
+        assert_eq!(calls(&log), 2);
+    }
+    #[test]
+    fn run_within_gives_up_on_a_hung_command() {
+        let (bin, _) = script("hung", "exec sleep 30");
+        let at = Instant::now();
+        assert_eq!(run_within(bin.to_str().unwrap(), "/bin", &[], Duration::from_millis(300)), None);
+        assert!(at.elapsed() < Duration::from_secs(5));
+        let (bin, _) = script("fails", "echo half; exit 1");
+        assert_eq!(run_within(bin.to_str().unwrap(), "/bin", &[], Duration::from_secs(5)), None);
+    }
     #[test]
     fn events_serialise_for_the_webview() {
         let e = serde_json::to_value(Event::ToolCall { id: "t1".into(), name: "Read".into(), input: serde_json::json!({"file_path": "/a"}) }).unwrap();

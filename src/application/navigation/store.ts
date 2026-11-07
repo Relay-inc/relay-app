@@ -46,8 +46,9 @@ type NavigationState = {
     // the vault folder the sidebar shows, "" for the main vault: kept here, not in the settings, which the settings
     // window saves whole from its own copy
     workspace: string;
-    pagesOpen: Set<string>; // the Pages tab's unfolded folders and projects, by path
+    pagesOpen: Set<string>; // the Pages tab's unfolded folders and projects, by path; kept over a restart
     touches: Touch[]; // the notes conversations read and wrote this week, for the Pages tab's Recent
+    recentRemoved: Record<string, Record<string, number>>; // per workspace root: the notes taken off Recent, when; kept over a restart
     tab: "chats" | "pages"; // the sidebar's tab, kept here for the same reason as `workspace`
   };
 };
@@ -86,8 +87,9 @@ export const useNavigationStore = makeStore<NavigationState>(() => ({
     folders: storage.get<Record<string, Folder[]>>("folders", {}),
     editing: "",
     workspace: storage.get<string>("workspace", ""),
-    pagesOpen: new Set(),
+    pagesOpen: new Set(storage.get<string[]>("pagesOpen", [])),
     touches: [],
+    recentRemoved: storage.get<Record<string, Record<string, number>>>("recentRemoved", {}),
     tab: storage.get<"chats" | "pages">("sidebarTab", "chats"),
   },
 }));

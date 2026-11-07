@@ -1,25 +1,46 @@
-import { useRef, useState, type DragEvent, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from "react";
 import type { PageFolder } from "../../../domain/navigation/pages";
-import { noteName } from "../../../domain/navigation/pages";
+import { noteName, sortPages } from "../../../domain/navigation/pages";
 import { CONTEXT_TINTS } from "../../../domain/navigation/sidebar";
 import {
+  addToConversation,
+  clearRecent,
   copyPagePath,
   duplicatePage,
   isProjectNote,
   openPage,
   openPagePath,
   pagesView,
+  placeIn,
+  removeRecent,
   projectEntry,
   PROJECT_STATES,
   revealPage,
   setProjectState,
   togglePage,
 } from "../../../application/navigation/pages";
+import { isFavourite, loadFavourites, toggleFavourite } from "../../../application/navigation/favourites";
+import {
+  loadTemplates,
+  loadTimes,
+  newFromTemplate,
+  openDailyNote,
+  setSort,
+  sortOf,
+  sortsByModified,
+  templatesOf,
+  useKbStore,
+} from "../../../application/navigation/kb";
 import { newChatHere } from "../../../application/conversations/chats";
 import { select } from "../../../application/navigation/navigation";
-import { GRAPH } from "../../../domain/navigation/views";
+import { GRAPH, INBOX_VIEW } from "../../../domain/navigation/views";
+import { loadInboxNotes, useInboxStore } from "../../../application/inbox/inbox";
+import { loadViews } from "../../../application/collections/collections";
+import { SavedViewRows } from "./CollectionRows";
 import { toast } from "../../../application/navigation/navigation";
-import { workspaces } from "../../../application/navigation/workspaces";
+import { activeFolder, workspaces } from "../../../application/navigation/workspaces";
+import { loadLinked, useLinkedStore } from "../../../application/navigation/linked";
+import { emojiOf, iconOf } from "../../../domain/workspace/decor";
 import { projectVault as homeOf } from "../../../application/navigation/migrate";
 import { toggleSection } from "../../../application/navigation/sidebar";
 import { useNavigationStore } from "../../../application/navigation/store";
@@ -34,10 +55,16 @@ import { PageFileDialog, type PageFileAsk } from "./PageFileDialog";
 import { MigrateDialog } from "./MigrateDialog";
 import { ProjectDialog, type ProjectAsk } from "./ProjectDialog";
 import { VaultCheckDialog } from "./VaultCheckDialog";
+import { Collections } from "./Collections";
 
+const FAVOURITES = "pages:favourites";
+const NO_TIMES: Record<string, number> = {};
+const NO_ICONS: Record<string, string> = {};
+// separates the parts of a menu item's id that hold a template or folder name
+const SEP = "\u001f";
 const RECENT = "pages:recent";
 const FOLDERS = "pages:folders";
-// unfolded like a folder (pagesOpen), so it starts folded on every start
+// unfolded like a folder (pagesOpen)
 const SYSTEM = "pages:system";
 
 /** The sidebar's Pages tab: the notes of the workspace shown. Recent, its contexts with their projects (a project
@@ -49,7 +76,7 @@ const SYSTEM = "pages:system";
  *  workspace. A context without projects still shows, with New project. A page or folder dragged onto a folder moves there. */
 export function PagesView() {
   const { t } = useT();
-  const { model, system, recent, found } = useDerived(() => pagesView());
+  const { model, system, recent, found, favourites } = useDerived(() => pagesView());
   const open = useDerived(() => openPagePath());
   const unfolded = useNavigationStore(s => s.sidebar.pagesOpen);
   const collapsed = useNavigationStore(s => s.sidebar.collapsed);
@@ -64,7 +91,34 @@ export function PagesView() {
   const [migrating, setMigrating] = useState<{ project: string; to: string; mode: "move" | "copy" } | null>(null);
   const [dropOn, setDropOn] = useState<string | null>(null);
   const menuElement = useRef<HTMLDivElement>(null);
+  // what points at the projects and contexts (their virtual groups): read again when the notes that exist change
+  const notesVersion = useWorkspaceStore(s => s.notesVersion);
+  const workspaceShown = useDerived(() => activeFolder());
+  useEffect(() => {
+    void loadLinked();
+  }, [notesVersion, workspaceShown]);
+  // the pinned notes and the templates of the workspace shown; the times a folder sorted by modified needs
+  useKbStore(s => s.templates); // the menus list them once read
+  const sorts = useKbStore(s => s.sorts);
+  const times = useKbStore(s => s.times[workspaceShown]) ?? NO_TIMES;
+  // a note's `icon:` emoji in place of the file glyph (issue 427), read with loadLinked
+  const noteIcons = useLinkedStore(s => s.icons[workspaceShown]) ?? NO_ICONS;
+  useEffect(() => {
+    void loadFavourites();
+    void loadTemplates();
+  }, [workspaceShown]);
+  useEffect(() => {
+    if (sortsByModified()) void loadTimes();
+  }, [notesVersion, workspaceShown, sorts]);
   useDismiss(menuElement, !!menu, () => setMenu(null));
+  // the Inbox's count: read again when the notes that exist change
+  const inboxCount = useInboxStore(s => s.notes[workspaceShown]?.length ?? 0);
+  useEffect(() => {
+    void loadInboxNotes(workspaceShown);
+  }, [notesVersion, workspaceShown]);
+  useEffect(() => {
+    void loadViews(workspaceShown);
+  }, [workspaceShown]);
 
   const onMenu = (path: string, kind: MenuKind) => (e: MouseEvent) => {
     e.preventDefault();
@@ -80,11 +134,36 @@ export function PagesView() {
       ...others.map(w => ({ id: `${mode}:${w.folder}`, label: w.name })),
     ]);
   };
-  const fileItems = (kind: "note" | "folder" | "top"): MenuItem[] => [
+  // New ▸ from a template: one item per template of the vault, made in the type's home or in this folder
+  const templateItems = (folder: string): MenuItem[] => {
+    const list = templatesOf();
+    return list.length
+      ? [
+          { id: "", label: t("pages.fromTemplate"), head: true },
+          ...list.map(name => ({ id: `tpl${SEP}${name}${SEP}${folder}`, label: name, icon: "file" })),
+        ]
+      : [];
+  };
+  const fileItems = (kind: "note" | "folder" | "top", path = ""): MenuItem[] => [
+    ...(kind === "note"
+      ? [
+          { id: "fav", label: t(isFavourite(path) ? "pages.unfavourite" : "pages.favourite"), icon: "star" },
+          { id: "addchat", label: t("pages.addToChat"), icon: "talk" },
+        ]
+      : []),
     ...(kind !== "note"
       ? [
           { id: "page", label: t("pages.newPage"), icon: "file" },
           { id: "folder", label: t("pages.newFolder"), icon: "folder" },
+          ...templateItems(path),
+        ]
+      : []),
+    ...(kind !== "note"
+      ? [
+          {
+            id: `sort${SEP}${path}${SEP}${sortOf(path) === "name" ? "modified" : "name"}`,
+            label: t(sortOf(path) === "name" ? "pages.sortModified" : "pages.sortName"),
+          },
         ]
       : []),
     ...(kind !== "top"
@@ -111,7 +190,7 @@ export function PagesView() {
     const folder = model.contexts.find(context => context.name === name)?.folder ?? "";
     return [
       { id: "project", label: t("pages.newProject") },
-      ...(folder ? [...inFolder(folder), ...where(folder)] : []),
+      ...(folder ? [...inFolder(folder), ...templateItems(folder), ...where(folder)] : []),
     ];
   };
   const projectItems = (key: string): MenuItem[] => {
@@ -120,6 +199,7 @@ export function PagesView() {
     const folder = project.folder?.path ?? "";
     return [
       ...(folder ? inFolder(folder) : []),
+      ...templateItems(folder || project.note.split("/").slice(0, -1).join("/")),
       { id: "open", label: t("pages.openNote") },
       { id: "chat", label: t("nav.newChat") },
       { id: "", label: t("pages.projectState"), head: true },
@@ -142,14 +222,19 @@ export function PagesView() {
         ? contextItems(path)
         : kind === "top"
           ? [{ id: "context", label: t("pages.newContext") }, ...fileItems(kind), { id: "check", label: t("vc.menu") }]
-          : fileItems(kind);
+          : fileItems(kind, path);
   // a project's own note keeps its name and place: the project is known by it
   const guarded = (path: string, then: () => void) => (isProjectNote(path) ? toast(t("pages.projectNote")) : then());
   const pick = (target: { path: string; kind: MenuKind }, id: string) => {
     setMenu(null);
     const { path } = target;
     const arg = id.slice(id.indexOf(":") + 1);
-    if (id.startsWith("page:") || id.startsWith("folder:"))
+    const [verb, one, two] = id.split(SEP);
+    if (verb === "tpl") void newFromTemplate(one, placeIn(two));
+    else if (verb === "sort") setSort(one, two as "name" | "modified");
+    else if (id === "fav") void toggleFavourite(path);
+    else if (id === "addchat") void addToConversation(path);
+    else if (id.startsWith("page:") || id.startsWith("folder:"))
       setAsk({ kind: id.startsWith("page:") ? "page" : "folder", folder: arg });
     else if (id.startsWith("reveal:")) void revealPage(arg);
     else if (id.startsWith("copy:")) void copyPagePath(arg);
@@ -196,14 +281,18 @@ export function PagesView() {
   });
 
   // rows a level deeper sit in a wrapper one step in, not SidebarRow's own `indent`, so a tree goes as deep as it is
-  const note = (path: string) => (
+  const note = (path: string, onRemove?: () => void) => (
     <SidebarRow
       key={path}
       kind="view"
       icon="file"
+      emoji={emojiOf(noteIcons[path]) ?? ""}
       data-page={path}
       name={noteName(path)}
       selected={open === path}
+      closable={!!onRemove}
+      closeTitle={t("pages.recentRemove")}
+      onClose={onRemove}
       onClick={() => openPage(path)}
       onContextMenu={onMenu(path, "note")}
       {...drag(path)}
@@ -211,10 +300,15 @@ export function PagesView() {
   );
   // a folder's subfolders, then its notes, one step in; `skip` is the note its project row already opens
   // `scope` keeps a folder's unfolding apart when System shows a folder the tree has too (Resources)
-  const contents = (folder: PageFolder, skip = "", scope = "") => (
+  const contents = (folder: PageFolder, skip = "", scope = "", extra: ReactNode = null) => (
     <div className="ml-4">
       {folder.folders.map(sub => renderFolder(sub, scope))}
-      {folder.notes.filter(path => path !== skip).map(path => note(path))}
+      {sortPages(
+        folder.notes.filter(path => path !== skip),
+        sorts[`${workspaceShown}|${folder.path}`] ?? "name",
+        times,
+      ).map(path => note(path))}
+      {extra}
     </div>
   );
   const renderFolder = (folder: PageFolder, scope = "") => {
@@ -242,6 +336,7 @@ export function PagesView() {
     label: string,
     tint: (typeof CONTEXT_TINTS)[number] | "" = "",
     onContextMenu?: (e: MouseEvent) => void,
+    action?: { label: string; onClick: () => void },
   ) => (
     <SidebarHead
       label={label}
@@ -251,6 +346,7 @@ export function PagesView() {
       dropBefore={false}
       onClick={() => toggleSection(id)}
       onContextMenu={onContextMenu}
+      action={action}
     />
   );
 
@@ -292,12 +388,50 @@ export function PagesView() {
         selected={selected === GRAPH}
         onClick={() => select(GRAPH)}
       />
-      {recent.length ? (
-        <div className="mt-3">
-          {head(RECENT, t("pages.recent"))}
-          {collapsed[RECENT] ? null : recent.map(path => note(path))}
+      <SidebarRow
+        kind="view"
+        data-today-note
+        icon="cal"
+        name={t("pages.todayNote")}
+        onClick={() => void openDailyNote()}
+      />
+      {favourites.length ? (
+        <div className="mt-3" data-section={FAVOURITES}>
+          {head(FAVOURITES, t("pages.favourites"))}
+          {collapsed[FAVOURITES] ? null : favourites.map(path => note(path))}
         </div>
       ) : null}
+      {recent.length ? (
+        <div className="mt-3" data-section={RECENT}>
+          {head(RECENT, t("pages.recent"), "", undefined, { label: t("pages.recentClear"), onClick: clearRecent })}
+          {collapsed[RECENT]
+            ? null
+            : recent.map(path => (
+                // Delete or Backspace on a focused row takes it off Recent, as its ×
+                <div
+                  key={path}
+                  onKeyDown={e => {
+                    if (e.target !== e.currentTarget.firstElementChild || (e.key !== "Delete" && e.key !== "Backspace"))
+                      return;
+                    e.preventDefault();
+                    removeRecent(path);
+                  }}
+                >
+                  {note(path, () => removeRecent(path))}
+                </div>
+              ))}
+        </div>
+      ) : null}
+      <SidebarRow
+        kind="view"
+        data-inbox
+        icon="inbox"
+        name={t("nav.inbox")}
+        selected={selected === INBOX_VIEW}
+        meta={inboxCount ? { kind: "badge", n: inboxCount } : undefined}
+        onClick={() => select(INBOX_VIEW)}
+      />
+      <SavedViewRows />
       {model.contexts.map(context => {
         const id = `pages:ctx:${context.name}`;
         const tint = CONTEXT_TINTS[context.index % CONTEXT_TINTS.length];
@@ -312,30 +446,53 @@ export function PagesView() {
               />
             ) : (
               context.projects.map(project => {
-                const isOpen = !!project.folder && unfolded.has(project.folder.path);
+                // a flat project (just its note) unfolds too, to the notes that point at it
+                const at = project.folder?.path ?? project.note;
+                const isOpen = unfolded.has(at);
+                // the project note's icon: emoji, else the project's icon from config (decor.ts)
+                const shown = iconOf(noteIcons[project.note], icons[project.key]);
                 return (
                   <div key={project.key}>
                     <SidebarRow
                       kind="proj"
                       tint={tint}
-                      aria-expanded={project.folder ? isOpen : undefined}
+                      aria-expanded={isOpen}
                       data-project={project.key}
                       name={project.label}
-                      img={icons[project.key]?.img ?? null}
-                      emoji={icons[project.key]?.icon ?? ""}
+                      img={shown && "project" in shown ? (shown.project.img ?? null) : null}
+                      emoji={shown ? ("emoji" in shown ? shown.emoji : (shown.project.icon ?? "")) : ""}
                       selected={open === project.note}
                       meta={project.count > 1 ? { kind: "count", n: project.count } : undefined}
                       // opens its note and unfolds; a click on it open again folds it
                       onClick={() => {
-                        if (project.folder) togglePage(project.folder.path, !(isOpen && open === project.note));
+                        togglePage(at, !(isOpen && open === project.note));
                         openPage(project.note);
                       }}
                       onContextMenu={onMenu(project.key, "project")}
                     />
-                    {isOpen && project.folder ? contents(project.folder, project.note) : null}
+                    {isOpen && project.folder ? (
+                      contents(
+                        project.folder,
+                        project.note,
+                        "",
+                        <Collections
+                          layer="project"
+                          name={noteName(project.note)}
+                          inside={project.folder.path}
+                          base={project.folder.path}
+                        />,
+                      )
+                    ) : isOpen ? (
+                      <div className="ml-4">
+                        <Collections layer="project" name={noteName(project.note)} inside="" base={project.note} />
+                      </div>
+                    ) : null}
                   </div>
                 );
               })
+            )}
+            {collapsed[id] ? null : (
+              <Collections layer="context" name={context.name} inside="" base={`ctx:${context.name}`} />
             )}
           </div>
         );
@@ -349,7 +506,7 @@ export function PagesView() {
         {collapsed[FOLDERS] ? null : (
           <>
             {model.top.folders.map(folder => renderFolder(folder))}
-            {model.top.notes.map(path => note(path))}
+            {sortPages(model.top.notes, sorts[`${workspaceShown}|`] ?? "name", times).map(path => note(path))}
           </>
         )}
       </div>

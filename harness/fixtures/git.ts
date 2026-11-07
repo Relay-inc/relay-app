@@ -89,6 +89,23 @@ export const repos = [
   },
 ];
 
+/** fixture git-long: one checkout with 40 changed files, the first one a 150-line diff with a very long line, to scroll. */
+export const longRepos = [
+  {
+    ...repos[0],
+    files: Array.from({ length: 40 }, (_, i) =>
+      file(
+        `src/Billing/Report${String(i + 1).padStart(2, "0")}.php`,
+        "M",
+        false,
+        i === 0
+          ? [...fresh(150, "report"), `+    // ${"x".repeat(400)}`]
+          : ["     public function run(): void", `+        $this->step${i + 1}();`],
+      ),
+    ),
+  },
+];
+
 /** What `git push` says when the remote has commits this checkout lacks. */
 export const pushRejected = `To github.com:acme/beacon-api.git
  ! [rejected]        main -> main (fetch first)

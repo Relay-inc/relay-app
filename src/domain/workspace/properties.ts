@@ -1,13 +1,15 @@
 import { Document, isMap, isScalar, isSeq, parseDocument } from "yaml";
+import { typeOf, type FieldKind, type Registry } from "../types/registry.ts";
 
 // A page's properties: its frontmatter as rows to edit. An edit rewrites only the lines of the key it touches, the
 // rest of the frontmatter (comments, quoting, order, keys Relay does not understand) stays byte for byte.
 
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
 
-export type PropertyKind = "text" | "date" | "list" | "link" | "check" | "raw";
+export type PropertyKind = "text" | "date" | "list" | "link" | "check" | "select" | "raw";
 export type PropertyValue = string | number | boolean | null | string[];
-export type Property = { key: string; value: PropertyValue; kind: PropertyKind };
+/** `values`: what a select offers. */
+export type Property = { key: string; value: PropertyValue; kind: PropertyKind; values?: string[] };
 
 const LINK = /^\[\[[^\]\n]+\]\]$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -77,6 +79,36 @@ function valueOf(lines: string, after: number): { value: PropertyValue; kind: Pr
 /** The frontmatter's keys in order with their values and editor kinds; null when it can't be edited safely. */
 export function readProperties(yaml: string): Property[] | null {
   return spans(yaml + "\n")?.map(({ key, value, kind }) => ({ key, value, kind })) ?? null;
+}
+
+const EDITOR: Record<FieldKind, PropertyKind> = {
+  text: "text",
+  date: "date",
+  select: "select",
+  link: "link",
+  people: "list",
+  check: "check",
+};
+/** The rows with the editors the note's type (its `type:` in the registry) gives its keys: a select with the type's
+ *  values, a date picker, a link, people as a list, a checkbox. A value whose shape the field does not take (a list in
+ *  a date field) keeps the editor its value asks for, so nothing is lost; a select keeps a value outside its list. */
+export function typed(rows: Property[], registry: Registry): Property[] {
+  const name = rows.find(row => row.key === "type")?.value;
+  const fields = (typeof name === "string" && typeOf(registry, name)?.fields) || [];
+  return rows.map(row => {
+    const field = fields.find(f => f.key === row.key);
+    if (!field || field.kind === "text") return row;
+    const kind = EDITOR[field.kind];
+    const empty = row.value === null || (Array.isArray(row.value) && !row.value.length);
+    const fits =
+      kind === "select"
+        ? row.kind === "text"
+        : kind === "list"
+          ? empty || row.kind === "list"
+          : row.value === null || row.kind === kind;
+    if (!fits) return row;
+    return kind === "select" ? { ...row, kind, values: field.values ?? [] } : { ...row, kind };
+  });
 }
 
 /** One key's lines as Relay writes them: a [[link]] double-quoted, an empty value as `key:`. */

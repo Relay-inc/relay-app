@@ -1,11 +1,15 @@
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
+import type { FilingItem, InboxNote } from "../domain/inbox/rules";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { Related } from "../domain/related/rules";
+import type { Registry } from "../domain/types/registry";
 import type { CommentThread, Member } from "../domain/workspace/comments";
+import type { Change, Merge } from "../domain/workspace/changes";
+import type { TidyMove, TidyPlan } from "../domain/workspace/tidy";
 import type { GitRepo } from "../domain/git/git";
 import type { CommitFile, GitCommit } from "../domain/git/graph";
 import type { FileEntry, FileRoot } from "../domain/files/files";
@@ -54,6 +58,9 @@ import type { Mail, MailBody } from "../domain/mail/types";
 import type { Meeting, Meetings } from "../domain/calendar/types";
 import type { PrDetail, PRs } from "../domain/pull-requests/types";
 import type { NotesGraph, Touch } from "../domain/graph/types";
+import type { LinkedNote } from "../domain/workspace/linked";
+import type { Row as CollectionRow } from "../domain/collections/rules";
+import type { RailData } from "../domain/workspace/rail";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
 import type { OrchEvent, Worker } from "../domain/orchestrator/types";
 import type { PrStatus, Ticket } from "../domain/pipeline/types";
@@ -80,12 +87,17 @@ export const pastedFiles = () => invoke<string[]>("pasted_files");
 /** Text on the clipboard, written by the app (the webview's clipboard API is refused now and then). */
 export const copyText = (text: string) => invoke("copy_text", { text });
 /** Files dragged over the window from Finder: `over` while they hover, then the dropped paths. */
-export const onFileDrop = (handler: (event: { over: boolean; paths?: string[] }) => void) =>
+export const onFileDrop = (
+  handler: (event: { over: boolean; paths?: string[]; at?: { x: number; y: number } }) => void,
+) =>
   getCurrentWebview().onDragDropEvent(e => {
     const { type } = e.payload;
-    if (type === "enter" || type === "over") handler({ over: true });
-    else if (type === "leave") handler({ over: false });
-    else handler({ over: false, paths: e.payload.paths });
+    if (type === "leave") return handler({ over: false });
+    // where the pointer is, in the page's own pixels (Tauri gives physical ones)
+    const ratio = window.devicePixelRatio || 1;
+    const at = { x: e.payload.position.x / ratio, y: e.payload.position.y / ratio };
+    if (type === "enter" || type === "over") handler({ over: true, at });
+    else handler({ over: false, paths: e.payload.paths, at });
   });
 
 // ---------- settings, language, windows
@@ -178,6 +190,30 @@ export const writeNote = (target: string, text: string, expect: string, force: b
 /** The Pages tab's file operations: paths absolute, answers relative to the workspace. */
 export const createNote = (parent: string, name: string, folder: boolean) =>
   invoke<string>("create_note", { parent, name, folder });
+/** What a page's embeds are (src-tauri/src/attach.rs `info`): one answer per target, in order. */
+export type EmbedInfo = {
+  target: string;
+  missing?: boolean;
+  path?: string; // absolute
+  rel?: string; // in the workspace
+  kind?: "image" | "pdf" | "audio" | "note" | "file";
+  size?: number;
+  pages?: number | null;
+  thumb?: string | null; // a PDF's first page, as a data URL
+  text?: string; // a note's text
+};
+export const embedInfo = (page: string, targets: string[]) => invoke<EmbedInfo[]>("embed_info", { page, targets });
+/** One file's answer when it was added to a page: where it is and what to embed it by, or too large (not copied). */
+export type Attached = { path: string; link: string } | { tooLarge: true; name: string; size: number };
+/** Files at paths (dropped, copied in Finder, picked) copied into the page's attachments folder. */
+export const attachCopy = (page: string, paths: string[]) => invoke<Attached[]>("attach_copy", { page, paths });
+/** A pasted file's bytes (base64) saved under `name` in the page's attachments folder. */
+export const attachSave = (page: string, name: string, data: string) =>
+  invoke<Attached>("attach_save", { page, name, data });
+/** The folder, in the page's workspace, a file added to it is copied to ("Attachments/2026"). */
+export const attachDest = (page: string) => invoke<string>("attach_dest", { page });
+/** A workspace file as an address the webview loads (the `relay-file` scheme of attach.rs, not file://). */
+export const fileUrl = (path: string) => convertFileSrc(path, "relay-file");
 export const freePageName = (parent: string, name: string) => invoke<string>("free_page_name", { parent, name });
 export const duplicateNote = (target: string) => invoke<string>("duplicate_note", { target });
 export const movePath = (from: string, to: string, dry: boolean) =>
@@ -198,7 +234,22 @@ export const projectRow = (workspace: string, name: string, context: string, row
  *  for `card_fields` the fields) it is about, `fix` whether Repair puts it right. */
 export type VaultFinding = { id: string; kind: string; context: string; path: string; paths: string[]; fix: boolean };
 export const vaultCheck = (workspace: string) => invoke<VaultFinding[]>("vault_check", { workspace });
+/** The garden (vaultcheck.rs): where the notes decay, in the same shape. */
+export const vaultGarden = (workspace: string) => invoke<VaultFinding[]>("vault_garden", { workspace });
+/** Claude does `action` (properties or about) on these notes in the background, as one entry of the Changes feed. */
+export const gardenAsk = (workspace: string, action: string, paths: string[]) =>
+  invoke("garden_ask", { workspace, action, paths });
+/** A meeting's project picked: its `about:` set to a link to `project`. */
+export const gardenAbout = (workspace: string, path: string, project: string) =>
+  invoke("garden_about", { workspace, path, project });
 export const vaultRepair = (workspace: string, ids: string[]) => invoke<number>("vault_repair", { workspace, ids });
+/** Tidy structure (tidy.rs): every note outside the home of its `type:` and where it goes, with the links the move
+ *  rewrites (`links` in `notes` notes) and how many notes of a type with a home already `stay`. */
+export type { TidyMove, TidyPlan };
+export const tidyPreview = (workspace: string) => invoke<TidyPlan>("tidy_preview", { workspace });
+/** Moves them all as one run (an admin's, in a shared workspace); `tidyUndo` puts the last run back. */
+export const tidyApply = (workspace: string) => invoke<TidyPlan>("tidy_apply", { workspace });
+export const tidyUndo = (workspace: string) => invoke<number>("tidy_undo", { workspace });
 export const propertyValues = (folder: string, key: string) => invoke<string[]>("property_values", { folder, key });
 export const pickFolder = () => invoke<string | null>("pick_folder");
 export const pickPath = (folder: boolean, start: string) => invoke<string | null>("pick_path", { folder, start });
@@ -214,7 +265,30 @@ export const favicons = (projects: { name: string; aliases: string[] }[]) =>
 export const findIconSites = (projects: { name: string; context: string; summary: string }[]) =>
   invoke<Record<string, string>>("find_icon_sites", { projects });
 /** Write what a closed conversation leaves for the vault, straight in (lib.rs capture_vault). */
-export const captureVault = (key: string) => invoke<void>("capture_vault", { key });
+export const captureVault = (key: string, title: string) => invoke<void>("capture_vault", { key, title });
+/** Claude does one job on a note in the background (`action`: summarise, next-steps, link, properties, split; a
+ *  `selection` limits it to that text). What it wrote lands in the Changes feed (lib.rs page_action). */
+export const pageAction = (workspace: string, path: string, action: string, selection: string | null) =>
+  invoke<void>("page_action", { workspace, path, action, selection });
+/** The Changes feed of a workspace: what Relay-run Claude jobs of this Mac wrote, newest first (changes.rs). */
+export const changesList = (workspace: string) => invoke<Change[]>("changes_list", { workspace });
+/** Notes the app wrote itself (a meeting's prep or wrap-up) as one entry of the Changes feed (`path` relative to the main vault). */
+export const changeRecord = (
+  source: string,
+  subject: string,
+  reason: string,
+  files: { path: string; before: string | null; after: string | null }[],
+) => invoke<void>("change_record", { source, subject, reason, files });
+/** A note of a change (every open one without `path`) marked as read. */
+export const changeKeep = (workspace: string, id: string, path: string | null) =>
+  invoke<void>("change_keep", { workspace, id, path });
+/** Undo one note of a change. `merge` false: it is back as it was. Else the note changed since: the three texts, nothing written. */
+export const changeUndo = (workspace: string, id: string, path: string) =>
+  invoke<{ merge: false } | ({ merge: true } & Merge)>("change_undo", { workspace, id, path });
+/** Write a merge, only while the note still is `expect` (null: still missing). */
+export const changeResolve = (workspace: string, id: string, path: string, expect: string | null, text: string) =>
+  invoke<void>("change_resolve", { workspace, id, path, expect, text });
+export const onChangesChanged = (handler: () => void) => listen("changes-changed", () => handler());
 export const projectRepos = () => invoke<Record<string, string[]>>("project_repos");
 export const setProjectRepos = (project: string, repos: string[]) => invoke("set_project_repos", { project, repos });
 /** What moving or copying a project to another workspace takes along (src-tauri migrate.rs), or, without `dry`, done. */
@@ -473,6 +547,47 @@ export const githubStatus = () => invoke<string>("github_status");
 
 // ---------- the Pages graph and Recent
 export const notesGraph = (folder: string) => invoke<NotesGraph>("notes_graph", { folder });
+/** The notes of a workspace that point at another through `about:`, `context:` or `with:`. */
+export const notesLinked = (folder: string) => invoke<LinkedNote[]>("notes_linked", { folder });
+/** Every note of a workspace with its frontmatter values: what the collections' table and board are made of. */
+/** The workspace's type registry (types.rs). */
+export const noteTypes = (workspace: string) => invoke<Registry>("note_types", { workspace });
+export const notesCollection = (folder: string) => invoke<CollectionRow[]>("notes_collection", { folder });
+/** The saved collection views of a workspace (`.relay/views/<name>.json`). */
+export const viewsList = (workspace: string) => invoke<{ name: string; view: unknown }[]>("views_list", { workspace });
+export const viewSave = (workspace: string, name: string, view: unknown) =>
+  invoke<void>("view_save", { workspace, name, view });
+export const viewDelete = (workspace: string, name: string) => invoke<void>("view_delete", { workspace, name });
+/** A note's right rail: its backlinks and unlinked mentions with the line around each, and the notes near it. `path` is
+ *  the note in the workspace `folder`. */
+export const noteRail = (folder: string, path: string) => invoke<RailData>("note_rail", { folder, path });
+/** One line of ⌘K's content matches: `line` counts from the top of the note, `hit` the matched words. */
+export type ContentHit = { path: string; title: string; line: number; before: string; hit: string; after: string };
+export type NameHit = { path: string; title: string; type: string };
+/** ⌘K over a workspace's notes: names and content for a typed query (`type:`, `in:`, `#tag` and words). */
+export const findNotes = (folder: string, query: string) =>
+  invoke<{ names: NameHit[]; content: ContentHit[] }>("find_notes", { folder, query });
+/** When each note of a workspace last changed (seconds), for a folder sorted by modified. */
+export const noteTimes = (folder: string) => invoke<Record<string, number>>("note_times", { folder });
+/** The notes of a workspace with an `icon:` key, {path: its value}. */
+export const noteIcons = (folder: string) => invoke<Record<string, string>>("note_icons", { folder });
+/** The templates New ▸ offers in a workspace. */
+export const noteTemplates = (workspace: string) => invoke<string[]>("note_templates", { workspace });
+/** A new note from a template, saved in its type's home or in `folder`; returns its path in the workspace. */
+export const newFromTemplate = (
+  workspace: string,
+  template: string,
+  folder: string,
+  about: string,
+  context: string,
+  title = "",
+) => invoke<string>("new_from_template", { workspace, template, folder, about, context, title });
+/** Today's note of a workspace, made once; returns its path in the workspace. */
+export const dailyNote = (workspace: string) => invoke<string>("daily_note", { workspace });
+/** The notes pinned above Recent, kept in the workspace's `.relay/config.json`. */
+export const favourites = (workspace: string) => invoke<string[]>("favourites", { workspace });
+export const setFavourites = (workspace: string, paths: string[]) =>
+  invoke<string[]>("set_favourites", { workspace, paths });
 export const noteTouches = (days: number) => invoke<Touch[]>("note_touches", { days });
 
 // ---------- mail
@@ -632,6 +747,26 @@ export const scratchList = (project: string) => invoke<ScratchFile[]>("scratch_l
 export const scratchSave = (project: string, id: string | null, text: string) =>
   invoke<string>("scratch_save", { project, id, text });
 export const scratchDelete = (project: string, id: string) => invoke("scratch_delete", { project, id });
+
+// ---------- the Inbox and quick capture (src-tauri/src/inbox.rs, anywhere.rs)
+export const inboxList = (workspace: string) => invoke<InboxNote[]>("inbox_list", { workspace });
+/** The folder notes of this type go to (meeting, daily, thread), null for a type without a home of its own. */
+export const inboxHome = (workspace: string, kind: string) => invoke<string | null>("inbox_home", { workspace, kind });
+/** File with Claude: one read-only run, a proposal per note. Nothing is written. */
+export const inboxPropose = (workspace: string) =>
+  invoke<{ at: number; items: FilingItem[] }>("inbox_propose", { workspace });
+/** Accept proposals: each note gets its frontmatter and moves; one entry in the Changes feed (source "inbox"). */
+export const inboxAccept = (workspace: string, items: FilingItem[]) =>
+  invoke<{ filed: { path: string; to: string }[]; failed: { path: string; error: string }[] }>("inbox_accept", {
+    workspace,
+    items,
+  });
+export const onInboxChanged = (handler: () => void) => listen("inbox-changed", () => handler());
+/** The capture window's: save the text as an Inbox note of the main vault, hide the window. */
+export const quickCaptureSave = (text: string) => invoke<string>("quick_capture_save", { text });
+export const quickCaptureHide = () => invoke("quick_capture_hide");
+/** The window was brought forward (the shortcut, the menu bar item): take the focus. */
+export const onCaptureOpen = (handler: () => void) => listen("capture-open", () => handler());
 
 // ---------- dictation in the composer (src-tauri/src/dictation.rs)
 /** Every speech model Settings › Voice offers, with whether it is on this Mac. */

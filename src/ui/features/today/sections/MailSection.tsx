@@ -223,9 +223,12 @@ export function MailSection({ entry }: SectionProps<"mail">) {
   );
 }
 
+// one empty list, so the selector below returns the same snapshot (a new [] would render forever)
+const NO_ONE: Addr[] = [];
+
 function Recipients({ field }: { field: "to" | "cc" }) {
   const { t } = useT();
-  const list = useDetailsStore(s => s.compose?.[field] ?? []);
+  const list = useDetailsStore(s => s.compose?.[field] ?? NO_ONE);
   const [typed, setTyped] = useState("");
   const [adding, setAdding] = useState(false);
   return (

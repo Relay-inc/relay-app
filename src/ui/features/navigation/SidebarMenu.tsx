@@ -1,10 +1,11 @@
-import type { Ref } from "react";
+import { useImperativeHandle, useLayoutEffect, useRef, type Ref } from "react";
 import { Icon } from "../../components/Icon";
 import { Glyph } from "../../components/Glyph";
 
 /** `icon` a named icon, or `mark`: a board's 24×24 glyph, drawn before the label. */
 export type MenuItem = { id: string; label: string; head?: boolean; icon?: string; mark?: string };
 
+const MARGIN = 8;
 const ICON = "glyph size-3.75 flex-none text-secondary group-hover:text-on-accent";
 
 /** The right-click menu at the pointer: buttons, and small headings between them. `onPick` gets the item's id. */
@@ -21,10 +22,19 @@ export function SidebarMenu({
   onPick: (id: string) => void;
   ref?: Ref<HTMLDivElement>;
 }) {
+  const own = useRef<HTMLDivElement>(null);
+  useImperativeHandle(ref, () => own.current!);
+  // a long menu opened low in the window moves up to fit (and one near the right edge left)
+  useLayoutEffect(() => {
+    const el = own.current!;
+    const { width, height } = el.getBoundingClientRect();
+    el.style.left = `${Math.max(MARGIN, Math.min(x, window.innerWidth - width - MARGIN))}px`;
+    el.style.top = `${Math.max(MARGIN, Math.min(y, window.innerHeight - height - MARGIN))}px`;
+  }, [x, y, items.length]);
   return (
     <div
-      ref={ref}
-      className="fixed z-20 min-w-45 grid p-1 bg-bg border border-separator rounded-lg shadow-lg"
+      ref={own}
+      className="fixed z-20 min-w-45 max-h-screen overflow-y-auto grid p-1 bg-bg border border-separator rounded-lg shadow-lg"
       style={{ left: x, top: y }}
     >
       {items.map((item, i) =>

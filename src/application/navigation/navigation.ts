@@ -1,16 +1,17 @@
 import { t } from "../../shared/i18n";
-import { WAIT, PRS, MAIL, GRAPH, isView, boardIdOf, type Tool } from "../../domain/navigation/views";
+import { WAIT, PRS, MAIL, GRAPH, INBOX_VIEW, isView, boardIdOf, type Tool } from "../../domain/navigation/views";
 import { provider } from "../../shared/plugins";
 import { isTerminal } from "../../domain/navigation/keys";
 import { ORCH } from "../../domain/orchestrator/rules";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
 import { useConversationsStore } from "../conversations/store";
-import { chatsOf, selectedProject } from "../conversations/selectors";
+import { chatsOf, label as chatLabel, selectedProject } from "../conversations/selectors";
 import { newChat, newChatHere, dropEmptyDraft, markSeen } from "../conversations/chats";
 import { typedOf } from "../conversations/drafts";
 import { ensureHistory } from "../conversations/history";
 import { loadGraph } from "./graph";
+import { loadInboxNotes } from "../inbox/inbox";
 import { loadPrs, loadProjectRepos } from "../pull-requests/prs";
 import { loadMails } from "../mail/mail";
 import { searchProjects } from "../../domain/navigation/project-search";
@@ -66,6 +67,7 @@ export async function select(key: string, tool: Tool | null = null) {
   if (key === WAIT) loadTodayCards();
   if (key === MAIL) loadMails();
   if (key === GRAPH) loadGraph();
+  if (key === INBOX_VIEW) void loadInboxNotes();
   request(isView(key) ? "scroll-top" : "scroll-bottom");
   if (!isView(key)) request("focus-composer");
 }
@@ -109,9 +111,9 @@ let toastTimer = 0;
 /** Text on the clipboard. */
 export const copy = (text: string) => backend.copyText(text).catch(e => console.error(e));
 
-export function toast(text: string, undo?: () => void, btn = t("toast.undo"), ms = 8000) {
+export function toast(text: string, undo?: () => void, btn = t("toast.undo"), ms = 8000, detail?: string) {
   set(draft => {
-    draft.toast = { text, undo, btn };
+    draft.toast = { text, undo, btn, detail };
   });
   clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => {
@@ -188,6 +190,25 @@ export const quickProjects = (typed: string) =>
       .snap.projects.map(project => ({ ...project, label: settings().projects[project.name]?.label })),
     typed,
   ).map(project => ({ name: project.name, label: projectLabel(project.name), context: project.context }));
+/** Cmd-K's conversations for what is typed: matched on title and project name, as the projects are. */
+export const quickChats = (typed: string) =>
+  searchProjects(
+    Object.values(useConversationsStore.getState().chats)
+      .filter(chat => !chat.draft && !chat.closed && chat.key !== ORCH)
+      .map(chat => ({
+        key: chat.key,
+        name: chatLabel(chat.key),
+        context: projectLabel(chat.project),
+        aliases: [],
+      })),
+    typed,
+  );
+/** The settings window on a page (the last one it showed when none is given). */
+export const openSettingsTab = (tab?: string) => backend.openSettingsWindow(tab);
+/** A drawer tool, opened and left open when it already is. */
+export const openDrawer = (tool: Parameters<typeof toggleDrawer>[0]) => {
+  if (nav().drawer !== tool) toggleDrawer(tool);
+};
 /** A web or mail link in the default browser or mail app: a webview window cannot open them itself. */
 export const openExternal = (url: string) => backend.openUrl(url);
 /** The settings window, on Updates while there is one. */

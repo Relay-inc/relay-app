@@ -134,7 +134,7 @@ mod tests {
     use std::path::PathBuf;
     use std::time::Instant;
 
-    fn env<'a>(pending: &'a Path) -> Env<'a> { Env { home: "", vault: "/tmp", path: "/usr/bin:/bin", bin: "/bin/sh", pending, opts: &Value::Null } }
+    fn env<'a>(pending: &'a Path) -> Env<'a> { Env { home: "", vault: "/tmp", path: "/usr/bin:/bin", bin: "/bin/sh", pending, grants: &crate::NO_GRANTS, opts: &Value::Null } }
 
     #[test]
     fn times_out_and_reaps_a_provider_that_never_answers() {

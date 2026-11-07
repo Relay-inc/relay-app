@@ -9,14 +9,16 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::time::Duration;
 
 /// User-role messages the harness injects, not typed by the user.
 const INJECTED: [&str; 8] = ["<", "Another Claude session", "Base directory for this skill", "[Image", "Stop hook feedback",
     "[Request interrupted", "The user sent a new message", "This session is being continued"];
 
 fn rx(p: &str) -> Regex { Regex::new(p).unwrap() }
+/// A regex literal, compiled the first time it is used.
+macro_rules! lazy_rx {
+    ($p:expr) => {{ static R: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| rx($p)); &*R }};
+}
 fn list(cfg: &Value, key: &[&str], dflt: &[&str]) -> Vec<String> {
     let v = key.iter().fold(cfg, |v, k| &v[*k]);
     let l: Vec<String> = v.as_array().map(|a| a.iter().filter_map(|s| s.as_str().map(String::from)).collect()).unwrap_or_default();
@@ -26,11 +28,11 @@ fn list(cfg: &Value, key: &[&str], dflt: &[&str]) -> Vec<String> {
 fn alt(names: &[String]) -> String { format!("(?:{})", names.iter().map(|n| regex::escape(n)).collect::<Vec<_>>().join("|")) }
 fn read(p: &Path) -> Option<String> { fs::read_to_string(p).ok().map(|s| s.replace("\r\n", "\n").replace('\r', "\n")) }
 
-struct Notes { root: PathBuf, skip: Vec<String>, open: Regex, status: Regex, status_line: Regex }
+struct Notes { root: PathBuf, open: Regex, status: Regex, status_line: Regex, files: HashMap<String, Vec<PathBuf>> }
 
-pub fn snapshot(vault: &str, work_state: &str, notes: &str, today: chrono::NaiveDate, path: &str, cache: &Path, home: &str) -> Result<Value, String> {
+pub fn snapshot(vault: &str, work_state: &str, notes: &str, today: chrono::NaiveDate, claude_agents: Option<String>, cache: &Path, home: &str) -> Result<Value, String> {
     let (projs, root) = vault_projects(vault, work_state, notes)?;
-    let mut ses = sessions(path);
+    let mut ses = sessions(claude_agents);
     if let Some(items) = ses["items"].as_array_mut() {
         topics(items, &projs, &root, vault, cache, home);
     }
@@ -42,10 +44,10 @@ pub fn vault_projects(vault: &str, work_state: &str, notes: &str) -> Result<(Vec
     let (cfg, root) = cfg_root(vault, notes);
     let (open_h, status_h) = (alt(&list(&cfg, &["headings", "open"], &["Open"])), alt(&list(&cfg, &["headings", "status"], &["Status", "Stand van zaken"])));
     let n = Notes {
-        skip: list(&cfg, &["skip"], &["Documents", "Gesprekken", "_archive"]),
         open: rx(&format!(r"(?mi)^## {open_h}[ \t]*\n")),
         status: rx(&format!(r"(?mi)^## {status_h}[ \t]*\n")),
         status_line: rx(&format!(r"(?i)^\*{status_h}[^\n]*\n")),
+        files: md_files(&root, &list(&cfg, &["skip"], &["Documents", "Gesprekken", "_archive"])),
         root,
     };
     let contexts = contexts_in(&cfg, &n.root)?;
@@ -76,7 +78,7 @@ pub fn contexts(vault: &str, notes: &str) -> Result<Vec<String>, String> {
 pub fn project_note(vault: &str, notes: &str, name: &str) -> Option<PathBuf> {
     let (cfg, root) = cfg_root(vault, notes);
     let skip = list(&cfg, &["skip"], &["Documents", "Gesprekken", "_archive"]);
-    let short = rx(r"\s*\(.*\)$").replace(name, "").into_owned();
+    let short = lazy_rx!(r"\s*\(.*\)$").replace(name, "").into_owned();
     let mut hits = vec![];
     for nm in std::iter::once(name).chain((short != name).then_some(short.as_str())) { find_notes(&root, &skip, &format!("{nm}.md"), 0, &mut hits); }
     hits.into_iter().next()
@@ -84,7 +86,7 @@ pub fn project_note(vault: &str, notes: &str, name: &str) -> Option<PathBuf> {
 
 fn projects(work_state: &str, contexts: &HashSet<String>, n: &Notes) -> Result<Vec<Value>, String> {
     let text = read(Path::new(work_state)).ok_or_else(|| format!("snapshot: cannot read {work_state}"))?;
-    let (head, row) = (rx(r"^#{2,3} (.+?)\s*$"), rx(r"^\| (?:\[\[([^\]]+)\]\][^|]*|([^|\[]+?)) \| (\w+) \| ([\d-]+) \| (.*) \|$"));
+    let (head, row) = (lazy_rx!(r"^#{2,3} (.+?)\s*$"), lazy_rx!(r"^\| (?:\[\[([^\]]+)\]\][^|]*|([^|\[]+?)) \| (\w+) \| ([\d-]+) \| (.*) \|$"));
     let (mut out, mut context) = (vec![], None::<String>);
     for line in text.split('\n') {
         if let Some(h) = head.captures(line) { context = Some(h[1].to_string()).filter(|c| contexts.contains(c)); }
@@ -107,31 +109,48 @@ fn find_notes(dir: &Path, rel_skip: &[String], file: &str, depth: u8, hits: &mut
     for (_, p) in subs { find_notes(&p, rel_skip, file, depth + 1, hits); }
 }
 
+/// Every `*.md` under the notes by file name, in the order find_notes meets them: one walk for all the projects.
+fn md_files(root: &Path, rel_skip: &[String]) -> HashMap<String, Vec<PathBuf>> {
+    fn walk(dir: &Path, rel_skip: &[String], depth: u8, out: &mut HashMap<String, Vec<PathBuf>>) {
+        let Ok(rd) = fs::read_dir(dir) else { return };
+        let mut subs = vec![];
+        for e in rd.flatten() {
+            let (name, path) = (e.file_name().to_string_lossy().into_owned(), e.path());
+            if name.ends_with(".md") { out.entry(name.clone()).or_default().push(path.clone()); }
+            if !name.starts_with('.') && !rel_skip.contains(&name) && path.is_dir() { subs.push((name, path)); }
+        }
+        if depth > 12 { return; }
+        subs.sort();
+        for (_, p) in subs { walk(&p, rel_skip, depth + 1, out); }
+    }
+    let mut out = HashMap::new();
+    walk(root, rel_skip, 0, &mut out);
+    out
+}
+
 /// The text after the `## <heading>` line up to the next `## ` line.
 fn section<'a>(heading: &Regex, s: &'a str) -> Option<&'a str> {
     let rest = &s[heading.find(s)?.end()..];
-    Some(&rest[..rx(r"(?m)^## ").find(rest).map_or(rest.len(), |m| m.start())])
+    Some(&rest[..lazy_rx!(r"(?m)^## ").find(rest).map_or(rest.len(), |m| m.start())])
 }
 
 fn note_state(name: &str, n: &Notes) -> Map<String, Value> {
     // "Kestrel (ERP)": Kestrel.md too
-    let short = rx(r"\s*\(.*\)$").replace(name, "").into_owned();
+    let short = lazy_rx!(r"\s*\(.*\)$").replace(name, "").into_owned();
     let mut names = vec![name.to_string()];
     if short != name { names.push(short); }
-    let mut hits = vec![];
-    for nm in &names { find_notes(&n.root, &n.skip, &format!("{nm}.md"), 0, &mut hits); }
-    let s = hits.first().and_then(|p| read(p));
+    let s = names.iter().find_map(|nm| n.files.get(&format!("{nm}.md"))?.first()).and_then(|p| read(p));
     let (mut items, mut stand, mut aliases, mut open) = (vec![], Value::Null, vec![], Value::Null);
     if let Some(s) = &s {
         if let Some(op) = section(&n.open, s) {
-            items = rx(r"(?m)^\s*- \[ \] (.+)$").captures_iter(op).map(|c| unlink(&c[1])).collect();
+            items = lazy_rx!(r"(?m)^\s*- \[ \] (.+)$").captures_iter(op).map(|c| unlink(&c[1])).collect();
             open = json!(items.len());
         }
         if let Some(st) = section(&n.status, s) {
             stand = json!(unlink(&n.status_line.replace(st.trim(), "")).trim());
         }
-        if let Some(fm) = rx(r"(?s)^---\n(.*?)\n---").captures(s) {
-            if let Some(a) = rx(r"(?m)^aliases:\n((?:\s+-.*\n?)*)").captures(&fm[1]).filter(|_| rx(r"(?m)^aliases:\n\s+-").is_match(&fm[1])) {
+        if let Some(fm) = lazy_rx!(r"(?s)^---\n(.*?)\n---").captures(s) {
+            if let Some(a) = lazy_rx!(r"(?m)^aliases:\n((?:\s+-.*\n?)*)").captures(&fm[1]).filter(|_| lazy_rx!(r"(?m)^aliases:\n\s+-").is_match(&fm[1])) {
                 aliases = rx(r#"(?m)^\s*-\s*"?([^"\n]+?)"?\s*$"#).captures_iter(&a[1]).map(|c| c[1].to_string()).collect();
             }
         }
@@ -144,24 +163,15 @@ fn note_state(name: &str, n: &Notes) -> Map<String, Value> {
     m
 }
 
-fn unlink(text: &str) -> String { rx(r"\[\[([^\]|]+)(\|[^\]]+)?\]\]").replace_all(text, "${1}").into_owned() }
+fn unlink(text: &str) -> String { lazy_rx!(r"\[\[([^\]|]+)(\|[^\]]+)?\]\]").replace_all(text, "${1}").into_owned() }
 
 // ---------- sessions
 
-fn sessions(path: &str) -> Value {
+/// `claude agents --json` output as the snapshot's `sessions`.
+fn sessions(raw: Option<String>) -> Value {
     let err = |e: String| json!({ "error": e, "items": [] });
-    let Ok(mut child) = Command::new("claude").args(["agents", "--json"]).env("PATH", path)
-        .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn() else { return err("cannot run claude".into()) };
-    let mut out = child.stdout.take().unwrap();
-    let (tx, rx_) = std::sync::mpsc::channel();
-    std::thread::spawn(move || { let mut b = vec![]; out.read_to_end(&mut b).ok(); tx.send(b).ok(); });
-    let Ok(raw) = rx_.recv_timeout(Duration::from_secs(15)) else {
-        child.kill().ok();
-        child.wait().ok();
-        return err("claude agents --json timed out after 15 seconds".into());
-    };
-    child.wait().ok();
-    match serde_json::from_slice::<Value>(&raw) {
+    let Some(raw) = raw else { return err("cannot run claude".into()) };
+    match serde_json::from_str::<Value>(&raw) {
         Ok(items) if items.is_array() => json!({ "error": null, "items": items }),
         Ok(_) => err("claude agents --json: not a list".into()),
         Err(e) => err(e.to_string()),
@@ -204,10 +214,10 @@ impl Matcher {
 /// (user messages naming a project, project notes Claude read or edited). Recent hits decide, so a
 /// session that moved on to another project follows. Parsing 200 MB once, then only new lines.
 fn topics(items: &mut [Value], projs: &[Value], notes: &Path, vault: &str, cache_file: &Path, home: &str) {
-    let mut cache: Map<String, Value> = fs::read_to_string(cache_file).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    let mut cache: Map<String, Value> = crate::util::read_json(cache_file);
     let transcripts = Path::new(home).join(".claude/projects").join(vault.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect::<String>());
     let (find, names) = (Matcher::new(projs), projs.iter().filter_map(|p| p["name"].as_str()).collect::<HashSet<_>>());
-    let (relay_project, auto) = (rx(r"(?s)^<relay-project>.*?</relay-project>\s*"), rx(r"^obsidian-context-management-\w+$"));
+    let (relay_project, auto) = (lazy_rx!(r"(?s)^<relay-project>.*?</relay-project>\s*"), lazy_rx!(r"^obsidian-context-management-\w+$"));
     let notes_prefix = format!("{}/", notes.to_string_lossy());
     for it in items.iter_mut() {
         let Some(sid) = it["sessionId"].as_str().filter(|s| !s.is_empty()).map(String::from) else { continue };
@@ -263,9 +273,10 @@ fn topics(items: &mut [Value], projs: &[Value], notes: &Path, vault: &str, cache
     }
     let live: HashSet<&str> = items.iter().filter_map(|i| i["sessionId"].as_str()).collect();
     cache.retain(|k, _| live.contains(k.as_str()));
+    let text = Value::Object(cache).to_string();
+    if fs::read_to_string(cache_file).is_ok_and(|old| old == text) { return; }
     if let Some(d) = cache_file.parent() { fs::create_dir_all(d).ok(); }
-    let tmp = cache_file.with_extension("json.tmp");
-    fs::write(&tmp, Value::Object(cache).to_string()).and_then(|_| fs::rename(&tmp, cache_file)).ok();
+    crate::util::write_file(cache_file, text).ok();
 }
 
 #[cfg(test)]
@@ -285,8 +296,9 @@ mod tests {
         let ws = d.join("work-state.md");
         fs::write(&ws, "# W\n## Acme\n| P | S | L | N |\n|---|---|---|---|\n| Bluebird | Active | 2026-10-01 | sum |\n| [[Kestrel (ERP)]] extra | Quiet | 2026-01-02 | x |\n| Ghost | Active | 2026-01-01 | y |\n## Nope\n| Skipped | Active | 2026-01-01 | z |\n### Elders\n| Else | Active | 2026-01-01 | w |\n").unwrap();
         let p = projects(ws.to_str().unwrap(), &["Elders".into(), "Acme".into()].into_iter().collect(), &Notes {
-            root: notes.clone(), skip: vec!["Documents".into()], open: rx(r"(?mi)^## (?:Openstaand)[ \t]*\n"),
-            status: rx(r"(?mi)^## (?:Stand van zaken)[ \t]*\n"), status_line: rx(r"(?i)^\*(?:Stand van zaken)[^\n]*\n") }).unwrap();
+            root: notes.clone(), open: rx(r"(?mi)^## (?:Openstaand)[ \t]*\n"),
+            status: rx(r"(?mi)^## (?:Stand van zaken)[ \t]*\n"), status_line: rx(r"(?i)^\*(?:Stand van zaken)[^\n]*\n"),
+            files: md_files(&notes, &["Documents".into()]) }).unwrap();
         let names: Vec<_> = p.iter().map(|p| p["name"].as_str().unwrap()).collect();
         assert_eq!(names, ["Bluebird", "Kestrel (ERP)", "Ghost", "Else"]);
         assert_eq!(p[0]["context"], "Acme");
@@ -296,6 +308,13 @@ mod tests {
         assert_eq!(p[0]["aliases"], json!(["Blue", "Bird"]));
         assert_eq!((p[1]["open"].clone(), p[1]["open_items"].clone()), (json!(0), json!([])), "falls back to Kestrel.md, not the skipped Documents one");
         assert_eq!((p[2]["open"].clone(), p[2]["stand"].clone()), (Value::Null, Value::Null), "no note");
+        // the one walk finds the notes find_notes does
+        let files = md_files(&notes, &["Documents".into()]);
+        for name in ["Bluebird.md", "Kestrel.md", "Ghost.md"] {
+            let mut walked = vec![];
+            find_notes(&notes, &["Documents".into()], name, 0, &mut walked);
+            assert_eq!(files.get(name).cloned().unwrap_or_default(), walked, "{name}");
+        }
         let m = Matcher::new(&p);
         assert_eq!(m.find("talk to BLUEBIRD, not Bluebirder or xBird"), ["Bluebird"]);
         fs::remove_dir_all(&d).ok();
@@ -308,7 +327,7 @@ mod dry_run {
     #[ignore]
     fn show_snapshot() {
         let e = |k: &str| std::env::var(k).unwrap_or_default();
-        let s = super::snapshot(&e("VAULT"), &e("WORK_STATE"), &e("NOTES"), chrono::NaiveDate::from_ymd_opt(2026, 10, 2).unwrap(), &e("PATH"), std::path::Path::new(&e("CACHE")), &e("HOME")).unwrap();
+        let s = super::snapshot(&e("VAULT"), &e("WORK_STATE"), &e("NOTES"), chrono::NaiveDate::from_ymd_opt(2026, 10, 2).unwrap(), std::process::Command::new("claude").args(["agents", "--json"]).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()), std::path::Path::new(&e("CACHE")), &e("HOME")).unwrap();
         std::fs::write(e("OUT"), serde_json::to_string_pretty(&s).unwrap()).unwrap();
     }
 }

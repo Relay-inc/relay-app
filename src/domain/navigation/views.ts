@@ -1,7 +1,16 @@
 import { VIEW, opened } from "./keys.ts";
 
 // What the middle column shows: a view, a provider's board, a terminal session or an app conversation.
-export const { wait: WAIT, reminders: REM, prs: PRS, mail: MAIL, graph: GRAPH, usage: USAGE } = VIEW;
+export const {
+  wait: WAIT,
+  reminders: REM,
+  prs: PRS,
+  mail: MAIL,
+  graph: GRAPH,
+  usage: USAGE,
+  inbox: INBOX_VIEW,
+  collection: COLLECTION_VIEW,
+} = VIEW;
 
 /** The id of the provider whose board a selection key opens (application/navigation's `boardOf` gives the provider). */
 export const boardIdOf = (key: string) => {
@@ -39,7 +48,8 @@ export const meetingOf = (key: string) => {
 export type Drawer = "" | "detail" | "terminal" | "notes" | "design" | "workers" | "git" | "files" | "agents";
 /** A project's board or PRs opened from its title bar: whose they are, and the conversation to go back to. */
 export type Tool = { project: string; back: string };
-export type Toast = { text: string; undo?: () => void; btn?: string };
+/** `detail`: a second, quieter line; a toast with one is a refusal and shows the red mark. */
+export type Toast = { text: string; undo?: () => void; btn?: string; detail?: string };
 /** The note a page key shows, "" for any other key. */
 export const pageOf = (key: string) => {
   const target = opened(key);

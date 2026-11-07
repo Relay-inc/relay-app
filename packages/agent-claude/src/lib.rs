@@ -44,6 +44,11 @@ pub const ORCH_WORKER_TOOLS: [&str; 2] = ["mcp__relay-orch__step", "mcp__relay-o
 pub struct Claude;
 pub static PROVIDER: Claude = Claude;
 
+/// `claude agents --json`, as the last 2.5 s read it: the sidebar's polls and the vault snapshot ask within seconds
+/// of each other, and each ask spawns claude.
+pub fn agents_raw(env: &Env) -> Option<String> {
+    agent_core::run_cached(env.bin, env.path, &["agents", "--json"], std::time::Duration::from_millis(2500))
+}
 /// The oldest Claude Code seen taking every flag `command` passes (`--thinking-display` is not in its changelog, so
 /// this is the oldest build checked, not the release that added it). An older one stops each turn on "unknown option".
 const MIN_VERSION: [u32; 3] = [2, 1, 294];
@@ -66,7 +71,7 @@ pub fn config_dirs(env: &Env) -> Vec<String> {
     let extra = env.opts["accounts"].as_array().into_iter().flatten().filter_map(|a| a["dir"].as_str()).filter(|d| !d.is_empty()).map(String::from);
     std::iter::once(config_dir(env.home, "")).chain(extra).collect()
 }
-/// The `--settings` of a fenced conversation (opts.fenced: a shared vault, or another vault than the main one): no hook
+/// The `--settings` of a fenced conversation (grants.fenced: a shared vault, or another vault than the main one): no hook
 /// runs, wherever it is defined (settings, a skill's or agent's frontmatter), since a member could have put one in the
 /// vault for every other member's Mac, and no auto memory is loaded or written there.
 pub fn fenced_settings() -> &'static str { r#"{"disableAllHooks":true,"autoMemoryEnabled":false}"# }
@@ -101,6 +106,58 @@ fn carry(env: &Env, sid: &str) -> Result<(), String> {
     if to.is_empty() || from == to || !Path::new(&format!("{from}/{sid}.jsonl")).is_file() { return Ok(()); }
     std::fs::create_dir_all(&to).and_then(|_| std::fs::copy(format!("{from}/{sid}.jsonl"), format!("{to}/{sid}.jsonl")))
         .map(|_| ()).map_err(|e| format!("claude: moving the conversation to the other account: {e}"))
+}
+
+/// One `claude -p` call that answers once, no conversation: the title, a review, a text, a page's website, a capture.
+/// What they share is in [`oneshot`]; what differs is here. Everything else (flags) is the same for all.
+#[derive(Default)]
+pub struct OneShot<'a> {
+    /// The working folder; None: the temp folder, outside any vault.
+    pub cwd: Option<&'a str>,
+    /// `--model`; None: the CLI's default.
+    pub model: Option<&'a str>,
+    /// `--tools`: the tools there are, none when empty.
+    pub tools: &'a [&'a str],
+    /// `--allowedTools`: the ones that run without asking (in print mode the others are refused, nobody is asked).
+    pub allowed: &'a [&'a str],
+    /// `--system-prompt`, replacing Claude Code's own.
+    pub system: Option<&'a str>,
+    /// With the user's and the vault's own settings (CLAUDE.md, rules, hooks); false: none of them, and no transcript.
+    pub own_settings: bool,
+    /// Continue a copy of this session (not kept).
+    pub fork_of: Option<&'a str>,
+    /// The prompt as an argument; None: the caller writes it to stdin. Only after a `system`: `--tools` and
+    /// `--allowedTools` take a list and would swallow it.
+    pub prompt: Option<&'a str>,
+}
+/// The one-shot `claude -p` command for `o`, without stdio (the caller sets those): on the subscription
+/// (ANTHROPIC_API_KEY removed), on the env's account, with the login PATH, and with the fence of `env.grants`
+/// (its denies, and no hooks or auto memory when fenced) when the call may read the vault.
+pub fn oneshot(env: &Env, o: OneShot) -> Command {
+    let mut cmd = Command::new(env.bin);
+    cmd.arg("-p");
+    if let Some(sid) = o.fork_of { cmd.args(["--resume", sid, "--fork-session"]); }
+    if let Some(m) = o.model { cmd.args(["--model", m]); }
+    cmd.arg("--no-session-persistence");
+    if !o.own_settings { cmd.args(["--setting-sources", ""]); }
+    cmd.args(["--strict-mcp-config", "--tools"]);
+    if o.tools.is_empty() { cmd.arg(""); } else { cmd.args(o.tools); }
+    if !o.allowed.is_empty() { cmd.arg("--allowedTools").args(o.allowed); }
+    if !env.grants.deny.is_empty() { cmd.arg("--disallowedTools").args(&env.grants.deny); }
+    // in a shared vault no hook runs here either, as in the conversation it belongs to
+    if env.grants.fenced { cmd.args(["--settings", fenced_settings()]); }
+    if let Some(s) = o.system { cmd.args(["--system-prompt", s]); }
+    if let Some(p) = o.prompt { cmd.arg(p); }
+    on_account(&mut cmd, account(env));
+    cmd.current_dir(o.cwd.map_or_else(std::env::temp_dir, PathBuf::from)).env("PATH", env.path).env_remove("ANTHROPIC_API_KEY");
+    cmd
+}
+/// A one-shot call run to its end, on no stdin.
+fn finish(mut cmd: Command) -> Result<std::process::Output, String> { cmd.stdin(Stdio::null()).output().map_err(|e| e.to_string()) }
+/// The text a one-shot call answered, or what it said on stderr.
+fn answered(out: std::process::Output) -> Result<String, String> {
+    let t = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if out.status.success() && !t.is_empty() { Ok(t) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
 }
 
 static SUBS: Mutex<Option<subagents::SubCache>> = Mutex::new(None);
@@ -152,24 +209,24 @@ impl AgentProvider for Claude {
             return Err(format!("claude: Claude Code {v} is too old for Relay, it needs {a}.{b}.{c} or newer. Run `claude update` and start the conversation again."));
         }
         let mut mcp = json!({"mcpServers": {}});
-        // opts.mail, set by the app: the relay-mail tools, answered by the app over this pipe
-        if env.opts["mail"] == true { mcp["mcpServers"]["relay-mail"] = json!({"type": "sdk", "name": "relay-mail"}); }
-        // opts.orch, set by the app for the orchestrator's coordinator and workers: the relay-orch tools, their
+        // grants.mail, set by the app: the relay-mail tools, answered by the app over this pipe
+        if env.grants.mail { mcp["mcpServers"]["relay-mail"] = json!({"type": "sdk", "name": "relay-mail"}); }
+        // grants.orch, set by the app for the orchestrator's coordinator and workers: the relay-orch tools, their
         // role prompt, and the denies and asks that hold whatever the user's settings allow (ask beats allow)
         let strs = |k: &str| env.opts[k].as_array().into_iter().flatten().filter_map(Value::as_str).map(String::from).collect::<Vec<_>>();
         let mut allowed: Vec<String> = MAIL_TOOLS.iter().chain([RELAY_TOOL].iter()).map(|t| t.to_string()).collect();
-        // opts.design, set by the app: the relay-design tools, answered over this pipe too
-        if env.opts["design"] == true {
+        // grants.design, set by the app: the relay-design tools, answered over this pipe too
+        if env.grants.design {
             mcp["mcpServers"]["relay-design"] = json!({"type": "sdk", "name": "relay-design"});
             allowed.extend(DESIGN_TOOLS.iter().map(|t| t.to_string()));
         }
-        if let Some(role) = env.opts["orch"].as_str() {
+        if let Some(role) = env.grants.orch.as_deref() {
             mcp["mcpServers"]["relay-orch"] = json!({"type": "sdk", "name": "relay-orch"});
             allowed.extend(if role == "coordinator" { &ORCH_COORD_TOOLS[..] } else { &ORCH_WORKER_TOOLS[..] }.iter().map(|t| t.to_string()));
         }
-        let denied: Vec<String> = DENIED.iter().map(|d| d.to_string()).chain(strs("deny")).collect();
-        let system = match env.opts["system"].as_str() { Some(s) => format!("{}\n\n{s}", agent_core::envelope::HINT), None => agent_core::envelope::HINT.to_string() };
-        let fenced = env.opts["fenced"] == true;
+        let denied: Vec<String> = DENIED.iter().map(|d| d.to_string()).chain(env.grants.deny.iter().cloned()).collect();
+        let system = match env.grants.system.as_deref() { Some(s) => format!("{}\n\n{s}", agent_core::envelope::HINT), None => agent_core::envelope::HINT.to_string() };
+        let fenced = env.grants.fenced;
         let mut cmd = Command::new(env.bin);
         cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                   "--permission-prompt-tool", "stdio", "--thinking-display", "summarized"])
@@ -178,17 +235,17 @@ impl AgentProvider for Claude {
             // each message echoed when Claude takes it up: one sent during a turn often joins that turn
             .arg("--replay-user-messages");
         if !mcp["mcpServers"].as_object().is_some_and(|m| m.is_empty()) { cmd.arg("--mcp-config").arg(mcp.to_string()); }
-        // opts.fenced, set by the app in a shared vault: only the servers above, none of the user's own or claude.ai's
+        // grants.fenced, set by the app in a shared vault: only the servers above, none of the user's own or claude.ai's
         if fenced { cmd.arg("--strict-mcp-config"); }
         let ask = strs("ask");
         let mut settings: serde_json::Map<String, Value> = if fenced { serde_json::from_str(fenced_settings()).unwrap() } else { Default::default() };
         if !ask.is_empty() { settings.insert("permissions".into(), json!({"ask": ask})); }
         if !settings.is_empty() { cmd.arg("--settings").arg(Value::Object(settings).to_string()); }
         // no mode set: auto, as a terminal window starts; `-p` would start in manual and ask for every edit. A work
-        // machine (opts.machine) gets the mode with this Mac's mirrored settings (src-tauri mirror.rs)
-        // a shared vault (opts.fenced) always: a mode like bypassPermissions has no auto classifier, and that is
+        // machine (grants.machine) gets the mode with this Mac's mirrored settings (src-tauri mirror.rs)
+        // a shared vault (grants.fenced) always: a mode like bypassPermissions has no auto classifier, and that is
         // what stops a script reading another vault where no deny rule reaches (Bash)
-        if env.opts["machine"] != true && (fenced || !mode_set(env)) { cmd.args(["--permission-mode", "auto"]); }
+        if !env.grants.machine && (fenced || !mode_set(env)) { cmd.args(["--permission-mode", "auto"]); }
         if !l.model.is_empty() { cmd.args(["--model", l.model]); }
         if !l.effort.is_empty() { cmd.args(["--effort", l.effort]); }
         if let Some(sid) = l.resume { carry(env, sid)?; cmd.args(["--resume", sid]); }
@@ -221,13 +278,26 @@ impl AgentProvider for Claude {
         Box::new(move |l| st.parse(l))
     }
 
+    fn read_session(&self, env: &Env, sid: &str) -> Result<Vec<u8>, String> {
+        if !agent_core::safe_id(sid) { return Err("transcript: bad session id".into()); }
+        std::fs::read(format!("{}/{sid}.jsonl", transcripts_of(env, sid))).map_err(|e| format!("transcript: {e}"))
+    }
+    fn write_session(&self, env: &Env, sid: &str, bytes: &[u8]) -> Result<(), String> {
+        let dir = transcripts(env);
+        if dir.is_empty() || !agent_core::safe_id(sid) { return Err("transcript: no vault or bad session id".into()); }
+        // written beside the file and renamed, so a resume never reads half of it
+        let (to, tmp) = (format!("{dir}/{sid}.jsonl"), format!("{dir}/.{sid}.jsonl.tmp"));
+        std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&tmp, bytes)).and_then(|_| std::fs::rename(&tmp, &to))
+            .map_err(|e| { std::fs::remove_file(&tmp).ok(); format!("transcript: {e}") })
+    }
+    fn memory_dir(&self, env: &Env) -> Option<String> { Some(format!("{}/.claude/projects/{}/memory", env.home, slug(env.vault))) }
     fn history(&self, env: &Env, sid: &str, from: u64) -> (Vec<Event>, u64) {
         if !agent_core::safe_id(sid) { return (vec![], 0); }
         stream::history(&PathBuf::from(format!("{}/{sid}.jsonl", transcripts_of(env, sid))), from)
     }
     /// Sessions Claude Code knows about, including the ones in the terminal and in the background.
     fn sessions(&self, env: &Env) -> Vec<Value> {
-        let mut list: Vec<Value> = agent_core::run(env.bin, env.path, &["agents", "--json"]).and_then(|o| serde_json::from_str(&o).ok()).unwrap_or_default();
+        let mut list: Vec<Value> = agents_raw(env).and_then(|o| serde_json::from_str(&o).ok()).unwrap_or_default();
         for a in list.iter_mut() {
             let sid = a["sessionId"].as_str().unwrap_or("").to_string();
             if a["status"] == "busy" && agent_core::safe_id(&sid) && subagents::turn_ended(&PathBuf::from(format!("{}/{sid}.jsonl", transcripts_of(env, &sid)))) { a["status"] = json!("idle"); }
@@ -243,16 +313,16 @@ impl AgentProvider for Claude {
         stream::agent_history(&PathBuf::from(format!("{}/{sid}/subagents/agent-{id}.jsonl", transcripts_of(env, sid))), from)
     }
     fn terminal(&self, env: &Env, t: Terminal) -> Option<String> {
-        let q = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
+        let q = agent_core::quote_sh;
         // the user's own `claude`, unless the settings point elsewhere
-        let bin = if env.bin == self.default_bin(env.home) { "claude".to_string() } else { q(env.bin) };
+        let bin = agent_core::command_for(env, &self.default_bin(env.home), "claude");
         // on another account than ~/.claude: the terminal's claude gets its config folder too
         let on = |dir: &str| if dir == config_dir(env.home, "") { bin.clone() } else { format!("CLAUDE_CONFIG_DIR={} {bin}", q(dir)) };
-        // the fence the app set (opts.deny, opts.fenced) goes along, so the terminal reaches no further than Relay
-        let deny: Vec<String> = env.opts["deny"].as_array().into_iter().flatten().filter_map(Value::as_str).map(q).collect();
+        // the fence the app set (grants.deny, grants.fenced) goes along, so the terminal reaches no further than Relay
+        let deny: Vec<String> = env.grants.deny.iter().map(|d| q(d)).collect();
         let fence = format!("{}{}", if deny.is_empty() { String::new() } else { format!(" --disallowedTools {}", deny.join(" ")) },
             // a shared vault runs in auto whatever the account's default mode, as in command(): bypass has no classifier
-            if env.opts["fenced"] == true { format!(" --strict-mcp-config --permission-mode auto --settings '{}'", fenced_settings()) } else { String::new() });
+            if env.grants.fenced { format!(" --strict-mcp-config --permission-mode auto --settings '{}'", fenced_settings()) } else { String::new() });
         Some(match t {
             Terminal::Resume(s) if agent_core::safe_id(s) => format!("cd {} && {} --resume {s}{fence}", q(env.vault), on(&session_dir(env, s))),
             Terminal::Resume(_) => return None,
@@ -273,13 +343,7 @@ impl AgentProvider for Claude {
     fn title(&self, env: &Env, text: &str) -> Result<String, String> {
         let text: String = text.chars().take(2000).collect();
         let prompt = agent_core::prompt::fill(TITLE, &[("text", &text)]);
-        let mut cmd = Command::new(env.bin);
-        on_account(&mut cmd, account(env));
-        let out = cmd
-            .args(["-p", "--model", "haiku", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config", "--tools", "",
-                   "--system-prompt", TITLE_SYSTEM])
-            .arg(prompt).current_dir(std::env::temp_dir()).env("PATH", env.path).env_remove("ANTHROPIC_API_KEY")
-            .stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
+        let out = finish(oneshot(env, OneShot { model: Some("haiku"), system: Some(TITLE_SYSTEM), prompt: Some(&prompt), ..Default::default() }))?;
         let t = String::from_utf8_lossy(&out.stdout);
         let t: String = t.lines().next().unwrap_or("").trim().trim_matches(|c| c == '"' || c == '\'' || c == '.').chars().take(60).collect();
         if out.status.success() && !t.is_empty() { Ok(t) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
@@ -287,28 +351,15 @@ impl AgentProvider for Claude {
     /// One call in the checkout without settings, MCP or a transcript, on the CLI's default model: Read, Grep, Glob and
     /// read-only git, the rest refused (in print mode a tool that is not allowed is denied, nobody is asked).
     fn review(&self, env: &Env, dir: &str, system: &str, text: &str) -> Result<String, String> {
-        let mut cmd = Command::new(env.bin);
-        on_account(&mut cmd, account(env));
-        let out = cmd
-            .args(["-p", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config", "--tools", "Read", "Grep", "Glob", "Bash",
-                "--allowedTools", "Read", "Grep", "Glob", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git status:*)",
-                "--system-prompt", system])
-            .arg(text).current_dir(dir).env("PATH", env.path).env_remove("ANTHROPIC_API_KEY")
-            .stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
-        let t = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if out.status.success() && !t.is_empty() { Ok(t) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
+        let one = OneShot { cwd: Some(dir), tools: &["Read", "Grep", "Glob", "Bash"],
+            allowed: &["Read", "Grep", "Glob", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git status:*)"],
+            system: Some(system), prompt: Some(text), ..Default::default() };
+        answered(finish(oneshot(env, one))?)
     }
     /// Like `title`: one call outside the vault without settings, tools, MCP or a transcript, here on Sonnet.
     fn write(&self, env: &Env, system: &str, text: &str) -> Result<String, String> {
         let text: String = text.chars().take(agent_core::WRITE_MAX).collect();
-        let mut cmd = Command::new(env.bin);
-        on_account(&mut cmd, account(env));
-        let out = cmd
-            .args(["-p", "--model", "sonnet", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config", "--tools", "", "--system-prompt", system])
-            .arg(text).current_dir(std::env::temp_dir()).env("PATH", env.path).env_remove("ANTHROPIC_API_KEY")
-            .stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
-        let t = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if out.status.success() && !t.is_empty() { Ok(t) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
+        answered(finish(oneshot(env, OneShot { model: Some("sonnet"), system: Some(system), prompt: Some(&text), ..Default::default() }))?)
     }
     fn limits(&self, env: &Env) -> usage::Limits { usage_log::fetch_limits(env.home, account(env)) }
     fn usage(&self, env: &Env, since: i64) -> Vec<usage::Record> {
@@ -324,7 +375,8 @@ impl AgentProvider for Claude {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn env<'a>(p: &'a Path) -> Env<'a> { Env { home: "/Users/me", vault: "/Users/me/my vault", path: "/usr/bin", bin: "/Users/me/.local/bin/claude", pending: p, opts: &Value::Null } }
+    use agent_core::{Grants, NO_GRANTS};
+    fn env<'a>(p: &'a Path) -> Env<'a> { Env { home: "/Users/me", vault: "/Users/me/my vault", path: "/usr/bin", bin: "/Users/me/.local/bin/claude", pending: p, grants: &agent_core::NO_GRANTS, opts: &Value::Null } }
     #[test]
     fn the_title_prompt_holds_the_message_as_data() {
         let p = agent_core::prompt::fill(TITLE, &[("text", "wat is {{dit}}?")]);
@@ -355,20 +407,20 @@ mod tests {
         std::fs::create_dir_all(vault.join(".claude")).unwrap();
         let p = PathBuf::from("/tmp/pending");
         let l = Launch { key: "c:1", name: "x", model: "", effort: "", resume: None, fork: None, turn: None };
-        let auto = |opts: &Value| {
-            let e = Env { home: home.to_str().unwrap(), vault: vault.to_str().unwrap(), opts, ..env(&p) };
+        let auto = |grants: &Grants| {
+            let e = Env { home: home.to_str().unwrap(), vault: vault.to_str().unwrap(), grants, ..env(&p) };
             PROVIDER.command(&e, &l).unwrap().get_args().any(|a| a == "--permission-mode")
         };
         let mode = |f: &Path, m: &str| std::fs::write(f, json!({"permissions": {"defaultMode": m}}).to_string()).unwrap();
-        assert!(auto(&Value::Null), "nothing set: auto");
-        assert!(!auto(&json!({"machine": true})), "a work machine takes the mirrored mode");
+        assert!(auto(&NO_GRANTS), "nothing set: auto");
+        assert!(!auto(&Grants { machine: true, ..Default::default() }), "a work machine takes the mirrored mode");
         mode(&vault.join(".claude/settings.json"), "auto");
-        assert!(auto(&Value::Null), "the CLI ignores auto in a project's settings");
+        assert!(auto(&NO_GRANTS), "the CLI ignores auto in a project's settings");
         mode(&vault.join(".claude/settings.local.json"), "acceptEdits");
-        assert!(!auto(&Value::Null), "the vault's own mode stays");
+        assert!(!auto(&NO_GRANTS), "the vault's own mode stays");
         std::fs::remove_file(vault.join(".claude/settings.local.json")).unwrap();
         mode(&home.join(".claude/settings.json"), "manual");
-        assert!(!auto(&Value::Null), "the user's own mode stays");
+        assert!(!auto(&NO_GRANTS), "the user's own mode stays");
         std::fs::remove_dir_all(&d).ok();
     }
     #[test]
@@ -390,14 +442,15 @@ mod tests {
         let args: Vec<String> = PROVIDER.command(&env(&p), &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert_eq!(&args[24..], ["-n", "Algemeen: x", "--replay-user-messages", "--permission-mode", "auto", "--resume", "def", "--fork-session"]);
         let at = |args: &[String], f: &str| args.iter().position(|a| a == f).unwrap();
-        let opts = json!({"mail": true});
-        let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        let grants = Grants { mail: true, ..Default::default() };
+        let args: Vec<String> = PROVIDER.command(&Env { grants: &grants, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args[at(&args, "--mcp-config") + 1].contains("\"relay-mail\":{\"name\":\"relay-mail\",\"type\":\"sdk\"}"));
-        let opts = json!({"design": true});
-        let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        let grants = Grants { design: true, ..Default::default() };
+        let args: Vec<String> = PROVIDER.command(&Env { grants: &grants, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args[at(&args, "--mcp-config") + 1].contains("\"relay-design\":{\"name\":\"relay-design\",\"type\":\"sdk\"}") && args.contains(&"mcp__relay-design__design_snapshot".to_string()));
-        let opts = json!({"orch": "worker", "system": "be a worker", "deny": ["Edit(//v/x)"], "ask": ["Bash(git push*)"]});
-        let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        let grants = Grants { orch: Some("worker".into()), system: Some("be a worker".into()), deny: vec!["Edit(//v/x)".into()], ..Default::default() };
+        let opts = json!({"ask": ["Bash(git push*)"]});
+        let args: Vec<String> = PROVIDER.command(&Env { grants: &grants, opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args[at(&args, "--mcp-config") + 1].contains("\"relay-orch\":{\"name\":\"relay-orch\",\"type\":\"sdk\"}"));
         let at = |f: &str| at(&args, f);
         assert_eq!(args[at("--allowedTools") + 1..at("--disallowedTools")].last().unwrap(), "mcp__relay-orch__report");
@@ -406,13 +459,48 @@ mod tests {
         assert_eq!(args[at("--settings") + 1], r#"{"permissions":{"ask":["Bash(git push*)"]}}"#);
         assert!(!args.contains(&"--strict-mcp-config".to_string()));
         // in a shared vault: the fence's rules among the denies, and only Relay's own MCP servers
-        let opts = json!({"mail": true, "deny": ["Read(//Users/me/my vault/**)"], "fenced": true, "ask": ["Bash(git push*)"]});
-        let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        let grants = Grants { mail: true, deny: vec!["Read(//Users/me/my vault/**)".into()], fenced: true, ..Default::default() };
+        let opts = json!({"ask": ["Bash(git push*)"]});
+        let args: Vec<String> = PROVIDER.command(&Env { grants: &grants, opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args.contains(&"Read(//Users/me/my vault/**)".to_string()) && args.contains(&"--strict-mcp-config".to_string()));
         assert_eq!(args[args.iter().position(|a| a == "--permission-mode").unwrap() + 1], "auto", "a shared vault runs in auto, whatever the account says");
         let settings: Value = serde_json::from_str(&args[args.iter().position(|a| a == "--settings").unwrap() + 1]).unwrap();
         assert_eq!(settings, json!({"disableAllHooks": true, "autoMemoryEnabled": false, "permissions": {"ask": ["Bash(git push*)"]}}), "no hook and no auto memory there, the asks kept");
         assert!(args[args.iter().position(|a| a == "--mcp-config").unwrap() + 1].contains("relay-mail"));
+    }
+    #[test]
+    fn one_shot_calls_keep_their_flags() {
+        let p = PathBuf::from("/tmp/pending");
+        let args = |c: &Command| c.get_args().map(|a| a.to_string_lossy().into_owned()).collect::<Vec<_>>();
+        let cwd = |c: &Command| c.get_current_dir().map(|d| d.to_path_buf());
+        let e = env(&p);
+        let c = oneshot(&e, OneShot { model: Some("haiku"), system: Some("sys"), prompt: Some("hi"), ..Default::default() });
+        assert_eq!(args(&c), ["-p", "--model", "haiku", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config", "--tools", "", "--system-prompt", "sys", "hi"]);
+        assert_eq!(cwd(&c), Some(std::env::temp_dir()));
+        assert!(c.get_envs().any(|(k, v)| k == "ANTHROPIC_API_KEY" && v.is_none()) && c.get_envs().any(|(k, v)| k == "CLAUDE_CONFIG_DIR" && v.is_none()));
+        let c = oneshot(&e, OneShot { cwd: Some("/repo"), tools: &["Read", "Bash"], allowed: &["Read", "Bash(git diff:*)"], system: Some("sys"), prompt: Some("hi"), ..Default::default() });
+        assert_eq!(args(&c), ["-p", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config", "--tools", "Read", "Bash", "--allowedTools", "Read", "Bash(git diff:*)", "--system-prompt", "sys", "hi"]);
+        assert_eq!(cwd(&c), Some(PathBuf::from("/repo")));
+        // a job in the vault: own settings, a fork, the fence's denies and settings, on another account
+        let grants = Grants { deny: vec!["Read(//x/**)".into()], fenced: true, ..Default::default() };
+        let opts = json!({"account": "/Users/me/.claude-work"});
+        let c = oneshot(&Env { grants: &grants, opts: &opts, ..e }, OneShot { cwd: Some("/v"), model: Some("sonnet"), tools: &["Read", "Edit"], allowed: &["Read", "Edit"], own_settings: true, fork_of: Some("ab-1"), ..Default::default() });
+        assert_eq!(args(&c), ["-p", "--resume", "ab-1", "--fork-session", "--model", "sonnet", "--no-session-persistence", "--strict-mcp-config", "--tools", "Read", "Edit",
+            "--allowedTools", "Read", "Edit", "--disallowedTools", "Read(//x/**)", "--settings", fenced_settings()]);
+        assert!(c.get_envs().any(|(k, v)| k == "CLAUDE_CONFIG_DIR" && v.is_some_and(|v| v == "/Users/me/.claude-work")));
+    }
+    #[test]
+    fn a_session_moves_through_the_provider() {
+        let root = std::env::temp_dir().join(format!("relay-session-io-{}", std::process::id()));
+        let home = root.to_string_lossy().into_owned();
+        let p = PathBuf::from("/tmp/pending");
+        let e = Env { home: &home, vault: "/v", ..env(&p) };
+        assert_eq!(PROVIDER.memory_dir(&e).unwrap(), format!("{home}/.claude/projects/-v/memory"));
+        assert!(PROVIDER.read_session(&e, "ab-1").is_err());
+        PROVIDER.write_session(&e, "ab-1", b"{}\n").unwrap();
+        assert_eq!(PROVIDER.read_session(&e, "ab-1").unwrap(), b"{}\n");
+        assert!(PROVIDER.write_session(&e, "x/../y", b"").is_err());
+        std::fs::remove_dir_all(&root).ok();
     }
     #[test]
     fn the_control_pipe_lines() {
@@ -440,8 +528,8 @@ mod tests {
         assert_eq!(PROVIDER.terminal(&env(&p), Terminal::Attach("bg1")).unwrap(), "claude attach bg1");
         assert!(PROVIDER.terminal(&env(&p), Terminal::Resume("x; rm")).is_none());
         // a fenced conversation's terminal gets the same fence
-        let opts = json!({"deny": ["Read(//Users/me/team/**)"], "fenced": true});
-        let e = Env { opts: &opts, ..env(&p) };
+        let grants = Grants { deny: vec!["Read(//Users/me/team/**)".into()], fenced: true, ..Default::default() };
+        let e = Env { grants: &grants, ..env(&p) };
         assert_eq!(PROVIDER.terminal(&e, Terminal::Resume("ab-12")).unwrap(),
             "cd '/Users/me/my vault' && claude --resume ab-12 --disallowedTools 'Read(//Users/me/team/**)' --strict-mcp-config --permission-mode auto --settings '{\"disableAllHooks\":true,\"autoMemoryEnabled\":false}'");
         assert_eq!(transcripts(&env(&p)), "/Users/me/.claude/projects/-Users-me-my-vault");
@@ -458,7 +546,7 @@ mod tests {
         std::fs::create_dir_all(root.join(".claude/projects/-v")).unwrap();
         std::fs::write(root.join(".claude/projects/-v/ab-1.jsonl"), "{}\n").unwrap();
         let opts = json!({"account": work.to_string_lossy(), "accounts": [{"name": "Work", "dir": work.to_string_lossy()}]});
-        let env = Env { home: &home, vault: &vault, path: "/usr/bin", bin: "/bin/claude", pending: &own, opts: &opts };
+        let env = Env { home: &home, vault: &vault, path: "/usr/bin", bin: "/bin/claude", pending: &own, grants: &NO_GRANTS, opts: &opts };
         let l = Launch { key: "c:1", name: "x", model: "", effort: "", resume: Some("ab-1"), fork: None, turn: None };
         let cmd = PROVIDER.command(&env, &l).unwrap();
         assert!(work.join("projects/-v/ab-1.jsonl").is_file());

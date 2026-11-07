@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findPages, isSystemPage, pagesModel, pageTree, recentPages } from "./pages.ts";
+import { findPages, isSystemPage, pagesModel, pageTree, placeOf, recentPages, sortPages } from "./pages.ts";
 
 const paths = [
   "Contexts/Agency/Portfolio/Beacon/Beacon.md",
@@ -75,6 +75,20 @@ test("the search matches note names, the recent notes are this workspace's, newe
   );
 });
 
+test("a note taken off Recent stays off until a conversation touches it again", () => {
+  const touch = (path: string, at: number) => ({ root: "/v", path, at });
+  const touches = [touch("README.md", 5), touch("Calendar/2026-10-01.md", 3)];
+  const removed = { "README.md": 5 };
+  assert.deepEqual(
+    recentPages(touches, "/v", () => true, 5, removed),
+    ["Calendar/2026-10-01.md"],
+  );
+  assert.deepEqual(
+    recentPages([...touches, touch("README.md", 9)], "/v", () => true, 5, removed),
+    ["README.md", "Calendar/2026-10-01.md"],
+  );
+});
+
 test("the notes the vault runs on are system pages, the ones people write in are not", () => {
   for (const path of [
     "CLAUDE.md",
@@ -87,4 +101,20 @@ test("the notes the vault runs on are system pages, the ones people write in are
     assert.equal(isSystemPage(path), true, path);
   for (const path of ["README.md", "Resources/Reference/Article.md", "Contexts/Work/CLAUDE.md", "Systems.md"])
     assert.equal(isSystemPage(path), false, path);
+});
+
+test("a folder lists its notes by name or the last changed first", () => {
+  const list = ["B.md", "A.md", "C.md"];
+  assert.deepEqual(sortPages(list, "name", {}), list);
+  assert.deepEqual(sortPages(list, "modified", { "A.md": 5, "C.md": 9 }), ["C.md", "A.md", "B.md"]);
+});
+
+test("a new note's place: the project whose folder it is asked in, and that project's context", () => {
+  const model = pagesModel(paths, [{ key: "Beacon", name: "Beacon", label: "Beacon", context: "Agency" }], ["Agency"]);
+  assert.deepEqual(placeOf(model, "Contexts/Agency/Portfolio/Beacon/Documents"), {
+    folder: "Contexts/Agency/Portfolio/Beacon/Documents",
+    about: "Beacon",
+    context: "Agency",
+  });
+  assert.deepEqual(placeOf(model, "Calendar"), { folder: "Calendar", about: "", context: "" });
 });

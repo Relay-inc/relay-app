@@ -739,6 +739,30 @@ const VIEWS = {
     await page.keyboard.type("/");
     await settle(page);
   },
+  // @ in the composer: the notes to pick from, then a picked note as a chip (issue 370)
+  "composer-note-mention": async () => {
+    await open(page, server.url, { fixture: "kb", sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("Look at @bil");
+    await settle(page);
+  },
+  "composer-note-chip": async () => {
+    await open(page, server.url, { fixture: "kb", sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("Look at @billin");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+  },
+  "composer-note-chip-dark": async () => {
+    await open(page, server.url, { fixture: "kb-dark", sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("Look at @billin");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+  },
   // Relay's own /share-phone in the completion, next to the agent's (PR phone-share)
   "composer-share-slash": async () => {
     await open(page, server.url, { sel: keys.switchTo });
@@ -1023,6 +1047,17 @@ const VIEWS = {
     await click(markers.card);
     await waitText("Amount excl. VAT");
   },
+  // a ticket's subtasks under its description (one closed), and a subtask opened from there names its parent
+  "card-subtasks": async () => {
+    await VIEWS["card-detail"]();
+    await page.locator(".ticket-window").getByText("Subtasks", { exact: false }).first().scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  "card-subtask-parent": async () => {
+    await VIEWS["card-detail"]();
+    await page.locator(".ticket-window").getByRole("button", { name: /VAT column per rate/ }).click();
+    await waitText("Subtask of #300");
+  },
   // Start conversation on a ticket with a screenshot: the picture is attached in the new conversation's composer (#251)
   "ticket-chat-pictures": async () => {
     await VIEWS["card-detail"]();
@@ -1202,6 +1237,232 @@ const VIEWS = {
     await VIEWS["cmd-k"]();
     await page.keyboard.type("export");
     await settle(page, 0);
+  },
+  // K5, #369: ⌘K over names and content; type: and in: typed as text are pills, notes by name above the lines of content with
+  // the match marked, the keys at the bottom
+  "quick-switcher": async (fixture = "kb") => {
+    await open(page, server.url, { fixture, sel: keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.keyboard.type("type:Document in:Agency rate limit");
+    await settle(page, 500);
+  },
+  "quick-switcher-dark": async () => VIEWS["quick-switcher"]("kb-dark"),
+  // an action matching what is typed: New <template> where the open page is, Today's note
+  "quick-switcher-actions": async (fixture = "kb") => {
+    await open(page, server.url, { fixture, sel: keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.keyboard.type("new");
+    await settle(page, 500);
+    await page.keyboard.press("ArrowDown");
+    await settle(page);
+  },
+  // #387: ⌘K as the palette, conversations and commands next to the notes
+  palette: async (fixture = "kb") => {
+    await open(page, server.url, { fixture, sel: keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.keyboard.type("settings");
+    await settle(page, 500);
+    await page.keyboard.press("ArrowDown");
+    await settle(page);
+  },
+  "palette-dark": async () => VIEWS.palette("kb-dark"),
+  "palette-chats": async (fixture = "kb") => {
+    await open(page, server.url, { fixture, sel: keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.keyboard.type("export");
+    await settle(page, 500);
+  },
+  // K1, #369: three notes pinned from their menu stand under Favourites above Recent
+  "pages-favourites": async (fixture = "kb") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
+    for (const name of ["Rate limit findings", "Portal Architecture", "Rate limit test plan"]) {
+      await page.locator(`[data-page$="/${name}.md"]`).first().click({ button: "right" });
+      await click("Add to favourites");
+    }
+    await page.locator('[data-page$="/Rate limit findings.md"]').first().click();
+    await settle(page, 400);
+  },
+  "pages-favourites-dark": async () => VIEWS["pages-favourites"]("kb-dark"),
+  // K2, #366: a note's right rail: the outline (the heading in view marked), 3 backlinks with their line, 2 unlinked
+  // mentions with Link, what is near it and the 2 conversations that used it; the real folder and the about: chip above
+  "page-rail": async (fixture = "kb") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
+    await page.locator('[data-page$="/Hosting plan.md"]').first().click();
+    await waitText("Unlinked mentions");
+    await settle(page, 400);
+  },
+  "page-rail-dark": async () => VIEWS["page-rail"]("kb-dark"),
+  // K, #392: a page with every block type typed into the editor, no markdown showing; `state` is what the cursor does
+  // last: "heading" (in a heading), "selection" (the toolbar over a selected word), "link" (in a link: its popover),
+  // "raw" (Show markdown on)
+  "page-hidden-markdown": async (fixture = "kb", state = "heading") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
+    await page.locator('[data-page$="/Rate limit findings.md"]').first().click();
+    const editor = page.locator(".cm-content");
+    await editor.waitFor();
+    await editor.click();
+    await page.keyboard.press("Meta+End");
+    for (const text of [
+      "## Next steps",
+      "Agree the **window** with Sofie Claes, see [the plan](https://example.com/plan) and [[Northwind Portal]].",
+      "- Send the new key",
+      "- [ ] Call the client",
+      "> Keep the old key for a week",
+      "",
+      "> [!note] Heads up",
+      "> Retry-After is in seconds.",
+      "",
+      "---",
+    ]) {
+      await page.keyboard.insertText("\n");
+      if (text) await page.keyboard.type(text);
+      else await page.keyboard.type(" "); // a blank line (WebKit swallows a second newline in a row)
+    }
+    await settle(page, 300);
+    if (state === "heading") await page.locator(".cm-h2", { hasText: "Next steps" }).click();
+    else if (state === "selection") {
+      const word = page.locator(".cm-strong", { hasText: "window" });
+      await word.dblclick();
+    } else if (state === "link") {
+      const link = page.locator(".cm-link", { hasText: "the plan" });
+      const box = await link.boundingBox();
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await page.locator(".cm-link-input").waitFor();
+    } else if (state === "raw") {
+      await page.keyboard.press("Shift+Meta+m");
+    }
+    await settle(page, 400);
+  },
+  "page-hidden-markdown-dark": async () => VIEWS["page-hidden-markdown"]("kb-dark"),
+  "page-format-toolbar": async () => VIEWS["page-hidden-markdown"]("kb", "selection"),
+  "page-format-toolbar-dark": async () => VIEWS["page-hidden-markdown"]("kb-dark", "selection"),
+  "page-link-popover": async () => VIEWS["page-hidden-markdown"]("kb", "link"),
+  "page-link-popover-dark": async () => VIEWS["page-hidden-markdown"]("kb-dark", "link"),
+  "page-show-markdown": async () => VIEWS["page-hidden-markdown"]("kb", "raw"),
+  // K, tables: the Vendor overview page (fixture kb-tables) with a grid for its tables; `state` is what the pointer does:
+  // "cursor" (the caret in a cell), "hover" (a cell hovered, its row grip and the column grip showing, the column menu
+  // open), "wide" (the wide table scrolled to its last columns)
+  "page-tables": async (fixture = "kb-tables", state = "cursor") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
+    await page.locator('[data-page$="/Vendor overview.md"]').first().click();
+    await page.locator(".cm-content").waitFor();
+    await settle(page, 300);
+    if (state === "cursor") {
+      await page.locator(".cm-tcell", { hasText: "Atlas Logistics" }).first().click();
+      await page.keyboard.press("End");
+    } else if (state === "hover") {
+      await page.locator(".cm-tcell", { hasText: "Tom Willems" }).first().hover();
+      await page.locator(".cm-table-col-grip").click();
+    } else if (state === "wide") {
+      await page
+        .locator(".cm-trow", { hasText: "Question" })
+        .first()
+        .evaluate(row => row.scrollTo({ left: row.scrollWidth }));
+      await page.locator(".cm-tcell", { hasText: "Asked on the call" }).first().click();
+    }
+    await settle(page, 400);
+  },
+  "page-tables-dark": async () => VIEWS["page-tables"]("kb-tables-dark"),
+  "page-tables-hover": async () => VIEWS["page-tables"]("kb-tables", "hover"),
+  "page-tables-hover-dark": async () => VIEWS["page-tables"]("kb-tables-dark", "hover"),
+  "page-tables-wide": async () => VIEWS["page-tables"]("kb-tables", "wide"),
+  "page-tables-wide-dark": async () => VIEWS["page-tables"]("kb-tables-dark", "wide"),
+  // K6 / K12 (issue 371): the Changes feed beside a page, the capture run open with its two diffs
+  "changes-feed": async (fixture = "kb-changes") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Beacon Billing"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Beacon Billing/Documents"]').click();
+    await page.locator('[data-page$="/Billing Spec.md"]').first().click();
+    await waitText("Billing Spec");
+    await page.getByRole("button", { name: /^Changes, \d+ to review/ }).click();
+    await waitText("Pricing check");
+    await settle(page, 400);
+  },
+  "changes-feed-dark": async () => VIEWS["changes-feed"]("kb-changes-dark"),
+  // a run's entry taller than the panel, scrolled with the wheel to its lower notes
+  "changes-feed-long": async (fixture = "kb-changes-long") => {
+    await VIEWS["changes-feed"](fixture);
+    const box = await page.locator('aside[aria-label="Changes"] [data-file]').first().boundingBox();
+    await page.mouse.move(box.x + 40, box.y + 40);
+    await page.mouse.wheel(0, 2600);
+    await settle(page, 400);
+  },
+  "changes-feed-long-dark": async () => VIEWS["changes-feed-long"]("kb-changes-long-dark"),
+  // K1 / K7 (issue 372): the Inbox row with its count in the Pages tab, the Inbox view, Claude's proposals, a row's
+  // destination picker, and the quick capture window
+  "inbox-row": async (fixture = "kb-changes-inbox") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await waitText("Inbox");
+    await settle(page);
+  },
+  "inbox-row-dark": async () => VIEWS["inbox-row"]("kb-changes-inbox-dark"),
+  inbox: async (fixture = "kb-changes-inbox") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator("[data-inbox]").click();
+    await waitText("4 notes");
+    await settle(page);
+  },
+  "inbox-dark": async () => VIEWS.inbox("kb-changes-inbox-dark"),
+  "inbox-filing": async (fixture = "kb-changes-inbox") => {
+    await VIEWS.inbox(fixture);
+    await page.getByRole("button", { name: "File with Claude" }).click();
+    await waitText("Claude proposed a home for each");
+    await settle(page);
+  },
+  "inbox-filing-dark": async () => VIEWS["inbox-filing"]("kb-changes-inbox-dark"),
+  "inbox-edit": async (fixture = "kb-changes-inbox") => {
+    await VIEWS["inbox-filing"](fixture);
+    await page.locator('[data-inbox-note="Inbox/2026-10-01 0830.md"]').getByRole("button", { name: "Edit" }).click();
+    await page.getByRole("combobox", { name: "Destination" }).waitFor();
+    await settle(page);
+  },
+  "inbox-edit-dark": async () => VIEWS["inbox-edit"]("kb-changes-inbox-dark"),
+  "quick-capture": async (fixture = "kb-changes-inbox") => {
+    await page.setViewportSize({ width: 440, height: 200 });
+    await open(page, server.url, { path: "/capture.html", fixture });
+    await page
+      .getByRole("textbox", { name: "Quick capture" })
+      .fill("Sofie confirms the tax rule Friday → then take the portal live, tell Tom");
+    await settle(page);
+  },
+  "quick-capture-dark": async () => VIEWS["quick-capture"]("kb-changes-inbox-dark"),
+  // Ask Claude as a menu: the page actions
+  "page-actions-menu": async (fixture = "kb-changes") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Beacon Billing"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Beacon Billing/Documents"]').click();
+    await page.locator('[data-page$="/Billing Spec.md"]').first().click();
+    await waitText("Billing Spec");
+    await page.getByRole("button", { name: "Ask Claude" }).click();
+    await settle(page, 300);
+  },
+  // New ▸ from template on a project: the templates of the vault under the folder's own items
+  "pages-new-from-template": async (fixture = "kb") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('[data-project="Northwind Portal"]').click({ button: "right" });
+    await settle(page);
   },
   "deep-link-ask": async () => {
     await open(page, server.url, { sel: keys.switchTo, link: "relay://ask" }); // the link the app was launched with
@@ -1796,6 +2057,63 @@ const VIEWS = {
     await page.locator("[data-finding=context_mismatch] summary").click();
     await settle(page);
   },
+  // Tidy structure (PR 365): the notes outside their home, and the dry run sheet over the check
+  "vault-check-tidy": async () => {
+    await VIEWS["vault-check"]();
+    await page.getByRole("tab", { name: /^Garden/ }).click();
+    await page.getByRole("button", { name: "Tidy structure" }).click();
+    await waitText("Dry run");
+    await waitText("one Undo");
+    await settle(page);
+  },
+  "vault-check-tidy-dark": async () => {
+    await open(page, server.url, { fixture: "dark" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await page.getByRole("button", { name: "Check workspace…" }).click();
+    await page.getByRole("tab", { name: /^Garden/ }).click();
+    await page.getByRole("button", { name: "Tidy structure" }).click();
+    await waitText("one Undo");
+    await settle(page);
+  },
+  // after Apply: the finding is gone, one Undo on offer
+  "vault-check-tidy-applied": async () => {
+    await VIEWS["vault-check-tidy"]();
+    await page.getByRole("button", { name: /^Apply \d+ moves$/ }).click();
+    await waitText("moved to their home");
+    if (await page.locator("[data-garden=outside_home]").count()) throw new Error("the finding stays after Apply");
+    await settle(page);
+  },
+  // the Garden tab (PR 374, K10): one of each problem with its count and action; Tidy structure is the one filled button
+  "vault-check-garden": async () => {
+    await VIEWS["vault-check"]();
+    await page.getByRole("tab", { name: /^Garden/ }).click();
+    await waitText("Notes outside their home");
+    await waitText("Meetings without a project");
+    await waitText("Unused attachments");
+    await settle(page);
+  },
+  "vault-check-garden-dark": async () => {
+    await open(page, server.url, { fixture: "dark" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await page.getByRole("button", { name: "Check workspace…" }).click();
+    await page.getByRole("tab", { name: /^Garden/ }).click();
+    await waitText("Notes outside their home");
+    await settle(page);
+  },
+  // Ask Claude to fix properties: its dry run over the tab, one filled button
+  "vault-check-garden-ask": async () => {
+    await VIEWS["vault-check-garden"]();
+    await page.getByRole("button", { name: "Ask Claude to fix properties" }).click();
+    await waitText("Dry run");
+    await settle(page);
+  },
+  // Move to trash: the dry run of the unused attachments
+  "vault-check-garden-trash": async () => {
+    await VIEWS["vault-check-garden"]();
+    await page.getByRole("button", { name: "Move to trash" }).click();
+    await waitText("one Undo");
+    await settle(page);
+  },
   // after Repair all: what needs a person stays
   "vault-check-repaired": async () => {
     await VIEWS["vault-check"]();
@@ -1810,7 +2128,13 @@ const VIEWS = {
     await page.getByRole("tab", { name: /^Pages/ }).click();
     await page.getByText("Folders", { exact: true }).click({ button: "right" });
     await page.getByRole("button", { name: "Check workspace…" }).click();
-    await waitText("Only an admin");
+    await waitText("Only an admin of this workspace can repair it.");
+    // the Tidy structure finding shows on the Garden tab, its button and so Apply do not
+    await page.getByRole("tab", { name: /^Garden/ }).click();
+    await waitText("Only an admin can tidy the structure");
+    await waitText("Only an admin can move files to the trash");
+    if (await page.getByRole("button", { name: "Tidy structure" }).count())
+      throw new Error("a member sees Tidy structure");
     await settle(page);
   },
   // a project unfolded to its folder, its note open in the drawer, and a top folder unfolded (PR workspace-pages)
@@ -1873,6 +2197,142 @@ const VIEWS = {
     await waitText("Stand van zaken");
     await settle(page);
   },
+  // the Pages tab under a project: its folder, then its Collections folder with the notes that point at it (about:,
+  // context:, with:) as Meetings, Threads and People that unfold to the newest four, the same notes nowhere else (K1)
+  "pages-virtual-groups": async (fixture = "linked") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    const folder = page.locator('[data-collections^="Contexts/Agency/Projects/Northwind Portal"]');
+    await folder.locator("[aria-expanded]").first().click();
+    await folder.locator('[data-linked-group="meetings"]').click();
+    await waitText("Show all 6");
+    await page.getByText("Show all 6").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // a context's Collections folder open: Meetings, Documents, People, Projects, Threads with their counts, one unfolded
+  "pages-collections-context": async (fixture = "linked") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    const folder = page.locator('[data-collections="ctx:Agency"]');
+    await folder.locator("[aria-expanded]").first().click();
+    await folder.locator('[data-linked-group="projects"]').click();
+    await folder.scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  "pages-collections-context-dark": async () => VIEWS["pages-collections-context"]("linked-dark"),
+  // Recent with the × showing on the hovered row and Clear on the header
+  "pages-recent-close": async (fixture = "default") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    const recent = page.locator('[data-section="pages:recent"]');
+    await recent.locator("[data-page]").nth(1).hover();
+    await settle(page);
+  },
+  "pages-recent-close-dark": async () => VIEWS["pages-recent-close"]("dark"),
+  "pages-virtual-groups-dark": async () => VIEWS["pages-virtual-groups"]("linked-dark"),
+  // a collection (K8, K9): the Meetings of a context as a table with the filter chip, the about: cell open on its
+  // listbox; as a board by stage; the Projects board with a card in the air over the lane it sets
+  "collection-table": async (fixture = "linked-collections") => {
+    await VIEWS["collection-open"](fixture, "meetings");
+    await page.getByRole("button", { name: "+ Filter", exact: true }).click();
+    await page.getByRole("option", { name: "about" }).click();
+    await page.getByRole("combobox", { name: "about" }).fill("Northwind Portal");
+    await page.keyboard.press("Enter");
+    await waitText("5 match this view");
+    await page
+      .locator('[role="row"]', { hasText: "2026-10-08 Northwind Portal sync" })
+      .locator('[data-cell="about"] div')
+      .first()
+      .click();
+    await waitText("Writes about: in 2026-10-08 Northwind Portal sync.md");
+    await settle(page);
+  },
+  "collection-table-dark": async () => VIEWS["collection-table"]("linked-collections-dark"),
+  "collection-board": async (fixture = "linked-collections") => {
+    await VIEWS["collection-open"](fixture, "meetings");
+    await page.getByRole("tab", { name: "Board" }).click();
+    await waitText("Stage is worked out from each note");
+    await settle(page);
+  },
+  "collection-board-dark": async () => VIEWS["collection-board"]("linked-collections-dark"),
+  "collection-board-drag": async (fixture = "linked-collections") => {
+    await VIEWS["collection-open"](fixture, "projects");
+    await page.getByRole("tab", { name: "Board" }).click();
+    const card = await page.locator('[data-card$="Atlas Logistics/Atlas Logistics.md"]').boundingBox();
+    const lane = await page.locator('[data-lane="Paused"]').boundingBox();
+    await page.mouse.move(card.x + 20, card.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(card.x + 60, card.y + 40, { steps: 3 });
+    await page.mouse.move(lane.x + lane.width / 2, lane.y + 40, { steps: 8 });
+    await waitText("Drop to set status: Paused");
+    await settle(page);
+  },
+  "collection-board-drag-dark": async () => VIEWS["collection-board-drag"]("linked-collections-dark"),
+  "collection-open": async (fixture, collection) => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    const folder = page.locator('[data-collections="ctx:Agency"]');
+    await folder.locator("[aria-expanded]").first().click();
+    const group = folder.locator(`[data-linked-group="${collection}"]`);
+    await group.click();
+    await group
+      .locator("xpath=..")
+      .getByText(/^Show all \d+$/)
+      .click();
+    await waitText("match this view");
+    await settle(page);
+  },
+  // a project's page with "From links" under its body: meetings, documents, people, open reminders, conversations (K3)
+  "project-auto-sections": async (fixture = "linked") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText("From links");
+    await page.locator("[data-from-links]").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  "project-auto-sections-dark": async () => VIEWS["project-auto-sections"]("linked-dark"),
+  // files inside a page (K4): a picture with its caption, a PDF card, an audio player and a section of another note, in
+  // place of their markdown
+  "page-embeds": async (fixture = "embeds") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText("Next: confirm the window");
+    await page.locator('.cm-embed[data-kind="image"] img').waitFor();
+    await page.locator('.cm-embed[data-kind="note"]').waitFor();
+    await page.locator(".cm-embed-card img").waitFor();
+    await page.locator(".cm-embed").first().scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  "page-embeds-dark": async () => VIEWS["page-embeds"]("embeds-dark"),
+  // the picture selected: its ring, both width handles and the caption with its place and width
+  "page-embeds-selected": async (fixture = "embeds") => {
+    await VIEWS["page-embeds"](fixture);
+    await page.locator('.cm-embed[data-kind="image"] img').click();
+    await settle(page);
+  },
+  "page-embeds-selected-dark": async () => VIEWS["page-embeds-selected"]("embeds-dark"),
+  // files from Finder hovering over a line of the page: the insertion line and what dropping does
+  "page-embeds-drop": async (fixture = "embeds") => {
+    await VIEWS["page-embeds"](fixture);
+    const card = await page.locator('.cm-embed[data-kind="pdf"]').boundingBox();
+    await page.evaluate(
+      ([x, y]) => window.__harness.dropHover(["/Users/me/Downloads/dealer-portal-error.png"], { x, y }),
+      [card.x + 40, card.y + 2],
+    );
+    await settle(page);
+  },
+  "page-embeds-drop-dark": async () => VIEWS["page-embeds-drop"]("embeds-dark"),
+  // a file over 25 MB dropped: refused, the toast says so
+  "page-embeds-toolarge": async (fixture = "embeds") => {
+    await VIEWS["page-embeds"](fixture);
+    await page.evaluate(() => window.__harness.dropPaths(["/Users/me/Downloads/configurator-db-dump.sql.gz"]));
+    await waitText("Too large: 25 MB max per file");
+    await settle(page);
+  },
+  "page-embeds-toolarge-dark": async () => VIEWS["page-embeds-toolarge"]("embeds-dark"),
   // a page's history beside it (ticket 10): three sessions, who and when, what made them, lines added and removed
   "page-history": async () => {
     await VIEWS["page-view"]();
@@ -1969,8 +2429,8 @@ const VIEWS = {
     await page.waitForFunction(() => /\nstatus: Blocked\n/.test(window.__harness.written() ?? ""), null, {
       timeout: 4000,
     });
-    await page.getByRole("button", { name: "Remove: archive" }).click();
-    await page.waitForFunction(() => !/archive:/.test(window.__harness.written() ?? "archive:"), null, {
+    await page.getByRole("button", { name: "Remove: laatst" }).click();
+    await page.waitForFunction(() => !/laatst:/.test(window.__harness.written() ?? "laatst:"), null, {
       timeout: 4000,
     });
     await settle(page);
@@ -1978,9 +2438,11 @@ const VIEWS = {
   // a property added: a link to a note, written as key: "[[Note]]"
   "page-properties-add": async () => {
     await VIEWS["page-view"]();
+    // a Document: its missing fields first (issue 419), any other key under Other…
     await page.getByRole("button", { name: "Add property" }).click();
+    await page.getByRole("button", { name: "Other…" }).click();
     await page.getByRole("textbox", { name: "Property name" }).fill("reviewer");
-    await page.getByRole("combobox", { name: "Type" }).selectOption("link");
+    await page.getByRole("combobox", { name: "Type", exact: true }).selectOption("link");
     await page.getByRole("button", { name: "Add", exact: true }).click();
     const reviewer = page.getByLabel("reviewer", { exact: true });
     await reviewer.fill("Billing Spec");
@@ -1989,6 +2451,152 @@ const VIEWS = {
       timeout: 4000,
     });
     await page.getByRole("button", { name: "Add property" }).click();
+    await settle(page);
+  },
+  // the note's type gives its keys their editors (issue 418): as a Project, status is a select of the registry's
+  // values, and a value outside them shows as invalid instead of being dropped
+  "page-properties-select": async () => {
+    await VIEWS["page-view"]();
+    const status = page.getByLabel("status", { exact: true });
+    await status.fill("Someday");
+    await status.press("Enter");
+    await page.waitForFunction(() => /\nstatus: Someday\n/.test(window.__harness.written() ?? ""), null, { timeout: 4000 });
+    await page.getByRole("combobox", { name: "Note type" }).selectOption("Project");
+    await page.waitForFunction(() => /type: Project\n/.test(window.__harness.written() ?? ""), null, { timeout: 4000 });
+    await page.getByRole("combobox", { name: "status", exact: true }).hover();
+    await settle(page);
+  },
+  // typed pages (issue 419): a Meeting's header with its type chip, the breadcrumb Agency › Northwind Portal and the
+  // registry's fields, each with its editor; `note` another typed (or untyped) note of fixture kb
+  "typed-meeting": async (fixture = "kb", note = "Calendar/Meetings/2026/2026-10-01 Portal kickoff.md") => {
+    await open(page, server.url, { fixture, sel: `page:${note}` });
+    await page.locator("h1").first().waitFor();
+    await settle(page, 400);
+  },
+  "typed-meeting-dark": async () => VIEWS["typed-meeting"]("kb-dark"),
+  // a Meeting without about: shows it as an empty, highlighted slot
+  "typed-meeting-missing": async () => {
+    await VIEWS["typed-meeting"]("kb", "Calendar/Meetings/2026/2026-09-25 Intro call.md");
+    await page.locator('[data-slot="about"][data-missing]').waitFor();
+    await settle(page);
+  },
+  // the with: picker lists only Person notes and ends with Create Person 'Jane Doe'
+  "typed-with-picker": async (fixture = "kb") => {
+    await VIEWS["typed-meeting"](fixture);
+    await page.getByRole("button", { name: "Add: with" }).click();
+    await page.getByRole("textbox", { name: "Search" }).fill("Jane Doe");
+    await waitText("Create Person ‘Jane Doe’");
+    await settle(page);
+  },
+  "typed-with-picker-dark": async () => VIEWS["typed-with-picker"]("kb-dark"),
+  // the picker's Create makes the person beside the context and links it
+  "typed-person-created": async () => {
+    await VIEWS["typed-with-picker"]();
+    await page.getByText("Create Person ‘Jane Doe’").click();
+    await page.waitForFunction(() => /- "\[\[Jane Doe\]\]"/.test(window.__harness.written() ?? ""), null, {
+      timeout: 4000,
+    });
+    const made = await page.evaluate(() => window.__harness.calls.find(c => c.cmd === "new_from_template")?.args);
+    if (made?.folder !== "Contexts/Agency/People" || made?.title !== "Jane Doe" || made?.context !== "Agency")
+      throw new Error(`Jane Doe made with ${JSON.stringify(made)}`);
+    await settle(page, 300);
+  },
+  "typed-person": async (fixture = "kb") =>
+    VIEWS["typed-meeting"](fixture, "Contexts/Agency/People/Tom Willems.md"),
+  "typed-person-dark": async () => VIEWS["typed-person"]("kb-dark"),
+  // a Project's rail groups the meetings that link to it through about:
+  "typed-project": async (fixture = "kb") => {
+    await VIEWS["typed-meeting"](fixture, "Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md");
+    await waitText("Meetings about this project");
+    await settle(page);
+  },
+  "typed-project-dark": async () => VIEWS["typed-project"]("kb-dark"),
+  // a note without type: keeps the plain properties list
+  "typed-untyped": async (fixture = "kb-sketch") =>
+    VIEWS["typed-meeting"](fixture, "Contexts/Agency/Projects/Northwind Portal/Documents/Pricing sketch.md"),
+  "typed-untyped-dark": async () => VIEWS["typed-untyped"]("kb-sketch-dark"),
+  // page icons and covers (issue 424): a page with its own icon and a cover banner; `note` another page of fixture kb
+  "page-icon-cover": async (fixture = "kb", note = "Contexts/Agency/Projects/Northwind Portal/Documents/Launch checklist.md") => {
+    await VIEWS["typed-meeting"](fixture, note);
+    await page.locator("[data-page-cover] img").waitFor();
+    await settle(page, 300);
+  },
+  "page-icon-cover-dark": async () => VIEWS["page-icon-cover"]("kb-dark"),
+  // cover: names a missing file: no banner, no error; hovering the header offers Add icon and Add cover (whose Remove drops
+  // the key)
+  "page-cover-missing": async (fixture = "kb") => {
+    await VIEWS["typed-meeting"](fixture, "Contexts/Agency/Projects/Northwind Portal/Documents/Brand notes.md");
+    await page.locator("h1").hover();
+    await waitText("Add cover");
+    if (await page.locator("[data-page-cover]").count()) throw new Error("a banner for a missing cover");
+    await settle(page);
+  },
+  "page-cover-missing-dark": async () => VIEWS["page-cover-missing"]("kb-dark"),
+  // a project page without icon: keeps the project's icon; the icon field refuses "ab"
+  "page-icon-project": async (fixture = "kb") => {
+    await VIEWS["typed-meeting"](fixture, "Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md");
+    await page.getByRole("button", { name: "Page icon" }).click();
+    await page.getByRole("textbox", { name: "Page icon" }).fill("ab");
+    await page.keyboard.press("Enter");
+    await waitText("Only one emoji");
+    if (/\nicon:/.test((await page.evaluate(() => window.__harness.written())) ?? "")) throw new Error("ab was written");
+    await settle(page);
+  },
+  "page-icon-project-dark": async () => VIEWS["page-icon-project"]("kb-dark"),
+  // one emoji is written as icon: and wins over the project's icon
+  "page-icon-project-set": async () => {
+    await VIEWS["page-icon-project"]();
+    await page.getByRole("textbox", { name: "Page icon" }).fill("🚀");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => /\nicon: 🚀\n/.test(window.__harness.written() ?? ""), null, { timeout: 4000 });
+    await page.locator("[data-page-icon]", { hasText: "🚀" }).waitFor();
+    await settle(page);
+  },
+  // Remove drops icon: and the file glyph is back
+  "page-icon-removed": async () => {
+    await VIEWS["page-icon-cover"]();
+    await page.getByRole("button", { name: "Page icon" }).click();
+    await page.locator("[data-icon-popover]").getByRole("button", { name: "Remove" }).click();
+    await page.waitForFunction(() => !/\nicon:/.test(window.__harness.written() ?? "icon:"), null, { timeout: 4000 });
+    await page.locator("[data-page-icon] svg").waitFor();
+    await settle(page);
+  },
+  // page icons in the Pages tree (issue 427): Launch checklist's icon: 🚀 in place of the file glyph, the other pages
+  // keep it; the Northwind Portal row keeps its config picture (its note has no icon:)
+  "pages-tree-icons": async (fixture = "kb") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"] img').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
+    const launch = page.locator('[data-page$="/Launch checklist.md"]', { hasText: "🚀" }).first();
+    await launch.click();
+    if (await page.locator('[data-page$="/Brand notes.md"]', { hasText: "🚀" }).count()) throw new Error("an icon on a page without");
+    await settle(page, 300);
+  },
+  "pages-tree-icons-dark": async () => VIEWS["pages-tree-icons"]("kb-dark"),
+  // an icon set in the project note's header shows on its project row, no restart
+  "pages-tree-icon-set": async () => {
+    await VIEWS["typed-meeting"]("kb", "Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md");
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"] img').waitFor();
+    await page.getByRole("button", { name: "Page icon" }).click();
+    await page.getByRole("textbox", { name: "Page icon" }).fill("🧭");
+    await page.keyboard.press("Enter");
+    await page.locator('[data-project="Northwind Portal"]', { hasText: "🧭" }).waitFor({ timeout: 4000 });
+    if (await page.locator('[data-project="Northwind Portal"] img').count()) throw new Error("the config picture stayed");
+    await settle(page, 300);
+  },
+  // Add cover from a file: copied into the attachments folder, cover: written, the banner above the title
+  "page-cover-added": async () => {
+    await VIEWS["typed-meeting"]("kb", "Contexts/Agency/People/Tom Willems.md");
+    await page.evaluate(() => (window.__harness.pickFiles = ["/Users/sofie/Desktop/Kickoff banner.png"]));
+    await page.locator("h1").hover();
+    await page.getByRole("button", { name: "Add cover" }).click();
+    await page.getByRole("button", { name: "Choose image…" }).click();
+    await page.waitForFunction(() => /\ncover: "\[\[Kickoff banner\.png\]\]"\n/.test(window.__harness.written() ?? ""), null, {
+      timeout: 4000,
+    });
+    await page.locator("[data-page-cover] img").waitFor();
     await settle(page);
   },
   // the file changed on disk since the page read it: the save is refused, the bar offers Reload and Keep mine
@@ -2086,6 +2694,7 @@ const VIEWS = {
     await VIEWS["pages-shared"]();
     await waitText("Stand van zaken");
     await page.getByRole("button", { name: "Ask Claude" }).click();
+    await page.getByRole("button", { name: "Ask about this page" }).click(); // Ask Claude is a menu since issue 371
     await waitText("New conversation about Team Handbook");
     await settle(page);
   },

@@ -24,7 +24,7 @@ struct File { #[serde(default)] shared: BTreeMap<String, String>, #[serde(defaul
 static FILE: Mutex<Option<File>> = Mutex::new(None);
 fn with<T>(app: &AppHandle, f: impl FnOnce(&mut File) -> T) -> T {
     let mut g = FILE.lock().unwrap();
-    let file = g.get_or_insert_with(|| std::fs::read_to_string(path(app)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default());
+    let file = g.get_or_insert_with(|| crate::util::read_json(path(app)));
     f(file)
 }
 fn update<T>(app: &AppHandle, f: impl FnOnce(&mut File) -> T) -> T {
@@ -52,11 +52,6 @@ pub fn add_link(app: &AppHandle, machine: &str, link: &str) {
 }
 /// Forget a machine: the phones trusted there go with it.
 pub fn forget(app: &AppHandle, machine: &str) { update(app, |f| f.phones.remove(machine)); }
-/// A conversation moved to another key (move_chat): its share goes along.
-pub fn rekey(app: &AppHandle, from: &str, to: &str) {
-    if with(app, |f| f.shared.contains_key(from)) { update(app, |f| if let Some(t) = f.shared.remove(from) { f.shared.insert(to.into(), t); }); }
-}
-
 /// Whether the conversation `key` is shared with the phone.
 pub fn is_shared(app: &AppHandle, key: &str) -> bool { with(app, |f| f.shared.contains_key(key)) }
 

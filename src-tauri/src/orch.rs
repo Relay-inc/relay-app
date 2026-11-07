@@ -148,7 +148,7 @@ fn now() -> i64 { chrono::Utc::now().timestamp_millis() }
 
 fn file(app: &AppHandle) -> PathBuf { data_dir(app).join("orch.json") }
 pub fn load(app: &AppHandle) -> Vec<Worker> {
-    std::fs::read_to_string(file(app)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    crate::util::read_json(file(app))
 }
 fn save(app: &AppHandle, w: &[Worker]) { std::fs::write(file(app), serde_json::to_string(w).unwrap_or_default()).ok(); }
 /// Change one worker on disk and tell the webview.
@@ -164,7 +164,7 @@ fn update(app: &AppHandle, key: &str, f: impl FnOnce(&mut Worker)) -> Option<Wor
     Some(out)
 }
 
-// ---------- the flags a conversation of the orchestrator starts with (agent-claude reads them from its opts)
+// ---------- the flags a conversation of the orchestrator starts with (agent-claude reads them from its grants)
 
 const COORD_PROMPT: &str = prompt::text(include_str!("../../prompts/orchestrator/coordinator.md"));
 
@@ -172,12 +172,11 @@ const WORKER_PROMPT: &str = prompt::text(include_str!("../../prompts/orchestrato
 
 /// The extra start flags of a coordinator or worker: role, its system prompt and its tools. Permissions are the
 /// user's own, as in any other conversation: no extra asks or denies.
-pub fn flags(opts: &mut Value, key: &str, vault: &str, shared: &Shared) {
+pub fn flags(grants: &mut agent_core::Grants, key: &str, vault: &str, shared: &Shared) {
     if !is_orch(key) { return; }
-    if !opts.is_object() { *opts = json!({}); }
     let coord = key == COORD;
-    opts["orch"] = json!(if coord { "coordinator" } else { "worker" });
-    opts["system"] = json!(prompt::fill(if coord { COORD_PROMPT } else { WORKER_PROMPT }, &[("shared", &shared.listed(vault))]));
+    grants.orch = Some(if coord { "coordinator" } else { "worker" }.into());
+    grants.system = Some(prompt::fill(if coord { COORD_PROMPT } else { WORKER_PROMPT }, &[("shared", &shared.listed(vault))]));
 }
 
 // ---------- the relay-orch MCP server
@@ -271,8 +270,8 @@ fn summary(w: &Worker) -> Value {
 
 fn git(dir: &str, args: &[&str]) -> Option<String> {
     let path = std::env::var("PATH").unwrap_or_default();
-    let o = Command::new("git").arg("-C").arg(dir).args(args).env("PATH", path).output().ok()?;
-    o.status.success().then(|| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    // trim_start too: `status --short` callers have always seen its first line without the leading blank
+    crate::git::ok(dir, args, &path).map(|s| s.trim_start().to_string())
 }
 /// A checkout path the coordinator may use: a git top level, listed in (or inside a folder listed in) the
 /// vault's index/repos.json. Returns the project note name it belongs to.
@@ -600,11 +599,7 @@ pub fn tainted(app: &AppHandle, key: &str) -> bool {
     app.state::<App>().procs.lock().unwrap().get(key).is_some_and(|p| p.tainted) || marked(app).iter().any(|k| k == key)
 }
 fn marked(app: &AppHandle) -> Vec<String> {
-    std::fs::read_to_string(data_dir(app).join("orch-tainted.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
-}
-pub fn unmark(app: &AppHandle, key: &str) {
-    let m: Vec<String> = marked(app).into_iter().filter(|k| k != key).collect();
-    std::fs::write(data_dir(app).join("orch-tainted.json"), json!(m).to_string()).ok();
+    crate::util::read_json(data_dir(app).join("orch-tainted.json"))
 }
 fn mark(app: &AppHandle, key: &str) {
     let mut m = marked(app);
@@ -922,7 +917,7 @@ pub(crate) fn inject(app: &AppHandle, key: &str, name: &str, t: &str, model: &st
 #[derive(Serialize, Deserialize, Clone)]
 struct Queued { key: String, name: String, model: String, taint: bool, text: String }
 fn queue(app: &AppHandle) -> Vec<Queued> {
-    std::fs::read_to_string(data_dir(app).join("orch-queue.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    crate::util::read_json(data_dir(app).join("orch-queue.json"))
 }
 fn save_queue(app: &AppHandle, q: &[Queued]) { std::fs::write(data_dir(app).join("orch-queue.json"), serde_json::to_string(q).unwrap_or_default()).ok(); }
 
@@ -974,18 +969,18 @@ mod tests {
     fn keys_and_flags() {
         assert!(is_orch(COORD) && !is_worker(COORD) && is_worker("c:orch-w-abc") && !is_orch("c:abc"));
         let sh = Shared { files: vec!["/v/Brain/work-state.md".into(), "/v/reminders.md".into()], dirs: vec!["/v/Brain/index".into()] };
-        let mut o = json!(null);
+        let mut o = agent_core::Grants::default();
         flags(&mut o, "c:abc", "/v", &sh);
-        assert!(o.is_null(), "a normal conversation gets nothing");
+        assert_eq!(o, agent_core::Grants::default(), "a normal conversation gets nothing");
         flags(&mut o, COORD, "/v", &sh);
-        assert!(o["system"].as_str().unwrap().contains("Brain/work-state.md, reminders.md, Brain/index/"), "the prompt names the vault's own files");
-        assert_eq!(o["orch"], "coordinator");
-        assert!(o["deny"].is_null() && o["ask"].is_null(), "the user's own permissions, as in any conversation");
-        let mut o = json!({"mail": true});
+        assert!(o.system.as_deref().unwrap().contains("Brain/work-state.md, reminders.md, Brain/index/"), "the prompt names the vault's own files");
+        assert_eq!(o.orch.as_deref(), Some("coordinator"));
+        assert!(o.deny.is_empty(), "the user's own permissions, as in any conversation");
+        let mut o = agent_core::Grants { mail: true, ..Default::default() };
         flags(&mut o, "c:orch-w-1", "/v", &sh);
-        assert_eq!((o["orch"].as_str(), o["mail"].as_bool()), (Some("worker"), Some(true)));
-        assert!(o["deny"].is_null() && o["ask"].is_null(), "a worker too");
-        assert!(!o["system"].as_str().unwrap().contains("{{"));
+        assert_eq!((o.orch.as_deref(), o.mail), (Some("worker"), true));
+        assert!(o.deny.is_empty(), "a worker too");
+        assert!(!o.system.unwrap().contains("{{"));
     }
 
     #[test]
@@ -1144,9 +1139,9 @@ mod tests {
     fn prompts_render_without_placeholders() {
         let sh = Shared { files: vec!["/v/Brain/work-state.md".into()], dirs: vec![] };
         for key in [COORD, "c:orch-w-1"] {
-            let mut o = json!(null);
+            let mut o = agent_core::Grants::default();
             flags(&mut o, key, "/v", &sh);
-            assert!(!o["system"].as_str().unwrap().contains("{{"), "{key}");
+            assert!(!o.system.unwrap().contains("{{"), "{key}");
         }
         let mut w = Worker { ticket: Some(json!({"number": "#5", "title": "T"})), task: "task".into(), ..Default::default() };
         let mut heads = vec![review_head(&w, "abc")];

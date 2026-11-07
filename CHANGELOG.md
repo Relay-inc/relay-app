@@ -15,7 +15,59 @@ a PR. Versions follow
 
 ### Added
 
+- Note types live in one registry, `.relay/types.json` in the vault: each type's fields, required keys, home, template and collection columns. Tidy, Collections, new notes and the Properties panel read it (a field with a fixed list of values, like a project's `status`, gets a select that marks a value outside the list), Relay writes it out as the Claude rule `System/rules/vault/types.md`, and the starter vault's hook checks notes against it.
+- A typed page has a header made from its type: the type, where it belongs (Context › Project), and the type's fields, each with its editor. A link field only offers notes of its type (`with:` people, `about:` projects and contexts) and can create a missing one, like a new person in the context's People folder; an empty `context:` or `about:` shows as a slot to fill, and "Add property" offers the type's missing fields first. The right rail groups backlinks by relation, like "Meetings about this project".
+- A page can carry an emoji icon and a cover picture, saved as `icon:` and `cover:` in its frontmatter. Hover the header for Add icon and Add cover; the cover is copied into the attachments folder and shown as a banner above the title. The note's own icon wins over its project's icon, and a cover whose file is gone just isn't shown.
+- The Pages tree shows a page's icon in place of the file glyph, and a project row the emoji of its project note when it has one (else its project icon). Changing the icon in the page header updates the row right away. (#427)
 - While a turn runs, Enter now holds your message as a chip above the composer and sends it when the turn ends; click a chip to edit it, drag to reorder, × to remove. ⌥Enter steers instead: it ends the running turn (what it wrote so far stays) and sends your message at once. Claude Code can steer; Codex and OpenCode queue on both keys. Both keys can be changed in Settings › Shortcuts (#400).
+
+### Changed
+
+- Relay stays responsive when many notes change at once, like after a git pull or a long Claude run: the notes list and the related notes are refreshed once per burst instead of once per note, and the note list is read off the main thread. (#415)
+- Less CPU and no UI stalls while a terminal conversation is open: the list of running sessions is read at most every 2.5 seconds instead of with every poll, and the polls for questions, subagents, the sidebar and sending a message no longer run on the UI thread. The vault is scanned once per refresh instead of once per project, and `claude --version` is not run again for every message. (#414)
+
+### Fixed
+
+- Productive subtasks show on the board and in the ticket window: a parent card counts its done subtasks (1/3), the ticket window lists them under the description (a row opens the subtask) and a subtask links back to its parent. The board's task list leaves subtasks out, as Productive's own board does, and the ticket never asked for them
+- A meeting note from a recording gets its people, `context:` and `about:` filled from the vault: attendee emails are matched to Person notes, a company note's `domain:` is the fallback, and what stays unknown is named instead of asked when nobody is there to answer.
+- Back to the notes in a meeting's Wrap-up no longer blanks the window when nothing was recorded: the transcript panel rendered in a loop until React gave up. The mail composer's recipient fields had the same loop waiting for them.
+
+### Removed
+
+- The one-time move of old scratch notes from `.relay/notes` into the Inbox is gone: the Inbox and a project's notes drawer no longer scan for them or show the move banner. Notes still left in `.relay/notes` stay on disk but Relay no longer shows them. (#426)
+
+## [0.0.48] - 2026-11-05
+
+### Added
+
+- Tables in a page are a real grid, also with the cursor outside them: no pipes or `---` row, a bold header, columns aligned as the markdown says (`:--`, `:-:`, `--:`), a wide table scrolling inside itself. Click a cell and type: the columns are re-padded as you go, a `|` is stored as `\|`, Tab / ⇧Tab / Enter / the arrows move between cells, Backspace never takes a pipe, ⌘A selects the cell first. Hover a table for the row and column menus (insert, move, delete, align); `/table` makes a 3-column table with the cursor in its first header cell; pasting tab-separated data from Sheets, Excel or Numbers makes a table or fills cells from the cursor. The file stays a plain markdown table. (#407)
+- Recent in Pages: hover a note and click × (or press Delete on it) to take it off the list, and Clear on the header empties it. The note itself is untouched, it comes back only when a conversation reads or writes it again, and the list stays as you left it after a restart (#406)
+
+### Changed
+
+- Pages: under every context and every project one "Collections" folder (closed until you open it, remembered) replaces the "linked here" divider and the separate Collections rows, so nothing shows twice. A context lists Meetings, Documents, People, Projects and Threads, a project Meetings, Documents, Threads and People, each with its count, the newest four and Show all, which opens the collection filtered on that context or project. A context's saved views are in its folder (#406)
+
+### Fixed
+
+- A page's Changes panel scrolls again when a run's changes are longer than the panel: the open entry was squeezed to the panel's height and its lower diffs were cut off (#405)
+
+
+## [0.0.47] - 2026-11-04
+
+### Added
+
+- Vault check › Garden tab: where your notes are decaying, each with a count and an action. Notes outside their home (Tidy structure), meetings without a project (pick one per row, it writes `about:`), broken links (open at the link), orphans, unused attachments (Move to trash, one Undo) and notes without a type (Ask Claude to fix properties, in Changes with Undo). Nothing runs on its own; bulk actions show a dry run first
+- Collections: Meetings, Documents, People, Projects and Threads of a context as a table or a board (Pages › Collections under a context). Filter by a property or a date range, sort, group by; click a cell to edit a property (a project link opens a list of projects) and drag a card on a board to set its property: only that note's frontmatter changes, the rest of the file stays as it was. A meeting's stage is worked out from its text, so that board only opens cards. Save view keeps it in `.relay/views/` on this Mac and it comes back under Saved views. "Show all" under a project's linked Meetings, Documents, Threads or People now opens the collection filtered on that project (#398)
+- An Inbox for notes without a place: ⌃⌥⌘N from any app (or the menu bar icon's Quick capture) opens a small window with a text field and a mic, and Save to Inbox writes `Inbox/<date time>.md` in your vault (the key is changeable in Settings › Shortcuts; ⌘⇧N is Finder's and the browsers', so it is not the default). The Pages tab has an Inbox row with its count; the Inbox lists the notes, and File with Claude proposes per note a title, type, folder and links, with Accept, Edit (the folder as a path picker, the type's home marked), Skip and Accept all. Nothing moves until you accept; an accepted note moves with its links, and each filing is an "Inbox filing" entry in Changes with Undo. A project's scratch notes are now Inbox notes with `about:` set; the ones from before (in Relay's own folder) show a dry run and move on one click, with one Undo (#397).
+- A Changes feed for everything Relay's own Claude runs write to your notes: the pill in the page bar (with the number still to review) opens a panel with one entry per run (a conversation's capture on close or idle, or a page action), its one-line reason, the notes it touched and a diff per note with Keep and Undo, or Keep all and Undo all; kept entries collapse under Reviewed and stay 30 days on this Mac only. Undo puts a note back only while it is as the run left it; a note you edited since shows the merge of your edit and the undo (or, when you changed the same lines, is left alone) and nothing is overwritten. Ask Claude in the page bar became a menu, also on a selection: Summarise into a section, Extract next steps to reminders, Link mentions, Fix properties, Split into notes, each running in the background with its result in the feed. A meeting's prep (its briefing), a wrap-up's Accept, a decision added to a project note and a follow-up mark show in the same feed, each with Undo. The page bar's More menu holds Add to conversation, Reveal in Finder and Copy path. (#396)
+- ⌘K is now the palette: it also lists your conversations (matched on title and project name, the project on the right) and commands in one Commands group: New conversation here, Today, a project's terminal, notes, design, git, files, agents and workers, Settings and each of its pages, Check for updates. A command named exactly comes first, the list stops at 8 rows, and Enter with nothing selected still sends a quick question. Text of 6 or more words, or ending in `?`, lists nothing (unless a filter pill is set) and Enter asks it. (#401)
+- ⌘K (and ⌘O) also searches your notes: by name and by content, with the matching line marked and its place, narrowed by `type:`, `in:` and `#tag` (each becomes a pill), ↵ opens, ⌘↵ opens beside the chat, ⇥ searches another workspace. Pin notes from their menu to show them under Favourites above Recent, make a note from any of the vault's templates (New from template on a folder or project, or as a ⌘K action; a meeting goes to its home with `about:` set), open Today's note from Pages or Today, sort a folder by last changed; unfolded folders and sorts are remembered. (#393)
+- A project's page in Pages shows what points at it, without moving or writing anything: under its folder a thin "linked here" divider with Meetings, Documents, Threads and People (built from `about:`, `context:` and `with:` of notes elsewhere in the vault, the newest four with Show all), and under the page's body a read-only "From links" with its meetings, documents, people, open reminders and conversations. A note about two projects shows in both (#386).
+- The workspace check finds notes that sit outside the folder their type goes in (meetings, transcripts, daily notes and threads loose in `Calendar/`) and offers Tidy structure: a dry run says how many notes move and how many links change, and Apply moves them all as one run with one Undo. Only an admin can do it in a shared workspace (#385).
+- Pages are written without seeing markdown: headings, bold, links, lists, to-dos, quotes and callouts show only as they look, also on the line you are on, and the arrow keys and Backspace step over the hidden `##`, `**` and `](…)`. Typing `## `, `**bold**`, `- ` or `[] ` still works and the file holds exactly that markdown. Select text for a toolbar (bold, italic, strikethrough, code, link, Turn into) or press ⌘B, ⌘I, ⇧⌘X, ⌘E; ⌘K on selected text makes it a link (without a selection it is still the palette), and a link's address changes in a small popover. Backspace at the start of a heading, list item, to-do or quote makes it plain text. "Show markdown" in the page menu (⇧⌘M, Settings › Shortcuts) shows the raw text again and is remembered. The meeting notes behave the same. (#402)
+- Files inside a page: paste a screenshot, or drop or pick (`/` → File) files, and they are copied to `Attachments/<year>` and embedded by name (25 MB max per file). Pictures, PDFs, audio and `![[Note#Heading]]` sections show in place, a picture's width handle writes `|<width>`, and renaming an attachment rewrites the embeds that point to it. (#391)
+- A page has a right rail you can fold (the button next to its folder path; kept per workspace): the outline of its headings (a click jumps there, the heading in view is marked), the notes that link to it with the line around each link (a click opens that note at that line), unlinked mentions of its name or aliases with a Link button that turns the words into a `[[link]]`, related notes, and the conversations that read or wrote it this week. The folder path above a page is now the note's real folder, with an `about:` chip when it has one.
+- Point a conversation at a note: type `@` and a name in the message field and pick the note, it becomes a chip and the message carries its absolute path for the agent to read (Claude and Codex alike). "Add to conversation" in a page's menu and ⌥↵ in ⌘K put the chip in the open conversation of the note's project, or a new one. A note of another workspace than the conversation's says "Switch workspace to add this note". (#395)
 
 ### Changed
 
@@ -585,7 +637,7 @@ a PR. Versions follow
 - **"Always allow" on a permission card**: when Claude offers to remember a choice (this command, the folder, edits for the session), the card has a third button next to Deny and Allow that allows it and keeps it, so the same ask doesn't come back. Enter still allows once. (#118)
 - **Make ticket from a mail**: a button next to the draft-reply ones (and in a mail's … menu in Today, shortcut T) starts a conversation that reads the mail and its thread, finds the board (the one linked to the mail's project, else it picks one), and creates one task in the intake list with a short title and a summary, with the full mail as a comment on it. You approve the create before anything is made, and Relay never sends mail (#111)
 - **Claude shows when it compacts a conversation and how full its context is**: a "Compacting conversation…" line turns into "Conversation compacted" with the size before and after, your history stays, and a small "42% context" next to the model pick shows how much of the window is used. (#115)
-- **Claude's to-do list shows as a checklist above the field**: while a turn runs you see what is done, what Claude is on now and what is next, and it goes away when the turn ends with everything done. The step in the conversation now says "Todos · 2/5 done".  (#117)
+- **Claude's to-do list shows as a checklist above the field**: while a turn runs you see what is done, what Claude is on now and what is next, and it goes away when the turn ends with everything done. The step in the conversation now says "Todos · 2/5 done". (#117)
 - **Claude replies and thinking stream in live**: the answer appears word by word instead of all at once, and what Claude reasons shows above it as a dim, folded "Thinking" line you can open. (#113)
 
 ### Changed
@@ -695,6 +747,7 @@ a PR. Versions follow
 ## [0.0.4] - 2026-10-03
 
 ### Added
+
 - Drop files from Finder anywhere on the window, pick them with +, or paste them after Cmd-C in Finder: the agent gets their path and reads them where they are, nothing is copied. They wait as chips next to the pictures, and in the conversation a click opens the file in its own app (Option-click shows it in Finder). Reading a file you attached needs no permission card in that conversation, anything else still asks. Pictures still go inline (#86)
 
 - Work machines: run a project's conversations on another computer in your network (a home server, a spare Mac), so they keep going while this Mac is closed. Run `relay-server` there (Settings › Machines › Set up a machine has the commands), pair it with the line `relay-server pair` prints, then pick per conversation where it runs, or link a project to its folder on that machine. The connection is mutual TLS with pinned certificates: a device that is not paired never gets past the handshake. Permission cards from there show up here as usual, the composer says where a conversation runs, and a conversation that lost its connection is taken back when the machine answers again. Mail stays on this Mac (#82)
@@ -747,6 +800,7 @@ a PR. Versions follow
 - The fixed right panel is gone. A project's board, pull requests, terminal and notes are now icons at the top right of the title bar, and a drawer opens on the right only when you ask for it or open a card or note. The board and pull requests open as the project's, with the same icon, the project name or Esc to go back to the conversation. The button that resumes the conversation in iTerm or WezTerm moved next to its title. (#70)
 
 ### Fixed
+
 - Banners no longer leave a Relay process running for every one you didn't click: each conversation keeps only its latest banner's process, a new banner ends the previous one (#51)
 - The Remove button on an integration's page works again (#54)
 - Open in Terminal works without iTerm: Settings › General › Terminal picks iTerm, WezTerm or Terminal, and Automatic (the default) takes the first one installed. A terminal that fails to open now shows an error instead of doing nothing (#67)
@@ -760,6 +814,7 @@ a PR. Versions follow
 ## [0.0.2] - 2026-10-01
 
 ### Added
+
 - Mail works with any IMAP mail server, not only Gmail: Settings › Integrations › Mail › Other mail server (IMAP) takes the address, server, port and password (stored in the macOS keychain). All accounts show in one inbox, newest first, with the account on each row. Claude searches the inbox of such an account and saves replies as drafts in its Drafts folder; nothing is ever sent (#41)
 - A Productive board's Presets menu also lists the project's saved views from Productive (read only), above the presets you keep in Relay; picking one applies its filters, grouping and layout (kanban or list). A view that uses a filter Relay can't apply shows greyed out (#42)
 - Boards get a toolbar: search with a task count, a Kanban/List toggle, Group lanes by, Filters (state, status, assignee, folder, task list, labels, each with its count) shown as removable chips, and Presets, filter sets you save under a name per board. The list view has foldable lanes, and done lanes start folded (#39)
@@ -777,6 +832,7 @@ a PR. Versions follow
 - A macOS notification when a turn ends, a turn stops or something waits for you while Relay is in the background; clicking it opens that conversation (#18)
 
 ### Changed
+
 - Mail is laid out like the Pull requests view: the inbox on the left with search, read state and project filters, the mail you pick on the right at full width instead of in the side panel, so you can step through the inbox without closing anything (#39)
 - Pull requests get the new look, laid out like Mail: the list on the left (waiting for your review, yours) with state-coloured icons and CI and review status, the PR you pick on the right with its branch, checks, conversation, code comments and files, Open on GitHub and AI review. "Updated N min ago" with a refresh button sits in the title bar; a PR in the right panel opens there too (#39)
 - Waiting for you follows the redesign: each item has a header with the agent, project and conversation plus an "Open conversation" link, questions and blocked terminal sessions get the new cards, and the empty state is centered (#39)
@@ -801,6 +857,7 @@ a PR. Versions follow
 - Favicons and the "this conversation is about" suggestion work wherever a vault keeps its project notes, not only under `Projects/` or `Portfolio/`; a project with a short name like "ab1" gets its site too (only a domain that is exactly its name)
 
 ### Fixed
+
 - `/clear` in a Claude Code conversation now empties it in Relay too; before, the old messages stayed on screen even though Claude had started over (#34)
 - Connecting Trello no longer sends you looking for OAuth: Settings › Integrations › Trello walks you through it in three steps, with a link to create the Power-Up, the API key field first and a Get token button that opens Trello's allow page for that key. Pasting the Secret or something that isn't a token now says so before saving (#30)
 - The Trello steps name the tab where Trello now keeps the API key, Authorization › Trello Auth, instead of the old API key tab (#32)
@@ -814,6 +871,7 @@ a PR. Versions follow
 First version with a number: everything merged up to and including #15.
 
 ### Added
+
 - Relay: the brand, app name, icon and bundle identifier `be.laurentmeersman.relay` (#13)
 - Agent providers behind one contract: Claude Code, Codex and OpenCode (#7)
 - Board providers behind one contract: Productive, Trello and Linear (#3)
@@ -826,10 +884,12 @@ First version with a number: everything merged up to and including #15.
 - The UI in English, Dutch, French and German, following the macOS language by default (#1)
 
 ### Changed
+
 - Settings after bb: pages in a sidebar, sections in cards, agents and integrations as lists you add to (#15)
 - Usage and Settings are compact icon buttons in the sidebar footer (#9)
 
 ### Fixed
+
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
 [Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.40...HEAD

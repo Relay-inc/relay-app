@@ -6,8 +6,10 @@ import {
   readProperties,
   removeProperty,
   setProperty,
+  typed,
   withFrontmatter,
 } from "./properties.ts";
+import { SHIPPED } from "../types/registry.ts";
 
 // the frontmatter of the vault's own templates and notes (keys only, no content)
 const PRODUCT = `lastSync: Sun Apr 05 2026 22:21:55 GMT+0200 (Central European Summer Time)
@@ -130,4 +132,28 @@ test("frontmatter in a head: read, replace, add when missing", () => {
   assert.equal(withFrontmatter(head, "type: X"), "---\ntype: X\n---\n# Relay\n");
   assert.equal(withFrontmatter("# Relay\n", "type: X"), "---\ntype: X\n---\n# Relay\n");
   assert.equal(frontmatterOf("# Relay\n"), null);
+});
+
+test("the note's type gives its keys their editors: a select with its values, a value outside them kept", () => {
+  const kinds = (yaml: string) =>
+    typed(readProperties(yaml)!, SHIPPED).map(p => [p.key, p.kind, p.value, p.values?.join("|") ?? ""]);
+  assert.deepEqual(kinds("type: Project\nstatus: Active\nlast:\npeople:\ncontext:\nphase:"), [
+    ["type", "text", "Project", ""],
+    ["status", "select", "Active", "Active|Blocked|Quiet|Paused|Closed"],
+    ["last", "date", null, ""],
+    ["people", "list", null, ""],
+    ["context", "link", null, ""],
+    ["phase", "text", null, ""],
+  ]);
+  // a value outside the list stays, as the select's value; a shape the field does not take keeps its own editor
+  assert.deepEqual(kinds("type: project\nstatus: Someday\nlast: [a, b]"), [
+    ["type", "text", "project", ""],
+    ["status", "select", "Someday", "Active|Blocked|Quiet|Paused|Closed"],
+    ["last", "list", ["a", "b"], ""],
+  ]);
+  // no type, or one the registry does not know: the editors come from the values
+  assert.deepEqual(kinds("status: Active\nlast:"), [
+    ["status", "text", "Active", ""],
+    ["last", "text", null, ""],
+  ]);
 });

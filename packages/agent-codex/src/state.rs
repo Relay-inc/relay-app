@@ -2,21 +2,8 @@
 //! read with the system's sqlite3 in read-only mode. Where it is missing (another version) the rollouts stand in.
 
 use serde_json::{json, Value};
-use std::path::Path;
-use std::process::{Command, Stdio};
 
-const SQLITE: &str = "/usr/bin/sqlite3";
-
-/// `select …` as JSON rows, read-only; None when there is no database or no sqlite3.
-pub fn query(db: &Path, sql: &str) -> Option<Vec<Value>> {
-    if !db.is_file() { return None; }
-    let out = Command::new(SQLITE).arg("-readonly").arg("-json").arg(db).arg(sql).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
-    if !out.status.success() { return None; }
-    let s = String::from_utf8_lossy(&out.stdout);
-    // no rows is no output at all
-    if s.trim().is_empty() { Some(vec![]) } else { serde_json::from_str(&s).ok() }
-}
-fn quote(s: &str) -> String { format!("'{}'", s.replace('\'', "''")) }
+pub use agent_core::sqlite::{query, quote, SQLITE};
 
 /// The vault's threads, the newest first: in the folder or below it, as given or as its real path.
 pub fn threads_sql(vault: &str, real: &str) -> String {
@@ -42,6 +29,8 @@ pub fn sessions_of(rows: &[Value]) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
+    use std::process::Command;
     #[test]
     fn threads_from_a_state_database() {
         let rows: Vec<Value> = serde_json::from_str(include_str!("../tests/fixtures/threads.json")).unwrap();

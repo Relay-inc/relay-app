@@ -3,7 +3,7 @@
 // agents run. lib.rs, session/mod.rs, actions.rs, pty.rs and shared_vaults.rs ask here.
 
 use super::{data_dir, home, need_vault, pty, shared_vaults, trc, trc_v, App, EnvBuf};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Manager};
@@ -119,7 +119,7 @@ fn config_dirs(st: &App, eb: &EnvBuf) -> Vec<String> {
     c
 }
 
-/// A conversation in `eb.vault` fenced in, in its provider's opts: `deny` gets the fence's rules, and another vault
+/// A conversation in `eb.vault` fenced in, in its grants: `deny` gets the fence's rules, and another vault
 /// than the main one `fenced` (agent-claude: no own MCP servers or connectors, no hooks, no auto memory, auto mode).
 pub fn fence_in(app: &AppHandle, st: &App, eb: &mut EnvBuf) {
     let s = st.settings.lock().unwrap().clone();
@@ -130,11 +130,9 @@ pub fn fence_in(app: &AppHandle, st: &App, eb: &mut EnvBuf) {
     let mut rules = fence(&eb.vault, &all, &configs, shared.then_some(data.as_str()));
     if !shared && all.len() > 1 { rules.extend(shared_copies(&data)); }
     if !rules.is_empty() {
-        let mut deny = eb.opts["deny"].as_array().cloned().unwrap_or_default();
-        deny.extend(rules.into_iter().map(Value::from));
-        eb.opts["deny"] = json!(deny);
+        eb.grants.deny.extend(rules);
     }
-    if shared { eb.opts["fenced"] = json!(true); }
+    if shared { eb.grants.fenced = true; }
 }
 
 /// Whether a conversation runs in another vault than the main one: what it reads of the user's own mail, reminders and
@@ -207,6 +205,7 @@ pub fn protected(app: &AppHandle, eb: &EnvBuf) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     #[test]
     fn a_projects_key_never_moves() {
         let s = json!({"vault": "/me/vault", "sharedVaults": [{"id": "0123456789abcdef", "name": "Team", "host": "h", "port": 1, "fp": "ab", "folder": "/teams/a/shared"}]});

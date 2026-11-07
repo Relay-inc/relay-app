@@ -15,6 +15,7 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useRelatedStore } from "../../../application/related/store";
 import { loadRelated } from "../../../application/related/related";
+import { useInboxStore } from "../../../application/inbox/inbox";
 
 /** The vault notes closest to the open conversation, from the full-text index: a compact list under the editor. */
 function RelatedNotes() {
@@ -62,15 +63,17 @@ export function ScratchPanel({ project }: { project: string }) {
   const notes = useScratchStore(s => s.notes);
   const openKey = useScratchStore(s => s.open);
   const open = notes.find(note => note.key === openKey);
+  // the notes are Inbox notes of the project's vault: read again when the Inbox changed under them (a quick capture)
+  const version = useInboxStore(s => s.version);
 
   useEffect(() => {
-    if (project && project !== useScratchStore.getState().project) loadScratch(project);
-  }, [project]);
+    if (project && (project !== useScratchStore.getState().project || version)) loadScratch(project);
+  }, [project, version]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="flex items-center gap-2 mb-2">
-        <button className="btn btn-primary h-7.5 px-3 rounded-lg text-[13px] cursor-pointer" onClick={newScratch}>
+        <button className={`btn btn-primary h-7.5 px-3 rounded-lg text-[13px] cursor-pointer`} onClick={newScratch}>
           + {t("notes.new")}
         </button>
         {open ? (

@@ -15,18 +15,28 @@ import {
   adoptPage,
   followPageLink,
   loadPage,
+  LINE,
+  onHeading,
   pageTextIs,
   savePage,
+  takeHeading,
   watchPage,
   workspacePaths,
 } from "../../../application/navigation/pages";
+import { attachDest, attachPaths, forgetEmbeds } from "../../../application/navigation/embeds";
+import { dropTarget } from "../../../application/conversations/attachments";
+import { dropText, headingAt } from "../../../domain/workspace/embeds";
 import { headAfter, lineChanges, merge3, oneChange } from "../../../domain/workspace/merge";
 import { LOCAL, openSharedPage, type Peer, type SharedPage } from "../../../application/workspace/coedit";
 import { yAnchor, ySpan } from "../../../application/workspace/anchors";
 import { findQuote, type Span } from "../../../domain/workspace/comments";
 import { useT } from "../../hooks/useT";
-import { livePreview } from "./livePreview";
+import { livePreview, showMarkdown } from "./livePreview";
+import { formatting, type FormatWords } from "./formatting";
+import { useEditorStore } from "../../../application/navigation/editor";
 import { blockEditing, type BlockWords } from "./blocks";
+import { attachEditing, embeds, pickAndEmbed } from "./embeds";
+import { fileDrop } from "./fileDrop";
 import "../../styles/page-editor.css";
 
 const SAVE_AFTER = 1000; // ms after the last keystroke
@@ -42,6 +52,8 @@ export type CommentsApi = {
   locate: (anchor: unknown, quote: string) => Span;
   mark: (spans: { id: string; from: number; to: number }[], active: string | null) => void;
   reveal: (from: number, to: number) => void;
+  /** The line of the file (from 1) at window height `y`: where the page is scrolled to, for the rail's outline. */
+  lineAt: (y: number) => number;
 };
 /** The editor's side of a page's comments, and what it tells them: a selection made or gone, ⌘⌥M, a commented text
  *  clicked, the text changed (anchors move). */
@@ -204,10 +216,44 @@ function Editor(props: {
     turnInto: t("block.turnInto"),
     duplicate: t("block.duplicate"),
     remove: t("block.delete"),
-    addRow: t("block.addRow"),
-    addColumn: t("block.addColumn"),
+    table: {
+      rowGrip: t("table.rowGrip"),
+      columnGrip: t("table.columnGrip"),
+      rowAbove: t("table.rowAbove"),
+      rowBelow: t("table.rowBelow"),
+      moveUp: t("table.moveUp"),
+      moveDown: t("table.moveDown"),
+      deleteRow: t("table.deleteRow"),
+      columnLeft: t("table.columnLeft"),
+      columnRight: t("table.columnRight"),
+      moveLeft: t("table.moveLeft"),
+      moveRight: t("table.moveRight"),
+      alignLeft: t("table.alignLeft"),
+      alignCenter: t("table.alignCenter"),
+      alignRight: t("table.alignRight"),
+      deleteColumn: t("table.deleteColumn"),
+    },
     handle: t("block.handle"),
   }));
+  const [format] = useState<FormatWords>(() => ({
+    toolbar: t("fmt.toolbar"),
+    bold: t("fmt.bold"),
+    italic: t("fmt.italic"),
+    strike: t("fmt.strike"),
+    code: t("fmt.code"),
+    link: t("fmt.link"),
+    target: t("fmt.target"),
+    removeLink: t("fmt.removeLink"),
+    turn: { label: t("block.turnInto"), kind: kind => t(`block.${kind}`) },
+  }));
+  const raw = useEditorStore(s => s.showMarkdown);
+  const mode = useRef(new Compartment()); // Show markdown, changed while the editor lives
+  const rawNow = useRef(raw);
+  const apply = useRef<(on: boolean) => void>(() => {});
+  useEffect(() => {
+    rawNow.current = raw;
+    apply.current(raw);
+  }, [raw]);
   useEffect(() => {
     const { page, body, split, onReady, onChanged, onFailed, onPeers } = first;
     // a shared document's page (ticket 9): typed into its text after the head, not saved as a file
@@ -266,8 +312,16 @@ function Editor(props: {
           drawSelection(),
           EditorView.lineWrapping,
           markdown({ base: markdownLanguage }),
+          mode.current.of(showMarkdown.of(rawNow.current)),
           livePreview((link, drawer) => void followPageLink(link, drawer)),
-          blockEditing(words, () => workspacePaths()), // before the keymap below: Tab in a table moves between cells
+          formatting(format),
+          embeds(page),
+          attachEditing(page),
+          blockEditing(
+            words,
+            () => workspacePaths(),
+            (v, at) => pickAndEmbed(page, v, at),
+          ), // before the keymap below: Tab in a table moves between cells
           keymap.of([
             { key: "Mod-Alt-m", run: () => (hooks.current?.onKey(), true) },
             // on a shared document ⌘Z undoes only what was typed here (Y.UndoManager with this Mac's origin)
@@ -325,6 +379,45 @@ function Editor(props: {
         ],
       }),
     });
+    apply.current = on => view.dispatch({ effects: mode.current.reconfigure(showMarkdown.of(on)) });
+    // files dragged in from Finder: the line they would land on, then copied into the attachments folder and embedded
+    forgetEmbeds(page);
+    const drop = fileDrop(view, {
+      dest: () => attachDest(page),
+      add: async (paths, at) => {
+        const links = await attachPaths(page, paths);
+        if (!links.length) return;
+        const { from, insert } = dropText(view.state.doc.toString(), at, links);
+        view.dispatch({
+          changes: { from, insert },
+          selection: { anchor: from + insert.length - 1 },
+          userEvent: "input.drop",
+        });
+      },
+    });
+    const stopDrops = dropTarget(drop);
+    // Open on an embedded section: the page opens with the cursor on that heading
+    const reveal = () => {
+      const heading = takeHeading(page);
+      if (heading?.startsWith(LINE)) {
+        // a line of the file (⌘K's content match): the body starts after the head's lines
+        const [line, edge] = heading.slice(LINE.length).split(":");
+        const n = Number(line) - (head.split("\n").length - 1);
+        const at = view.state.doc.line(Math.min(Math.max(n, 1), view.state.doc.lines)).from;
+        const y = edge === "top" ? ({ y: "start", yMargin: 24 } as const) : ({ y: "center" } as const);
+        view.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, y) });
+        view.focus();
+        return;
+      }
+      const at = heading === undefined ? null : headingAt(view.state.doc.toString(), heading);
+      if (at !== null)
+        view.dispatch({
+          selection: { anchor: at },
+          effects: EditorView.scrollIntoView(at, { y: "start", yMargin: 24 }),
+        });
+    };
+    reveal();
+    const stopHeadings = onHeading(p => p === page && reveal());
     // the page's comments: in body offsets; a shared document's anchors are on its whole text, after the head
     hooks.current?.onApi({
       selection: () => {
@@ -356,6 +449,8 @@ function Editor(props: {
           selection: { anchor: from, head: to },
           effects: EditorView.scrollIntoView(from, { y: "center" }),
         }),
+      lineAt: y =>
+        view.state.doc.lineAt(view.lineBlockAtHeight(y - view.documentTop).from).number + head.split("\n").length - 1,
     });
     // the file changed outside Relay (Claude, Obsidian, a shared round): merged into what is typed when the two did not
     // change the same lines, else the bar. Not undoable with ⌘Z: it is not the user's edit.
@@ -442,6 +537,9 @@ function Editor(props: {
       });
     return () => {
       closed = true;
+      stopDrops();
+      stopHeadings();
+      drop.destroy();
       hooks.current?.onApi(null);
       shared?.close();
       onPeers?.([]);
@@ -450,6 +548,6 @@ function Editor(props: {
       void write(); // leaving the page saves what was typed
       view.destroy();
     };
-  }, [first, label, words, by]);
+  }, [first, label, words, by, format]);
   return <div ref={host} className="page-editor" />;
 }

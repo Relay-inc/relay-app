@@ -19,6 +19,8 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { ORCH } from "../../../domain/orchestrator/rules";
 import { projectName as plainProject } from "../../../application/workspace/vault";
 import { matchCommands, type SlashCommand } from "../../../domain/conversations/commands";
+import { matchNotes, mentionAt, noteLabel } from "../../../domain/conversations/mention";
+import { mentionNote, workspacePaths } from "../../../application/navigation/pages";
 import {
   chatBar,
   commandsOf,
@@ -245,6 +247,8 @@ export function Composer({ className }: { className: string }) {
   const [picked, setPicked] = useState(0);
   // the text Escape closed the list on: it stays closed until the text changes
   const [dismissed, setDismissed] = useState("");
+  // where the caret is: an `@` and a name before it lists the workspace's notes
+  const [caret, setCaret] = useState(0);
   const field = useRef<HTMLTextAreaElement | null>(null);
 
   // files dropped anywhere on the window land here, unless Cmd-K is open over it
@@ -267,20 +271,33 @@ export function Composer({ className }: { className: string }) {
 
   // the agent's slash commands and skills while the field is a `/` and a name
   const completions: SlashCommand[] = typed === dismissed ? [] : matchCommands(commands, typed);
-  const current = Math.min(picked, completions.length - 1);
+  const mention = typed === dismissed ? null : mentionAt(typed, caret);
+  const notes = useDerived(() => (mention ? matchNotes(workspacePaths(), mention.query) : []));
+  const count = completions.length || notes.length;
+  const current = Math.min(picked, count - 1);
   const complete = (command: SlashCommand) => {
     setTyped(`/${command.name} `);
     setPicked(0);
     field.current?.focus();
   };
+  // a picked note becomes a chip and its `@name` leaves the text; a refused one (another workspace) stays typed
+  const take = async (path: string) => {
+    if (!mention || !(await mentionNote(path))) return;
+    setTyped(typed.slice(0, mention.from) + typed.slice(caret));
+    setCaret(mention.from);
+    setPicked(0);
+    field.current?.focus();
+    requestAnimationFrame(() => field.current?.setSelectionRange(mention.from, mention.from));
+  };
   // arrows move through the list, Tab or Enter takes one, Escape closes it
   const onCompletionKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (!completions.length || e.nativeEvent.isComposing) return false;
+    if (!count || e.nativeEvent.isComposing) return false;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       const step = e.key === "ArrowDown" ? 1 : -1;
-      setPicked((picked + step + completions.length) % completions.length);
+      setPicked((picked + step + count) % count);
     } else if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
-      complete(completions[current]);
+      if (completions.length) complete(completions[current]);
+      else void take(notes[current]);
     } else if (e.key === "Escape") {
       // the list's own Escape: not the window's, which would start stopping a running turn
       e.stopPropagation();
@@ -353,12 +370,28 @@ export function Composer({ className }: { className: string }) {
       <div
         className={`relative rounded-[14px] bg-raised border pt-3 pr-3 pb-2 pl-3.5 shadow-md focus-within:border-accent ${dropping ? "border-accent" : "border-separator-strong"}`}
       >
-        {completions.length ? (
+        {count ? (
           <ul
             className="absolute bottom-full inset-x-0 mb-1.5 py-1 rounded-lg bg-bg border border-separator shadow-md overflow-hidden"
             role="listbox"
-            aria-label={t("composer.commands")}
+            aria-label={t(completions.length ? "composer.commands" : "composer.notes")}
           >
+            {notes.map((path, i) =>
+              completions.length ? null : (
+                <li
+                  key={path}
+                  className={`flex items-baseline gap-2 px-3 py-1.5 text-sm cursor-default ${i === current ? "bg-fill" : ""}`}
+                  role="option"
+                  aria-selected={i === current}
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={() => void take(path)}
+                  onMouseEnter={() => setPicked(i)}
+                >
+                  <span className="font-medium whitespace-nowrap">{noteLabel(path)}</span>
+                  <span className="text-secondary truncate">{path.split("/").slice(0, -1).join("/")}</span>
+                </li>
+              ),
+            )}
             {completions.map((command, i) => (
               <li
                 key={command.name}
@@ -437,8 +470,10 @@ export function Composer({ className }: { className: string }) {
           value={typed}
           placeholder={placeholder}
           onKeyDown={onKeyDown}
+          onSelect={e => setCaret(e.currentTarget.selectionStart)}
           onChange={e => {
             setDismissed("");
+            setCaret(e.target.selectionStart);
             setTyped(e.target.value);
             setPicked(0);
           }}

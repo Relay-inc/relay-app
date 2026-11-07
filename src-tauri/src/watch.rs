@@ -42,7 +42,7 @@ pub fn moved(root: &Path, files: &[String], edits: &[(String, String)]) {
 /// A shared document's note Relay wrote out (another member's edit, `Docs::export`): announced as relinked, so an open
 /// page takes it in without saying it changed on disk, and its document does not take it as a change.
 pub fn exported(file: &Path) {
-    let p = std::fs::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
+    let p = vault::canon_path(file);
     if let Ok(t) = std::fs::read_to_string(&p) { RELINKED.lock().unwrap().insert(p, vault::text_hash(&t)); }
 }
 
@@ -92,6 +92,13 @@ pub fn start(app: &AppHandle) {
             while let Ok(more) = rx.recv_timeout(Duration::from_millis(300)) { files.extend(more); }
             files.sort();
             files.dedup();
+            // the related index walks the folders again at its next query (Relay's own writes included; a moved or deleted
+            // folder has no extension)
+            for f in files.iter().filter(|f| f.extension().is_none_or(|e| e == "md")) { crate::related::touched(f); }
+            // a workspace's type registry changed: its Claude rule follows
+            for f in files.iter().filter(|f| f.ends_with(".relay/types.json")) {
+                if let Some((_, c)) = watched.iter().find(|(_, c)| f.starts_with(c)) { crate::types::write_rule(Path::new(c)); }
+            }
             // a file in a shared workspace changed (a save, Claude, Obsidian): its round runs now, not at the next 10 s.
             // ponytail: a round's own pulls land here too and cost one more round that finds nothing
             let shared: Vec<String> = shared_vaults::list(&app.state::<App>().settings.lock().unwrap()).into_iter().map(|v| vault::canon(&v.folder)).collect();

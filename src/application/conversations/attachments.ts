@@ -32,7 +32,9 @@ export async function fromPaths(paths: string[]): Promise<{ images: Img[]; files
 }
 
 // ---------- where a drop goes: the field drawn last (Cmd-K over the composer), wherever in the window it lands
-type DropTarget = { over: (on: boolean) => void; drop: (paths: string[]) => void };
+// `at`: where the pointer is in the window's pixels (a page's editor shows the line the files would land on)
+type Point = { x: number; y: number };
+type DropTarget = { over: (on: boolean, at?: Point) => void; drop: (paths: string[], at?: Point) => void };
 const targets: DropTarget[] = [];
 /** A field that takes dropped files while it is mounted. Returns the unregister. */
 export function dropTarget(target: DropTarget) {
@@ -44,11 +46,11 @@ export function dropTarget(target: DropTarget) {
 }
 /** Started once at boot: Finder drops on the window go to the top drop target. */
 export const listenToFileDrops = () =>
-  backend.onFileDrop(({ over, paths }) => {
+  backend.onFileDrop(({ over, paths, at }) => {
     const top = targets[targets.length - 1];
     if (!top) return;
-    top.over(over);
-    if (paths?.length) top.drop(paths);
+    top.over(over, at);
+    if (paths?.length) top.drop(paths, at);
   });
 
 /** The files copied in Finder as paths, [] when the clipboard holds none. */

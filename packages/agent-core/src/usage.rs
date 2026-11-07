@@ -108,7 +108,11 @@ pub enum Act { Read, Write, Edit, Search }
 #[derive(Clone, Debug, PartialEq)]
 pub struct Touch { pub at: i64, pub act: Act, pub path: String }
 
-fn under(path: &str, dir: &str) -> bool { !dir.is_empty() && (path == dir || path.starts_with(&format!("{dir}/"))) }
+pub fn under(path: &str, dir: &str) -> bool { !dir.is_empty() && (path == dir || path.starts_with(&format!("{dir}/"))) }
+/// In the vault, given as is or as its real path (a provider keeps the real one: /tmp is /private/tmp).
+pub fn in_vault(cwd: &str, vault: &str) -> bool {
+    under(cwd, vault) || std::fs::canonicalize(vault).is_ok_and(|v| under(cwd, &v.to_string_lossy()))
+}
 /// `path` as an absolute path, a relative one taken from `cwd`.
 pub fn resolve(path: &str, cwd: &str) -> String { if path.starts_with('/') { path.into() } else { format!("{cwd}/{path}") } }
 
@@ -203,6 +207,23 @@ pub fn vault_activity(touches: &[Touch], vault: &str, today: i64, week: i64) -> 
     })
 }
 
+/// Epoch ms as RFC 3339 in UTC, "2026-09-30T19:00:00Z", with `.mmm` before the Z when `millis`. The inverse of [`parse_ts`].
+pub fn rfc3339(ms: i64, millis: bool) -> String {
+    let (days, rem) = (ms.div_euclid(86_400_000), ms.rem_euclid(86_400_000));
+    // civil from days (Howard Hinnant)
+    let z = days + 719468;
+    let era = z.div_euclid(146097);
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    let frac = if millis { format!(".{:03}", rem % 1000) } else { String::new() };
+    format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}{frac}Z", rem / 3_600_000, rem / 60_000 % 60, rem / 1000 % 60)
+}
+
 /// "2026-09-30T19:00:00.123Z" (or with +hh:mm) as epoch ms.
 pub fn parse_ts(s: &str) -> Option<i64> {
     let b = s.as_bytes();
@@ -289,6 +310,11 @@ mod tests {
         assert_eq!(parse_ts("2026-09-30T02:00:00+02:00"), Some(TODAY));
         assert_eq!(parse_ts("1970-01-01T00:00:00.000Z"), Some(0));
         assert_eq!(parse_ts("yesterday"), None);
+        assert_eq!(rfc3339(0, true), "1970-01-01T00:00:00.000Z");
+        assert_eq!(rfc3339(TODAY + 500, true), "2026-09-30T00:00:00.500Z");
+        assert_eq!(rfc3339(1790755200 * 1000, false), "2026-09-30T08:00:00Z");
+        assert_eq!(parse_ts(&rfc3339(TODAY + 1234, true)), Some(TODAY + 1234));
+        assert!(in_vault("/v/a", "/v") && !in_vault("/vx", "/v") && !in_vault("/v", ""));
     }
 
     #[test]

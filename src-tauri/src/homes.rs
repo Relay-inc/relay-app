@@ -4,7 +4,12 @@
 
 use std::path::{Path, PathBuf};
 
-const DEFAULTS: [(&str, &str); 2] = [("meeting", "Calendar/Meetings/{yyyy}"), ("attachments", "Attachments/{yyyy}")];
+const DEFAULTS: [(&str, &str); 4] = [
+    ("meeting", "Calendar/Meetings/{yyyy}"),
+    ("daily", "Calendar/Daily/{yyyy}"),
+    ("thread", "Calendar/Threads/{yyyy}"),
+    ("attachments", "Attachments/{yyyy}"),
+];
 
 /// A folder relative to the vault, or None: no absolute path, no `..`, nothing hidden.
 fn clean(p: &str) -> Option<String> {
@@ -52,6 +57,8 @@ mod tests {
         let d = vault();
         assert_eq!(home(d.path(), "meeting", "2026"), d.path().join("Calendar/Meetings/2026"));
         assert_eq!(home(d.path(), "attachments", "2026"), d.path().join("Attachments/2026"));
+        assert_eq!(home(d.path(), "daily", "2026"), d.path().join("Calendar/Daily/2026"));
+        assert_eq!(home(d.path(), "thread", "2025"), d.path().join("Calendar/Threads/2025"));
     }
 
     #[test]

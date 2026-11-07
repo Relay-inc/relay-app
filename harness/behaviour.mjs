@@ -59,6 +59,13 @@ const READS = new Set([
   "detect_vault",
   "check_vault",
   "plugin:window|theme",
+  "find_notes",
+  "note_times",
+  "note_icons",
+  "note_templates",
+  "favourites",
+  "note_rail",
+  "note_touches",
 ]);
 const isIgnored = c => IGNORED.has(c.cmd) || c.cmd.startsWith("plugin:event|");
 const isRead = c => READS.has(c.cmd) || (c.cmd === "integration_call" && c.args.method === "GET");
@@ -282,11 +289,32 @@ const click = async (locator, ms = 150) => {
 const byText = (page, text) => page.getByText(text, { exact: true });
 const nav = page => page.getByRole("navigation").first();
 const navHas = async (page, text) => (await visible(nav(page).getByText(text, { exact: true })).count()) > 0;
+// the Beacon Billing spec open in Pages (fixture kb): where the Changes pill is
+const openBilling = async s => {
+  const { page } = s;
+  const billing = "Contexts/Agency/Projects/Beacon Billing/Documents/Billing Spec.md";
+  await click(page.getByRole("tab", { name: /^Pages/ }));
+  await click(page.locator('[data-project="Beacon Billing"]'));
+  await click(page.locator('[data-folder="Contexts/Agency/Projects/Beacon Billing/Documents"]'));
+  await click(page.locator(`[data-page="${billing}"]`).first());
+  await waitText(page, "Billing Spec");
+  return { billing, findings: "Contexts/Agency/Projects/Northwind Portal/Documents/Rate limit findings.md" };
+};
 const button = (page, name) => page.getByRole("button", { name, exact: true });
 /** a visible element whose whole text is `text` (a mail row's subject, not a longer subject that contains it) */
 const listed = async (page, text) => (await visible(byText(page, text)).count()) > 0;
 /** a settings section in the window's sidebar, by its name */
 const navButton = (page, name) => page.getByRole("button", { name: new RegExp(`^${name}\\b`) });
+/** the Pages tab: a context's Collections folder unfolded, one group unfolded, Show all clicked: the collection opens on
+ *  the group's own rule */
+async function openGroup(page, group, context = "Agency") {
+  await page.getByRole("tab", { name: /^Pages/ }).click();
+  const folder = page.locator(`[data-collections="ctx:${context}"]`);
+  if (!(await folder.locator("[data-linked-group]").count())) await click(folder.locator("[aria-expanded]").first());
+  const row = folder.locator(`[data-linked-group="${group}"]`);
+  if ((await row.getAttribute("aria-expanded")) !== "true") await click(row);
+  await click(row.locator("xpath=..").getByText(/^Show all \d+$/));
+}
 async function typeInComposer(page, text) {
   await composer(page).click({ timeout: 4000 });
   await page.keyboard.type(text);
@@ -301,6 +329,444 @@ const focusedPlaceholder = page =>
 
 // ---------- the scenarios
 const SCENARIOS = {
+  // the Pages tab's Collections folder at every layer (#367, #398): under a context and under a project (folder and
+  // flat) one folder, closed until opened, with the groups of that layer; no "linked here", no group twice; Show all
+  // opens the collection on the group's own rule, as many rows as the group counts; the fold is kept over a reload
+  async linked(s) {
+    await s.load({ fixture: "linked", keep: true });
+    const { page } = s;
+    const countOf = async group => Number(((await group.textContent()) ?? "").replace(/\D/g, ""));
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    // a context: its Collections folder is there, closed
+    const ctx = page.locator('[data-collections="ctx:Agency"]');
+    s.check(
+      "a context has a Collections folder, closed",
+      (await ctx.count()) === 1 && !(await ctx.locator("[data-linked-group]").count()),
+    );
+    await click(ctx.locator("[aria-expanded]").first());
+    const ctxGroups = await ctx.locator("[data-linked-group]").evaluateAll(els => els.map(e => e.dataset.linkedGroup));
+    s.check(
+      "it lists the groups of a context, none twice",
+      ctxGroups.length === new Set(ctxGroups).size && ctxGroups.includes("projects"),
+    );
+    s.check(
+      "in the context's order",
+      ctxGroups.join() ===
+        ["meetings", "documents", "people", "projects", "threads"].filter(k => ctxGroups.includes(k)).join(),
+    );
+    // a project with a folder
+    await page.locator('[data-project="Northwind Portal"]').click();
+    const folder = page.locator('[data-collections^="Contexts/Agency/Projects/Northwind Portal"]');
+    s.check(
+      "the project's Collections folder is closed",
+      (await folder.count()) === 1 && !(await folder.locator("[data-linked-group]").count()),
+    );
+    s.check("there is no linked here text", !(await hasText(page, "linked here")));
+    await click(folder.locator("[aria-expanded]").first());
+    const keys = await folder.locator("[data-linked-group]").evaluateAll(els => els.map(e => e.dataset.linkedGroup));
+    s.check(
+      "a project's groups, none twice, no Projects",
+      keys.length === new Set(keys).size && !keys.includes("projects"),
+    );
+    const group = folder.locator('[data-linked-group="meetings"]');
+    s.check("the group counts 6 meetings", (await countOf(group)) === 6);
+    await group.click();
+    const rows = folder.locator('[data-page^="Calendar/Meetings/"]');
+    s.check("the newest 4 show first", (await rows.count()) === 4);
+    // Show all opens the collection (#373): Meetings about the project, 6 rows, no other project's
+    await page.getByText("Show all 6").click();
+    s.check("Show all opens the Meetings collection", await waitText(page, "6 match this view"));
+    s.check(
+      "filtered on the group's own rule for Northwind Portal",
+      ((await page.locator('[data-filter="linked"]').textContent()) ?? "").includes("Northwind Portal"),
+    );
+    const titles = page.locator('[role="row"] [data-cell="title"]');
+    s.check("it lists all 6, as many as the group counts", (await titles.count()) === 6);
+    s.check(
+      "among them the meeting that points at the project through context: only",
+      (await page.locator('[data-cell="title"]', { hasText: "Northwind Portal design review" }).count()) === 1,
+    );
+    s.check(
+      "another project's meeting is not among them",
+      (await page.locator('[data-cell="title"]', { hasText: "Atlas Logistics sync" }).count()) === 0,
+    );
+    await rows.first().click();
+    await page.locator("[data-breadcrumb]").waitFor();
+    s.check(
+      "the note opens at its own place",
+      (await page.locator("[data-breadcrumb]").textContent()) === "CalendarMeetings2026",
+    );
+    // a flat project: no folder, only its note
+    await page.locator('[data-project="Delmas Bakery"]').click();
+    const flat = page.locator('[data-collections="Contexts/Agency/Projects/Delmas Bakery.md"]');
+    s.check(
+      "a flat project has its Collections folder, closed",
+      (await flat.count()) === 1 && !(await flat.locator("[data-linked-group]").count()),
+    );
+    await click(flat.locator("[aria-expanded]").first());
+    s.check("with its 2 meetings", (await countOf(flat.locator('[data-linked-group="meetings"]'))) === 2);
+    // the context's Meetings: Show all opens the collection with as many rows as the group counts
+    const ctxMeetings = ctx.locator('[data-linked-group="meetings"]');
+    const n = await countOf(ctxMeetings);
+    await ctxMeetings.click();
+    await page.getByText(`Show all ${n}`).first().click();
+    s.check("a context's Show all lists the group's count", await waitText(page, `${n} match this view`));
+    // collapse the project's folder again, reload: the fold is kept (Northwind open, Delmas closed)
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await click(ctx.locator("[aria-expanded]").first());
+    s.check("the context's folder folds", !(await ctx.locator("[data-linked-group]").count()));
+    await settle(page, 500); // the UI state is written a moment after a change
+    await s.load({ fixture: "linked", keep: true });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    s.check(
+      "after a reload the context's fold is kept (closed)",
+      (await page.locator('[data-collections="ctx:Agency"]').count()) === 1 &&
+        !(await page.locator('[data-collections="ctx:Agency"] [data-linked-group]').count()),
+    );
+    s.check(
+      "and the flat project's stays open",
+      (await page
+        .locator('[data-collections="Contexts/Agency/Projects/Delmas Bakery.md"] [data-linked-group]')
+        .count()) > 0,
+    );
+  },
+  // Recent in the Pages tab: × on a row (hover) takes it off the list only, Delete does the same on a focused row,
+  // Clear on the header empties it; all of it is still so after a restart
+  async recentClose(s) {
+    const kb = { fixture: "default", keep: true };
+    await s.load(kb);
+    const { page } = s;
+    const recent = () => page.locator('[data-section="pages:recent"]');
+    const rows = () => recent().locator("[data-page]");
+    const tab = () => page.getByRole("tab", { name: /^Pages/ }).click();
+    await tab();
+    const n = await rows().count();
+    s.check("Recent lists several notes", n >= 3);
+    const first = await rows().first().getAttribute("data-page");
+    await rows().first().hover();
+    const x = rows().first().getByRole("button", { name: "Remove from Recent" });
+    s.check("a hovered row shows × with its tooltip", (await x.getAttribute("title")) === "Remove from Recent");
+    await click(x);
+    s.check(
+      "× takes it off the list (the next one moves up)",
+      !(await recent().locator(`[data-page="${first}"]`).count()),
+    );
+    s.check(
+      "the note itself is untouched",
+      (await s.calls("delete_page")).length === 0 && (await s.calls("write_note")).length === 0,
+    );
+    await settle(page, 500);
+    await s.load(kb);
+    await tab();
+    s.check("after a reload it is still gone", !(await recent().locator(`[data-page="${first}"]`).count()));
+    // keyboard: Delete on a focused row
+    const second = await rows().first().getAttribute("data-page");
+    await rows().first().focus();
+    await page.keyboard.press("Delete");
+    s.check("Delete on a focused row removes it", !(await recent().locator(`[data-page="${second}"]`).count()));
+    // Clear on the header
+    await recent().getByRole("button").first().hover();
+    await click(recent().getByRole("button", { name: "Clear", exact: true }));
+    s.check("Clear empties Recent and hides the section", (await recent().count()) === 0);
+    await settle(page, 500);
+    await s.load(kb);
+    await tab();
+    s.check("after a reload it stays empty", (await recent().count()) === 0);
+  },
+
+  // collections (#373, K8): Meetings in a context lists every type: Meeting note with that context:, a filter about:
+  // narrows it, editing the about: cell writes only that note's frontmatter, and a saved view comes back after a restart
+  async collectionTable(s) {
+    const kb = { fixture: "linked-collections", keep: true };
+    await s.load(kb);
+    const { page } = s;
+    const note = p => page.evaluate(x => window.__harness.noteText(x), p);
+    const open = group => openGroup(page, group);
+    await open("meetings");
+    s.check("the Meetings collection opens", await waitText(page, "9 match this view"));
+    s.check(
+      "on the context's own rule",
+      ((await page.locator('[data-filter="linked"]').textContent()) ?? "").includes("Agency"),
+    );
+    const titles = page.locator('[role="row"] [data-cell="title"]');
+    s.check("it lists the 9 meetings with context: Agency, no thread or person", (await titles.count()) === 9);
+    // filter about: Northwind Portal
+    await click(button(page, "+ Filter"));
+    await click(page.getByRole("option", { name: "about" }));
+    await page.getByRole("combobox", { name: "about" }).fill("Northwind Portal"); // an input with a list is a combobox
+    await page.keyboard.press("Enter");
+    s.check(
+      "the about: filter narrows it to 5 (the sixth links through context: only)",
+      (await waitText(page, "5 match this view")) && (await titles.count()) === 5,
+    );
+    s.check(
+      "Followed up has its column, set on two meetings",
+      (await hasText(page, "Followed up")) && (await page.getByText("✓ Mail drafted").count()) === 2,
+    );
+    s.check(
+      "the chip is there",
+      ((await page.locator('[data-filter="about"]').textContent()) ?? "").includes("Northwind Portal"),
+    );
+    // editing the about: cell writes that note's frontmatter and nothing else
+    const file = "Calendar/Meetings/2026/2026-10-08 Northwind Portal sync.md";
+    const before = await note(file);
+    const cell = page
+      .locator('[role="row"]', { hasText: "2026-10-08 Northwind Portal sync" })
+      .locator('[data-cell="about"]');
+    await click(cell.locator("div").first());
+    s.check(
+      "the cell opens a listbox of projects, the link ticked",
+      await waitText(page, "Writes about: in 2026-10-08 Northwind Portal sync.md"),
+    );
+    s.check(
+      "with the one linked ticked",
+      (await page.getByRole("option", { name: /^N\s*Northwind Portal/ }).getAttribute("aria-selected")) === "true",
+    );
+    await click(page.getByRole("option", { name: /Atlas Logistics/ }));
+    await settle(page, 300);
+    const writes = await s.calls("write_note");
+    const after = await note(file);
+    s.check("one write_note, to that note", writes.length === 1 && writes[0].args.target === file);
+    s.check(
+      "only the about: line changed, every other byte kept",
+      after === before.replace('about: "[[Northwind Portal]]"', 'about: "[[Atlas Logistics]]"') && after !== before,
+    );
+    s.check("it left the filtered table", (await titles.count()) === 4);
+    // sort and save the view
+    await click(page.getByRole("button", { name: /^Sort / }));
+    await click(page.getByRole("option", { name: "Title" }));
+    await click(button(page, "Save view"));
+    await page.getByRole("textbox", { name: "View name" }).fill("Portal meetings");
+    await click(button(page, "Save"));
+    await settle(page, 200);
+    const saved = await s.calls("view_save");
+    s.check(
+      "Save view writes the view with its filter and sort",
+      saved.length === 1 &&
+        saved[0].args.name === "Portal meetings" &&
+        saved[0].args.view.filters.some(f => f.key === "about" && f.is === "Northwind Portal") &&
+        saved[0].args.view.sort.key === "title",
+    );
+    s.check("its file is named", await hasText(page, ".relay/views/Portal meetings.json"));
+    await settle(page, 500);
+    // restart: the saved view reopens with its filter and sort
+    await s.load(kb);
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await click(page.locator("[data-saved-views] [aria-expanded]").first());
+    await click(page.locator('[data-saved-view="Portal meetings"]'));
+    s.check("the saved view reopens with its about: filter", await waitText(page, "Northwind Portal"));
+    s.check(
+      "and its sort",
+      (await button(page, "Sort Title ↓").count()) === 1 && (await page.locator('[data-filter="about"]').count()) === 1,
+    );
+    // a note that was not meant to be touched stays as it was
+    s.check(
+      "the other meeting notes are untouched",
+      (await note("Calendar/Meetings/2026/2026-09-24 Northwind Portal sync.md")).includes(
+        'about: "[[Northwind Portal]]"',
+      ),
+    );
+  },
+
+  // collections (#373, K9): Projects by status as a board; dragging a card to a lane writes status: and only that line;
+  // a meeting's stage is derived, so its board has no moves
+  async collectionBoard(s) {
+    await s.load({ fixture: "linked-collections" });
+    const { page } = s;
+    const note = p => page.evaluate(x => window.__harness.noteText(x), p);
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await openGroup(page, "projects");
+    await waitText(page, "match this view");
+    await click(page.getByRole("tab", { name: "Board" }));
+    const lane = name => page.locator(`[data-lane="${name}"]`);
+    s.check(
+      "the board has the lanes of status:",
+      (await lane("Active").count()) === 1 && (await lane("Paused").count()) === 1,
+    );
+    const card = "Contexts/Agency/Projects/Atlas Logistics/Atlas Logistics.md";
+    const before = await note(card);
+    s.check("Atlas Logistics is Active", (await lane("Active").locator(`[data-card="${card}"]`).count()) === 1);
+    const from = await page.locator(`[data-card="${card}"]`).boundingBox();
+    const to = await lane("Paused").boundingBox();
+    await page.mouse.move(from.x + 20, from.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 40, from.y + 40, { steps: 3 });
+    await page.mouse.move(to.x + to.width / 2, to.y + 30, { steps: 8 });
+    s.check("a card in the air says where it lands", await waitText(page, "Drop to set status: Paused"));
+    await page.mouse.up();
+    await settle(page, 300);
+    const writes = await s.calls("write_note");
+    const after = await note(card);
+    s.check("one write_note for that note", writes.length === 1 && writes[0].args.target === card);
+    s.check(
+      "status: is Paused and nothing else changed, the comment and the keys after it as they were",
+      after === before.replace("status: Active", "status: Paused") && after.includes("# kept as written\npriority: 2"),
+    );
+    s.check("the card is in the Paused lane", (await lane("Paused").locator(`[data-card="${card}"]`).count()) === 1);
+    // a meeting's stage: derived, no moves
+    await openGroup(page, "meetings");
+    await click(page.getByRole("tab", { name: "Board" }));
+    s.check("the stage lanes", (await lane("planned").count()) === 1 && (await lane("wrapped").count()) === 1);
+    s.check("the board says its cards do not move", await hasText(page, "Stage is worked out from each note"));
+    const meet = page.locator('[data-card^="Calendar/Meetings/"]').first();
+    const mb = await meet.boundingBox();
+    const wb = await lane("wrapped").boundingBox();
+    await page.mouse.move(mb.x + 20, mb.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(wb.x + wb.width / 2, wb.y + 40, { steps: 8 });
+    await page.mouse.up();
+    await settle(page, 300);
+    s.check("dragging a meeting card writes nothing", (await s.calls("write_note")).length === 1);
+  },
+
+  // files inside a page (#368, K4): an image, a PDF, audio and a section of a note drawn in place of their markdown; a
+  // screenshot pasted, files dropped (with the insertion line) and a 312 MB one refused with the toast
+  async embeds(s) {
+    await s.load({ fixture: "embeds" });
+    const { page } = s;
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    s.check("the page opens", await waitText(page, "Next: confirm the window"));
+    const image = page.locator('.cm-embed[data-kind="image"] img').first();
+    await image.waitFor({ timeout: 4000 });
+    s.check("the picture loads", await image.evaluate(i => i.complete && i.naturalWidth > 0));
+    s.check("its width is the |560", (await image.evaluate(i => Math.round(i.parentElement.clientWidth))) === 560);
+    s.check(
+      "its caption is the alt text",
+      ((await page.locator(".cm-embed-caption").first().textContent()) ?? "").includes(
+        "Configurator traffic, last 7 days",
+      ),
+    );
+    const content = await page.locator(".cm-content").innerText();
+    s.check("no embed markdown shows", !content.includes("![[") && !content.includes("|560"));
+    const card = page.locator('.cm-embed[data-kind="pdf"]');
+    const cardText = (await card.textContent()) ?? "";
+    s.check(
+      "the PDF is a card with its name, pages and size",
+      cardText.includes("Hosting quote cluster 2026.pdf") && cardText.includes("6 pages") && /1[.,]2 MB/.test(cardText),
+    );
+    await card.getByRole("button", { name: "Open" }).click();
+    s.check(
+      "Open opens the PDF from where it is",
+      (await s.calls("open_file")).some(c =>
+        String(c.args.path).endsWith("Attachments/2026/Hosting quote cluster 2026.pdf"),
+      ),
+    );
+    const player = page.locator('.cm-embed[data-kind="audio"]');
+    await player.getByRole("button", { name: "Play" }).click();
+    s.check(
+      "the audio plays",
+      await page
+        .waitForFunction(() => document.querySelector(".cm-embed-audio audio")?.currentTime > 0.2, null, {
+          timeout: 4000,
+        })
+        .then(
+          () => true,
+          () => false,
+        ),
+    );
+    await player.getByRole("button", { name: "Pause" }).click();
+    s.check("with its clock", ((await player.textContent()) ?? "").includes("/ 0:32"));
+    const note = page.locator('.cm-embed[data-kind="note"]');
+    const noteText = (await note.textContent()) ?? "";
+    s.check(
+      "an embedded section shows only that section",
+      noteText.includes("60 requests per minute") &&
+        !noteText.includes("An API key per client") &&
+        !noteText.includes("retried twice"),
+    );
+    // the picture selected: a ring and two handles; dragging one writes |<width>
+    await image.click();
+    s.check(
+      "a click selects the picture",
+      (await page.locator(".cm-embed-selected .cm-embed-grip-right").count()) === 1,
+    );
+    const grip = await page.locator(".cm-embed-grip-right").boundingBox();
+    await page.mouse.move(grip.x + 3, grip.y + 14);
+    await page.mouse.down();
+    await page.mouse.move(grip.x - 197, grip.y + 14, { steps: 6 });
+    await page.mouse.up();
+    await page
+      .waitForFunction(() => /\|360\]\]/.test(window.__harness.written() ?? ""), null, { timeout: 4000 })
+      .catch(() => {});
+    s.check(
+      "the width handle writes |360",
+      /\|a?[^|\]]*\|360\]\]/.test((await page.evaluate(() => window.__harness.written())) ?? ""),
+    );
+    // a screenshot pasted at the end of the page
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.evaluate(() => {
+      const png = Uint8Array.from(
+        atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="),
+        c => c.charCodeAt(0),
+      );
+      const data = new DataTransfer();
+      data.items.add(new File([png], "image.png", { type: "image/png" }));
+      document
+        .querySelector(".cm-content")
+        .dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    });
+    const stamped = /^Pasted image \d{14}\.png$/;
+    await page.waitForFunction(() => window.__harness.attached().length > 0, null, { timeout: 4000 });
+    s.check(
+      "a pasted screenshot is saved as Pasted image <stamp>.png",
+      (await page.evaluate(() => window.__harness.attached())).every(a => stamped.test(a.name)),
+    );
+    await page
+      .waitForFunction(() => /!\[\[Pasted image \d{14}\.png\]\]/.test(window.__harness.written() ?? ""), null, {
+        timeout: 4000,
+      })
+      .catch(() => {});
+    s.check(
+      "and embedded where the cursor was",
+      /!\[\[Pasted image \d{14}\.png\]\]\s*$/.test((await page.evaluate(() => window.__harness.written())) ?? ""),
+    );
+    s.check("it shows as a picture", (await page.locator('.cm-embed[data-kind="image"]').count()) === 2);
+    // files hovering: the insertion line between two lines, then dropped there
+    const target = await page.locator('.cm-embed[data-kind="pdf"]').boundingBox();
+    const at = { x: target.x + 40, y: target.y + 4 };
+    await page.evaluate(
+      ([paths, at]) => window.__harness.dropHover(paths, at),
+      [["/Users/me/Downloads/dealer-portal-error.png"], at],
+    );
+    const mark = page.locator(".cm-file-drop");
+    s.check(
+      "the drop shows its line and what happens",
+      (await mark.isVisible()) && ((await mark.textContent()) ?? "").includes("Copy to Attachments/2026 and embed"),
+    );
+    await page.evaluate(
+      ([paths, at]) => window.__harness.dropPaths(paths, at),
+      [["/Users/me/Downloads/dealer-portal-error.png"], at],
+    );
+    await page
+      .waitForFunction(() => /dealer-portal-error\.png/.test(window.__harness.written() ?? ""), null, { timeout: 4000 })
+      .catch(() => {});
+    const written = (await page.evaluate(() => window.__harness.written())) ?? "";
+    s.check(
+      "a drop is embedded on its own line before the line it landed on",
+      /!\[\[dealer-portal-error\.png\]\]\n!\[\[Hosting quote cluster 2026\.pdf\]\]/.test(written),
+    );
+    s.check("the line is gone after the drop", !(await mark.isVisible()));
+    // 312 MB: refused, the toast says so, nothing is embedded
+    await page.evaluate(() => window.__harness.dropPaths(["/Users/me/Downloads/configurator-db-dump.sql.gz"]));
+    s.check("a file over 25 MB gets the toast", await waitText(page, "Too large: 25 MB max per file"));
+    s.check(
+      "and no embed",
+      !((await page.evaluate(() => window.__harness.written())) ?? "").includes("configurator-db-dump"),
+    );
+    // Open on the section: the note opens with the cursor on its heading
+    await note.getByRole("button", { name: "Open" }).click();
+    s.check("Open shows the note", await waitText(page, "retried twice"));
+    const opened = await page.locator(".cm-content").innerText();
+    // the heading's ## is hidden now (#392): its line used to show it as raw text with the cursor on it
+    s.check(
+      "at the section's heading",
+      opened.includes("Rate limits") &&
+        (await page.locator(".cm-h2", { hasText: /^Rate limits$/ }).isVisible()) &&
+        !opened.includes("##"),
+    );
+  },
   async send(s) {
     await s.load(); // a first load reads the fixture keys
     await s.load({ sel: s.keys.switchTo });
@@ -527,7 +993,11 @@ const SCENARIOS = {
     );
     const changes = await s.chatChanges();
     const created = Object.values(changes).filter(c => c !== "removed");
-    s.check("new conversation routed to the project", created.length === 1 && created[0].project === "Harbor CRM");
+    // Cmd-K always starts a general conversation and only offers the named project (e5c162bc)
+    s.check(
+      "new general conversation (no project, not a draft)",
+      created.length === 1 && created[0].project === null && !created[0].draft,
+    );
     s.check("open view unchanged", (await s.local(["sel"])).sel === s.keys.switchTo);
     s.check("started toast", await hasText(page, `Started: ${text}`));
     s.fact("chat changes", changes);
@@ -815,7 +1285,8 @@ const SCENARIOS = {
     s.check("the text names them", /@Ben Lauwers/.test(made?.args.text ?? ""));
     await page.keyboard.press("Control+Digit3");
     await click(page.getByRole("button", { name: /^Switch workspace/ }));
-    const inbox = page.getByRole("button", { name: /^Inbox/ });
+    // the Pages tab has an Inbox row of its own (#372): the workspace menu is the last one in the page
+    const inbox = page.getByRole("button", { name: /^Inbox/ }).last();
     s.check("the Inbox counts the thread that mentions you", (await inbox.textContent())?.trim() === "Inbox1");
     await click(inbox);
     await click(page.getByRole("button", { name: /Northwind Portal/ }).first());
@@ -826,6 +1297,7 @@ const SCENARIOS = {
       "resolving takes it out of the Inbox",
       await page
         .getByRole("button", { name: /^Inbox$/ })
+        .last()
         .waitFor({ timeout: 3000 })
         .then(
           () => true,
@@ -1056,6 +1528,314 @@ const SCENARIOS = {
     s.check("and nothing else changed", /```\n\n- \[x\] Call the client/.test(await written()));
   },
 
+  // the page editor writes markdown without showing it (#392): typing, ⌘B and the toolbar, a link's address, the cursor
+  // and Backspace at hidden marks, ⌘K as the link key and as the palette, Show markdown; each asserts the file's text
+  async pageHiddenMarkdown(s) {
+    await s.load();
+    const { page } = s;
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    const editor = page.locator(".cm-content");
+    await editor.waitFor();
+    const written = async () => (await page.evaluate(() => window.__harness.written())) ?? "";
+    const saved = async re => {
+      for (let i = 0; i < 20 && !re.test(await written()); i++) await page.waitForTimeout(200);
+      return re.test(await written());
+    };
+    const shown = () => editor.innerText();
+    await editor.click();
+    await page.keyboard.press("Meta+End");
+    // a new line without the list continuation Enter would add
+    const line = async text => {
+      await page.keyboard.insertText("\n");
+      await page.keyboard.type(text);
+    };
+    await line("## Title");
+    s.check(
+      "## Title is a heading as soon as it is typed",
+      await page.locator(".cm-h2", { hasText: /^Title$/ }).isVisible(),
+    );
+    s.check("the file has ## Title", await saved(/\n## Title$/));
+    await line("**bold**");
+    s.check(
+      "**bold** is bold, its asterisks hidden",
+      await page.locator(".cm-strong", { hasText: /^bold$/ }).isVisible(),
+    );
+    s.check("the file has **bold**", await saved(/\n## Title\n\*\*bold\*\*$/));
+    await line("**clos");
+    s.check("unclosed syntax stays visible", (await shown()).includes("**clos"));
+    await page.keyboard.type("ed**");
+    s.check("and hides when it closes", !(await shown()).includes("**clos") && (await shown()).includes("closed"));
+    await line("- item");
+    s.check(
+      "- item is a bullet",
+      (await page.locator(".cm-bullet").count()) > 0 && !(await shown()).includes("- item"),
+    );
+    s.check("the file has - item", await saved(/\n- item$/));
+    await line("[] task");
+    s.check(
+      "[] task is a to-do with its box",
+      (await page
+        .locator(".cm-line", { hasText: /^\s*task$/ })
+        .locator(".cm-task")
+        .count()) === 1,
+    );
+    s.check("the file has - [ ] task", await saved(/\n- \[ \] task$/));
+    // ⌘B on a selection, and the toolbar's buttons
+    await line("");
+    await page.keyboard.type("make me bold");
+    await page.keyboard.press("Shift+Home");
+    s.check("the toolbar shows over a selection", await page.locator(".cm-format-bar").isVisible());
+    await page.keyboard.press("Meta+b");
+    s.check("⌘B makes it bold in the file", await saved(/\n\*\*make me bold\*\*$/));
+    await page.locator(".cm-format-italic").click();
+    s.check("the toolbar's I adds italic", await saved(/\n\*\*\*make me bold\*\*\*$/));
+    await page.locator(".cm-format-bold").click();
+    s.check("and its B takes the bold off again", await saved(/\n\*make me bold\*$/));
+    // a link: ⌘K over a selection is the link key, the address is typed in the popover
+    await page.keyboard.press("End");
+    await line("go here");
+    await page.keyboard.press("Shift+Home");
+    await page.keyboard.press("Meta+k");
+    s.check("⌘K on a selection opens the link popover", await page.locator(".cm-link-input").isVisible());
+    s.check("and not the palette", !/ask a question/i.test((await focusedPlaceholder(page)) ?? ""));
+    await page.keyboard.type("https://example.com/a");
+    await page.keyboard.press("Enter");
+    s.check(
+      "the file has [go here](https://example.com/a)",
+      await saved(/\n\[go here\]\(https:\/\/example\.com\/a\)$/),
+    );
+    s.check(
+      "the editor shows the link's text only",
+      (await shown()).includes("go here") &&
+        !(await shown()).includes("](") &&
+        !(await shown()).includes("example.com"),
+    );
+    // the address changed without seeing the markdown: the cursor in the link brings its popover
+    const link = page.locator(".cm-link", { hasText: "go here" });
+    const box = await link.boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    const input = page.locator(".cm-link-input");
+    await input.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+    s.check(
+      "a click in a link shows its address",
+      (await input.inputValue().catch(() => "")) === "https://example.com/a",
+    );
+    await input.fill("https://example.com/b");
+    await page.keyboard.press("Enter");
+    s.check("changing it changes the file", await saved(/\n\[go here\]\(https:\/\/example\.com\/b\)$/));
+    // ⌘K with nothing selected is the palette's
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    s.check("⌘K without a selection is the palette", /ask a question/i.test((await focusedPlaceholder(page)) ?? ""));
+    await page.keyboard.press("Escape");
+    await settle(page, 200);
+    // arrows and Backspace step over hidden marks
+    await editor.click();
+    await page.keyboard.press("Meta+End");
+    await line("**solid**");
+    await page.keyboard.press("Home");
+    for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowRight");
+    await page.keyboard.type("X");
+    s.check("→ steps over the hidden ** to the letters", await saved(/\n\*\*solXid\*\*$/));
+    await page.keyboard.press("End");
+    await page.keyboard.press("Backspace");
+    s.check("Backspace takes the last letter, not the hidden marks", await saved(/\n\*\*solXi\*\*$/));
+    await page.locator(".cm-line", { hasText: /^Title$/ }).click();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Backspace");
+    s.check("Backspace at the start of a heading makes it plain text", await saved(/\nTitle\n\*\*bold\*\*/));
+    // Show markdown: the page menu and its key, remembered
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await page.getByRole("button", { name: "Show markdown" }).click();
+    s.check(
+      "Show markdown shows the syntax",
+      (await shown()).includes("**bold**") && (await shown()).includes("](https://example.com/b)"),
+    );
+    const remembered = async on =>
+      page
+        .waitForFunction(on => localStorage.getItem("showMarkdown") === on, String(on), { timeout: 3000 })
+        .then(
+          () => true,
+          () => false,
+        );
+    s.check("it is remembered", await remembered(true));
+    await page.keyboard.press("Shift+Meta+m");
+    s.check("its key hides it again", !(await shown()).includes("**bold**") && !(await shown()).includes("](https://"));
+    s.check("and that is remembered too", await remembered(false));
+    s.check(
+      "the file kept every character of it",
+      /\*\*bold\*\*/.test(await written()) && /\[go here\]\(https:\/\/example\.com\/b\)/.test(await written()),
+    );
+  },
+  // tables in the page editor are a grid you edit in place: click a cell, type, Tab, Enter, the hover controls, Backspace,
+  // pasted tab-separated data, Show markdown; each asserts the file's text
+  async pageTables(s) {
+    await s.load({ fixture: "kb-tables" });
+    const { page } = s;
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
+    await page.locator('[data-page$="/Vendor overview.md"]').first().click();
+    const editor = page.locator(".cm-content");
+    await editor.waitFor();
+    const written = async () => (await page.evaluate(() => window.__harness.written())) ?? "";
+    const saved = async re => {
+      for (let i = 0; i < 20 && !re.test(await written()); i++) await page.waitForTimeout(200);
+      return re.test(await written());
+    };
+    const paste = text =>
+      page.evaluate(t => {
+        const data = new DataTransfer();
+        data.setData("text/plain", t);
+        const e = new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true });
+        document.querySelector(".cm-content").dispatchEvent(e);
+        return e.defaultPrevented;
+      }, text);
+    const rowsOf = async () => (await written()).split("\n").filter(l => l.startsWith("|"));
+    const cell = text => page.locator(".cm-tcell", { hasText: text }).first();
+    await settle(page, 300);
+    const shown = await editor.innerText();
+    s.check(
+      "a table is a grid without its pipes",
+      (await page.locator(".cm-trow").count()) === 7 && !/\|\s*:?-{2}/.test(shown),
+    );
+    s.check(
+      "the header is styled and aligned from the delimiter row",
+      await page.locator(".cm-thead .cm-ta-right").first().isVisible(),
+    );
+    const first = await page.locator(".cm-trow").first().boundingBox();
+    const second = await page.locator(".cm-trow").nth(1).boundingBox();
+    const cols = async n =>
+      page
+        .locator(".cm-trow")
+        .nth(n)
+        .locator(".cm-tcell")
+        .evaluateAll(a => a.map(c => Math.round(c.getBoundingClientRect().left)));
+    s.check(
+      "the columns line up from row to row",
+      JSON.stringify(await cols(0)) === JSON.stringify(await cols(1)) && second.y > first.y,
+    );
+    s.check(
+      "a wide table scrolls inside itself, not the page",
+      await page.evaluate(() => {
+        const row = [...document.querySelectorAll(".cm-trow")].find(r => r.scrollWidth > r.clientWidth);
+        return !!row && document.documentElement.scrollWidth <= document.documentElement.clientWidth;
+      }),
+    );
+    // click a cell, type: only that cell changes, the columns are padded again
+    await cell("Atlas Logistics").click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" Ltd");
+    s.check(
+      "typing changes the cell and re-pads the columns",
+      await saved(/\n\| Atlas Logistics Ltd +\| Sofie Claes +\| 1\.240,00 +\|\n/),
+    );
+    const lens = (await rowsOf()).slice(0, 5).map(l => l.length);
+    s.check("every row of the table is the same width in the file", new Set(lens).size === 1);
+    await page.keyboard.press("Tab");
+    await page.keyboard.type("X");
+    s.check("Tab goes to the next cell", await saved(/\| XSofie Claes +\|/));
+    await page.keyboard.type("|y");
+    s.check("a | typed in a cell is stored as \\|", await saved(/\| X\\\|ySofie Claes +\|/));
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.type("!");
+    s.check("Shift+Tab goes back", await saved(/\| !Atlas Logistics Ltd +\|/));
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Q");
+    s.check("Enter moves to the cell below", await saved(/\| QHarbour \\\| Docks +\|/));
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.type("U");
+    s.check("↑ moves up in the same column", await saved(/\| U\*\*Bluebird Studio\*\* +\|/));
+    // Backspace never takes a pipe
+    await page.keyboard.press("Home");
+    const before = await written();
+    await page.keyboard.press("Backspace");
+    await settle(page, 200);
+    s.check("Backspace at a cell's start changes nothing", (await written()) === before);
+    // the hover controls
+    const tbl = async () => {
+      const lines = (await written()).split("\n");
+      const from = lines.findIndex(l => l.startsWith("| Vendor"));
+      const to = lines.findIndex((l, n) => n > from && !l.startsWith("|"));
+      return lines.slice(from, to);
+    };
+    const tableIs = async (test, tries = 20) => {
+      for (let n = 0; n < tries; n++) {
+        if (test(await tbl())) return true;
+        await page.waitForTimeout(200);
+      }
+      return false;
+    };
+    const blank = l => /^\|[ |]+$/.test(l);
+    await cell("Bluebird Studio").hover();
+    await page.locator(".cm-table-row-grip").waitFor({ state: "visible" });
+    await page.locator(".cm-table-row-grip").click();
+    await page.getByRole("menuitem", { name: "Insert row below" }).click();
+    s.check("a row grip adds a row below", await tableIs(t => t.length === 6 && blank(t[4])));
+    await page.keyboard.press("Backspace");
+    s.check(
+      "Backspace in an empty row's first cell removes the row",
+      await tableIs(t => t.length === 5 && !t.some(blank)),
+    );
+    await page.keyboard.press("Meta+z");
+    s.check("and one undo brings it back", await tableIs(t => t.length === 6 && blank(t[4])));
+    await page.keyboard.press("Meta+z");
+    await cell("Monthly cost").hover();
+    await page.locator(".cm-table-col-grip").click();
+    await page.getByRole("menuitem", { name: "Insert column right" }).click();
+    s.check("a column grip adds a column", await tableIs(t => t[0].split("|").length === 6 && /\| --- \|$/.test(t[1])));
+    await cell("Monthly cost").hover();
+    await page.locator(".cm-table-col-grip").click();
+    await page.getByRole("menuitem", { name: "Align center" }).click();
+    s.check(
+      "a column's alignment is written to the delimiter row",
+      await tableIs(t => /\| :-+ +\| :-+: +\| :-+: +\| -+ +\|$/.test(t[1])),
+    );
+    await cell("Monthly cost").hover();
+    await page.locator(".cm-table-col-grip").click();
+    await page.getByRole("menuitem", { name: "Move column left" }).click();
+    s.check(
+      "a column moves with its cells",
+      await tableIs(t => /^\| Vendor +\| Monthly cost +\| Contact +\|/.test(t[0])),
+    );
+    await cell("Monthly cost").hover();
+    await page.locator(".cm-table-col-grip").click();
+    await page.getByRole("menuitem", { name: "Delete column" }).click();
+    s.check(
+      "a column is deleted",
+      await tableIs(t => t[0].split("|").length === 5 && !/Monthly cost/.test(t.join("\n"))),
+    );
+    // pasted data
+    await cell("Contact").click();
+    s.check("pasting tab-separated data inside a table is taken", await paste("Plan\tSeats\nBasic\t5\nPro\t25"));
+    s.check(
+      "it fills the cells from the caret, adding rows and a column",
+      await tableIs(
+        t =>
+          /^\| Vendor +\| Plan +\| Seats +\|$/.test(t[0]) &&
+          /\| Basic +\| 5 +\|$/.test(t[2]) &&
+          /\| Pro +\| 25 +\|$/.test(t[3]),
+      ),
+    );
+    await page.locator(".cm-line", { hasText: "Closing line." }).click();
+    await page.keyboard.press("End");
+    await page.keyboard.insertText("\n");
+    await page.keyboard.insertText("\n");
+    s.check(
+      "tab-separated data on an empty line makes a table",
+      (await paste("Name\tCity\nSofie Claes\tGhent")) &&
+        (await saved(/\| Name +\| City +\|\n\| -+ +\| -+ +\|\n\| Sofie Claes +\| Ghent +\|/)),
+    );
+    await page.keyboard.type("x");
+    s.check("the caret is in the table's first header cell", await saved(/\| xName +\|/));
+    // Show markdown draws the file's text
+    await page.keyboard.press("Shift+Meta+m");
+    const raw = await editor.innerText();
+    s.check("Show markdown shows the pipes and the delimiter row", /\| xName/.test(raw) && /\| -{3,}/.test(raw));
+    await page.keyboard.press("Shift+Meta+m");
+  },
   async mail(s) {
     await s.load();
     const { page, keys } = s;
@@ -1849,7 +2629,6 @@ const SCENARIOS = {
 
   async cmdkProject(s) {
     await s.load();
-    await s.load({ sel: s.keys.switchTo });
     const { page } = s;
     await page.keyboard.press("Meta+k");
     await settle(page, 300);
@@ -1861,11 +2640,1014 @@ const SCENARIOS = {
     await settle(page, 300);
     s.check("Enter on a picked project sends nothing", (await s.calls("send")).length === 0);
     s.check(
-      "the project opens",
-      (await s.local(["sel"])).sel !== s.keys.switchTo && (await hasText(page, "Contact sync testen op staging")),
+      "the project opens on its latest conversation",
+      (await s.local(["sel"])).sel !== "__wait" && (await hasText(page, "Contact sync strategy")),
     );
     s.fact("sel", (await s.local(["sel"])).sel);
     s.fact("chat changes", await s.chatChanges());
+  },
+
+  // issue 387: ⌘K as the palette. Conversations (project on the right), commands (exact names first, one Commands
+  // group with Today's note), settings pages, the 8-row cap, and a question (6+ words or `?`) that lists nothing
+  async cmdkPalette(s) {
+    await s.load();
+    const { page } = s;
+    const open = async text => {
+      await page.keyboard.press("Meta+k");
+      await settle(page, 200);
+      await page.keyboard.type(text);
+      await settle(page, 300);
+    };
+    const rows = () => visible(page.locator("[data-option]")).evaluateAll(els => els.map(e => e.textContent.trim()));
+    const drawer = () => page.evaluate(() => document.querySelector(".relay-app")?.getAttribute("data-drawer") ?? "");
+    const sel = async () => (await s.local(["sel"])).sel;
+    // 1. a conversation by a part of its title, its project on the right; Enter opens it
+    await s.load();
+    await open("invoice export");
+    const found = await rows();
+    s.check(
+      "the conversation is listed with its project",
+      found.some(r => /Invoice export columns.*Northwind Portal/.test(r)),
+    );
+    s.check("under a Conversations group", await hasText(page, "Conversations"));
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check("Enter on it opens it", (await sel()) === s.keys.switchTo);
+    s.check("and sends no question", (await s.calls("send")).length === 0);
+    // 5. nothing selected: Enter asks, with results shown
+    await s.load();
+    await open("invoice export");
+    s.check("results are shown", (await rows()).length > 0);
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check("Enter with nothing selected sends a quick question", (await s.calls("send")).length === 1);
+    s.check("and does not open the conversation", (await sel()) !== s.keys.switchTo);
+    // 2. a project tool opens its drawer for the selected project
+    await s.load({ sel: s.keys.switchTo });
+    await open("terminal");
+    s.check("Terminal is the first row, the commands on top", (await rows())[0]?.startsWith("Terminal"));
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check("the terminal drawer opens", (await drawer()) === "terminal");
+    // 3. Settings and its pages; picking a page opens the window on that tab; 8 rows at most
+    await s.load({ sel: s.keys.switchTo });
+    await open("settings");
+    const settingsRows = await rows();
+    s.check(
+      "Settings comes first, then its pages",
+      settingsRows[0] === "Settings" && /^Settings: General/.test(settingsRows[1]),
+    );
+    s.check("no more than 8 rows", settingsRows.length === 8);
+    await click(page.getByRole("option", { name: /Settings: Agents/ }));
+    await settle(page, 300);
+    s.check(
+      "a settings page opens the window on its tab",
+      (await s.calls("open_settings_window")).some(c => c.args.tab === "agents"),
+    );
+    await s.load({ sel: s.keys.switchTo });
+    await open("check for updates");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check(
+      "Check for updates opens Updates",
+      (await s.calls("open_settings_window")).some(c => c.args.tab === "updates"),
+    );
+    // 2./Today: the view and today's note are two rows with their own names, the exact one first
+    await s.load({ sel: s.keys.switchTo });
+    await open("today");
+    const today = await rows();
+    s.check(
+      "Today first, then Open today's note, in one Commands group",
+      today[0] === "Today" && /today's note/.test(today[1] ?? ""),
+    );
+    s.check(
+      "one Commands group",
+      (await visible(page.locator("[role=group]").filter({ hasText: "Commands" })).count()) === 1,
+    );
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check(
+      "Today opens the Today view",
+      (await sel()) !== s.keys.switchTo && (await s.calls("daily_note")).length === 0,
+    );
+    // New conversation here
+    await s.load({ sel: s.keys.switchTo });
+    await open("new conversation here");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check("New conversation here opens a new conversation", (await sel()) !== s.keys.switchTo);
+    // 4. a question lists nothing and Enter asks
+    for (const question of ["how do I rename a project", "terminal?"]) {
+      await s.load({ sel: s.keys.switchTo });
+      await open(question);
+      s.check(`"${question}" lists nothing`, (await rows()).length === 0 && !(await hasText(page, "Commands")));
+      await page.keyboard.press("Enter");
+      await settle(page, 300);
+      s.check(`Enter sends "${question}" as a quick question`, (await s.calls("send")).length === 1);
+    }
+    // a filter pill is not a question: the notes stay with a long text
+    await s.load({ fixture: "kb", sel: s.keys.switchTo });
+    await open("type:Document rate limit what is the policy on this?");
+    s.check("with a pill a long question still lists notes", (await rows()).length > 0);
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check(
+      "and Enter opens the first one",
+      String(await sel()).startsWith("page:") && (await s.calls("send")).length === 0,
+    );
+  },
+
+  // K5, issue 369: ⌘K over names and content. Typing finds notes by name and lines of content with the match marked,
+  // `type:` and `in:` become pills that narrow what the backend is asked, ↵ opens, ⌘↵ opens beside the chat, ⌘O opens it
+  async quickSwitcher(s) {
+    const kb = { fixture: "kb" };
+    await s.load(kb);
+    await s.load({ ...kb, sel: s.keys.switchTo });
+    const { page } = s;
+    const searches = async () => (await s.calls("find_notes")).map(c => c.args.query);
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    s.check("opening ⌘K warms the index (an empty search)", (await searches()).includes(""));
+    await page.keyboard.type("rate limit");
+    s.check("a content match shows", await waitText(page, "Content matches"));
+    s.check("a name group shows", await waitText(page, "Notes by name"));
+    const hit = visible(page.locator("[data-option=content] mark")).first();
+    s.check("the matched words are marked", (await hit.textContent())?.toLowerCase().startsWith("rate limit"));
+    s.check("a content match names its line", /line \d+/.test(await page.locator("#quick-options").innerText()));
+    s.check("the query reached the backend as typed", (await searches()).includes("rate limit"));
+    // pills: typed as text, a space finishes them
+    await page.keyboard.press("Meta+a");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.type("type:Document in:Agency rate limit");
+    await settle(page, 300);
+    const pills = await visible(page.locator("[data-filter]")).evaluateAll(els => els.map(e => e.dataset.filter));
+    s.check("type: and in: become pills", pills.join(",") === "type:Document,in:Agency");
+    s.check(
+      "the backend gets the pills with the words",
+      (await searches()).includes("type:Document in:Agency rate limit"),
+    );
+    s.check("the meeting is narrowed away", !(await hasText(page, "Portal sync")));
+    s.check("the other context is narrowed away", !(await hasText(page, "Rate card")));
+    s.check("a Document of the context stays", await hasText(page, "Rate limit findings"));
+    s.fact(
+      "results with the filters",
+      await visible(page.locator("[data-option]")).evaluateAll(els => els.map(e => e.textContent.slice(0, 60))),
+    );
+    // a pill comes off with Backspace on the empty field
+    await page.keyboard.press("Meta+a");
+    await page.keyboard.press("Backspace");
+    await settle(page);
+    await page.keyboard.press("Backspace");
+    await settle(page);
+    s.check(
+      "Backspace on the empty field takes the last pill off",
+      (await visible(page.locator("[data-filter]")).count()) === 1,
+    );
+    await page.keyboard.type("rate limit");
+    await settle(page, 300);
+    s.check(
+      "a pill still narrows after one is taken off",
+      (await visible(page.locator("[data-filter]")).count()) === 1,
+    );
+    // ↵ opens the first result (with a filter on, nothing is asked)
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    const sel = (await s.local(["sel"])).sel;
+    s.check("↵ opens a note as a page", String(sel).startsWith("page:") && (await s.calls("send")).length === 0);
+    s.check("the note is shown", await waitText(page, "Rate limit"));
+    s.fact("sel", sel);
+    // a content match opens at its line: the cursor stands on it
+    await s.load({ ...kb, sel: s.keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    await page.keyboard.type("retry-after");
+    await waitText(page, "Content matches");
+    const line = /line (\d+)/.exec(await page.locator("#quick-options").innerText())?.[1];
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 600);
+    const active = await page.evaluate(
+      () =>
+        (getSelection()?.anchorNode instanceof Node
+          ? getSelection().anchorNode.parentElement?.closest(".cm-line")?.textContent
+          : "") ?? "",
+    );
+    s.check("↵ on a content match puts the cursor on its line", !!line && active.includes("Retry-After"));
+    s.fact("line asked, line under the cursor", [line, active]);
+    // ⌘↵: beside the conversation, which stays
+    await s.load({ ...kb, sel: s.keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    await page.keyboard.type("retry-after");
+    await waitText(page, "Content matches");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Meta+Enter");
+    await settle(page, 500);
+    s.check("⌘↵ leaves the conversation open", (await s.local(["sel"])).sel === s.keys.switchTo);
+    s.check("⌘↵ shows the note beside it", await waitText(page, "429 with Retry-After"));
+    // ⌘O is the same switcher
+    await s.load(kb);
+    await page.keyboard.press("Meta+o");
+    await settle(page, 300);
+    s.check("⌘O opens the switcher", /search notes/i.test((await focusedPlaceholder(page)) ?? ""));
+    // an action: Today's note, made once
+    await page.keyboard.type("today's note");
+    await waitText(page, "Commands");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 500);
+    s.check("the action makes today's note", (await s.calls("daily_note")).length === 1);
+    s.check("and opens it", String((await s.local(["sel"])).sel).includes("2026-10-01.md"));
+    // New <template> from the open page's project
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    await page.keyboard.type("new meeting");
+    await waitText(page, "Commands");
+    await click(page.getByRole("option", { name: /New Meeting/ }));
+    await settle(page, 500);
+    const made = await s.calls("new_from_template");
+    s.check("New Meeting asks for a meeting from a template", made.length === 1 && made[0].args.template === "Meeting");
+    s.fact("new from template", made[0]?.args ?? null);
+  },
+
+  // ⇥ in ⌘K searches the other workspace; its note opens by its absolute path
+  async quickSwitcherWorkspace(s) {
+    const kb = { fixture: "kb-shared" };
+    await s.load(kb);
+    await s.load({ ...kb, sel: s.keys.switchTo });
+    const { page } = s;
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    await page.keyboard.type("policy");
+    await s.waitCall("find_notes", 2);
+    await settle(page, 200);
+    const folders = async () => [...new Set((await s.calls("find_notes")).map(c => c.args.folder))];
+    s.check("it searches the workspace shown first", (await folders()).length === 1);
+    s.check("nothing of the other workspace yet", !(await hasText(page, "Rate policy")));
+    await page.keyboard.press("Tab");
+    await settle(page, 300);
+    s.check("⇥ names the other workspace", await hasText(page, "in Side vault"));
+    s.check("it searches that workspace", (await folders()).length === 2);
+    s.check("its note is listed", await waitText(page, "Rate policy"));
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check(
+      "its note opens by its absolute path",
+      String((await s.local(["sel"])).sel).startsWith("page:/Users/me/Side vault/"),
+    );
+    s.fact("sel", (await s.local(["sel"])).sel);
+  },
+
+  // issue 370: @ in the composer picks a note as a chip and the message carries its path; Add to conversation (the
+  // page's menu and ⌥↵ in ⌘K) puts the chip in the note's project conversation
+  async noteMention(s) {
+    const kb = { fixture: "kb" };
+    await s.load(kb);
+    await s.load({ ...kb, sel: s.keys.switchTo });
+    const { page } = s;
+    const hosting = "Contexts/Agency/Projects/Northwind Portal/Documents/Hosting plan.md";
+    const chips = name => visible(page.getByRole("button", { name: new RegExp(`^${name}`) })).count();
+    await typeInComposer(page, "Check @hosti");
+    s.check("@ lists the notes by name", await waitText(page, "Hosting plan", 3000));
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+    s.check("picking one shows a chip", (await chips("Hosting plan")) === 1);
+    s.check("and takes the @name out of the text", (await composerValue(page)) === "Check ");
+    s.check("nothing sent by the pick", (await s.calls("send")).length === 0);
+    await page.keyboard.type("and summarise it");
+    await page.keyboard.press("Enter");
+    s.check("send called", await s.waitCall("send"));
+    const sent = (await s.calls("send"))[0]?.args.text ?? "";
+    s.check("the sent message carries the absolute path", String(sent).includes(`\n/Users/demo/Vault/${hosting}\n`));
+    s.check("and the typed text", String(sent).startsWith("Check and summarise it"));
+    s.fact("send text", sent);
+    // the page's menu: the chip lands in a new conversation of the note's project
+    await settle(page, 300);
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    await click(page.locator('[data-project="Northwind Portal"]'));
+    await click(page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]'));
+    await page.locator(`[data-page="${hosting}"]`).first().click({ button: "right" });
+    await click(button(page, "Add to conversation"));
+    await settle(page, 400);
+    s.check("Add to conversation shows the chip in a composer", (await chips("Hosting plan")) >= 1);
+    s.check(
+      "in a conversation of the note's project",
+      (await composer(page).getAttribute("placeholder")) === "Ask something about Northwind Portal…",
+    );
+    // ⌥↵ in ⌘K
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    await page.keyboard.type("billing spec");
+    await waitText(page, "Notes by name");
+    await page.keyboard.press("ArrowDown");
+    s.check("the hint offers ⌥↵", await hasText(page, "⌥↵ add to conversation"));
+    await page.keyboard.press("Alt+Enter");
+    await settle(page, 500);
+    s.check("⌥↵ puts the note's chip in a composer", (await chips("Billing Spec")) === 1);
+    s.check("⌘K is closed", !(await hasText(page, "Notes by name")));
+    s.check(
+      "in a conversation of that note's project",
+      (await composer(page).getAttribute("placeholder")) === "Ask something about Beacon…",
+    );
+  },
+
+  // issue 370: a note of another workspace is refused, and no chip is made
+  async noteMentionOtherWorkspace(s) {
+    const kb = { fixture: "kb-shared" };
+    await s.load(kb);
+    await s.load({ ...kb, sel: s.keys.switchTo });
+    const { page } = s;
+    const chips = () => visible(page.getByRole("button", { name: /^Rate policy/ })).count();
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    await page.keyboard.type("policy");
+    await s.waitCall("find_notes", 2);
+    await page.keyboard.press("Tab");
+    await settle(page, 300);
+    s.check("its note is listed", await waitText(page, "Rate policy"));
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Alt+Enter");
+    await settle(page, 400);
+    s.check("it says to switch workspace", await waitText(page, "Switch workspace to add this note", 3000));
+    s.check("no chip is added", (await chips()) === 0);
+    s.check("nothing is attached for the next message", (await s.calls("send")).length === 0);
+  },
+
+  // K6, issue 371: the feed shows a capture run as one entry with both diffs and its reason; Undo puts one note back
+  // and leaves the other
+  async changesFeed(s) {
+    await s.load({ fixture: "kb-changes" });
+    const { page } = s;
+    const { billing, findings } = await openBilling(s);
+    const note = path => page.evaluate(p => window.__harness.noteText(p), path);
+    s.check(
+      "the pill counts the entries to review",
+      (await page.getByRole("button", { name: "Changes, 2 to review" }).count()) === 1,
+    );
+    await click(page.getByRole("button", { name: "Changes, 2 to review" }));
+    s.check("the feed opens", await waitText(page, "written to the vault by Relay"));
+    s.check(
+      "one entry with the reason line",
+      await hasText(page, "Decision: dry run first, live after Sofie confirms the rate rule"),
+    );
+    s.check(
+      "and both notes' diffs",
+      (await page.locator("[data-file]").count()) === 2 && (await hasText(page, "2 notes changed")),
+    );
+    await click(page.locator(`[data-file="${findings}"]`).getByRole("button", { name: "Undo", exact: true }));
+    await settle(page, 300);
+    s.check("Undo puts that note back", (await note(findings)).includes("Go live in sprint 24."));
+    s.check("the other note stays", (await note(billing)).includes("Dry run first"));
+    s.check("the row says so", await hasText(page, "Undone"));
+    s.fact(
+      "backend calls",
+      (await s.calls("change_undo")).map(c => c.args.path),
+    );
+  },
+
+  // the lists of changed files scroll with the wheel (WebKit): a page's Changes panel with an entry taller than the
+  // panel, a conversation's Git drawer with 40 files and the diff window over the app with a 150-line diff
+  async changesScroll(s) {
+    const wheelAt = async (locator, dy = 600, dx = 40) => {
+      const box = await locator.boundingBox();
+      await s.page.mouse.move(box.x + dx, box.y + 40);
+      await s.page.mouse.wheel(0, dy);
+      await settle(s.page, 200);
+    };
+    const top = el => el.evaluate(e => e.scrollTop);
+    // the Changes panel beside a page: the open entry has 7 notes, the Reviewed rows come after it
+    await s.load({ fixture: "kb-changes-long" });
+    const { page } = s;
+    await openBilling(s);
+    await click(page.getByRole("button", { name: /^Changes, \d+ to review/ }));
+    await waitText(page, "written to the vault by Relay");
+    const panel = page.locator('aside[aria-label="Changes"]');
+    const list = panel.locator(".overflow-y-auto");
+    const last = panel.getByText("Capture from \u201cStart the security audit\u201d chat");
+    s.check("the panel's list is taller than the panel", (await list.evaluate(e => e.scrollHeight > e.clientHeight * 2)) === true);
+    await wheelAt(panel.locator("[data-file]").first());
+    s.check("the wheel over a diff scrolls the list", (await top(list)) > 0);
+    for (let i = 0; i < 12; i++) await wheelAt(list, 800);
+    const [lb, pb] = [await last.boundingBox(), await list.boundingBox()];
+    s.check("the last Reviewed row comes into view", !!lb && lb.y >= pb.y && lb.y + lb.height <= pb.y + pb.height + 1);
+    s.check("the panel keeps its width", (await panel.boundingBox()).width === 580);
+    // a conversation's changes in the Git drawer, and one file's diff in the window over the app
+    await s.load({ fixture: "git-long", sel: s.keys.long });
+    await page.evaluate(() => window.__harness.changeSettings({ gitDrawer: true }));
+    await click(button(page, "Git"));
+    await waitText(page, "Report01.php");
+    const files = page.locator(".relay-drawer .overflow-y-auto").first();
+    await wheelAt(page.getByText("Report05.php").first(), 3000, 20);
+    s.check("the wheel scrolls the drawer's file list", (await top(files)) > 0);
+    s.check("down to the last file", await page.getByText("Report40.php").first().isVisible());
+    await click(page.getByText("Report01.php").first());
+    const diff = page.locator(".ticket-window .overflow-y-auto").first();
+    await wheelAt(diff, 800, 300);
+    s.check("the wheel scrolls the diff window", (await top(diff)) > 0);
+    s.check("its width stays the window's", (await diff.evaluate(e => e.scrollWidth <= e.clientWidth)) === true);
+  },
+
+  // issue 371: Undo on a note the user edited since shows the merge and writes nothing until it is applied
+  async changesMerge(s) {
+    await s.load({ fixture: "kb-changes" });
+    const { page } = s;
+    const { billing, findings } = await openBilling(s);
+    const note = path => page.evaluate(p => window.__harness.noteText(p), path);
+    await click(page.getByRole("button", { name: "Changes, 2 to review" }));
+    await waitText(page, "written to the vault by Relay");
+    // my line added after the run: the merge keeps it and takes the run's change out
+    const mine = (await note(findings)) + "My own line.\n";
+    await page.evaluate(([p, t]) => window.__harness.typeInto(p, t), [findings, mine]);
+    await click(page.locator(`[data-file="${findings}"]`).getByRole("button", { name: "Undo", exact: true }));
+    s.check("a merge is shown", await waitText(page, "You edited this note after the run"));
+    s.check("and nothing is written yet", (await note(findings)) === mine);
+    await click(button(page, "Apply merge"));
+    await settle(page, 300);
+    const merged = await note(findings);
+    s.check("the merge keeps my line", merged.includes("My own line."));
+    s.check(
+      "and takes the run's change out",
+      merged.includes("Go live in sprint 24.") && !merged.includes("Dry run in sprint 24"),
+    );
+    // my rewrite of the same lines: no merge, my text stays
+    const rewrite = (await note(billing)).replace(
+      "Dry run first, live after [[Sofie Claes]] confirms the rate rule",
+      "Something else entirely",
+    );
+    await page.evaluate(([p, t]) => window.__harness.typeInto(p, t), [billing, rewrite]);
+    await click(page.locator(`[data-file="${billing}"]`).getByRole("button", { name: "Undo", exact: true }));
+    s.check("the same lines: nothing is overwritten", await waitText(page, "Nothing is overwritten"));
+    s.check("my text is still there", (await note(billing)) === rewrite);
+    s.check("and no merge to apply", (await button(page, "Apply merge").count()) === 0);
+    await click(button(page, "Keep mine"));
+    await settle(page, 200);
+    s.check("Keep mine leaves it as it is", (await note(billing)) === rewrite);
+  },
+
+  // K7, issue 372: File with Claude proposes per note and writes nothing; Edit picks another folder, Skip leaves a note,
+  // Accept moves it with its links and the filing is one entry in the Changes feed, undone from there
+  async inboxFiling(s) {
+    await s.load({ fixture: "kb-changes-inbox" });
+    const { page } = s;
+    const note = path => page.evaluate(p => window.__harness.noteText(p), path);
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    s.check(
+      "the Pages tab has an Inbox row with its count",
+      (await page.locator("[data-inbox]").textContent())?.includes("4") ?? false,
+    );
+    await click(page.locator("[data-inbox]"));
+    s.check("the Inbox lists the 4 notes", await waitText(page, "4 notes"));
+    s.check("no proposal and no Accept before File with Claude", (await button(page, "Accept", true).count()) === 0);
+    await click(button(page, "File with Claude"));
+    s.check("a proposal per note", await waitText(page, "Claude proposed a home for each"));
+    s.check("File with Claude asked once", (await s.calls("inbox_propose")).length === 1);
+    s.check(
+      "nothing moved yet",
+      (await note("Inbox/2026-10-01 0915.md")) !== null && (await s.calls("inbox_accept")).length === 0,
+    );
+    // Edit: another folder
+    const row = path => page.locator(`[data-inbox-note="${path}"]`);
+    await click(row("Inbox/2026-10-01 0830.md").getByRole("button", { name: "Edit" }));
+    s.check(
+      "Edit shows the destination as a picker with the type's home marked",
+      await waitText(page, "home for Meeting"),
+    );
+    await click(page.getByRole("option", { name: /^Calendar\/Daily\/2026\// }));
+    await click(row("Inbox/2026-10-01 0830.md").getByRole("button", { name: "Save" }));
+    s.check(
+      "Save keeps the picked folder",
+      (await row("Inbox/2026-10-01 0830.md").textContent())?.includes("Calendar/Daily/2026/") ?? false,
+    );
+    // Skip
+    await click(row("Inbox/2026-09-30 1740.md").getByRole("button", { name: "Skip" }));
+    s.check(
+      "Skip leaves the note in the list",
+      (await row("Inbox/2026-09-30 1740.md").count()) === 1 && (await hasText(page, "Skipped")),
+    );
+    // Accept one: moved, linked, in the feed
+    await click(row("Inbox/2026-10-01 0915.md").getByRole("button", { name: "Accept" }));
+    await settle(page, 400);
+    const dest = "Contexts/Agency/Projects/Northwind Portal/Documents/Portal go-live after tax rule check.md";
+    const after = await note(dest);
+    s.check(
+      "Accept moved the note and set type, about and with",
+      !!after &&
+        after.includes("type: Document") &&
+        after.includes('about: "[[Northwind Portal]]"') &&
+        after.includes('with: "[[Sofie Claes]]"'),
+    );
+    s.check(
+      "it left the Inbox",
+      (await note("Inbox/2026-10-01 0915.md")) === null &&
+        (await page.locator("[data-inbox]").textContent())?.includes("3"),
+    );
+    const fed = await s.calls("inbox_accept");
+    s.check("one inbox_accept with that note only", fed.length === 1 && fed[0].args.items.length === 1);
+    // the entry is in Changes (on a page), and Undo from there puts the note back
+    await click(page.locator('[data-project="Northwind Portal"]'));
+    await click(page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]'));
+    await click(page.locator(`[data-page="${dest}"]`).first());
+    await waitText(page, "Portal go-live after tax rule check");
+    await click(page.getByRole("button", { name: /^Changes, \d+ to review/ }));
+    s.check(
+      "the filing is an Inbox filing entry with its reason",
+      (await waitText(page, "Inbox filing")) && (await hasText(page, "Filed 1 capture: 1 Document")),
+    );
+    await click(
+      page.locator(`[data-file="Inbox/2026-10-01 0915.md"]`).getByRole("button", { name: "Undo", exact: true }),
+    );
+    await click(page.locator(`[data-file="${dest}"]`).getByRole("button", { name: "Undo", exact: true }));
+    await settle(page, 300);
+    s.check(
+      "Undo puts the note back in the Inbox as it was",
+      (await note("Inbox/2026-10-01 0915.md")) ===
+        "Sofie confirms the tax rule Friday → then take the Northwind portal live, tell Tom\n" &&
+        (await note(dest)) === null,
+    );
+    // Accept all: the rest in one entry
+    await click(page.getByRole("button", { name: "Close changes" }));
+    await click(page.locator("[data-inbox]"));
+    await click(button(page, "File with Claude"));
+    await waitText(page, "Claude proposed a home for each");
+    await click(button(page, "Accept all"));
+    await settle(page, 400);
+    s.check(
+      "Accept all filed every note",
+      (await page.locator("[data-inbox]").textContent())?.includes("4") === false &&
+        (await hasText(page, "The Inbox is empty")),
+    );
+  },
+
+  // K7, issue 372: the capture window saves its text through quick_capture_save with ⌘↵ and puts the window away; Esc
+  // puts it away without saving
+  async quickCapture(s) {
+    await s.load({ path: "/capture.html", fixture: "kb-changes-inbox" });
+    const { page } = s;
+    const field = page.getByRole("textbox", { name: "Quick capture" });
+    s.check(
+      "Save is off while the field is empty",
+      await page.getByRole("button", { name: /^Save to Inbox/ }).isDisabled(),
+    );
+    await field.fill("Call Tom about the hosting window");
+    await page.keyboard.press("Escape");
+    await settle(page, 200);
+    s.check(
+      "Esc hides the window and saves nothing",
+      (await s.calls("quick_capture_hide")).length === 1 && (await s.calls("quick_capture_save")).length === 0,
+    );
+    s.check("what was typed stays", (await field.inputValue()) === "Call Tom about the hosting window");
+    await page.keyboard.press("Meta+Enter");
+    await settle(page, 300);
+    const saved = await s.calls("quick_capture_save");
+    s.check(
+      "⌘↵ saves the text to the Inbox",
+      saved.length === 1 && saved[0].args.text === "Call Tom about the hosting window",
+    );
+    s.check("and the field is empty again", (await field.inputValue()) === "");
+  },
+
+  // K6, issue 371: a capture run lands in the feed as one entry; Fix properties (Ask Claude's menu) adds the missing
+  // type and its run shows up there too
+  async changesActions(s) {
+    await s.load({ fixture: "kb-sketch" });
+    const { page } = s;
+    await openBilling(s);
+    const note = path => page.evaluate(p => window.__harness.noteText(p), path);
+    s.check("no badge before a run", (await page.getByRole("button", { name: "Changes, 0 to review" }).count()) === 1);
+    await page.evaluate(() => window.__harness.capture());
+    await settle(page, 300);
+    await click(page.getByRole("button", { name: "Changes, 1 to review" }));
+    s.check(
+      "a capture run that edited 2 notes is one entry with 2 diffs",
+      (await page.locator("[data-file]").count()) === 2 && (await hasText(page, "2 notes changed")),
+    );
+    s.check("with its reason", await hasText(page, "Decision: dry run first"));
+    await click(page.getByRole("button", { name: "Close changes" }));
+    // a note without type:
+    const sketch = "Contexts/Agency/Projects/Northwind Portal/Documents/Pricing sketch.md";
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    await click(page.locator('[data-project="Northwind Portal"]'));
+    await click(page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]'));
+    await click(page.locator(`[data-page="${sketch}"]`).first());
+    await waitText(page, "Pricing sketch");
+    await click(button(page, "Ask Claude"));
+    await click(button(page, "Fix properties"));
+    await settle(page, 400);
+    s.check(
+      "page_action asked for the properties",
+      (await s.calls("page_action")).some(c => c.args.action === "properties" && c.args.path === sketch),
+    );
+    s.check("the note has its type now", (await note(sketch)).startsWith("---\ntype: Document"));
+    await click(page.getByRole("button", { name: /^Changes, 2 to review/ }));
+    s.check("and the run is in the feed", await waitText(page, "Added type: Document"));
+  },
+
+  // issue 374 (K10): the Garden tab of the vault check. One of each problem with its count; a project picked on a meeting
+  // writes about: and the row goes; Move to trash is a dry run, then one Undo; Ask Claude is a dry run too and its run is
+  // one entry in the feed; one filled button at a time, also with a sheet open
+  async vaultGarden(s) {
+    await s.load({ fixture: "kb-sketch" });
+    const { page } = s;
+    await click(page.getByRole("button", { name: /^Switch workspace/ }));
+    await click(button(page, "Check workspace…"), 300);
+    await click(page.getByRole("tab", { name: /^Garden/ }), 300);
+    const count = async kind => Number((await page.locator(`[data-garden=${kind}] span`).first().textContent()) ?? 0);
+    const counts = [];
+    for (const kind of ["outside_home", "no_project", "broken_link", "orphan", "unused_attachment", "no_type"])
+      counts.push(await count(kind));
+    s.check("each finding shows its count", counts.join(",") === "10,3,2,4,3,3");
+    s.check("the tab counts them all", (await page.getByRole("tab", { name: /^Garden\s*25$/ }).count()) === 1);
+    const primary = () =>
+      page.locator('[role=dialog][aria-label^="Check"] .btn-primary').locator("visible=true").count();
+    s.check("one filled button: Tidy structure", (await primary()) === 1);
+    // a project picked on a meeting
+    const meeting = "Calendar/Meetings/2026/2026-10-30 Call Sofie planning Q1.md";
+    await page
+      .getByLabel("Pick project: 2026-10-30 Call Sofie planning Q1")
+      .selectOption({ label: "Northwind Portal" });
+    await settle(page, 400);
+    const about = (await s.calls("garden_about")).map(c => c.args);
+    s.check(
+      "the pick writes about:",
+      about.length === 1 && about[0].path === meeting && about[0].project === "Northwind Portal",
+    );
+    s.check(
+      "and the row is gone",
+      (await count("no_project")) === 2 &&
+        (await page.getByLabel("Pick project: 2026-10-30 Call Sofie planning Q1").count()) === 0,
+    );
+    // Move to trash: a dry run, one Undo
+    await click(button(page, "Move to trash"), 300);
+    s.check(
+      "the dry run lists the files",
+      (await hasText(page, "Dry run")) && (await hasText(page, "floor-plan-v1.png")),
+    );
+    s.check("with the sheet open the Apply button is the only filled one", (await primary()) === 1);
+    await click(button(page, "Move 3 files to trash"), 500);
+    s.check("three files went to the trash", (await s.calls("trash_path")).length === 3);
+    s.check("the dialog stays open", (await page.getByRole("tab", { name: /^Garden/ }).count()) === 1);
+    await click(button(page, "Undo"), 400);
+    s.check(
+      "one Undo, clicked above the open dialog, puts all three back",
+      (await s.calls("restore_path")).length === 3,
+    );
+    s.check("and the row is there again", (await count("unused_attachment")) === 3);
+    // Tidy structure's Undo is reachable above the dialog too
+    await click(button(page, "Tidy structure"), 300);
+    await click(page.getByRole("button", { name: /^Apply \d+ moves$/ }), 500);
+    await click(button(page, "Undo"), 400);
+    s.check("Tidy structure's Undo works with the dialog open", (await s.calls("tidy_undo")).length === 1);
+    // Ask Claude to fix properties
+    await click(button(page, "Ask Claude to fix properties"), 300);
+    s.check(
+      "its dry run lists the notes, one filled button",
+      (await hasText(page, "Pricing ideas")) && (await primary()) === 1,
+    );
+    await click(button(page, "Ask Claude"), 600);
+    const asked = (await s.calls("garden_ask")).map(c => c.args);
+    s.check(
+      "Claude is asked once for the 3 notes",
+      asked.length === 1 && asked[0].action === "properties" && asked[0].paths.length === 3,
+    );
+    s.check("the row is gone", (await page.locator("[data-garden=no_type]").count()) === 0);
+    await click(button(page, "Close"), 300);
+    await openBilling(s);
+    s.check(
+      "its writes are one entry in the feed",
+      (await page.getByRole("button", { name: /^Changes, [1-9]\d* to review/ }).count()) === 1,
+    );
+    // a broken link opens its note at the line
+    await click(page.getByRole("button", { name: /^Switch workspace/ }));
+    await click(button(page, "Check workspace…"), 300);
+    await click(page.getByRole("tab", { name: /^Garden/ }), 300);
+    await click(page.locator("[data-garden=broken_link]").getByRole("button", { name: "Review" }), 200);
+    s.check("Review lists the links with their line", await hasText(page, "Northwind Portal.md:12"));
+  },
+
+  // issue 371: the meeting flow's own writes are in the feed: a prep's briefing, a wrap-up's Accept and a decision added
+  // to its project's note, each one entry; Undo on the decision restores the project note exactly
+  async changesMeeting(s) {
+    await s.load({ fixture: "calendar" });
+    const { page } = s;
+    const notePath = "Calendar/2026-10-01 Sprint review Northwind Portal.md";
+    const project = "Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md";
+    const projectText =
+      "---\ntype: Product\n---\n# Northwind Portal\n\n## Status\nBuilding.\n\n## Decisions\n- 2026-09-20: Billing per month ([[Billing Spec]])\n\n## Open\n";
+    const meetingText = [
+      "---",
+      "type: Meeting",
+      'event: "EVENT"',
+      "created: 2026-10-01",
+      "language: nl",
+      "---",
+      "",
+      "# Sprint review Northwind Portal",
+      "",
+      "## Notes",
+      "- [09:31] Sprint 23 demo: API-koppeling werkt op staging, geen issues",
+      "- [09:33] = Pricing-simulator komt in sprint 24, niet 25",
+      "",
+    ].join("\n");
+    const id = await page.evaluate(
+      ([project, projectText, notePath, meetingText]) => {
+        const id = `review@${new Date(window.__harness.now + 4 * 60000).toISOString()}`;
+        window.__harness.setNote(project, projectText);
+        window.__harness.meetingNote(id, notePath, meetingText.replace("EVENT", id));
+        return id;
+      },
+      [project, projectText, notePath, meetingText],
+    );
+    const recorded = async () => (await s.calls("change_record")).map(c => c.args);
+    const text = path => page.evaluate(p => window.__harness.noteText(p), path);
+    const day = page
+      .locator('section[aria-label="Day"]')
+      .getByRole("button", { name: "Sprint review Northwind Portal", exact: true });
+    await click(visible(day).first(), 400);
+    // the wrap-up: Accept writes the summary into the note, a click adds a decision to the project's note
+    await click(page.getByRole("button", { name: "Wrap-up", exact: true }), 300);
+    await click(button(page, "Write the summary"), 300);
+    await waitText(page, "Built from");
+    await click(button(page, "Accept"), 300);
+    await waitText(page, "Saved to note ✓");
+    await click(page.getByRole("button", { name: "Add to Northwind Portal note" }).first(), 300);
+    await waitText(page, "Added ✓");
+    const wrapups = (await recorded()).filter(r => r.source === "wrap-up");
+    s.check(
+      "Accept and the decision are one entry each",
+      wrapups.length === 2 && wrapups.every(r => r.files.length === 1),
+    );
+    const decision = wrapups.find(r => r.files[0].path === project);
+    s.check(
+      "the decision's before/after is the project note",
+      !!decision &&
+        decision.files[0].before === projectText &&
+        decision.files[0].after.includes("Pricing-simulator in sprint 24") &&
+        decision.reason === "Decision from Sprint review Northwind Portal added to Northwind Portal",
+    );
+    const accept = wrapups.find(r => r.files[0].path === notePath);
+    s.check(
+      "Accept's after holds the summary",
+      !!accept && accept.files[0].after.includes("## Summary") && !accept.files[0].before.includes("## Summary"),
+    );
+    // the prep: Claude writes the briefing into the note, then its turn ends
+    await click(page.getByRole("button", { name: "Briefing", exact: true }), 300);
+    await click(button(page, "Prep with Claude"), 400);
+    const key = Object.keys(await s.chatChanges())[0];
+    const withBriefing = (await text(notePath)) + "\n## Briefing\n### Doel\nDe sprint afronden.\n";
+    await page.evaluate(
+      ([path, t, key]) => {
+        window.__harness.setNote(path, t);
+        window.__harness.emitAgent(key, {
+          type: "turn_end",
+          ok: true,
+          error: null,
+          usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+          duration_ms: 1,
+        });
+      },
+      [notePath, withBriefing, key],
+    );
+    await settle(page, 400);
+    const prep = (await recorded()).find(r => r.source === "prep");
+    s.check("the prep is recorded", !!prep && prep.reason === "Briefing for Sprint review Northwind Portal");
+    s.check(
+      "before: the note without a briefing, after: with it",
+      !!prep && !prep.files[0].before.includes("## Briefing") && prep.files[0].after.includes("De sprint afronden."),
+    );
+    // all three in the feed; Undo on the decision puts the project note back exactly
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    await click(page.locator('[data-project="Northwind Portal"]'));
+    await waitText(page, "Northwind Portal");
+    await click(page.getByRole("button", { name: /^Changes, \d+ to review/ }));
+    s.check(
+      "the feed lists the prep and the wrap-up",
+      (await waitText(page, "Briefing for “Sprint review Northwind Portal”")) &&
+        (await hasText(page, "Meeting wrap-up “Sprint review Northwind Portal”")),
+    );
+    await click(page.getByRole("button", { name: /^Meeting wrap-up/ }).first(), 200); // the decision, the newest of the two
+    await click(page.locator(`[data-file="${project}"]`).getByRole("button", { name: "Undo", exact: true }));
+    await settle(page, 300);
+    s.check("Undo restores the project note exactly", (await text(project)) === projectText);
+    s.check("and leaves the meeting note's summary", (await text(notePath)).includes("## Summary"));
+  },
+
+  // K1, issue 369: a note pinned from its menu stands under Favourites above Recent, and is still there after a
+  // restart (the backend keeps it in .relay/config.json); unfolded folders and a folder's sort are remembered too
+  async favourites(s) {
+    const kb = { fixture: "kb", keep: true }; // the mock keeps what the app saved over a reload, as a restart does
+    await s.load(kb);
+    const { page } = s;
+    const findings = "Contexts/Agency/Projects/Northwind Portal/Documents/Rate limit findings.md";
+    const row = path => page.locator(`[data-page="${path}"]`);
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    await click(page.locator('[data-project="Northwind Portal"]'));
+    await click(page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]'));
+    s.check(
+      "no Favourites before anything is pinned",
+      (await visible(page.locator('[data-section="pages:favourites"]')).count()) === 0,
+    );
+    await row(findings).click({ button: "right" });
+    await click(button(page, "Add to favourites"));
+    const set = await s.calls("set_favourites");
+    s.check("pinning is saved by the backend", set.length === 1 && set[0].args.paths.join() === findings);
+    const fav = page.locator('[data-section="pages:favourites"]');
+    s.check(
+      "the note stands under Favourites",
+      (await visible(fav.locator(`[data-page="${findings}"]`)).count()) === 1,
+    );
+    // above Recent
+    const order = await page.evaluate(() => {
+      const heads = [...document.querySelectorAll("[data-section], nav *")].filter(e =>
+        /^(Favourites|Recent)$/.test(e.textContent?.trim() ?? ""),
+      );
+      return heads.map(e => e.textContent.trim());
+    });
+    s.fact("section order", order);
+    // sort the folder by last changed (its notes' times come from the index)
+    await page
+      .locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]')
+      .click({ button: "right" });
+    await click(button(page, "Sort by last changed"));
+    s.check("the sort is asked for the times", (await s.calls("note_times")).length >= 1);
+    await settle(page, 500); // the app's UI state is written a quarter second after the last change
+    // restart: the same workspace read again, the pin, the unfolded folders and the sort come back
+    await s.load(kb);
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    s.check(
+      "after a restart the pin is still there",
+      (await visible(page.locator('[data-section="pages:favourites"] [data-page]')).count()) === 1,
+    );
+    s.check("the folder is still unfolded", (await row(findings).count()) >= 1);
+    await page
+      .locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]')
+      .click({ button: "right" });
+    s.check("the folder's sort is kept", await hasText(page, "Sort by name"));
+    await page.keyboard.press("Escape");
+    await settle(page);
+    await row(findings).first().click({ button: "right" });
+    await click(button(page, "Remove from favourites"));
+    s.check(
+      "unpinning leaves Favourites",
+      (await visible(page.locator('[data-section="pages:favourites"]')).count()) === 0,
+    );
+    s.check("and is saved", (await s.calls("set_favourites")).pop()?.args.paths.length === 0);
+  },
+
+  // K2, issue 366: a note's right rail. 3 backlinks with their line, one opens the note at that line; Link on an
+  // unlinked mention writes the wikilink and moves it to Backlinks; the outline jumps and follows the scroll; the fold
+  // survives a restart
+  async rail(s) {
+    const kb = { fixture: "kb", keep: true };
+    await s.load(kb);
+    const { page } = s;
+    const hosting = "Contexts/Agency/Projects/Northwind Portal/Documents/Hosting plan.md";
+    // the text of the line the editor's cursor is on
+    const cursorLine = () =>
+      page.evaluate(() => {
+        const r = document.querySelector(".cm-cursor")?.getBoundingClientRect();
+        if (!r) return "";
+        const y = r.top + r.height / 2;
+        return (
+          [...document.querySelectorAll(".cm-line")].find(l => {
+            const b = l.getBoundingClientRect();
+            return b.top <= y && y <= b.bottom;
+          })?.textContent ?? ""
+        );
+      });
+    const openHosting = async () => {
+      await click(page.getByRole("tab", { name: /^Pages/ }));
+      if ((await page.locator('[data-folder$="Northwind Portal/Documents"]').count()) === 0)
+        await click(page.locator('[data-project="Northwind Portal"]'));
+      if ((await page.locator(`[data-page="${hosting}"]`).count()) === 0)
+        await click(page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]'));
+      await click(page.locator(`[data-page="${hosting}"]`).first(), 400);
+    };
+    await openHosting();
+    const section = id => page.locator(`[data-rail-section="${id}"]`);
+    await section("backlinks").waitFor();
+    s.check(
+      "a note linked from 3 notes shows 3 backlinks",
+      (await section("backlinks").locator("button.font-medium").count()) === 3,
+    );
+    s.check(
+      "each with the line around the link",
+      (await section("backlinks").textContent())?.includes("Last sync: [[Hosting plan]], cutover on 15 Oct.") ?? false,
+    );
+    s.check(
+      "the breadcrumb shows the real folder",
+      (await page.locator("[data-breadcrumb]").textContent()) === "ContextsAgencyProjectsNorthwind PortalDocuments",
+    );
+    s.check("and the about: chip", await hasText(page, "about:"));
+    // a backlink opens its note at the line
+    await click(
+      section("backlinks").getByRole("button", { name: "Last sync: [[Hosting plan]], cutover on 15 Oct." }),
+      600,
+    );
+    s.check("a backlink opens the note at its line", (await cursorLine()).includes("Last sync"));
+    await openHosting();
+    await section("unlinked").waitFor();
+    s.check("2 unlinked mentions", (await section("unlinked").getByRole("button", { name: /^Link/ }).count()) === 2);
+    // Link: the text becomes a wikilink through a normal write, and the note moves to Backlinks
+    await click(page.getByRole("button", { name: "Link “Hosting plan” in 2026-09-29" }), 600);
+    const writes = await s.calls("write_note");
+    const w = writes.at(-1)?.args;
+    s.check(
+      "Link writes the wikilink in the other note",
+      !!w && w.target.endsWith("2026-09-29.md") && w.text.includes("09:30 [[Hosting plan]] sync with Sofie"),
+    );
+    s.check("which moves to Backlinks", (await section("backlinks").locator("button.font-medium").count()) === 4);
+    s.check(
+      "and leaves the mentions",
+      (await section("unlinked").getByRole("button", { name: /^Link/ }).count()) === 1,
+    );
+    // the outline jumps on a click and follows the scroll
+    const marked = () => page.locator('[data-rail-section="outline"] [aria-current="true"]').textContent();
+    await click(section("outline").getByRole("button", { name: "Cutover" }), 600);
+    s.check("the outline jumps to a heading", (await marked()) === "Cutover");
+    s.check("the editor's cursor is on it", (await cursorLine()).includes("Cutover"));
+    // the reader scrolls (a wheel over the page); a click's own scroll did not move the mark
+    await page.mouse.move(500, 500);
+    await page.mouse.wheel(0, -3000);
+    await settle(page, 400);
+    s.check("scrolling up moves the mark to the first heading", (await marked()) === "Briefing");
+    await page.mouse.wheel(0, 3000);
+    await settle(page, 400);
+    s.check("and down to the last", (await marked()) === "Next steps");
+    // conversations that used it
+    s.check(
+      "2 conversations used the note",
+      (await section("conversations").textContent())?.includes("Wrote") ?? false,
+    );
+    // the star in the bar pins the note (the same favourites as the sidebar's menu) and unpins it
+    const fav = page.locator('[data-section="pages:favourites"]');
+    await click(button(page, "Add to favourites"), 400);
+    s.check("the star pins the note", (await s.calls("set_favourites")).at(-1)?.args.paths.join() === hosting);
+    s.check("it stands under Favourites", (await visible(fav.locator(`[data-page="${hosting}"]`)).count()) === 1);
+    s.check(
+      "and the star is filled",
+      (await button(page, "Remove from favourites").getAttribute("aria-pressed")) === "true",
+    );
+    await click(button(page, "Remove from favourites"), 400);
+    s.check("a second click unpins it", (await s.calls("set_favourites")).at(-1)?.args.paths.length === 0);
+    // the fold is kept over a restart
+    await click(button(page, "Hide right rail"));
+    s.check("Hide right rail folds it", (await page.locator("[data-rail]").count()) === 0);
+    await settle(page, 500);
+    await s.load(kb);
+    await openHosting();
+    s.check("after a restart it is still folded", (await page.locator("[data-rail]").count()) === 0);
+    await click(button(page, "Show right rail"));
+    s.check("Show right rail brings it back", (await page.locator("[data-rail]").count()) === 1);
+  },
+
+  // New ▸ from template on a folder and Today's note in the Pages tab: a Meeting in a project is saved in its home
+  // with about: set, Today's note is made once
+  async newFromTemplate(s) {
+    await s.load({ fixture: "kb" });
+    const { page } = s;
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    await click(page.locator('[data-project="Northwind Portal"]'));
+    await page.locator('[data-project="Northwind Portal"]').click({ button: "right" });
+    s.check("the project's menu lists the templates", await hasText(page, "New from template"));
+    await click(button(page, "Meeting"));
+    const made = await s.calls("new_from_template");
+    s.check(
+      "New Meeting in the project: template, folder, about and context",
+      made.length === 1 &&
+        made[0].args.template === "Meeting" &&
+        made[0].args.about === "Northwind Portal" &&
+        made[0].args.context === "Agency" &&
+        made[0].args.folder === "Contexts/Agency/Projects/Northwind Portal",
+    );
+    await settle(page, 400);
+    s.check("the note opens", String((await s.local(["sel"])).sel).includes("Calendar/Meetings/2026/"));
+    s.fact("new from template", made[0]?.args ?? null);
+    // a document goes to the folder asked in
+    await page
+      .locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]')
+      .click({ button: "right" });
+    await click(button(page, "Document"));
+    const second = await s.calls("new_from_template");
+    s.check(
+      "a Document is made in the folder it was asked in",
+      second[1]?.args.folder === "Contexts/Agency/Projects/Northwind Portal/Documents",
+    );
+    // Today's note
+    await click(page.locator("[data-today-note]"));
+    await click(page.locator("[data-today-note]"));
+    await settle(page, 400);
+    s.check("Today's note opens", String((await s.local(["sel"])).sel).includes("Calendar/Daily/2026/2026-10-01.md"));
+    s.check(
+      "asking twice leaves one note",
+      (await s.calls("daily_note")).length === 2 &&
+        (await page.evaluate(() => window.__harness.calls.filter(c => c.cmd === "daily_note").length)) === 2,
+    );
   },
 
   // relay:// links: the one the app was launched with (get_current) and one while it runs (deep-link://new-url)

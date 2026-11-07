@@ -17,6 +17,7 @@ import {
 import { ORCH } from "../../domain/orchestrator/rules";
 import { closeDrawer, closeTicket, openDetail } from "../../application/navigation/panel";
 import { request } from "../../application/navigation/requests";
+import { toggleShowMarkdown } from "../../application/navigation/editor";
 import { isKey, mailExperimental, settings } from "../../application/settings/settings";
 import { switchToNth } from "../../application/navigation/workspaces";
 import { workspaceDigit } from "../../domain/settings/shortcuts";
@@ -177,7 +178,8 @@ function onKey(e: KeyboardEvent) {
     return;
   }
   if (onMailKey(e)) return;
-  if (isKey(e, "app.quickAsk")) {
+  // ⌘K on text selected in a page links it: the editor took the key
+  if (isKey(e, "app.quickAsk") && !e.defaultPrevented) {
     // Cmd-K: a question that starts a general conversation in the background
     e.preventDefault();
     toggleQuickAsk();
@@ -191,6 +193,10 @@ function onKey(e: KeyboardEvent) {
     request("find");
   } else if (isKey(e, "app.escape")) {
     onEscape(e);
+  } else if (isKey(e, "app.showMarkdown")) {
+    // the pages' editor shows or hides the markdown it hides
+    e.preventDefault();
+    toggleShowMarkdown();
   } else if (isKey(e, "app.sidebarTab")) {
     // Cmd-.: the sidebar's other tab, Chats or Pages
     e.preventDefault();

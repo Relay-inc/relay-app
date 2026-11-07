@@ -1,6 +1,7 @@
 import { VIEW, isTerminal } from "../navigation/keys.ts";
 import type { ConversationsState, DraftsState } from "./state";
-import type { Chat } from "./types";
+import type { Chat, Img } from "./types";
+import { withFiles } from "./files.ts";
 
 /** What sending does, decided before anything changes. `take`: what is typed leaves the composer, which it only does
  *  once the text really goes (a turn running outside the app keeps it typed). */
@@ -50,3 +51,39 @@ export const refusesImages = (textOnly: string[], text: string) => {
   const command = /^\/(\S+)/.exec(text)?.[1];
   return !!command && textOnly.includes(command);
 };
+
+/** What goes to the backend for one message, for every agent alike: the attached files, notes included, follow the
+ *  text as their paths, which the agent reads (nothing of them is inlined). */
+export function sendRequest(i: {
+  key: string;
+  sent: string;
+  files: string[];
+  images: Img[];
+  name: string;
+  conversation: Pick<Chat, "fork" | "fromMail" | "project" | "vault"> | undefined;
+  model: string;
+  effort: string;
+  provider: string;
+  machine: string | null;
+  told: string;
+  context: string;
+}) {
+  const { conversation } = i;
+  return {
+    project: i.key,
+    text: withFiles(i.sent, i.files),
+    images: i.images.map(image => ({ media_type: image.mt, data: image.data })),
+    name: i.name,
+    fork: conversation?.fork ?? null,
+    mail: !!conversation?.fromMail,
+    model: i.model,
+    effort: i.effort,
+    provider: i.provider,
+    machine: i.machine,
+    told: i.told || null,
+    about: conversation?.project ?? null,
+    context: i.context || null,
+    // the vault picked for a general conversation, a project's runs in its project's vault
+    vault: (!conversation?.project && conversation?.vault) || null,
+  };
+}

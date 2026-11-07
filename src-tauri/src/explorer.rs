@@ -4,7 +4,6 @@
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 const MAX_ENTRIES: usize = 2000;
 const MAX_TEXT: u64 = 2_000_000;
@@ -54,7 +53,8 @@ pub fn list(roots: &[String], path: &str, path_env: &str) -> Result<Value, Strin
     // outside a repo git exits 128 and nothing is ignored
     let ignored: Vec<String> = if names.is_empty() { vec![] } else {
         // a folder in the tree may be any checkout: no fsmonitor command from its config, no index read
-        Command::new("git").arg("-C").arg(&dir).args(["-c", "core.fsmonitor=false", "check-ignore", "--no-index", "--"]).args(&names).env("PATH", path_env).output()
+        let args: Vec<&str> = ["-c", "core.fsmonitor=false", "check-ignore", "--no-index", "--"].into_iter().chain(names.iter().copied()).collect();
+        crate::git::output(&dir, &args, path_env)
             .map(|o| String::from_utf8_lossy(&o.stdout).lines().map(str::to_string).collect()).unwrap_or_default()
     };
     Ok(Value::Array(entries.iter().map(|(n, d)| json!({"name": n, "path": dir.join(n).to_string_lossy(), "dir": d, "ignored": ignored.contains(n)})).collect()))
@@ -89,7 +89,7 @@ mod tests {
         fs::write(proj.join("logo.png"), [0x89, b'P', b'N', b'G', 0, 0, 1]).unwrap();
         fs::write(tmp.join("secret.txt"), "no").unwrap();
         std::os::unix::fs::symlink(tmp.join("secret.txt"), proj.join("link.txt")).unwrap();
-        assert!(Command::new("git").arg("-C").arg(&proj).args(["init", "-q"]).status().unwrap().success());
+        assert!(std::process::Command::new("git").arg("-C").arg(&proj).args(["init", "-q"]).status().unwrap().success());
         let roots = vec![proj.to_string_lossy().into_owned()];
 
         let v = list(&roots, &proj.to_string_lossy(), &path).unwrap();

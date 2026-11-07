@@ -5,6 +5,7 @@
 // opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
+import * as embeds from "./fixtures/embeds";
 import * as vault from "./fixtures/vault";
 import * as conv from "./fixtures/conversations";
 import * as integ from "./fixtures/integrations";
@@ -12,7 +13,11 @@ import * as orch from "./fixtures/orchestrator";
 import * as graph from "./fixtures/graph";
 import * as git from "./fixtures/git";
 import * as files from "./fixtures/files";
+import * as kb from "./fixtures/kb";
+import * as inbox from "./fixtures/inbox";
+import * as coll from "./fixtures/collections";
 import * as Y from "yjs";
+import { SHIPPED } from "../src/domain/types/registry";
 // the example plugin's real view: the harness serves it from a blob, where the app has the relay-plugin:// scheme
 import diceView from "../packages/plugin-example/view.html?raw";
 
@@ -64,6 +69,7 @@ const member = fixture === "shared-member" || fixture === "shared-keeper";
 const live = fixture === "shared-live" || fixture === "shared-live-dark";
 const shared =
   fixture === "shared" ||
+  fixture === "kb-shared" ||
   fixture === "shared-invite" ||
   fixture === "shared-rekey" ||
   fixture === "shared-unlisted" ||
@@ -85,7 +91,7 @@ if (fixture === "buddy")
   };
 let vaultOk = !onboarding;
 let pending = [...conv.pending];
-const gitRepos = structuredClone(git.repos);
+const gitRepos = structuredClone(fixture === "git-long" ? git.longRepos : git.repos);
 let reminders = [...vault.reminders];
 let added = 0;
 let actionConfig = integ.actionConfig();
@@ -189,6 +195,8 @@ const voiceModels = [
   { id: "moonshine-base", mb: 55, langs: ["en"], auto: true, installed: false, downloading: false },
 ];
 const scratch = new Map<string, { id: string; text: string; modified: number }[]>();
+// fixture kb-changes-inbox: the Inbox's notes (fixtures/inbox.ts)
+const inboxOn = fixture.includes("inbox");
 let scratchId = 0;
 const NOW_S = Math.floor(NOW / 1000);
 // the machine's GitHub and repos (fixture "github"), changed by Disconnect, Connect and Push
@@ -509,6 +517,22 @@ function handle(cmd: string, a: Args): unknown {
       if (!type) return Promise.reject("not a picture");
       return [type, pngBase64(120, 80, "#e8efe3", "#3f8f4f")];
     }
+    // files inside a page (src-tauri/src/attach.rs)
+    case "embed_info":
+      return embeds.info(a.targets as string[]);
+    case "attach_dest":
+      return "Attachments/2026";
+    case "attach_save":
+      attached.push({ page: String(a.page), name: String(a.name), bytes: String(a.data).length });
+      return { path: `Attachments/2026/${a.name}`, link: a.name };
+    case "attach_copy":
+      return (a.paths as string[]).map(path => {
+        const name = path.split("/").pop()!;
+        attached.push({ page: String(a.page), name });
+        return name === embeds.DUMP
+          ? { tooLarge: true, name, size: 312_000_000 }
+          : { path: `Attachments/2026/${name}`, link: name };
+      });
     case "open_file":
       return String(a.path).includes("missing") ? Promise.reject("not found") : null;
     case "snapshot": {
@@ -581,6 +605,33 @@ function handle(cmd: string, a: Args): unknown {
     // the workspace check: a few of each kind, gone once repaired
     case "vault_check":
       return VAULT_FINDINGS.filter(f => !repaired.has(f.id));
+    case "vault_garden":
+      return gardenFindings();
+    case "garden_about":
+      gardenDone.add(String(a.path));
+      aboutSet.push([String(a.path), String(a.project)]);
+      return null;
+    case "garden_ask": {
+      const paths = (a.paths as string[]).slice(0, 20);
+      const stem = (p: string) => p.split("/").pop()!.replace(/\.md$/, "");
+      const edits = paths.map(p => [p, mockAction(String(a.action), p, null)[1][0][1]] as [string, string | null]);
+      paths.forEach(p => gardenDone.add(p));
+      recordChange(
+        `action:${a.action}`,
+        paths.length > 1 ? `${stem(paths[0])} +${paths.length - 1}` : stem(paths[0] ?? ""),
+        `Ran ${a.action} on ${paths.length} notes`,
+        edits,
+      );
+      return null;
+    }
+    case "tidy_preview":
+      return TIDY;
+    case "tidy_apply":
+      tidied = true;
+      return TIDY;
+    case "tidy_undo":
+      tidied = false;
+      return TIDY.moves.length;
     case "vault_repair":
       (a.ids as string[]).forEach(id => repaired.add(id));
       return (a.ids as string[]).length;
@@ -612,6 +663,7 @@ function handle(cmd: string, a: Args): unknown {
     }
     case "restore_path":
       pages = [...pageList(), ...(trashed.get(String(a.path)) ?? [])];
+      trashed.delete(String(a.path));
       return null;
     case "note_by_event":
       return eventNotes.get(String(a.event)) ?? null;
@@ -622,7 +674,11 @@ function handle(cmd: string, a: Args): unknown {
       const target = String(a.target);
       const made = [...written.keys()].find(k => k === target || k.endsWith(`/${target.replace(/\.md$/, "")}.md`));
       if (made) a.target = made;
-      else if (/(^|\/)\d{4}-\d\d-\d\d /.test(target) && !target.includes(vault.BRIEFING_NOTE))
+      else if (
+        /(^|\/)\d{4}-\d\d-\d\d /.test(target) &&
+        !target.includes(vault.BRIEFING_NOTE) &&
+        !pageList().some(n => n === target || n.endsWith(`/${target.replace(/\.md$/, "")}.md`))
+      )
         return Promise.reject(`not found: ${target}`);
       const team = shared && vault.teamNotes.find(n => n.endsWith(`/${String(a.target).replace(/\.md$/, "")}.md`));
       const modified = Date.now() - 2 * 3600_000; // a page reads "Edited 2 h ago"
@@ -731,6 +787,7 @@ function handle(cmd: string, a: Args): unknown {
       diskChanged = false;
       const hash = `h${++writes}`;
       written.set(String(a.target), { text: String(a.text), hash });
+      lastSaved = String(a.target);
       return { hash };
     }
     case "shared_vault_admin": {
@@ -1075,6 +1132,16 @@ function handle(cmd: string, a: Args): unknown {
       return structuredClone(vaultSync);
     // the UI state file (src/infrastructure/storage.ts): empty, so the app takes over the fixtures' localStorage
     case "ui_state_get": {
+      // ?keep=1: the Pages tab's folds and sorts the app saved before the reload (a restart reads them from the UI state
+      // file), on top of what the harness seeded
+      if (keepState) {
+        const seeded = Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage.getItem(key) ?? ""]));
+        const kept = ["pagesOpen", "pagesSort", "railClosed", "recentRemoved"].flatMap(k => {
+          const v = sessionStorage.getItem(`mockUi:${k}`);
+          return v == null ? [] : [[k, v]];
+        });
+        return { ...seeded, ...Object.fromEntries(kept) };
+      }
       if (!orchClosed) return {};
       // on top of what the harness seeded (the selection), which a non-empty state would otherwise replace
       const seeded = Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage.getItem(key) ?? ""]));
@@ -1102,6 +1169,7 @@ function handle(cmd: string, a: Args): unknown {
       return "main";
     case "ui_state_set":
       localStorage.setItem(a.key, a.value);
+      if (keepState) sessionStorage.setItem(`mockUi:${a.key}`, a.value);
       return null;
     case "dictation_models":
       return structuredClone(voiceModels);
@@ -1173,6 +1241,78 @@ function handle(cmd: string, a: Args): unknown {
       scratch.set(a.project, list);
       return id;
     }
+    // the Inbox and quick capture (K7): the notes are the written ones under Inbox/, as inbox.rs lists them
+    case "inbox_list":
+      return [...written.keys()]
+        .filter(k => k.startsWith(`${inbox.DIR}/`))
+        .sort()
+        .reverse()
+        .map((path, i) => ({ path, text: written.get(path)!.text, modified: NOW_S - i * 60 }));
+    case "inbox_home":
+      return inbox.homes[String(a.kind).toLowerCase()] ?? null;
+    case "inbox_propose": {
+      const items = [...written.keys()]
+        .filter(k => k.startsWith(`${inbox.DIR}/`))
+        .sort()
+        .reverse()
+        .map(path => {
+          const given = inbox.notes.find(n => n.path === path)?.proposal;
+          const stem = path.split("/").pop()!.replace(/\.md$/, "");
+          return { path, ...(given ?? { title: stem, type: "", dest: inbox.DIR, links: [] }) };
+        })
+        .map(({ path, title, type, dest, links }) => ({ path, title, type, dest, links }));
+      return { at: inbox.proposedAt, items };
+    }
+    case "inbox_accept": {
+      const filed: { path: string; to: string }[] = [];
+      const failed: { path: string; error: string }[] = [];
+      const files: Change["files"] = [];
+      for (const item of a.items as {
+        path: string;
+        title: string;
+        type: string;
+        dest: string;
+        links: { k: string; v: string }[];
+      }[]) {
+        const before = noteNow(item.path);
+        if (before === null) {
+          failed.push({ path: item.path, error: `not in the Inbox: ${item.path}` });
+          continue;
+        }
+        const to = `${item.dest}/${item.title}.md`;
+        const after = inbox.filed(before, item);
+        putNote(item.path, null);
+        putNote(to, after);
+        pages = [...pageList().filter(p => p !== item.path), to];
+        files.push(
+          { path: item.path, before, after: null, state: "open" },
+          { path: to, before: null, after, state: "open" },
+        );
+        filed.push({ path: item.path, to });
+      }
+      if (files.length) {
+        const kinds = [...new Set(filed.map((_, i) => (a.items as { type: string }[])[i]?.type || "Note"))];
+        const count = (k: string) => (a.items as { type: string }[]).filter(x => (x.type || "Note") === k).length;
+        const reason = `Filed ${filed.length} ${filed.length === 1 ? "capture" : "captures"}: ${kinds.map(k => `${count(k)} ${k}`).join(", ")}`;
+        changes = [
+          { id: `${Date.now()}-${changes.length}`, at: Date.now(), source: "inbox", subject: "", reason, files },
+          ...changes,
+        ];
+        emit("changes-changed", null);
+      }
+      emit("inbox-changed", null);
+      return { filed, failed };
+    }
+    // the capture window's save: a note in the Inbox, named for the minute (inbox.rs `capture`)
+    case "quick_capture_save": {
+      const path = `${inbox.DIR}/2026-10-01 0930.md`;
+      putNote(path, `${String(a.text).trimEnd()}\n`);
+      pages = [...pageList(), path];
+      emit("inbox-changed", null);
+      return path;
+    }
+    case "quick_capture_hide":
+      return null;
     case "scratch_delete":
       scratch.set(
         a.project,
@@ -1193,8 +1333,6 @@ function handle(cmd: string, a: Args): unknown {
       return [...phoneShared];
     case "notify":
     case "open_settings_window":
-    case "reset":
-    case "move_chat":
       return null;
     case "usage_limits":
       return integ.usageLimits;
@@ -1205,7 +1343,134 @@ function handle(cmd: string, a: Args): unknown {
     case "notes_graph":
       return graph.graph();
     case "note_touches":
-      return graph.touches();
+      return kbOn ? [...graph.touches(), ...kb.touches()] : graph.touches();
+    case "note_rail":
+      return kbOn && a.folder === vault.VAULT
+        ? kb.rail(String(a.path), p => written.get(p)?.text)
+        : { backlinks: [], mentions: [], related: [] };
+    case "notes_linked":
+      return linkedOn ? vault.linkedNotes() : [];
+    // the collections (issue 373): every note with its frontmatter values, read from the note's text as related.rs does;
+    // the saved views are in sessionStorage with ?keep=1 (a restart), else in memory
+    // the type registry (issue 418): the shipped one
+    case "note_types":
+      return SHIPPED;
+    case "notes_collection":
+      return pageList().map(path => collectionRow(path, textOfNote(path)));
+    case "views_list":
+      return savedViews();
+    case "view_save": {
+      const list = savedViews().filter(v => v.name !== a.name);
+      keptViews([...list, { name: String(a.name), view: a.view }]);
+      return null;
+    }
+    case "view_delete":
+      keptViews(savedViews().filter(v => v.name !== a.name));
+      return null;
+
+    // the knowledge base (K5, K1): ⌘K's search, templates, today's note and the pinned notes. The favourites are kept in
+    // sessionStorage with ?keep=1, so a reload shows them back the way `.relay/config.json` does after a restart.
+    case "find_notes":
+      return kbOn ? kb.find(a.folder === vault.VAULT, String(a.query)) : { names: [], content: [] };
+    case "note_icons":
+      return Object.fromEntries(
+        pageList().flatMap(path => {
+          const icon = collectionRow(path, textOfNote(path)).props.icon?.[0];
+          return icon ? [[path, icon]] : [];
+        }),
+      );
+    case "note_times":
+      return Object.fromEntries(pageList().map((p, i) => [p, NOW_S - i * 3600]));
+    case "note_templates":
+      return kbOn ? kb.templates : [];
+    case "new_from_template": {
+      const day = new Date(NOW).toISOString().slice(0, 10);
+      const home = a.template === "Meeting" ? `Calendar/Meetings/${day.slice(0, 4)}` : String(a.folder);
+      const title = String(a.title || "") || String(a.template);
+      const name = a.template === "Meeting" ? `${day} ${a.about ? `${a.about} ` : ""}${title}` : title;
+      const path = `${home ? `${home}/` : ""}${name}.md`;
+      const links = [a.context && `context: "[[${a.context}]]"`, a.about && `about: "[[${a.about}]]"`].filter(Boolean);
+      pages = [...pageList(), path];
+      written.set(path, { text: `---\ntype: ${a.template}\n${links.join("\n")}\n---\n# ${name}\n`, hash: "h0" });
+      return path;
+    }
+    case "daily_note": {
+      const path = kb.dailyPath(new Date(NOW).toISOString().slice(0, 10));
+      if (!pageList().includes(path)) {
+        pages = [...pageList(), path];
+        written.set(path, { text: "---\ntype: Daily\n---\n", hash: "h0" });
+      }
+      return path;
+    }
+    case "changes_list":
+      return structuredClone(changes);
+    case "change_keep":
+      for (const e of changes.filter(e => e.id === a.id))
+        for (const f of e.files) if ((!a.path || f.path === a.path) && f.state === "open") f.state = "kept";
+      return null;
+    case "change_undo": {
+      const f = changes.find(e => e.id === a.id)?.files.find(f => f.path === a.path && f.state === "open");
+      if (!f) return Promise.reject("already reviewed");
+      const current = noteNow(f.path);
+      if (current !== f.after) return { merge: true, current, before: f.before, after: f.after };
+      putNote(f.path, f.before);
+      // a note that is back in the vault, or gone from it, is in the Pages list too
+      pages =
+        f.before === null
+          ? pageList().filter(p => p !== f.path)
+          : pageList().includes(f.path)
+            ? pageList()
+            : [...pageList(), f.path];
+      f.state = "undone";
+      return { merge: false };
+    }
+    case "change_resolve": {
+      const f = changes.find(e => e.id === a.id)?.files.find(f => f.path === a.path && f.state === "open");
+      if (!f) return Promise.reject("already reviewed");
+      if (noteNow(f.path) !== a.expect) return Promise.reject("changed");
+      putNote(f.path, String(a.text));
+      f.state = "undone";
+      return null;
+    }
+    case "page_action": {
+      const [reason, edits] = mockAction(String(a.action), String(a.path), (a.selection as string | null) ?? null);
+      recordChange(`action:${a.action}`, String(a.path).split("/").pop()!.replace(/\.md$/, ""), reason, edits);
+      return null;
+    }
+    case "change_record": {
+      const files = (a.files as { path: string; before: string | null; after: string | null }[]).filter(
+        f => f.before !== f.after,
+      );
+      if (files.length) {
+        changes = [
+          {
+            id: `${Date.now()}-${changes.length}`,
+            at: Date.now(),
+            source: String(a.source),
+            subject: String(a.subject),
+            reason: String(a.reason),
+            files: files.map(f => ({ ...f, state: "open" })),
+          },
+          ...changes,
+        ];
+        emit("changes-changed", null);
+      }
+      return null;
+    }
+    case "capture_vault":
+      recordChange(
+        "capture",
+        String(a.title ?? ""),
+        kb.capture.reason,
+        kb.capture.files.map(f => [f.path, f.after]),
+      );
+      return null;
+    case "favourites":
+      return kbOn ? favourites : [];
+    case "set_favourites":
+      favourites = (a.paths as string[]).slice();
+      if (keepState) sessionStorage.setItem("mockFavourites", JSON.stringify(favourites));
+      return favourites;
 
     // GitHub, mail, boards
     case "github_status":
@@ -1508,6 +1773,8 @@ mockIPC((cmd, args) => {
   if (!POLLS.has(cmd) && !cmd.startsWith("plugin:event|")) settle();
   return handle(cmd, a);
 });
+// the relay-file scheme of the backend (attach.rs) has no server here: a file's address is the picture or clip it stands for
+internals().convertFileSrc = (path: string) => embeds.fileSrc(decodeURIComponent(path));
 // a window that makes no call at all is ready too
 setTimeout(settle, 0);
 
@@ -1583,6 +1850,82 @@ const finding = (kind: string, context: string, path: string, paths: string[] = 
   paths,
   fix,
 });
+// Tidy structure: the flat Calendar/'s notes by type, each with the folder its type goes in
+const OUTSIDE: [string, string, string[]][] = [
+  [
+    "Meeting",
+    "Calendar/Meetings/2026",
+    [
+      "2026-11-04 Northwind sync",
+      "2026-10-28 Northwind sync",
+      "2026-10-22 Atlas intake",
+      "Old/2026-10-22 Atlas intake",
+      "2026-10-15 Bluebird kickoff",
+    ],
+  ],
+  ["Thread", "Calendar/Threads/2026", ["Atlas pricing question", "Bluebird brief"]],
+  ["Daily", "Calendar/Daily/2026", ["2026-11-04", "2026-11-03", "2026-11-02"]],
+];
+const TIDY = {
+  moves: OUTSIDE.flatMap(([kind, home, names]) =>
+    names.map((n, i) => {
+      const name = n.split("/").pop()!;
+      const renamed = names.findIndex(o => o.split("/").pop() === name) !== i;
+      return { kind, from: `Calendar/${n}.md`, to: `${home}/${name}${renamed ? " 2" : ""}.md`, renamed };
+    }),
+  ),
+  stay: 4,
+  links: 12,
+  notes: 7,
+};
+let tidied = false;
+// the garden: one of each problem, gone when acted on (a project picked, a note fixed, a file trashed)
+const MEETINGS_WITHOUT_PROJECT = [
+  "Calendar/Meetings/2026/2026-10-30 Call Sofie planning Q1.md",
+  "Calendar/Meetings/2026/2026-10-22 Intake Atlas sorting line.md",
+  "Calendar/Meetings/2026/2026-10-14 Bluebird check-in.md",
+];
+const GARDEN_TYPELESS = [
+  "Resources/Notes/Pricing ideas.md",
+  "Resources/Notes/Warehouse layout.md",
+  "Inbox/Call notes.md",
+];
+const UNUSED = [
+  "Attachments/2026/floor-plan-v1.png",
+  "Attachments/2026/scan-0042.pdf",
+  "Attachments/2026/old-logo.svg",
+];
+const gardenDone = new Set<string>();
+const aboutSet: [string, string][] = []; // garden_about calls, for the checks
+const gardenFindings = () => {
+  const left = (paths: string[]) => paths.filter(p => !gardenDone.has(p) && !trashed.has(p));
+  const f = (kind: string, paths: string[], context = "") =>
+    paths.length ? [finding(kind, context, "", paths, false)] : [];
+  return [
+    ...OUTSIDE.map(([kind, , names]) =>
+      finding(
+        "outside_home",
+        "",
+        kind,
+        names.map(n => `Calendar/${n}.md`),
+        false,
+      ),
+    ).filter(() => !tidied),
+    ...f("no_project", left(MEETINGS_WITHOUT_PROJECT)),
+    ...f("broken_link", [
+      "Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md\t12\tPricewise API",
+      "Resources/Notes/Pricing ideas.md\t3\tOld offer",
+    ]),
+    ...f("orphan", [
+      "Resources/Notes/Warehouse layout.md",
+      "Resources/Notes/Old idea.md",
+      "Inbox/Scratch.md",
+      "Resources/Notes/Parking.md",
+    ]),
+    ...f("unused_attachment", left(UNUSED), String(4_300_000)),
+    ...f("no_type", left(GARDEN_TYPELESS)),
+  ];
+};
 const VAULT_FINDINGS = [
   finding("missing_file", "", "System/rules/core/team.md"),
   finding("orphan_rule", "", "System/rules/gone/context.md", ["Contexts/Gone"], false),
@@ -1595,7 +1938,78 @@ const VAULT_FINDINGS = [
   ]),
 ];
 const trashed = new Map<string, string[]>();
-const pageList = () => pages ?? vault.notes;
+// fixture linked: notes outside the projects' folders that point at them (about:, context:, with:)
+const linkedOn = fixture.startsWith("linked");
+// fixture embeds (K4): the Northwind Portal page holds a picture, a PDF, an audio file and a section of another note
+const embedsOn = fixture.startsWith("embeds");
+// fixture kb (K5, K1): notes with content to search, templates, favourites
+const kbOn = fixture.startsWith("kb");
+const changesOn = fixture.startsWith("kb-changes");
+// kb-sketch (-dark): the same notes without a feed, and the one note that has no type: (Fix properties)
+const sketchOn = changesOn || fixture.startsWith("kb-sketch");
+// kb-tables (-dark): one more note, holding the tables the table editing is tried on
+const tablesOn = fixture.startsWith("kb-tables");
+const keepState = query.get("keep") === "1";
+let favourites: string[] = keepState ? JSON.parse(sessionStorage.getItem("mockFavourites") || "[]") : [];
+if (!keepState) for (const k of Object.keys(sessionStorage)) if (k.startsWith("mock")) sessionStorage.removeItem(k);
+const pageList = () =>
+  pages ??
+  (kbOn
+    ? [
+        ...vault.notes,
+        ...kb.paths,
+        ...(sketchOn ? [kb.untyped.path] : []),
+        ...(tablesOn ? [kb.tables.path] : []),
+        ...(inboxOn ? inbox.paths : []),
+      ]
+    : linkedOn
+      ? [...vault.notes.filter(n => vault.flat(n)), vault.FLAT_NOTE, ...vault.linkedPaths]
+      : embedsOn
+        ? [...vault.notes, embeds.FINDINGS_NOTE]
+        : vault.notes);
+// the saved collection views, kept over a reload with ?keep=1 like the favourites
+let viewsMem: { name: string; view: unknown }[] = keepState
+  ? JSON.parse(sessionStorage.getItem("mockViews") || "[]")
+  : [];
+const savedViews = () => viewsMem;
+const keptViews = (list: { name: string; view: unknown }[]) => {
+  viewsMem = list;
+  if (keepState) sessionStorage.setItem("mockViews", JSON.stringify(list));
+};
+// a note's text: what was written, else the fixture's own (collections.ts), else the generic note
+const textOfNote = (path: string): string =>
+  written.get(path)?.text ?? coll.texts[path] ?? String(vault.noteText(path).text);
+/** The index's row for a note (related.rs `collection`): its type, date, stage and every frontmatter key's values. */
+function collectionRow(path: string, text: string) {
+  const head = /^---\n([\s\S]*?)\n---/.exec(text)?.[1] ?? "";
+  const props: Record<string, string[]> = {};
+  const lines = head.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^([^\s#\-][^:]*):(.*)$/.exec(lines[i]);
+    if (!m) continue;
+    const raw = [m[2].trim()];
+    while (i + 1 < lines.length && /^(\s+|- )/.test(lines[i + 1])) raw.push(lines[++i].trim().replace(/^- /, ""));
+    const values = raw
+      .flatMap(r =>
+        r.includes("[[") ? [...r.matchAll(/\[\[([^\]|#]+)/g)].map(x => x[1].trim()) : [r.replace(/^["']|["']$/g, "")],
+      )
+      .filter(Boolean);
+    if (values.length) props[m[1].trim()] = values;
+  }
+  const body = text.slice(text.indexOf("\n---", 3) + 4);
+  const kind = props.type?.[0] ?? "";
+  const stem = path.split("/").pop()!.replace(/\.md$/, "");
+  const date = props.date?.[0] ?? (/^\d{4}-\d\d-\d\d/.test(stem) ? stem.slice(0, 10) : "");
+  const stage =
+    kind.toLowerCase() !== "meeting"
+      ? ""
+      : /^## Summary\s*$/m.test(body)
+        ? "wrapped"
+        : /\n## Briefing\n[^\n#]*\S/.test(`\n${body}`)
+          ? "briefed"
+          : "planned";
+  return { p: path, t: stem, k: kind, at: Math.floor(NOW_S - 3 * 86400), date, stage, props };
+}
 const pageRel = (p: unknown) => String(p).replace(vault.VAULT, "").replace(/^\//, "");
 // shared-live: the Mac's document of the page, which the editor and the mock peers share, and the cursors sent
 const liveDoc = new Y.Doc();
@@ -1651,13 +2065,87 @@ function threadsOf(all: Comment[]) {
     });
 }
 
-const written = new Map<string, { text: string; hash: string }>();
+const written = new Map<string, { text: string; hash: string }>(
+  fixture.startsWith("linked-collections")
+    ? Object.entries(coll.texts).map(([path, text]) => [path, { text, hash: "h0" }])
+    : embedsOn
+      ? Object.entries(embeds.texts).map(([path, text]) => [path, { text, hash: "h0" }])
+      : kbOn
+        ? [...Object.entries(kb.texts), ...(inboxOn ? Object.entries(inbox.texts) : [])].map(([path, text]) => [
+            path,
+            { text, hash: "h0" },
+          ])
+        : [],
+);
+// the Changes feed (K6, issue 371): the real one is src-tauri/src/changes.rs, which has its own tests. Kept in memory.
+type Change = {
+  id: string;
+  at: number;
+  source: string;
+  subject: string;
+  reason: string;
+  files: { path: string; before: string | null; after: string | null; state: string }[];
+};
+let changes: Change[] = changesOn ? kb.seedChanges(fixture.startsWith("kb-changes-long")) : [];
+if (sketchOn) written.set(kb.untyped.path, { text: kb.untyped.text, hash: "h0" });
+if (tablesOn) written.set(kb.tables.path, { text: kb.tables.text, hash: "h0" });
+if (changesOn) {
+  for (const e of changes)
+    for (const f of e.files) if (f.after !== null) written.set(f.path, { text: f.after, hash: "h0" });
+}
+const noteKey = (path: string) => [...written.keys()].find(k => k === path || k.endsWith(`/${path}`)) ?? path;
+const noteNow = (path: string) => written.get(noteKey(path))?.text ?? null;
+const putNote = (path: string, text: string | null) => {
+  if (text === null) written.delete(noteKey(path));
+  else written.set(noteKey(path), { text, hash: `h${++writes}` });
+};
+/** A job's writes as one entry, as changes.rs records them: the notes that differ from `before`. */
+function recordChange(source: string, subject: string, reason: string, edits: [string, string | null][]) {
+  const files = edits
+    .map(([path, after]) => ({ path, before: noteNow(path), after, state: "open" }))
+    .filter(f => f.before !== f.after);
+  for (const f of files) putNote(f.path, f.after);
+  if (!files.length) return;
+  changes = [{ id: `${Date.now()}-${changes.length}`, at: Date.now(), source, subject, reason, files }, ...changes];
+  emit("changes-changed", null);
+}
+/** What Claude does for a page action here, in a line each: enough to show the result in the feed. */
+function mockAction(action: string, path: string, selection: string | null): [string, [string, string | null][]] {
+  const text = noteNow(path) ?? "";
+  if (action === "properties") {
+    const has = /^---\n[\s\S]*?\btype:/.test(text);
+    const next = has
+      ? text
+      : /^---\n/.test(text)
+        ? text.replace("---\n", "---\ntype: Document\n")
+        : `---\ntype: Document\ncontext: "[[Agency]]"\n---\n${text}`;
+    return [has ? "Nothing to change" : "Added type: Document and context: Agency", [[path, next]]];
+  }
+  if (action === "about") {
+    const next = /^---\n/.test(text) ? text.replace("---\n", '---\nabout: "[[Northwind Portal]]"\n') : text;
+    return ["Set about: Northwind Portal", [[path, next]]];
+  }
+  if (action === "summarise") {
+    const at = text.indexOf("\n", text.indexOf("# ")) + 1;
+    const about = selection ? "the selected text" : "the note";
+    return [
+      `Summarised ${about} in a Summary section`,
+      [[path, `${text.slice(0, at)}\n## Summary\nA short summary of ${about}.\n${text.slice(at)}`]],
+    ];
+  }
+  return [`Ran ${action}`, [[path, `${text}\n<!-- ${action} -->\n`]]];
+}
+// the files added to a page (attach_copy, attach_save), for the checks
+const attached: { page: string; name: string; bytes?: number }[] = [];
 const eventNotes = new Map<string, string>(); // a calendar event's id -> the note that holds it (`event:`)
 let writes = 0;
 let diskChanged = false;
 let followupMode: "ok" | "slow" | "fail" = "ok"; // the same for the follow-up mail
 let wrapupMode: "ok" | "slow" | "fail" = "ok"; // what a meeting's wrap-up draft does (ai_write)
+let lastSaved = ""; // the page write_note saved last, which __harness.written gives
 let lastPage = ""; // the page read_note last read, which __harness.editOutside changes
+// Tauri gives a drop's position in physical pixels; the harness is given the page's own
+const physical = (at: { x: number; y: number }) => ({ x: at.x * devicePixelRatio, y: at.y * devicePixelRatio });
 const harness = {
   // the app has asked for the orchestrator's workers (orchestrator-closed-empty waits for it)
   workersRead: false,
@@ -1721,13 +2209,24 @@ const harness = {
   /** a permission card that turns up in the next `pending` poll */
   addPending: (request: (typeof pending)[number]) => void pending.push(request),
   /** files dragged in from Finder: Tauri's drag-enter, then drag-drop with the paths (the webview's onDragDropEvent) */
-  dropPaths: async (paths: string[]) => {
-    const position = { x: 400, y: 300 };
+  dropPaths: async (paths: string[], at = { x: 400, y: 300 }) => {
+    const position = physical(at);
     emit("tauri://drag-enter", { paths, position });
     await nextTask();
     emit("tauri://drag-drop", { paths, position });
     await nextTask();
   },
+  /** files hovering over the window at `position` (the drop's insertion line shows), not dropped yet */
+  dropHover: async (paths: string[], at = { x: 400, y: 300 }) => {
+    const position = physical(at);
+    emit("tauri://drag-enter", { paths, position });
+    await nextTask();
+    emit("tauri://drag-over", { position });
+    await nextTask();
+  },
+  /** the files added to a page so far (attach_copy, attach_save) */
+  attached: () => structuredClone(attached),
+  aboutSet: () => structuredClone(aboutSet),
   /** what a fresh session ran on when the model and effort were left to the CLI (read_agent's `resolved`) */
   resolved: (key: string, model = "opus", effort = "high") =>
     emitAgent(key, { type: "resolved", model, effort, default_model: true, default_effort: true }),
@@ -1736,6 +2235,18 @@ const harness = {
   /** how a meeting's wrap-up draft goes: written, never finishing (the skeleton), or failing */
   wrapupMode: (mode: "ok" | "slow" | "fail") => void (wrapupMode = mode),
   followupMode: (mode: "ok" | "slow" | "fail") => void (followupMode = mode),
+  /** a capture run finished (what capture_vault does): two notes edited, one entry in the Changes feed */
+  capture: () =>
+    recordChange(
+      "capture",
+      kb.capture.subject,
+      kb.capture.reason,
+      kb.capture.files.map(f => [f.path, f.after]),
+    ),
+  /** a note's text now, as the backend has it (a page's saves and a job's writes) */
+  noteText: (path: string) => noteNow(path),
+  /** a note's text typed by the user outside the editor flow: what an Undo finds when the note was edited since the run */
+  typeInto: (path: string, text: string) => putNote(path, text),
   /** a note in the vault with this text (a project's, with its decisions) */
   setNote: (path: string, text: string) => void written.set(path, { text, hash: `h${++writes}` }),
   /** a meeting note in the vault: its text, found by the event it belongs to */
@@ -1744,7 +2255,7 @@ const harness = {
     eventNotes.set(event, path);
   },
   /** what the page editor saved last (write_note) */
-  written: () => [...written.values()].pop()?.text ?? null,
+  written: () => (lastSaved ? written.get(lastSaved)?.text : [...written.values()].pop()?.text) ?? null,
   /** someone changed a note on disk: the next save without force is refused */
   changeOnDisk: () => void (diskChanged = true),
   teamComments: () => void (teamComments = true),

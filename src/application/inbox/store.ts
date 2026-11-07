@@ -1,0 +1,25 @@
+import type { FilingItem, InboxNote } from "../../domain/inbox/rules";
+import { makeStore } from "../make-store";
+
+// The Inbox's state (inbox.ts): the notes per workspace, Claude's proposals, and the row being edited.
+type Proposal = { at: number; items: FilingItem[] };
+type InboxState = {
+  notes: Record<string, InboxNote[]>; // per workspace folder
+  proposal: Record<string, Proposal | undefined>;
+  skipped: string[]; // notes the user left alone this time
+  busy: "" | "propose" | "accept";
+  /** the note whose destination is being edited, and the folder picked so far */
+  edit: { path: string; dest: string } | null;
+  home: Record<string, string | null>; // a type's home folder, by `<workspace>\n<type>`
+  /** bumped when the Inbox changed outside this view: the notes drawer reads its notes again */
+  version: number;
+};
+export const useInboxStore = makeStore<InboxState>(() => ({
+  notes: {},
+  proposal: {},
+  skipped: [],
+  busy: "",
+  edit: null,
+  home: {},
+  version: 0,
+}));

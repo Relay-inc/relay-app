@@ -59,9 +59,6 @@ fn prepare_turn(message: &Value, skills: &HashMap<String, Value>) -> Result<Valu
     Ok(message)
 }
 
-/// SIGTERM, as the python bridge did: codex cleans up its own children.
-pub fn terminate(pid: u32) { unsafe { libc::kill(pid as i32, libc::SIGTERM); } }
-
 /// The bridge on `input`/`out`; `gone(code)` is called (from a thread) when codex ends by itself, the process exit in
 /// the app. Returns the exit code.
 pub fn run<W: Write + Send + 'static>(bin: &str, cfg: &Value, input: impl BufRead, out: W, gone: fn(i32)) -> i32 {
@@ -115,7 +112,7 @@ pub fn run<W: Write + Send + 'static>(bin: &str, cfg: &Value, input: impl BufRea
         let r = r.unwrap();
         emit(&out, &r.to_string()); // the Rust side reads the thread id (or the error) from it
         let Some(thread) = r["result"]["thread"]["id"].as_str().filter(|s| !s.is_empty()).map(String::from) else {
-            terminate(pid);
+            agent_core::terminate(pid);
             return Err(1);
         };
         let cwd = cfg["cwd"].as_str().filter(|s| !s.is_empty()).map(String::from).unwrap_or_else(|| std::env::current_dir().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default());
@@ -173,7 +170,7 @@ pub fn run<W: Write + Send + 'static>(bin: &str, cfg: &Value, input: impl BufRea
         } else { m };
         if send(&cin, &m).is_err() { break; }
     }
-    terminate(pid);
+    agent_core::terminate(pid);
     pump.join().unwrap_or(1)
 }
 

@@ -60,9 +60,12 @@ fn public_url(url: &str) -> Option<String> {
     (!host.contains('/')).then(|| format!("https://{host}/{}", path.trim_start_matches('/')))
 }
 
+/// The Changes feed's before/after copies of notes (changes.rs) stay on this Mac: no backup commit holds them.
+const NOT_CHANGES: &str = ":(exclude).relay/changes";
+/// Stage everything a backup commit holds.
+pub(crate) fn stage_all(vault: &str, path_env: &str) -> Result<String, String> { git(vault, path_env, &["add", "-A", "--", ".", NOT_CHANGES]) }
 fn git(vault: &str, path_env: &str, args: &[&str]) -> Result<String, String> {
-    let o = Command::new("git").arg("-C").arg(vault).args(args).env("PATH", path_env).env("GIT_TERMINAL_PROMPT", "0")
-        .stdin(Stdio::null()).output().map_err(|e| format!("git: {e}"))?;
+    let o = crate::git::output_quiet(vault, args, path_env).map_err(|e| format!("git: {e}"))?;
     if o.status.success() { return Ok(String::from_utf8_lossy(&o.stdout).trim_end().to_string()); }
     // the line that says what went wrong, not the hints git puts after it (a refused push ends on "hint: …")
     let e = String::from_utf8_lossy(&o.stderr);
@@ -91,8 +94,8 @@ fn round(vault: &str, remote: &str, path_env: &str) -> Result<Option<String>, St
     if is_public(remote, path_env) { return Err("the remote is public, a vault only syncs to a private repository".into()); }
     let branch = git(vault, path_env, &["symbolic-ref", "--short", "HEAD"]).map_err(|_| "the vault is not on a branch (detached HEAD)".to_string())?;
     let mut commit = None;
-    if !git(vault, path_env, &["status", "--porcelain"])?.is_empty() {
-        git(vault, path_env, &["add", "-A"])?;
+    if !git(vault, path_env, &["status", "--porcelain", "--", ".", NOT_CHANGES])?.is_empty() {
+        stage_all(vault, path_env)?;
         // a Mac without a git identity still commits, as Relay
         let who: Vec<&str> = if git(vault, path_env, &["config", "user.email"]).is_ok() { vec![] } else { vec!["-c", "user.name=Relay", "-c", "user.email=relay@localhost"] };
         let msg = format!("Relay sync {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));

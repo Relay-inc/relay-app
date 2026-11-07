@@ -108,8 +108,7 @@ fn save(path: &Path, mut lines: Vec<Option<String>>, added: Option<&Row>, last_r
     }
     if let Some(dir) = path.parent() { fs::create_dir_all(dir).map_err(|e| e.to_string())?; }
     let text = lines.into_iter().flatten().collect::<Vec<_>>().join("\n");
-    let tmp = path.with_extension("md.tmp");
-    fs::write(&tmp, text).and_then(|_| fs::rename(&tmp, path)).map_err(|e| e.to_string())
+    crate::util::write_file(path, text)
 }
 
 fn log(log: &Path, kind: &str, extra: &str, r: &Row) {

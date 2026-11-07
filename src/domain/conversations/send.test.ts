@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { outgoing, planSend, refusesImages } from "./send.ts";
+import { outgoing, planSend, refusesImages, sendRequest } from "./send.ts";
 
 const state = (typed: Record<string, string>, outside: Record<string, number> = {}) => ({
   typed,
@@ -75,4 +75,29 @@ test("commands without attachments", () => {
   assert.ok(!refusesImages([], "/compact"));
   assert.ok(!refusesImages(codex, "/compacted"));
   assert.ok(!refusesImages(codex, "review this"));
+});
+
+test("a note chip's path reaches every agent in the sent text, nothing of the note inlined", () => {
+  const note = "/Users/demo/Vault/Projects/Bea Plan.md";
+  for (const provider of ["claude", "codex", "opencode"]) {
+    const request = sendRequest({
+      key: "chat:x",
+      sent: "what changed?",
+      files: [note],
+      images: [],
+      name: "x",
+      conversation: undefined,
+      model: "",
+      effort: "",
+      provider,
+      machine: null,
+      told: "",
+      context: "",
+    });
+    assert.equal(request.provider, provider);
+    assert.equal(
+      request.text,
+      `what changed?\n\n<relay-files>\nAttached files, read them from these paths:\n${note}\n</relay-files>`,
+    );
+  }
 });

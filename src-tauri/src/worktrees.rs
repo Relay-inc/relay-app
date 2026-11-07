@@ -4,7 +4,6 @@
 // Kept in worktrees.json: {conversation key: [worktree path, ...]}.
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// Whether a tool call could make a worktree: worth a snapshot around it.
 pub fn may_add(input: &serde_json::Value) -> bool { input.to_string().contains("worktree") }
@@ -25,7 +24,7 @@ pub fn load(json: &str) -> HashMap<String, Vec<String>> { serde_json::from_str(j
 /// Remove what is safe to remove. Kept: changes git would lose (it refuses itself without --force), and a detached
 /// HEAD with commits no branch or tag has. The branch of a removed worktree stays. Returns (removed, kept).
 pub fn remove(paths: &[String], path_env: &str) -> (usize, Vec<String>) {
-    let git = |dir: &str, args: &[&str]| Command::new("git").arg("-C").arg(dir).args(args).env("PATH", path_env).output().ok();
+    let git = |dir: &str, args: &[&str]| crate::git::output(dir, args, path_env).ok();
     let (mut removed, mut kept) = (0, vec![]);
     for p in paths {
         if !Path::new(p).exists() { continue; } // already gone, the agent removed it
@@ -40,7 +39,7 @@ pub fn remove(paths: &[String], path_env: &str) -> (usize, Vec<String>) {
 mod tests {
     use super::*;
 
-    fn sh(dir: &Path, cmd: &str) { assert!(Command::new("/bin/sh").arg("-c").arg(cmd).current_dir(dir).status().unwrap().success(), "{cmd}"); }
+    fn sh(dir: &Path, cmd: &str) { assert!(std::process::Command::new("/bin/sh").arg("-c").arg(cmd).current_dir(dir).status().unwrap().success(), "{cmd}"); }
 
     #[test]
     fn finds_new_worktrees_and_removes_only_the_safe_ones() {
