@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { commonFolder, evaluate, scoped, valuesOf, type View } from "../../../domain/collections/rules";
+import { evaluate, scoped, valuesOf, type View } from "../../../domain/collections/rules";
+import { commonFolder } from "../../../domain/workspace/garden";
 import { loadRows, loadViews, saveView, useCollectionsStore } from "../../../application/collections/collections";
 import { activeFolder } from "../../../application/navigation/workspaces";
 import { loadTypes, registryOf } from "../../../application/types/types";
@@ -40,7 +41,7 @@ export function CollectionView({ className }: { className: string }) {
   ]
     .filter(Boolean)
     .join(" · ");
-  const home = commonFolder(inScope);
+  const home = commonFolder(inScope.map(r => r.p));
   return (
     <div className={`${className} min-h-0 relative`}>
       <div className="h-full flex flex-col px-8 pt-10 pb-6">

@@ -1,21 +1,34 @@
-// The garden (src-tauri/src/vaultcheck.rs `garden`): what the Garden tab of the vault check shows of its findings.
-/** What the tab reads of a finding (a `VaultFinding` of the backend is one). */
-export type Found = { kind: string; context: string; paths: string[] };
+// The vault check's list (src-tauri/src/vaultcheck.rs `check` and `garden`): its findings grouped by kind.
+/** What the list reads of a finding (a `VaultFinding` of the backend is one). */
+export type Found = { kind: string; context: string; path: string; paths: string[] };
 
-/** The kinds the garden finds, in the order the tab lists them. */
+/** The kinds the health check finds, in the order the list shows them, before the garden's. */
+export const HEALTH = [
+  "claude_link",
+  "missing_file",
+  "context_note",
+  "context_rule",
+  "context_heading",
+  "context_mismatch",
+  "card_fields",
+  "orphan_rule",
+  "row_without_note",
+] as const;
+/** The kinds the garden finds, in the order the list shows them. */
 export const GARDEN = ["outside_home", "no_project", "broken_link", "orphan", "unused_attachment", "no_type"] as const;
-export type GardenKind = (typeof GARDEN)[number];
+export const isGarden = (kind: string) => (GARDEN as readonly string[]).includes(kind);
 
-/** One row of the tab: how many notes (or files) a kind names, and them. `outside_home` is one finding per type. */
-export type GardenRow<F extends Found = Found> = { kind: GardenKind; n: number; paths: string[]; findings: F[] };
-export function gardenRows<F extends Found>(found: F[]): GardenRow<F>[] {
-  return GARDEN.flatMap(kind => {
+/** One group of the list: how many it names and them. A health finding is one entry (its `path`); a garden finding
+ *  names many notes (or files) in `paths`, and `outside_home` is one finding per type. */
+export type Group<F extends Found = Found> = { kind: string; n: number; paths: string[]; findings: F[] };
+/** Health kinds first, then the garden's, then any kind this app does not know yet (so no finding goes missing). */
+export function findingGroups<F extends Found>(found: F[]): Group<F>[] {
+  return [...new Set<string>([...HEALTH, ...GARDEN, ...found.map(f => f.kind)])].flatMap(kind => {
     const findings = found.filter(f => f.kind === kind);
-    const paths = findings.flatMap(f => f.paths);
+    const paths = isGarden(kind) ? findings.flatMap(f => f.paths) : findings.map(f => f.path);
     return paths.length ? [{ kind, n: paths.length, paths, findings }] : [];
   });
 }
-export const gardenTotal = (found: Found[]) => gardenRows(found).reduce((n, r) => n + r.n, 0);
 
 /** A broken link as the check names it: "note<TAB>line<TAB>target". */
 export type BrokenLink = { note: string; line: number; target: string };
@@ -26,10 +39,11 @@ export function brokenLink(path: string): BrokenLink {
 
 /** The folder every path sits in, "Attachments/2026/" (or "" when they share none). */
 export function commonFolder(paths: string[]) {
+  if (!paths.length) return "";
   const dirs = paths.map(p => p.split("/").slice(0, -1));
-  const first = dirs[0] ?? [];
-  let n = first.length;
-  for (const d of dirs) while (n && d.slice(0, n).join("/") !== first.slice(0, n).join("/")) n--;
+  const first = dirs[0];
+  let n = 0;
+  while (n < first.length && dirs.every(d => d[n] === first[n])) n++;
   return n ? `${first.slice(0, n).join("/")}/` : "";
 }
 

@@ -2932,7 +2932,10 @@ const SCENARIOS = {
     const panel = page.locator('aside[aria-label="Changes"]');
     const list = panel.locator(".overflow-y-auto");
     const last = panel.getByText("Capture from \u201cStart the security audit\u201d chat");
-    s.check("the panel's list is taller than the panel", (await list.evaluate(e => e.scrollHeight > e.clientHeight * 2)) === true);
+    s.check(
+      "the panel's list is taller than the panel",
+      (await list.evaluate(e => e.scrollHeight > e.clientHeight * 2)) === true,
+    );
     await wheelAt(panel.locator("[data-file]").first());
     s.check("the wheel over a diff scrolls the list", (await top(list)) > 0);
     for (let i = 0; i < 12; i++) await wheelAt(list, 800);
@@ -3150,24 +3153,22 @@ const SCENARIOS = {
     s.check("and the run is in the feed", await waitText(page, "Added type: Document"));
   },
 
-  // issue 374 (K10): the Garden tab of the vault check. One of each problem with its count; a project picked on a meeting
-  // writes about: and the row goes; Move to trash is a dry run, then one Undo; Ask Claude is a dry run too and its run is
+  // issue 374 (K10), one list since issue 425: the garden's groups of the vault check. One of each problem with its
+  // count; a project picked on a meeting writes about: and the row goes; Move to trash is a dry run, then one Undo; Ask Claude is a dry run too and its run is
   // one entry in the feed; one filled button at a time, also with a sheet open
   async vaultGarden(s) {
     await s.load({ fixture: "kb-sketch" });
     const { page } = s;
     await click(page.getByRole("button", { name: /^Switch workspace/ }));
     await click(button(page, "Check workspace…"), 300);
-    await click(page.getByRole("tab", { name: /^Garden/ }), 300);
-    const count = async kind => Number((await page.locator(`[data-garden=${kind}] span`).first().textContent()) ?? 0);
+    const count = async kind => Number((await page.locator(`[data-kind=${kind}] span`).first().textContent()) ?? 0);
     const counts = [];
     for (const kind of ["outside_home", "no_project", "broken_link", "orphan", "unused_attachment", "no_type"])
       counts.push(await count(kind));
     s.check("each finding shows its count", counts.join(",") === "10,3,2,4,3,3");
-    s.check("the tab counts them all", (await page.getByRole("tab", { name: /^Garden\s*25$/ }).count()) === 1);
     const primary = () =>
       page.locator('[role=dialog][aria-label^="Check"] .btn-primary').locator("visible=true").count();
-    s.check("one filled button: Tidy structure", (await primary()) === 1);
+    s.check("one filled button: Repair all", (await primary()) === 1);
     // a project picked on a meeting
     const meeting = "Calendar/Meetings/2026/2026-10-30 Call Sofie planning Q1.md";
     await page
@@ -3193,7 +3194,7 @@ const SCENARIOS = {
     s.check("with the sheet open the Apply button is the only filled one", (await primary()) === 1);
     await click(button(page, "Move 3 files to trash"), 500);
     s.check("three files went to the trash", (await s.calls("trash_path")).length === 3);
-    s.check("the dialog stays open", (await page.getByRole("tab", { name: /^Garden/ }).count()) === 1);
+    s.check("the dialog stays open", (await page.locator("[data-kind=outside_home]").count()) === 1);
     await click(button(page, "Undo"), 400);
     s.check(
       "one Undo, clicked above the open dialog, puts all three back",
@@ -3217,7 +3218,7 @@ const SCENARIOS = {
       "Claude is asked once for the 3 notes",
       asked.length === 1 && asked[0].action === "properties" && asked[0].paths.length === 3,
     );
-    s.check("the row is gone", (await page.locator("[data-garden=no_type]").count()) === 0);
+    s.check("the row is gone", (await page.locator("[data-kind=no_type]").count()) === 0);
     await click(button(page, "Close"), 300);
     await openBilling(s);
     s.check(
@@ -3227,8 +3228,7 @@ const SCENARIOS = {
     // a broken link opens its note at the line
     await click(page.getByRole("button", { name: /^Switch workspace/ }));
     await click(button(page, "Check workspace…"), 300);
-    await click(page.getByRole("tab", { name: /^Garden/ }), 300);
-    await click(page.locator("[data-garden=broken_link]").getByRole("button", { name: "Review" }), 200);
+    await click(page.locator("[data-kind=broken_link]").getByRole("button", { name: "Review" }), 200);
     s.check("Review lists the links with their line", await hasText(page, "Northwind Portal.md:12"));
   },
 

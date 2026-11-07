@@ -22,6 +22,7 @@ a PR. Versions follow
 
 ### Changed
 
+- The Vault check is one list instead of the Health and Garden tabs: every finding sits under its kind (health first), each group with its count, its action and its first three paths, and Tidy structure, Ask Claude and Move to trash share one dry run sheet. Orphans are now called Unlinked notes, so they no longer read like the rules for missing folders.
 - Relay stays responsive when many notes change at once, like after a git pull or a long Claude run: the notes list and the related notes are refreshed once per burst instead of once per note, and the note list is read off the main thread. (#415)
 - Less CPU and no UI stalls while a terminal conversation is open: the list of running sessions is read at most every 2.5 seconds instead of with every poll, and the polls for questions, subagents, the sidebar and sending a message no longer run on the UI thread. The vault is scanned once per refresh instead of once per project, and `claude --version` is not run again for every message. (#414)
 
