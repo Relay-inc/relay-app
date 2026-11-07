@@ -3,7 +3,7 @@ import { makeStore } from "../make-store";
 
 type FilesState = {
   project: string; // whose folders show
-  vault: string; // the vault's path, to open its notes in the right drawer
+  vault: string; // the vault's path, to open its notes as pages
   roots: FileRoot[] | null; // null while loading
   err: string;
   children: Record<string, FileEntry[] | null>; // per folder read, null while reading

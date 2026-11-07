@@ -38,7 +38,7 @@ export type BlockWords = {
 export type TypedNotes = {
   types: () => Registry;
   existing: (type: NoteType, title: string) => string | undefined;
-  make: (type: NoteType, title: string, link: (name: string) => () => void) => Promise<void>;
+  make: (type: NoteType, title: string, link: (name: string) => () => boolean) => Promise<void>;
 };
 
 /** A block: whole lines, from a top-level markdown node; a heading takes its section along, a list item its own lines
@@ -120,12 +120,15 @@ function slashSource(words: BlockWords, pickFile: (view: EditorView, at: number)
                 const link = `[[${name}]]`;
                 const at = Math.min(slash, view.state.doc.length);
                 view.dispatch({ changes: { from: at, insert: link }, selection: { anchor: at + link.length } });
+                // false when the editor is gone (the new note opened in its place): the file is changed instead
                 return () => {
+                  if (!view.dom.isConnected) return false;
                   const doc = view.state.doc.toString();
                   let found = -1;
                   for (let i = doc.indexOf(link); i >= 0; i = doc.indexOf(link, i + 1))
                     if (found < 0 || Math.abs(i - at) < Math.abs(found - at)) found = i;
                   if (found >= 0) view.dispatch({ changes: { from: found, to: found + link.length } });
+                  return true;
                 };
               });
             },

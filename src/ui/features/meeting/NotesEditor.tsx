@@ -13,7 +13,7 @@ import {
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { followPageLink } from "../../../application/navigation/pages";
+import { openNoteLink } from "../../../application/navigation/pages";
 import {
   LINE,
   MARKER_OF,
@@ -252,7 +252,7 @@ export function NotesEditor({
           EditorView.lineWrapping,
           markdown({ base: markdownLanguage }),
           mode.current.of(showMarkdown.of(rawNow.current)),
-          livePreview((link, drawer) => void followPageLink(link, drawer)),
+          livePreview(link => void openNoteLink(link)),
           formatting(format), // the lines' time and marker are not for Turn into: no such button
           Prec.high(lines),
           EditorView.atomicRanges.of(v => v.plugin(lines)?.glyphs ?? Decoration.none),

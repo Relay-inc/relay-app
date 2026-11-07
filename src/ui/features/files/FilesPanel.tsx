@@ -18,7 +18,7 @@ const MAX_LINES = 5000;
 const home = (path: string) => path.replace(/^\/Users\/[^/]+/, "~");
 
 /** The project's folders as a tree, as PhpStorm shows a project: its code folders and its folder in the vault, a
- *  folder opens on a click, a file opens (a note in the right drawer, a document in its app, text in a window over the
+ *  folder opens on a click, a file opens (a note as a page, a document in its app, text in a window over the
  *  app), a right-click shows it in Finder. */
 export function FilesPanel() {
   const { t } = useT();

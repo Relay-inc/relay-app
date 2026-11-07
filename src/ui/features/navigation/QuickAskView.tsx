@@ -297,15 +297,15 @@ export function QuickAskView() {
     el.style.height = "auto";
     el.style.height = el.scrollHeight + "px";
   };
-  const choose = (option: Option, beside = false, add = false) => {
+  const choose = (option: Option, add = false) => {
     close();
     if (add && (option.kind === "note" || option.kind === "content"))
       void addToConversation(option.path, option.folder);
     else if (option.kind === "project") openProject(option.name);
     else if (option.kind === "meeting") openMeeting(option.meeting.id);
     else if (option.kind === "ticket") openFoundCard(option.provider, option.hit);
-    else if (option.kind === "content" && !beside) openPageAtLine(option.folder, option.path, option.line);
-    else if (option.kind === "note" || option.kind === "content") openPageIn(option.folder, option.path, beside);
+    else if (option.kind === "content") openPageAtLine(option.folder, option.path, option.line);
+    else if (option.kind === "note") openPageIn(option.folder, option.path);
     else if (option.kind === "chat") void select(option.key);
     else if (option.run) option.run();
     else if (option.id === "daily") void openDailyNote();
@@ -346,7 +346,7 @@ export function QuickAskView() {
     e.preventDefault();
     const option = options[picked];
     if (option) {
-      choose(option, e.metaKey, e.altKey);
+      choose(option, e.altKey);
       return;
     }
     const text = e.currentTarget.value.trim();
@@ -464,7 +464,7 @@ export function QuickAskView() {
                     data-option={option.kind}
                     className={`flex items-center gap-3 w-full text-left border-0 rounded-lg px-2.5 py-2 mt-1 cursor-pointer text-label ${picked === i ? "bg-fill-2" : "bg-transparent hover:bg-fill"}`}
                     onMouseDown={e => e.preventDefault()}
-                    onClick={e => choose(option, e.metaKey)}
+                    onClick={() => choose(option)}
                   >
                     {option.kind === "chat" ? (
                       <span className="flex-1 min-w-0 truncate text-[13px] font-medium">{option.name}</span>

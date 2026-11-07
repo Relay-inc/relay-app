@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { cancelRecording, stopRecording, useRecordingStore } from "../../../application/calendar/recording";
 import { backToToday } from "../../../application/calendar/meeting-view";
-import { openDetail } from "../../../application/navigation/panel";
-import { noteKey } from "../../../domain/navigation/keys";
+import { openNoteLink } from "../../../application/navigation/pages";
 import { othersLabel } from "../../../domain/calendar/meeting-view";
 import type { Meeting } from "../../../domain/calendar/types";
 import { Icon } from "../../components/Icon";
@@ -119,7 +118,7 @@ export function MeetingBar({ meeting, note }: { meeting: Meeting; note: { path: 
       ) : note && file ? (
         <button
           className="max-w-1/2 truncate text-xs text-secondary cursor-pointer hover:text-label"
-          onClick={() => openDetail(noteKey(note.path))}
+          onClick={() => void openNoteLink(note.path)}
         >
           {t("meet.noteFile", { file })}
         </button>

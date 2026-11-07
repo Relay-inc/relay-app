@@ -11,11 +11,13 @@ import {
   type PagesModel,
   type TypedTree,
 } from "../../domain/navigation/pages";
-import { noteKey, pageKey, VIEW } from "../../domain/navigation/keys";
+import { pageKey, VIEW } from "../../domain/navigation/keys";
 import { pageOf } from "../../domain/navigation/views";
 import { ORCH } from "../../domain/orchestrator/rules";
 import { chatVault, inWorkspace, vaultChoices } from "../../domain/conversations/rules";
 import { noteIn } from "../../domain/conversations/files";
+import { resolveNote } from "../../domain/workspace/rules";
+import { noteOf } from "../../shared/markdown";
 import * as backend from "../../infrastructure/backend";
 import { t, tn } from "../../shared/i18n";
 import { storage } from "../../infrastructure/storage";
@@ -27,13 +29,12 @@ import { useWorkspaceStore } from "../workspace/store";
 import { contexts, loadNotes, loadSnapshot, projectName } from "../workspace/vault";
 import { FILE_TOOLS } from "../../domain/git/git";
 import { copy, select, toast } from "./navigation";
-import { openDetail } from "./panel";
 import { useNavigationStore } from "./store";
 import { makeStore } from "../make-store";
 import { trailing } from "../trailing";
 import { loadLinked } from "./linked";
 import { favouritesOf, followFavourites } from "./favourites";
-import { activeFolder, workspaces } from "./workspaces";
+import { activeFolder, workspaceOf, workspaces } from "./workspaces";
 import { loadRows } from "../collections/collections";
 import { useCollectionsStore } from "../collections/store";
 import { registryOf } from "../types/types";
@@ -183,16 +184,11 @@ export function togglePage(path: string, open = !useNavigationStore.getState().s
   storage.set("pagesOpen", [...useNavigationStore.getState().sidebar.pagesOpen]);
 }
 /** A note of the workspace shown opens as a page in the middle column. */
-/** A note as a page in the middle column; with Files off in the side drawer, as before pages. */
 export const openPage = (path: string) => openPageIn(activeFolder(), path);
 /** The path a note of workspace `folder` is read and written by: the main vault's relative, another vault's absolute. */
 export const noteTarget = (folder: string, path: string) => (isMain(folder) ? path : `${folder}/${path}`);
-/** A note of any workspace (`folder`, its path in it): in the middle column, or with `beside` in the drawer next to
- *  the open conversation. */
-export function openPageIn(folder: string, path: string, beside = false) {
-  const full = noteTarget(folder, path);
-  return filesOn() && !beside ? select(pageKey(full)) : openDetail(noteKey(full));
-}
+/** A note of any workspace (`folder`, its path in it) as a page in the middle column, in that workspace. */
+export const openPageIn = (folder: string, path: string) => select(pageKey(noteTarget(folder, path)));
 /** A page's note as a path of the workspace shown ("" when the open page is another workspace's). */
 export function pagePath(page: string) {
   if (isMain(activeFolder())) return page.startsWith("/") ? "" : page;
@@ -300,6 +296,15 @@ export async function restorePage(page: string, kind: backend.PageHistory["kind"
   const { hash } = await backend.writeNote(page, text, "", true);
   watchers.get(page)?.({ text, hash, by: "relay" });
 }
+/** A link out of a page's file, its first one: the / menu's Undo once the page's editor has closed. An open editor of
+ *  the page takes the change in as one made outside. */
+export async function dropLink(page: string, link: string) {
+  const read = (await backend.readNote(page)) as Page;
+  if ("err" in read || !read.text.includes(link)) return;
+  const text = read.text.replace(link, "");
+  const { hash } = await backend.writeNote(page, text, read.hash, false);
+  watchers.get(page)?.({ text, hash, by: "relay" });
+}
 // a conversation's Edit or Write of this note that ended in the last 15 s
 function byClaude(page: string) {
   const since = Date.now() - 15_000;
@@ -392,20 +397,19 @@ export function openPageAtLine(folder: string, path: string, line: number) {
   revealLine(isMain(folder) ? path : `${folder}/${path}`, line);
   return openPageIn(folder, path);
 }
-/** A [[link]] in a page: the note of the workspace shown it names opens as a page, or in the right drawer with
- *  `drawer` (⌘-click), as a link in a conversation does. With a `heading` (Open on an embedded section) the page opens
- *  at it. */
-export function followPageLink(link: string, drawer: boolean, heading = "") {
-  if (drawer) return openDetail(noteKey(link));
-  const name = (/\.md$/i.test(link) ? link : `${link}.md`).toLowerCase();
-  const paths = workspacePaths();
-  const path = paths.find(p => p.toLowerCase() === name) ?? paths.find(p => p.toLowerCase().endsWith(`/${name}`));
-  if (!path) return openDetail(noteKey(link));
+/** A note a link, a tool call or a list names (a path, absolute or not, or a bare name looked for in every workspace,
+ *  first in the one of what is open, else the one shown) as a page; a toast when no note has that name. With a
+ *  `heading` the page opens at it. */
+export function openNoteLink(link: string, heading = "") {
+  const folder = workspaceOf(useNavigationStore.getState().selected) || activeFolder();
+  const here = isMain(folder) ? "" : folder;
+  const page = resolveNote(useWorkspaceStore.getState().notes, settings().vault, noteOf(link), here);
+  if (!page) return void toast(t("page.notFound", { name: noteOf(link) }));
   if (heading) {
-    headings.set(target(path), heading);
-    headingWatchers.forEach(listener => listener(target(path)));
+    headings.set(page, heading);
+    headingWatchers.forEach(listener => listener(page));
   }
-  return openPage(path);
+  return select(pageKey(page));
 }
 /** Ask Claude about a page: a new conversation in the page's workspace (its project's, when it is a project's note)
  *  with the note's path typed in. */

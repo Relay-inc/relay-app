@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Note } from "./Note";
 
-/** A detail in the right panel (a PR, mail, note or card): the bar with the close button and what follows it in
+/** A detail in the right panel (a PR, mail or card): the bar with the close button and what follows it in
  *  `bar`, then the error, the loading line, or the detail itself. `before` goes above the bar (an action's error). */
 export function DetailFrame({
   closeLabel,

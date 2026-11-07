@@ -1524,15 +1524,27 @@ const VIEWS = {
     await page.locator(".relay-drawer button[title='Close terminal']").last().hover();
     await settle(page, 500);
   },
-  // a vault note in the drawer: its frontmatter as properties, a callout, ruled headings, a task list and a table (#233)
-  "drawer-note": async () => {
+  // a [[link]] in a conversation opens the note as a page: "← <conversation>" in its bar goes back (⌘[, Esc)
+  "page-from-chat": async () => {
     await open(page, server.url, { sel: keys.long });
     await page.locator("a.vlink", { hasText: "Billing Spec" }).last().click();
+    await page.locator("[data-page-back]").waitFor();
     await waitText("Archive: old repo");
     await settle(page, 300);
   },
-  // a note of the team vault, linked from a conversation, in the drawer: its absolute path in the bar
-  "drawer-note-shared": async () => {
+  // Back: the conversation again, scrolled where it was when the link was clicked
+  "page-back": async () => {
+    await open(page, server.url, { sel: keys.long });
+    const link = page.locator("a.vlink", { hasText: "Billing Spec" }).nth(3);
+    await link.scrollIntoViewIfNeeded();
+    await settle(page, 200);
+    await link.click();
+    await page.locator("[data-page-back]").click();
+    await page.locator("#log").waitFor();
+    await settle(page, 400);
+  },
+  // a note of the team vault, linked from a conversation, as a page of that workspace (the sidebar stays on its own)
+  "page-from-chat-shared": async () => {
     await open(page, server.url, { fixture: "shared", sel: keys.long });
     await page.evaluate(key => {
       window.__harness.emitAgent(key, { type: "text", text: "The handbook is in [[Team Handbook]].", delta: true });
@@ -1540,14 +1552,36 @@ const VIEWS = {
     }, keys.long);
     await waitText("The handbook is in");
     await page.locator("a.vlink", { hasText: "Team Handbook" }).last().click();
+    await page.locator("[data-page-back]").waitFor();
     await waitText("Archive: old repo");
     await settle(page, 300);
   },
-  // the same note with its properties unfolded under the title (the doc panel design)
-  "drawer-note-properties": async () => {
-    await VIEWS["drawer-note"]();
-    await page.locator(".relay-drawer button[aria-expanded]").click();
+  // Experimental › Files off: no Pages tab, the note still opens as a page that can be edited
+  "page-from-chat-files-off": async () => {
+    await open(page, server.url, { fixture: "files-off", sel: keys.long });
+    await page.locator("a.vlink", { hasText: "Billing Spec" }).last().click();
+    await page.locator("[data-page-back]").waitFor();
+    await waitText("Archive: old repo");
     await settle(page, 300);
+  },
+  // the page's More menu: Open in default app, which the side panel had
+  "page-more-menu": async () => {
+    await VIEWS["page-from-chat"]();
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await waitText("Open in default app");
+    await settle(page);
+  },
+  // a [[link]] to a note that does not exist: a toast, not an empty page
+  "page-link-missing": async () => {
+    await open(page, server.url, { sel: keys.long });
+    await page.evaluate(() => {
+      const a = Object.assign(document.createElement("a"), { className: "vlink", textContent: "Nowhere" });
+      a.dataset.note = "Nowhere Note";
+      document.querySelector("#msgs")?.append(a);
+      a.click();
+    });
+    await waitText("No note named");
+    await settle(page, 200);
   },
   "drawer-notes": async () => {
     await VIEWS["project-tools"]();
