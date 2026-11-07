@@ -6,6 +6,7 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { Related } from "../domain/related/rules";
+import type { Registry } from "../domain/types/registry";
 import type { CommentThread, Member } from "../domain/workspace/comments";
 import type { Change, Merge } from "../domain/workspace/changes";
 import type { TidyMove, TidyPlan } from "../domain/workspace/tidy";
@@ -547,6 +548,8 @@ export const notesGraph = (folder: string) => invoke<NotesGraph>("notes_graph", 
 /** The notes of a workspace that point at another through `about:`, `context:` or `with:`. */
 export const notesLinked = (folder: string) => invoke<LinkedNote[]>("notes_linked", { folder });
 /** Every note of a workspace with its frontmatter values: what the collections' table and board are made of. */
+/** The workspace's type registry (types.rs). */
+export const noteTypes = (workspace: string) => invoke<Registry>("note_types", { workspace });
 export const notesCollection = (folder: string) => invoke<CollectionRow[]>("notes_collection", { folder });
 /** The saved collection views of a workspace (`.relay/views/<name>.json`). */
 export const viewsList = (workspace: string) => invoke<{ name: string; view: unknown }[]>("views_list", { workspace });
@@ -564,11 +567,19 @@ export const findNotes = (folder: string, query: string) =>
   invoke<{ names: NameHit[]; content: ContentHit[] }>("find_notes", { folder, query });
 /** When each note of a workspace last changed (seconds), for a folder sorted by modified. */
 export const noteTimes = (folder: string) => invoke<Record<string, number>>("note_times", { folder });
+/** The notes of a workspace with an `icon:` key, {path: its value}. */
+export const noteIcons = (folder: string) => invoke<Record<string, string>>("note_icons", { folder });
 /** The templates New ▸ offers in a workspace. */
 export const noteTemplates = (workspace: string) => invoke<string[]>("note_templates", { workspace });
 /** A new note from a template, saved in its type's home or in `folder`; returns its path in the workspace. */
-export const newFromTemplate = (workspace: string, template: string, folder: string, about: string, context: string) =>
-  invoke<string>("new_from_template", { workspace, template, folder, about, context });
+export const newFromTemplate = (
+  workspace: string,
+  template: string,
+  folder: string,
+  about: string,
+  context: string,
+  title = "",
+) => invoke<string>("new_from_template", { workspace, template, folder, about, context, title });
 /** Today's note of a workspace, made once; returns its path in the workspace. */
 export const dailyNote = (workspace: string) => invoke<string>("daily_note", { workspace });
 /** The notes pinned above Recent, kept in the workspace's `.relay/config.json`. */
@@ -734,12 +745,6 @@ export const scratchList = (project: string) => invoke<ScratchFile[]>("scratch_l
 export const scratchSave = (project: string, id: string | null, text: string) =>
   invoke<string>("scratch_save", { project, id, text });
 export const scratchDelete = (project: string, id: string) => invoke("scratch_delete", { project, id });
-/** What moving a workspace's old scratch notes (`.relay/notes`) into its Inbox would do, nothing written. */
-export type ScratchMove = { project: string; id: string; to: string };
-export const scratchPending = (workspace: string) => invoke<ScratchMove[]>("scratch_pending", { workspace });
-export const scratchMigrate = (workspace: string) => invoke<number>("scratch_migrate", { workspace });
-export const scratchMigrateUndo = (workspace: string) =>
-  invoke<{ back: number; left: number }>("scratch_migrate_undo", { workspace });
 
 // ---------- the Inbox and quick capture (src-tauri/src/inbox.rs, anywhere.rs)
 export const inboxList = (workspace: string) => invoke<InboxNote[]>("inbox_list", { workspace });

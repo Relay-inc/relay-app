@@ -1,15 +1,20 @@
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { followPageLink, propertyValues, workspacePaths } from "../../../application/navigation/pages";
 import {
   moveProperty,
   readProperties,
   removeProperty,
   setProperty,
+  typed,
   type Property,
   type PropertyKind,
   type PropertyValue as Value,
 } from "../../../domain/workspace/properties";
 import { noteName } from "../../../domain/navigation/pages";
+import { activeFolder } from "../../../application/navigation/workspaces";
+import { loadTypes, registryOf } from "../../../application/types/types";
+import type { TypeField } from "../../../domain/types/registry";
+import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { PropertyValue } from "./NoteDetail";
@@ -21,20 +26,29 @@ const LINK = /^\[\[([^\]\n]+)\]\]$/;
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** A page's properties as rows to edit, the way Obsidian shows them: text (offering the values the key has elsewhere in
- *  the workspace), a date picker, chips for a list, a [[note]] link, a checkbox. Each change hands the new frontmatter to
+ *  the workspace), a date picker, chips for a list, a [[note]] link, a checkbox, and a select for a key the note's type
+ *  gives a list of values (the type registry also picks the editor of a key that is still empty). Each change hands the new frontmatter to
  *  `onChange`; a key is removed with its ×, moved by dragging its name, added at the bottom. `children` go last (the
  *  project's conversations). Frontmatter that does not parse shows read-only. */
 export function Properties({
   yaml,
   onChange,
+  hide = [],
+  suggest = [],
   children,
 }: {
   yaml: string;
   onChange: (yaml: string) => void;
+  hide?: string[]; // keys the page header shows (a typed note's fields)
+  suggest?: TypeField[]; // what "Add property" offers before any other key: the type's fields the note lacks
   children?: ReactNode;
 }) {
   const { t } = useT();
-  const rows = readProperties(yaml);
+  const folder = useDerived(() => activeFolder());
+  const registry = useDerived(() => registryOf(folder));
+  useEffect(() => void loadTypes(folder), [folder]);
+  const read = readProperties(yaml);
+  const rows = read && typed(read, registry).filter(row => !hide.includes(row.key));
   const [kinds, setKinds] = useState<Record<string, PropertyKind>>({}); // a new, still empty key's kind
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -96,7 +110,8 @@ export function Properties({
         );
       })}
       <AddProperty
-        taken={rows.map(row => row.key)}
+        taken={read.map(row => row.key)}
+        suggest={suggest}
         dropping={!!dragging}
         onDrop={() => drop(null)}
         onAdd={(key, kind) => {
@@ -112,7 +127,7 @@ export function Properties({
 }
 
 /** One value's editor, by kind. */
-function Field({ row, set }: { row: Property; set: (value: Value) => void }) {
+export function Field({ row, set }: { row: Property; set: (value: Value) => void }) {
   const { t } = useT();
   const list = useId();
   const { key, value, kind } = row;
@@ -132,6 +147,28 @@ function Field({ row, set }: { row: Property; set: (value: Value) => void }) {
         onChange={e => set(e.target.value || null)}
       />
     );
+  if (kind === "select") {
+    const current = value === null ? "" : String(value);
+    const invalid = !!current && !row.values?.includes(current);
+    return (
+      <select
+        className={invalid ? FIELD.replace("text-label", "text-bad") : FIELD}
+        value={current}
+        aria-label={key}
+        aria-invalid={invalid}
+        title={invalid ? t("props.invalid") : undefined}
+        onChange={e => set(e.target.value || null)}
+      >
+        <option value="" />
+        {invalid ? <option value={current}>{current}</option> : null}
+        {row.values?.map(v => (
+          <option key={v} value={v}>
+            {v}
+          </option>
+        ))}
+      </select>
+    );
+  }
   if (kind === "raw")
     return <span className="flex-1 px-2 font-mono text-xs text-secondary whitespace-pre-wrap">{String(value)}</span>;
   if (kind === "list") return <ListField name={key} items={Array.isArray(value) ? value : []} set={set} />;
@@ -270,20 +307,31 @@ function ListField({ name, items, set }: { name: string; items: string[]; set: (
   );
 }
 
-/** "Add property" at the bottom: a name and a kind; also where a dragged key lands to go last. */
+const KIND_OF: Record<TypeField["kind"], PropertyKind> = {
+  text: "text",
+  select: "text",
+  date: "date",
+  link: "link",
+  people: "list",
+  check: "check",
+};
+/** "Add property" at the bottom: the type's missing fields first (`suggest`), then "Other" for a name and a kind; also
+ *  where a dragged key lands to go last. */
 function AddProperty({
   taken,
+  suggest,
   dropping,
   onDrop,
   onAdd,
 }: {
   taken: string[];
+  suggest: TypeField[];
   dropping: boolean;
   onDrop: () => void;
   onAdd: (key: string, kind: PropertyKind) => void;
 }) {
   const { t } = useT();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState<false | "menu" | "other">(false);
   const [kind, setKind] = useState<PropertyKind>("text");
   const [error, setError] = useState(false);
   const add = (input: HTMLInputElement | null) => {
@@ -305,7 +353,25 @@ function AddProperty({
         onDrop();
       }}
     >
-      {open ? (
+      {open === "menu" ? (
+        <div className="flex flex-wrap items-center gap-1.5 py-0.5" role="group" aria-label={t("props.add")}>
+          {suggest.map(field => (
+            <button
+              key={field.key}
+              className="h-6.5 px-2 rounded-md border border-separator text-label hover:bg-fill"
+              onClick={() => {
+                onAdd(field.key, KIND_OF[field.kind]);
+                setOpen(false);
+              }}
+            >
+              {field.key}
+            </button>
+          ))}
+          <button className="h-6.5 px-2 rounded-md text-secondary hover:bg-fill" onClick={() => setOpen("other")}>
+            {t("props.other")}
+          </button>
+        </div>
+      ) : open ? (
         <form
           className="flex items-center gap-2 h-8"
           onSubmit={e => {
@@ -349,7 +415,7 @@ function AddProperty({
       ) : (
         <button
           className="flex items-center gap-1.5 h-7 px-1 rounded-md text-tertiary hover:text-label"
-          onClick={() => setOpen(true)}
+          onClick={() => setOpen(suggest.length ? "menu" : "other")}
         >
           <Icon name="plus" className="glyph size-3" />
           {t("props.add")}

@@ -17,6 +17,7 @@ import * as kb from "./fixtures/kb";
 import * as inbox from "./fixtures/inbox";
 import * as coll from "./fixtures/collections";
 import * as Y from "yjs";
+import { SHIPPED } from "../src/domain/types/registry";
 // the example plugin's real view: the harness serves it from a blob, where the app has the relay-plugin:// scheme
 import diceView from "../packages/plugin-example/view.html?raw";
 
@@ -195,10 +196,8 @@ const voiceModels = [
   { id: "moonshine-base", mb: 55, langs: ["en"], auto: true, installed: false, downloading: false },
 ];
 const scratch = new Map<string, { id: string; text: string; modified: number }[]>();
-// fixture kb-changes-inbox: the Inbox's notes and the old scratch notes (fixtures/inbox.ts)
+// fixture kb-changes-inbox: the Inbox's notes (fixtures/inbox.ts)
 const inboxOn = fixture.includes("inbox");
-let legacyLeft = inboxOn ? structuredClone(inbox.legacy) : [];
-let migratedScratch: typeof legacyLeft = [];
 let scratchId = 0;
 const NOW_S = Math.floor(NOW / 1000);
 // the machine's GitHub and repos (fixture "github"), changed by Disconnect, Connect and Push
@@ -1291,37 +1290,6 @@ function handle(cmd: string, a: Args): unknown {
       emit("inbox-changed", null);
       return { filed, failed };
     }
-    // scratch notes of before: still in .relay/notes until the migration moves them into the Inbox (scratch.rs)
-    case "scratch_pending":
-      return legacyLeft.map((m, i) => ({ project: m.project, id: m.id, to: inbox.migratedName(i) }));
-    case "scratch_migrate": {
-      const moved = legacyLeft;
-      moved.forEach((m, i) => {
-        const to = inbox.migratedName(i);
-        written.set(`${inbox.DIR}/${to}.md`, { text: `---\nabout: "[[${m.project}]]"\n---\n\n${m.text}`, hash: "h0" });
-        pages = [...pageList(), `${inbox.DIR}/${to}.md`];
-        scratch.set(m.project, [{ id: to, text: m.text, modified: NOW_S }, ...(scratch.get(m.project) ?? [])]);
-      });
-      migratedScratch = moved;
-      legacyLeft = [];
-      emit("inbox-changed", null);
-      return moved.length;
-    }
-    case "scratch_migrate_undo": {
-      migratedScratch.forEach((m, i) => {
-        const to = inbox.migratedName(i);
-        written.delete(`${inbox.DIR}/${to}.md`);
-        pages = pageList().filter(p => p !== `${inbox.DIR}/${to}.md`);
-        scratch.set(
-          m.project,
-          (scratch.get(m.project) ?? []).filter(n => n.id !== to),
-        );
-      });
-      legacyLeft = migratedScratch;
-      migratedScratch = [];
-      emit("inbox-changed", null);
-      return { back: legacyLeft.length, left: 0 };
-    }
     // the capture window's save: a note in the Inbox, named for the minute (inbox.rs `capture`)
     case "quick_capture_save": {
       const path = `${inbox.DIR}/2026-10-01 0930.md`;
@@ -1371,6 +1339,9 @@ function handle(cmd: string, a: Args): unknown {
       return linkedOn ? vault.linkedNotes() : [];
     // the collections (issue 373): every note with its frontmatter values, read from the note's text as related.rs does;
     // the saved views are in sessionStorage with ?keep=1 (a restart), else in memory
+    // the type registry (issue 418): the shipped one
+    case "note_types":
+      return SHIPPED;
     case "notes_collection":
       return pageList().map(path => collectionRow(path, textOfNote(path)));
     case "views_list":
@@ -1388,6 +1359,13 @@ function handle(cmd: string, a: Args): unknown {
     // sessionStorage with ?keep=1, so a reload shows them back the way `.relay/config.json` does after a restart.
     case "find_notes":
       return kbOn ? kb.find(a.folder === vault.VAULT, String(a.query)) : { names: [], content: [] };
+    case "note_icons":
+      return Object.fromEntries(
+        pageList().flatMap(path => {
+          const icon = collectionRow(path, textOfNote(path)).props.icon?.[0];
+          return icon ? [[path, icon]] : [];
+        }),
+      );
     case "note_times":
       return Object.fromEntries(pageList().map((p, i) => [p, NOW_S - i * 3600]));
     case "note_templates":
@@ -1395,7 +1373,8 @@ function handle(cmd: string, a: Args): unknown {
     case "new_from_template": {
       const day = new Date(NOW).toISOString().slice(0, 10);
       const home = a.template === "Meeting" ? `Calendar/Meetings/${day.slice(0, 4)}` : String(a.folder);
-      const name = a.template === "Meeting" ? `${day} ${a.about ? `${a.about} ` : ""}Meeting` : String(a.template);
+      const title = String(a.title || "") || String(a.template);
+      const name = a.template === "Meeting" ? `${day} ${a.about ? `${a.about} ` : ""}${title}` : title;
       const path = `${home ? `${home}/` : ""}${name}.md`;
       const links = [a.context && `context: "[[${a.context}]]"`, a.about && `about: "[[${a.about}]]"`].filter(Boolean);
       pages = [...pageList(), path];
@@ -1957,8 +1936,8 @@ const embedsOn = fixture.startsWith("embeds");
 // fixture kb (K5, K1): notes with content to search, templates, favourites
 const kbOn = fixture.startsWith("kb");
 const changesOn = fixture.startsWith("kb-changes");
-// kb-sketch: the same notes without a feed, and the one note that has no type: (Fix properties)
-const sketchOn = changesOn || fixture === "kb-sketch";
+// kb-sketch (-dark): the same notes without a feed, and the one note that has no type: (Fix properties)
+const sketchOn = changesOn || fixture.startsWith("kb-sketch");
 // kb-tables (-dark): one more note, holding the tables the table editing is tried on
 const tablesOn = fixture.startsWith("kb-tables");
 const keepState = query.get("keep") === "1";

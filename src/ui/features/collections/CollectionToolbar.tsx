@@ -1,14 +1,23 @@
 import { useState } from "react";
-import { DEFS, range, type Column, type Filter, type View } from "../../../domain/collections/rules";
+import { defOf, range, type Column, type Filter, type View } from "../../../domain/collections/rules";
+import type { Registry } from "../../../domain/types/registry";
 import { addFilter, removeFilter, setGroup, setLayout, setSort } from "../../../application/collections/collections";
 import { useT } from "../../hooks/useT";
 import { MenuItem, PILL, PillMenu } from "./PillMenu";
 import { columnLabel } from "./labels";
 
 /** Table | Board, the filter chips with "+ Filter", then Sort and Group by (K8, K9). */
-export function CollectionToolbar({ view, values }: { view: View; values: (key: string) => string[] }) {
+export function CollectionToolbar({
+  view,
+  registry,
+  values,
+}: {
+  view: View;
+  registry: Registry;
+  values: (key: string) => string[];
+}) {
   const { t, any } = useT();
-  const def = DEFS[view.collection];
+  const def = defOf(view.collection, registry);
   const sort = view.sort ?? def.sort;
   const group = view.group || (view.layout === "board" ? def.board : "");
   return (

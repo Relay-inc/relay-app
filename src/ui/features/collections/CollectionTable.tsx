@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { DEFS, grouped, type CollectionId, type Column, type Row, type View } from "../../../domain/collections/rules";
+import { defOf, grouped, type Column, type Row, type View } from "../../../domain/collections/rules";
+import type { Registry } from "../../../domain/types/registry";
 import { useT } from "../../hooks/useT";
 import { CellEditor, CellValue, editable } from "./CollectionCell";
 import { columnLabel } from "./labels";
@@ -23,11 +24,23 @@ type Item = { head: string; count: number } | { row: Row };
 /** The table (K8): one line per note, the columns of the collection, group headers when a key is picked. Only the lines
  *  in view are drawn, so a collection of thousands scrolls as one of ten. A click on a cell of a stored property edits
  *  it in place and writes that note's frontmatter. */
-export function CollectionTable({ rows, all, view, today }: { rows: Row[]; all: Row[]; view: View; today: string }) {
+export function CollectionTable({
+  rows,
+  all,
+  view,
+  registry,
+  today,
+}: {
+  rows: Row[];
+  all: Row[];
+  view: View;
+  registry: Registry;
+  today: string;
+}) {
   const { t, any } = useT();
   const [top, setTop] = useState(0);
   const [editing, setEditing] = useState<{ path: string; key: string } | null>(null);
-  const def = DEFS[view.collection as CollectionId];
+  const def = defOf(view.collection, registry);
   const template = def.columns.map(c => WIDTH[c.kind]).join(" ");
   const items: Item[] = grouped(rows, view.group, view.collection, today).flatMap(group => [
     ...(view.group ? [{ head: group.value, count: group.rows.length }] : []),

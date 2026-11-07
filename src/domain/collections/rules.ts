@@ -2,6 +2,7 @@
 // (related.rs `collection`: every note with its keys' values); this is the query on them. Nothing is written here: an
 // edit goes through the note's own frontmatter (domain/workspace/properties.ts).
 import { noteName } from "../navigation/pages.ts";
+import { SHIPPED, typeOf, type FieldKind, type Registry } from "../types/registry.ts";
 
 /** A note as the index lists it: where it is, its title and `type:` ("" without one), the file's mtime (seconds), the
  *  `date:` (or the date its name starts with), the stage of a meeting (derived from its text), and every frontmatter
@@ -27,8 +28,8 @@ export type Sort = { key: string; dir: "asc" | "desc" };
 type Def = {
   /** the `type:` values it lists (lower case); "rest" is every typed note the others do not take */
   kinds: string[] | "rest";
-  columns: Column[];
-  sort: Sort;
+  /** the registry type its columns and sort come from */
+  type: string;
   /** the key a board groups by until one is picked */
   board: string;
   /** keys whose value is worked out from the note, not stored: shown, never written */
@@ -36,68 +37,45 @@ type Def = {
 };
 const col = (key: string, kind: ColumnKind): Column => ({ key, kind });
 export const DEFS: Record<CollectionId, Def> = {
-  meetings: {
-    kinds: ["meeting"],
-    columns: [
-      col("date", "date"),
-      col("title", "title"),
-      col("stage", "stage"),
-      col("about", "links"),
-      col("with", "people"),
-      col("language", "text"),
-      col("followed-up", "followed"),
-    ],
-    sort: { key: "date", dir: "desc" },
-    board: "stage",
-    derived: ["stage", "followed-up"],
-  },
-  documents: {
-    kinds: "rest",
-    columns: [
-      col("title", "title"),
-      col("type", "text"),
-      col("about", "links"),
-      col("status", "status"),
-      col("updated", "time"),
-    ],
-    sort: { key: "updated", dir: "desc" },
-    board: "status",
-    derived: ["type", "updated"],
-  },
-  people: {
-    kinds: ["person"],
-    columns: [col("title", "title"), col("role", "text"), col("context", "links"), col("about", "links")],
-    sort: { key: "title", dir: "asc" },
-    board: "role",
-    derived: [],
-  },
+  meetings: { kinds: ["meeting"], type: "Meeting", board: "stage", derived: ["stage", "followed-up"] },
+  documents: { kinds: "rest", type: "Document", board: "status", derived: ["type", "updated"] },
+  people: { kinds: ["person"], type: "Person", board: "role", derived: [] },
   projects: {
     kinds: ["project", "product", "platform", "initiative", "feature"],
-    columns: [
-      col("title", "title"),
-      col("type", "text"),
-      col("status", "status"),
-      col("context", "links"),
-      col("updated", "time"),
-    ],
-    sort: { key: "title", dir: "asc" },
+    type: "Project",
     board: "status",
     derived: ["type", "updated"],
   },
-  threads: {
-    kinds: ["thread"],
-    columns: [
-      col("date", "date"),
-      col("title", "title"),
-      col("about", "links"),
-      col("with", "people"),
-      col("status", "status"),
-    ],
-    sort: { key: "date", dir: "desc" },
-    board: "status",
-    derived: [],
-  },
+  threads: { kinds: ["thread"], type: "Thread", board: "status", derived: [] },
 };
+/** How a column draws by its key: the keys a collection works out itself, `date` and `status`, else by the kind of the
+ *  type's field. */
+const KEY_KIND: Record<string, ColumnKind> = {
+  title: "title",
+  type: "text",
+  updated: "time",
+  stage: "stage",
+  "followed-up": "followed",
+  date: "date",
+  status: "status",
+};
+const FIELD_KIND: Record<FieldKind, ColumnKind> = {
+  text: "text",
+  date: "date",
+  select: "status",
+  link: "links",
+  people: "people",
+  check: "text",
+};
+/** A collection's columns and sort, from its type in the registry (the title by name when the type has none). */
+export function defOf(collection: CollectionId, registry: Registry = SHIPPED) {
+  const type = typeOf(registry, DEFS[collection].type);
+  const fields = type?.fields ?? [];
+  const kind = (key: string) => KEY_KIND[key] ?? FIELD_KIND[fields.find(f => f.key === key)?.kind ?? "text"] ?? "text";
+  const columns = (type?.columns?.length ? type.columns : ["title"]).map(key => col(key, kind(key)));
+  const sort: Sort = type?.sort ?? { key: "title", dir: "asc" };
+  return { ...DEFS[collection], columns, sort };
+}
 const TAKEN = new Set(Object.values(DEFS).flatMap(def => (def.kinds === "rest" ? [] : def.kinds)));
 /** The stages a meeting board has lanes for, in the order of a meeting's life. */
 export const STAGES = ["planned", "briefed", "wrapped"];
@@ -147,8 +125,8 @@ export function valuesOf(row: Row, key: string): string[] {
 export const isDerived = (collection: CollectionId, key: string) => DEFS[collection].derived.includes(key);
 
 /** The kind a column of `key` has in this collection (a key it does not list is plain text). */
-export const columnOf = (collection: CollectionId, key: string): Column =>
-  DEFS[collection].columns.find(c => c.key === key) ?? col(key, key === "date" ? "date" : "text");
+export const columnOf = (collection: CollectionId, key: string, registry: Registry = SHIPPED): Column =>
+  defOf(collection, registry).columns.find(c => c.key === key) ?? col(key, key === "date" ? "date" : "text");
 
 /** Whether a row belongs to a collection by its `type:`. */
 export function inCollection(row: Row, collection: CollectionId, grouped = false, apart = false) {
@@ -191,8 +169,8 @@ export const scoped = (rows: Row[], view: Pick<View, "collection" | "context"> &
 const compare = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 /** What a view lists: its scope, then every filter, ordered by its sort (the collection's own until one is picked). A row
  *  without a value for the sort key goes last, whichever way it runs. */
-export function evaluate(rows: Row[], view: View): Row[] {
-  const sort = view.sort ?? DEFS[view.collection].sort;
+export function evaluate(rows: Row[], view: View, registry: Registry = SHIPPED): Row[] {
+  const sort = view.sort ?? defOf(view.collection, registry).sort;
   const test = view.filters.map(f =>
     f.key === LINKED ? linkedTest(rows, f, view.collection) : (row: Row) => matches(row, f),
   );
@@ -274,12 +252,15 @@ export function range(key: string, preset: "month" | "quarter" | "days30", today
 }
 
 /** The names a links cell offers: the notes of the type the key points at (`about` the projects, `context` the contexts,
- *  `with` the people) and what the rows already name under it, sorted. */
-export function linkOptions(rows: Row[], key: string): string[] {
-  const kinds = key === "with" ? ["person"] : key === "context" ? ["context"] : DEFS.projects.kinds;
+ *  `with` the people) and what the rows already name under it, sorted. With `target` (the registry field's types) only
+ *  the notes of those types. */
+export function linkOptions(rows: Row[], key: string, target?: string[]): string[] {
+  const kinds =
+    target?.map(t => t.toLowerCase()) ??
+    (key === "with" ? ["person"] : key === "context" ? ["context"] : DEFS.projects.kinds);
   const names = new Map<string, string>();
   const add = (name: string) => names.has(name.toLowerCase()) || names.set(name.toLowerCase(), name);
   for (const row of rows) if (kinds !== "rest" && kinds.includes(row.k.toLowerCase())) add(row.t);
-  for (const row of rows) for (const value of row.props[key] ?? []) add(value);
+  if (!target) for (const row of rows) for (const value of row.props[key] ?? []) add(value);
   return [...names.values()].sort(compare);
 }

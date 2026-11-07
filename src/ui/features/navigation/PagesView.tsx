@@ -39,7 +39,8 @@ import { loadViews } from "../../../application/collections/collections";
 import { SavedViewRows } from "./CollectionRows";
 import { toast } from "../../../application/navigation/navigation";
 import { activeFolder, workspaces } from "../../../application/navigation/workspaces";
-import { loadLinked } from "../../../application/navigation/linked";
+import { loadLinked, useLinkedStore } from "../../../application/navigation/linked";
+import { emojiOf, iconOf } from "../../../domain/workspace/decor";
 import { projectVault as homeOf } from "../../../application/navigation/migrate";
 import { toggleSection } from "../../../application/navigation/sidebar";
 import { useNavigationStore } from "../../../application/navigation/store";
@@ -58,6 +59,7 @@ import { Collections } from "./Collections";
 
 const FAVOURITES = "pages:favourites";
 const NO_TIMES: Record<string, number> = {};
+const NO_ICONS: Record<string, string> = {};
 // separates the parts of a menu item's id that hold a template or folder name
 const SEP = "\u001f";
 const RECENT = "pages:recent";
@@ -99,6 +101,8 @@ export function PagesView() {
   useKbStore(s => s.templates); // the menus list them once read
   const sorts = useKbStore(s => s.sorts);
   const times = useKbStore(s => s.times[workspaceShown]) ?? NO_TIMES;
+  // a note's `icon:` emoji in place of the file glyph (issue 427), read with loadLinked
+  const noteIcons = useLinkedStore(s => s.icons[workspaceShown]) ?? NO_ICONS;
   useEffect(() => {
     void loadFavourites();
     void loadTemplates();
@@ -282,6 +286,7 @@ export function PagesView() {
       key={path}
       kind="view"
       icon="file"
+      emoji={emojiOf(noteIcons[path]) ?? ""}
       data-page={path}
       name={noteName(path)}
       selected={open === path}
@@ -444,6 +449,8 @@ export function PagesView() {
                 // a flat project (just its note) unfolds too, to the notes that point at it
                 const at = project.folder?.path ?? project.note;
                 const isOpen = unfolded.has(at);
+                // the project note's icon: emoji, else the project's icon from config (decor.ts)
+                const shown = iconOf(noteIcons[project.note], icons[project.key]);
                 return (
                   <div key={project.key}>
                     <SidebarRow
@@ -452,8 +459,8 @@ export function PagesView() {
                       aria-expanded={isOpen}
                       data-project={project.key}
                       name={project.label}
-                      img={icons[project.key]?.img ?? null}
-                      emoji={icons[project.key]?.icon ?? ""}
+                      img={shown && "project" in shown ? (shown.project.img ?? null) : null}
+                      emoji={shown ? ("emoji" in shown ? shown.emoji : (shown.project.icon ?? "")) : ""}
                       selected={open === project.note}
                       meta={project.count > 1 ? { kind: "count", n: project.count } : undefined}
                       // opens its note and unfolds; a click on it open again folds it
