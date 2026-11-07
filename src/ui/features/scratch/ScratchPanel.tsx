@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { scratchTitle } from "../../../domain/scratch/rules";
 import { useScratchStore } from "../../../application/scratch/store";
 import {
@@ -15,9 +15,7 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useRelatedStore } from "../../../application/related/store";
 import { loadRelated } from "../../../application/related/related";
-import { loadPending, useInboxStore } from "../../../application/inbox/inbox";
-import { projectVault } from "../../../application/navigation/migrate";
-import { ScratchMove } from "../inbox/ScratchMove";
+import { useInboxStore } from "../../../application/inbox/inbox";
 
 /** The vault notes closest to the open conversation, from the full-text index: a compact list under the editor. */
 function RelatedNotes() {
@@ -65,31 +63,17 @@ export function ScratchPanel({ project }: { project: string }) {
   const notes = useScratchStore(s => s.notes);
   const openKey = useScratchStore(s => s.open);
   const open = notes.find(note => note.key === openKey);
-  // the notes are Inbox notes of the project's vault: read again when the Inbox changed under them (a migration, a capture)
+  // the notes are Inbox notes of the project's vault: read again when the Inbox changed under them (a quick capture)
   const version = useInboxStore(s => s.version);
-  const vault = projectVault(project);
-  const [moving, setMoving] = useState(false);
 
   useEffect(() => {
     if (project && (project !== useScratchStore.getState().project || version)) loadScratch(project);
   }, [project, version]);
-  // old notes still in .relay/notes are not shown here until they are moved into the Inbox
-  useEffect(() => {
-    if (vault) void loadPending(vault);
-  }, [vault]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {vault ? (
-        <div className="mb-2 empty:hidden">
-          <ScratchMove workspace={vault} open={moving} onOpen={setMoving} />
-        </div>
-      ) : null}
       <div className="flex items-center gap-2 mb-2">
-        <button
-          className={`btn ${moving ? "" : "btn-primary"} h-7.5 px-3 rounded-lg text-[13px] cursor-pointer`}
-          onClick={newScratch}
-        >
+        <button className={`btn btn-primary h-7.5 px-3 rounded-lg text-[13px] cursor-pointer`} onClick={newScratch}>
           + {t("notes.new")}
         </button>
         {open ? (

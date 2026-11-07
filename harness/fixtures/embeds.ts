@@ -38,8 +38,14 @@ export function info(targets: string[]) {
 /** What a workspace file answers the webview (convertFileSrc is replaced by the harness): a chart, or a silent clip. */
 export function fileSrc(path: string): string {
   if (/\.(m4a|mp3)$/i.test(path)) return wav(32);
+  if (/banner\.(png|jpe?g)$/i.test(path)) return banner();
   if (/\.(png|jpe?g)$/i.test(path)) return chart(path);
   return "";
+}
+/** A cover (issue 424): a wide gradient with a few soft circles. */
+function banner() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a5ffb"/><stop offset="1" stop-color="#9b5de5"/></linearGradient></defs><rect width="1200" height="320" fill="url(#g)"/><circle cx="980" cy="70" r="140" fill="#fff" fill-opacity=".12"/><circle cx="220" cy="300" r="180" fill="#fff" fill-opacity=".08"/></svg>`;
+  return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 function chart(path: string) {
   const bars = Array.from({ length: 42 }, (_, i) => {

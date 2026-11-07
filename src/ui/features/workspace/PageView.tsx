@@ -29,19 +29,17 @@ import { noteTitle } from "../../../domain/workspace/rules";
 import { frontmatterOf, withFrontmatter } from "../../../domain/workspace/properties";
 import { noteName } from "../../../domain/navigation/pages";
 import { clockTime } from "../../../shared/format";
-import { isImg } from "../../../shared/icons";
 import { agoOf } from "./ago";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Markdown } from "../../components/Markdown";
 import { Icon } from "../../components/Icon";
 import { Note } from "../../components/Note";
-import { ProjectImg } from "../../components/ProjectImg";
 import { FRONTMATTER } from "./NoteDetail";
 import { PageEditor, type CommentsApi, type HeadWriter } from "./PageEditor";
 import { PageComments } from "./PageComments";
 import type { Peer } from "../../../application/workspace/coedit";
-import { Properties } from "./Properties";
+import { PageTop } from "./PageTop";
 import { PageHistory, VersionDiff } from "./PageHistory";
 import { LinkedSections } from "./LinkedSections";
 import { loadLinked } from "../../../application/navigation/linked";
@@ -49,6 +47,9 @@ import { toggleShowMarkdown, useEditorStore } from "../../../application/navigat
 import { loadRail, railNote, railOpen, setRail, useRailStore } from "../../../application/navigation/rail";
 import { aboutOf } from "../../../domain/workspace/rail";
 import { Rail } from "./Rail";
+import { registryOf } from "../../../application/types/types";
+import { typeOf } from "../../../domain/types/registry";
+import { typeNameOf } from "../../../domain/types/header";
 import { ChangesPanel } from "./ChangesPanel";
 import { toggleFavourite, useFavouritesStore } from "../../../application/navigation/favourites";
 
@@ -138,7 +139,9 @@ export function PageView({ target, className }: { target: string; className: str
   }
   const { title, head, body } = page ? pageParts(path, page.text) : { ...noteTitle(path, noteName(path)), head: "" };
   const folders = railNote(target).path.split("/").slice(0, -1); // where the note really is, in its workspace
-  const about = aboutOf(frontmatterOf(head) ?? "");
+  // a typed note's header shows its about: in its breadcrumb, the bar's chip is for the others
+  const typed = useDerived(() => !!typeOf(registryOf(folder), typeNameOf(head)));
+  const about = typed ? "" : aboutOf(frontmatterOf(head) ?? "");
 
   const ACTIONS = ["summarise", "next-steps", "link", "properties", "split"] as const;
   const menuItems = (): MenuItem[] =>
@@ -308,45 +311,34 @@ export function PageView({ target, className }: { target: string; className: str
             </div>
           ) : (
             <article className="w-full max-w-180 mx-auto pt-10 px-8 pb-16 flex flex-col gap-6">
-              <header className="flex flex-col gap-4">
-                <div className="flex items-center gap-3">
-                  <span className="size-11 flex-none grid place-items-center rounded-lg bg-fill-2 text-xl">
-                    {isImg(icon?.img) ? (
-                      <ProjectImg url={icon.img} className="size-6 object-contain" />
-                    ) : icon?.icon ? (
-                      icon.icon
-                    ) : (
-                      <Icon name="file" className="glyph size-5 text-secondary" />
-                    )}
-                  </span>
-                  <h1 className="text-3xl font-semibold tracking-tight text-pretty">{title}</h1>
-                </div>
-                <Properties
-                  yaml={frontmatterOf(head) ?? ""}
-                  onChange={yaml => {
-                    const next = withFrontmatter(head, yaml);
-                    // through the editor: what is typed in the body goes along, one write, one hash check
-                    void (headRef.current ? headRef.current(next) : savePage(target, next + body));
-                  }}
-                >
-                  {project ? (
-                    <>
-                      <dt className="h-7 flex items-center pl-4 text-tertiary">{t("page.conversations")}</dt>
-                      <dd className="flex items-center px-2">
-                        <span className="inline-flex items-center gap-1.5 px-2 rounded-md border border-separator text-accent-text">
-                          <Icon name="chat" className="glyph size-3" />
-                          {chats.length
-                            ? t("page.latest", {
-                                n: chats.length,
-                                time: clockTime(new Date(chats[0].at).toISOString(), locale),
-                              })
-                            : 0}
-                        </span>
-                      </dd>
-                    </>
-                  ) : null}
-                </Properties>
-              </header>
+              <PageTop
+                page={target}
+                project={icon}
+                title={title}
+                yaml={frontmatterOf(head) ?? ""}
+                onChange={yaml => {
+                  const next = withFrontmatter(head, yaml);
+                  // through the editor: what is typed in the body goes along, one write, one hash check
+                  void (headRef.current ? headRef.current(next) : savePage(target, next + body));
+                }}
+              >
+                {project ? (
+                  <>
+                    <dt className="h-7 flex items-center pl-4 text-tertiary">{t("page.conversations")}</dt>
+                    <dd className="flex items-center px-2">
+                      <span className="inline-flex items-center gap-1.5 px-2 rounded-md border border-separator text-accent-text">
+                        <Icon name="chat" className="glyph size-3" />
+                        {chats.length
+                          ? t("page.latest", {
+                              n: chats.length,
+                              time: clockTime(new Date(chats[0].at).toISOString(), locale),
+                            })
+                          : 0}
+                      </span>
+                    </dd>
+                  </>
+                ) : null}
+              </PageTop>
               <div className="h-px bg-separator" />
               {picked ? (
                 <VersionDiff

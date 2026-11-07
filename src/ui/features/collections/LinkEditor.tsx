@@ -5,7 +5,8 @@ import { useT } from "../../hooks/useT";
 
 /** The listbox a links cell opens (K8): what the key may point at, filtered by what is typed, the ones it points at
  *  ticked. A click on another name replaces the link; after "+ Link another" it adds. Every change is handed to
- *  `onChange` at once, which writes the note. */
+ *  `onChange` at once, which writes the note. With `target` (the registry field's types) only notes of those types are
+ *  offered, and a typed name none of them has can be made as a note of a `create` type (`onCreate`). */
 export function LinkEditor({
   rows,
   fieldKey,
@@ -13,6 +14,10 @@ export function LinkEditor({
   values,
   onChange,
   onClose,
+  target,
+  many = false,
+  create = [],
+  onCreate,
 }: {
   rows: Row[];
   fieldKey: string;
@@ -20,14 +25,21 @@ export function LinkEditor({
   values: string[];
   onChange: (values: string[]) => void;
   onClose: () => void;
+  target?: string[];
+  many?: boolean; // a list (people): a pick adds instead of replacing
+  create?: string[];
+  onCreate?: (type: string, name: string) => void;
 }) {
   const { t } = useT();
   const box = useRef<HTMLDivElement>(null);
   const [typed, setTyped] = useState("");
-  const [adding, setAdding] = useState(values.length > 1);
+  const [adding, setAdding] = useState(many || values.length > 1);
   // pointerdown: the click that opened it is still on its way to the document
   useDismiss(box, true, onClose, { on: "pointerdown" });
-  const options = linkOptions(rows, fieldKey).filter(name => name.toLowerCase().includes(typed.trim().toLowerCase()));
+  const options = linkOptions(rows, fieldKey, target).filter(name =>
+    name.toLowerCase().includes(typed.trim().toLowerCase()),
+  );
+  const fresh = options.some(o => o.toLowerCase() === typed.trim().toLowerCase()) ? "" : typed.trim();
   const has = (name: string) => values.some(v => v.toLowerCase() === name.toLowerCase());
   const contextOf = (name: string) => rows.find(r => r.t === name)?.props.context?.[0] ?? "";
   const pick = (name: string) => {
@@ -50,6 +62,7 @@ export function LinkEditor({
         onChange={e => setTyped(e.target.value)}
         onKeyDown={e => {
           if (e.key === "Enter" && options[0]) pick(options[0]);
+          else if (e.key === "Enter" && fresh && create[0]) onCreate?.(create[0], fresh);
         }}
       />
       <div className="mt-1 max-h-60 overflow-y-auto">
@@ -69,6 +82,18 @@ export function LinkEditor({
             {has(name) ? <span className="text-accent-text">✓</span> : null}
           </button>
         ))}
+        {fresh && onCreate
+          ? create.map(type => (
+              <button
+                key={type}
+                className="w-full h-7.5 flex items-center gap-2 px-2 rounded-md text-left cursor-pointer hover:bg-fill text-accent-text"
+                onClick={() => onCreate(type, fresh)}
+              >
+                <span className="size-4 grid place-items-center text-[13px]">+</span>
+                <span className="truncate">{t("link.create", { type, name: fresh })}</span>
+              </button>
+            ))
+          : null}
         <button
           className={`w-full h-7.5 flex items-center px-2 rounded-md text-left cursor-pointer hover:bg-fill ${adding ? "text-accent-text" : "text-secondary"}`}
           onClick={() => setAdding(!adding)}

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   commonFolder,
+  defOf,
   evaluate,
   grouped,
   isDerived,
@@ -14,6 +15,7 @@ import {
   stageOf,
   type Row,
 } from "./rules.ts";
+import { SHIPPED, type Registry } from "../types/registry.ts";
 
 const row = (p: string, k: string, props: Record<string, string[]>, extra: Partial<Row> = {}): Row => ({
   p,
@@ -202,4 +204,24 @@ test("the linked filter is the tree group's rule: about: or context:, outside it
   assert.deepEqual(names("meetings"), ["2026-10-01 A", "2026-09-01 B"]);
   assert.deepEqual(names("documents").sort(), ["Loose", "Ref"]); // untyped counts, the project's own folder does not
   assert.deepEqual(names("people"), ["Sofie Claes"]);
+});
+
+test("a collection's columns and sort come from its type in the registry", () => {
+  assert.deepEqual(
+    defOf("meetings").columns.map(c => `${c.key}:${c.kind}`),
+    ["date:date", "title:title", "stage:stage", "about:links", "with:people", "language:text", "followed-up:followed"],
+  );
+  // the vault's registry gives meetings a room column and sorts them by title
+  const own: Registry = structuredClone(SHIPPED);
+  const meeting = own.types.find(t => t.name === "Meeting")!;
+  meeting.fields!.push({ key: "room", kind: "select", values: ["Blue", "Green"] });
+  meeting.columns!.push("room");
+  meeting.sort = { key: "title", dir: "asc" };
+  assert.deepEqual(defOf("meetings", own).columns.at(-1), { key: "room", kind: "status" });
+  assert.deepEqual(
+    evaluate(rows, newView("meetings", "Studio"), own).map(r => r.t),
+    ["2026-09-24 Beacon sync", "2026-10-02 Atlas sync", "2026-10-08 Beacon sync"],
+  );
+  // a type the registry lacks lists its notes by title
+  assert.deepEqual(defOf("people", { types: [] }).columns, [{ key: "title", kind: "title" }]);
 });

@@ -1,10 +1,10 @@
-// New notes from the vault's templates (`Resources/Templates/`): a note of a type that has a home (homes.rs: meeting,
-// thread, daily) is saved there, any other where it was asked for. `context:` and `about:` come from where it was asked,
+// New notes from the vault's templates (`Resources/Templates/`): a note of a type that has a home (types.rs: meeting,
+// thread, daily by default) is saved there, any other where it was asked for. `context:` and `about:` come from where it was asked,
 // the date and the title from today and the note's name; Templater tags Relay does not know stay as text. The daily
 // note is the one note a day: opened when it is there, made once when not.
 
 use crate::vault::rel_to as rel;
-use crate::{homes, projects, tidy, vault};
+use crate::{homes, projects, vault};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -37,15 +37,18 @@ fn free(dir: &Path, name: &str) -> (String, PathBuf) {
     (1..).map(|i| if i == 1 { name.to_string() } else { format!("{name} {i}") }).map(|n| (dir.join(format!("{n}.md")), n)).find(|(p, _)| !p.exists()).map(|(p, n)| (n, p)).unwrap()
 }
 
-/// A new note from `template`, for `folder` (relative to the vault, "" the top) when its type has no home. Returns the
-/// note's path relative to the vault.
-pub fn create(vault: &Path, template: &str, folder: &str, about: &str, context: &str, today: &str) -> Result<String, String> {
+/// A new note from `template`, for `folder` (relative to the vault, "" the top) when its type has no home. `title` names
+/// it when given (a note in a home keeps its day and project in front of it), else the template does; a name that is
+/// taken gets a number, nothing is overwritten. Returns the note's path relative to the vault.
+pub fn create(vault: &Path, template: &str, folder: &str, about: &str, context: &str, title: &str, today: &str) -> Result<String, String> {
     let v = vault.to_string_lossy();
     if !list(&v).iter().any(|n| n == template) { return Err(format!("no template {template}")); }
     let raw = fs::read_to_string(vault.join(DIR).join(format!("{template}.md"))).map_err(|e| e.to_string())?;
     let kind = vault::split(&raw).and_then(|(fm, _)| vault::field(fm, "type")).unwrap_or_else(|| template.to_string());
-    let home = tidy::home_of(&kind, today);
-    let (about, context) = (safe(about), safe(context));
+    let types = crate::types::load(vault);
+    let home = types.home_of(&kind, today);
+    let (about, context, title) = (safe(about), safe(context), safe(title));
+    let title = if title.is_empty() { template } else { &title };
     let dir = match home {
         Some(h) => homes::home(vault, h, homes::year_of(today).ok_or("not a day")?),
         None => {
@@ -54,9 +57,9 @@ pub fn create(vault: &Path, template: &str, folder: &str, about: &str, context: 
         }
     };
     let base = match (home.is_some(), about.is_empty()) {
-        (true, true) => format!("{today} {template}"),
-        (true, false) => format!("{today} {about} {template}"),
-        (false, _) => template.to_string(),
+        (true, true) => format!("{today} {title}"),
+        (true, false) => format!("{today} {about} {title}"),
+        (false, _) => title.to_string(),
     };
     let (name, path) = free(&dir, &base);
     let mut text = note_text(&raw, &name, today, &about, &context);
@@ -99,20 +102,25 @@ mod tests {
         w(&v, "Resources/Templates/Document.md", "---\ntype: Document\n---\n");
         w(&v, "Resources/Templates/Project.md", "---\ntype: Project\n---\n");
         assert_eq!(list(&v.to_string_lossy()), ["Document", "Meeting"]);
-        let p = create(&v, "Meeting", "Contexts/Studio/Beacon", "Beacon", "Studio", "2026-11-04").unwrap();
+        let p = create(&v, "Meeting", "Contexts/Studio/Beacon", "Beacon", "Studio", "", "2026-11-04").unwrap();
         assert_eq!(p, "Calendar/Meetings/2026/2026-11-04 Beacon Meeting.md");
         let t = r(&v, &p);
         assert!(t.contains("about: \"[[Beacon]]\"") && t.contains("context: \"[[Studio]]\"") && t.contains("date: 2026-11-04"), "{t}");
         assert!(!t.contains("lastSync") && t.contains("# 2026-11-04 Beacon Meeting"), "{t}");
         assert!(t.contains("<%* await tp.system.prompt() %>"), "a tag Relay does not know stays text");
         // a second one the same day does not take the first's place
-        assert_eq!(create(&v, "Meeting", "", "Beacon", "Studio", "2026-11-04").unwrap(), "Calendar/Meetings/2026/2026-11-04 Beacon Meeting 2.md");
+        assert_eq!(create(&v, "Meeting", "", "Beacon", "Studio", "", "2026-11-04").unwrap(), "Calendar/Meetings/2026/2026-11-04 Beacon Meeting 2.md");
         // a type without a home goes where it was asked for
-        assert_eq!(create(&v, "Document", "Contexts/Studio/Beacon/Documents", "Beacon", "Studio", "2026-11-04").unwrap(), "Contexts/Studio/Beacon/Documents/Document.md");
+        assert_eq!(create(&v, "Document", "Contexts/Studio/Beacon/Documents", "Beacon", "Studio", "", "2026-11-04").unwrap(), "Contexts/Studio/Beacon/Documents/Document.md");
         assert!(r(&v, "Contexts/Studio/Beacon/Documents/Document.md").contains("about: \"[[Beacon]]\""));
+        // a title names the note, in a home and out of it; one that is taken gets a number, never replaces
+        assert_eq!(create(&v, "Meeting", "", "Beacon", "Studio", "Kickoff", "2026-11-04").unwrap(), "Calendar/Meetings/2026/2026-11-04 Beacon Kickoff.md");
+        assert_eq!(create(&v, "Meeting", "", "Beacon", "Studio", "Kickoff", "2026-11-04").unwrap(), "Calendar/Meetings/2026/2026-11-04 Beacon Kickoff 2.md");
+        assert!(r(&v, "Calendar/Meetings/2026/2026-11-04 Beacon Kickoff.md").contains("# 2026-11-04 Beacon Kickoff\n"), "the first is untouched");
+        assert_eq!(create(&v, "Document", "Contexts/Studio/Beacon/Documents", "Beacon", "Studio", "Sofie/Claes: brief", "2026-11-04").unwrap(), "Contexts/Studio/Beacon/Documents/SofieClaes brief.md");
         // not a template, not a folder outside the vault
-        assert!(create(&v, "../Secrets", "", "", "", "2026-11-04").is_err());
-        assert!(create(&v, "Document", "../out", "", "", "2026-11-04").is_err());
+        assert!(create(&v, "../Secrets", "", "", "", "", "2026-11-04").is_err());
+        assert!(create(&v, "Document", "../out", "", "", "", "2026-11-04").is_err());
     }
 
     #[test]
@@ -120,7 +128,7 @@ mod tests {
         let v = vault("daily");
         w(&v, ".relay/config.json", r#"{"homes":{"meeting":"Meetings/{yyyy}"}}"#);
         w(&v, "Resources/Templates/Meeting.md", "---\ntype: Meeting\n---\n");
-        assert_eq!(create(&v, "Meeting", "", "", "", "2027-01-05").unwrap(), "Meetings/2027/2027-01-05 Meeting.md");
+        assert_eq!(create(&v, "Meeting", "", "", "", "", "2027-01-05").unwrap(), "Meetings/2027/2027-01-05 Meeting.md");
         // no Daily template: a plain note
         assert_eq!(daily(&v, "2026-11-04").unwrap(), "Calendar/Daily/2026/2026-11-04.md");
         assert_eq!(r(&v, "Calendar/Daily/2026/2026-11-04.md"), "---\ntype: Daily\ncreated: 2026-11-04\n---\n");

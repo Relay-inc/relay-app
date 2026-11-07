@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { commonFolder, evaluate, localToday, scoped, valuesOf, type View } from "../../../domain/collections/rules";
 import { loadRows, loadViews, saveView, useCollectionsStore } from "../../../application/collections/collections";
 import { activeFolder } from "../../../application/navigation/workspaces";
+import { loadTypes, registryOf } from "../../../application/types/types";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { useDerived } from "../../hooks/useDerived";
 import { useDismiss } from "../../hooks/useDismiss";
@@ -24,13 +25,15 @@ export function CollectionView({ className }: { className: string }) {
   const view = useCollectionsStore(s => s.view);
   const name = useCollectionsStore(s => s.name);
   const toast = useNavigationStore(s => s.toast);
+  const registry = useDerived(() => registryOf(folder));
   useEffect(() => {
     void loadRows(folder);
     void loadViews(folder);
+    void loadTypes(folder);
   }, [folder]);
   const today = localToday();
   const inScope = scoped(rows, view);
-  const shown = evaluate(rows, view);
+  const shown = evaluate(rows, view, registry);
   const about = view.filters.find(f => (f.key === "about" || f.key === "linked") && f.is !== undefined)?.is;
   const where = [
     view.context ? t("coll.in", { context: view.context }) : "",
@@ -60,10 +63,11 @@ export function CollectionView({ className }: { className: string }) {
         </header>
         <CollectionToolbar
           view={view}
+          registry={registry}
           values={key => [...new Set(inScope.flatMap(row => valuesOf(row, key)))].sort()}
         />
         {view.layout === "table" ? (
-          <CollectionTable rows={shown} all={rows} view={view} today={today} />
+          <CollectionTable rows={shown} all={rows} view={view} registry={registry} today={today} />
         ) : view.layout === "board" ? (
           <CollectionBoard rows={shown} view={view} today={today} />
         ) : (

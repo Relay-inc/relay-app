@@ -313,6 +313,14 @@ export function embeds(page: string) {
   return plugin;
 }
 
+/** A paste's text is a Finder copy's: the names of its files, one per line (its files are then at paths, not in it). */
+export const isFinderPaste = (text: string) =>
+  !!text.trim() &&
+  text
+    .trim()
+    .split(/[\r\n]+/)
+    .every(line => /^[^/\t]+\.[A-Za-z0-9]{1,8}$/.test(line.trim()));
+
 /** What goes into the page for files added: one `![[name]]` per file. */
 export const embedText = (links: string[]) => links.map(l => `![[${l}]]`).join("\n");
 
@@ -324,9 +332,8 @@ export function attachEditing(page: string) {
       const board = e.clipboardData;
       if (!board?.types.includes("Files")) return false;
       const text = board.getData("text/plain").trim();
-      // a Finder copy holds the names of its files as text next to them; any other text with a file (cells copied from a
-      // sheet) pastes as the text it is
-      const finder = !!text && text.split(/[\r\n]+/).every(line => /^[^/\t]+\.[A-Za-z0-9]{1,8}$/.test(line.trim()));
+      // any other text with a file (cells copied from a sheet) pastes as the text it is
+      const finder = isFinderPaste(text);
       if (text && !finder) return false;
       e.preventDefault();
       const { from, to } = view.state.selection.main;

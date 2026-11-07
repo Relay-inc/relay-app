@@ -95,6 +95,10 @@ pub fn start(app: &AppHandle) {
             // the related index walks the folders again at its next query (Relay's own writes included; a moved or deleted
             // folder has no extension)
             for f in files.iter().filter(|f| f.extension().is_none_or(|e| e == "md")) { crate::related::touched(f); }
+            // a workspace's type registry changed: its Claude rule follows
+            for f in files.iter().filter(|f| f.ends_with(".relay/types.json")) {
+                if let Some((_, c)) = watched.iter().find(|(_, c)| f.starts_with(c)) { crate::types::write_rule(Path::new(c)); }
+            }
             // a file in a shared workspace changed (a save, Claude, Obsidian): its round runs now, not at the next 10 s.
             // ponytail: a round's own pulls land here too and cost one more round that finds nothing
             let shared: Vec<String> = shared_vaults::list(&app.state::<App>().settings.lock().unwrap()).into_iter().map(|v| vault::canon(&v.folder)).collect();

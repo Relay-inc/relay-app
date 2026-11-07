@@ -15,6 +15,10 @@ a PR. Versions follow
 
 ### Added
 
+- Note types live in one registry, `.relay/types.json` in the vault: each type's fields, required keys, home, template and collection columns. Tidy, Collections, new notes and the Properties panel read it (a field with a fixed list of values, like a project's `status`, gets a select that marks a value outside the list), Relay writes it out as the Claude rule `System/rules/vault/types.md`, and the starter vault's hook checks notes against it.
+- A typed page has a header made from its type: the type, where it belongs (Context › Project), and the type's fields, each with its editor. A link field only offers notes of its type (`with:` people, `about:` projects and contexts) and can create a missing one, like a new person in the context's People folder; an empty `context:` or `about:` shows as a slot to fill, and "Add property" offers the type's missing fields first. The right rail groups backlinks by relation, like "Meetings about this project".
+- A page can carry an emoji icon and a cover picture, saved as `icon:` and `cover:` in its frontmatter. Hover the header for Add icon and Add cover; the cover is copied into the attachments folder and shown as a banner above the title. The note's own icon wins over its project's icon, and a cover whose file is gone just isn't shown.
+- The Pages tree shows a page's icon in place of the file glyph, and a project row the emoji of its project note when it has one (else its project icon). Changing the icon in the page header updates the row right away. (#427)
 - The Meetings collection has a Calendar layout next to Table and Board: a month (Monday first) or a week, each meeting on its `date:` day with its stage, a click opens it, and the meetings without a date listed under the grid. Filters and the context apply as in the table, and a saved view keeps Calendar. Threads get it too. The collections' "today" is now the local date, so just after midnight a meeting of yesterday counts as over.
 
 ### Changed
@@ -28,6 +32,9 @@ a PR. Versions follow
 - A meeting note from a recording gets its people, `context:` and `about:` filled from the vault: attendee emails are matched to Person notes, a company note's `domain:` is the fallback, and what stays unknown is named instead of asked when nobody is there to answer.
 - Back to the notes in a meeting's Wrap-up no longer blanks the window when nothing was recorded: the transcript panel rendered in a loop until React gave up. The mail composer's recipient fields had the same loop waiting for them.
 
+### Removed
+
+- The one-time move of old scratch notes from `.relay/notes` into the Inbox is gone: the Inbox and a project's notes drawer no longer scan for them or show the move banner. Notes still left in `.relay/notes` stay on disk but Relay no longer shows them. (#426)
 
 ## [0.0.48] - 2026-11-05
 
@@ -43,7 +50,6 @@ a PR. Versions follow
 ### Fixed
 
 - A page's Changes panel scrolls again when a run's changes are longer than the panel: the open entry was squeezed to the panel's height and its lower diffs were cut off (#405)
-
 
 ## [0.0.47] - 2026-11-04
 

@@ -410,6 +410,18 @@ fn link_line(text: &str, names: impl Fn(&str) -> bool) -> Option<(usize, String,
     })
 }
 
+/// The frontmatter key whose value links to the note `names` takes (`about` for `about: "[[X]]"`, `with` for an item
+/// under `with:`), the typed relation a backlink comes from. None when only the body links.
+fn link_key(text: &str, names: impl Fn(&str) -> bool) -> Option<String> {
+    let mut key = None;
+    for l in vault::split(text)?.0.lines() {
+        if !l.starts_with([' ', '\t', '-', '#']) { key = l.split_once(':').map(|(k, _)| k.trim().to_string()); }
+        let chars: Vec<char> = l.chars().collect();
+        if wikilinks(&chars).iter().any(|w| names(&w.2)) { return key; }
+    }
+    None
+}
+
 /// The first line of `text` that has `name` (lowercase) as plain text: not inside a [[link]], on word boundaries,
 /// any case. (line, before, the text as written, after).
 fn mention_line(text: &str, names: &[Vec<char>]) -> Option<(usize, String, String, String)> {
@@ -452,7 +464,11 @@ pub fn rail(dir: &Path, root: &str, path: &str) -> Result<Value, String> {
         for (i, row) in rows.iter().enumerate() {
             if i == me || !row.3.lines().any(|l| lookup(&by, l) == Some(me)) { continue; }
             linking.insert(i);
-            if let Some(at) = link_line(&read(&row.0), |name| lookup(&by, name) == Some(me)) { backlinks.push(hit(row, at)); }
+            let text = read(&row.0);
+            let Some(at) = link_line(&text, |name| lookup(&by, name) == Some(me)) else { continue };
+            let mut v = hit(row, at);
+            if let Some(f) = link_key(&text, |name| lookup(&by, name) == Some(me)) { v["f"] = json!(f); }
+            backlinks.push(v);
         }
         // the names the note goes by: its file name, its title, its aliases
         let text = read(path);
@@ -644,6 +660,18 @@ pub fn times(dir: &Path, root: &str) -> Result<Value, String> {
     })
 }
 
+/// The notes of `root` with an `icon:` key, {path: its first value}, for the Pages tree's rows (issue 427). Whether it is
+/// one emoji is the frontend's call (decor.ts `emojiOf`), as for the page header.
+pub fn icons(dir: &Path, root: &str) -> Result<Value, String> {
+    with(dir, root, |c| {
+        let rows = c
+            .prepare("SELECT path, json_extract(props, '$.icon[0]') AS icon FROM meta WHERE icon IS NOT NULL")?
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows.into_iter().map(|(p, i)| (p, json!(i))).collect::<serde_json::Map<_, _>>().into())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -678,6 +706,26 @@ mod tests {
         assert_eq!(sync["props"]["about"], json!(["Northwind Portal"]));
         assert_eq!(sync["props"]["context"], json!(["Agency"]));
         assert_eq!(rows.iter().find(|r| r["p"] == "Loose.md").unwrap()["k"], "");
+        fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn icons_lists_the_notes_with_an_icon_and_follows_an_edit() {
+        let d = std::env::temp_dir().join(format!("relay-icons-{}", std::process::id()));
+        fs::remove_dir_all(&d).ok();
+        fs::create_dir_all(d.join("Docs")).unwrap();
+        let v = vault::canon(d.to_str().unwrap());
+        let db = d.join("index");
+        fs::write(d.join("Docs/Launch.md"), "---\ntype: Document\nicon: 🚀\n---\n# Launch\n").unwrap();
+        fs::write(d.join("Docs/Plain.md"), "---\ntype: Document\n---\nno icon\n").unwrap();
+        fs::write(d.join("Loose.md"), "just text").unwrap();
+        assert_eq!(icons(&db, &v).unwrap(), json!({"Docs/Launch.md": "🚀"}));
+        // the header writes icon: and the save touches the file (lib.rs write_note): the next read has it
+        let plain = d.join("Docs/Plain.md");
+        fs::write(&plain, "---\ntype: Document\nicon: \"🧭\"\n---\nno icon\n").unwrap();
+        filetime_bump(&plain);
+        touched(&vault::canon_path(&plain));
+        assert_eq!(icons(&db, &v).unwrap(), json!({"Docs/Launch.md": "🚀", "Docs/Plain.md": "🧭"}));
         fs::remove_dir_all(&d).ok();
     }
 
@@ -725,6 +773,9 @@ mod tests {
         assert!(mention_line("---\naliases: hosting plan\n---\n```\nhosting plan\n```\n", &names(&["hosting plan"])).is_none());
         // an alias finds it, a link with a label or heading counts as a link to the note
         assert!(mention_line("Het Plan voor de host.\n", &names(&["hosting plan", "plan voor de host"])).is_some());
+        let is = |x: &str| x.eq_ignore_ascii_case("hosting plan");
+        assert_eq!(link_key("---\ntype: Meeting\nwith:\n  - \"[[Sofie]]\"\n  - \"[[Hosting plan]]\"\n---\n", is).as_deref(), Some("with"));
+        assert_eq!(link_key("---\nabout: \"[[Other]]\"\n---\nSee [[Hosting plan]].\n", is), None);
         let (n, _, hit, _) = link_line("a\nb [[Other]] and [[Hosting Plan#Scope|the plan]] c", |x| x.eq_ignore_ascii_case("hosting plan")).unwrap();
         assert_eq!((n, hit.as_str()), (2, "[[Hosting Plan#Scope|the plan]]"));
     }
@@ -751,6 +802,8 @@ mod tests {
         let a = &r["backlinks"][0];
         assert_eq!((a["line"].as_u64(), a["before"].as_str(), a["hit"].as_str()), (Some(2), Some("Last sync: "), Some("[[Hosting plan]]")));
         assert_eq!(r["backlinks"][1]["line"], 2); // the frontmatter line, the body has no link
+        // the key a link stands under is the relation it is (B's about:), a body link has none
+        assert_eq!((r["backlinks"][1]["f"].as_str(), r["backlinks"][0].get("f")), (Some("about"), None));
         // D names it twice (name and alias) and shows once; "AI" is under 4 characters and is not looked for
         assert_eq!(p("mentions"), vec!["Docs/D.md"]);
         assert_eq!(r["mentions"][0]["hit"], "hosting plan");

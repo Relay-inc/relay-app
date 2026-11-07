@@ -19,7 +19,7 @@ type Props = Omit<ComponentProps<"div">, "className"> & {
   lead?: ReactNode; // a glyph of its own in the icon's place (a meeting's stage)
   box?: string; // the grid `svg` is drawn on
   img?: string | null; // a project's icon: an image, else an emoji, else the folder
-  emoji?: string;
+  emoji?: string; // a project's or a page's (issue 427), in place of its glyph
   tint?: Tint;
   selected?: boolean;
   unseen?: boolean;
@@ -141,11 +141,13 @@ export function SidebarRow({
 
   const glyphClass = `glyph ${kind === "conv" ? (indent ? "size-3.25" : "size-3.75") : indent ? "size-3.5" : "size-4"} flex-none ${glyphColor}`;
   let lead: ReactNode = glyph(glyphClass);
+  const emojiLead = <span className="w-4 flex-none text-center text-sm leading-none">{emoji}</span>;
   if (own) lead = <span className="size-4 flex-none grid place-items-center text-secondary">{own}</span>;
   else if (kind === "fold") lead = null;
+  else if (kind !== "proj" && emoji) lead = emojiLead;
   else if (kind === "proj") {
     if (isImg(img)) lead = <ProjectImg url={img} className="size-4 flex-none object-contain rounded-xs" />;
-    else if (emoji) lead = <span className="w-4 flex-none text-center text-sm leading-none">{emoji}</span>;
+    else if (emoji) lead = emojiLead;
     // no icon of its own: its initial (or a short all-caps first word, "BE") on a small tile in its context's colour
     else
       lead = (

@@ -107,9 +107,71 @@ notes.push(
     tags: [],
     text: "---\ntype: Person\n---\n# Sofie Claes\n\nWeekly hosting plan review on Wednesdays.\n",
   },
+  // typed pages (issue 419): the context, a second person, a meeting about the project with both people, and one
+  // without about: (its header shows the empty slot)
+  {
+    path: "Contexts/Agency/Agency.md",
+    type: "Context",
+    context: "Agency",
+    tags: [],
+    text: "---\ntype: Context\ncreated: 2026-01-05\n---\n# Agency\n\nClient work for the agency.\n",
+  },
+  {
+    path: "Contexts/Agency/People/Tom Willems.md",
+    type: "Person",
+    context: "Agency",
+    tags: [],
+    text: '---\ntype: Person\ncontext: "[[Agency]]"\nrole: Developer\nemail: tom.willems@example.com\n---\n# Tom Willems\n',
+  },
+  {
+    path: `${meetingDir}/2026-10-01 Portal kickoff.md`,
+    type: "Meeting",
+    context: "Agency",
+    tags: [],
+    text:
+      '---\ntype: Meeting\ncontext: "[[Agency]]"\nabout: "[[Northwind Portal]]"\nwith:\n  - "[[Sofie Claes]]"\n  - "[[Tom Willems]]"\n' +
+      "date: 2026-10-01\nlanguage: en\none-liner: Scope and dates for the portal\nstage: wrapped\n---\n# Portal kickoff\n\n" +
+      "## Summary\nScope agreed, first demo on 15 October.\n",
+  },
+  {
+    path: `${meetingDir}/2026-09-25 Intro call.md`,
+    type: "Meeting",
+    context: "Agency",
+    tags: [],
+    text:
+      '---\ntype: Meeting\ncontext: "[[Agency]]"\nwith:\n  - "[[Sofie Claes]]"\ndate: 2026-09-25\n---\n# Intro call\n\n' +
+      "First call with Northwind about the portal.\n",
+  },
 );
+// page icons and covers (issue 424): a page with its own icon and a cover, and one whose cover: names a missing file
+notes.push(
+  {
+    path: `${docs}/Launch checklist.md`,
+    type: "Document",
+    context: "Agency",
+    tags: [],
+    text:
+      '---\ntype: Document\ncontext: "[[Agency]]"\nicon: 🚀\ncover: "[[Kickoff banner.png]]"\n---\n# Launch checklist\n\n' +
+      "- [ ] DNS switched by Tom\n- [ ] Sofie signs off the invoices page\n",
+  },
+  {
+    path: `${docs}/Brand notes.md`,
+    type: "Document",
+    context: "Agency",
+    tags: [],
+    text: '---\ntype: Document\ncontext: "[[Agency]]"\ncover: "[[missing-banner.png]]"\n---\n# Brand notes\n\nColours and type for the portal.\n',
+  },
+);
+/** The project note as a typed Project (issue 419), in place of the generic note: its rail groups the meetings about it. */
+export const PROJECT = "Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md";
+const projectText =
+  '---\ntype: Project\ncontext: "[[Agency]]"\nstatus: Active\nphase: Build\npeople:\n  - "[[Sofie Claes]]"\n---\n' +
+  "# Northwind Portal\n\n## Stand van zaken\n\nThe client portal for Northwind: invoices, dossiers and the contact form.\n";
 export const paths = notes.map(n => n.path);
-export const texts: Record<string, string> = Object.fromEntries(notes.map(n => [n.path, n.text]));
+export const texts: Record<string, string> = {
+  ...Object.fromEntries(notes.map(n => [n.path, n.text])),
+  [PROJECT]: projectText,
+};
 export const templates = ["Document", "Meeting", "Person"];
 /** The note Today's note makes, on the fixture's date. */
 export const dailyPath = (day: string) => `Calendar/Daily/${day.slice(0, 4)}/${day}.md`;
@@ -225,14 +287,18 @@ export function rail(path: string, textOf: (path: string) => string | undefined)
   const backlinks: unknown[] = [];
   const linking = new Set<string>();
   for (const { p, text } of all) {
-    const m =
-      p === path
-        ? null
-        : new RegExp(`\\[\\[${me}(?:[|#][^\\]]*)?\\]\\]`, "i").exec(text.replace(/^---[\s\S]*?\n---\n/, ""));
+    if (p === path) continue;
+    const link = new RegExp(`\\[\\[${me}(?:[|#][^\\]]*)?\\]\\]`, "i");
+    const head = /^---\n[\s\S]*?\n---\n/.exec(text)?.[0] ?? "";
+    // the body first, the frontmatter when the body has none; `f` the frontmatter key the link stands under
+    const m = link.exec(text.slice(head.length)) ?? link.exec(head);
     if (m) {
       linking.add(p);
-      const at = text.indexOf(m[0]);
-      backlinks.push({ ...meta(p, text), ...context(text, at, m[0].length) });
+      const at = text.indexOf(m[0], m.input === head ? 0 : head.length);
+      const lines = head.split("\n");
+      const n = lines.findIndex(l => link.test(l));
+      const f = n < 0 ? undefined : lines.slice(0, n + 1).findLast(l => /^[^\s#-][^:]*:/.test(l))?.split(":")[0];
+      backlinks.push({ ...meta(p, text), ...context(text, at, m[0].length), ...(f ? { f } : {}) });
     }
   }
   const mentions: unknown[] = [];
