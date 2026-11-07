@@ -4,7 +4,13 @@ import { storage } from "../../infrastructure/storage";
 import { loadSnapshot } from "../workspace/vault";
 import { makeStore } from "../make-store";
 import { toast } from "./navigation";
-import { openPage, togglePage } from "./pages";
+import { existingNote } from "../../domain/workspace/blocks";
+import type { NoteType } from "../../domain/types/registry";
+import { noteName } from "../../domain/navigation/pages";
+import { t } from "../../shared/i18n";
+import { loadRows, rowsOf } from "../collections/collections";
+import { registryOf } from "../types/types";
+import { abs, followPageLink, openPage, placeIn, togglePage } from "./pages";
 import { activeFolder } from "./workspaces";
 
 // The knowledge base's note tools: New ▸ from a template, Today's note, ⌘K's search and a folder's sort.
@@ -32,12 +38,48 @@ export const templatesOf = (folder = activeFolder()) => useKbStore.getState().te
 export type Place = { folder: string; about: string; context: string };
 /** A note from a template: in its type's home (a meeting under Calendar/Meetings/<year>/), else in the folder it was
  *  asked in, with `about:` and `context:` from that place. It opens. */
-export async function newFromTemplate(template: string, place: Place) {
+export async function newFromTemplate(template: string, place: Place, title = "") {
   try {
-    const path = await backend.newFromTemplate(activeFolder(), template, place.folder, place.about, place.context);
+    const path = await backend.newFromTemplate(
+      activeFolder(),
+      template,
+      place.folder,
+      place.about,
+      place.context,
+      title,
+    );
     await loadSnapshot();
     if (place.folder) togglePage(place.folder, true);
     openPage(path);
+  } catch (e) {
+    toast(String(e));
+  }
+}
+/** The note of this type the title already names, for the / menu to say Link rather than Create. */
+export const existingTyped = (type: NoteType, title: string) =>
+  existingNote(rowsOf(activeFolder()), registryOf(activeFolder()), type, title);
+/** A typed note from a page's / menu: made from the type's template in its home with the page's project as `about:`,
+ *  or, when a note of that type already has the title, that one. `link` puts the link in the page and returns what takes
+ *  it out again; a new note opens in the drawer (as ⌘-click on a link does) and its toast's Undo removes the link and
+ *  moves the file to .trash/. */
+export async function newTypedNote(type: NoteType, title: string, page: string, link: (name: string) => () => void) {
+  try {
+    await loadRows(); // the notes as they are now: a person made a minute ago is linked, not made again
+    const old = existingTyped(type, title);
+    if (old) return void link(noteName(old));
+    const place = placeIn(page.split("/").slice(0, -1).join("/"));
+    const template = type.template!.split("/").pop()!.replace(/\.md$/, ""); // Resources/Templates/<name>.md
+    const path = await backend.newFromTemplate(activeFolder(), template, "", place.about, place.context, title);
+    const unlink = link(noteName(path));
+    await loadSnapshot();
+    followPageLink(noteName(path), true);
+    toast(t("slash.created", { type: type.name, name: noteName(path) }), () => {
+      unlink();
+      void backend
+        .trashPath(abs(path))
+        .then(loadSnapshot)
+        .catch(e => toast(String(e)));
+    });
   } catch (e) {
     toast(String(e));
   }

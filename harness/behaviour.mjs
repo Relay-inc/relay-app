@@ -3508,6 +3508,34 @@ const SCENARIOS = {
     s.check("Show right rail brings it back", (await page.locator("[data-rail]").count()) === 1);
   },
 
+  // /meeting Kickoff on a project's page: the note made with the title and the project, its link in the page, one Undo
+  // takes the link out and the file to .trash/
+  async slashTypedNote(s) {
+    await s.load({ fixture: "kb" });
+    const { page } = s;
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    await click(page.locator('[data-project="Northwind Portal"]'));
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("\n/meeting Kickoff");
+    await page.locator(".cm-tooltip-autocomplete").waitFor();
+    await page.clock.setFixedTime(await page.evaluate(() => Date.now() + 1000)); // CodeMirror's 75 ms before Enter picks
+    await page.keyboard.press("Enter");
+    await settle(page, 400);
+    const made = await s.calls("new_from_template");
+    s.check(
+      "the title and the project go to the one creation path",
+      made.length === 1 && made[0].args.title === "Kickoff" && made[0].args.about === "Northwind Portal",
+    );
+    const text = () => page.locator(".cm-content").innerText();
+    s.check("the link is in the page", (await text()).includes("2026-10-01 Northwind Portal Kickoff"));
+    await click(button(page, "Undo"));
+    await settle(page, 400);
+    const trashed = await s.calls("trash_path");
+    s.check("Undo trashes the new note", trashed.length === 1 && trashed[0].args.target.endsWith("Kickoff.md"));
+    s.check("Undo takes the link out", !(await text()).includes("Northwind Portal Kickoff"));
+  },
+
   // New ▸ from template on a folder and Today's note in the Pages tab: a Meeting in a project is saved in its home
   // with about: set, Today's note is made once
   async newFromTemplate(s) {

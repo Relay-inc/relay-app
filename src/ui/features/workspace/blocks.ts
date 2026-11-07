@@ -2,7 +2,16 @@ import { autocompletion, startCompletion, type Completion, type CompletionContex
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { type EditorState } from "@codemirror/state";
 import { EditorView, ViewPlugin } from "@codemirror/view";
-import { SLASH, TURN_INTO, moveBlock, pasteLink, turnInto, type BlockKind } from "../../../domain/workspace/blocks";
+import {
+  SLASH,
+  TURN_INTO,
+  moveBlock,
+  pasteLink,
+  turnInto,
+  typedSlash,
+  type BlockKind,
+} from "../../../domain/workspace/blocks";
+import type { NoteType, Registry } from "../../../domain/types/registry";
 import { noteName } from "../../../domain/navigation/pages";
 import { tableCommands, tableEditing, type TableWords } from "./tables";
 
@@ -17,6 +26,19 @@ export type BlockWords = {
   remove: string;
   table: TableWords;
   handle: string;
+  /** The / menu's typed notes: the hint while the title is empty, then Create and Link with the title. */
+  typed: {
+    ask: (type: string) => string;
+    create: (type: string, title: string) => string;
+    link: (type: string, title: string) => string;
+  };
+};
+/** What a / item for a note type needs of the app: the registry, the note a title already names, and making the note
+ *  (`link` puts its link in the page and returns what takes it out again). */
+export type TypedNotes = {
+  types: () => Registry;
+  existing: (type: NoteType, title: string) => string | undefined;
+  make: (type: NoteType, title: string, link: (name: string) => () => void) => Promise<void>;
 };
 
 /** A block: whole lines, from a top-level markdown node; a heading takes its section along, a list item its own lines
@@ -70,11 +92,47 @@ function replaceAll(view: EditorView, next: string) {
 }
 
 /** The / menu on an empty line: the kinds of block, filtered as you type; Enter puts the block's markdown there. */
-function slashSource(words: BlockWords, pickFile: (view: EditorView, at: number) => void) {
+function slashSource(words: BlockWords, pickFile: (view: EditorView, at: number) => void, notes: TypedNotes) {
   return (ctx: CompletionContext) => {
-    const typed = ctx.matchBefore(/^\s*\/[\w-]*$/);
+    const typed = ctx.matchBefore(/^\s*\/[\w-]*( [^\n]*)?$/);
     if (!typed) return null;
     const slash = typed.from + typed.text.indexOf("/");
+    // `/meeting Kickoff`: the word names a type, the rest is the new note's title
+    const titled = /^\/([\w-]+) ([^\n]*)$/.exec(typed.text.slice(slash - typed.from));
+    if (typed.text.includes(" ")) {
+      const type = titled && typedSlash(notes.types()).find(t => t.name.toLowerCase() === titled[1].toLowerCase());
+      if (!type) return null;
+      const title = titled[2].trim();
+      const old = title ? notes.existing(type, title) : undefined;
+      const label = !title
+        ? words.typed.ask(type.name)
+        : (old ? words.typed.link : words.typed.create)(type.name, title);
+      return {
+        from: slash + 1,
+        filter: false,
+        options: [
+          {
+            label,
+            apply: (view: EditorView, _c: Completion, _from: number, to: number) => {
+              if (!title) return;
+              view.dispatch({ changes: { from: slash, to } });
+              void notes.make(type, title, name => {
+                const link = `[[${name}]]`;
+                const at = Math.min(slash, view.state.doc.length);
+                view.dispatch({ changes: { from: at, insert: link }, selection: { anchor: at + link.length } });
+                return () => {
+                  const doc = view.state.doc.toString();
+                  let found = -1;
+                  for (let i = doc.indexOf(link); i >= 0; i = doc.indexOf(link, i + 1))
+                    if (found < 0 || Math.abs(i - at) < Math.abs(found - at)) found = i;
+                  if (found >= 0) view.dispatch({ changes: { from: found, to: found + link.length } });
+                };
+              });
+            },
+          },
+        ],
+      };
+    }
     const options: Completion[] = SLASH.map((item, i) => ({
       label: words.kind(item.kind),
       boost: 99 - i, // the menu's own order (headings first), not the alphabet
@@ -87,6 +145,19 @@ function slashSource(words: BlockWords, pickFile: (view: EditorView, at: number)
         if (item.kind === "link") startCompletion(view);
       },
     }));
+    // a type with a home and a template: the title is typed after its name
+    typedSlash(notes.types()).forEach((type, i) =>
+      options.push({
+        label: type.name,
+        boost: 98 - SLASH.length - i,
+        detail: words.typed.ask(type.name),
+        apply: (view: EditorView, _c: Completion, _from: number, to: number) => {
+          const insert = `/${type.name.toLowerCase()} `;
+          view.dispatch({ changes: { from: slash, to, insert }, selection: { anchor: slash + insert.length } });
+          startCompletion(view);
+        },
+      }),
+    );
     // File: pick files, copy them into the attachments folder and embed them where the slash was
     options.push({
       label: words.kind("file"),
@@ -296,9 +367,10 @@ export function blockEditing(
   words: BlockWords,
   notes: () => string[],
   pickFile: (view: EditorView, at: number) => void,
+  typed: TypedNotes,
 ) {
   return [
-    autocompletion({ override: [slashSource(words, pickFile), wikiSource(notes)], icons: false }),
+    autocompletion({ override: [slashSource(words, pickFile, typed), wikiSource(notes)], icons: false }),
     tableEditing(words.table),
     handle(words),
     EditorView.domEventHandlers({

@@ -489,7 +489,7 @@ export const clearRecent = () => removeFromRecent(null);
 // ---------- managing files: new page or folder, rename and move (links to it follow), duplicate, trash with Undo
 /** The workspace shown's folder, and a path of it as an absolute one ("" is the folder itself). */
 const rootOf = () => (isMain(activeFolder()) ? useWorkspaceStore.getState().notes.root : activeFolder());
-const abs = (path: string) => (path ? `${rootOf()}/${path}` : rootOf());
+export const abs = (path: string) => (path ? `${rootOf()}/${path}` : rootOf());
 /** The workspace shown is shared on a relay-server: a delete there deletes for every member. */
 export const sharedWorkspace = () => workspaces().find(workspace => workspace.active && workspace.team)?.name ?? "";
 /** How many pages a folder of the workspace shown holds, at any depth (what Delete names). */

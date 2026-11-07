@@ -2712,6 +2712,24 @@ const VIEWS = {
     await page.waitForFunction(() => document.querySelector(".cm-tooltip-autocomplete li"));
     await settle(page); // past the menu's interactionDelay, when Enter picks instead of breaking the line
   },
+  // /me: the registry's typed items (a type with a home and a template) next to the blocks
+  "editor-slash-typed": async () => {
+    await VIEWS["page-view"]();
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("\n/me");
+    await page.locator(".cm-tooltip-autocomplete").waitFor();
+    await settle(page);
+  },
+  // `/meeting Kickoff`: the title typed inline, the one item says what Enter does
+  "editor-slash-title": async () => {
+    await VIEWS["page-view"]();
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("\n/meeting Kickoff");
+    await page.locator(".cm-tooltip-autocomplete").waitFor();
+    await settle(page);
+  },
   // [[ completes the workspace's notes
   "editor-wikilink-complete": async () => {
     await VIEWS["page-view"]();

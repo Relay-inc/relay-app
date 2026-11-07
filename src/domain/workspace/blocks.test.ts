@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { markdownLanguage } from "@codemirror/lang-markdown";
-import { SLASH, moveBlock, pasteLink, turnInto } from "./blocks.ts";
+import { SLASH, existingNote, moveBlock, pasteLink, turnInto, typedSlash } from "./blocks.ts";
+import { SHIPPED, type NoteType } from "../types/registry.ts";
 
 const gfm = markdownLanguage.parser; // the editor's own parser: GFM tables and to-dos
 const top = (text: string) => {
@@ -99,4 +100,31 @@ test("a pasted URL over a selection makes a link", () => {
   assert.equal(pasteLink("the spec", "https://example.com/a "), "[the spec](https://example.com/a)");
   assert.equal(pasteLink("", "https://example.com"), null);
   assert.equal(pasteLink("x", "not a url"), null);
+});
+
+test("the / menu has an item for each type with a home and a template, and a typed name links the note it names", () => {
+  // the shipped registry: Meeting and Thread have a home and a template; Daily has a home but no template
+  assert.deepEqual(
+    typedSlash(SHIPPED).map(t => t.name),
+    ["Meeting", "Thread"],
+  );
+  const type = (name: string, home?: string, template?: string): NoteType => ({ name, home, template });
+  const registry = {
+    types: [
+      type("Meeting", "meeting", "Resources/Templates/Meeting.md"),
+      type("Person", "people", "Resources/Templates/Person.md"),
+      type("Document", undefined, "Resources/Templates/Document.md"),
+      type("Daily", "daily"),
+    ],
+  };
+  assert.deepEqual(
+    typedSlash(registry).map(t => t.name),
+    ["Meeting", "Person"],
+  );
+  const rows = [
+    { p: "People/Sofie Claes.md", t: "Sofie Claes", k: "Person" },
+    { p: "Calendar/Meetings/2026/Sofie Claes.md", t: "Sofie Claes", k: "meeting" },
+  ];
+  assert.equal(existingNote(rows, registry, registry.types[1], " sofie claes "), "People/Sofie Claes.md");
+  assert.equal(existingNote(rows, registry, registry.types[1], "Tom Willems"), undefined);
 });
