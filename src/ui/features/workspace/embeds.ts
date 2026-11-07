@@ -14,6 +14,7 @@ import { followPageLink } from "../../../application/navigation/pages";
 import { currentLang, currentLocale, t, tn } from "../../../shared/i18n";
 import { fileSize } from "../../../shared/format";
 import { markdownHtml } from "../../../shared/markdown";
+import { mountBase } from "./BaseView";
 
 // Files inside a page: `![[image.png]]`, `![alt|300](path)`, `![[doc.pdf]]`, `![[talk.m4a]]` and `![[Note#Heading]]` drawn
 // in the live preview as the picture, a PDF card, an audio player and a read-only block of the note. The text never
@@ -29,6 +30,8 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: s
 const nameOf = (path: string) => path.split("/").pop() ?? path;
 const folderOf = (path: string) => path.split("/").slice(0, -1).join("/");
 const MIN_WIDTH = 40;
+/** The React roots inside embeds (a base's view), taken down with their widget. */
+const unmounts = new WeakMap<HTMLElement, () => void>();
 
 /** Where an embed is now in the document: its widget's DOM leads to its start, the text there gives its end. */
 function embedAt(view: EditorView, dom: HTMLElement): { from: number; to: number; source: string } | null {
@@ -58,6 +61,9 @@ class EmbedWidget extends WidgetType {
   override ignoreEvent() {
     return true; // the clicks inside are the widget's own
   }
+  override destroy(dom: HTMLElement) {
+    unmounts.get(dom)?.();
+  }
   toDOM(view: EditorView) {
     const dom = el("div", "cm-embed");
     dom.dataset.source = this.source;
@@ -65,7 +71,7 @@ class EmbedWidget extends WidgetType {
     dom.classList.toggle("cm-embed-selected", this.selected);
     // a click on the embed selects it (the ring and handles of an image), like a click on a block
     dom.addEventListener("mousedown", e => {
-      if ((e.target as HTMLElement).closest("button,a,audio,[data-grip]")) return;
+      if ((e.target as HTMLElement).closest("button,a,audio,[data-grip],.cm-base")) return;
       e.preventDefault();
       view.dispatch({ selection: { anchor: view.posAtDOM(dom) } });
       view.focus();
@@ -88,7 +94,11 @@ class EmbedWidget extends WidgetType {
     if (info.kind === "image") dom.append(this.image(dom, path, rel, view));
     else if (info.kind === "audio") dom.append(this.audio(path, info));
     else if (info.kind === "note") dom.append(this.note(info));
-    else dom.append(this.card(path, rel, info));
+    else if (info.kind === "base") {
+      // a base's view (issue 421): `this` is this page, `#View` picks the view; it follows the collections store
+      const host = dom.appendChild(el("div", ""));
+      unmounts.set(dom, mountBase(host, { page: this.page, source: info.text ?? "", viewName: embed.heading }));
+    } else dom.append(this.card(path, rel, info));
   }
 
   // a picture: its width from `|300`, a ring and two handles when selected, its caption (the alt text) under it

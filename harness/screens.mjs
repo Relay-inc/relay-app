@@ -2310,6 +2310,51 @@ const VIEWS = {
     await settle(page);
   },
   "project-auto-sections-dark": async () => VIEWS["project-auto-sections"]("linked-dark"),
+  // views inside a page (issue 421): Obsidian bases as tables, a fenced block of the page's meetings (`this`), an
+  // embedded .base file grouped by status, and a block outside the subset that offers Obsidian instead
+  "page-views": async (fixture = "linked-views") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText("Every meeting about this project");
+    await page.locator(".cm-base").first().waitFor();
+    await page.locator(".cm-base-unsupported").waitFor();
+    await page.locator(".cm-base").first().scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  "page-views-dark": async () => VIEWS["page-views"]("linked-views-dark"),
+  // the rest of that page: the embedded .base grouped by status is a board, the formula block offers Obsidian
+  "page-views-board": async (fixture = "linked-views") => {
+    await VIEWS["page-views"](fixture);
+    await page.locator(".cm-base").nth(1).evaluate(el => el.scrollIntoView({ block: "start" }));
+    await settle(page);
+  },
+  // a cell edited in the page's table: the date of a meeting, written into that note; the table re-sorts, the block's
+  // text stays as it was
+  "page-views-edit": async (fixture = "linked-views") => {
+    await VIEWS["page-views"](fixture);
+    const cell = page.locator('.cm-base [data-cell="date"]').nth(2);
+    await cell.locator("div").first().click();
+    await cell.locator("input").fill("2026-10-15");
+    await cell.locator("input").press("Enter");
+    await waitText("15 Oct");
+    await settle(page);
+  },
+  // / → View on an empty line of the page: a block of the page's meetings, drawn as their table at once
+  "page-views-slash": async (fixture = "linked-views") => {
+    await VIEWS["page-views"](fixture);
+    await page.getByText("Next: confirm the migration window").click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("/view");
+    await page.waitForFunction(() => document.querySelector(".cm-tooltip-autocomplete li"));
+    await settle(page);
+    await page.locator(".cm-tooltip-autocomplete li").first().click();
+    await page.locator(".cm-base").nth(2).waitFor();
+    await page.locator(".cm-base").nth(2).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   // files inside a page (K4): a picture with its caption, a PDF card, an audio player and a section of another note, in
   // place of their markdown
   "page-embeds": async (fixture = "embeds") => {
@@ -2656,16 +2701,16 @@ const VIEWS = {
     await page.locator(".cm-content").click();
     await page.keyboard.press("Meta+End");
     await page.keyboard.type("\n/");
-    await page.locator(".cm-tooltip-autocomplete").waitFor();
-    await settle(page);
+    await page.waitForFunction(() => document.querySelector(".cm-tooltip-autocomplete li"));
+    await settle(page); // past the menu's interactionDelay, when Enter picks instead of breaking the line
   },
   "editor-slash-menu-dark": async () => {
     await VIEWS["page-view-dark"]();
     await page.locator(".cm-content").click();
     await page.keyboard.press("Meta+End");
     await page.keyboard.type("\n/to");
-    await page.locator(".cm-tooltip-autocomplete").waitFor();
-    await settle(page);
+    await page.waitForFunction(() => document.querySelector(".cm-tooltip-autocomplete li"));
+    await settle(page); // past the menu's interactionDelay, when Enter picks instead of breaking the line
   },
   // [[ completes the workspace's notes
   "editor-wikilink-complete": async () => {
@@ -2673,8 +2718,8 @@ const VIEWS = {
     await page.locator(".cm-content").click();
     await page.keyboard.press("Meta+End");
     await page.keyboard.type("\nSee [[Nor");
-    await page.locator(".cm-tooltip-autocomplete").waitFor();
-    await settle(page);
+    await page.waitForFunction(() => document.querySelector(".cm-tooltip-autocomplete li"));
+    await settle(page); // past the menu's interactionDelay, when Enter picks instead of breaking the line
   },
   // a table from the / menu, filled with Tab; Tab in the last cell adds a row
   "editor-table": async () => {
@@ -2682,7 +2727,7 @@ const VIEWS = {
     await page.locator(".cm-content").click();
     await page.keyboard.press("Meta+End");
     await page.keyboard.type("\n\n/table");
-    await page.locator(".cm-tooltip-autocomplete").waitFor();
+    await page.waitForFunction(() => document.querySelector(".cm-tooltip-autocomplete li"));
     // CodeMirror takes Enter as a pick only 75 ms after the list opened, by Date.now, which the harness pins: move it on
     await page.clock.setFixedTime(await page.evaluate(() => Date.now() + 1000));
     await page.keyboard.press("Enter");
