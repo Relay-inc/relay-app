@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- Views inside a page: an Obsidian base, as a fenced `base` block or an embedded `![[x.base]]`, shows in the page as a table of the notes it lists, with `this` as the page it is in, so a project page can list its own meetings and Obsidian shows the same view. A base that uses more than Relay reads (formulas, other view types, functions outside the subset) shows Open in Obsidian instead.
 - Note types live in one registry, `.relay/types.json` in the vault: each type's fields, required keys, home, template and collection columns. Tidy, Collections, new notes and the Properties panel read it (a field with a fixed list of values, like a project's `status`, gets a select that marks a value outside the list), Relay writes it out as the Claude rule `System/rules/vault/types.md`, and the starter vault's hook checks notes against it.
 
 ### Changed

@@ -2251,6 +2251,19 @@ const VIEWS = {
     await settle(page);
   },
   "project-auto-sections-dark": async () => VIEWS["project-auto-sections"]("linked-dark"),
+  // views inside a page (issue 421): Obsidian bases as tables, a fenced block of the page's meetings (`this`), an
+  // embedded .base file grouped by status, and a block outside the subset that offers Obsidian instead
+  "page-views": async (fixture = "linked-views") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText("Every meeting about this project");
+    await page.locator(".cm-base").first().waitFor();
+    await page.locator(".cm-base-unsupported").waitFor();
+    await page.locator(".cm-base").first().scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  "page-views-dark": async () => VIEWS["page-views"]("linked-views-dark"),
   // files inside a page (K4): a picture with its caption, a PDF card, an audio player and a section of another note, in
   // place of their markdown
   "page-embeds": async (fixture = "embeds") => {
