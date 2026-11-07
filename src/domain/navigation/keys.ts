@@ -66,18 +66,15 @@ export const isTerminal = (key: string) => key.startsWith(TERM_PREFIX);
 /** The session id of a terminal key, "" for any other key. */
 export const termSid = (key: string) => (isTerminal(key) ? key.slice(TERM_PREFIX.length) : "");
 
-// ---------- what the right panel shows in detail: a PR, a mail, a vault note or a tracker card
+// ---------- what a detail shows: a PR or a mail next to its list, a tracker card in the ticket window
 export type PanelItem =
   | { kind: "pr"; repo: string; number: number }
   | { kind: "mail"; account: string; id: string }
-  | { kind: "note"; target: string }
   | { kind: "card"; provider: string; id: string };
 /** A PR: `owner/repo#12`. */
 export const prKey = (repo: string, number: number | string) => `${repo}#${number}`;
 /** A mail: `mail:<account>:<id>` (an email address has no colon, so the last one splits). */
 export const mailKey = (m: { account: string; id: string }) => `mail:${m.account}:${m.id}`;
-/** A vault note: `note:<path or name>`. */
-export const noteKey = (target: string) => `note:${target}`;
 /** A card in a provider's tracker: `card:<provider>:<id>`. */
 export const cardKey = (provider: string, id: string) => `card:${provider}:${id}`;
 
@@ -88,7 +85,6 @@ export function panelItem(key: string): PanelItem | null {
     const i = key.lastIndexOf(":");
     return { kind: "mail", account: key.slice("mail:".length, i), id: key.slice(i + 1) };
   }
-  if (key.startsWith("note:")) return { kind: "note", target: key.slice("note:".length) };
   const card = /^card:([^:]+):(.+)$/.exec(key);
   if (card) return { kind: "card", provider: card[1], id: card[2] };
   const i = key.lastIndexOf("#");

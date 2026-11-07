@@ -1233,13 +1233,14 @@ const SCENARIOS = {
     await page.evaluate(() => window.__harness.setFiles(false));
     await settle(page);
     s.check("off again: no tabs", (await tabs()) === 0);
+    // the switch only hides the Pages tab: an open page stays, notes open as pages with it off too
     s.check(
-      "off again: the page is gone",
-      !(await page
+      "off again: the open page stays",
+      await page
         .getByRole("button", { name: /History|Geschiedenis/ })
         .first()
         .isVisible()
-        .catch(() => false)),
+        .catch(() => false),
     );
   },
 
@@ -2741,17 +2742,20 @@ const SCENARIOS = {
     );
     s.check("↵ on a content match puts the cursor on its line", !!line && active.includes("Retry-After"));
     s.fact("line asked, line under the cursor", [line, active]);
-    // ⌘↵: beside the conversation, which stays
+    // ⌘↵: the page view too (no side panel any more), with Back to the conversation
     await s.load({ ...kb, sel: s.keys.switchTo });
     await page.keyboard.press("Meta+k");
     await settle(page, 300);
+    s.check("the hint no longer offers ⌘↵ beside the chat", !(await hasText(page, "beside the chat")));
     await page.keyboard.type("retry-after");
     await waitText(page, "Content matches");
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Meta+Enter");
     await settle(page, 500);
-    s.check("⌘↵ leaves the conversation open", (await s.local(["sel"])).sel === s.keys.switchTo);
-    s.check("⌘↵ shows the note beside it", await waitText(page, "429 with Retry-After"));
+    s.check("⌘↵ opens the note as a page", String((await s.local(["sel"])).sel).startsWith("page:"));
+    s.check("the page shows the note", await waitText(page, "429 with Retry-After"));
+    s.check("no side panel", (await page.locator(".relay-drawer").count()) === 0);
+    s.check("its bar goes back to the conversation", (await page.locator("[data-page-back]").count()) === 1);
     // ⌘O is the same switcher
     await s.load(kb);
     await page.keyboard.press("Meta+o");
@@ -3527,13 +3531,84 @@ const SCENARIOS = {
       "the title and the project go to the one creation path",
       made.length === 1 && made[0].args.title === "Kickoff" && made[0].args.about === "Northwind Portal",
     );
+    const sel = String((await s.local(["sel"])).sel);
+    s.check("the new note opens as a page", sel.startsWith("page:") && sel.endsWith("Kickoff.md"));
+    s.check("no side panel", (await page.locator(".relay-drawer").count()) === 0);
+    s.fact("sel", sel);
     const text = () => page.locator(".cm-content").innerText();
+    // Back: the page it was made from, with the link in it
+    await click(page.locator("[data-page-back]"));
+    await settle(page, 400);
+    s.check(
+      "Back returns to the page it was made from",
+      String((await s.local(["sel"])).sel) === "page:Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md",
+    );
     s.check("the link is in the page", (await text()).includes("2026-10-01 Northwind Portal Kickoff"));
+    s.check("that page has no Back of its own", (await page.locator("[data-page-back]").count()) === 0);
     await click(button(page, "Undo"));
     await settle(page, 400);
     const trashed = await s.calls("trash_path");
     s.check("Undo trashes the new note", trashed.length === 1 && trashed[0].args.target.endsWith("Kickoff.md"));
     s.check("Undo takes the link out", !(await text()).includes("Northwind Portal Kickoff"));
+  },
+
+  // a [[link]] in a conversation opens the page view; "← <conversation>", ⌘[ and Esc go back to the conversation at
+  // the same scroll, with the drawer it had; Files off changes none of it, and the page can be edited
+  async pageBack(s) {
+    for (const fixture of ["default", "files-off"]) {
+      await s.load({ fixture });
+      await s.load({ fixture, sel: s.keys.long });
+      const { page } = s;
+      const pre = `${fixture}: `;
+      await click(page.getByRole("button", { name: "Terminal", exact: true }).first()).catch(() => {});
+      await settle(page, 300);
+      const drawer = await page.evaluate(() => document.querySelector(".relay-app")?.getAttribute("data-drawer") ?? "");
+      const link = page.locator("a.vlink", { hasText: "Billing Spec" }).nth(3);
+      await link.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      const top = await page.evaluate(() => document.querySelector("#log").scrollTop);
+      await link.click();
+      await page.locator("[data-page-back]").waitFor();
+      await settle(page, 300);
+      s.check(pre + "the link opens the page view", String((await s.local(["sel"])).sel).startsWith("page:"));
+      s.check(pre + "no side panel", (await page.locator(".relay-drawer h2", { hasText: "Details" }).count()) === 0);
+      s.check(
+        pre + "Back names the conversation",
+        (await page.locator("[data-page-back]").innerText()).includes("Billing sync double balances"),
+      );
+      // the page can be edited: a typed word is saved
+      await page.locator(".cm-content").click();
+      await page.keyboard.press("Meta+End");
+      await page.keyboard.type(" edited");
+      await page.keyboard.press("Meta+s");
+      await settle(page, 400);
+      s.check(pre + "the page saves", (await s.calls("write_note")).some(c => c.args.text.includes(" edited")));
+      // a link in the page opens another page: Back still goes to the conversation (one level)
+      await page.locator(".cm-content [data-link]", { hasText: "Portal Architecture" }).first().click();
+      await settle(page, 400);
+      s.check(pre + "a link in the page opens the next page", String((await s.local(["sel"])).sel).includes("Portal"));
+      s.check(
+        pre + "Back still names the conversation",
+        (await page.locator("[data-page-back]").innerText()).includes("Billing sync double balances"),
+      );
+      await page.keyboard.press("Meta+BracketLeft");
+      await page.locator("#log").waitFor();
+      await settle(page, 500);
+      s.check(pre + "⌘[ goes back to the conversation", (await s.local(["sel"])).sel === s.keys.long);
+      const after = await page.evaluate(() => document.querySelector("#log").scrollTop);
+      s.check(pre + "at the same scroll", Math.abs(after - top) < 4);
+      s.fact(pre + "scroll before, after", [top, after]);
+      const again = await page.evaluate(() => document.querySelector(".relay-app")?.getAttribute("data-drawer") ?? "");
+      s.check(pre + "the drawer as it was", again === drawer);
+      s.fact(pre + "drawer", drawer);
+      // Esc with nothing else to close does the same
+      await page.locator("a.vlink", { hasText: "Billing Spec" }).last().click();
+      await page.locator("[data-page-back]").waitFor();
+      await page.locator("body").click({ position: { x: 900, y: 60 } });
+      await page.keyboard.press("Escape");
+      await settle(page, 400);
+      s.check(pre + "Esc goes back too", (await s.local(["sel"])).sel === s.keys.long);
+    }
   },
 
   // New ▸ from template on a folder and Today's note in the Pages tab: a Meeting in a project is saved in its home

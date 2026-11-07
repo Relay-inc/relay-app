@@ -1,14 +1,6 @@
 import { reloadChanges } from "./navigation/changes";
 import { inboxChanged } from "./inbox/inbox";
-import {
-  opened,
-  chatTime,
-  isLegacyGeneral,
-  isMailKey,
-  LEGACY_BOARD,
-  isTerminal,
-  boardKey,
-} from "../domain/navigation/keys";
+import { opened, chatTime, isLegacyGeneral, LEGACY_BOARD, isTerminal, boardKey } from "../domain/navigation/keys";
 import { finishPendingPreps } from "./calendar/prep";
 import { WAIT, PRS, MAIL, isView, pluginIdOf } from "../domain/navigation/views";
 import { shownPlugins } from "../domain/plugins/rules";
@@ -34,7 +26,6 @@ import { watchDesign } from "./design/design";
 import { loadAgents, sawDefaults } from "./agents/agents";
 import { useNavigationStore } from "./navigation/store";
 import { select, newHere, watchUpdate } from "./navigation/navigation";
-import { closeDrawer } from "./navigation/panel";
 import { useBoardStore } from "./board/store";
 import { checkBoards, resetBoard } from "./board/board";
 import { loadPrs, resetPrs, loadProjectRepos, askRepo } from "./pull-requests/prs";
@@ -90,7 +81,6 @@ async function settingsChanged(next: Settings) {
   }
   if (mailChanged) {
     resetMail();
-    if (isMailKey(useNavigationStore.getState().panel.open)) closeDrawer();
     if (!mailOn() && selected() === MAIL) select(WAIT);
     loadMails();
   }

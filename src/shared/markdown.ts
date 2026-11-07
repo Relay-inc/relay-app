@@ -8,7 +8,7 @@ import { highlightHtml } from "./highlight";
 /** Links that may open: the web and mail. */
 export const urlOk = (url: string) => /^(https?:|mailto:)/i.test(url);
 // ---------- vault notes: a markdown link without a scheme, a [[wikilink]] or a `path.md:12` becomes a link when the note
-// exists (application/workspace says which do), and the app opens it in the right panel (ui/app listens for data-note)
+// exists (application/workspace says which do), and the app opens it as a page (ui/app listens for data-note)
 /** The note a link or path names: without its anchor, alias or line number. */
 export const noteOf = (text: string) => {
   let decoded = text;

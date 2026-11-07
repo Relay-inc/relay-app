@@ -6,8 +6,8 @@ import { ctxOf } from "../board/ctx";
 import { clearMailLink } from "../mail/mail";
 import { useNavigationStore } from "./store";
 
-// The details: a note in the right drawer, a PR or mail next to its list, a card in the ticket window over the
-// board. Each is shown from what is known at once, then fresh.
+// The details: a PR or mail next to its list, a card in the ticket window over the board. Each is shown from what is
+// known at once, then fresh.
 const nav = () => useNavigationStore.getState();
 const set = useNavigationStore.setState;
 
@@ -43,33 +43,8 @@ function fetchDetail(key: string, item: PanelItem): Promise<unknown> {
     }
     case "mail":
       return backend.mailRead(item.account, item.id);
-    case "note":
-      return backend.readNote(item.target);
     case "pr":
       return backend.githubPr(item.repo, item.number);
-  }
-}
-/** Show a vault note in the right drawer: what is known at once, then fresh from the backend. */
-export async function openDetail(key: string) {
-  const item = panelItem(key);
-  if (!item) return;
-  clearMailLink();
-  set(draft => {
-    draft.panel.open = key;
-    draft.panel.err = "";
-    draft.panel.actErr = "";
-    draft.drawer = "detail";
-  });
-  try {
-    const detail = await fetchDetail(key, item);
-    set(draft => {
-      draft.panel.detail[key] = detail;
-    });
-  } catch (e) {
-    set(draft => {
-      // the error of a load the user already left does not show on the detail open now
-      if (!draft.panel.detail[key] && draft.panel.open === key) draft.panel.err = String(e);
-    });
   }
 }
 /** Show a mail in the Mail view next to the list: its headers at once, the body from the server. */
@@ -178,6 +153,5 @@ export function closeDrawer() {
   if (!nav().drawer) return;
   set(draft => {
     draft.drawer = "";
-    draft.panel.open = "";
   });
 }

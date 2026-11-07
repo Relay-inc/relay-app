@@ -1,5 +1,5 @@
 import { activeWorkspace, chatVault, vaultChoices } from "../../domain/conversations/rules";
-import { opened, panelItem } from "../../domain/navigation/keys";
+import { opened } from "../../domain/navigation/keys";
 import { isSystemPage } from "../../domain/navigation/pages";
 import { WAIT } from "../../domain/navigation/views";
 import { isOrchKey } from "../../domain/orchestrator/rules";
@@ -99,23 +99,17 @@ export function workspaceOf(key: string): string {
 }
 // what was open in each workspace when the sidebar left it, to come back to; not kept over a restart
 const lastOpen: Record<string, string> = {};
-// The workspaces stay apart: what is open (a page, a conversation, a project's board, a note in the drawer) belongs to
+// The workspaces stay apart: what is open (a page, a conversation, a project's board) belongs to
 // the workspace it was opened in. Leaving that workspace puts it away; coming to one opens what was open there, else
 // Today when what is open belongs to another. What every workspace shares stays when the new one had nothing open.
 function leave(from: string, to: string) {
-  const { selected, tool, drawer, panel } = useNavigationStore.getState();
+  const { selected, tool } = useNavigationStore.getState();
   const owner = tool ? shownUnder(projectVault(tool.project)) : workspaceOf(selected);
   if (owner === from) lastOpen[from] = selected;
   const back = lastOpen[to] ?? "";
   delete lastOpen[to];
   if (owner !== to && back && workspaceOf(back) === to) return void select(back);
-  if (owner && owner !== to) return void select(WAIT);
-  const note = drawer === "detail" ? panelItem(panel.open) : null;
-  if (note?.kind === "note" && noteFolder(note.target) !== to)
-    useNavigationStore.setState(draft => {
-      draft.drawer = "";
-      draft.panel.open = "";
-    });
+  if (owner && owner !== to) select(WAIT);
 }
 /** Keep the workspaces apart whichever way the sidebar changes workspace: the menu, ⌃1 to ⌃9, another Relay window. */
 export function keepWorkspacesApart() {

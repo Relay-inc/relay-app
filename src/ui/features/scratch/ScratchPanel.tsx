@@ -9,8 +9,7 @@ import {
   selectScratch,
 } from "../../../application/scratch/scratch";
 import { useT } from "../../hooks/useT";
-import { noteKey } from "../../../domain/navigation/keys";
-import { openDetail } from "../../../application/navigation/panel";
+import { openNoteLink } from "../../../application/navigation/pages";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useRelatedStore } from "../../../application/related/store";
@@ -44,7 +43,7 @@ function RelatedNotes() {
               key={hit.path}
               className="block text-left cursor-pointer"
               title={hit.path}
-              onClick={() => openDetail(noteKey(hit.path))}
+              onClick={() => void openNoteLink(hit.path)}
             >
               <div className="vlink text-[13px] font-medium truncate">{hit.title}</div>
               <div className="text-xs text-secondary line-clamp-2">{hit.snippet}</div>

@@ -25,11 +25,12 @@ import {
   openSettings,
   openTool,
   toggleDrawer,
+  logScrolled,
+  backTop,
 } from "../../../application/navigation/navigation";
 import { showInGraph } from "../../../application/navigation/graph";
 import { boardKey } from "../../../domain/navigation/keys";
 import { useDerived } from "../../hooks/useDerived";
-import { filesOn } from "../../../application/settings/settings";
 import { useUiRequest } from "../../hooks/useUiRequest";
 import { SelectedView } from "../../app/SelectedView";
 import { PullRequestsView } from "../pull-requests/PullRequestsView";
@@ -84,7 +85,6 @@ export function ConversationsView({ className }: { className: string }) {
   const board = boardOf(selected);
   const hasSubagents = useConversationsStore(s => !onView && !!s.subs[selected]?.length);
   const bar = useDerived(() => chatBar(selected));
-  const files = useDerived(filesOn);
   // a worker shown as its page next to the orchestrator's column, and the orchestrator before its first task
   const workerPage = useNavigationStore(s => s.orchDetail);
   // a subagent Claude Code spawned here, shown as its page next to the agents column
@@ -108,8 +108,8 @@ export function ConversationsView({ className }: { className: string }) {
   const meeting = meetingOf(selected);
   // a plugin's view is a page of its own in a frame, which scrolls itself
   const plugin = pluginIdOf(selected);
-  // a workspace's note as a page: its own bar and scroll
-  const page = files ? pageOf(selected) : "";
+  // a workspace's note as a page: its own bar and scroll (with Experimental › Files off too)
+  const page = pageOf(selected);
   const ownScroll =
     !!page ||
     selected === PRS ||
@@ -139,10 +139,18 @@ export function ConversationsView({ className }: { className: string }) {
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) stick.current = true;
     else if (el.scrollTop < lastTop.current) stick.current = false;
     lastTop.current = el.scrollTop;
+    if (!onView) logScrolled(selected, stick.current ? null : el.scrollTop); // for Back from a page opened here
   };
   useUiRequest("scroll-bottom", () => {
     stick.current = true;
     requestAnimationFrame(() => log.current && (log.current.scrollTop = log.current.scrollHeight));
+  });
+  // Back from a page: the log where it was when the page opened
+  useUiRequest("scroll-back", () => {
+    const top = backTop();
+    if (top === null) return;
+    stick.current = false;
+    requestAnimationFrame(() => log.current && (log.current.scrollTop = top));
   });
   useUiRequest("scroll-top", () => {
     stick.current = false;
