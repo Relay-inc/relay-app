@@ -290,6 +290,7 @@ const en = {
   "orch.stop": "Stop",
   "orch.diff": "Changes",
   "orch.flags": "Flags",
+  "orch.decisions": "Decisions",
   "orch.checking": "Running checks",
   "orch.stuck": "Looks stuck",
   "orch.reviewing": "Reviewing",

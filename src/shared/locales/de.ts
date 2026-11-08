@@ -291,6 +291,7 @@ export default {
   "orch.stop": "Stoppen",
   "orch.diff": "Änderungen",
   "orch.flags": "Hinweise",
+  "orch.decisions": "Entscheidungen",
   "orch.checking": "Checks laufen",
   "orch.stuck": "Scheint festzuhängen",
   "orch.reviewing": "Review läuft",

@@ -26,6 +26,8 @@ export type Worker = {
   report: Report | null;
   model?: string;
   step?: { done: number; total: number; note: string | null } | null;
+  /** its `decision` trail over its whole life, oldest first: what it chose, why, a pointer to the evidence, the result */
+  decisions?: { at: number; decision: string; why: string; evidence: string | null; result: string | null }[];
   answer?: string | null;
   stalled?: string | null;
 };
@@ -50,6 +52,12 @@ const running: Worker = {
   report: null,
   model: "opus",
   step: { done: 2, total: 5, note: "Writing the redirect test" },
+  decisions: [
+    { at: NOW - 92 * MIN, decision: "Fix the cookie domain, not the redirect loop guard", why: "The loop only happens when the session cookie is set for the wrong host; a guard would hide it", evidence: "src/auth/session.ts:41", result: "open" },
+    { at: NOW - 70 * MIN, decision: "Reproduce with a failing test first", why: "No test covers the SSO callback, so the fix needs one to stay fixed", evidence: "tests/auth/redirect.test.ts", result: "fails as expected" },
+    { at: NOW - 41 * MIN, decision: "Set the cookie domain from the request host", why: "A fixed domain breaks the staging host; the config value is only a fallback", evidence: "a1b2c3d", result: "tests green" },
+    { at: NOW - 18 * MIN, decision: "Reverted the shared-config change", why: "It moved the default for every environment, more than the ticket asks", evidence: "e4f5a6b", result: "reverted" },
+  ],
 };
 const done: Worker = {
   key: "c:orch-w-b2",

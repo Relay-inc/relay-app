@@ -39,7 +39,7 @@ pub const RELAY_TOOL: &str = "Bash(relay *)";
 
 /// The relay-orch tools of the orchestrator's coordinator and of its workers, without a card (src-tauri orch.rs).
 pub const ORCH_COORD_TOOLS: [&str; 4] = ["mcp__relay-orch__dispatch", "mcp__relay-orch__workers", "mcp__relay-orch__message", "mcp__relay-orch__stop"];
-pub const ORCH_WORKER_TOOLS: [&str; 2] = ["mcp__relay-orch__step", "mcp__relay-orch__report"];
+pub const ORCH_WORKER_TOOLS: [&str; 3] = ["mcp__relay-orch__step", "mcp__relay-orch__decision", "mcp__relay-orch__report"];
 
 pub struct Claude;
 pub static PROVIDER: Claude = Claude;

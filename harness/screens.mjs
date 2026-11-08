@@ -1630,6 +1630,12 @@ const VIEWS = {
     await page.locator(".relay-drawer").getByText("Patch the balance sync", { exact: true }).click();
     await waitText("read from git by Relay");
   },
+  // a running worker's page with its decision trail
+  "orchestrator-worker-decisions": async () => {
+    await VIEWS.orchestrator();
+    await page.locator(".relay-drawer").getByText("Fix the login redirect", { exact: true }).click();
+    await waitText("Reverted the shared-config change");
+  },
   "orchestrator-answered": async () => {
     await VIEWS["orchestrator-worker-page"]();
     await click("Deploy tonight");

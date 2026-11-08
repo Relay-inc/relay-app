@@ -292,6 +292,7 @@ export default {
   "orch.stop": "Stoppen",
   "orch.diff": "Wijzigingen",
   "orch.flags": "Meldingen",
+  "orch.decisions": "Beslissingen",
   "orch.checking": "Checks lopen",
   "orch.stuck": "Lijkt vast te zitten",
   "orch.reviewing": "Review loopt",
