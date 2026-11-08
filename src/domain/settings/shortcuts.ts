@@ -29,6 +29,8 @@ export const COMMANDS = {
   "app.workspace8": { scope: "app", keys: ["ctrl+Digit8"] },
   "app.workspace9": { scope: "app", keys: ["ctrl+Digit9"] },
   "app.sidebarTab": { scope: "app", keys: ["meta+Period"] },
+  // a page back to the conversation or view it was opened from (Esc too, when nothing else takes it)
+  "app.back": { scope: "app", keys: ["meta+BracketLeft"] },
   // the pages' editor shows the markdown it hides
   "app.showMarkdown": { scope: "app", keys: ["shift+meta+KeyM"] },
   // registered with macOS (anywhere.rs), so it works from any app. ⌘⇧N would be Finder's New Folder and every browser's

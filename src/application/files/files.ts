@@ -1,11 +1,11 @@
 import { gitLetters, opensOutside, vaultNote, type FileEntry } from "../../domain/files/files";
-import { noteKey } from "../../domain/navigation/keys";
 import * as backend from "../../infrastructure/backend";
-import { openDetail } from "../navigation/panel";
+import { openPageIn } from "../navigation/pages";
+import { settings } from "../settings/settings";
 import { useFilesStore } from "./store";
 
 // The Files drawer (domain/files/files.ts): the project's roots, the folders opened in them, and a file opened from
-// them: a vault note in the right drawer, a document in its own app, text in a window over the app.
+// them: a vault note as a page, a document in its own app, text in a window over the app.
 const st = () => useFilesStore.getState();
 const set = useFilesStore.setState;
 
@@ -60,12 +60,12 @@ export function toggleDir(path: string, root = false) {
   if (open) void loadDir(path);
 }
 
-/** A click on a file: a vault note in the right drawer, a document or picture in its own app, anything else as text in
+/** A click on a file: a vault note as a page, a document or picture in its own app, anything else as text in
  *  a window over the app (a file that turns out binary still goes to its app). */
 export async function openEntry(entry: FileEntry) {
   const note = vaultNote(entry.path, st().vault);
   if (note) {
-    await openDetail(noteKey(note));
+    await openPageIn(settings().vault, note);
     return;
   }
   if (opensOutside(entry.name)) {

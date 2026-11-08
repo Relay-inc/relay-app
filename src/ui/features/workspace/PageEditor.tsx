@@ -13,7 +13,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirro
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import {
   adoptPage,
-  followPageLink,
+  openNoteLink,
   loadPage,
   LINE,
   onHeading,
@@ -328,7 +328,7 @@ function Editor(props: {
           EditorView.lineWrapping,
           markdown({ base: markdownLanguage }),
           mode.current.of(showMarkdown.of(rawNow.current)),
-          livePreview((link, drawer) => void followPageLink(link, drawer)),
+          livePreview(link => void openNoteLink(link)),
           formatting(format),
           embeds(page),
           baseBlocks(page),
@@ -357,7 +357,8 @@ function Editor(props: {
               },
             },
             indentWithTab,
-            ...defaultKeymap,
+            // ⌘[ goes back from the page (the app's key), not outdent: ⇧⇥ does that
+            ...defaultKeymap.filter(binding => binding.key !== "Mod-["),
             ...historyKeymap,
           ]),
           outsideMarks,

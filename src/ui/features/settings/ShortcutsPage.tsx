@@ -40,6 +40,7 @@ const APP: CommandId[] = [
   "app.escape",
   "app.stop",
   "app.sidebarTab",
+  "app.back",
   "app.showMarkdown",
   "app.capture",
 ];

@@ -256,7 +256,7 @@
     @apply text-accent-text cursor-pointer;
   }
 }
-/* a vault note read in the drawer: a document, not a chat answer. Headings that step down, room between blocks, ruled
+/* a vault note read as a document, not a chat answer. Headings that step down, room between blocks, ruled
    tables, task lists without their bullets */
 @utility md-note {
   @apply text-sm leading-[1.6] wrap-anywhere;
@@ -364,7 +364,7 @@
     @apply text-accent-text;
   }
 }
-/* a vault note named in the text: opens in the right panel */
+/* a vault note named in the text: opens as a page */
 @utility vlink {
   @apply text-accent-text cursor-pointer underline decoration-focus underline-offset-2 hover:decoration-current;
 }

@@ -1,5 +1,17 @@
 import { t } from "../../shared/i18n";
-import { WAIT, PRS, MAIL, GRAPH, INBOX_VIEW, isView, boardIdOf, type Tool } from "../../domain/navigation/views";
+import {
+  WAIT,
+  PRS,
+  MAIL,
+  GRAPH,
+  INBOX_VIEW,
+  isView,
+  boardIdOf,
+  backAfter,
+  type Back,
+  type Drawer,
+  type Tool,
+} from "../../domain/navigation/views";
 import { provider } from "../../shared/plugins";
 import { isTerminal } from "../../domain/navigation/keys";
 import { ORCH } from "../../domain/orchestrator/rules";
@@ -32,12 +44,9 @@ export async function select(key: string, tool: Tool | null = null) {
   if (nav().selected !== key) dropEmptyDraft(nav().selected);
   const { chats } = useConversationsStore.getState();
   set(draft => {
+    draft.back = backAfter(draft.back, backHere(draft), key);
     draft.projectPanel = false;
     draft.tool = tool;
-    if (draft.selected !== key && draft.drawer === "detail") {
-      draft.drawer = "";
-      draft.panel.open = "";
-    }
     // the coordinator opens with its workers next to it, anything else closes them (openWorker keeps them)
     draft.orchDetail = false;
     // a conversation's agents column and agent page belong to that conversation
@@ -70,6 +79,38 @@ export async function select(key: string, tool: Tool | null = null) {
   if (key === INBOX_VIEW) void loadInboxNotes();
   request(isView(key) ? "scroll-top" : "scroll-bottom");
   if (!isView(key)) request("focus-composer");
+}
+// where the open conversation's log is scrolled, as its view says on each scroll (null: at the bottom)
+let logAt: { key: string; top: number | null } = { key: "", top: null };
+export const logScrolled = (key: string, top: number | null) => void (logAt = { key, top });
+const backHere = (draft: { selected: string; tool: Tool | null; drawer: Drawer }): Back => ({
+  key: draft.selected,
+  tool: draft.tool,
+  drawer: draft.drawer,
+  top: logAt.key === draft.selected ? logAt.top : null,
+});
+/** The page opened next goes back to what is open now, also when that is a page (a note made from a page's / menu). */
+export const backToHere = () =>
+  set(draft => {
+    draft.back = backHere(draft);
+  });
+/** Where Back puts the log again, read once by the view when asked (`scroll-back`). */
+export const backTop = () => logAt.top;
+/** Back from a page: what it was opened from, with that drawer open again and its log scrolled where it was. */
+export async function goBack() {
+  const back = nav().back;
+  if (!back) return;
+  set(draft => {
+    draft.back = null; // a page it goes back to has no Back of its own
+  });
+  await select(back.key, back.tool);
+  set(draft => {
+    if (back.drawer) draft.drawer = back.drawer;
+  });
+  if (back.top !== null) {
+    logAt = { key: back.key, top: back.top };
+    request("scroll-back");
+  }
 }
 /** A worker as its page in the orchestrator: the workers stay on the right, the composer talks to the worker, Esc
  *  goes back to the coordinator. */
@@ -152,13 +193,11 @@ export function closeTool() {
 export const toggleDrawer = (tool: "terminal" | "notes" | "design" | "workers" | "git" | "files" | "agents") =>
   set(draft => {
     draft.drawer = draft.drawer === tool ? "" : tool;
-    draft.panel.open = "";
   });
 /** A drawer tool open, whatever the drawer showed. */
 export const showDrawer = (tool: "design") =>
   set(draft => {
     draft.drawer = tool;
-    draft.panel.open = "";
   });
 export const openProjectPanel = () => {
   // the coordinator belongs to no project and never moves

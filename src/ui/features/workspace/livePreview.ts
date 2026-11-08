@@ -391,8 +391,8 @@ const hiddenDelete = (forward: boolean) => (view: EditorView) => {
   return true;
 };
 
-/** The live preview; `follow` opens a [[link]] (as a page, or in the drawer with ⌘). */
-export function livePreview(follow: (link: string, drawer: boolean) => void) {
+/** The live preview; `follow` opens a [[link]] as a page. */
+export function livePreview(follow: (link: string) => void) {
   return [
     preview,
     EditorView.atomicRanges.of(view => view.plugin(preview)?.atomic ?? Decoration.none),
@@ -433,7 +433,7 @@ export function livePreview(follow: (link: string, drawer: boolean) => void) {
         // with the markdown shown a link is text being edited: a click puts the cursor in it, ⌘-click follows
         if (link && (!view.state.facet(showMarkdown) || e.metaKey)) {
           e.preventDefault();
-          follow(link.dataset.link!, e.metaKey);
+          follow(link.dataset.link!);
           return true;
         }
         return false;

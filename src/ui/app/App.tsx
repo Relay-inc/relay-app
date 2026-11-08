@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { urlOk } from "../../shared/markdown";
-import { isView, MAIL } from "../../domain/navigation/views";
-import { noteKey } from "../../domain/navigation/keys";
+import { isView, MAIL, pageOf } from "../../domain/navigation/views";
 import { useNavigationStore } from "../../application/navigation/store";
 import { useConversationsStore } from "../../application/conversations/store";
 import { useWorkspaceStore } from "../../application/workspace/store";
@@ -13,15 +12,16 @@ import {
   openExternal,
   select,
   closeAgent,
+  goBack,
 } from "../../application/navigation/navigation";
 import { ORCH } from "../../domain/orchestrator/rules";
-import { closeDrawer, closeTicket, openDetail } from "../../application/navigation/panel";
+import { closeDrawer, closeTicket } from "../../application/navigation/panel";
 import { request } from "../../application/navigation/requests";
 import { toggleShowMarkdown } from "../../application/navigation/editor";
 import { isKey, mailExperimental, settings } from "../../application/settings/settings";
 import { switchToNth } from "../../application/navigation/workspaces";
 import { workspaceDigit } from "../../domain/settings/shortcuts";
-import { swapSidebarTab } from "../../application/navigation/pages";
+import { openNoteLink, swapSidebarTab } from "../../application/navigation/pages";
 import { useMailStore } from "../../application/mail/store";
 import {
   clearMailSelection,
@@ -51,10 +51,10 @@ const closest = <T extends HTMLElement>(e: Event, match: (node: HTMLElement) => 
   e.composedPath().find((node): node is T => node instanceof HTMLElement && match(node));
 
 // ---------- the shortcuts that work anywhere in the main window, registered once
-// Esc closes the image, then the ticket window, a changed file's, a commit's or a file's window, then the right drawer, then a project's board or PRs, then stops the
-// running turn
+// Esc closes the image, then the ticket window, a changed file's, a commit's or a file's window, then the right drawer,
+// then a project's board or PRs, then goes back from a page to what opened it, then stops the running turn
 function onEscape(e: KeyboardEvent) {
-  const { zoom: zoomed, panel, drawer, tool, projectPanel, quickAsk, selected } = useNavigationStore.getState();
+  const { zoom: zoomed, panel, drawer, tool, projectPanel, quickAsk, selected, back } = useNavigationStore.getState();
   if (zoomed) {
     e.preventDefault();
     zoom("");
@@ -111,6 +111,19 @@ function onEscape(e: KeyboardEvent) {
   if (tool && isView(selected) && !inField(e) && !e.defaultPrevented) {
     e.preventDefault();
     closeTool();
+    return;
+  }
+  // a page opened from a conversation or a view: back to it. Not from a field, nor when Esc was a popover's or took
+  // the editor's selection away (both call preventDefault), nor with text selected in the page
+  if (
+    back &&
+    pageOf(selected) &&
+    !e.defaultPrevented &&
+    !inField(e, "input, textarea, select") &&
+    document.getSelection()?.isCollapsed !== false
+  ) {
+    e.preventDefault();
+    void goBack();
     return;
   }
   // the search and the title are inputs: Esc in them is theirs (the composer is a textarea, Esc there stops the turn)
@@ -201,6 +214,10 @@ function onKey(e: KeyboardEvent) {
     // Cmd-.: the sidebar's other tab, Chats or Pages
     e.preventDefault();
     swapSidebarTab();
+  } else if (isKey(e, "app.back") && useNavigationStore.getState().back) {
+    // ⌘[: a page back to the conversation or view it was opened from
+    e.preventDefault();
+    void goBack();
   } else if (workspaceDigit(settings(), e)) {
     // ⌃1 to ⌃9 by default (Settings › Shortcuts): the workspace at that place in the footer's menu
     e.preventDefault();
@@ -213,11 +230,11 @@ function onKey(e: KeyboardEvent) {
 function onLink(e: MouseEvent) {
   // a component that handled the click itself (a picture that opens in the viewer window)
   if (e.defaultPrevented) return;
-  // a vault note named in markdown opens in the right drawer (shared/markdown.ts)
+  // a vault note named in markdown opens as a page (shared/markdown.ts)
   const noteLink = closest(e, node => !!node.dataset.note);
   if (noteLink) {
     e.preventDefault();
-    openDetail(noteKey(noteLink.dataset.note!));
+    void openNoteLink(noteLink.dataset.note!);
     return;
   }
   // a code block's copy button (shared/markdown.ts)

@@ -43,9 +43,9 @@ export const meetingOf = (key: string) => {
   const target = opened(key);
   return target.kind === "work" && target.work === "meeting" ? target.id : "";
 };
-/** What the right drawer shows, "" while it is closed: a note's detail, one of the project's tools, the open
- *  conversation's changes, or the orchestrator's workers. */
-export type Drawer = "" | "detail" | "terminal" | "notes" | "design" | "workers" | "git" | "files" | "agents";
+/** What the right drawer shows, "" while it is closed: one of the project's tools, the open conversation's changes,
+ *  or the orchestrator's workers. */
+export type Drawer = "" | "terminal" | "notes" | "design" | "workers" | "git" | "files" | "agents";
 /** A project's board or PRs opened from its title bar: whose they are, and the conversation to go back to. */
 export type Tool = { project: string; back: string };
 /** `detail`: a second, quieter line; a toast with one is a refusal and shows the red mark. */
@@ -55,3 +55,10 @@ export const pageOf = (key: string) => {
   const target = opened(key);
   return target.kind === "page" ? target.target : "";
 };
+/** What a page goes back to: what was open before it (a conversation or a view), the drawer that had, and where its
+ *  log was scrolled (null: at the bottom). */
+export type Back = { key: string; tool: Tool | null; drawer: Drawer; top: number | null };
+/** Back once `to` opens from `from` (what is open now): a page opened from anything but a page goes back to it, one
+ *  opened from a page keeps that page's Back (one level), anything else has none. */
+export const backAfter = (back: Back | null, from: Back, to: string): Back | null =>
+  !pageOf(to) ? null : pageOf(from.key) || from.key === to ? back : from;

@@ -17,7 +17,7 @@ const OUTSIDE =
 /** A file to open in its default app (a document, a picture, an archive), not as text in the window. */
 export const opensOutside = (name: string) => OUTSIDE.test(name);
 
-/** A markdown file inside the vault as the note path the right drawer opens, else "". */
+/** A markdown file inside the vault as the note path its page opens by, else "". */
 export function vaultNote(path: string, vault: string) {
   if (!vault || !path.startsWith(`${vault}/`) || !/\.md$/i.test(path)) return "";
   return path.slice(vault.length + 1);

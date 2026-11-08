@@ -3,14 +3,14 @@ import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
 import { loadSnapshot } from "../workspace/vault";
 import { makeStore } from "../make-store";
-import { toast } from "./navigation";
+import { backToHere, toast } from "./navigation";
 import { existingNote } from "../../domain/workspace/blocks";
 import type { NoteType } from "../../domain/types/registry";
 import { noteName } from "../../domain/navigation/pages";
 import { t } from "../../shared/i18n";
 import { loadRows, rowsOf } from "../collections/collections";
 import { registryOf } from "../types/types";
-import { abs, followPageLink, openPage, placeIn, togglePage } from "./pages";
+import { abs, dropLink, openPage, placeIn, togglePage } from "./pages";
 import { activeFolder } from "./workspaces";
 
 // The knowledge base's note tools: New ▸ from a template, Today's note, ⌘K's search and a folder's sort.
@@ -60,9 +60,9 @@ export const existingTyped = (type: NoteType, title: string) =>
   existingNote(rowsOf(activeFolder()), registryOf(activeFolder()), type, title);
 /** A typed note from a page's / menu: made from the type's template in its home with the page's project as `about:`,
  *  or, when a note of that type already has the title, that one. `link` puts the link in the page and returns what takes
- *  it out again; a new note opens in the drawer (as ⌘-click on a link does) and its toast's Undo removes the link and
+ *  it out again; a new note opens as a page whose Back returns to this one, and its toast's Undo removes the link and
  *  moves the file to .trash/. */
-export async function newTypedNote(type: NoteType, title: string, page: string, link: (name: string) => () => void) {
+export async function newTypedNote(type: NoteType, title: string, page: string, link: (name: string) => () => boolean) {
   try {
     await loadRows(); // the notes as they are now: a person made a minute ago is linked, not made again
     const old = existingTyped(type, title);
@@ -72,9 +72,10 @@ export async function newTypedNote(type: NoteType, title: string, page: string, 
     const path = await backend.newFromTemplate(activeFolder(), template, "", place.about, place.context, title);
     const unlink = link(noteName(path));
     await loadSnapshot();
-    followPageLink(noteName(path), true);
+    backToHere();
+    void openPage(path);
     toast(t("slash.created", { type: type.name, name: noteName(path) }), () => {
-      unlink();
+      if (!unlink()) void dropLink(page, `[[${noteName(path)}]]`).catch(e => toast(String(e)));
       void backend
         .trashPath(abs(path))
         .then(loadSnapshot)

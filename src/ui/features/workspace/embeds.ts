@@ -10,7 +10,7 @@ import {
   pickAttachments,
   type EmbedInfo,
 } from "../../../application/navigation/embeds";
-import { followPageLink } from "../../../application/navigation/pages";
+import { openNoteLink } from "../../../application/navigation/pages";
 import { currentLang, currentLocale, t, tn } from "../../../shared/i18n";
 import { fileSize } from "../../../shared/format";
 import { markdownHtml } from "../../../shared/markdown";
@@ -256,7 +256,7 @@ class EmbedWidget extends WidgetType {
     head.append(el("span", "cm-embed-sub", name), el("span", "cm-embed-spacer"));
     const open = el("button", "cm-embed-link", t("embed.open"));
     open.type = "button";
-    open.addEventListener("click", () => followPageLink(embed.target, false, found ? embed.heading : ""));
+    open.addEventListener("click", () => openNoteLink(embed.target, found ? embed.heading : ""));
     head.append(open);
     block.append(head);
     if (embed.heading && !found) {
