@@ -294,6 +294,7 @@ export default {
   "orch.stop": "Arrêter",
   "orch.diff": "Modifications",
   "orch.flags": "Signalements",
+  "orch.decisions": "Décisions",
   "orch.checking": "Vérifications en cours",
   "orch.stuck": "Semble bloqué",
   "orch.reviewing": "Revue en cours",

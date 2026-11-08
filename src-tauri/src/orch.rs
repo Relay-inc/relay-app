@@ -56,6 +56,10 @@ pub struct Report {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Step { pub done: u32, pub total: u32, pub note: Option<String> }
 
+/// One row of a worker's decision trail, from its `decision` tool: what it chose, why, a pointer to the evidence, how it turned out.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+pub struct Decision { pub at: i64, pub decision: String, pub why: String, pub evidence: Option<String>, pub result: Option<String> }
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Worker {
     pub key: String,
@@ -76,6 +80,9 @@ pub struct Worker {
     /// its last `step`, cleared when a message starts it on a new round
     #[serde(default)]
     pub step: Option<Step>,
+    /// its `decision` rows over its whole life (a new round does not clear them), the oldest dropped past DECISIONS_KEPT
+    #[serde(default)]
+    pub decisions: Vec<Decision>,
     /// what the protected branches and shared files were at the start, to flag what moved
     #[serde(default)]
     pub base: HashMap<String, String>,
@@ -191,6 +198,11 @@ pub fn tool_list(coord: bool) -> Value {
             json!({"done": {"type": "integer", "minimum": 0, "description": "Steps finished so far"},
                    "total": {"type": "integer", "minimum": 1, "description": "Steps planned; may change when the plan does"},
                    "note": {"type": "string", "maxLength": 80, "description": "The step in progress, a few words"}}), &["done"]),
+            tool("decision", "Log a decision point or checkpoint in your trail, which the user reads instead of trusting your summary: a fork you chose, a unit finished with its check result, a pivot or revert and what triggered it, a blocker found. One row each, not every action. Silent and cheap.",
+            json!({"decision": {"type": "string", "maxLength": 200, "description": "What you chose or did, one line"},
+                   "why": {"type": "string", "maxLength": 300, "description": "Why, one line"},
+                   "evidence": {"type": "string", "maxLength": 200, "description": "A pointer, not prose: commit SHA, file:line, PR number, artifact path"},
+                   "result": {"type": "string", "maxLength": 80, "description": "How it turned out: tests green, reverted, open"}}), &["decision", "why"]),
             tool("report", "Report the end of your task to the coordinator. Call it once, at the end, then end your turn.",
             json!({"status": {"type": "string", "enum": ["done", "blocked", "failed"]},
                    "summary": {"type": "string", "maxLength": 4000, "description": "What changed, where, what is left"},
@@ -248,6 +260,7 @@ fn call(app: &AppHandle, key: &str, name: &str, a: &Value) -> Value {
         (true, "message") => message(app, &s("worker").unwrap_or_default(), &s("text").unwrap_or_default()).unwrap_or_else(fail),
         (true, "stop") => { let w = s("worker").unwrap_or_default(); if stop(app, &w) { text(format!("{w} stopped")) } else { fail(format!("no worker {w}")) } }
         (false, "step") => step(app, key, a["done"].as_u64(), a["total"].as_u64(), s("note")).unwrap_or_else(fail),
+        (false, "decision") => decision(app, key, s("decision"), s("why"), s("evidence"), s("result")).unwrap_or_else(fail),
         (false, "report") => {
             let options = a["options"].as_array().map(|o| o.iter().filter_map(|v| v.as_str().map(str::trim).filter(|v| !v.is_empty()).map(String::from)).take(4).collect()).unwrap_or_default();
             report(app, key, s("status"), s("summary"), s("questions"), options).unwrap_or_else(fail)
@@ -260,9 +273,12 @@ fn call(app: &AppHandle, key: &str, name: &str, a: &Value) -> Value {
 /// compacted to know again what each one was asked.
 const WORKERS_LISTED: usize = 30;
 const BRIEF_LISTED: usize = 400;
+/// Decisions `workers` shows per worker; the rest are on the worker's page
+const DECISIONS_LISTED: usize = 5;
 fn summary(w: &Worker) -> Value {
     let brief: String = w.task.chars().take(BRIEF_LISTED).collect();
     json!({"key": w.key, "project": w.project, "title": w.title, "brief": brief, "state": w.state, "stalled": w.stalled, "repo": w.repo, "worktree": w.worktree, "branch": w.branch, "step": w.step,
+           "decisions": &w.decisions[w.decisions.len().saturating_sub(DECISIONS_LISTED)..],
            "report": w.report.as_ref().map(|r| json!({"status": r.status, "summary": r.summary, "questions": r.questions, "flags": r.flags})), "answer": w.answer})
 }
 
@@ -537,6 +553,11 @@ fn findings(answer: &str) -> Result<Findings, String> {
     Ok(out)
 }
 
+/// The trail as PR lines: decision — why (evidence)
+fn decisions_md(d: &[Decision]) -> String {
+    d.iter().map(|d| format!("- {} — {}{}", d.decision, d.why, d.evidence.as_deref().map(|e| format!(" ({e})")).unwrap_or_default())).collect::<Vec<_>>().join("\n")
+}
+
 /// Push a pipeline worker's branch and open its PR (once: a later `done` only pushes, the PR follows the branch).
 /// Returns the PR's URL and why there is none.
 fn publish(app: &AppHandle, w: &Worker, r: &Report) -> (Option<String>, Option<String>) {
@@ -553,6 +574,7 @@ fn publish(app: &AppHandle, w: &Worker, r: &Report) -> (Option<String>, Option<S
     if !t("url").is_empty() { body += &format!("\n\nTicket: {}", t("url")); }
     if let Some(v) = w.validate.as_ref().filter(|v| !v.checks.trim().is_empty()) { body += &format!("\n\nChecks passed: `{}`", v.checks.trim()); }
     if let Some(n) = &w.review_notes { body += &format!("\n\nFrom the automatic review, nothing blocking:\n\n{n}"); }
+    if !w.decisions.is_empty() { body += &format!("\n\n## Decisions\n\n{}", decisions_md(&w.decisions)); }
     body += "\n\nBuilt by an agent from Relay's board pipeline.";
     let base = w.base_branch.clone().unwrap_or_else(|| "main".into());
     match super::gh(&app.state::<App>(), &["pr", "create", "-R", &slug, "--head", branch, "--base", &base, "--title", &title, "--body", &body]) {
@@ -772,6 +794,23 @@ fn step(app: &AppHandle, key: &str, done: Option<u64>, total: Option<u64>, note:
     Ok(text("ok"))
 }
 
+/// Decisions kept per worker
+const DECISIONS_KEPT: usize = 100;
+/// A table cell: one line, at most `max` characters
+fn cell(v: &str, max: usize) -> String { v.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(max).collect() }
+fn push_decision(w: &mut Worker, at: i64, decision: &str, why: &str, evidence: Option<&str>, result: Option<&str>) {
+    let opt = |v: Option<&str>, max| v.map(|v| cell(v, max)).filter(|v| !v.is_empty());
+    w.decisions.push(Decision { at, decision: cell(decision, 200), why: cell(why, 300), evidence: opt(evidence, 200), result: opt(result, 80) });
+    // ponytail: the newest DECISIONS_KEPT rows only, so orch.json stays small; raise it if trails of long workers get cut
+    if w.decisions.len() > DECISIONS_KEPT { w.decisions.remove(0); }
+}
+/// A worker's `decision`: one row of its trail, stamped now. Unlike `step`, a new round does not clear it.
+fn decision(app: &AppHandle, key: &str, decision: Option<String>, why: Option<String>, evidence: Option<String>, result: Option<String>) -> Result<Value, String> {
+    let (decision, why) = (decision.ok_or("decision is required")?, why.ok_or("why is required")?);
+    update(app, key, |w| push_decision(w, now(), &decision, &why, evidence.as_deref(), result.as_deref())).ok_or("this conversation is no worker of the orchestrator")?;
+    Ok(text("ok"))
+}
+
 fn asks(q: &Option<String>) -> bool { q.as_deref().is_some_and(|q| !q.trim().is_empty()) }
 fn report(app: &AppHandle, key: &str, status: Option<String>, summary: Option<String>, questions: Option<String>, options: Vec<String>) -> Result<Value, String> {
     let status = status.filter(|s| ["done", "blocked", "failed"].contains(&s.as_str())).ok_or("status must be done, blocked or failed")?;
@@ -984,10 +1023,23 @@ mod tests {
     }
 
     #[test]
+    fn decisions_are_one_line_and_capped() {
+        let mut w = Worker::default();
+        push_decision(&mut w, 1, "Use\treplace()\nnot add()", &"y".repeat(500), Some("  "), Some("tests\ngreen"));
+        let d = &w.decisions[0];
+        assert_eq!((d.decision.as_str(), d.why.chars().count(), d.evidence.as_deref(), d.result.as_deref()), ("Use replace() not add()", 300, None, Some("tests green")));
+        for i in 0..DECISIONS_KEPT + 5 { push_decision(&mut w, i as i64, &format!("d{i}"), "w", Some("abc123"), None); }
+        assert_eq!((w.decisions.len(), w.decisions[0].decision.as_str()), (DECISIONS_KEPT, "d5"), "the oldest are dropped");
+        assert_eq!(summary(&w)["decisions"].as_array().unwrap().len(), DECISIONS_LISTED);
+        assert_eq!(decisions_md(&w.decisions[..1]), "- d5 — w (abc123)");
+    }
+
+    #[test]
     fn tools_per_role() {
         let names = |c| tool_list(c)["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect::<Vec<_>>();
         assert_eq!(names(true), ["dispatch", "workers", "message", "stop"]);
-        assert_eq!(names(false), ["step", "report"]);
+        assert_eq!(names(false), ["step", "decision", "report"]);
+        assert_eq!(agent_claude::ORCH_WORKER_TOOLS.map(|t| t.rsplit("__").next().unwrap()), ["step", "decision", "report"]);
         assert_eq!(agent_claude::ORCH_COORD_TOOLS.map(|t| t.rsplit("__").next().unwrap()), ["dispatch", "workers", "message", "stop"]);
     }
 

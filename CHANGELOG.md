@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- A worker now logs its decisions as it goes (what it chose, why, where the evidence is, how it turned out). The trail shows on its page, and a board pipeline's PR description lists it under Decisions. (#450)
+
 ## [0.0.49] - 2026-11-08
 
 ### Added
