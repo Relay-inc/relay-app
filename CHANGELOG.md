@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.49] - 2026-11-08
+
 ### Added
 
 - Views inside a page can be edited and inserted: a cell of a page's base table writes that note's property (the block's text stays the same), a base grouped by a property shows as a board whose cards move between lanes, / → View inserts a table of the page's meetings, and new projects from the starter vault's template come with one.
