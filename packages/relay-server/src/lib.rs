@@ -20,6 +20,7 @@ pub mod docs;
 pub mod cli;
 pub mod github;
 pub mod mirror;
+pub mod org;
 #[cfg(target_os = "macos")]
 pub mod ramdisk;
 pub mod upgrade;
@@ -81,7 +82,9 @@ const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answ
 /// further devices, and makes no vaults of its own. `pair` with a code from the owner makes it a full device.
 const VAULT_OPS: &[&str] = &["pair", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
     "vault_get", "vault_put", "vault_put_many", "vault_delete", "vault_stream", "vault_pk", "vault_rotate", "vault_log", "vault_append",
-    "doc_push", "doc_pull", "doc_snapshot_put", "doc_list", "doc_bind", "doc_unbind"];
+    "doc_push", "doc_pull", "doc_snapshot_put", "doc_list", "doc_bind", "doc_unbind",
+    // the organisation list, read only: a vault admin adds the organisation admins to its workspace (org.rs)
+    "org_log"];
 /// What a vault-only device may ask besides, while it is admin of a vault here: it keeps the server, so it sees what
 /// the server is and updates it (`update`, to an official release only: signed with Relay's release key, upgrade.rs).
 /// Never a conversation, the mirror, a phone, GitHub or a vault of its own.
@@ -352,6 +355,15 @@ impl Server {
                 reply(&mut w, res)
             }
             "vault_remove" => reply(&mut w, self.vaults.remove(&fp, s("vault"), s("fp")).map(|_| json!({}))),
+            // the organisation (org.rs): its signed list, and for its admins the overview and a revoke
+            "org_log" => reply(&mut w, Ok(org::log(&self.data, &fp, req["from"].as_u64().unwrap_or(0)))),
+            "org_append" => reply(&mut w, org::append(&self.data, &self.fp, &fp, &req["entry"]).map(|_| json!({}))),
+            "org_pk" => reply(&mut w, org::publish(&self.data, &fp, &req).map(|_| json!({}))),
+            "org_overview" => reply(&mut w, org::overview(&self.vaults, &self.fp, &fp)),
+            "org_revoke" => {
+                let fps: Vec<String> = req["fps"].as_array().into_iter().flatten().filter_map(|f| f.as_str().map(String::from)).collect();
+                reply(&mut w, org::revoke(&self.data, &self.fp, &fp, &fps))
+            }
             "vault_manifest" => reply(&mut w, self.vaults.manifest(&fp, s("vault"))),
             "vault_log" => reply(&mut w, self.vaults.log(&fp, s("vault"), req["from"].as_u64().unwrap_or(0))),
             "vault_append" => {

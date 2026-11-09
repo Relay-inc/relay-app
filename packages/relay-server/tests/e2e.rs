@@ -2062,3 +2062,156 @@ fn a_shared_vaults_documents() {
     assert!(colleague.call(json!({"op": "doc_list", "vault": vault})).is_err());
     std::fs::remove_dir_all(&dirs).ok();
 }
+
+/// An invite to `vault` that `m` makes and remembers in its key file, as the app does.
+fn invite_to(m: &Member, t: &Team, vault: &str, role: &str) -> String {
+    let keys = m.keys();
+    let (link, inv) = m.c.vault_invite(vault, role, &keys, &t.host, t.port).unwrap();
+    let mut k = m.keys();
+    k.invites.push(relay_remote::vault::Invited { id: inv.id, secret: relay_remote::proto::PairLine::parse(&link).unwrap().secret.unwrap(), role: role.into(), epoch: keys.epoch(), expires: inv.expires, who: String::new() });
+    *m.file.lock().unwrap() = k.format();
+    link
+}
+/// `vault`'s member list as `c` reads it from the server.
+fn list_in(c: &Client, vault: &str) -> relay_remote::members::List {
+    let entries: Vec<relay_remote::members::Entry> = serde_json::from_value(c.call(serde_json::json!({"op": "vault_log", "vault": vault})).unwrap()["entries"].clone()).unwrap();
+    relay_remote::members::check(vault, &entries, None).unwrap().0
+}
+
+/// The organisation (docs/workspaces.md, Organisation): the owner starts it and adds a second admin on the keys it
+/// published (their codes match); a new workspace gets the organisation admins from its creation, an existing one when
+/// its admin adds them; the second admin's Mac takes the keys sealed to it and offboards a person from every workspace
+/// it is admin of in one go, then revokes the device. Where it is no admin, the person stays.
+#[test]
+fn an_organisation_admin_is_on_every_new_workspace_and_offboards_a_person_everywhere() {
+    use relay_remote::org;
+    use relay_remote::vault::{Keys, VaultKey};
+    use serde_json::json;
+    let t = team("org");
+    let nosave = |_: &Keys| Ok(());
+    // the laptop paired first: it owns the server and starts the organisation
+    let mut lk = Keys::from(VaultKey::generate());
+    lk.ensure();
+    org::start(&t.laptop, &mut lk, &nosave).unwrap();
+    assert!(org::start(&t.laptop, &mut lk, &nosave).unwrap_err().contains("already"));
+    // a second full device publishes its keys, the owner compares the code and adds it
+    let bid = device("org-boss");
+    let (l, _) = client::pair(&pair_line(&t.s), &bid, "boss").unwrap();
+    let boss = Client::new(&l.host, l.port, &l.fp, bid.clone());
+    let mut bk = Keys::from(VaultKey::generate());
+    let code = org::publish(&boss, &mut bk, &nosave).unwrap();
+    assert!(org::fetch(&boss, &mut bk, &nosave).is_ok_and(|o| !o.me && !o.owner && o.list.is_some()));
+    let ov = t.laptop.call(json!({"op": "org_overview"})).unwrap();
+    let cand = ov["candidates"].as_array().unwrap().iter().find(|c| c["fp"] == bid.fingerprint().as_str()).unwrap().clone();
+    let (id, pk) = org::proven(&t.laptop.fp, &bid.fingerprint(), &cand).unwrap();
+    assert_eq!(org::code(&id, &pk), code);
+    // a publication changed on the way (the server's own keys) no longer proves
+    assert!(org::proven(&t.laptop.fp, &bid.fingerprint(), &json!({"id": id, "pk": "1".repeat(64), "sig": cand["sig"]})).is_none());
+    org::add(&t.laptop, &mut lk, &bid.fingerprint(), &id, &pk, &nosave).unwrap();
+    let o = org::fetch(&boss, &mut bk, &nosave).unwrap();
+    assert!(o.me && o.admins().len() == 2);
+    // a device that only shares vaults reads the list, and nothing else of the organisation
+    assert!(t.colleague.call(json!({"op": "org_log"})).is_ok());
+    for op in ["org_overview", "org_append", "org_revoke", "org_pk"] { assert!(t.colleague.call(json!({"op": op})).unwrap_err().contains("not allowed"), "{op}"); }
+
+    // the first workspace, from before: its admin's list, a member on it, and the organisation admins not
+    let a = Member::new(&t.laptop, &t.lid, &t.key);
+    a.remote(&t.vault).start(false, &a.save()).unwrap();
+    rounds(&t, &[&a], 1);
+    let (c, cid) = join(&a.invite(&t, "member"), "org-c");
+    rounds(&t, &[&c, &a, &c], 1);
+    let managed = |id: &str| boss.call(json!({"op": "org_overview"})).unwrap()["workspaces"].as_array().unwrap().iter().find(|w| w["id"] == id).unwrap()["managed"].clone();
+    assert_eq!(managed(&t.vault), json!(false));
+    // a new workspace, made as the app does: its list, then the organisation admins as admins
+    let w2 = t.laptop.vault_create("Second").unwrap().id;
+    let a2 = Member::new(&t.laptop, &t.lid, &Keys::from(VaultKey::generate()));
+    a2.remote(&w2).start(false, &a2.save()).unwrap();
+    assert_eq!(a2.remote(&w2).add_org(&o.admins(), &a2.save()).unwrap(), 1, "the laptop is admin already");
+    assert!(list_in(&t.laptop, &w2).admin(&bid.fingerprint()) && managed(&w2) == json!(true));
+    // the boss's Mac takes the workspace key sealed to its organisation key, and works the list as its admin
+    let b2 = Member::new(&boss, &bid, &org::adopt(&boss, &w2, &bk).unwrap());
+    let step = b2.step(&w2);
+    assert!(step.admin && step.errors.is_empty() && step.warnings.is_empty(), "{step:?}");
+    // a key the server seals itself to the boss's organisation key is not the workspace's: its list does not check
+    assert!(org::adopt(&boss, &t.vault, &bk).is_err(), "not added there yet");
+    // the existing workspace: its admin adds the organisation admins
+    assert_eq!(a.remote(&t.vault).add_org(&o.admins(), &a.save()).unwrap(), 1);
+    assert_eq!(managed(&t.vault), json!(true));
+    let b1 = Member::new(&boss, &bid, &org::adopt(&boss, &t.vault, &bk).unwrap());
+    assert!(b1.step(&t.vault).admin);
+    // the colleague joins the second workspace as a person, and a third one the boss is no admin of
+    let (_, _, k2) = client::vault_join(&invite_to(&a2, &t, &w2, "member"), &cid, "org-c").unwrap();
+    let c2 = Member::new(&c.c, &cid, &k2);
+    for m in [&c2, &a2, &c2] { m.step(&w2); }
+    a2.remote(&w2).set_person(&"7".repeat(64), "Cy", "cy@example.com", &c.fp, &a2.save()).unwrap();
+    let w3 = t.laptop.vault_create("Third").unwrap().id;
+    let a3 = Member::new(&t.laptop, &t.lid, &Keys::from(VaultKey::generate()));
+    a3.remote(&w3).start(false, &a3.save()).unwrap();
+    let (_, _, k3) = client::vault_join(&invite_to(&a3, &t, &w3, "member"), &cid, "org-c").unwrap();
+    let c3 = Member::new(&c.c, &cid, &k3);
+    for m in [&c3, &a3, &c3] { m.step(&w3); }
+    // the overview: the colleague is one person in three workspaces
+    let ov = boss.call(json!({"op": "org_overview"})).unwrap();
+    let cy = ov["people"].as_array().unwrap().iter().find(|p| p["devices"].as_array().unwrap().iter().any(|d| d["fp"] == c.fp.as_str())).unwrap().clone();
+    assert_eq!((cy["name"].as_str(), cy["workspaces"].as_array().unwrap().len()), (Some("Cy"), 3), "{cy}");
+    // offboarding: off every list the boss is admin of (a person-remove, a remove), refused where it is not
+    let gone = vec![c.fp.clone()];
+    assert_eq!(b2.remote(&w2).remove_devices(&gone, &b2.save()).unwrap(), 1);
+    assert_eq!(b1.remote(&t.vault).remove_devices(&gone, &b1.save()).unwrap(), 1);
+    assert!(org::adopt(&boss, &w3, &bk).is_err(), "no member of the third one");
+    assert!(!list_in(&t.laptop, &w2).members.contains_key(&c.fp) && !list_in(&t.laptop, &t.vault).members.contains_key(&c.fp));
+    assert!(list_in(&t.laptop, &w3).members.contains_key(&c.fp), "where the boss is no admin the person stays");
+    // the boss's next round changes the key for who is left
+    assert_eq!(b2.step(&w2).keys.map(|k| k.epoch()), Some(1));
+    // and the device is revoked: it connects nowhere any more. Never an organisation admin
+    assert!(boss.call(json!({"op": "org_revoke", "fps": [t.lid.fingerprint()]})).unwrap_err().contains("organisation admin"));
+    assert!(c.c.call(json!({"op": "org_revoke", "fps": [bid.fingerprint()]})).is_err());
+    assert_eq!(boss.call(json!({"op": "org_revoke", "fps": gone})).unwrap()["revoked"].as_array().unwrap().len(), 1);
+    assert!(c3.c.call(json!({"op": "vault_manifest", "vault": w3})).is_err());
+    // the owner takes the boss off the organisation: a new workspace no longer adds it
+    org::remove(&t.laptop, &mut lk, &bid.fingerprint(), &nosave).unwrap();
+    assert_eq!(org::fetch(&t.laptop, &mut lk, &nosave).unwrap().admins().len(), 1);
+    assert!(!org::fetch(&boss, &mut bk, &nosave).unwrap().me);
+}
+
+/// An organisation list held back or forked by the server is noticed by a Mac that saw it before.
+#[test]
+fn a_held_back_or_forked_organisation_list_is_refused() {
+    use relay_remote::org;
+    use relay_remote::vault::{Keys, VaultKey};
+    let t = team("org-fork");
+    let mut lk = Keys::from(VaultKey::generate());
+    lk.ensure();
+    let nosave = |_: &Keys| Ok(());
+    org::start(&t.laptop, &mut lk, &nosave).unwrap();
+    let path = t.s.data.join("org.json");
+    let kept = std::fs::read_to_string(&path).unwrap();
+    // emptied: held back
+    std::fs::write(&path, "{}").unwrap();
+    assert!(org::fetch(&t.laptop, &mut lk, &nosave).unwrap_err().contains("held back"));
+    let mut other = Keys::from(VaultKey::generate());
+    other.ensure();
+    std::fs::write(&path, &kept).unwrap();
+    assert!(org::fetch(&t.laptop, &mut lk, &nosave).is_ok());
+    // its creation made by another key: not what this Mac pinned (nor signed by it)
+    let mut v: serde_json::Value = serde_json::from_str(&kept).unwrap();
+    v["log"][0]["id"] = serde_json::json!(other.identity());
+    std::fs::write(&path, v.to_string()).unwrap();
+    assert!(org::fetch(&t.laptop, &mut lk, &nosave).is_err());
+}
+
+/// A workspace's policy (docs/workspaces.md, Policy): an admin signs it, every member's round takes it and keeps it in
+/// its key file, a member cannot sign one, and the server refuses a policy entry that does not check.
+#[test]
+fn an_admin_sets_the_workspace_policy_and_every_member_keeps_it() {
+    let (t, a, b, _) = trio("policy", "member");
+    a.remote(&t.vault).set_policy(&["codex".to_string()], true, &a.save()).unwrap();
+    let want = Some(relay_remote::members::Policy { providers: vec!["codex".into()], capture: true });
+    assert_eq!((b.step(&t.vault).policy, b.keys().policy), (want.clone(), want.clone()));
+    assert!(b.remote(&t.vault).set_policy(&["claude".to_string()], false, &b.save()).unwrap_err().contains("only an admin"));
+    assert!(a.remote(&t.vault).set_policy(&["opencode".to_string()], false, &a.save()).unwrap_err().contains("wrong fields"));
+    assert!(a.remote(&t.vault).set_policy(&[], false, &a.save()).is_err());
+    // a newer one replaces it
+    a.remote(&t.vault).set_policy(&["claude".to_string(), "codex".to_string()], false, &a.save()).unwrap();
+    assert_eq!(b.step(&t.vault).policy.unwrap().providers, ["claude", "codex"]);
+}

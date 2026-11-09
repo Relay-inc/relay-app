@@ -56,7 +56,7 @@ impl Vault {
     /// that is no member's device, so no Relay names a device there (an old one sends none, or its device).
     pub(crate) fn session_ok(&self, from: &str) -> bool { hex(from, 16) && !self.members.iter().any(|m| m.fp.starts_with(from)) }
     /// The member list as it stands (checked when each entry went on), none when there is none or it no longer checks.
-    fn list(&self) -> Option<members::List> { members::check(&self.id, &self.log, None).ok().map(|(l, _)| l) }
+    pub(crate) fn list(&self) -> Option<members::List> { members::check(&self.id, &self.log, None).ok().map(|(l, _)| l) }
 }
 
 /// Exactly `n` lowercase hex characters: every id, code and blob name. Anything else never reaches a path.
@@ -352,7 +352,9 @@ impl Vaults {
             match e.kind.as_str() {
                 "create" if !v.log.is_empty() || me != "admin" => return Err("this vault has a member list".into()),
                 "rekey" => return Err("a key change goes with vault_rotate".into()),
-                "add" if v.role(&e.fp).is_none() => return Err("only who joined can be added".into()),
+                // an organisation admin (docs/workspaces.md, Organisation) goes on as admin without joining: its keys are
+                // on the organisation list, and the vault key comes sealed to it in `keys`
+                "add" if v.role(&e.fp).is_none() && !(e.role == "admin" && crate::org::is_admin(&self.data, &self.fp, &e.fp)) => return Err("only who joined can be added".into()),
                 // who joined with a reader invite goes on the list as a reader: a role entry raises it later, if at all
                 "add" if v.role(&e.fp) == Some("reader") && e.role != "reader" => return Err("joined as a reader: add it as one".into()),
                 _ => {}
@@ -368,10 +370,15 @@ impl Vaults {
                 }
                 _ => {}
             }
+            if e.kind == "add" && v.role(&e.fp).is_none() {
+                let name = clients(&self.data).into_iter().find(|c| c.fp == e.fp).map(|c| c.name).unwrap_or_default();
+                v.members.push(Member { fp: e.fp.clone(), name, role: "admin".into(), added: now(), pk: String::new(), id: String::new(), sig: String::new(), mac: String::new(), imac: String::new(), via: String::new() });
+            }
             if e.kind == "add" {
+                // epoch 0 too: an organisation admin never had an invite link to carry it
                 for (ep, w) in keys {
                     let w = w.as_str().filter(|w| !w.is_empty() && w.len() <= MAX_WRAPPED && hex(w, w.len())).ok_or("bad sealed key")?;
-                    if ep.parse::<u32>().ok().filter(|x| *x >= 1 && *x <= v.epoch).is_none() { return Err("a key of an epoch that is not here".into()); }
+                    if ep.parse::<u32>().ok().filter(|x| *x <= v.epoch).is_none() { return Err("a key of an epoch that is not here".into()); }
                     v.keys.entry(ep.clone()).or_default().insert(e.fp.clone(), w.into());
                 }
             }

@@ -105,7 +105,8 @@ impl List {
 
 pub fn hex64(s: &str) -> bool { lowhex(s, 64) }
 fn lowhex(s: &str, n: usize) -> bool { s.len() == n && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) }
-fn signed(id: &str, msg: &str, sig: &str) -> bool {
+/// Whether `sig` is the Ed25519 identity `id`'s signature over `msg` (all hex).
+pub fn signed(id: &str, msg: &str, sig: &str) -> bool {
     let (Some(id), Some(sig)) = (unhex(id), unhex(sig)) else { return false };
     ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, id).verify(msg.as_bytes(), &sig).is_ok()
 }

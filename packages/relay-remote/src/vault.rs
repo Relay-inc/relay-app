@@ -124,18 +124,20 @@ fn frame_aad(e: u32, l: &str, vault: &str, kind: &str, doc: &str, from: &str, n:
 /// this Mac to the list. `invites`: the invites this Mac made (id, secret, role, epoch), until their joiner is added.
 /// `nohistory`: the member list says the workspace was made without history, kept here once seen, so a round that
 /// cannot check the list (held back, a fork) still writes nothing that names this Mac.
+/// `policy`: the newest policy the member list said (docs/workspaces.md, Policy), kept here so a conversation that starts
+/// before the next round still follows it.
 #[derive(Clone)]
 pub struct Keys {
     ring: BTreeMap<u32, VaultKey>, pub secret: Option<[u8; 32]>, pub sign: Option<[u8; 32]>, pub creator: Option<String>,
     pub head: Option<(u64, String)>, pub expect: Option<String>, pub joined: Option<String>, pub invites: Vec<Invited>,
-    pub nohistory: bool,
+    pub nohistory: bool, pub policy: Option<crate::members::Policy>,
 }
 /// An invite this Mac made: its id, the link's secret, the role, the epoch it carried keys up to, when it expires, and
 /// `who`: the person whoever joins with it is added under ("" none).
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Invited { pub id: String, pub secret: String, pub role: String, pub epoch: u32, pub expires: u64, pub who: String }
 impl From<VaultKey> for Keys {
-    fn from(k: VaultKey) -> Keys { Keys { ring: BTreeMap::from([(0, k)]), secret: None, sign: None, creator: None, head: None, expect: None, joined: None, invites: vec![], nohistory: false } }
+    fn from(k: VaultKey) -> Keys { Keys { ring: BTreeMap::from([(0, k)]), secret: None, sign: None, creator: None, head: None, expect: None, joined: None, invites: vec![], nohistory: false, policy: None } }
 }
 impl std::fmt::Debug for Keys { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "Keys(epoch {})", self.epoch()) } }
 impl Keys {
@@ -221,6 +223,8 @@ impl Keys {
     pub fn public(&self) -> String { hex(x25519_dalek::PublicKey::from(&x25519_dalek::StaticSecret::from(self.secret.expect("ensure first"))).as_bytes()) }
     /// This member's identity, its Ed25519 public key (hex). Panics without `ensure` first.
     pub fn identity(&self) -> String { use ring::signature::KeyPair; hex(self.signer().public_key().as_ref()) }
+    /// `msg` signed by this member's identity (hex).
+    pub fn sign_text(&self, msg: &str) -> String { hex(self.signer().sign(msg.as_bytes()).as_ref()) }
     fn signer(&self) -> ring::signature::Ed25519KeyPair { ring::signature::Ed25519KeyPair::from_seed_unchecked(&self.sign.expect("ensure first")).expect("a 32-byte seed") }
     /// What `vault_pk` sends for this member: both public keys signed by its identity, vouched for under the newest key
     /// (`mac`, `<epoch>:<hex>`), and while it waits to be added, proven with its invite link's secret (`imac`).
@@ -276,6 +280,12 @@ impl Keys {
                 ["expect", h] if hex64(h) => { once(k.expect.is_some())?; k.expect = Some(h.into()) }
                 ["joined", h] if hex64(h) => { once(k.joined.is_some())?; k.joined = Some(h.into()) }
                 ["nohistory"] => { once(k.nohistory)?; k.nohistory = true }
+                ["policy", p, c] if ["0", "1"].contains(&c) => {
+                    once(k.policy.is_some())?;
+                    let providers: Vec<String> = p.split(',').map(String::from).collect();
+                    if !providers.iter().all(|x| crate::members::POLICY_PROVIDERS.contains(&x.as_str())) { return None; }
+                    k.policy = Some(crate::members::Policy { providers, capture: c == "1" });
+                }
                 ["invite", id, sec, role, e, x, ref who @ ..] if id.len() == 16 && id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) && hex64(sec) && ["admin", "member", "reader"].contains(&role)
                     && (who.is_empty() || (who.len() == 1 && hex64(who[0]))) => {
                     k.invites.push(Invited { id: id.into(), secret: sec.into(), role: role.into(), epoch: e.parse().ok()?, expires: x.parse().ok()?, who: who.first().map_or(String::new(), |w| w.to_string()) });
@@ -301,6 +311,7 @@ impl Keys {
         if let Some(h) = &self.expect { out += &format!("expect {h}\n"); }
         if let Some(h) = &self.joined { out += &format!("joined {h}\n"); }
         if self.nohistory { out += "nohistory\n"; }
+        if let Some(p) = &self.policy { out += &format!("policy {} {}\n", p.providers.join(","), u8::from(p.capture)); }
         for i in &self.invites {
             out += &format!("invite {} {} {} {} {}", i.id, i.secret, i.role, i.epoch, i.expires);
             out += &if i.who.is_empty() { "\n".to_string() } else { format!(" {}\n", i.who) };
@@ -309,7 +320,7 @@ impl Keys {
     }
     /// What Settings shows as the recovery key: the keys alone. Before any rotation the one hex line it always was.
     pub fn recovery(&self) -> String {
-        Keys { secret: None, sign: None, creator: None, head: None, expect: None, joined: None, invites: vec![], nohistory: false, ..self.clone() }.format().trim_end().to_string()
+        Keys { secret: None, sign: None, creator: None, head: None, expect: None, joined: None, invites: vec![], nohistory: false, policy: None, ..self.clone() }.format().trim_end().to_string()
     }
 }
 use crate::members::hex64;
@@ -494,7 +505,9 @@ pub struct KeyStep { pub keys: Option<Keys>, pub warnings: Vec<String>, pub chan
     /// this Mac only reads (the server's role for it, which follows the member list), `readers` the list's readers
     pub reader: bool, pub readers: Option<Vec<String>>,
     /// the workspace was made without history (the member list's `nohistory`, or this Mac saw it before)
-    pub nohistory: bool }
+    pub nohistory: bool,
+    /// the workspace's policy (the member list's newest `policy`, or the one this Mac kept)
+    pub policy: Option<members::Policy> }
 use crate::members::{self, List};
 impl SealedRemote {
     fn info(&self) -> Result<Value, String> { Ok((self.call)(json!({"op": "vault_info", "vault": self.vault}), None, None)?.0["vault"].take()) }
@@ -576,7 +589,7 @@ impl SealedRemote {
     /// yet gets one from its first admin on this version (trust on upgrade).
     pub fn keep_keys(&self, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<KeyStep, String> {
         let mut k = self.keys();
-        let mut step = KeyStep { nohistory: k.nohistory, ..Default::default() };
+        let mut step = KeyStep { nohistory: k.nohistory, policy: k.policy.clone(), ..Default::default() };
         let keep = |k: &Keys, step: &mut KeyStep| -> Result<(), String> { save(k)?; *lock(&self.keys) = k.clone(); step.keys = Some(k.clone()); Ok(()) };
         if k.ensure() { keep(&k, &mut step)?; }
         let v = self.info()?;
@@ -630,6 +643,8 @@ impl SealedRemote {
         (step.docs, step.admin) = (list.docs, list.admin(&me));
         if list.nohistory && !k.nohistory { k.nohistory = true; keep(&k, &mut step)?; }
         step.nohistory = k.nohistory;
+        if list.policy.is_some() && list.policy != k.policy { k.policy = list.policy.clone(); keep(&k, &mut step)?; }
+        step.policy = k.policy.clone();
         step.admins = Some(list.members.iter().filter(|(_, m)| m.admin).map(|(fp, _)| fp.clone()).collect());
         step.readers = Some(list.members.iter().filter(|(_, m)| m.reader).map(|(fp, _)| fp.clone()).collect());
         step.listed = Some(list.members.keys().cloned().collect());
@@ -818,6 +833,70 @@ impl SealedRemote {
         let (id, pk) = k.proven(&self.vault, m, None).ok_or("its new key is not signed by it, or not vouched for by a member")?;
         let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "device".into(), fp: fp.into(), id, pk, ..Default::default() });
         self.append(&mut k, &list, &e, json!({}), save)
+    }
+    /// An admin sets the workspace's policy (docs/workspaces.md, Policy): the agent providers allowed and capture on or
+    /// off, a `policy` entry signed by this Mac. The newest replaces the older on every member's Mac.
+    pub fn set_policy(&self, providers: &[String], capture: bool, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<(), String> {
+        let mut k = self.keys();
+        let v = self.info()?;
+        let me = v["me"].as_str().unwrap_or_default().to_string();
+        let (list, _) = self.list(&k)?.ok_or("this workspace has no member list yet")?;
+        if !list.admin(&me) { return Err("only an admin can change the workspace's policy".into()); }
+        let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "policy".into(), providers: providers.to_vec(), capture, ..Default::default() });
+        self.append(&mut k, &list, &e, json!({}), save)?;
+        k.policy = Some(members::Policy { providers: providers.to_vec(), capture });
+        save(&k)?;
+        *lock(&self.keys) = k;
+        Ok(())
+    }
+    /// An admin makes the organisation admins (docs/workspaces.md, Organisation) admins of this workspace: one not on
+    /// the list goes on as admin with its organisation keys, every key so far sealed to its organisation key (it never
+    /// had an invite link); a member or reader becomes admin. Signed by this Mac, one entry each. How many changed.
+    pub fn add_org(&self, admins: &[crate::org::Admin], save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<usize, String> {
+        let v = self.info()?;
+        let me = v["me"].as_str().unwrap_or_default().to_string();
+        let mut n = 0;
+        for a in admins.iter().filter(|a| a.fp != me) {
+            let mut k = self.keys();
+            let (list, _) = self.list(&k)?.ok_or("this workspace has no member list yet")?;
+            if !list.admin(&me) { return Err("only an admin of this workspace adds the organisation admins".into()); }
+            if list.admin(&a.fp) { continue; }
+            if list.members.contains_key(&a.fp) {
+                let kind = if list.reader(&a.fp) { "role" } else { "promote" };
+                let role = if kind == "role" { "admin".to_string() } else { String::new() };
+                let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: kind.into(), fp: a.fp.clone(), role, ..Default::default() });
+                self.append(&mut k, &list, &e, json!({}), save)?;
+            } else {
+                if k.epoch() != list.epoch { return Err("this Mac does not have the newest key yet".into()); }
+                let mut keys = serde_json::Map::new();
+                for e in 0..=k.epoch() { keys.insert(e.to_string(), json!(seal_for(&a.pk, &self.vault, e, &a.fp, &k.get(e).ok_or("a key of this workspace is missing here")?.raw)?)); }
+                let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "add".into(), fp: a.fp.clone(), id: a.id.clone(), pk: a.pk.clone(), role: "admin".into(), ..Default::default() });
+                self.append(&mut k, &list, &e, json!(keys), save)?;
+            }
+            n += 1;
+        }
+        Ok(n)
+    }
+    /// Offboarding (docs/workspaces.md, Organisation): every device in `fps` off this workspace's member list, signed by
+    /// this Mac (an admin): a person with any of them goes with all its devices (`person-remove`), a device under no
+    /// person by itself (`remove`). The server drops them in the same write, the next admin round changes the key.
+    /// How many entries.
+    pub fn remove_devices(&self, fps: &[String], save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<usize, String> {
+        let v = self.info()?;
+        let me = v["me"].as_str().unwrap_or_default().to_string();
+        if fps.contains(&me) { return Err("this Mac would remove itself".into()); }
+        let mut n = 0;
+        loop {
+            let mut k = self.keys();
+            let (list, _) = self.list(&k)?.ok_or("this workspace has no member list yet")?;
+            if !list.admin(&me) { return Err("only an admin of this workspace removes someone".into()); }
+            let Some(fp) = fps.iter().find(|f| list.members.contains_key(*f)) else { return Ok(n) };
+            let who = list.person(fp).to_string();
+            let e = if who.is_empty() { members::Entry { kind: "remove".into(), fp: fp.clone(), ..Default::default() } } else { members::Entry { kind: "person-remove".into(), who, ..Default::default() } };
+            let e = k.sign_entry(&self.vault, &list, &me, e);
+            self.append(&mut k, &list, &e, json!({}), save)?;
+            n += 1;
+        }
     }
     /// Seal again under the newest key, at most `max` files of the last manifest still under an older one (each read
     /// and checked as any get). Old records then die out, and a new member's Relay never has to take one. The count.
