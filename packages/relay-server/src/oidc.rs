@@ -73,23 +73,27 @@ pub fn verify(token: &str, jwks: &Value, sso: &Sso, nonce: &str, now: u64) -> Re
     Ok(Signed { email, name })
 }
 
-/// Per issuer: when its keys were last fetched or tried, and the keys (null while none came).
-static KEYS: Mutex<BTreeMap<String, (u64, Value)>> = Mutex::new(BTreeMap::new());
+/// Per issuer: when a fetch was last tried, when its keys last came, and those keys (null while none came).
+static KEYS: Mutex<BTreeMap<String, (u64, u64, Value)>> = Mutex::new(BTreeMap::new());
+/// The longest keys are used while the issuer cannot be reached: after that a join fails closed.
+const STALE_SECS: u64 = 2 * KEYS_SECS;
 /// The issuer's keys: from its discovery document's `jwks_uri`, kept `KEYS_SECS`. `fresh`: fetched again (a token named
 /// a key not among them). Whatever the outcome, at most one try a `REFETCH_SECS` per issuer: a joiner can never make
 /// this server fetch more often than that.
 fn jwks(issuer: &str, fresh: bool) -> Result<Value, String> {
     let now = crate::now();
+    // the keys from before, while they are not too old to use
+    let usable = |got: u64, k: &Value| (!k.is_null() && now.saturating_sub(got) < STALE_SECS).then(|| k.clone());
     let had = {
         let mut keys = KEYS.lock().unwrap_or_else(|e| e.into_inner());
         let had = keys.get(issuer).cloned();
-        if let Some((at, k)) = &had {
-            let age = now.saturating_sub(*at);
-            if age < REFETCH_SECS || (!fresh && age < KEYS_SECS && !k.is_null()) {
-                return if k.is_null() { Err(UNREACHABLE.into()) } else { Ok(k.clone()) };
+        if let Some((tried, got, k)) = &had {
+            if now.saturating_sub(*tried) < REFETCH_SECS || (!fresh && !k.is_null() && now.saturating_sub(*got) < KEYS_SECS) {
+                return usable(*got, k).ok_or_else(|| UNREACHABLE.into());
             }
         }
-        keys.insert(issuer.into(), (now, had.as_ref().map_or(Value::Null, |h| h.1.clone())));
+        let (got, k) = had.as_ref().map_or((0, Value::Null), |h| (h.1, h.2.clone()));
+        keys.insert(issuer.into(), (now, got, k));
         had
     };
     let fetched = (|| {
@@ -99,9 +103,9 @@ fn jwks(issuer: &str, fresh: bool) -> Result<Value, String> {
         get(conf["jwks_uri"].as_str().filter(|u| u.starts_with("https://")).ok_or("it publishes no keys over https")?)
     })();
     match fetched {
-        Ok(k) => { KEYS.lock().unwrap_or_else(|e| e.into_inner()).insert(issuer.into(), (now, k.clone())); Ok(k) }
-        // logged here, never told to the joiner; the keys from before stay in use
-        Err(e) => { eprintln!("relay-server: SSO: the keys of {issuer}: {e}"); had.map(|h| h.1).filter(|k| !k.is_null()).ok_or_else(|| UNREACHABLE.into()) }
+        Ok(k) => { KEYS.lock().unwrap_or_else(|e| e.into_inner()).insert(issuer.into(), (now, now, k.clone())); Ok(k) }
+        // logged here, never told to the joiner
+        Err(e) => { eprintln!("relay-server: SSO: the keys of {issuer}: {e}"); had.and_then(|h| usable(h.1, &h.2)).ok_or_else(|| UNREACHABLE.into()) }
     }
 }
 const UNREACHABLE: &str = "SSO: this server cannot reach the sign-in provider's keys now: try again later";
@@ -160,7 +164,7 @@ pub(crate) mod tests {
             self.sign(json!({"alg": "RS256", "kid": "k1", "typ": "JWT"}), c)
         }
         /// Its keys, as this server would have fetched them.
-        pub(crate) fn publish(&self) { KEYS.lock().unwrap().insert(self.issuer.clone(), (crate::now(), self.jwks())); }
+        pub(crate) fn publish(&self) { KEYS.lock().unwrap().insert(self.issuer.clone(), (crate::now(), crate::now(), self.jwks())); }
     }
     pub(crate) const CLIENT: &str = "123-abc.apps.googleusercontent.com";
     pub(crate) fn sso(issuer: &str, required: bool) -> Sso { Sso { issuer: issuer.into(), client: CLIENT.into(), domains: vec!["example.com".into()], required } }
@@ -261,5 +265,17 @@ pub(crate) mod tests {
         assert_eq!(gate(&d, SERVER, &joiner, &no).unwrap(), None);
         assert!(gate(&d, SERVER, &joiner, &req(&idp.token("ann@evil.example", "x", crate::now(), |_| {}), &salt)).is_err());
         std::fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn keys_too_old_to_use_fail_closed_and_a_fetch_is_tried_once_a_minute() {
+        let (issuer, now) = ("https://stale.invalid", crate::now());
+        let k = json!({"keys": []});
+        // fetched long ago and tried just now (the issuer down): not used any more
+        KEYS.lock().unwrap().insert(issuer.into(), (now, now - STALE_SECS - 1, k.clone()));
+        assert_eq!(jwks(issuer, false).unwrap_err(), UNREACHABLE);
+        // fetched a while ago, tried just now: still used, without a fetch
+        KEYS.lock().unwrap().insert(issuer.into(), (now, now - KEYS_SECS - 1, k.clone()));
+        assert_eq!(jwks(issuer, true).unwrap(), k);
     }
 }
