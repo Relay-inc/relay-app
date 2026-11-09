@@ -27,6 +27,9 @@ use std::collections::BTreeMap;
 /// `add` with `who` adds a device under that person. Members stay devices: a device without a person is as before.
 /// Policy (docs/workspaces.md, Policy): `policy`, by an admin, sets the agent `providers` allowed in the workspace (from
 /// `POLICY_PROVIDERS`, at least one) and whether `capture` is on. A newer one replaces the older.
+/// SSO (docs/workspaces.md, SSO): `sso`, on the organisation list only, sets the OIDC provider a device signs in with
+/// to join a workspace on the server: its `issuer` (https), the `client` id, the email `domains` allowed and whether
+/// signing in is `required`. One with every field empty turns it off. A newer one replaces the older.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
 pub struct Entry {
@@ -35,12 +38,35 @@ pub struct Entry {
     pub who: String, pub name: String, pub email: String,
     #[serde(skip_serializing_if = "Vec::is_empty")] pub providers: Vec<String>,
     #[serde(skip_serializing_if = "std::ops::Not::not")] pub capture: bool,
+    #[serde(skip_serializing_if = "String::is_empty")] pub issuer: String,
+    #[serde(skip_serializing_if = "String::is_empty")] pub client: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")] pub domains: Vec<String>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")] pub required: bool,
 }
 /// The agent providers a workspace policy may allow: the ones Relay fences inside a workspace.
 pub const POLICY_PROVIDERS: [&str; 2] = ["claude", "codex"];
 /// A workspace's policy as the list says: the providers allowed, and capture on or off.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct Policy { pub providers: Vec<String>, pub capture: bool }
+/// A server's SSO as its organisation list says: the OIDC provider (`issuer`, `client` id), the email domains allowed,
+/// and whether a device must sign in to join a workspace there.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Sso { pub issuer: String, pub client: String, pub domains: Vec<String>, pub required: bool }
+impl Entry {
+    fn has_sso(&self) -> bool { !self.issuer.is_empty() || !self.client.is_empty() || !self.domains.is_empty() || self.required }
+}
+/// An SSO entry's fields: all empty (off), or an https issuer, a client id and one to `MAX_DOMAINS` domains, each once.
+fn good_sso(e: &Entry) -> bool {
+    if !e.has_sso() { return true; }
+    let plain = |s: &str, n: usize| !s.is_empty() && s.len() <= n && s.bytes().all(|b| b.is_ascii_graphic());
+    let domain = |d: &str| d.len() <= 253 && d.contains('.') && d.split('.').all(|p| !p.is_empty() && !p.starts_with('-') && !p.ends_with('-') && p.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'));
+    plain(&e.issuer, 200) && e.issuer.starts_with("https://") && !e.issuer.ends_with('/') && !e.issuer.contains(['?', '#'])
+        && plain(&e.client, 200) && (1..=MAX_DOMAINS).contains(&e.domains.len()) && e.domains.iter().all(|d| domain(d))
+        && e.domains.iter().enumerate().all(|(n, d)| !e.domains[..n].contains(d))
+}
+/// The most email domains an SSO entry allows.
+pub const MAX_DOMAINS: usize = 20;
 /// The server's answer to any write by a reader, and what a reader's Relay says instead of trying.
 pub const READ_ONLY: &str = "read only: a reader of this workspace cannot change it";
 /// The longest list a server keeps or a Mac takes.
@@ -53,8 +79,10 @@ impl Entry {
         let base = format!("member-log:{vault}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}", self.seq, self.prev, self.kind, self.fp, self.id, self.pk, self.role, self.epoch, self.h, self.at, self.by);
         let base = if self.who.is_empty() && self.name.is_empty() && self.email.is_empty() { base } else { format!("{base}:{}:{}", self.who, serde_json::json!([self.name, self.email])) };
         // the policy fields only on a policy entry (or one that carries them anyway, which the check refuses)
-        if self.kind != "policy" && self.providers.is_empty() && !self.capture { return base; }
-        format!("{base}:policy:{}", serde_json::json!([self.providers, self.capture]))
+        let base = if self.kind != "policy" && self.providers.is_empty() && !self.capture { base } else { format!("{base}:policy:{}", serde_json::json!([self.providers, self.capture])) };
+        // the SSO fields only on an SSO entry (or one that carries them anyway, which the check refuses)
+        if self.kind != "sso" && !self.has_sso() { return base; }
+        format!("{base}:sso:{}", serde_json::json!([self.issuer, self.client, self.domains, self.required]))
     }
     /// The entry's hash, which the next one names as `prev`: of what is signed and the signature.
     pub fn hash(&self, vault: &str) -> String { sha256_hex(format!("{}:{}", self.msg(vault), self.sig).as_bytes()) }
@@ -86,6 +114,8 @@ pub struct List {
     pub people: BTreeMap<String, (String, String)>,
     /// The newest `policy` entry's, none before one.
     pub policy: Option<Policy>,
+    /// The newest `sso` entry's (organisation list only), none before one or once one turned it off.
+    pub sso: Option<Sso>,
 }
 impl List {
     pub fn admin(&self, fp: &str) -> bool { self.members.get(fp).is_some_and(|m| m.admin) }
@@ -138,6 +168,7 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
         let policy = e.providers.iter().all(|p| POLICY_PROVIDERS.contains(&p.as_str())) && !e.providers.is_empty()
             && e.providers.iter().enumerate().all(|(n, p)| !e.providers[..n].contains(p));
         if e.kind != "policy" && (!e.providers.is_empty() || e.capture) { return bad(&format!("a {} with the wrong fields", e.kind)); }
+        if e.kind != "sso" && e.has_sso() { return bad(&format!("a {} with the wrong fields", e.kind)); }
         let shape = match e.kind.as_str() {
             "create" => uses(true, true, true, false, true) && person(false, false),
             "add" => uses(true, true, true, false, false) && person(false, false),
@@ -150,6 +181,8 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
             "person" => uses(hex64(&e.fp), false, false, false, false) && person(true, true),
             "person-remove" => uses(false, false, false, false, false) && person(true, false),
             "policy" => uses(false, false, false, false, false) && person(false, false) && policy,
+            // an organisation list's only (`org_name`): a workspace's never takes one
+            "sso" => vault.starts_with("org:") && uses(false, false, false, false, false) && person(false, false) && good_sso(e),
             _ => false,
         };
         if !shape { return bad(&format!("a {} with the wrong fields", e.kind)); }
@@ -192,6 +225,7 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
                 "role" if member => { let m = l.members.get_mut(&e.fp).unwrap(); (m.admin, m.reader) = (e.role == "admin", e.role == "reader"); }
                 "docs-on" | "docs-off" => l.docs = e.kind == "docs-on",
                 "policy" => l.policy = Some(Policy { providers: e.providers.clone(), capture: e.capture }),
+                "sso" => l.sso = e.has_sso().then(|| Sso { issuer: e.issuer.clone(), client: e.client.clone(), domains: e.domains.clone(), required: e.required }),
                 // never later: a workspace that had a history would keep it, and every member saw it as one with history
                 "nohistory" if i == 1 => l.nohistory = true,
                 "nohistory" => return bad("without history only right after the creation"),
@@ -222,7 +256,8 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
 pub fn org_name(server: &str) -> String { format!("org:{server}") }
 /// The organisation list: the member list's rules (hash chain, Ed25519, an admin signs), with only these entries:
 /// `create` by its owner (its `mac` the sha256 of `org_name`, as no vault key exists here), `add` of an organisation
-/// admin (role admin, no person), `remove` and `leave`. Everyone on it is an admin: who is not on it signs nothing.
+/// admin (role admin, no person), `remove`, `leave` and `sso` (the server's SSO, signed by an organisation admin so the
+/// server can never turn it on, off or wider itself). Everyone on it is an admin: who is not on it signs nothing.
 /// `creator`: the identity it must start with, once this Mac pinned it.
 pub fn check_org(server: &str, entries: &[Entry], creator: Option<&str>) -> Result<(List, Vec<String>), String> {
     extend_org(server, List::default(), vec![], entries, creator)
@@ -233,7 +268,7 @@ pub fn extend_org(server: &str, l: List, hashes: Vec<String>, entries: &[Entry],
         let ok = match e.kind.as_str() {
             "create" => e.mac == sha256_hex(name.as_bytes()),
             "add" => e.role == "admin" && e.who.is_empty(),
-            "remove" | "leave" => true,
+            "remove" | "leave" | "sso" => true,
             _ => false,
         };
         if !ok { return Err(format!("organisation list entry {}: no {} here", l.len + n as u64, e.kind)); }
@@ -673,5 +708,46 @@ mod tests {
         assert!(extend_org(S, one.clone(), hashes.clone(), &[x2.clone()], None).unwrap_err().contains("out of order"));
         let other = check_org(S, &[l.clone(), vec![x2]].concat(), None).unwrap().0;
         assert!(!one.has(&hashes, other.len - 1, &other.head));
+    }
+    fn google(required: bool) -> Entry {
+        Entry { kind: "sso".into(), issuer: "https://accounts.google.com".into(), client: "123-abc.apps.googleusercontent.com".into(), domains: vec!["example.com".into()], required, ..Default::default() }
+    }
+    #[test]
+    fn the_organisation_signs_its_sso_and_a_workspace_list_takes_none() {
+        let (a, b, d) = (Dev::new('a'), Dev::new('b'), Dev::new('d'));
+        let mut l = vec![org_create(&a)];
+        org_add(&mut l, &a, admin_of(&b, '2'));
+        assert_eq!(check_org(S, &l, None).unwrap().0.sso, None);
+        org_add(&mut l, &b, google(true));
+        let list = check_org(S, &l, None).unwrap().0;
+        assert_eq!(list.sso, Some(Sso { issuer: "https://accounts.google.com".into(), client: "123-abc.apps.googleusercontent.com".into(), domains: vec!["example.com".into()], required: true }));
+        // the server cannot loosen it: a domain added or required dropped after signing breaks the signature
+        for f in [|e: &mut Entry| e.domains.push("evil.example".into()), |e: &mut Entry| e.required = false, |e: &mut Entry| e.client = "other".into()] {
+            let mut x = l.last().unwrap().clone();
+            f(&mut x);
+            assert!(check_org(S, &[l[..l.len() - 1].to_vec(), vec![x]].concat(), None).unwrap_err().contains("not signed by who it names"));
+        }
+        let list = check_org(S, &l, None).unwrap().0;
+        let with = |by: &Dev, x: Entry| check_org(S, &[l.clone(), vec![sign(&org_name(S), &list, &by.fp, &by.seed, x)]].concat(), None);
+        // by who is not an organisation admin
+        assert!(with(&d, google(false)).unwrap_err().contains("no member"));
+        // bad fields: plain http, a trailing slash, no client, no domain, an upper-case or doubled domain, a person on it
+        for x in [Entry { issuer: "http://accounts.google.com".into(), ..google(true) }, Entry { issuer: "https://accounts.google.com/".into(), ..google(true) },
+            Entry { client: String::new(), ..google(true) }, Entry { domains: vec![], ..google(true) }, Entry { domains: vec!["Example.com".into()], ..google(true) },
+            Entry { domains: vec!["example.com".into(), "example.com".into()], ..google(true) }, Entry { domains: vec!["localhost".into()], ..google(true) },
+            Entry { required: true, issuer: String::new(), client: String::new(), domains: vec![], ..google(true) },
+            Entry { who: "7".repeat(64), ..google(true) }, Entry { fp: b.fp.clone(), ..google(true) }] {
+            assert!(with(&a, x.clone()).unwrap_err().contains("wrong fields"), "{x:?}");
+        }
+        // SSO fields on another kind
+        assert!(with(&a, Entry { kind: "remove".into(), fp: b.fp.clone(), issuer: "https://x.example".into(), ..Default::default() }).unwrap_err().contains("wrong fields"));
+        // turned off: an entry with every field empty
+        assert_eq!(with(&a, Entry { kind: "sso".into(), ..Default::default() }).unwrap().0.sso, None);
+        // a workspace's member list never takes one
+        let (wl, wa, _, _) = team();
+        let wlist = check(V, &wl, None).unwrap().0;
+        assert!(check(V, &[wl.clone(), vec![sign(V, &wlist, &wa.fp, &wa.seed, google(true))]].concat(), None).unwrap_err().contains("wrong fields"));
+        // an entry without SSO fields serialises and signs as it did before
+        assert!(!serde_json::to_string(&l[1]).unwrap().contains("issuer") && !l[1].msg("x").contains(":sso:"));
     }
 }

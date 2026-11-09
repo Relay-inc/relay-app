@@ -95,6 +95,18 @@ pub fn remove(c: &Client, k: &mut Keys, fp: &str, save: &dyn Fn(&Keys) -> Result
     let kind = if fp == c.me() { "leave" } else { "remove" };
     append(c, k, &list, members::Entry { kind: kind.into(), fp: fp.into(), ..Default::default() }, save)
 }
+/// An organisation admin sets the server's SSO (docs/workspaces.md, SSO), or turns it off with `None`: an `sso` entry
+/// signed by this Mac, which the server enforces at a join and every Mac checks like any other.
+pub fn set_sso(c: &Client, k: &mut Keys, sso: Option<members::Sso>, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<(), String> {
+    let list = fetch(c, k, save)?.list.ok_or("this server has no organisation yet")?;
+    if list.sso == sso { return Ok(()); }
+    let s = sso.unwrap_or_default();
+    append(c, k, &list, members::Entry { kind: "sso".into(), issuer: s.issuer, client: s.client, domains: s.domains, required: s.required, ..Default::default() }, save)
+}
+/// The OIDC `nonce` a device asks its ID token with to join on `server`: bound to both certificates by a fresh `salt`,
+/// so a token one device got never joins another, and the server recomputes it from the TLS session.
+pub fn sso_nonce(server: &str, device: &str, salt: &str) -> String { crate::sync::sha256_hex(format!("relay-sso:{server}:{device}:{salt}").as_bytes()) }
+
 /// This Mac's organisation keys, made where missing (saved before the server hears of them), and published.
 pub fn publish(c: &Client, k: &mut Keys, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<String, String> {
     if k.ensure() { save(k)?; }
