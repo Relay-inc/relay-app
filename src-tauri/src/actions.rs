@@ -29,7 +29,7 @@ pub fn sock() -> PathBuf { crate::broker::dir().join("relay.sock") }
 
 /// One command: where it runs and what the user decides about it.
 struct Item { ext: &'static str, id: &'static str, about: &'static str, args: &'static [(&'static str, &'static str)], write: bool, default: Policy, run: Run }
-enum Run { Board(&'static Provider, &'static Action), Mail, Reminders, Calendar, Comments }
+enum Run { Board(&'static Provider, &'static Action), Mail, Reminders, Calendar, Comments, Knowledge }
 
 const MAIL: &[(&str, &str, &[(&str, &str)], bool)] = &[
     ("search", "Search Gmail (All Mail) with Gmail search syntax, newest first: ids, senders, subjects, dates.", &[("query", "Gmail search"), ("account?", "account email"), ("limit?", "1 to 50, default 20")], false),
@@ -56,6 +56,9 @@ fn items() -> Vec<Item> {
     // the conversation's own workspace's pages: reading runs, a reply is the user's word under their name, so it asks
     out.push(Item { ext: "comments", id: "list", about: "The open comment threads on a page of this conversation's workspace (resolved ones marked), with their ids, quotes and replies.", args: &[("path", "the note's path in the workspace, e.g. Clients/a2a.md")], write: false, default: Policy::Auto, run: Run::Comments });
     out.push(Item { ext: "comments", id: "reply", about: "Reply to a comment thread on a page of this conversation's workspace, as the user.", args: &[("path", "the note's path in the workspace"), ("id", "the thread's id from comments.list"), ("text", "the reply")], write: true, default: Policy::Ask, run: Run::Comments });
+    // the knowledge workspaces, read-only from any conversation: a conversation is fenced to its own workspace, so this
+    // is the one way in, and it only gives passages (no author, session or time)
+    out.push(Item { ext: "knowledge", id: "search", about: "Search the knowledge workspaces (shared workspaces without history) for passages, read-only: path, workspace, the matching line, score.", args: &[("query", "words to find, as word prefixes"), ("workspace?", "one knowledge workspace by name"), ("limit?", "1 to 20, default 10")], write: false, default: Policy::Auto, run: Run::Knowledge });
     out.push(Item { ext: "calendar", id: "meetings", about: "Meetings on the user's calendars from an hour ago to 12 hours ahead, or of one whole day, with errors per calendar.", args: &[("date?", "YYYY-MM-DD, a whole local day")], write: false, default: Policy::Auto, run: Run::Calendar });
     out
 }
@@ -104,6 +107,7 @@ fn ready(app: &AppHandle, ext: &str) -> bool {
         "reminders" => crate::vault_of(&s)["ok"] == true,
         "calendar" => !crate::calendar::feeds(&s).is_empty(),
         "comments" => crate::files_on(&s),
+        "knowledge" => !crate::shared_vaults::knowledge(&s, &crate::data_dir(app)).is_empty(),
         id => providers::get(id).is_ok_and(|p| (p.ready)(&s["integrations"][p.id]) && providers::token(p).is_some()),
     }
 }
@@ -226,6 +230,10 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, known: bool, action: &str, a
         Run::Mail => mail(app, key, &provider, it.id, args),
         Run::Reminders => reminder(app, it.id, args),
         Run::Comments => comments(app, key, it.id, args),
+        Run::Knowledge => {
+            let spaces = crate::shared_vaults::knowledge(&app.state::<crate::App>().settings.lock().unwrap(), &crate::data_dir(app));
+            knowledge(&crate::index_dir(app), &spaces, args)
+        }
         Run::Calendar => {
             let s = app.state::<crate::App>().settings.lock().unwrap().clone();
             match args["date"].as_str() {
@@ -302,6 +310,35 @@ fn comments(app: &AppHandle, key: &str, name: &str, args: &Value) -> Result<Valu
     if name == "list" { return tauri::async_runtime::block_on(crate::comments_of(&st, &target)).map(|v| v["threads"].clone()); }
     let id = crate::comment_add(&st, &target, "reply", &a("id"), &a("text"), "", &Value::Null, &[])?;
     Ok(json!({ "id": id }))
+}
+
+const KNOWLEDGE_MAX: usize = 20;
+/// `knowledge.search` over `spaces` (shared_vaults::knowledge) with the note index of each (related::passages):
+/// [{workspace, path, passage, score}], best first across them, at most `limit` (default 10, at most 20).
+// ponytail: bm25 scores of separate indexes compared as they are, fine for a few workspaces. A shared scale if one
+// big workspace keeps crowding out a small one.
+fn knowledge(dir: &std::path::Path, spaces: &[crate::shared_vaults::Shared], args: &Value) -> Result<Value, String> {
+    let a = |k: &str| board_core::arg(args, k);
+    let limit = match a("limit") {
+        None => 10,
+        Some(n) => n.parse::<usize>().ok().filter(|n| (1..=KNOWLEDGE_MAX).contains(n)).ok_or("limit is a number from 1 to 20")?,
+    };
+    let only = a("workspace");
+    let spaces: Vec<_> = spaces.iter().filter(|v| only.as_deref().is_none_or(|w| v.name.eq_ignore_ascii_case(w))).collect();
+    if spaces.is_empty() {
+        return Err(match only { Some(w) => format!("no knowledge workspace named '{w}' on this Mac"), None => "this Mac is a member of no knowledge workspace".into() });
+    }
+    let query = a("query").unwrap_or_default();
+    let mut out = vec![];
+    for v in spaces {
+        for mut p in crate::related::passages(dir, &crate::vault::canon(&v.folder), &query, limit)? {
+            p["workspace"] = json!(v.name);
+            out.push(p);
+        }
+    }
+    out.sort_by(|x, y| y["score"].as_f64().unwrap_or(0.0).total_cmp(&x["score"].as_f64().unwrap_or(0.0)));
+    out.truncate(limit);
+    Ok(json!(out))
 }
 
 fn reminder(app: &AppHandle, name: &str, args: &Value) -> Result<Value, String> {
@@ -393,6 +430,57 @@ mod tests {
         let mut d = names.clone(); d.sort(); d.dedup();
         assert_eq!(d.len(), names.len());
         assert!(names.contains(&"productive.add_time".into()) && names.contains(&"reminders.add".into()) && names.contains(&"calendar.meetings".into()) && names.contains(&"trello.create_card".into()));
+    }
+    #[test]
+    fn knowledge_search_gives_passages_only_of_the_flagged_workspaces() {
+        use relay_remote::vault::{Keys, VaultKey};
+        let d = std::env::temp_dir().join(format!("relay-knowledge-{}", std::process::id()));
+        std::fs::remove_dir_all(&d).ok();
+        let (data, dir) = (d.join("data"), d.join("data/index"));
+        std::fs::create_dir_all(&data).unwrap();
+        let space = |id: &str, name: &str| json!({"id": id, "name": name, "host": "h", "port": 1, "fp": "f", "folder": d.join(name).to_string_lossy()});
+        let s = json!({"vault": d.join("Own").to_string_lossy(), "sharedVaults": [space("0000000000000001", "Know"), space("0000000000000002", "Client"), space("0000000000000003", "Nokey")]});
+        for (id, flag) in [("0000000000000001", true), ("0000000000000002", false)] {
+            let mut k = Keys::from(VaultKey::generate());
+            k.nohistory = flag;
+            crate::shared_vaults::save_key(&data, id, &k).unwrap();
+        }
+        for w in ["Own", "Know", "Client", "Nokey"] {
+            std::fs::create_dir_all(d.join(w).join("Notes")).unwrap();
+            std::fs::write(d.join(w).join("Notes/Rates.md"), format!("---\ntype: Document\nauthor: someone\n---\nIntro.\nThe zebracache rate limit in {w} is 60 per minute\n")).unwrap();
+        }
+        for i in 0..25 { std::fs::write(d.join(format!("Know/Notes/More {i}.md")), format!("zebracache note {i}\n")).unwrap(); }
+        // only the flagged workspace, never the own vault, the unflagged one or one without a key here
+        let spaces = crate::shared_vaults::knowledge(&s, &data);
+        assert_eq!(spaces.iter().map(|v| v.name.as_str()).collect::<Vec<_>>(), vec!["Know"]);
+        let run = |a: Value| knowledge(&dir, &spaces, &a);
+        let hits = run(json!({"query": "zebracache rate"})).unwrap();
+        let first = &hits[0];
+        assert_eq!(first["path"], "Notes/Rates.md");
+        assert_eq!(first["workspace"], "Know");
+        assert_eq!(first["passage"], "The zebracache rate limit in Know is 60 per minute");
+        assert!(first["score"].as_f64().unwrap() > 0.0);
+        // nothing on who or when: exactly these four fields, on every hit
+        for h in run(json!({"query": "zebracache"})).unwrap().as_array().unwrap() {
+            let mut keys: Vec<&str> = h.as_object().unwrap().keys().map(String::as_str).collect();
+            keys.sort();
+            assert_eq!(keys, ["passage", "path", "score", "workspace"]);
+        }
+        // the limit: 10 by default, at most 20
+        assert_eq!(run(json!({"query": "zebracache"})).unwrap().as_array().unwrap().len(), 10);
+        assert_eq!(run(json!({"query": "zebracache", "limit": "20"})).unwrap().as_array().unwrap().len(), 20);
+        assert_eq!(run(json!({"query": "zebracache", "limit": 3})).unwrap().as_array().unwrap().len(), 3);
+        assert!(run(json!({"query": "zebracache", "limit": "21"})).is_err() && run(json!({"query": "zebracache", "limit": "0"})).is_err());
+        // an empty query: refused by the arguments' check, and a query without words finds nothing
+        let it = items().into_iter().find(|i| i.ext == "knowledge").unwrap();
+        assert!(!it.write && it.default == Policy::Auto);
+        assert!(check_args(it.args, &json!({"query": ""})).is_err());
+        assert_eq!(run(json!({"query": " ?! "})).unwrap(), json!([]));
+        // one workspace by name, an unknown or unflagged one is refused
+        assert_eq!(run(json!({"query": "zebracache", "workspace": "know", "limit": 1})).unwrap()[0]["workspace"], "Know");
+        assert!(run(json!({"query": "zebracache", "workspace": "Client"})).unwrap_err().contains("no knowledge workspace"));
+        assert!(knowledge(&dir, &[], &json!({"query": "zebracache"})).unwrap_err().contains("no knowledge workspace"));
+        std::fs::remove_dir_all(&d).ok();
     }
     #[test]
     fn cli_arguments() {

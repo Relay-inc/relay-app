@@ -654,6 +654,25 @@ pub fn find(dir: &Path, root: &str, query: &str) -> Result<Value, String> {
     })
 }
 
+/// The passages of `root` that match `text` as word prefixes (as ⌘K's content), best first, at most `limit`:
+/// [{path, passage, score}], the score bm25 turned positive (higher is better). Only what the note says and where it
+/// is: no title, no mtime, nothing the index knows about who or when (`relay knowledge.search`, actions.rs).
+pub fn passages(dir: &Path, root: &str, text: &str, limit: usize) -> Result<Vec<Value>, String> {
+    let terms = terms(text);
+    if terms.is_empty() || limit == 0 { return Ok(vec![]); }
+    with(dir, root, |c| {
+        let mut st = c.prepare("SELECT path, body, bm25(docs, 0, 0, 5.0, 1.0) AS s FROM docs WHERE docs MATCH ?1 ORDER BY s LIMIT ?2")?;
+        let rows = st.query_map(params![fts("body", &terms), limit as i64], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, f64>(2)?)))?;
+        let mut out = vec![];
+        for r in rows {
+            let (path, body, s) = r?;
+            let Some((_, before, hit, after)) = hit_line(&body, &terms) else { continue };
+            out.push(json!({"path": path, "passage": format!("{before}{hit}{after}"), "score": ((-s) * 1000.0).round() / 1000.0}));
+        }
+        Ok(out)
+    })
+}
+
 /// When each note of `root` last changed, {path: seconds}, for a folder sorted by modified.
 pub fn times(dir: &Path, root: &str) -> Result<Value, String> {
     with(dir, root, |c| {

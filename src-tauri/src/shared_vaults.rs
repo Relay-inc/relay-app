@@ -98,6 +98,11 @@ pub fn save_key(data: &Path, id: &str, keys: &Keys) -> Result<(), String> {
 pub fn load_key(data: &Path, id: &str) -> Result<Keys, String> {
     std::fs::read_to_string(key_path(data, id)).ok().and_then(|k| Keys::parse(&k)).ok_or_else(|| format!("the key of workspace {id} is missing on this Mac"))
 }
+/// The knowledge workspaces: the shared ones this Mac is a member of whose key file says `nohistory` (kept there once
+/// the member list said so, docs/workspaces.md, Without history). Nothing else, never the user's own vault.
+pub fn knowledge(s: &Value, data: &Path) -> Vec<Shared> {
+    list(s).into_iter().filter(|v| load_key(data, &v.id).is_ok_and(|k| k.nohistory)).collect()
+}
 /// Where a round keeps what it deletes or mostly empties here: <data>/shared-trash/<id>/<round's minute>/<path>.
 fn trash(data: &Path, id: &str) -> PathBuf { data.join("shared-trash").join(id) }
 const TRASH_DAYS: i64 = 30;
