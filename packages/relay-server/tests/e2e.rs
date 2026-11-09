@@ -1561,7 +1561,7 @@ fn a_workspace_made_without_history_says_so_to_every_member() {
 
 /// A workspace without history's documents (docs/workspaces.md, Without history): an admin turns them on as anywhere;
 /// each Mac writes as a session of its own, which the server keeps and passes on (log, live stream, cursors) instead
-/// of the device, and writes no `.from`; a Relay that sends no session (one from before) cannot write there.
+/// of the device, and writes no `.from`. A Relay that sends no session (one from before) cannot write there.
 #[test]
 fn a_workspace_without_history_has_documents_by_session() {
     use relay_remote::channel::Event;

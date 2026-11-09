@@ -67,7 +67,7 @@ struct Cursor { seq: u64, epoch: u32, path: String, at: String, out: String, pen
 struct Open { doc: Doc, c: Cursor }
 
 type On = Arc<dyn Fn(&str, &[u8]) + Send + Sync>;
-/// Sessions whose counters one document keeps, without history; the oldest are let go (their gap check with them).
+/// Sessions whose counters one document keeps, without history. The oldest are let go (their gap check with them).
 const MAX_SESSIONS: usize = 256;
 /// This run's session id on vault `vault` for device `device` (16 hex), on a workspace without history: random, the
 /// same for its documents and its live channel until the app quits, a new one after a restart.
@@ -82,7 +82,7 @@ fn sessions() -> &'static Mutex<BTreeMap<(String, String), String>> {
 #[cfg(test)]
 pub(crate) fn forget_session(vault: &str, device: &str) { lock(sessions()).remove(&(vault.to_string(), device.to_string())); }
 /// One shared vault's documents on this Mac. `me`: this device (the first 16 hex of its fingerprint). `author`: who
-/// what it writes is sealed as, `me` or on a workspace without history (`anon`) this run's session id; `own` every
+/// what it writes is sealed as, `me` or on a workspace without history (`anon`) this run's session id. `own`: every
 /// session id this Mac wrote under (dir/sessions.json, never synced). `on`: called with (document id, Yjs update) for every update another member made (ticket 9's
 /// editor). `busy`: one lock per document, so a live update and a round never work on it at once. `warnings`: what
 /// the user should hear of (`take_warnings`). `read_only`: this Mac is a reader of the workspace (`set_read_only`).
@@ -276,7 +276,7 @@ impl Docs {
         if k.nohistory && !self.anon.load(Ordering::SeqCst) {
             let s = session(&self.vault, &self.me);
             let mut own = lock(&self.own);
-            // ponytail: one id per restart, never pruned; 16 bytes each, a list per workspace
+            // ponytail: one id per restart, never pruned, 16 bytes each, a list per workspace
             if own.insert(s.clone()) {
                 std::fs::create_dir_all(&self.dir).ok();
                 if let Err(e) = sync::write_atomic(&self.dir.join("sessions.json"), serde_json::to_string(&*own).unwrap().as_bytes(), None) { self.warn(format!("this Mac's sessions not kept: {e}")); }
@@ -533,7 +533,7 @@ impl Docs {
             let Some(o) = open.get(id).filter(|o| o.c.pending) else { return Ok(()) };
             let txn = o.doc.transact();
             let author = if o.c.as_author.is_empty() { me.clone() } else { o.c.as_author.clone() };
-            // without history the counter is the session's (a new one starts at 1, an earlier one goes on); `mine`
+            // without history the counter is the session's (a new one starts at 1, an earlier one goes on). `mine`
             // still counts every update this Mac sent (`edited`, `keep_orphans`)
             let n = if anon { o.c.seen.get(&author).copied().unwrap_or(0) + 1 } else { o.c.mine + 1 };
             (txn.encode_state_as_update_v1(&sv_of(&o.c.acked)), txn.state_vector().encode_v1(), n, o.c.via.clone(), author)
@@ -1490,8 +1490,8 @@ mod tests {
     }
 
     /// Without history every Mac writes as this run's session, sealed under it and named by it to the server, never
-    /// its device; after a restart a new session whose counter starts at 1, which no other Mac takes for a gap; a
-    /// gap inside a session is still warned; the history goes by session; this Mac knows its earlier sessions.
+    /// its device. After a restart a new session whose counter starts at 1, which no other Mac takes for a gap. A
+    /// gap inside a session is still warned, the history goes by session, and this Mac knows its earlier sessions.
     #[test]
     fn without_history_each_run_writes_as_a_session_of_its_own() {
         let (srv, k) = (Server::default(), anon_keys());
@@ -1524,13 +1524,13 @@ mod tests {
         b.sync().unwrap();
         assert!(b.take_warnings().iter().any(|w| w.contains("held back") && w.contains(&s2)), "within a session");
         let _ = held;
-        // this Mac's own sessions, before the restart too; another Mac's are not
+        // this Mac's own sessions, before the restart too, not another Mac's
         assert!(a.is_mine(&s1) && a.is_mine(&s2) && !b.is_mine(&s1) && !a.is_mine(&b.me()));
         std::fs::remove_dir_all(tmp("anon-a")).ok();
         std::fs::remove_dir_all(tmp("anon-b")).ok();
     }
 
-    /// Without history a comment's author is a session; after a restart this Mac still knows it as its own, and its
+    /// Without history a comment's author is a session. After a restart this Mac still knows it as its own, and its
     /// delete is sealed as that session, so every Mac sees the entry's own author delete it.
     #[test]
     fn without_history_an_own_comment_stays_deletable_after_a_restart() {
@@ -1558,7 +1558,7 @@ mod tests {
         std::fs::remove_dir_all(tmp("anon-com-b")).ok();
     }
 
-    /// Without history a document keeps the counters of its newest MAX_SESSIONS sessions; with history every author.
+    /// Without history a document keeps the counters of its newest MAX_SESSIONS sessions, with history every author.
     #[test]
     fn old_sessions_are_let_go() {
         let mut o = Open { doc: Doc::new(), c: Cursor::default() };

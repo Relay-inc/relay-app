@@ -183,7 +183,8 @@ Relay never asks and keeps its rounds.
 - **Server to app:** `{"t": "frame", "seq", "from", "e", "kind", "doc", "n", "body"}`, `{"t": "files"}` after another
   member put or deleted a file (the rounds run at once; it names no file), `{"t": "ping"}` every 15 s and
   `{"t": "bye", "why"}` before it closes. `from` is the first 16 hex of the sender's certificate fingerprint, from the
-  handshake, or on a workspace without history the session id the frame named. An update gets the next `seq` of its workspace, an awareness frame `seq` 0. A sender never gets its own;
+  handshake, or on a workspace without history the session id the frame named. An update gets the next `seq` of its
+  workspace, an awareness frame `seq` 0. A sender never gets its own;
   Relay also drops a frame whose `from` is its own device, and one whose `n` is not above the last it took from that
   sender for that document and kind.
 - **Seal:** `nonce (12) || ChaCha20-Poly1305(enc_key, aad = "frame:" + vault + ":" + kind + ":" + doc + ":" + from + ":" + n,
@@ -234,8 +235,8 @@ an agent. Its edits merge; there are no conflict copies for it.
   rules): `doc_push {vault, doc, updates: [len…]}` with the parts after the line (each at most 4 MiB, one push at
   most 16 MiB, under the vault's current key, else `key changed` / `no such key epoch`), answers `{seq, seqs}`;
   `doc_pull {vault, doc, since, limit}` answers a page of the updates after `since` (at most 1000 and 32 MiB, `more`
-  past either), each with `from` (a session id on a workspace without history, where `doc_push` carries `from` too);
-`doc_list {vault}`. `doc_snapshot_put {vault, doc, upto, len}` stores a member's
+  past either), each with `from` (a session id on a workspace without history, where `doc_push` carries `from` too),
+  and `doc_list {vault}`. `doc_snapshot_put {vault, doc, upto, len}` stores a member's
   snapshot (a place the log has, at least 200 updates past the last, none replaced) as an unchecked hint for the
   history to come: no pull hands one out, and Relay writes none yet. Limits: 10 000 documents a workspace, 512 MiB a
   member may push into a workspace a day (counted in memory, so a restart starts the day over). A push also goes at
@@ -495,8 +496,8 @@ had a history would keep it. Its row in Settings › Machines and the workspace 
   binds that id like any author). Its counter per document starts at 1 per session, and the gap check runs per
   session. `doc_push` and every live frame carry the session id as `from`. The server keeps it in `<seq>.sid` and
   relays it (pull, live stream, awareness), writes no `.from`, and refuses a push without one or with a member's
-  device in it (`this workspace keeps no record of who wrote what: update Relay to edit its documents`); such a frame
-  is dropped. The first device to name a session holds it while the server runs, in memory only: another member's
+  device in it (`this workspace keeps no record of who wrote what: update Relay to edit its documents`), and drops
+  such a frame. The first device to name a session holds it while the server runs, in memory only: another member's
   push under it is refused (`another member's session`), its frames dropped.
 - **What the members see.** Page history lists each session as "Anonymous session" with its time, sessions of one
   person are not linked. A comment's author is "Anonymous". A Mac keeps the session ids it wrote under

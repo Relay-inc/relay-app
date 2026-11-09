@@ -59,7 +59,7 @@ impl Vaults {
 
     /// Append `parts` (sealed updates) to a document's log, under the vault's current key; returns their seqs. The
     /// other members' live streams get each one that fits a frame. `from`: the session id the pusher's Relay sent,
-    /// what a workspace without history keeps and passes on instead of the pusher's device; it refuses a push
+    /// what a workspace without history keeps and passes on instead of the pusher's device. It refuses a push
     /// without one or with a member's device in it. Elsewhere `from` is not read.
     pub fn doc_push(&self, fp: &str, id: &str, name: &str, from: &str, parts: Vec<Vec<u8>>) -> Result<Vec<u64>, String> {
         if !hex(name, 64) { return Err("bad doc".into()); }
@@ -240,7 +240,7 @@ mod tests {
     }
 
     /// A workspace without history (its member list's entry 1): a push names a session, which the log keeps instead
-    /// of the device (no `.from`) and a pull hands out; one without a session, or with a member's device as one, is
+    /// of the device (no `.from`) and a pull hands out. One without a session, or with a member's device as one, is
     /// refused (an old Relay's, or one that would name a device).
     #[test]
     fn without_history_the_log_keeps_sessions_not_devices() {
