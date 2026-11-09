@@ -653,8 +653,11 @@ That is all it gives: the path in the workspace, the workspace's name, the line 
 no author, no session, no time, so the history the workspace does not keep does not come back through a search. It
 never reads the user's own vault or a workspace with history, also not when named in `workspace`. It only reads, it is
 `auto` like `reminders.list`, and the user changes that under Settings › Machines › Agent access or in `.relay/config.json`
-(`"knowledge": "ask"`). A conversation that runs in the knowledge workspace itself reads its files as any, the action
-works there too. Writing into it from elsewhere is not built.
+(`"knowledge": "ask"`). It runs only for a conversation the app runs: the caller is traced from the socket up to one of
+its agents, as for the user's own reads, so a process that only found the socket and named a running conversation
+gets nothing. On Windows the trace does not prove which conversation calls (the user's own reads are off there), but
+every conversation gets the same passages, so a traced call is enough. A conversation that runs in the knowledge
+workspace itself reads its files as any, the action works there too. Writing into it from elsewhere is not built.
 
 What it does not hide:
 

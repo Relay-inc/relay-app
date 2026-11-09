@@ -209,9 +209,7 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, known: bool, action: &str, a
     let all = items();
     let it = all.iter().find(|it| format!("{}.{}", it.ext, it.id) == action).ok_or_else(|| format!("no action '{action}', `relay help` lists them"))?;
     check_args(it.args, args)?;
-    // a shared vault's conversation reads none of the user's own mail, reminders or calendar (it may still write to them)
-    let personal = matches!(it.ext, "mail" | "reminders" | "calendar");
-    if personal && !it.write && (!known || crate::in_shared_vault(&app.state::<crate::App>(), key)) { return Err(crate::SHARED_NO_READ.into()); }
+    if let Some(e) = refused(it, known, || crate::in_shared_vault(&app.state::<crate::App>(), key)) { return Err(e.into()); }
     let s = acts(app);
     if !access(&s, it.ext) { return Err(format!("the user switched off agent access to {}", it.ext)); }
     if !ready(app, it.ext) { return Err(format!("{} is not set up in Relay (Settings)", it.ext)); }
@@ -243,6 +241,20 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, known: bool, action: &str, a
         }
     }
 }
+
+/// What runs only for a caller traced to a conversation (`known`), whatever the user's policy. A shared vault's
+/// conversation, or a caller that only named one, reads none of the user's own mail, reminders or calendar (it may still
+/// write to them). The knowledge workspaces only for a caller traced to one of the app's agents: a process that found
+/// the socket and a running conversation's key (`ps -E`) reads none of them. On Windows that trace (W3, the pipe's pid)
+/// does not prove which conversation calls, but every conversation gets the same passages, none of the user's own data,
+/// so a traced call is enough there too.
+fn refused(it: &Item, known: bool, shared: impl FnOnce() -> bool) -> Option<&'static str> {
+    let personal = matches!(it.ext, "mail" | "reminders" | "calendar");
+    if personal && !it.write && (!known || shared()) { return Some(crate::SHARED_NO_READ); }
+    if it.ext == "knowledge" && !known { return Some(NOT_TRACED); }
+    None
+}
+const NOT_TRACED: &str = "relay searches the knowledge workspaces only for a conversation the Relay app runs, not for a command it cannot trace to one";
 
 /// A card in the conversation, as for a permission; blocks until the user answers or the agent stops waiting.
 fn ask(app: &AppHandle, stopped: &dyn Fn() -> bool, key: &str, provider: &str, action: &str, args: &Value) -> Result<(), String> {
@@ -481,6 +493,21 @@ mod tests {
         assert!(run(json!({"query": "zebracache", "workspace": "Client"})).unwrap_err().contains("no knowledge workspace"));
         assert!(knowledge(&dir, &[], &json!({"query": "zebracache"})).unwrap_err().contains("no knowledge workspace"));
         std::fs::remove_dir_all(&d).ok();
+    }
+    #[test]
+    fn only_a_traced_caller_searches_the_knowledge_workspaces() {
+        let all = items();
+        let it = |ext: &str, write: bool| all.iter().find(|i| i.ext == ext && i.write == write).unwrap();
+        // a process that only named a running conversation: no knowledge, none of the user's own reads
+        assert_eq!(refused(it("knowledge", false), false, || false), Some(NOT_TRACED));
+        assert_eq!(refused(it("reminders", false), false, || false), Some(crate::SHARED_NO_READ));
+        // traced: the knowledge workspaces from any conversation, also one in a shared vault
+        assert_eq!(refused(it("knowledge", false), true, || true), None);
+        assert_eq!(refused(it("reminders", false), true, || true), Some(crate::SHARED_NO_READ));
+        assert_eq!(refused(it("reminders", false), true, || false), None);
+        // writing to the user and the other actions are as before
+        assert_eq!(refused(it("reminders", true), false, || true), None);
+        assert_eq!(refused(it("comments", false), false, || false), None);
     }
     #[test]
     fn cli_arguments() {

@@ -26,6 +26,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- `relay knowledge.search` ran for any process that named a running conversation, not only for one the Relay app runs: it now needs the same trace to the app's agent as the user's own reads (#PR)
 - The Pi agent was only declared as a dependency of the macOS build, so a build for any other system failed on it (#451)
 
 ## [0.0.49] - 2026-11-08
