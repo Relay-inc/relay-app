@@ -1383,6 +1383,60 @@ export default {
   "set.sharedLinkLabel": "Einladungslink",
   "set.sharedLinkLabelHelp": "Der relay://-Link, den dir ein Admin geschickt hat.",
   "set.sharedJoinButton": "Beitreten",
+  "set.org": "Organisation",
+  "set.orgShow": "Anzeigen…",
+  "set.orgHide": "Ausblenden",
+  "set.orgAdmin": "Organisations-Admin",
+  "set.orgNone":
+    "Dieser Server hat noch keine Organisation. Sein Besitzer, der erste damit gekoppelte Mac, kann eine starten.",
+  "set.orgNoneOwner":
+    "Dieser Server hat noch keine Organisation. Als Besitzer kannst du eine starten: Dieser Mac wird ihr erster Organisations-Admin.",
+  "set.orgStart": "Organisation starten",
+  "set.orgNotAdmin":
+    "Dieser Server hat eine Organisation. Um Organisations-Admin zu werden, fügt ein Admin diesen Mac hinzu, nachdem er seinen Code verglichen hat: {code}",
+  "set.orgReads":
+    "Organisations-Admins sind Admin jedes Workspace, den sie auf diesem Server verwalten, und können ihn lesen. Neue Workspaces fügen sie von Anfang an hinzu.",
+  "set.orgYourCode": "Code dieses Mac: {code}",
+  "set.orgAdmins": "Organisations-Admins",
+  "set.orgRemoveAdmin": "Entfernen",
+  "set.orgCodeBad": "nicht vom Gerät signiert",
+  "set.orgAddAdmin": "Als Admin hinzufügen…",
+  "set.orgAddSure":
+    "Füge {name} nur hinzu, wenn sein Bildschirm denselben Code zeigt: {code}. Ein anderer Code bedeutet die Schlüssel von jemand anderem.",
+  "set.orgCodesMatch": "Codes stimmen, hinzufügen",
+  "set.orgAddHelp":
+    "Ein gekoppelter Mac erscheint hier, sobald sein Bereich Organisation geöffnet wurde. Sein Code steht in diesem Bereich.",
+  "set.orgWorkspaces": "Workspaces",
+  "set.orgManaged": "Verwaltet",
+  "set.orgUnmanaged": "Nicht verwaltet",
+  "set.orgDevices_one": "{n} Gerät",
+  "set.orgDevices_other": "{n} Geräte",
+  "set.orgUnmanagedHelp":
+    "Nicht jeder Organisations-Admin ist hier Admin. Ein Admin dieses Workspace fügt sie in seinen Einstellungen hinzu (Organisations-Admins hinzufügen).",
+  "set.orgNoWorkspaces": "Noch keine Workspaces auf diesem Server.",
+  "set.orgPeople": "Personen",
+  "set.orgOffboard": "Offboarden…",
+  "set.orgOffboardSure":
+    "{name} offboarden: Die Person verlässt {workspaces}, jeder Workspace bekommt einen neuen Schlüssel, und ihre {devices} Gerät(e) können sich nicht mehr mit diesem Server verbinden. Ihre Macs behalten die Dateien, die sie schon haben.",
+  "set.orgNoneOfThem": "keinen Workspace, dessen Admin du bist",
+  "set.orgOffboardSkipped":
+    "Nicht aus {workspaces}: Dort bist du kein Admin. Bitte einen Admin dieses Workspace, die Person zu entfernen oder die Organisations-Admins hinzuzufügen.",
+  "set.orgOffboarded": "{name} ist aus {n} Workspace(s) entfernt, {revoked} Gerät(e) widerrufen.",
+  "set.orgAdded": "Organisations-Admins hinzugefügt: {n}.",
+  "set.orgAddedNone":
+    "Nichts hinzuzufügen: Dieser Server hat keine Organisation, oder ihre Admins sind hier schon Admin.",
+  "set.orgCreateFailed": "Erstellt, aber die Organisations-Admins sind noch nicht darauf: {error}",
+  "set.orgAddToWorkspace": "Organisations-Admins hinzufügen",
+  "set.orgAddToWorkspaceHelp":
+    "Macht die Organisations-Admins dieses Servers zu Admins dieses Workspace. Sie können ihn dann lesen.",
+  "set.policyAgents": "Agenten in diesem Workspace",
+  "set.policyAgentsHelp":
+    "Ein Gespräch hier startet nur mit einem Agenten, den du erlaubst. In die Mitgliederliste signiert, folgt ihm das Relay jedes Mitglieds.",
+  "set.policyCapture": "Capture",
+  "set.policyCaptureHelp": "Ob Capture in diesem Workspace an ist.",
+  "set.policyIs": "Richtlinie: {agents}, Capture {capture}",
+  "set.policyCaptureOn": "an",
+  "set.policyCaptureOff": "aus",
   "set.title": "Einstellungen",
   "set.vaultHelp":
     "Der Ordner deines Workspaces Persönlich, dein Obsidian-Vault. Gespräche starten darin, und die Seitenleiste liest daraus work-state und Erinnerungen.",

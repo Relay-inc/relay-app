@@ -95,9 +95,11 @@ export async function pickSharedFolder() {
 export async function createSharedVault() {
   const { machine, name, folder, noHistory } = st().form;
   await run("form", async () => {
-    const { id, recovery } = await backend.sharedVaultCreate(machine, name, folder, noHistory);
+    const { id, recovery, orgError } = await backend.sharedVaultCreate(machine, name, folder, noHistory);
     change(draft => {
       draft.keys[id] = recovery;
+      // made, but the organisation admins are not on it yet: said under the new workspace
+      if (orgError) draft.messages[id] = { text: t("set.orgCreateFailed", { error: orgError }), ok: false };
       draft.form = { ...CLOSED, machine }; // what the reload says shows under that machine
     });
     await reload();
@@ -169,6 +171,23 @@ export const setSharedDocs = (id: string, on: boolean) =>
       const s = draft.status[id];
       if (s) s.docs = on;
     });
+  });
+/** An admin sets the workspace's policy (docs/workspaces.md, Policy): the providers allowed and capture. */
+export const setSharedPolicy = (id: string, providers: string[], capture: boolean) =>
+  run(id, async () => {
+    await backend.sharedVaultPolicy(id, providers, capture);
+    change(draft => {
+      const s = draft.status[id];
+      if (s) s.policy = { providers, capture };
+    });
+  });
+/** An admin makes the server's organisation admins admins of the workspace (docs/workspaces.md, Organisation). */
+export const addOrgAdmins = (id: string) =>
+  run(id, async () => {
+    const n = await backend.sharedVaultAddOrg(id);
+    change(
+      draft => void (draft.messages[id] = { text: n ? t("set.orgAdded", { n }) : t("set.orgAddedNone"), ok: true }),
+    );
   });
 /** An admin trusts a member's new key, after they said they set up Relay again (docs/workspaces.md, Key rotation). */
 export const trustMember = (id: string, fp: string) =>

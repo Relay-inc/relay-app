@@ -44,6 +44,12 @@ export function otherVaultOf(chat: Pick<Chat, "project" | "vault"> | undefined) 
   const vault = chatVault(chat, ws().snap);
   return vault && vault !== ws().snap.vault?.vault ? vaultName(vault) : null;
 }
+/** The agents a conversation's workspace allows by its signed policy (docs/workspaces.md, Policy), null for none. */
+export function policyOf(chat: Pick<Chat, "project" | "vault"> | undefined) {
+  const folder = chatVault(chat, ws().snap);
+  const team = (settings().sharedVaults ?? []).find(v => v.folder === folder);
+  return team ? (ws().policies[team.id] ?? null) : null;
+}
 /** Vault projects by their label, for a picker. */
 export const projectsByLabel = (locale: string) =>
   ws()

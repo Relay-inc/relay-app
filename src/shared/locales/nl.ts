@@ -1375,6 +1375,59 @@ export default {
   "set.sharedLinkLabel": "Uitnodigingslink",
   "set.sharedLinkLabelHelp": "De relay://-link die een beheerder je stuurde.",
   "set.sharedJoinButton": "Deelnemen",
+  "set.org": "Organisatie",
+  "set.orgShow": "Tonen…",
+  "set.orgHide": "Verbergen",
+  "set.orgAdmin": "Organisatie-admin",
+  "set.orgNone":
+    "Deze server heeft nog geen organisatie. De eigenaar, de eerste Mac die ermee gekoppeld werd, kan er een starten.",
+  "set.orgNoneOwner":
+    "Deze server heeft nog geen organisatie. Als eigenaar kun je er een starten: deze Mac wordt de eerste organisatie-admin.",
+  "set.orgStart": "Organisatie starten",
+  "set.orgNotAdmin":
+    "Deze server heeft een organisatie. Om organisatie-admin te worden, voegt een admin deze Mac toe na het vergelijken van de code: {code}",
+  "set.orgReads":
+    "Organisatie-admins zijn admin van elke workspace die ze op deze server beheren, en kunnen die lezen. Nieuwe workspaces voegen hen meteen toe.",
+  "set.orgYourCode": "Code van deze Mac: {code}",
+  "set.orgAdmins": "Organisatie-admins",
+  "set.orgRemoveAdmin": "Verwijderen",
+  "set.orgCodeBad": "niet ondertekend door het toestel",
+  "set.orgAddAdmin": "Toevoegen als admin…",
+  "set.orgAddSure":
+    "Voeg {name} enkel toe als het scherm ervan dezelfde code toont: {code}. Een andere code betekent sleutels van iemand anders.",
+  "set.orgCodesMatch": "Codes kloppen, toevoegen",
+  "set.orgAddHelp":
+    "Een gekoppelde Mac verschijnt hier zodra de sectie Organisatie erop geopend werd. De code staat in die sectie.",
+  "set.orgWorkspaces": "Workspaces",
+  "set.orgManaged": "Beheerd",
+  "set.orgUnmanaged": "Niet beheerd",
+  "set.orgDevices_one": "{n} toestel",
+  "set.orgDevices_other": "{n} toestellen",
+  "set.orgUnmanagedHelp":
+    "Niet elke organisatie-admin is hier admin. Een admin van deze workspace voegt hen toe in de instellingen ervan (Organisatie-admins toevoegen).",
+  "set.orgNoWorkspaces": "Nog geen workspaces op deze server.",
+  "set.orgPeople": "Personen",
+  "set.orgOffboard": "Offboarden…",
+  "set.orgOffboardSure":
+    "{name} offboarden: die gaat uit {workspaces}, elke workspace krijgt een nieuwe sleutel, en de {devices} toestel(len) kunnen niet meer met deze server verbinden. Hun Macs houden de bestanden die ze al hebben.",
+  "set.orgNoneOfThem": "geen workspace waar jij admin van bent",
+  "set.orgOffboardSkipped":
+    "Niet uit {workspaces}: daar ben je geen admin. Vraag een admin van die workspace om hen te verwijderen, of om de organisatie-admins toe te voegen.",
+  "set.orgOffboarded": "{name} is uit {n} workspace(s), {revoked} toestel(len) ingetrokken.",
+  "set.orgAdded": "Organisatie-admins toegevoegd: {n}.",
+  "set.orgAddedNone": "Niets toe te voegen: deze server heeft geen organisatie, of de admins ervan zijn hier al admin.",
+  "set.orgCreateFailed": "Gemaakt, maar de organisatie-admins staan er nog niet op: {error}",
+  "set.orgAddToWorkspace": "Organisatie-admins toevoegen",
+  "set.orgAddToWorkspaceHelp":
+    "Maakt de organisatie-admins van deze server admin van deze workspace. Ze kunnen hem dan lezen.",
+  "set.policyAgents": "Agents in deze workspace",
+  "set.policyAgentsHelp":
+    "Een gesprek hier start enkel met een agent die je toelaat. Ondertekend in de ledenlijst, de Relay van elk lid volgt het.",
+  "set.policyCapture": "Capture",
+  "set.policyCaptureHelp": "Of capture aan staat in deze workspace.",
+  "set.policyIs": "Beleid: {agents}, capture {capture}",
+  "set.policyCaptureOn": "aan",
+  "set.policyCaptureOff": "uit",
   "set.title": "Instellingen",
   "set.vaultHelp":
     "De map van je workspace Persoonlijk, je Obsidian-vault. Gesprekken starten daarin, en de zijbalk leest er work-state en reminders uit.",

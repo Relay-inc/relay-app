@@ -26,7 +26,7 @@ import { boardOf } from "../navigation/navigation";
 import { provider } from "../../shared/plugins";
 import { contextTint } from "../navigation/sidebar";
 import { agentOf, chatAgent, chatCaps } from "../agents/agents";
-import { otherVaultOf, projectLabel } from "../workspace/vault";
+import { otherVaultOf, policyOf, projectLabel } from "../workspace/vault";
 import { machinePick } from "../../domain/settings/machines";
 import { ORCH, isOrchKey } from "../../domain/orchestrator/rules";
 import { workerCounts } from "../orchestrator/orchestrator";
@@ -217,6 +217,8 @@ export function machineRepo(key: string) {
 /** The other vault a conversation runs in, its project's or the one picked for it: its name, null for the main vault.
  *  The conversation stays in it (src-tauri `fence`). */
 export const sharedVault = (key: string) => otherVaultOf(cs().chats[key]);
+/** The agents the conversation's workspace policy allows, null for no policy. */
+export const sharedPolicy = (key: string) => policyOf(cs().chats[key]);
 /** The composer's vault pick for a conversation not started yet (rules.vaultPick). */
 export const vaultChoice = (key: string) =>
   rules.vaultPick(cs().chats[key], settings(), useWorkspaceStore.getState().snap);

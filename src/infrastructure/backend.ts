@@ -45,6 +45,9 @@ import type {
   SharedPerson,
   SharedRole,
   SharedStatus,
+  OrgOffboard,
+  OrgOverview,
+  OrgStatus,
 } from "../domain/settings/types";
 import type {
   ExtraVault,
@@ -690,7 +693,12 @@ export const onSharedVaults = (handler: (status: Record<string, SharedStatus>) =
 /** A new vault on a paired machine; `recovery` is its key (64 hex), shown again with `sharedVaultRecovery`.
  *  `noHistory`: made without history, for good. */
 export const sharedVaultCreate = (machine: string, name: string, folder: string, noHistory = false) =>
-  invoke<{ id: string; recovery: string }>("shared_vault_create", { machine, name, folder, noHistory });
+  invoke<{ id: string; recovery: string; org?: number | null; orgError?: string | null }>("shared_vault_create", {
+    machine,
+    name,
+    folder,
+    noHistory,
+  });
 /** Join with an invite link into an empty folder. */
 export const sharedVaultJoin = (link: string, folder: string) =>
   invoke<{ id: string; name: string }>("shared_vault_join", { link, folder });
@@ -718,6 +726,22 @@ export const sharedVaultInviteRevoke = (id: string, invite: string) =>
   invoke("shared_vault_invite_revoke", { id, invite });
 /** Remove a member, or leave the vault with this Mac's own fingerprint (the folder stays). */
 export const sharedVaultRemove = (id: string, fp: string) => invoke("shared_vault_remove", { id, fp });
+/** An admin sets the workspace's policy: the agent providers allowed and capture (a signed entry in the member list). */
+export const sharedVaultPolicy = (id: string, providers: string[], capture: boolean) =>
+  invoke("shared_vault_policy", { id, providers, capture });
+/** An admin makes the server's organisation admins admins of the workspace: how many changed. */
+export const sharedVaultAddOrg = (id: string) => invoke<number>("shared_vault_add_org", { id });
+
+// ---------- the organisation of a machine's server (src-tauri/src/organisation.rs)
+export const orgStatus = (machine: string) => invoke<OrgStatus>("org_status", { machine });
+export const orgStart = (machine: string) => invoke("org_start", { machine });
+export const orgOverview = (machine: string) => invoke<OrgOverview>("org_overview", { machine });
+/** Add a device as organisation admin, with the code the user compared on both Macs. */
+export const orgAddAdmin = (machine: string, fp: string, code: string) =>
+  invoke("org_add_admin", { machine, fp, code });
+export const orgRemoveAdmin = (machine: string, fp: string) => invoke("org_remove_admin", { machine, fp });
+/** One person's devices off every workspace this Mac is admin of, then revoked on the server. */
+export const orgOffboard = (machine: string, fps: string[]) => invoke<OrgOffboard>("org_offboard", { machine, fps });
 /** The held deletes of a vault the user saw (`paths`): through in its next round, or the files put back. */
 export const sharedVaultHeld = (id: string, allow: boolean, paths: string[]) =>
   invoke("shared_vault_held", { id, allow, paths });

@@ -1364,6 +1364,57 @@ const en = {
   "set.sharedLinkLabel": "Invite link",
   "set.sharedLinkLabelHelp": "The relay:// link an admin sent you.",
   "set.sharedJoinButton": "Join",
+  "set.org": "Organisation",
+  "set.orgShow": "Show…",
+  "set.orgHide": "Hide",
+  "set.orgAdmin": "Organisation admin",
+  "set.orgNone": "This server has no organisation yet. Its owner, the first Mac paired with it, can start one.",
+  "set.orgNoneOwner":
+    "This server has no organisation yet. As its owner you can start one: this Mac becomes its first organisation admin.",
+  "set.orgStart": "Start organisation",
+  "set.orgNotAdmin":
+    "This server has an organisation. To become an organisation admin, an admin adds this Mac after comparing its code: {code}",
+  "set.orgReads":
+    "Organisation admins are admins of every workspace they manage on this server, and can read it. New workspaces add them from the start.",
+  "set.orgYourCode": "This Mac's code: {code}",
+  "set.orgAdmins": "Organisation admins",
+  "set.orgRemoveAdmin": "Remove",
+  "set.orgCodeBad": "not signed by the device",
+  "set.orgAddAdmin": "Add as admin…",
+  "set.orgAddSure":
+    "Add {name} only if its screen shows the same code: {code}. A different code means someone else's keys.",
+  "set.orgCodesMatch": "Codes match, add",
+  "set.orgAddHelp": "A paired Mac shows up here once its Organisation section was opened. Its code is in that section.",
+  "set.orgWorkspaces": "Workspaces",
+  "set.orgManaged": "Managed",
+  "set.orgUnmanaged": "Not managed",
+  "set.orgDevices_one": "{n} device",
+  "set.orgDevices_other": "{n} devices",
+  "set.orgUnmanagedHelp":
+    "Not every organisation admin is an admin here. An admin of this workspace adds them in its settings (Add organisation admins).",
+  "set.orgNoWorkspaces": "No workspaces on this server yet.",
+  "set.orgPeople": "People",
+  "set.orgOffboard": "Offboard…",
+  "set.orgOffboardSure":
+    "Offboard {name}: they come off {workspaces}, each workspace gets a new key, and their {devices} device(s) can no longer connect to this server. Their Macs keep the files they already have.",
+  "set.orgNoneOfThem": "no workspace you are admin of",
+  "set.orgOffboardSkipped":
+    "Not in {workspaces}: you are no admin there. Ask an admin of that workspace to remove them, or to add the organisation admins.",
+  "set.orgOffboarded": "{name} is off {n} workspace(s), {revoked} device(s) revoked.",
+  "set.orgAdded": "Organisation admins added: {n}.",
+  "set.orgAddedNone": "Nothing to add: this server has no organisation, or its admins are admins here already.",
+  "set.orgCreateFailed": "Made, but the organisation admins are not on it yet: {error}",
+  "set.orgAddToWorkspace": "Add organisation admins",
+  "set.orgAddToWorkspaceHelp":
+    "Makes this server's organisation admins admins of this workspace. They can then read it.",
+  "set.policyAgents": "Agents in this workspace",
+  "set.policyAgentsHelp":
+    "A conversation here starts only with an agent you allow. Signed into the member list, every member's Relay follows it.",
+  "set.policyCapture": "Capture",
+  "set.policyCaptureHelp": "Whether capture is on in this workspace.",
+  "set.policyIs": "Policy: {agents}, capture {capture}",
+  "set.policyCaptureOn": "on",
+  "set.policyCaptureOff": "off",
   "set.title": "Settings",
   "set.vaultHelp":
     "The folder of your Personal workspace, your Obsidian vault. Conversations start in it, and the sidebar reads work-state and reminders from it.",

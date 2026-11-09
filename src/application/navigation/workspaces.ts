@@ -69,11 +69,19 @@ export function workspaces(): Workspace[] {
 }
 /** The shared vaults' live channels, as the backend reports them: now and on every change. */
 export function watchLive() {
-  const set = (status: Record<string, { live?: boolean; reader?: boolean; nohistory?: boolean }>) =>
+  const set = (
+    status: Record<
+      string,
+      { live?: boolean; reader?: boolean; nohistory?: boolean; policy?: { providers: string[] } | null }
+    >,
+  ) =>
     useWorkspaceStore.setState(draft => {
       draft.live = Object.fromEntries(Object.entries(status).map(([id, s]) => [id, !!s.live]));
       draft.readers = Object.fromEntries(Object.entries(status).map(([id, s]) => [id, !!s.reader]));
       draft.nohistory = Object.fromEntries(Object.entries(status).map(([id, s]) => [id, !!s.nohistory]));
+      draft.policies = Object.fromEntries(
+        Object.entries(status).flatMap(([id, s]) => (s.policy ? [[id, s.policy.providers]] : [])),
+      );
     });
   void backend.sharedVaultsStatus().then(set);
   void backend.onSharedVaults(set);

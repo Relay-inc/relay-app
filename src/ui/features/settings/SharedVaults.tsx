@@ -2,7 +2,7 @@ import { Fragment, useState } from "react";
 import type { Machine, SharedInfo, SharedRole, SharedVault } from "../../../domain/settings/types";
 import { agoParts } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
-import { filesOn } from "../../../domain/settings/types";
+import { filesOn, POLICY_PROVIDERS } from "../../../domain/settings/types";
 import {
   closeInvite,
   createSharedVault,
@@ -20,6 +20,8 @@ import {
   addToList,
   setMemberRole,
   setSharedDocs,
+  setSharedPolicy,
+  addOrgAdmins,
   settleShared,
   showRecovery,
   toggleMembers,
@@ -83,6 +85,9 @@ export function MachineVaults({ machine, vaults = [] }: { machine: Machine; vaul
     </div>
   );
 }
+
+/** The agents a workspace policy names, as Relay calls them. */
+const PROVIDER_NAMES: Record<string, string> = { claude: "Claude Code", codex: "Codex" };
 
 function SharedRow({ vault }: { vault: SharedVault }) {
   const { t, tn, locale } = useT();
@@ -367,6 +372,63 @@ function SharedRow({ vault }: { vault: SharedVault }) {
                   <span className={PILL}>{t("set.sharedDocsOn")}</span>
                 )}
               </div>
+            ) : null}
+            {/* the signed policy (docs/workspaces.md, Policy): an admin picks the agents and capture, a member sees it */}
+            {status.admin ? (
+              <div className="grid gap-1.5 py-1">
+                <span className="text-xs text-s-fg">{t("set.policyAgents")}</span>
+                <span className="text-xs text-s-muted">{t("set.policyAgentsHelp")}</span>
+                <div className="flex flex-wrap items-center gap-4">
+                  {POLICY_PROVIDERS.map(p => {
+                    const allowed = status.policy?.providers ?? POLICY_PROVIDERS;
+                    const on = allowed.includes(p);
+                    return (
+                      <label key={p} className="flex items-center gap-1.5 text-xs text-s-fg">
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          // at least one agent: an empty policy is refused by every member's Mac
+                          disabled={busy || (on && allowed.length === 1)}
+                          onChange={() =>
+                            setSharedPolicy(
+                              vault.id,
+                              POLICY_PROVIDERS.filter(x => (x === p ? !on : allowed.includes(x))),
+                              !!status.policy?.capture,
+                            )
+                          }
+                        />
+                        {PROVIDER_NAMES[p] ?? p}
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="grid flex-1 gap-0.5">
+                    <label htmlFor={`capture-${vault.id}`} className="text-xs text-s-fg">
+                      {t("set.policyCapture")}
+                    </label>
+                    <span className="text-xs text-s-muted">{t("set.policyCaptureHelp")}</span>
+                  </div>
+                  <Switch
+                    id={`capture-${vault.id}`}
+                    on={!!status.policy?.capture}
+                    onToggle={on => setSharedPolicy(vault.id, status.policy?.providers ?? POLICY_PROVIDERS, on)}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="flex-1 text-xs text-s-muted">{t("set.orgAddToWorkspaceHelp")}</span>
+                  <button className={buttonClass()} disabled={busy} onClick={() => addOrgAdmins(vault.id)}>
+                    {t("set.orgAddToWorkspace")}
+                  </button>
+                </div>
+              </div>
+            ) : status.policy ? (
+              <span className="text-xs text-s-muted">
+                {t("set.policyIs", {
+                  agents: status.policy.providers.map(p => PROVIDER_NAMES[p] ?? p).join(", "),
+                  capture: t(status.policy.capture ? "set.policyCaptureOn" : "set.policyCaptureOff"),
+                })}
+              </span>
             ) : null}
             {status.rekeying ? <StatusLine level="warn">{t("set.sharedRekeying")}</StatusLine> : null}
             {/* the member list: held back, forked, or a removal still waiting for its key change */}

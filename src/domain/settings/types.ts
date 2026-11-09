@@ -146,6 +146,49 @@ export type SharedStatus = {
   readers?: string[] | null; // the member list's readers (fingerprints), null while the workspace has no list
   unsent?: number; // a reader's changes in the folder that its rounds leave out
   nohistory?: boolean; // made without history (the member list's `nohistory`): its conflict copies name no Mac
+  policy?: SharedPolicy | null; // the workspace's signed policy (docs/workspaces.md, Policy), null or missing: none
+};
+/** A workspace's signed policy: the agent providers it allows (claude, codex) and whether capture is on. */
+export type SharedPolicy = { providers: string[]; capture: boolean };
+/** The agent providers a workspace policy may allow (relay-remote members.rs POLICY_PROVIDERS). */
+export const POLICY_PROVIDERS = ["claude", "codex"];
+/** A server's organisation as this Mac sees it (src-tauri/src/organisation.rs `org_status`): `me` an organisation
+ *  admin, `owner` the device that may start it, `code` this Mac's keys' code (to compare), `admins` fingerprints. */
+export type OrgStatus = { exists: boolean; me: boolean; owner: boolean; code: string; admins: string[] };
+/** A workspace in the organisation's overview: what its member list says, nothing of its notes. `managed`: every
+ *  organisation admin is an admin of it, `admin`: this Mac is one. */
+export type OrgWorkspace = {
+  id: string;
+  name: string;
+  list: boolean;
+  managed: boolean;
+  admin: boolean;
+  nohistory: boolean;
+  members: { fp: string; name: string; role: SharedRole | ""; person: string; listed: boolean }[];
+  people: SharedPerson[];
+};
+/** A person across the server's workspaces, grouped by a device or an email they share. */
+export type OrgPerson = {
+  name: string;
+  email: string;
+  devices: { fp: string; name: string }[];
+  workspaces: { id: string; name: string; role: SharedRole | "" }[];
+};
+/** The overview (`org_overview`): workspaces, people, admins, and devices that published keys to be added (`code`
+ *  null when what they published is not signed by them). */
+export type OrgOverview = {
+  workspaces: OrgWorkspace[];
+  people: OrgPerson[];
+  admins: { fp: string; name: string }[];
+  candidates: { fp: string; name: string; code: string | null }[];
+};
+/** What an offboarding did: the workspaces it took the person off, the ones this Mac is no admin of, the failures and
+ *  how many devices the server revoked. */
+export type OrgOffboard = {
+  removed: string[];
+  skipped: string[];
+  failed: { name: string; error: string }[];
+  revoked: number;
 };
 /** A person on a shared vault's member list (docs/workspaces.md, People): `who` its id, `devices` fingerprints. */
 export type SharedPerson = { who: string; name: string; email: string; devices: string[] };

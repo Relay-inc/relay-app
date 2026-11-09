@@ -1389,6 +1389,59 @@ export default {
   "set.sharedLinkLabel": "Lien d'invitation",
   "set.sharedLinkLabelHelp": "Le lien relay:// qu'un admin vous a envoyé.",
   "set.sharedJoinButton": "Rejoindre",
+  "set.org": "Organisation",
+  "set.orgShow": "Afficher…",
+  "set.orgHide": "Masquer",
+  "set.orgAdmin": "Admin de l'organisation",
+  "set.orgNone":
+    "Ce serveur n'a pas encore d'organisation. Son propriétaire, le premier Mac appairé, peut en créer une.",
+  "set.orgNoneOwner":
+    "Ce serveur n'a pas encore d'organisation. En tant que propriétaire, vous pouvez en créer une : ce Mac en devient le premier admin.",
+  "set.orgStart": "Créer l'organisation",
+  "set.orgNotAdmin":
+    "Ce serveur a une organisation. Pour en devenir admin, un admin ajoute ce Mac après avoir comparé son code : {code}",
+  "set.orgReads":
+    "Les admins de l'organisation sont admins de chaque espace de travail qu'ils gèrent sur ce serveur, et peuvent le lire. Les nouveaux espaces les ajoutent dès le départ.",
+  "set.orgYourCode": "Code de ce Mac : {code}",
+  "set.orgAdmins": "Admins de l'organisation",
+  "set.orgRemoveAdmin": "Retirer",
+  "set.orgCodeBad": "non signé par l'appareil",
+  "set.orgAddAdmin": "Ajouter comme admin…",
+  "set.orgAddSure":
+    "N'ajoutez {name} que si son écran affiche le même code : {code}. Un autre code signifie les clés de quelqu'un d'autre.",
+  "set.orgCodesMatch": "Les codes concordent, ajouter",
+  "set.orgAddHelp":
+    "Un Mac appairé apparaît ici dès que sa section Organisation a été ouverte. Son code se trouve dans cette section.",
+  "set.orgWorkspaces": "Espaces de travail",
+  "set.orgManaged": "Géré",
+  "set.orgUnmanaged": "Non géré",
+  "set.orgDevices_one": "{n} appareil",
+  "set.orgDevices_other": "{n} appareils",
+  "set.orgUnmanagedHelp":
+    "Tous les admins de l'organisation ne sont pas admins ici. Un admin de cet espace les ajoute dans ses réglages (Ajouter les admins de l'organisation).",
+  "set.orgNoWorkspaces": "Aucun espace de travail sur ce serveur pour l'instant.",
+  "set.orgPeople": "Personnes",
+  "set.orgOffboard": "Retirer partout…",
+  "set.orgOffboardSure":
+    "Retirer {name} : cette personne quitte {workspaces}, chaque espace reçoit une nouvelle clé, et ses {devices} appareil(s) ne peuvent plus se connecter à ce serveur. Ses Mac gardent les fichiers qu'ils ont déjà.",
+  "set.orgNoneOfThem": "aucun espace dont vous êtes admin",
+  "set.orgOffboardSkipped":
+    "Pas de {workspaces} : vous n'y êtes pas admin. Demandez à un admin de cet espace de la retirer, ou d'ajouter les admins de l'organisation.",
+  "set.orgOffboarded": "{name} a quitté {n} espace(s), {revoked} appareil(s) révoqué(s).",
+  "set.orgAdded": "Admins de l'organisation ajoutés : {n}.",
+  "set.orgAddedNone": "Rien à ajouter : ce serveur n'a pas d'organisation, ou ses admins sont déjà admins ici.",
+  "set.orgCreateFailed": "Créé, mais les admins de l'organisation n'y sont pas encore : {error}",
+  "set.orgAddToWorkspace": "Ajouter les admins de l'organisation",
+  "set.orgAddToWorkspaceHelp":
+    "Fait des admins de l'organisation de ce serveur des admins de cet espace. Ils peuvent alors le lire.",
+  "set.policyAgents": "Agents dans cet espace",
+  "set.policyAgentsHelp":
+    "Une conversation ici ne démarre qu'avec un agent que vous autorisez. Signé dans la liste des membres, le Relay de chaque membre le suit.",
+  "set.policyCapture": "Capture",
+  "set.policyCaptureHelp": "Si la capture est activée dans cet espace.",
+  "set.policyIs": "Politique : {agents}, capture {capture}",
+  "set.policyCaptureOn": "activée",
+  "set.policyCaptureOff": "désactivée",
   "set.title": "Réglages",
   "set.vaultHelp":
     "Le dossier de votre espace de travail Personnel, votre coffre Obsidian. Les conversations y démarrent, et la barre latérale y lit le work-state et les rappels.",
