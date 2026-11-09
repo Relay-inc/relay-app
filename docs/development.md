@@ -376,11 +376,15 @@ Processes and local sockets work on Windows:
   the broker, the `relay` CLI and relay-server's attach. The socket's path stays the address: `bind` makes a pipe
   `\\.\pipe\relay-<pid>-<n>` and writes its name into the file at the path, `connect` reads it there, so removing the
   file closes the address as unlinking a socket does. The pipe's DACL allows only the user, remote clients are
-  refused, a client connects at identification level. Timeouts and non-blocking reads are overlapped I/O.
+  refused, a client connects at identification level and only to a pipe served by a process of the same user (a
+  dead broker's address file could otherwise lead to a pipe another user made under that name). Timeouts and non-blocking reads are overlapped I/O.
 - **Caller tracing** (`agent_core::peer`): the pid Windows recorded when the CLI opened the pipe
   (`GetNamedPipeClientProcessId`), then up through the parents. Windows keeps a parent's pid, not the parent, so a
   parent that started after its child (a reused pid) or one the user may not inspect ends the walk: the call then
-  counts as untraced, as a terminal of the user's own does on macOS.
+  counts as untraced, as a terminal of the user's own does on macOS. The walk picks the conversation but proves
+  nothing: any process of the user may start a child with another process named as its parent, or run code inside
+  another process. So `relay` reads none of the user's own mail, reminders or calendar on Windows, for any caller
+  (`TRACE_PROVES` in `src-tauri/src/actions.rs`).
 - **Process groups** (`agent_core::job`): a Job Object that ends everything in it when it is killed or its last
   handle closes. Discovery runs its probes in one, a plugin and the codex and OpenCode bridges' CLI in one each, the
   broker its agent (and ends the job once the agent exits, so nothing that holds the agent's pipes outlives it).

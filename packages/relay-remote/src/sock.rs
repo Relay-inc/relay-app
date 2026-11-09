@@ -5,7 +5,7 @@
 //! name into the file at the path, `connect` reads it there. Removing the file closes the address for new
 //! connections as unlinking a Unix socket does, and a new listener on the same path gets a pipe of its own, so a
 //! broker winding down never answers for the one that replaced it. The pipe is open to this user only (its DACL)
-//! and to this computer only (remote clients are refused).
+//! and to this computer only (remote clients are refused), and a client only talks to a pipe this user serves.
 
 #[cfg(unix)]
 pub use std::os::unix::net::{UnixListener, UnixStream};
@@ -49,9 +49,10 @@ mod pipe {
     use windows_sys::Win32::Security::{GetTokenInformation, TokenUser, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER};
     use windows_sys::Win32::Storage::FileSystem::{CreateFileW, ReadFile, WriteFile, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OVERLAPPED,
         OPEN_EXISTING, PIPE_ACCESS_DUPLEX, SECURITY_IDENTIFICATION, SECURITY_SQOS_PRESENT};
-    use windows_sys::Win32::System::Pipes::{ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, WaitNamedPipeW, PIPE_READMODE_BYTE,
+    use windows_sys::Win32::System::Pipes::{ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeServerProcessId, WaitNamedPipeW, PIPE_READMODE_BYTE,
         PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT};
-    use windows_sys::Win32::System::Threading::{CreateEventW, GetCurrentProcess, OpenProcessToken, WaitForSingleObject, INFINITE};
+    use windows_sys::Win32::System::Threading::{CreateEventW, GetCurrentProcess, OpenProcess, OpenProcessToken, WaitForSingleObject, INFINITE,
+        PROCESS_QUERY_LIMITED_INFORMATION};
     use windows_sys::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
 
     fn wide(s: &str) -> Vec<u16> { OsStr::new(s).encode_wide().chain(Some(0)).collect() }
@@ -101,12 +102,25 @@ mod pipe {
                 // identification only: the listener may learn who connects, never act as them
                 let h = unsafe { CreateFileW(name.as_ptr(), GENERIC_READ | GENERIC_WRITE, 0, std::ptr::null(), OPEN_EXISTING,
                     FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, std::ptr::null_mut()) };
-                if h != INVALID_HANDLE_VALUE { return Ok(UnixStream::of(h, false)); }
+                if h != INVALID_HANDLE_VALUE { return UnixStream::of(h, false).served_by_us(); }
                 let e = unsafe { GetLastError() };
                 if e != ERROR_PIPE_BUSY { return Err(err(e)); }
                 unsafe { WaitNamedPipeW(name.as_ptr(), 100) };
             }
             Err(io::Error::new(io::ErrorKind::TimedOut, "every instance of the pipe is busy"))
+        }
+        /// Refused unless the process serving the pipe runs as this user. A broker that died leaves its address file,
+        /// and another user who saw the pipe's name (anyone may list pipes) could serve that name next.
+        fn served_by_us(self) -> io::Result<UnixStream> {
+            let mut pid = 0u32;
+            let ours = unsafe { GetNamedPipeServerProcessId(self.h.as_raw_handle(), &mut pid) } != FALSE && pid > 0 && {
+                let p = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid) };
+                !p.is_null() && {
+                    let p = unsafe { OwnedHandle::from_raw_handle(p) };
+                    matches!((sid_of(p.as_raw_handle()), sid_of(unsafe { GetCurrentProcess() })), (Ok(a), Ok(b)) if a == b)
+                }
+            };
+            if ours { Ok(self) } else { Err(io::Error::new(io::ErrorKind::PermissionDenied, "the pipe is not served by this user")) }
         }
         fn of(h: HANDLE, server: bool) -> UnixStream { UnixStream { h: unsafe { OwnedHandle::from_raw_handle(h) }, server, opts: Default::default() } }
         pub fn try_clone(&self) -> io::Result<UnixStream> { Ok(UnixStream { h: self.h.try_clone()?, server: self.server, opts: self.opts.clone() }) }
@@ -149,10 +163,10 @@ mod pipe {
     impl Read for &UnixStream { fn read(&mut self, b: &mut [u8]) -> io::Result<usize> { self.read_pipe(b) } }
     impl Write for &UnixStream { fn write(&mut self, b: &[u8]) -> io::Result<usize> { self.write_pipe(b) } fn flush(&mut self) -> io::Result<()> { Ok(()) } }
 
-    /// The user this process runs as, as a SID string.
-    fn user_sid() -> io::Result<String> {
+    /// The user a process runs as, as a SID string.
+    fn sid_of(process: HANDLE) -> io::Result<String> {
         let mut tok = std::ptr::null_mut();
-        if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut tok) } == FALSE { return Err(last()); }
+        if unsafe { OpenProcessToken(process, TOKEN_QUERY, &mut tok) } == FALSE { return Err(last()); }
         let tok = unsafe { OwnedHandle::from_raw_handle(tok) };
         let mut buf = vec![0u64; 64]; // u64: aligned for TOKEN_USER
         let mut len = 0u32;
@@ -169,7 +183,7 @@ mod pipe {
     /// A new instance of the pipe `name`: the first one (refused when the name is taken) or another.
     fn instance(name: &[u16], first: bool) -> io::Result<OwnedHandle> {
         static SDDL: OnceLock<Result<Vec<u16>, i32>> = OnceLock::new();
-        let sddl = SDDL.get_or_init(|| user_sid().map(|s| wide(&super::sddl(&s))).map_err(|e| e.raw_os_error().unwrap_or(0)))
+        let sddl = SDDL.get_or_init(|| sid_of(unsafe { GetCurrentProcess() }).map(|s| wide(&super::sddl(&s))).map_err(|e| e.raw_os_error().unwrap_or(0)))
             .as_ref().map_err(|&e| io::Error::from_raw_os_error(e))?;
         let mut sd: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
         if unsafe { ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.as_ptr(), SDDL_REVISION_1, &mut sd, std::ptr::null_mut()) } == FALSE { return Err(last()); }

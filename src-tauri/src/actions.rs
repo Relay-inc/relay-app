@@ -169,6 +169,13 @@ fn serve(app: &AppHandle, c: UnixStream) {
     (&c).write_all(format!("{out}\n").as_bytes()).ok();
 }
 
+/// Whether tracing proves which conversation calls. Not on Windows: any process of the user may start a child with
+/// another process named as its parent (PROC_THREAD_ATTRIBUTE_PARENT_PROCESS), or run code inside another process,
+/// so an agent of a shared vault could pass for one of the main vault. There a traced call still picks its
+/// conversation, but personal reads are refused for every caller.
+// ponytail: refuses personal reads through `relay` on Windows (Claude Code's mail tools over the control pipe are not
+// affected). A per-conversation pipe the app hands only to that agent would prove it, if Windows users need the reads
+const TRACE_PROVES: bool = cfg!(not(windows));
 /// The app conversation a request on the socket comes from: up from the calling process to an agent the app runs.
 /// None when it descends from none (a terminal of the user's own) or the platform cannot tell.
 fn caller(app: &AppHandle, c: &UnixStream) -> Option<String> {
@@ -211,6 +218,7 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, known: bool, action: &str, a
     check_args(it.args, args)?;
     // a shared vault's conversation reads none of the user's own mail, reminders or calendar (it may still write to them)
     let personal = matches!(it.ext, "mail" | "reminders" | "calendar");
+    if personal && !it.write && !TRACE_PROVES { return Err("on Windows, `relay` does not read the user's own mail, reminders or calendar: Relay cannot tell which conversation asks. Writing to the user (a reminder, a mail draft) still works.".into()); }
     if personal && !it.write && (!known || crate::in_shared_vault(&app.state::<crate::App>(), key)) { return Err(crate::SHARED_NO_READ.into()); }
     let s = acts(app);
     if !access(&s, it.ext) { return Err(format!("the user switched off agent access to {}", it.ext)); }
