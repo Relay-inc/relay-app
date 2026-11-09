@@ -97,7 +97,12 @@ if (shared)
   settings = {
     ...settings,
     extraVaults: [vault.TEAM_VAULT],
-    machines: member || reader ? [] : org ? vault.hubMachines.map(m => ({ ...m, sharedOnly: false })) : structuredClone(vault.hubMachines),
+    machines:
+      member || reader
+        ? []
+        : org
+          ? vault.hubMachines.map(m => ({ ...m, sharedOnly: false }))
+          : structuredClone(vault.hubMachines),
     sharedVaults: structuredClone(reader ? vault.readerVaults : member ? vault.memberVaults : vault.sharedVaults),
   };
 // buddy: Buddy switched on, the first project linked to a Buddy project (fixtures/integrations buddy)
@@ -159,6 +164,18 @@ for (const s of Object.values(sharedStatus).slice(0, 1)) {
 }
 if (org) for (const s of Object.values(sharedStatus)) s.policy = { providers: ["claude"], capture: false };
 let orgState = structuredClone(vault.organisation);
+// the server's SSO (src-tauri organisation.rs org_sso): none until Turn on
+let orgSso: unknown = null;
+// what an invite link's server asks to sign in with (src-tauri sso.rs): Google, required, on "shared-invite"
+const inviteSso =
+  fixture === "shared-invite"
+    ? {
+        issuer: "https://accounts.google.com",
+        client: "123-example.apps.googleusercontent.com",
+        domains: ["example.com"],
+        required: true,
+      }
+    : null;
 if (fixture === "shared-rekey")
   for (const s of Object.values(sharedStatus))
     Object.assign(s, {
@@ -182,7 +199,10 @@ let sharedPeople: { who: string; name: string; email: string; devices: string[] 
 for (const s of Object.values(sharedStatus).slice(0, 1)) s.people = sharedPeople;
 if (noHistory)
   for (const s of Object.values(sharedStatus).slice(0, 1))
-    Object.assign(s, { nohistory: true, conflicts: s.conflicts.map((c: string) => c.replace(/\(conflict [^)]*? (\d{4}-)/, "(conflict $1")) });
+    Object.assign(s, {
+      nohistory: true,
+      conflicts: s.conflicts.map((c: string) => c.replace(/\(conflict [^)]*? (\d{4}-)/, "(conflict $1")),
+    });
 let sharedInvites = [{ id: "4d2e8a1b6c3f9e70", role: "member", expires: Math.floor(Date.now() / 1000) + 20 * 3600 }];
 let pendingInvite: string | null = fixture === "shared-invite" ? vault.inviteLink("b81c0e5f2a7d3946") : null;
 const hex = (n: number, seed: number) =>
@@ -457,7 +477,18 @@ function handle(cmd: string, a: Args): unknown {
         ...(settings.sharedVaults ?? []),
         { id, name: a.name.trim(), host, port, fp, folder: a.folder, role: "admin" },
       ];
-      if (a.noHistory) sharedStatus[id] = { at: Math.floor(Date.now() / 1000), pushed: 0, pulled: 0, conflicts: [], errors: [], held: [], bad: 0, admin: true, nohistory: true };
+      if (a.noHistory)
+        sharedStatus[id] = {
+          at: Math.floor(Date.now() / 1000),
+          pushed: 0,
+          pulled: 0,
+          conflicts: [],
+          errors: [],
+          held: [],
+          bad: 0,
+          admin: true,
+          nohistory: true,
+        };
       return { id, recovery: hex(64, 5) };
     }
     // the key this Mac holds, the same one `shared_vault_create` gave
@@ -511,7 +542,14 @@ function handle(cmd: string, a: Args): unknown {
     // the organisation of a machine's server (src-tauri/src/organisation.rs), fixture "shared-org"
     case "org_status":
       return org
-        ? { exists: true, me: true, owner: true, code: vault.ORG_CODE, admins: orgState.admins.map((x: { fp: string }) => x.fp) }
+        ? {
+            exists: true,
+            me: true,
+            owner: true,
+            code: vault.ORG_CODE,
+            admins: orgState.admins.map((x: { fp: string }) => x.fp),
+            sso: orgSso,
+          }
         : { exists: false, me: false, owner: true, code: vault.ORG_CODE, admins: [] };
     case "org_overview":
       return structuredClone(orgState);
@@ -527,13 +565,34 @@ function handle(cmd: string, a: Args): unknown {
       return null;
     case "org_start":
       return null;
+    case "org_sso":
+      orgSso = a.sso;
+      return null;
+    case "sso_check":
+      return { sso: inviteSso };
+    // the browser's sign-in, as if it came back after a moment
+    case "sso_login":
+      return new Promise(r => setTimeout(r, 300)).then(() => ({
+        id_token: "eyJ.harness.token",
+        salt: hex(64, 7),
+        email: "sofie.claes@example.com",
+        name: "Sofie Claes",
+      }));
+    case "sso_cancel":
+      return null;
     case "org_offboard": {
       const hit = (w: { members: { fp: string }[] }) => w.members.some(m => a.fps.includes(m.fp));
       const removed = orgState.workspaces.filter((w: any) => hit(w) && w.admin).map((w: any) => w.name);
       const skipped = orgState.workspaces.filter((w: any) => hit(w) && !w.admin).map((w: any) => w.name);
-      for (const w of orgState.workspaces) if (w.admin) w.members = w.members.filter((m: { fp: string }) => !a.fps.includes(m.fp));
+      for (const w of orgState.workspaces)
+        if (w.admin) w.members = w.members.filter((m: { fp: string }) => !a.fps.includes(m.fp));
       orgState.people = orgState.people
-        .map((p: any) => ({ ...p, workspaces: p.workspaces.filter((w: any) => !removed.includes(w.name) || !p.devices.some((d: any) => a.fps.includes(d.fp))) }))
+        .map((p: any) => ({
+          ...p,
+          workspaces: p.workspaces.filter(
+            (w: any) => !removed.includes(w.name) || !p.devices.some((d: any) => a.fps.includes(d.fp)),
+          ),
+        }))
         .filter((p: any) => !p.devices.every((d: any) => a.fps.includes(d.fp)) || p.workspaces.length);
       return { removed, skipped, failed: [], revoked: a.fps.length };
     }
@@ -2154,7 +2213,17 @@ function collectionRow(path: string, text: string) {
           ? "briefed"
           : "planned";
   const links = [...text.matchAll(/\[\[([^\]|#\n]+)/g)].map(x => x[1].trim());
-  return { p: path, t: stem, k: kind, at: Math.floor(NOW_S - 3 * 86400), date, stage, props, links, tags: props.tags ?? [] };
+  return {
+    p: path,
+    t: stem,
+    k: kind,
+    at: Math.floor(NOW_S - 3 * 86400),
+    date,
+    stage,
+    props,
+    links,
+    tags: props.tags ?? [],
+  };
 }
 const pageRel = (p: unknown) => String(p).replace(vault.VAULT, "").replace(/^\//, "");
 // shared-live: the Mac's document of the page, which the editor and the mock peers share, and the cursors sent

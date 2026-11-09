@@ -1,14 +1,17 @@
 import { useState } from "react";
-import type { Machine, OrgOverview, OrgPerson, OrgStatus } from "../../../domain/settings/types";
+import type { Machine, OrgOverview, OrgPerson, OrgStatus, Sso } from "../../../domain/settings/types";
+import { GOOGLE_ISSUER } from "../../../domain/settings/types";
 import {
   addOrgAdmin,
   loadOrganisation,
   offboard,
   removeOrgAdmin,
+  setSso,
   startOrganisation,
 } from "../../../application/settings/organisation";
 import { useT } from "../../hooks/useT";
-import { buttonClass, ERROR_MESSAGE, HINT_IN_ROW, OK_MESSAGE, PILL } from "./blocks";
+import { buttonClass, ERROR_MESSAGE, FIELD, HINT_IN_ROW, OK_MESSAGE, PILL, SELECT } from "./blocks";
+import { Field } from "./Field";
 import { StatusLine } from "./StatusLine";
 
 const ROLE_KEY = { admin: "set.sharedAdmin", member: "set.sharedMember", reader: "set.sharedReader" } as const;
@@ -151,6 +154,18 @@ export function MachineOrganisation({ machine }: { machine: Machine }) {
           </div>
           <span className={HINT_IN_ROW}>{t("set.orgAddHelp")}</span>
 
+          <OrgSso
+            key={JSON.stringify(status.sso ?? null)}
+            sso={status.sso ?? null}
+            busy={busy}
+            save={sso =>
+              step(
+                () => setSso(machine.id, sso),
+                () => t(sso ? "set.ssoSaved" : "set.ssoTurnedOff"),
+              )
+            }
+          />
+
           <span className="text-xs font-medium text-s-fg">{t("set.orgWorkspaces")}</span>
           <div className={LIST}>
             {overview?.workspaces.length ? (
@@ -254,6 +269,105 @@ export function MachineOrganisation({ machine }: { machine: Machine }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/** SSO for joining a workspace on this server (docs/workspaces.md, SSO): the provider (Google, or another OpenID
+ *  Connect issuer), its client id, the email domains allowed and whether signing in is required. Saved as an entry this
+ *  Mac signs on the organisation list, so the server can never turn it on, off or wider itself. */
+function OrgSso({ sso, busy, save }: { sso: Sso | null; busy: boolean; save: (sso: Sso | null) => void }) {
+  const { t } = useT();
+  const [draft, setDraft] = useState(() => ({
+    issuer: sso?.issuer ?? GOOGLE_ISSUER,
+    client: sso?.client ?? "",
+    domains: sso?.domains.join(", ") ?? "",
+    required: sso?.required ?? true,
+  }));
+  const google = draft.issuer === GOOGLE_ISSUER;
+  const edit = (patch: Partial<typeof draft>) => setDraft(d => ({ ...d, ...patch }));
+  const domains = draft.domains
+    .split(/[\s,]+/)
+    .map(d => d.trim())
+    .filter(Boolean);
+  const ready = !!draft.client.trim() && domains.length > 0 && draft.issuer.startsWith("https://");
+  return (
+    <div className="grid gap-2">
+      <div className={LINE}>
+        <span className="text-xs font-medium text-s-fg">{t("set.ssoTitle")}</span>
+        <StatusLine level={sso ? "ok" : "warn"}>
+          {sso ? t(sso.required ? "set.ssoOnRequired" : "set.ssoOnOptional") : t("set.ssoOff")}
+        </StatusLine>
+      </div>
+      <div className={`${LIST} gap-2 p-3`}>
+        <Field label={t("set.ssoProvider")} id="sso-provider">
+          <select
+            id="sso-provider"
+            className={SELECT}
+            value={google ? "google" : "other"}
+            onChange={e => edit({ issuer: e.target.value === "google" ? GOOGLE_ISSUER : "" })}
+          >
+            <option value="google">Google</option>
+            <option value="other">{t("set.ssoOther")}</option>
+          </select>
+        </Field>
+        {!google ? (
+          <Field label={t("set.ssoIssuer")} hint={t("set.ssoIssuerHelp")} id="sso-issuer">
+            <input
+              id="sso-issuer"
+              className={`${FIELD} font-mono`}
+              placeholder="https://"
+              spellCheck={false}
+              value={draft.issuer}
+              onChange={e => edit({ issuer: e.target.value })}
+            />
+          </Field>
+        ) : null}
+        <Field label={t("set.ssoClient")} hint={t("set.ssoClientHelp")} id="sso-client">
+          <input
+            id="sso-client"
+            className={`${FIELD} font-mono`}
+            spellCheck={false}
+            value={draft.client}
+            onChange={e => edit({ client: e.target.value })}
+          />
+        </Field>
+        <Field label={t("set.ssoDomains")} hint={t("set.ssoDomainsHelp")} id="sso-domains">
+          <input
+            id="sso-domains"
+            className={FIELD}
+            placeholder="example.com"
+            spellCheck={false}
+            value={draft.domains}
+            onChange={e => edit({ domains: e.target.value })}
+          />
+        </Field>
+        <Field label={t("set.ssoRequired")} hint={t("set.ssoRequiredHelp")} id="sso-required">
+          <input
+            id="sso-required"
+            type="checkbox"
+            checked={draft.required}
+            onChange={e => edit({ required: e.target.checked })}
+          />
+        </Field>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {sso ? (
+            <button className={buttonClass("ghost")} disabled={busy} onClick={() => save(null)}>
+              {t("set.ssoTurnOff")}
+            </button>
+          ) : null}
+          <button
+            className={buttonClass("primary")}
+            disabled={busy || !ready}
+            onClick={() =>
+              save({ issuer: draft.issuer.trim(), client: draft.client.trim(), domains, required: draft.required })
+            }
+          >
+            {t(sso ? "set.ssoSave" : "set.ssoTurnOn")}
+          </button>
+        </div>
+      </div>
+      <span className={HINT_IN_ROW}>{t("set.ssoHelp")}</span>
     </div>
   );
 }

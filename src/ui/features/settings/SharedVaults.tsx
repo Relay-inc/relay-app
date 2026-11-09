@@ -1,8 +1,8 @@
 import { Fragment, useState } from "react";
-import type { Machine, SharedInfo, SharedRole, SharedVault } from "../../../domain/settings/types";
+import type { Machine, SharedInfo, SharedRole, SharedVault, Sso, SsoLogin } from "../../../domain/settings/types";
 import { agoParts } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
-import { filesOn, POLICY_PROVIDERS } from "../../../domain/settings/types";
+import { filesOn, GOOGLE_ISSUER, POLICY_PROVIDERS } from "../../../domain/settings/types";
 import {
   closeInvite,
   createSharedVault,
@@ -26,6 +26,8 @@ import {
   showRecovery,
   toggleMembers,
   withdrawInvite,
+  ssoCancel,
+  ssoSignIn,
 } from "../../../application/settings/shared-vaults";
 import { relativeFormat, sentAt } from "../../../shared/format";
 import { useT } from "../../hooks/useT";
@@ -722,7 +724,8 @@ function SharedForm({ machine }: { machine: string }) {
         {footer(t("set.sharedCreate"), busy || !form.name.trim() || !form.folder, createSharedVault)}
       </div>
     );
-  if (form?.mode === "join")
+  if (form?.mode === "join") {
+    const { sso, login } = form;
     return (
       <div className={ROW}>
         <span className={LABEL}>{t("set.sharedJoinTitle")}</span>
@@ -736,10 +739,16 @@ function SharedForm({ machine }: { machine: string }) {
             onChange={e => editForm({ link: e.target.value })}
           />
         </Field>
+        {sso ? <SsoSignIn sso={sso} login={login ?? null} /> : null}
         {folder}
-        {footer(t("set.sharedJoinButton"), busy || !form.link.trim() || !form.folder, joinSharedVault)}
+        {footer(
+          t("set.sharedJoinButton"),
+          busy || !form.link.trim() || !form.folder || (!!sso?.required && !login),
+          joinSharedVault,
+        )}
       </div>
     );
+  }
   // a create or join that ends closes the form: what its reload said shows here
   return (
     <div className={`flex flex-wrap items-center gap-2 ${EDGE}`}>
@@ -748,5 +757,35 @@ function SharedForm({ machine }: { machine: string }) {
       </button>
       {message ? <span className={message.ok ? HINT_IN_ROW : ERROR_MESSAGE}>{message.text}</span> : null}
     </div>
+  );
+}
+
+/** The join form's sign-in (docs/workspaces.md, SSO): the server of the link asks devices to sign in with its provider
+ *  before they join. "Sign in with Google" opens the browser, then who signed in shows above the usual Join. */
+function SsoSignIn({ sso, login }: { sso: Sso; login: SsoLogin | null }) {
+  const { t } = useT();
+  const signing = useSettingsStore(s => !!s.shared.busy.sso);
+  const provider = sso.issuer === GOOGLE_ISSUER ? "Google" : sso.issuer.replace(/^https:\/\//, "");
+  return (
+    <Field
+      label={t("set.ssoJoinLabel")}
+      hint={t(sso.required ? "set.ssoJoinRequired" : "set.ssoJoinOptional", { domains: sso.domains.join(", ") })}
+    >
+      {login ? (
+        <span className="text-xs text-s-fg">{t("set.ssoSignedInAs", { email: login.email ?? "?" })}</span>
+      ) : null}
+      {signing ? (
+        <>
+          <span className="text-xs text-s-muted">{t("set.ssoWaiting")}</span>
+          <button className={buttonClass("ghost")} onClick={ssoCancel}>
+            {t("mc.cancel")}
+          </button>
+        </>
+      ) : (
+        <button className={buttonClass(login ? "ghost" : "primary")} onClick={() => void ssoSignIn()}>
+          {t(login ? "set.ssoSignInAgain" : "set.ssoSignIn", { provider })}
+        </button>
+      )}
+    </Field>
   );
 }

@@ -40,6 +40,8 @@ pub async fn sso_login(state: St<'_>, link: String) -> Result<Value, String> {
     let gen = LOGIN.fetch_add(1, Ordering::SeqCst) + 1;
     tauri::async_runtime::spawn_blocking(move || {
         let sso = relay_remote::client::sso_info(&link, &me)?.ok_or("this server has no SSO")?;
+        // what a server not trusted yet says: only what an organisation list would take, before a browser opens on it
+        if !sso.valid() { return Err("SSO: the server's sign-in settings are not valid".into()); }
         let conf = get(&format!("{}/.well-known/openid-configuration", sso.issuer))?;
         let https = |k: &str| conf[k].as_str().filter(|u| u.starts_with("https://")).map(String::from).ok_or(format!("SSO: the issuer has no {k}"));
         let (auth, token_url) = (https("authorization_endpoint")?, https("token_endpoint")?);
@@ -48,7 +50,7 @@ pub async fn sso_login(state: St<'_>, link: String) -> Result<Value, String> {
         let (verifier, state) = (format!("{}{}", random_secret(), random_secret()), random_secret());
         let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
         let redirect = format!("http://127.0.0.1:{}", listener.local_addr().map_err(|e| e.to_string())?.port());
-        let url = auth_url(&auth, &sso, &redirect, &b64(&sha256(verifier.as_bytes())), &state, &nonce);
+        let url = auth_url(&auth, &sso, &redirect, &b64(&sha256(verifier.as_bytes())), &state, &nonce)?;
         tauri_plugin_opener::open_url(&url, None::<&str>).map_err(|e| e.to_string())?;
         let code = catch(&listener, &state, || LOGIN.load(Ordering::SeqCst) != gen)?;
         let form = [("grant_type", "authorization_code"), ("code", &code), ("redirect_uri", &redirect), ("client_id", &sso.client), ("code_verifier", &verifier)];
@@ -64,13 +66,13 @@ pub async fn sso_login(state: St<'_>, link: String) -> Result<Value, String> {
 pub fn sso_cancel() { LOGIN.fetch_add(1, Ordering::SeqCst); }
 
 /// The sign-in URL: authorisation code with PKCE (S256), the nonce, and the domain as a hint when there is one.
-fn auth_url(auth: &str, sso: &Sso, redirect: &str, challenge: &str, state: &str, nonce: &str) -> String {
-    let mut u = url::Url::parse(auth).expect("an https URL");
+fn auth_url(auth: &str, sso: &Sso, redirect: &str, challenge: &str, state: &str, nonce: &str) -> Result<String, String> {
+    let mut u = url::Url::parse(auth).ok().filter(|u| u.scheme() == "https").ok_or("SSO: the issuer's sign-in address is not https")?;
     u.query_pairs_mut().extend_pairs([("client_id", sso.client.as_str()), ("redirect_uri", redirect), ("response_type", "code"), ("scope", "openid email profile"),
         ("code_challenge", challenge), ("code_challenge_method", "S256"), ("state", state), ("nonce", nonce), ("prompt", "select_account")]);
     // Google's `hd`: the account chooser shows that domain's accounts (a hint only, the server checks the token's)
     if let [d] = sso.domains.as_slice() { u.query_pairs_mut().append_pair("hd", d); }
-    u.into()
+    Ok(u.into())
 }
 
 /// The browser's redirect to the loopback listener: its code when `state` matches. Another request (a favicon) is
@@ -102,7 +104,7 @@ fn catch(l: &TcpListener, state: &str, stop: impl Fn() -> bool) -> Result<String
 
 /// One request with curl (as calendar.rs), https only: the body on stdin, off the command line.
 fn curl(url: &str, args: &[&str], body: &str) -> Result<Value, String> {
-    let mut ch = Command::new("curl").args(["-sS", "--proto", "=https", "--max-time", "20", "-H", "Accept: application/json"]).args(args).arg(url)
+    let mut ch = Command::new("curl").args(["-sS", "--proto", "=https", "--max-time", "20", "-H", "Accept: application/json"]).args(args).arg("--url").arg(url)
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| format!("curl: {e}"))?;
     if let Some(mut i) = ch.stdin.take() { i.write_all(body.as_bytes()).ok(); }
     let out = ch.wait_with_output().map_err(|e| format!("curl: {e}"))?;
@@ -121,7 +123,8 @@ mod tests {
 
     #[test]
     fn the_sign_in_url_asks_a_code_with_pkce_and_the_nonce() {
-        let u = url::Url::parse(&auth_url("https://accounts.google.com/o/oauth2/v2/auth", &sso(), "http://127.0.0.1:5000", "ch", "st", "no")).unwrap();
+        let u = url::Url::parse(&auth_url("https://accounts.google.com/o/oauth2/v2/auth", &sso(), "http://127.0.0.1:5000", "ch", "st", "no").unwrap()).unwrap();
+        assert!(auth_url("http://accounts.google.com/auth", &sso(), "x", "c", "s", "n").is_err());
         let q: std::collections::HashMap<String, String> = u.query_pairs().into_owned().collect();
         for (k, v) in [("client_id", "c1"), ("redirect_uri", "http://127.0.0.1:5000"), ("response_type", "code"), ("code_challenge", "ch"), ("code_challenge_method", "S256"), ("state", "st"), ("nonce", "no"), ("hd", "example.com")] {
             assert_eq!(q.get(k).map(String::as_str), Some(v), "{k}");

@@ -111,7 +111,7 @@ fn jwks(issuer: &str, fresh: bool) -> Result<Value, String> {
 const UNREACHABLE: &str = "SSO: this server cannot reach the sign-in provider's keys now: try again later";
 /// One GET with curl (no HTTP client in this binary, as github.rs), https only, its JSON answer.
 fn get(url: &str) -> Result<Value, String> {
-    let out = Command::new("curl").args(["-fsS", "-m", "10", "--proto", "=https", "-H", "Accept: application/json", url]).stdin(Stdio::null()).output().map_err(|e| format!("curl: {e}"))?;
+    let out = Command::new("curl").args(["-fsS", "-m", "10", "--proto", "=https", "-H", "Accept: application/json", "--url", url]).stdin(Stdio::null()).output().map_err(|e| format!("curl: {e}"))?;
     if !out.status.success() { return Err(String::from_utf8_lossy(&out.stderr).trim().to_string()); }
     serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())
 }

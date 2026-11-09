@@ -21,6 +21,8 @@ import {
   type SharedInfo,
   type SharedInvite,
   type SharedStatus,
+  type Sso,
+  type SsoLogin,
   type VaultSync,
 } from "../../domain/settings/types";
 import { SETUP_FOLDERS, type SetupPlatform } from "../../domain/settings/machines";
@@ -114,6 +116,9 @@ export type SettingsState = {
       folder: string;
       link: string;
       noHistory: boolean;
+      // joining: what the link's server asks to sign in with (null nothing, undefined not asked yet), and the login
+      sso?: Sso | null;
+      login?: SsoLogin | null;
     };
   };
   pluginsPage: {

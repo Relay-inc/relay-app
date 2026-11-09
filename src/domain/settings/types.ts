@@ -154,7 +154,21 @@ export type SharedPolicy = { providers: string[]; capture: boolean };
 export const POLICY_PROVIDERS = ["claude", "codex"];
 /** A server's organisation as this Mac sees it (src-tauri/src/organisation.rs `org_status`): `me` an organisation
  *  admin, `owner` the device that may start it, `code` this Mac's keys' code (to compare), `admins` fingerprints. */
-export type OrgStatus = { exists: boolean; me: boolean; owner: boolean; code: string; admins: string[] };
+export type OrgStatus = {
+  exists: boolean;
+  me: boolean;
+  owner: boolean;
+  code: string;
+  admins: string[];
+  sso?: Sso | null;
+};
+/** A server's SSO (docs/workspaces.md, SSO), signed on its organisation list: the OIDC issuer, the client id, the email
+ *  domains allowed, and whether a device must sign in to join a workspace there. */
+export type Sso = { issuer: string; client: string; domains: string[]; required: boolean };
+/** Google's issuer: the provider U4 names. Another one is an issuer URL. */
+export const GOOGLE_ISSUER = "https://accounts.google.com";
+/** An SSO login for a join (src-tauri sso.rs): the join sends the token and salt, the email and name show. */
+export type SsoLogin = { id_token: string; salt: string; email: string | null; name: string | null };
 /** A workspace in the organisation's overview: what its member list says, nothing of its notes. `managed`: every
  *  organisation admin is an admin of it, `admin`: this Mac is one. */
 export type OrgWorkspace = {

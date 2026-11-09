@@ -53,6 +53,11 @@ pub struct Policy { pub providers: Vec<String>, pub capture: bool }
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
 pub struct Sso { pub issuer: String, pub client: String, pub domains: Vec<String>, pub required: bool }
+impl Sso {
+    /// Whether an SSO entry would take these fields (an https issuer, a client id, one domain or more): a device that
+    /// is not paired yet checks what a server says it is with it, before it opens a browser on that.
+    pub fn valid(&self) -> bool { !self.issuer.is_empty() && good_sso(&Entry { kind: "sso".into(), issuer: self.issuer.clone(), client: self.client.clone(), domains: self.domains.clone(), required: self.required, ..Default::default() }) }
+}
 impl Entry {
     fn has_sso(&self) -> bool { !self.issuer.is_empty() || !self.client.is_empty() || !self.domains.is_empty() || self.required }
 }
@@ -739,6 +744,8 @@ mod tests {
             Entry { who: "7".repeat(64), ..google(true) }, Entry { fp: b.fp.clone(), ..google(true) }] {
             assert!(with(&a, x.clone()).unwrap_err().contains("wrong fields"), "{x:?}");
         }
+        // what a device not paired yet checks a server's word with: the same rules
+        assert!(list.sso.as_ref().unwrap().valid() && !Sso { issuer: "https://x.example/?a".into(), ..list.sso.clone().unwrap() }.valid() && !Sso::default().valid());
         // SSO fields on another kind
         assert!(with(&a, Entry { kind: "remove".into(), fp: b.fp.clone(), issuer: "https://x.example".into(), ..Default::default() }).unwrap_err().contains("wrong fields"));
         // turned off: an entry with every field empty

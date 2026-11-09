@@ -48,6 +48,8 @@ import type {
   OrgOffboard,
   OrgOverview,
   OrgStatus,
+  Sso,
+  SsoLogin,
 } from "../domain/settings/types";
 import type {
   ExtraVault,
@@ -700,8 +702,14 @@ export const sharedVaultCreate = (machine: string, name: string, folder: string,
     noHistory,
   });
 /** Join with an invite link into an empty folder. */
-export const sharedVaultJoin = (link: string, folder: string) =>
-  invoke<{ id: string; name: string }>("shared_vault_join", { link, folder });
+export const sharedVaultJoin = (link: string, folder: string, sso: SsoLogin | null) =>
+  invoke<{ id: string; name: string }>("shared_vault_join", { link, folder, sso });
+// ---------- SSO before a join (src-tauri/src/sso.rs)
+/** What the invite link's server asks to sign in with, null for nothing. */
+export const ssoCheck = (link: string) => invoke<{ sso: Sso | null }>("sso_check", { link }).then(r => r.sso);
+/** Sign in in the browser for a join with `link`. */
+export const ssoLogin = (link: string) => invoke<SsoLogin>("sso_login", { link });
+export const ssoCancel = () => invoke("sso_cancel");
 /** With `who`, for a device of that person: a member may make one for its own person. */
 export const sharedVaultInvite = (id: string, role: SharedRole, who?: string) =>
   invoke<{ link: string; invite: SharedInvite }>("shared_vault_invite", { id, role, who });
@@ -741,6 +749,8 @@ export const orgAddAdmin = (machine: string, fp: string, code: string) =>
   invoke("org_add_admin", { machine, fp, code });
 export const orgRemoveAdmin = (machine: string, fp: string) => invoke("org_remove_admin", { machine, fp });
 /** One person's devices off every workspace this Mac is admin of, then revoked on the server. */
+/** Set the server's SSO on its organisation list, or turn it off with null. */
+export const orgSso = (machine: string, sso: Sso | null) => invoke("org_sso", { machine, sso });
 export const orgOffboard = (machine: string, fps: string[]) => invoke<OrgOffboard>("org_offboard", { machine, fps });
 /** The held deletes of a vault the user saw (`paths`): through in its next round, or the files put back. */
 export const sharedVaultHeld = (id: string, allow: boolean, paths: string[]) =>

@@ -1761,6 +1761,23 @@ const VIEWS = {
     await page.getByText("Organisation admins", { exact: true }).scrollIntoViewIfNeeded();
     await settle(page);
   },
+  // SSO for joining (PR SSO through OIDC): Google, a client id and a domain filled in, required, before Turn on
+  "settings-org-sso": async () => {
+    await VIEWS["settings-org"]();
+    await waitText("SSO for joining");
+    await page.getByLabel("Client ID").fill("123-example.apps.googleusercontent.com");
+    await page.getByLabel("Email domains").fill("example.com");
+    await page.getByText("SSO for joining", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // the same, turned on: signed on the organisation list
+  "settings-org-sso-on": async () => {
+    await VIEWS["settings-org-sso"]();
+    await button("Turn on").click();
+    await waitText("SSO saved on the organisation list.");
+    await page.getByText("SSO for joining", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   // a workspace's policy for its admin: Claude Code allowed, Codex not, capture off, and Add organisation admins
   "settings-shared-policy": async () => {
     await settingsPage("Machines", undefined, "shared-org");
@@ -1916,6 +1933,19 @@ const VIEWS = {
     await settingsPage("Machines", undefined, "shared-invite");
     await page.setViewportSize({ width: 900, height: 1000 });
     await waitText("Join a workspace");
+    await intoView("Join a workspace");
+  },
+  // the invite's server asks to sign in with Google first (PR SSO through OIDC): Join waits for it
+  "settings-shared-join-sso": async () => {
+    await VIEWS["settings-shared-join"]();
+    await waitText("Sign in with Google");
+    await intoView("Join a workspace");
+  },
+  // signed in: who, then the usual Join
+  "settings-shared-join-signed": async () => {
+    await VIEWS["settings-shared-join-sso"]();
+    await button("Sign in with Google").click();
+    await waitText("Signed in as sofie.claes@example.com");
     await intoView("Join a workspace");
   },
   // the other vault folders under General: a path, Remove, and the project shown under another name (the main vault
@@ -2416,7 +2446,8 @@ const VIEWS = {
     await page.locator('[data-type-group="Document"]').first().click();
     const launch = page.locator('[data-page$="/Launch checklist.md"]', { hasText: "🚀" }).first();
     await launch.waitFor({ timeout: 4000 });
-    if (await page.locator('[data-page$="/Brand notes.md"]', { hasText: "🚀" }).count()) throw new Error("an icon on a page without");
+    if (await page.locator('[data-page$="/Brand notes.md"]', { hasText: "🚀" }).count())
+      throw new Error("an icon on a page without");
     await launch.scrollIntoViewIfNeeded();
     await settle(page, 300);
   },
@@ -2505,7 +2536,10 @@ const VIEWS = {
   // the rest of that page: the embedded .base grouped by status is a board, the formula block offers Obsidian
   "page-views-board": async (fixture = "linked-views") => {
     await VIEWS["page-views"](fixture);
-    await page.locator(".cm-base").nth(1).evaluate(el => el.scrollIntoView({ block: "start" }));
+    await page
+      .locator(".cm-base")
+      .nth(1)
+      .evaluate(el => el.scrollIntoView({ block: "start" }));
     await settle(page);
   },
   // a cell edited in the page's table: the date of a meeting, written into that note; the table re-sorts, the block's
@@ -2718,7 +2752,9 @@ const VIEWS = {
     const status = page.getByLabel("status", { exact: true });
     await status.fill("Someday");
     await status.press("Enter");
-    await page.waitForFunction(() => /\nstatus: Someday\n/.test(window.__harness.written() ?? ""), null, { timeout: 4000 });
+    await page.waitForFunction(() => /\nstatus: Someday\n/.test(window.__harness.written() ?? ""), null, {
+      timeout: 4000,
+    });
     await page.getByRole("combobox", { name: "Note type" }).selectOption("Project");
     await page.waitForFunction(() => /type: Project\n/.test(window.__harness.written() ?? ""), null, { timeout: 4000 });
     await page.getByRole("combobox", { name: "status", exact: true }).hover();
@@ -2759,8 +2795,7 @@ const VIEWS = {
       throw new Error(`Jane Doe made with ${JSON.stringify(made)}`);
     await settle(page, 300);
   },
-  "typed-person": async (fixture = "kb") =>
-    VIEWS["typed-meeting"](fixture, "Contexts/Agency/People/Tom Willems.md"),
+  "typed-person": async (fixture = "kb") => VIEWS["typed-meeting"](fixture, "Contexts/Agency/People/Tom Willems.md"),
   "typed-person-dark": async () => VIEWS["typed-person"]("kb-dark"),
   // a Project's rail groups the meetings that link to it through about:
   "typed-project": async (fixture = "kb") => {
@@ -2774,7 +2809,10 @@ const VIEWS = {
     VIEWS["typed-meeting"](fixture, "Contexts/Agency/Projects/Northwind Portal/Documents/Pricing sketch.md"),
   "typed-untyped-dark": async () => VIEWS["typed-untyped"]("kb-sketch-dark"),
   // page icons and covers (issue 424): a page with its own icon and a cover banner; `note` another page of fixture kb
-  "page-icon-cover": async (fixture = "kb", note = "Contexts/Agency/Projects/Northwind Portal/Documents/Launch checklist.md") => {
+  "page-icon-cover": async (
+    fixture = "kb",
+    note = "Contexts/Agency/Projects/Northwind Portal/Documents/Launch checklist.md",
+  ) => {
     await VIEWS["typed-meeting"](fixture, note);
     await page.locator("[data-page-cover] img").waitFor();
     await settle(page, 300);
@@ -2797,7 +2835,8 @@ const VIEWS = {
     await page.getByRole("textbox", { name: "Page icon" }).fill("ab");
     await page.keyboard.press("Enter");
     await waitText("Only one emoji");
-    if (/\nicon:/.test((await page.evaluate(() => window.__harness.written())) ?? "")) throw new Error("ab was written");
+    if (/\nicon:/.test((await page.evaluate(() => window.__harness.written())) ?? ""))
+      throw new Error("ab was written");
     await settle(page);
   },
   "page-icon-project-dark": async () => VIEWS["page-icon-project"]("kb-dark"),
@@ -2828,7 +2867,8 @@ const VIEWS = {
     await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
     const launch = page.locator('[data-page$="/Launch checklist.md"]', { hasText: "🚀" }).first();
     await launch.click();
-    if (await page.locator('[data-page$="/Brand notes.md"]', { hasText: "🚀" }).count()) throw new Error("an icon on a page without");
+    if (await page.locator('[data-page$="/Brand notes.md"]', { hasText: "🚀" }).count())
+      throw new Error("an icon on a page without");
     await settle(page, 300);
   },
   "pages-tree-icons-dark": async () => VIEWS["pages-tree-icons"]("kb-dark"),
@@ -2841,7 +2881,8 @@ const VIEWS = {
     await page.getByRole("textbox", { name: "Page icon" }).fill("🧭");
     await page.keyboard.press("Enter");
     await page.locator('[data-project="Northwind Portal"]', { hasText: "🧭" }).waitFor({ timeout: 4000 });
-    if (await page.locator('[data-project="Northwind Portal"] img').count()) throw new Error("the config picture stayed");
+    if (await page.locator('[data-project="Northwind Portal"] img').count())
+      throw new Error("the config picture stayed");
     await settle(page, 300);
   },
   // Add cover from a file: copied into the attachments folder, cover: written, the banner above the title
@@ -2851,9 +2892,13 @@ const VIEWS = {
     await page.locator("h1").hover();
     await page.getByRole("button", { name: "Add cover" }).click();
     await page.getByRole("button", { name: "Choose image…" }).click();
-    await page.waitForFunction(() => /\ncover: "\[\[Kickoff banner\.png\]\]"\n/.test(window.__harness.written() ?? ""), null, {
-      timeout: 4000,
-    });
+    await page.waitForFunction(
+      () => /\ncover: "\[\[Kickoff banner\.png\]\]"\n/.test(window.__harness.written() ?? ""),
+      null,
+      {
+        timeout: 4000,
+      },
+    );
     await page.locator("[data-page-cover] img").waitFor();
     await settle(page);
   },

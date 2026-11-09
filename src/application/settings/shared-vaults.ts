@@ -49,10 +49,36 @@ export async function takeInvite() {
   const link = await backend.sharedVaultPendingInvite().catch(() => null);
   if (!link) return;
   change(draft => {
-    draft.form = { ...draft.form, mode: "join", machine: "", link };
+    draft.form = { ...draft.form, mode: "join", machine: "", link, sso: undefined, login: null };
     draft.messages.form = null;
   });
+  void checkSso();
 }
+
+/** What the join form's link's server asks to sign in with (docs/workspaces.md, SSO), asked once per link. A link
+ *  that is no invite yet, or a server that cannot be reached, asks nothing: the join says why. */
+async function checkSso() {
+  const link = st().form.link.trim();
+  if (!/^relay:\/\/.*[#&]invite=/.test(link)) return;
+  const sso = await backend.ssoCheck(link).catch(() => null);
+  change(draft => {
+    if (draft.form.link.trim() === link) draft.form.sso = sso;
+  });
+}
+/** Sign in in the browser for the join form's link: the login shows in the form, the join sends it. */
+export async function ssoSignIn() {
+  const link = st().form.link.trim();
+  await run("sso", async () => {
+    const login = await backend.ssoLogin(link);
+    change(draft => {
+      if (draft.form.link.trim() === link) draft.form.login = login;
+    });
+  });
+  // a sign-in error shows where the form's do
+  const failed = st().messages.sso;
+  if (failed) change(draft => void (draft.messages.form = failed));
+}
+export const ssoCancel = () => void backend.ssoCancel();
 
 /** The rounds so far and then each one as it ends, and the invite links (`vault-invite` is a ping: the backend has
  *  the link). Once, when the window opens. */
@@ -83,8 +109,15 @@ export function openForm(mode: Shared["form"]["mode"], machine = st().form.machi
     draft.messages.form = null;
   });
 }
-export const editForm = (patch: Partial<Pick<Shared["form"], "name" | "link" | "noHistory">>) =>
-  change(draft => void Object.assign(draft.form, patch));
+export function editForm(patch: Partial<Pick<Shared["form"], "name" | "link" | "noHistory">>) {
+  const relink = patch.link !== undefined && patch.link !== st().form.link;
+  change(draft => {
+    Object.assign(draft.form, patch);
+    // another link: another server, and a login that was for the one before
+    if (relink) [draft.form.sso, draft.form.login] = [undefined, null];
+  });
+  if (relink) void checkSso();
+}
 export async function pickSharedFolder() {
   const folder = await backend.pickFolder();
   if (folder) change(draft => void (draft.form.folder = folder));
@@ -107,9 +140,9 @@ export async function createSharedVault() {
   await takeInvite();
 }
 export async function joinSharedVault() {
-  const { link, folder } = st().form;
+  const { link, folder, login } = st().form;
   await run("form", async () => {
-    await backend.sharedVaultJoin(link.trim(), folder);
+    await backend.sharedVaultJoin(link.trim(), folder, login ?? null);
     change(draft => void (draft.form = CLOSED)); // the invite is spent: closed also when the reload fails
     await reload();
   });

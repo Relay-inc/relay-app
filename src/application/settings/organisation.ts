@@ -1,4 +1,4 @@
-import type { OrgOffboard, OrgOverview, OrgStatus } from "../../domain/settings/types";
+import type { OrgOffboard, OrgOverview, OrgStatus, Sso } from "../../domain/settings/types";
 import * as backend from "../../infrastructure/backend";
 
 // Settings › Machines › Organisation (docs/workspaces.md, Organisation): a server's organisation admins, its workspaces
@@ -14,4 +14,5 @@ export async function loadOrganisation(machine: string): Promise<{ status: OrgSt
 export const startOrganisation = (machine: string) => backend.orgStart(machine);
 export const addOrgAdmin = (machine: string, fp: string, code: string) => backend.orgAddAdmin(machine, fp, code);
 export const removeOrgAdmin = (machine: string, fp: string) => backend.orgRemoveAdmin(machine, fp);
+export const setSso = (machine: string, sso: Sso | null) => backend.orgSso(machine, sso);
 export const offboard = (machine: string, fps: string[]): Promise<OrgOffboard> => backend.orgOffboard(machine, fps);
