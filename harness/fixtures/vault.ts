@@ -240,7 +240,7 @@ export const sharedPeople = [
 export const ORG_CODE = "5e1d-a07c-33b9";
 const SAM = "9a4f".padEnd(64, "c");
 const DESK = "2b7e".padEnd(64, "e");
-const ROBIN = "6c1f".padEnd(64, "a");
+const JONAS = "6c1f".padEnd(64, "a");
 /** The fully paired devices among the people: the server revokes none of them through an offboarding. */
 export const ORG_FULL = [DESK];
 export const organisation = {
@@ -270,7 +270,7 @@ export const organisation = {
       members: [
         { fp: DESK, name: "Front desk Mac", role: "admin", person: "", listed: true },
         { fp: SAM, name: "Design laptop", role: "member", person: "s2".repeat(32), listed: true },
-        { fp: ROBIN, name: "Robin's laptop", role: "member", person: "r1".repeat(32), listed: true },
+        { fp: JONAS, name: "Jonas's laptop", role: "member", person: "r1".repeat(32), listed: true },
       ],
       people: [],
     },
@@ -288,10 +288,10 @@ export const organisation = {
     { name: "Front desk Mac", email: "", devices: [{ fp: DESK, name: "Front desk Mac" }], workspaces: [{ id: "fedcba9876543210", name: "Acme Retail", role: "admin" }] },
     // named by its own device, without SSO or an admin: the email shows marked and groups nobody
     {
-      name: "Robin Kay",
-      email: "robin@example.com",
+      name: "Jonas Peeters",
+      email: "jonas@example.com",
       unverified: true,
-      devices: [{ fp: ROBIN, name: "Robin's laptop" }],
+      devices: [{ fp: JONAS, name: "Jonas's laptop" }],
       workspaces: [{ id: "fedcba9876543210", name: "Acme Retail", role: "member" }],
     },
     {
