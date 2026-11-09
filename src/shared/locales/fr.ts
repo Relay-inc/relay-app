@@ -1395,6 +1395,15 @@ export default {
   "set.ssoOff": "Désactivé : un lien d'invitation suffit pour rejoindre",
   "set.ssoProvider": "Fournisseur",
   "set.ssoOther": "Autre fournisseur OpenID Connect",
+  "set.ssoEntra": "Microsoft Entra ID",
+  "set.ssoTenant": "ID du tenant",
+  "set.ssoTenantHelp":
+    "L'ID de votre tenant Entra, un GUID. Tout compte de ce tenant peut rejoindre : Entra ne donne pas d'adresse vérifiée sur laquelle contrôler un domaine.",
+  "set.ssoClientHelpEntra":
+    "L'ID d'application (client) de l'inscription d'application créée pour Relay. Aucun secret client n'est nécessaire.",
+  "set.ssoJoinRequiredTenant":
+    "Ce serveur vous demande de vous connecter avec un compte Microsoft de son organisation avant de rejoindre.",
+  "set.ssoJoinOptionalTenant": "Ce serveur permet de vous connecter avec un compte Microsoft de son organisation.",
   "set.ssoIssuer": "Émetteur",
   "set.ssoIssuerHelp": "L'URL d'émetteur du fournisseur, telle que ses jetons d'identité la nomment.",
   "set.ssoClient": "ID client",

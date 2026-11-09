@@ -81,12 +81,14 @@ const noHistory = fixture === "shared-nohistory";
 // shared-org: "shared" on a full machine (not for workspaces only) whose server has an organisation, this Mac one of
 // its admins: Organisation under the machine (docs/workspaces.md, Organisation), Northwind's policy Claude Code only
 const org = fixture === "shared-org";
+// an invite link opened Relay; "shared-invite-entra": its server asks Microsoft Entra ID (PR Entra ID) instead of Google
+const invite = fixture === "shared-invite" || fixture === "shared-invite-entra";
 const shared =
   fixture === "shared" ||
   org ||
   noHistory ||
   fixture === "kb-shared" ||
-  fixture === "shared-invite" ||
+  invite ||
   fixture === "shared-rekey" ||
   fixture === "shared-unlisted" ||
   people ||
@@ -166,16 +168,24 @@ if (org) for (const s of Object.values(sharedStatus)) s.policy = { providers: ["
 let orgState = structuredClone(vault.organisation);
 // the server's SSO (src-tauri organisation.rs org_sso): none until Turn on
 let orgSso: unknown = null;
-// what an invite link's server asks to sign in with (src-tauri sso.rs): Google, required, on "shared-invite"
+// what an invite link's server asks to sign in with (src-tauri sso.rs): Google, required, on "shared-invite", an
+// Entra ID tenant without domains on "shared-invite-entra"
 const inviteSso =
-  fixture === "shared-invite"
+  fixture === "shared-invite-entra"
     ? {
-        issuer: "https://accounts.google.com",
-        client: "123-example.apps.googleusercontent.com",
-        domains: ["example.com"],
+        issuer: "https://login.microsoftonline.com/11111111-2222-3333-4444-555555555555/v2.0",
+        client: "00000000-aaaa-bbbb-cccc-111111111111",
+        domains: [],
         required: true,
       }
-    : null;
+    : fixture === "shared-invite"
+      ? {
+          issuer: "https://accounts.google.com",
+          client: "123-example.apps.googleusercontent.com",
+          domains: ["example.com"],
+          required: true,
+        }
+      : null;
 if (fixture === "shared-rekey")
   for (const s of Object.values(sharedStatus))
     Object.assign(s, {
@@ -204,7 +214,7 @@ if (noHistory)
       conflicts: s.conflicts.map((c: string) => c.replace(/\(conflict [^)]*? (\d{4}-)/, "(conflict $1")),
     });
 let sharedInvites = [{ id: "4d2e8a1b6c3f9e70", role: "member", expires: Math.floor(Date.now() / 1000) + 20 * 3600 }];
-let pendingInvite: string | null = fixture === "shared-invite" ? vault.inviteLink("b81c0e5f2a7d3946") : null;
+let pendingInvite: string | null = invite ? vault.inviteLink("b81c0e5f2a7d3946") : null;
 const hex = (n: number, seed: number) =>
   Array.from({ length: n }, (_, i) => ((i * 7 + seed) % 16).toString(16)).join("");
 // the orchestrator's workers (fixture "orch"), changed by orch_stop

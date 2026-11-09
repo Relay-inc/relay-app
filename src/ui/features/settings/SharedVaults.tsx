@@ -2,7 +2,7 @@ import { Fragment, useState } from "react";
 import type { Machine, SharedInfo, SharedRole, SharedVault, Sso, SsoLogin } from "../../../domain/settings/types";
 import { agoParts } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
-import { filesOn, GOOGLE_ISSUER, POLICY_PROVIDERS } from "../../../domain/settings/types";
+import { entraTenant, filesOn, GOOGLE_ISSUER, POLICY_PROVIDERS } from "../../../domain/settings/types";
 import {
   closeInvite,
   createSharedVault,
@@ -761,16 +761,18 @@ function SharedForm({ machine }: { machine: string }) {
 }
 
 /** The join form's sign-in (docs/workspaces.md, SSO): the server of the link asks devices to sign in with its provider
- *  before they join. "Sign in with Google" opens the browser, then who signed in shows above the usual Join. */
+ *  before they join. "Sign in with Google" (or Microsoft) opens the browser, then who signed in shows above the usual Join. */
 function SsoSignIn({ sso, login }: { sso: Sso; login: SsoLogin | null }) {
   const { t } = useT();
   const signing = useSettingsStore(s => !!s.shared.busy.sso);
-  const provider = sso.issuer === GOOGLE_ISSUER ? "Google" : sso.issuer.replace(/^https:\/\//, "");
+  const entra = !!entraTenant(sso.issuer);
+  const provider =
+    sso.issuer === GOOGLE_ISSUER ? "Google" : entra ? "Microsoft" : sso.issuer.replace(/^https:\/\//, "");
+  const hint = entra
+    ? t(sso.required ? "set.ssoJoinRequiredTenant" : "set.ssoJoinOptionalTenant")
+    : t(sso.required ? "set.ssoJoinRequired" : "set.ssoJoinOptional", { domains: sso.domains.join(", ") });
   return (
-    <Field
-      label={t("set.ssoJoinLabel")}
-      hint={t(sso.required ? "set.ssoJoinRequired" : "set.ssoJoinOptional", { domains: sso.domains.join(", ") })}
-    >
+    <Field label={t("set.ssoJoinLabel")} hint={hint}>
       {login ? (
         <span className="text-xs text-s-fg">{t("set.ssoSignedInAs", { email: login.email ?? "?" })}</span>
       ) : null}

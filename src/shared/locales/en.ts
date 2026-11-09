@@ -1370,6 +1370,15 @@ const en = {
   "set.ssoOff": "Off: an invite link alone joins",
   "set.ssoProvider": "Provider",
   "set.ssoOther": "Other OpenID Connect provider",
+  "set.ssoEntra": "Microsoft Entra ID",
+  "set.ssoTenant": "Tenant ID",
+  "set.ssoTenantHelp":
+    "Your Entra tenant's ID, a GUID. Every account of that tenant may join: Entra gives no verified email to check a domain on.",
+  "set.ssoClientHelpEntra":
+    "The application (client) ID of the app registration you made for Relay. No client secret is needed.",
+  "set.ssoJoinRequiredTenant":
+    "This server asks you to sign in with a Microsoft account of its organisation before you join.",
+  "set.ssoJoinOptionalTenant": "This server lets you sign in with a Microsoft account of its organisation.",
   "set.ssoIssuer": "Issuer",
   "set.ssoIssuerHelp": "The provider's issuer URL, as its ID tokens name it.",
   "set.ssoClient": "Client ID",

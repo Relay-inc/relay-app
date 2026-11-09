@@ -1381,6 +1381,15 @@ export default {
   "set.ssoOff": "Uit: een uitnodigingslink alleen volstaat",
   "set.ssoProvider": "Aanbieder",
   "set.ssoOther": "Andere OpenID Connect-aanbieder",
+  "set.ssoEntra": "Microsoft Entra ID",
+  "set.ssoTenant": "Tenant-ID",
+  "set.ssoTenantHelp":
+    "De ID van je Entra-tenant, een GUID. Elk account van die tenant mag erbij: Entra geeft geen geverifieerd e-mailadres om een domein op te controleren.",
+  "set.ssoClientHelpEntra":
+    "De application (client) ID van de app-registratie die je voor Relay maakte. Een client secret is niet nodig.",
+  "set.ssoJoinRequiredTenant":
+    "Deze server vraagt je aan te melden met een Microsoft-account van zijn organisatie voor je meedoet.",
+  "set.ssoJoinOptionalTenant": "Deze server laat je aanmelden met een Microsoft-account van zijn organisatie.",
   "set.ssoIssuer": "Issuer",
   "set.ssoIssuerHelp": "De issuer-URL van de aanbieder, zoals zijn ID-tokens die noemen.",
   "set.ssoClient": "Client-ID",

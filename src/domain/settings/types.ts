@@ -167,6 +167,12 @@ export type OrgStatus = {
 export type Sso = { issuer: string; client: string; domains: string[]; required: boolean };
 /** Google's issuer: the provider U4 names. Another one is an issuer URL. */
 export const GOOGLE_ISSUER = "https://accounts.google.com";
+/** Microsoft Entra ID: the issuer of one tenant (relay_remote members::entra_tenant), and the tenant of an issuer. */
+export const entraIssuer = (tenant: string) => `https://login.microsoftonline.com/${tenant}/v2.0`;
+export const entraTenant = (issuer: string) =>
+  /^https:\/\/login\.microsoftonline\.com\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/v2\.0$/.exec(
+    issuer,
+  )?.[1] ?? null;
 /** An SSO login for a join (src-tauri sso.rs): the join sends the token and salt, the email and name show. */
 export type SsoLogin = { id_token: string; salt: string; email: string | null; name: string | null };
 /** A workspace in the organisation's overview: what its member list says, nothing of its notes. `managed`: every

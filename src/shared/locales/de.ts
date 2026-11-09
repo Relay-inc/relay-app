@@ -1389,6 +1389,15 @@ export default {
   "set.ssoOff": "Aus: Ein Einladungslink allein genügt zum Beitreten",
   "set.ssoProvider": "Anbieter",
   "set.ssoOther": "Anderer OpenID-Connect-Anbieter",
+  "set.ssoEntra": "Microsoft Entra ID",
+  "set.ssoTenant": "Mandanten-ID",
+  "set.ssoTenantHelp":
+    "Die ID deines Entra-Mandanten, eine GUID. Jedes Konto dieses Mandanten darf beitreten: Entra liefert keine verifizierte E-Mail-Adresse, an der sich eine Domain prüfen ließe.",
+  "set.ssoClientHelpEntra":
+    "Die Anwendungs-ID (Client-ID) der App-Registrierung, die du für Relay angelegt hast. Ein Client-Secret ist nicht nötig.",
+  "set.ssoJoinRequiredTenant":
+    "Dieser Server bittet dich, dich vor dem Beitritt mit einem Microsoft-Konto seiner Organisation anzumelden.",
+  "set.ssoJoinOptionalTenant": "Dieser Server lässt dich mit einem Microsoft-Konto seiner Organisation anmelden.",
   "set.ssoIssuer": "Issuer",
   "set.ssoIssuerHelp": "Die Issuer-URL des Anbieters, wie seine ID-Tokens sie nennen.",
   "set.ssoClient": "Client-ID",

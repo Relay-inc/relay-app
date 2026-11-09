@@ -1787,6 +1787,27 @@ const VIEWS = {
     await page.getByText("SSO for joining", { exact: true }).scrollIntoViewIfNeeded();
     await settle(page);
   },
+  // Microsoft Entra ID picked (PR Entra ID): a tenant id instead of the issuer and the email domains
+  "settings-org-sso-entra": async () => {
+    await VIEWS["settings-org"]();
+    await waitText("SSO for joining");
+    await page.getByLabel("Provider").selectOption("entra");
+    await page.getByLabel("Tenant ID").fill("11111111-2222-3333-4444-555555555555");
+    await page.getByLabel("Client ID").fill("00000000-aaaa-bbbb-cccc-111111111111");
+    if (await page.getByLabel("Email domains").count()) throw new Error("email domains shown for Entra");
+    await page.getByText("SSO for joining", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // the same, turned on: the tenant's issuer signed on the organisation list, read back as Entra
+  "settings-org-sso-entra-on": async () => {
+    await VIEWS["settings-org-sso-entra"]();
+    await button("Turn on").click();
+    await waitText("SSO saved on the organisation list.");
+    if ((await page.getByLabel("Tenant ID").inputValue()) !== "11111111-2222-3333-4444-555555555555")
+      throw new Error("the tenant did not come back");
+    await page.getByText("SSO for joining", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   // the same, turned on: signed on the organisation list
   "settings-org-sso-on": async () => {
     await VIEWS["settings-org-sso"]();
@@ -1956,6 +1977,14 @@ const VIEWS = {
   "settings-shared-join-sso": async () => {
     await VIEWS["settings-shared-join"]();
     await waitText("Sign in with Google");
+    await intoView("Join a workspace");
+  },
+  // the invite's server asks an Entra ID tenant (PR Entra ID): Sign in with Microsoft, no domain in the hint
+  "settings-shared-join-entra": async () => {
+    await settingsPage("Machines", undefined, "shared-invite-entra");
+    await page.setViewportSize({ width: 900, height: 1000 });
+    await waitText("Sign in with Microsoft");
+    await waitText("a Microsoft account of its organisation");
     await intoView("Join a workspace");
   },
   // signed in: who, then the usual Join

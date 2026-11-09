@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Machine, OrgOverview, OrgPerson, OrgStatus, Sso } from "../../../domain/settings/types";
-import { GOOGLE_ISSUER } from "../../../domain/settings/types";
+import { entraIssuer, entraTenant, GOOGLE_ISSUER } from "../../../domain/settings/types";
 import {
   addOrgAdmin,
   loadOrganisation,
@@ -278,24 +278,34 @@ export function MachineOrganisation({ machine }: { machine: Machine }) {
   );
 }
 
-/** SSO for joining a workspace on this server (docs/workspaces.md, SSO): the provider (Google, or another OpenID
- *  Connect issuer), its client id, the email domains allowed and whether signing in is required. Saved as an entry this
- *  Mac signs on the organisation list, so the server can never turn it on, off or wider itself. */
+/** SSO for joining a workspace on this server (docs/workspaces.md, SSO): the provider (Google, Microsoft Entra ID or
+ *  another OpenID Connect issuer), its client id, the email domains allowed (Entra: its tenant instead) and whether
+ *  signing in is required. Saved as an entry this Mac signs on the organisation list, so the server can never turn it
+ *  on, off or wider itself. */
 function OrgSso({ sso, busy, save }: { sso: Sso | null; busy: boolean; save: (sso: Sso | null) => void }) {
   const { t } = useT();
   const [draft, setDraft] = useState(() => ({
-    issuer: sso?.issuer ?? GOOGLE_ISSUER,
+    provider: !sso || sso.issuer === GOOGLE_ISSUER ? "google" : entraTenant(sso.issuer) ? "entra" : "other",
+    tenant: (sso && entraTenant(sso.issuer)) ?? "",
+    issuer: sso && sso.issuer !== GOOGLE_ISSUER && !entraTenant(sso.issuer) ? sso.issuer : "",
     client: sso?.client ?? "",
     domains: sso?.domains.join(", ") ?? "",
     required: sso?.required ?? true,
   }));
-  const google = draft.issuer === GOOGLE_ISSUER;
+  const entra = draft.provider === "entra";
+  const issuer =
+    draft.provider === "google"
+      ? GOOGLE_ISSUER
+      : entra
+        ? entraIssuer(draft.tenant.trim().toLowerCase())
+        : draft.issuer.trim();
   const edit = (patch: Partial<typeof draft>) => setDraft(d => ({ ...d, ...patch }));
   const domains = draft.domains
     .split(/[\s,]+/)
     .map(d => d.trim())
     .filter(Boolean);
-  const ready = !!draft.client.trim() && domains.length > 0 && draft.issuer.startsWith("https://");
+  const ready =
+    !!draft.client.trim() && (entra ? !!entraTenant(issuer) : domains.length > 0 && issuer.startsWith("https://"));
   return (
     <div className="grid gap-2">
       <div className={LINE}>
@@ -309,14 +319,27 @@ function OrgSso({ sso, busy, save }: { sso: Sso | null; busy: boolean; save: (ss
           <select
             id="sso-provider"
             className={SELECT}
-            value={google ? "google" : "other"}
-            onChange={e => edit({ issuer: e.target.value === "google" ? GOOGLE_ISSUER : "" })}
+            value={draft.provider}
+            onChange={e => edit({ provider: e.target.value })}
           >
             <option value="google">Google</option>
+            <option value="entra">{t("set.ssoEntra")}</option>
             <option value="other">{t("set.ssoOther")}</option>
           </select>
         </Field>
-        {!google ? (
+        {entra ? (
+          <Field label={t("set.ssoTenant")} hint={t("set.ssoTenantHelp")} id="sso-tenant">
+            <input
+              id="sso-tenant"
+              className={`${FIELD} font-mono`}
+              placeholder="00000000-0000-0000-0000-000000000000"
+              spellCheck={false}
+              value={draft.tenant}
+              onChange={e => edit({ tenant: e.target.value })}
+            />
+          </Field>
+        ) : null}
+        {draft.provider === "other" ? (
           <Field label={t("set.ssoIssuer")} hint={t("set.ssoIssuerHelp")} id="sso-issuer">
             <input
               id="sso-issuer"
@@ -328,7 +351,11 @@ function OrgSso({ sso, busy, save }: { sso: Sso | null; busy: boolean; save: (ss
             />
           </Field>
         ) : null}
-        <Field label={t("set.ssoClient")} hint={t("set.ssoClientHelp")} id="sso-client">
+        <Field
+          label={t("set.ssoClient")}
+          hint={t(entra ? "set.ssoClientHelpEntra" : "set.ssoClientHelp")}
+          id="sso-client"
+        >
           <input
             id="sso-client"
             className={`${FIELD} font-mono`}
@@ -337,16 +364,18 @@ function OrgSso({ sso, busy, save }: { sso: Sso | null; busy: boolean; save: (ss
             onChange={e => edit({ client: e.target.value })}
           />
         </Field>
-        <Field label={t("set.ssoDomains")} hint={t("set.ssoDomainsHelp")} id="sso-domains">
-          <input
-            id="sso-domains"
-            className={FIELD}
-            placeholder="example.com"
-            spellCheck={false}
-            value={draft.domains}
-            onChange={e => edit({ domains: e.target.value })}
-          />
-        </Field>
+        {entra ? null : (
+          <Field label={t("set.ssoDomains")} hint={t("set.ssoDomainsHelp")} id="sso-domains">
+            <input
+              id="sso-domains"
+              className={FIELD}
+              placeholder="example.com"
+              spellCheck={false}
+              value={draft.domains}
+              onChange={e => edit({ domains: e.target.value })}
+            />
+          </Field>
+        )}
         <Field label={t("set.ssoRequired")} hint={t("set.ssoRequiredHelp")} id="sso-required">
           <input
             id="sso-required"
@@ -365,7 +394,7 @@ function OrgSso({ sso, busy, save }: { sso: Sso | null; busy: boolean; save: (ss
             className={buttonClass("primary")}
             disabled={busy || !ready}
             onClick={() =>
-              save({ issuer: draft.issuer.trim(), client: draft.client.trim(), domains, required: draft.required })
+              save({ issuer, client: draft.client.trim(), domains: entra ? [] : domains, required: draft.required })
             }
           >
             {t(sso ? "set.ssoSave" : "set.ssoTurnOn")}
