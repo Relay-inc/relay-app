@@ -25,13 +25,22 @@ use std::collections::BTreeMap;
 /// People (docs/workspaces.md, People): `person` names the person `who` (`name`, optional `email`, made or renamed) and,
 /// with `fp`, puts that device under it. `person-remove` takes the person `who` out with every device under it. An
 /// `add` with `who` adds a device under that person. Members stay devices: a device without a person is as before.
+/// Policy (docs/workspaces.md, Policy): `policy`, by an admin, sets the agent `providers` allowed in the workspace (from
+/// `POLICY_PROVIDERS`, at least one) and whether `capture` is on. A newer one replaces the older.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
 pub struct Entry {
     pub seq: u64, pub prev: String, pub kind: String, pub fp: String, pub id: String, pub pk: String, pub role: String,
     pub epoch: u32, pub h: String, pub at: u64, pub by: String, pub sig: String, pub mac: String,
     pub who: String, pub name: String, pub email: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")] pub providers: Vec<String>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")] pub capture: bool,
 }
+/// The agent providers a workspace policy may allow: the ones Relay fences inside a workspace.
+pub const POLICY_PROVIDERS: [&str; 2] = ["claude", "codex"];
+/// A workspace's policy as the list says: the providers allowed, and capture on or off.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct Policy { pub providers: Vec<String>, pub capture: bool }
 /// The server's answer to any write by a reader, and what a reader's Relay says instead of trying.
 pub const READ_ONLY: &str = "read only: a reader of this workspace cannot change it";
 /// The longest list a server keeps or a Mac takes.
@@ -42,8 +51,10 @@ impl Entry {
     /// character without two entries reading the same.
     pub fn msg(&self, vault: &str) -> String {
         let base = format!("member-log:{vault}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}", self.seq, self.prev, self.kind, self.fp, self.id, self.pk, self.role, self.epoch, self.h, self.at, self.by);
-        if self.who.is_empty() && self.name.is_empty() && self.email.is_empty() { return base; }
-        format!("{base}:{}:{}", self.who, serde_json::json!([self.name, self.email]))
+        let base = if self.who.is_empty() && self.name.is_empty() && self.email.is_empty() { base } else { format!("{base}:{}:{}", self.who, serde_json::json!([self.name, self.email])) };
+        // the policy fields only on a policy entry (or one that carries them anyway, which the check refuses)
+        if self.kind != "policy" && self.providers.is_empty() && !self.capture { return base; }
+        format!("{base}:policy:{}", serde_json::json!([self.providers, self.capture]))
     }
     /// The entry's hash, which the next one names as `prev`: of what is signed and the signature.
     pub fn hash(&self, vault: &str) -> String { sha256_hex(format!("{}:{}", self.msg(vault), self.sig).as_bytes()) }
@@ -73,6 +84,8 @@ pub struct List {
     pub nohistory: bool,
     /// Per person (`who`): its name and email.
     pub people: BTreeMap<String, (String, String)>,
+    /// The newest `policy` entry's, none before one.
+    pub policy: Option<Policy>,
 }
 impl List {
     pub fn admin(&self, fp: &str) -> bool { self.members.get(fp).is_some_and(|m| m.admin) }
@@ -120,6 +133,10 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
         // the person fields: `who` on the person kinds and optionally on an add, a name (and email) only on `person`
         let person = |who: bool, name: bool| (if who { hex64(&e.who) } else { e.who.is_empty() || (e.kind == "add" && hex64(&e.who)) })
             && (if name { good_name(&e.name) && good_email(&e.email) } else { e.name.is_empty() && e.email.is_empty() });
+        // the policy fields: known providers, each once, at least one; on a policy entry only
+        let policy = e.providers.iter().all(|p| POLICY_PROVIDERS.contains(&p.as_str())) && !e.providers.is_empty()
+            && e.providers.iter().enumerate().all(|(n, p)| !e.providers[..n].contains(p));
+        if e.kind != "policy" && (!e.providers.is_empty() || e.capture) { return bad(&format!("a {} with the wrong fields", e.kind)); }
         let shape = match e.kind.as_str() {
             "create" => uses(true, true, true, false, true) && person(false, false),
             "add" => uses(true, true, true, false, false) && person(false, false),
@@ -131,6 +148,7 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
             // the device is optional: without one a person is only named or renamed
             "person" => uses(hex64(&e.fp), false, false, false, false) && person(true, true),
             "person-remove" => uses(false, false, false, false, false) && person(true, false),
+            "policy" => uses(false, false, false, false, false) && person(false, false) && policy,
             _ => false,
         };
         if !shape { return bad(&format!("a {} with the wrong fields", e.kind)); }
@@ -172,6 +190,7 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
                 "demote" if member => l.members.get_mut(&e.fp).unwrap().admin = false,
                 "role" if member => { let m = l.members.get_mut(&e.fp).unwrap(); (m.admin, m.reader) = (e.role == "admin", e.role == "reader"); }
                 "docs-on" | "docs-off" => l.docs = e.kind == "docs-on",
+                "policy" => l.policy = Some(Policy { providers: e.providers.clone(), capture: e.capture }),
                 // never later: a workspace that had a history would keep it, and every member saw it as one with history
                 "nohistory" if i == 1 => l.nohistory = true,
                 "nohistory" => return bad("without history only right after the creation"),
@@ -195,6 +214,30 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
         (l.len, l.head) = (i + 1, h);
     }
     Ok((l, hashes))
+}
+
+/// The organisation list of a server (docs/workspaces.md, Organisation) is checked under this name: its server's
+/// certificate fingerprint, so a list of one server never checks as another's.
+pub fn org_name(server: &str) -> String { format!("org:{server}") }
+/// The organisation list: the member list's rules (hash chain, Ed25519, an admin signs), with only these entries:
+/// `create` by its owner (its `mac` the sha256 of `org_name`, as no vault key exists here), `add` of an organisation
+/// admin (role admin, no person), `remove` and `leave`. Everyone on it is an admin: who is not on it signs nothing.
+/// `creator`: the identity it must start with, once this Mac pinned it.
+pub fn check_org(server: &str, entries: &[Entry], creator: Option<&str>) -> Result<(List, Vec<String>), String> {
+    extend_org(server, List::default(), vec![], entries, creator)
+}
+pub fn extend_org(server: &str, l: List, hashes: Vec<String>, entries: &[Entry], creator: Option<&str>) -> Result<(List, Vec<String>), String> {
+    let name = org_name(server);
+    for (n, e) in entries.iter().enumerate() {
+        let ok = match e.kind.as_str() {
+            "create" => e.mac == sha256_hex(name.as_bytes()),
+            "add" => e.role == "admin" && e.who.is_empty(),
+            "remove" | "leave" => true,
+            _ => false,
+        };
+        if !ok { return Err(format!("organisation list entry {}: no {} here", l.len + n as u64, e.kind)); }
+    }
+    extend(&name, l, hashes, entries, creator).map_err(|e| e.replace("member list", "organisation list"))
 }
 
 /// The person `who` out, with every device under it: a removal then waits for a new key, as for one device.
@@ -533,5 +576,101 @@ mod tests {
         assert!(with(Entry { kind: "role".into(), fp: d.fp.clone(), ..Default::default() }).unwrap_err().contains("wrong fields"));
         assert!(with(Entry { kind: "role".into(), fp: f.fp.clone(), role: "member".into(), ..Default::default() }).unwrap_err().contains("breaks the rules"), "not a member");
         assert!(with(Entry { kind: "role".into(), fp: d.fp.clone(), role: "member".into(), who: who('1'), ..Default::default() }).unwrap_err().contains("wrong fields"));
+    }
+    #[test]
+    fn an_admin_signs_the_policy_and_a_newer_one_replaces_it() {
+        let (mut l, a, b, _) = team();
+        let d = Dev::new('d');
+        add(&mut l, &a, Entry { kind: "add".into(), fp: d.fp.clone(), id: d.id(), pk: "4".repeat(64), role: "reader".into(), ..Default::default() });
+        let pol = |p: &[&str], capture: bool| Entry { kind: "policy".into(), providers: p.iter().map(|x| x.to_string()).collect(), capture, ..Default::default() };
+        assert_eq!(check(V, &l, None).unwrap().0.policy, None, "no policy before one");
+        add(&mut l, &a, pol(&["claude", "codex"], true));
+        add(&mut l, &a, pol(&["codex"], false));
+        let list = check(V, &l, None).unwrap().0;
+        assert_eq!(list.policy, Some(Policy { providers: vec!["codex".into()], capture: false }), "the newer one");
+        let by = |dev: &Dev, x: Entry| check(V, &[l.clone(), vec![sign(V, &list, &dev.fp, &dev.seed, x)]].concat(), None);
+        // by a member or a reader
+        assert!(by(&b, pol(&["claude"], false)).unwrap_err().contains("not signed by an admin"));
+        assert!(by(&d, pol(&["claude"], false)).unwrap_err().contains("a reader only leaves"));
+        // an unknown provider, none, one twice, or the fields on another entry
+        for bad in [pol(&["opencode"], false), pol(&[], true), pol(&[], false), pol(&["claude", "claude"], false), pol(&["Claude"], false)] {
+            assert!(by(&a, bad.clone()).unwrap_err().contains("wrong fields"), "{bad:?}");
+        }
+        assert!(by(&a, Entry { kind: "docs-on".into(), providers: vec!["claude".into()], ..Default::default() }).unwrap_err().contains("wrong fields"));
+        assert!(by(&a, Entry { kind: "docs-on".into(), capture: true, ..Default::default() }).unwrap_err().contains("wrong fields"));
+        assert!(by(&a, Entry { fp: b.fp.clone(), ..pol(&["claude"], false) }).unwrap_err().contains("wrong fields"));
+        // the providers or capture changed after signing
+        let mut forged = sign(V, &list, &a.fp, &a.seed, pol(&["codex"], false));
+        forged.capture = true;
+        assert!(check(V, &[l.clone(), vec![forged]].concat(), None).unwrap_err().contains("not signed by who it names"));
+        let mut forged = sign(V, &list, &a.fp, &a.seed, pol(&["codex"], false));
+        forged.providers = vec!["claude".into()];
+        assert!(check(V, &[l.clone(), vec![forged]].concat(), None).unwrap_err().contains("not signed by who it names"));
+        // an entry without policy fields serialises as it did before policies
+        assert!(!serde_json::to_string(&l[1]).unwrap().contains("providers") && !serde_json::to_string(&l[1]).unwrap().contains("capture"));
+    }
+
+    const S: &str = "5555555555555555555555555555555555555555555555555555555555555555";
+    fn org_create(a: &Dev) -> Entry {
+        sign(&org_name(S), &List::default(), &a.fp, &a.seed, Entry { kind: "create".into(), fp: a.fp.clone(), id: a.id(), pk: "1".repeat(64), role: "admin".into(), mac: sha256_hex(org_name(S).as_bytes()), ..Default::default() })
+    }
+    fn org_add(l: &mut Vec<Entry>, by: &Dev, e: Entry) {
+        let list = check_org(S, l, None).unwrap().0;
+        l.push(sign(&org_name(S), &list, &by.fp, &by.seed, e));
+    }
+    fn admin_of(d: &Dev, pk: char) -> Entry { Entry { kind: "add".into(), fp: d.fp.clone(), id: d.id(), pk: pk.to_string().repeat(64), role: "admin".into(), ..Default::default() } }
+    #[test]
+    fn the_organisation_list_starts_with_its_owner_who_adds_and_removes_admins() {
+        let (a, b, c) = (Dev::new('a'), Dev::new('b'), Dev::new('c'));
+        let mut l = vec![org_create(&a)];
+        org_add(&mut l, &a, admin_of(&b, '2'));
+        let (list, _) = check_org(S, &l, Some(&a.id())).unwrap();
+        assert!(list.admin(&a.fp) && list.admin(&b.fp) && list.members.len() == 2);
+        // another creator pinned, or the list of another server
+        assert!(check_org(S, &l, Some(&b.id())).unwrap_err().contains("creator"));
+        assert!(check_org(&"6".repeat(64), &l, None).is_err(), "another server's list");
+        // a workspace's member list is no organisation list, nor the other way round
+        assert!(check(&org_name(S), &l, None).is_ok() && check(V, &l, None).is_err());
+        // the second admin adds a third and removes the owner, the last one cannot go
+        org_add(&mut l, &b, admin_of(&c, '3'));
+        org_add(&mut l, &b, Entry { kind: "remove".into(), fp: a.fp.clone(), ..Default::default() });
+        let list = check_org(S, &l, None).unwrap().0;
+        assert_eq!(list.members.keys().cloned().collect::<Vec<_>>(), [b.fp.clone(), c.fp.clone()]);
+        org_add(&mut l, &c, Entry { kind: "leave".into(), fp: c.fp.clone(), ..Default::default() });
+        let list = check_org(S, &l, None).unwrap().0;
+        let x = sign(&org_name(S), &list, &b.fp, &b.seed, Entry { kind: "leave".into(), fp: b.fp.clone(), ..Default::default() });
+        assert!(check_org(S, &[l.clone(), vec![x]].concat(), None).unwrap_err().contains("nobody left"));
+    }
+    #[test]
+    fn the_organisation_list_takes_only_its_own_entries_from_its_admins() {
+        let (a, b, d) = (Dev::new('a'), Dev::new('b'), Dev::new('d'));
+        let mut l = vec![org_create(&a)];
+        org_add(&mut l, &a, admin_of(&b, '2'));
+        let list = check_org(S, &l, None).unwrap().0;
+        let with = |by: &Dev, x: Entry| check_org(S, &[l.clone(), vec![sign(&org_name(S), &list, &by.fp, &by.seed, x)]].concat(), None);
+        // who is not on it signs nothing: no admin of the organisation
+        assert!(with(&d, admin_of(&d, '4')).unwrap_err().contains("no member"));
+        // a member, a reader, a person, a policy, docs: no such entries here
+        for x in [Entry { role: "member".into(), ..admin_of(&d, '4') }, Entry { role: "reader".into(), ..admin_of(&d, '4') },
+            Entry { kind: "person".into(), who: "7".repeat(64), name: "Ann".into(), ..Default::default() },
+            Entry { kind: "policy".into(), providers: vec!["claude".into()], ..Default::default() },
+            Entry { kind: "docs-on".into(), ..Default::default() }, Entry { kind: "promote".into(), fp: b.fp.clone(), ..Default::default() }] {
+            assert!(with(&a, x.clone()).unwrap_err().contains("no "), "{x:?}");
+        }
+        assert!(with(&a, Entry { who: "7".repeat(64), ..admin_of(&d, '4') }).is_err(), "an admin under a person");
+        // a creation without the organisation's mac, or by someone else than it names
+        let mut bad = org_create(&a);
+        bad.mac = "6".repeat(64);
+        assert!(check_org(S, &[bad], None).is_err());
+        // a forged entry: another key than the signer's (the server, which has none)
+        let forged = sign(&org_name(S), &list, &a.fp, &d.seed, admin_of(&d, '4'));
+        assert!(check_org(S, &[l.clone(), vec![forged]].concat(), None).unwrap_err().contains("not signed by who it names"));
+        // a fork: two entries on the same head, the second never follows the first
+        let x1 = sign(&org_name(S), &list, &a.fp, &a.seed, admin_of(&d, '4'));
+        let x2 = sign(&org_name(S), &list, &a.fp, &a.seed, Entry { kind: "remove".into(), fp: b.fp.clone(), ..Default::default() });
+        let (one, hashes) = check_org(S, &[l.clone(), vec![x1]].concat(), None).unwrap();
+        assert!(extend_org(S, one.clone(), hashes.clone(), &[x2.clone()], None).unwrap_err().contains("out of order"));
+        let other = check_org(S, &[l.clone(), vec![x2]].concat(), None).unwrap().0;
+        assert!(!one.has(&hashes, other.len - 1, &other.head));
     }
 }
