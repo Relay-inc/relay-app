@@ -26,13 +26,14 @@ pub struct Client { pub addr: String, pub fp: String, id: Identity, link: Option
 
 /// Join a shared vault with an invite link (docs/workspaces.md): connect pinned to the link's server with this
 /// device's identity, prove the link's code, and unwrap the vault key the server kept for the invite with the link's
-/// secret, which never went to the server. Returns the line, the vault and the role, and the keys.
-pub fn vault_join(line: &str, id: &Identity, name: &str) -> Result<(PairLine, Joined, Keys), String> {
+/// secret, which never went to the server. `sso`: the ID token and salt of an SSO login (docs/workspaces.md, SSO), which
+/// the server checks before the invite. Returns the line, the vault and the role, and the keys.
+pub fn vault_join(line: &str, id: &Identity, name: &str, sso: Option<&Value>) -> Result<(PairLine, Joined, Keys), String> {
     let l = PairLine::parse(line).filter(PairLine::is_invite).ok_or("not an invite link (relay://host:port#fp=…&vault=…&invite=…&secret=…)")?;
     let (vault, invite, secret) = (l.vault.clone().unwrap_or_default(), l.invite.clone().unwrap_or_default(), l.secret.clone().unwrap_or_default());
     let c = Client { addr: l.addr(), fp: l.fp.clone(), id: id.clone(), link: None };
     let proof = tls::proof(&l.code, &id.fingerprint(), &l.fp);
-    let v = c.call(json!({"op": "vault_join", "vault": vault, "invite": invite, "name": name, "proof": proof}))?;
+    let v = c.call(json!({"op": "vault_join", "vault": vault, "invite": invite, "name": name, "proof": proof, "sso": sso}))?;
     let r: VaultRef = field(v.clone(), "vault")?;
     if r.id != vault { return Err("the server answered for another vault".into()); }
     let mut key = vault::unwrap(v["wrapped"].as_str().unwrap_or_default(), &secret, &vault)?;
@@ -40,6 +41,15 @@ pub fn vault_join(line: &str, id: &Identity, name: &str) -> Result<(PairLine, Jo
     // Mac, it proves its keys with the link's secret
     (key.creator, key.expect, key.joined) = (l.creator.clone(), l.head.clone(), Some(secret.clone()));
     Ok((l, Joined { id: r.id, name: r.name, role: v["role"].as_str().unwrap_or_default().into() }, key))
+}
+
+/// What an invite link's server asks a device to sign in with before it joins (docs/workspaces.md, SSO): none when it
+/// has no SSO. Asked on the link's pinned certificate, before the invite is spent.
+pub fn sso_info(line: &str, id: &Identity) -> Result<Option<crate::members::Sso>, String> {
+    let l = PairLine::parse(line).filter(PairLine::is_invite).ok_or("not an invite link (relay://host:port#fp=…&vault=…&invite=…&secret=…)")?;
+    let c = Client { addr: l.addr(), fp: l.fp.clone(), id: id.clone(), link: None };
+    let v = c.call(json!({"op": "sso_info"}))?;
+    serde_json::from_value(v["sso"].clone()).map_err(|e| format!("SSO: {e}"))
 }
 
 /// A shared vault: its id (16 hex) and name.

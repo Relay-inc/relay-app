@@ -687,6 +687,20 @@ impl SealedRemote {
             // one entry a round: the next one follows the list as it is now
             return Ok(step);
         }
+        // a device that signed in with SSO at its join (the server checked the token, docs/workspaces.md, SSO), listed
+        // without a person: an admin puts it under a person of its own with the verified email
+        if list.admin(&me) {
+            for m in v["members"].as_array().into_iter().flatten() {
+                let fp = m["fp"].as_str().unwrap_or_default();
+                if !list.members.contains_key(fp) || !list.person(fp).is_empty() { continue; }
+                let Some((email, name)) = sso_person(m) else { continue };
+                let who = sync::sha256_hex(crate::tls::random_secret().as_bytes());
+                let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "person".into(), who, name, email, fp: fp.into(), ..Default::default() });
+                self.append(&mut k, &list, &e, json!({}), save)?;
+                step.keys = Some(k.clone());
+                return Ok(step);
+            }
+        }
         if list.admin(&me) && list.pending.is_some() && list.epoch < MAX_EPOCH {
             let (next, e) = (VaultKey::generate(), list.epoch + 1);
             let entry = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "rekey".into(), epoch: e, h: sync::sha256_hex(&next.raw), ..Default::default() });
@@ -999,6 +1013,17 @@ impl sync::Remote for SealedRemote {
         lock(&self.seen).remove(path);
         Ok(())
     }
+}
+
+/// The person a member's SSO record names (the server's `sso`: the verified email and the name from the ID token), as
+/// a person entry takes them: the name, else the device's, else the email's local part.
+fn sso_person(m: &Value) -> Option<(String, String)> {
+    let email = m["sso"]["email"].as_str()?.trim().to_string();
+    if email.is_empty() || email.chars().count() > 254 || !email.contains('@') || email.chars().any(|c| c.is_whitespace() || c.is_control()) { return None; }
+    let clean = |s: &str| -> String { s.chars().filter(|c| !c.is_control()).take(members::MAX_PERSON_NAME).collect::<String>().trim().to_string() };
+    let name = [clean(m["sso"]["name"].as_str().unwrap_or_default()), clean(m["name"].as_str().unwrap_or_default()), clean(email.split('@').next().unwrap_or_default())]
+        .into_iter().find(|n| !n.is_empty())?;
+    Some((email, name))
 }
 
 #[cfg(test)]

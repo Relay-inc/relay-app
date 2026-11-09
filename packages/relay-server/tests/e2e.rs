@@ -897,10 +897,10 @@ fn two_macs_share_a_vault_through_the_server() {
     let key = Keys::from(VaultKey::generate());
     let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
     let cid = device("share-colleague");
-    let (line, joined, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let (line, joined, theirs) = client::vault_join(&link, &cid, "colleague", None).unwrap();
     assert_eq!((joined.id.as_str(), joined.role.as_str(), theirs.recovery()), (vault.as_str(), "member", key.recovery()));
     let colleague = Client::new(&line.host, line.port, &line.fp, cid.clone());
-    assert!(client::vault_join(&link, &device("share-late"), "late").is_err(), "a link works once");
+    assert!(client::vault_join(&link, &device("share-late"), "late", None).is_err(), "a link works once");
 
     let dir = |t: &str| { let d = std::env::temp_dir().join(format!("relay-share-{t}-{}", std::process::id())); std::fs::remove_dir_all(&d).ok(); std::fs::create_dir_all(&d).unwrap(); d };
     let (a, b) = (dir("a"), dir("b"));
@@ -965,7 +965,7 @@ fn a_tidy_of_many_notes_is_one_round_through_the_server() {
     let key = Keys::from(VaultKey::generate());
     let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
     let cid = device("tidy-colleague");
-    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague", None).unwrap();
     let colleague = Client::new(&line.host, line.port, &line.fp, cid);
     let dir = |t: &str| { let d = std::env::temp_dir().join(format!("relay-tidy-{t}-{}", std::process::id())); std::fs::remove_dir_all(&d).ok(); std::fs::create_dir_all(&d).unwrap(); d };
     let (a, b) = (dir("a"), dir("b"));
@@ -1019,7 +1019,7 @@ fn filing_the_inbox_of_a_shared_workspace_holds_nothing_on_a_members_mac() {
     let key = Keys::from(VaultKey::generate());
     let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
     let cid = device("inbox-colleague");
-    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague", None).unwrap();
     let colleague = Client::new(&line.host, line.port, &line.fp, cid);
     let dir = |t: &str| { let d = std::env::temp_dir().join(format!("relay-inbox-{t}-{}", std::process::id())); std::fs::remove_dir_all(&d).ok(); std::fs::create_dir_all(&d).unwrap(); d };
     let (a, b) = (dir("a"), dir("b"));
@@ -1085,7 +1085,7 @@ fn a_shared_vaults_live_channel() {
     let key = Keys::from(VaultKey::generate());
     let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
     let cid = device("chan-colleague");
-    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague", None).unwrap();
     let colleague = Client::new(&line.host, line.port, &line.fp, cid.clone());
     let doc = key.name("Projects/Acme.md");
 
@@ -1206,7 +1206,7 @@ impl Member {
 }
 fn join(link: &str, tag: &str) -> (Member, Identity) {
     let id = device(tag);
-    let (line, _, k) = client::vault_join(link, &id, tag).unwrap();
+    let (line, _, k) = client::vault_join(link, &id, tag, None).unwrap();
     (Member::new(&Client::new(&line.host, line.port, &line.fp, id.clone()), &id, &k), id)
 }
 fn rounds(t: &Team, ms: &[&Member], n: usize) { for _ in 0..n { for m in ms { m.step(&t.vault); } } }
@@ -1825,7 +1825,7 @@ fn team(tag: &str) -> Team {
     let key = Keys::from(VaultKey::generate());
     let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
     let cid = device(&format!("{tag}-colleague"));
-    let (line, _, _) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let (line, _, _) = client::vault_join(&link, &cid, "colleague", None).unwrap();
     let colleague = Client::new(&line.host, line.port, &line.fp, cid.clone());
     Team { s, laptop, lid, colleague, cid, vault, key, host: l.host.clone(), port: l.port }
 }
@@ -1969,7 +1969,7 @@ fn a_shared_vaults_documents() {
     let key = Keys::from(VaultKey::generate());
     let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
     let cid = device("docs-colleague");
-    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague", None).unwrap();
     let colleague = Client::new(&line.host, line.port, &line.fp, cid.clone());
     let dirs = std::env::temp_dir().join(format!("relay-e2e-docs-{}", std::process::id()));
     let a = laptop.docs(&vault, key.clone(), &dirs.join("a"), &lid.fingerprint());
@@ -2140,14 +2140,14 @@ fn an_organisation_admin_is_on_every_new_workspace_and_offboards_a_person_everyw
     let b1 = Member::new(&boss, &bid, &org::adopt(&boss, &t.vault, &bk).unwrap());
     assert!(b1.step(&t.vault).admin);
     // the colleague joins the second workspace as a person, and a third one the boss is no admin of
-    let (_, _, k2) = client::vault_join(&invite_to(&a2, &t, &w2, "member"), &cid, "org-c").unwrap();
+    let (_, _, k2) = client::vault_join(&invite_to(&a2, &t, &w2, "member"), &cid, "org-c", None).unwrap();
     let c2 = Member::new(&c.c, &cid, &k2);
     for m in [&c2, &a2, &c2] { m.step(&w2); }
     a2.remote(&w2).set_person(&"7".repeat(64), "Cy", "cy@example.com", &c.fp, &a2.save()).unwrap();
     let w3 = t.laptop.vault_create("Third").unwrap().id;
     let a3 = Member::new(&t.laptop, &t.lid, &Keys::from(VaultKey::generate()));
     a3.remote(&w3).start(false, &a3.save()).unwrap();
-    let (_, _, k3) = client::vault_join(&invite_to(&a3, &t, &w3, "member"), &cid, "org-c").unwrap();
+    let (_, _, k3) = client::vault_join(&invite_to(&a3, &t, &w3, "member"), &cid, "org-c", None).unwrap();
     let c3 = Member::new(&c.c, &cid, &k3);
     for m in [&c3, &a3, &c3] { m.step(&w3); }
     // the overview: the colleague is one person in three workspaces
@@ -2214,4 +2214,55 @@ fn an_admin_sets_the_workspace_policy_and_every_member_keeps_it() {
     // a newer one replaces it
     a.remote(&t.vault).set_policy(&["claude".to_string(), "codex".to_string()], false, &a.save()).unwrap();
     assert_eq!(b.step(&t.vault).policy.unwrap().providers, ["claude", "codex"]);
+}
+
+/// SSO (docs/workspaces.md, SSO): an organisation admin signs it on, a device asks what to sign in with before it
+/// joins, a join without a token is refused while it is required (and the invite is not spent), and a device whose
+/// join an SSO login verified goes under a person with that email in the admin's next round. The token check itself
+/// is in oidc.rs's tests (a fake provider): this server cannot reach a real issuer here.
+#[test]
+fn sso_gates_a_join_and_the_verified_email_goes_on_a_person() {
+    use relay_remote::members::Sso;
+    use relay_remote::org;
+    use relay_remote::vault::{Keys, VaultKey};
+    let t = team("sso");
+    let a = Member::new(&t.laptop, &t.lid, &t.key);
+    a.remote(&t.vault).start(false, &a.save()).unwrap();
+    rounds(&t, &[&a], 1);
+    let nosave = |_: &Keys| Ok(());
+    let mut lk = Keys::from(VaultKey::generate());
+    lk.ensure();
+    org::start(&t.laptop, &mut lk, &nosave).unwrap();
+    let sso = Sso { issuer: "https://idp.invalid".into(), client: "relay-test".into(), domains: vec!["example.com".into()], required: true };
+    org::set_sso(&t.laptop, &mut lk, Some(sso.clone()), &nosave).unwrap();
+    // a device not paired here asks what to sign in with, on the invite's server
+    let link = a.invite(&t, "member");
+    let id = device("sso-ann");
+    assert_eq!(client::sso_info(&link, &id).unwrap(), Some(sso.clone()));
+    let e = client::vault_join(&link, &id, "ann", None).err().unwrap();
+    assert!(e.contains("requires signing in with SSO"), "{e}");
+    // a token that does not check: refused before the invite (the issuer is unreachable, or the token bad)
+    assert!(client::vault_join(&link, &id, "ann", Some(&serde_json::json!({"id_token": "a.b.c", "salt": "5".repeat(64)}))).is_err());
+    // not required any more: the same invite still works, without a token
+    org::set_sso(&t.laptop, &mut lk, Some(Sso { required: false, ..sso }), &nosave).unwrap();
+    let (line, _, k) = client::vault_join(&link, &id, "ann", None).unwrap();
+    let ann = Member::new(&Client::new(&line.host, line.port, &line.fp, id.clone()), &id, &k);
+    rounds(&t, &[&ann, &a, &ann], 1);
+    assert!(list_of(&t, &a).members.contains_key(&ann.fp) && list_of(&t, &a).person(&ann.fp).is_empty());
+    // what the server keeps after an SSO join (oidc::gate): the verified email and name on the joiner's record
+    edit_vault(&t, |v| {
+        let m = v["members"].as_array_mut().unwrap().iter_mut().find(|m| m["fp"] == ann.fp.as_str()).unwrap();
+        m["sso"] = serde_json::json!({"email": "ann@example.com", "name": "Ann Example", "at": 1});
+    });
+    rounds(&t, &[&a], 1);
+    let l = list_of(&t, &a);
+    let p = l.persons().into_iter().find(|p| p.devices.contains(&ann.fp)).unwrap();
+    assert_eq!((p.name.as_str(), p.email.as_str()), ("Ann Example", "ann@example.com"));
+    // once under a person, nothing more is signed for it
+    let len = l.len;
+    rounds(&t, &[&a], 1);
+    assert_eq!(list_of(&t, &a).len, len);
+    // turned off: no SSO to sign in with
+    org::set_sso(&t.laptop, &mut lk, None, &nosave).unwrap();
+    assert_eq!(client::sso_info(&a.invite(&t, "member"), &device("sso-bo")).unwrap(), None);
 }
