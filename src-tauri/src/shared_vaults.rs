@@ -22,7 +22,7 @@ static APP: std::sync::OnceLock<AppHandle> = std::sync::OnceLock::new();
 fn b64(b: &[u8]) -> String { base64::engine::general_purpose::STANDARD.encode(b) }
 
 /// A shared vault as the settings keep it: the server it lives on (pinned by its fingerprint), its folder here and this
-/// device's role there ("admin" or "member").
+/// device's role there ("admin", "member" or "reader").
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Shared { pub id: String, pub name: String, pub host: String, pub port: u16, pub fp: String, pub folder: String, #[serde(default)] pub role: String }
 
@@ -68,7 +68,10 @@ pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter()
 /// all its members and `people` its people with their devices, None when the workspace has no list yet.
 pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub bad: usize, pub live: bool,
     pub warnings: Vec<String>, pub changed: Vec<Changed>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>>,
-    pub people: Option<Vec<relay_remote::members::Person>> }
+    pub people: Option<Vec<relay_remote::members::Person>>,
+    /// `reader`: this Mac only reads the workspace (its rounds only pull, docs/workspaces.md, Roles), `readers` the
+    /// list's readers, `unsent` changes in the folder here a reader's round left out
+    pub reader: bool, pub readers: Option<Vec<String>>, pub unsent: usize }
 #[derive(Clone, serde::Serialize)]
 pub struct Changed { pub fp: String, pub name: String }
 
@@ -256,7 +259,7 @@ impl Hub {
                         st.errors.extend(k.errors.into_iter().map(|e| format!("key: {e}")));
                         st.warnings = k.warnings;
                         st.rekeying = k.rekeying;
-                        (st.docs, st.admin, st.admins, st.listed, st.people) = (k.docs, k.admin, k.admins, k.listed, k.people);
+                        (st.docs, st.admin, st.admins, st.listed, st.people, st.reader, st.readers) = (k.docs, k.admin, k.admins, k.listed, k.people, k.reader, k.readers);
                         st.changed = k.changed.into_iter().map(|(fp, name)| Changed { fp, name }).collect();
                     }
                     Err(e) => st.errors.push(format!("key: {e}")),
@@ -264,6 +267,7 @@ impl Hub {
                 // the documents: every log the server has further, the notes they changed written out; a note that is a
                 // document stays out of the file rounds, so it never has two writers (docs/workspaces.md, Documents)
                 let docs = self.docs(data, v, me, load_key(data, &v.id).unwrap_or_else(|_| key.clone()));
+                docs.set_read_only(st.reader);
                 let has_docs = match docs.sync() {
                     Ok(_) => true,
                     // a relay-server from before documents: none there, nothing to say every round
@@ -299,12 +303,14 @@ impl Hub {
                 let to = trash(data, &v.id).join(&stamp);
                 let keep = |p: &str, d: &[u8]| sync::write_atomic(&to.join(p), d, None);
                 let guard = Guard { allow_deletes: false, allowed: &allowed, moved: &moved, keep: &keep };
-                let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, &mut one.walker, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
+                // a reader's round only takes what the server has: what changed here stays here, said once (`unsent`)
+                let mode = if st.reader { Mode::Pull } else { Mode::TwoWay };
+                let (next, r) = sync::run(mode, Path::new(&v.folder), &base, &mut one.walker, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
                 // ponytail: any error keeps the whole list for the next round, which only looks again
                 if looked && r.errors.is_empty() { docs.forget_let_go(&let_go.into_iter().filter(|p| !f.prefixes.contains(p)).collect::<Vec<_>>()); }
                 // files still under an older key, sealed again under the newest
                 // ponytail: 100 a round, a big workspace takes a few rounds after a rotation
-                if r.errors.is_empty() { remote.reseal(100); }
+                if r.errors.is_empty() && !st.reader { remote.reseal(100); }
                 // a record written with a member list this Mac's does not hold: held back from it, or a fork
                 for w in remote.list_warnings() { if !st.warnings.contains(&w) { st.warnings.push(w); } }
                 // a round that failed (the server out of reach) keeps what the user let through for the next one
@@ -321,7 +327,7 @@ impl Hub {
                 // the next round plans against this base: one not written is an error, not a quiet success
                 if next != base { if let Err(e) = write_base(data, &v.id, &next) { st.errors.push(format!("base: {e}")); } }
                 st = Status { pushed: r.pushed.len() + r.deleted_remote.len(), pulled: r.pulled.len() + r.deleted_local.len(),
-                    conflicts: r.conflicts, errors: [r.errors, st.errors].concat(), held: r.held, bad: remote.bad().len(), ..st };
+                    conflicts: r.conflicts, errors: [r.errors, st.errors].concat(), held: r.held, bad: remote.bad().len(), unsent: r.unsent.len(), ..st };
             }
         }
         // still under the vault's lock: a leave waiting for this round removes the status after it
@@ -336,6 +342,7 @@ impl Hub {
     /// A note of vault `id` (in `folder`, `path` relative) changed on disk, by `by` ("claude", "disk", "relay"): taken
     /// into its document when it is one (Docs::absorb), on a thread of its own (it sends).
     pub fn absorb(&self, id: &str, folder: &str, path: &str, by: &str) {
+        if self.status.lock().unwrap().get(id).is_some_and(|s| s.reader) { return; }
         let Some(docs) = self.docs.lock().unwrap().get(id).cloned() else { return };
         let (folder, path, by) = (folder.to_string(), path.to_string(), by.to_string());
         std::thread::spawn(move || { if let Ok(f) = filter(Path::new(&folder)) { docs.absorb(Path::new(&folder), &f, &path, &by).ok(); } });
@@ -420,8 +427,8 @@ impl Hub {
         self.with_vault(&v.id, || c.sealed(&v.id, load_key(data, &v.id)?).set_docs(on, &|k| save_key(data, &v.id, k)))
     }
     /// An admin makes a member an admin, or an admin a member again (a signed entry in the member list).
-    pub fn set_admin(&self, data: &Path, v: &Shared, c: &Client, fp: &str, on: bool) -> Result<(), String> {
-        self.with_vault(&v.id, || c.sealed(&v.id, load_key(data, &v.id)?).set_admin(fp, on, &|k| save_key(data, &v.id, k)))
+    pub fn set_role(&self, data: &Path, v: &Shared, c: &Client, fp: &str, role: &str) -> Result<(), String> {
+        self.with_vault(&v.id, || c.sealed(&v.id, load_key(data, &v.id)?).set_role(fp, role, &|k| save_key(data, &v.id, k)))
     }
     /// An admin adds a member the server has and the member list lacks (a signed `add`, as member).
     pub fn add_listed(&self, data: &Path, v: &Shared, c: &Client, fp: &str) -> Result<(), String> {
@@ -705,7 +712,7 @@ pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, fold
 #[tauri::command]
 pub async fn shared_vault_invite(app: AppHandle, state: St<'_>, id: String, role: String, who: Option<String>) -> Result<Value, String> {
     let (key, data) = (load_key(&crate::data_dir(&app), &id)?, crate::data_dir(&app));
-    let role = if role == "admin" { "admin" } else { "member" };
+    let role = match role.as_str() { "admin" => "admin", "reader" => "reader", _ => "member" };
     let who = who.unwrap_or_default();
     let a = app.clone();
     let (link, invite) = on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || {
@@ -738,13 +745,15 @@ pub async fn shared_vault_docs(app: AppHandle, state: St<'_>, id: String, on: bo
     sync_now();
     Ok(())
 }
-/// An admin makes a member an admin, or an admin a member again (docs/workspaces.md, Members): the server's role follows.
+/// An admin gives a member the role admin, member or reader (docs/workspaces.md, Roles): the server's role follows.
 #[tauri::command]
-pub async fn shared_vault_admin(app: AppHandle, state: St<'_>, id: String, fp: String, on: bool) -> Result<(), String> {
-    let (data, a, who) = (crate::data_dir(&app), app.clone(), fp.clone());
-    on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.set_admin(&data, &v, &c, &fp, on)).await?;
+pub async fn shared_vault_role(app: AppHandle, state: St<'_>, id: String, fp: String, role: String) -> Result<(), String> {
+    let (data, a, who, r) = (crate::data_dir(&app), app.clone(), fp.clone(), role.clone());
+    on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.set_role(&data, &v, &c, &fp, &r)).await?;
     if let Some(s) = app.state::<crate::App>().shared.status.lock().unwrap().get_mut(&id) {
-        if let Some(admins) = s.admins.as_mut() { admins.retain(|x| *x != who); if on { admins.push(who); } }
+        for (list, on) in [(s.admins.as_mut(), role == "admin"), (s.readers.as_mut(), role == "reader")] {
+            if let Some(l) = list { l.retain(|x| *x != who); if on { l.push(who.clone()); } }
+        }
     }
     sync_now();
     Ok(())

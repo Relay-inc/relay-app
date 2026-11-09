@@ -179,13 +179,14 @@ export const trustMember = (id: string, fp: string) =>
       if (s) s.changed = (s.changed ?? []).filter(c => c.fp !== fp);
     });
   });
-/** An admin makes a member an admin, or an admin a member again (docs/workspaces.md, Members). */
-export const setMemberAdmin = (id: string, fp: string, on: boolean) =>
+/** An admin gives a member the role admin, member or reader (docs/workspaces.md, Roles). */
+export const setMemberRole = (id: string, fp: string, role: SharedRole) =>
   run(id, async () => {
-    await backend.sharedVaultAdmin(id, fp, on);
+    await backend.sharedVaultRole(id, fp, role);
     change(draft => {
       const s = draft.status[id];
-      if (s?.admins) s.admins = on ? [...s.admins.filter(a => a !== fp), fp] : s.admins.filter(a => a !== fp);
+      if (s?.admins) s.admins = [...s.admins.filter(a => a !== fp), ...(role === "admin" ? [fp] : [])];
+      if (s?.readers) s.readers = [...s.readers.filter(a => a !== fp), ...(role === "reader" ? [fp] : [])];
     });
     await loadInfo(id);
   });

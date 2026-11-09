@@ -600,6 +600,7 @@ export default {
   "page.reload": "Neu laden",
   "page.keepMine": "Meine behalten",
   "page.tooBig": "Diese Notiz ist größer als 1 MB: sie ist nur lesbar.",
+  "page.readOnly": "Du kannst diesen Workspace lesen, nicht ändern. Ein Admin kann dich zum Mitglied machen.",
   "page.conversations": "Unterhaltungen",
   "page.latest": "{n} · zuletzt {time}",
   "page.comments": "Kommentare",
@@ -1290,8 +1291,12 @@ export default {
     "Workspaces, die ein Team mit dir auf einem relay-server teilt, der keine deiner Maschinen ist. Der Server speichert nur verschlüsselte Dateien. Jeder Mac synchronisiert den Workspace in einen eigenen Ordner. Ein Workspace auf einer deiner Maschinen steht unter dieser Maschine.",
   "set.sharedAdmin": "Admin",
   "set.sharedMember": "Mitglied",
-  "set.sharedMakeAdmin": "Zum Admin machen",
-  "set.sharedMakeMember": "Zum Mitglied machen",
+  "set.sharedReader": "Leser",
+  "set.sharedRoleOf": "Rolle von {name}",
+  "set.sharedUnsent_one":
+    "{n} Änderung in diesem Ordner bleibt auf diesem Mac: du kannst diesen Workspace lesen, nicht ändern. Lösche die Datei, um die Version des Workspace zurückzubekommen.",
+  "set.sharedUnsent_other":
+    "{n} Änderungen in diesem Ordner bleiben auf diesem Mac: du kannst diesen Workspace lesen, nicht ändern. Lösche eine Datei, um die Version des Workspace zurückzubekommen.",
   "set.sharedNotListed": "Nicht auf der Liste",
   "set.sharedAddToList": "Auf die Liste setzen",
   "set.sharedNotListedHint":
@@ -2259,7 +2264,7 @@ export default {
   "mc.sharedOnlyRow":
     "Nur für Workspaces. Der Workspace Persönlich, Claude-Kontext und Memory dieses Macs gehen nicht hierher, und hier läuft kein Gespräch. Um das zu ändern, vergiss die Maschine und kopple sie neu.",
   "mc.keeperRow":
-    "Du betreust diesen Server als Admin eines Workspaces darauf: Du kannst ihn von hier aktualisieren. Er führt kein Gespräch für dich und hält keinen Mirror. Er verschwindet aus dieser Liste, sobald du hier von keinem Workspace mehr Admin bist.",
+    "Du betreust diesen Server als Admin eines Workspaces darauf: du kannst ihn von hier aktualisieren. Er führt kein Gespräch für dich und hält keinen Mirror. Er verschwindet aus dieser Liste, sobald du hier von keinem Workspace mehr Admin bist.",
   "mc.pair": "Koppeln",
   "mc.pairing": "Koppeln…",
   "mc.setupTitle": "Maschine einrichten",

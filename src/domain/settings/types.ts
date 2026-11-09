@@ -108,8 +108,8 @@ export type HostStatus = {
   fingerprint: string;
   clients: string[]; // names of the paired devices
 };
-/** What a member may do in a shared vault: an admin also invites and removes members. */
-export type SharedRole = "admin" | "member";
+/** What a member may do in a shared vault: an admin also invites and removes members, a reader only reads. */
+export type SharedRole = "admin" | "member" | "reader";
 /** A shared vault on a relay-server (src-tauri/src/shared_vaults.rs): the server it lives on (pinned by `fp`), its
  *  folder on this Mac and this Mac's role there. Only the backend writes the list. */
 export type SharedVault = {
@@ -142,6 +142,9 @@ export type SharedStatus = {
   admins?: string[] | null; // the member list's admins (fingerprints); null while the workspace has no list
   listed?: string[] | null; // every member on the member list (fingerprints); null while the workspace has no list
   people?: SharedPerson[] | null; // the member list's people with their devices; null while the workspace has no list
+  reader?: boolean; // this Mac only reads the workspace: its rounds only pull
+  readers?: string[] | null; // the member list's readers (fingerprints), null while the workspace has no list
+  unsent?: number; // a reader's changes in the folder that its rounds leave out
 };
 /** A person on a shared vault's member list (docs/workspaces.md, People): `who` its id, `devices` fingerprints. */
 export type SharedPerson = { who: string; name: string; email: string; devices: string[] };

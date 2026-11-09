@@ -13,10 +13,13 @@ use std::collections::BTreeMap;
 /// One entry. `kind`: `create`, `add`, `remove`, `leave`, `promote`, `demote`, `rekey` (epoch `epoch` is current, its
 /// key's sha256 `h`), `device` (the member `fp` set up Relay again: new `id` and `pk`), or `docs-on` / `docs-off` (an
 /// admin turns the making of the workspace's notes into documents on or off; no other field). `fp`: the member it is about;
-/// `id`, `pk`: its Ed25519 identity and X25519 key (create, add, device); `role`: admin or member (create, add); `at`:
+/// `id`, `pk`: its Ed25519 identity and X25519 key (create, add, device). `role`: admin, member or reader (create: admin,
+/// add, and `role`, which an admin signs to give the member `fp` that role). `at`:
 /// epoch seconds; `by`: the signer's fingerprint; `sig`: its signature over `msg`.
 /// `mac` (create only): the creator's identity vouched for under the vault's epoch-0 key, which the server never has:
 /// a Mac that knows no creator takes a first list only with it.
+/// A reader (docs/workspaces.md, Roles) reads the workspace and signs nothing but its own `leave`, and the server refuses
+/// its writes (`READ_ONLY`).
 /// People (docs/workspaces.md, People): `person` names the person `who` (`name`, optional `email`, made or renamed) and,
 /// with `fp`, puts that device under it. `person-remove` takes the person `who` out with every device under it. An
 /// `add` with `who` adds a device under that person. Members stay devices: a device without a person is as before.
@@ -27,6 +30,8 @@ pub struct Entry {
     pub epoch: u32, pub h: String, pub at: u64, pub by: String, pub sig: String, pub mac: String,
     pub who: String, pub name: String, pub email: String,
 }
+/// The server's answer to any write by a reader, and what a reader's Relay says instead of trying.
+pub const READ_ONLY: &str = "read only: a reader of this workspace cannot change it";
 /// The longest list a server keeps or a Mac takes.
 pub const MAX_ENTRIES: u64 = 10_000;
 impl Entry {
@@ -42,9 +47,9 @@ impl Entry {
     pub fn hash(&self, vault: &str) -> String { sha256_hex(format!("{}:{}", self.msg(vault), self.sig).as_bytes()) }
 }
 
-/// A member as the list says: a device, and `person` the person it is under ("" none).
+/// A member as the list says: a device, and `person` the person it is under ("" none). `reader`: it only reads.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Member { pub id: String, pub pk: String, pub admin: bool, pub person: String }
+pub struct Member { pub id: String, pub pk: String, pub admin: bool, pub person: String, pub reader: bool }
 /// A person as the list says, with the devices under it (fingerprints), for the settings.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
@@ -67,6 +72,7 @@ pub struct List {
 }
 impl List {
     pub fn admin(&self, fp: &str) -> bool { self.members.get(fp).is_some_and(|m| m.admin) }
+    pub fn reader(&self, fp: &str) -> bool { self.members.get(fp).is_some_and(|m| m.reader) }
     /// The hash of entry `seq`, from a check that kept them (`check` fills `hashes`).
     pub fn has(&self, hashes: &[String], seq: u64, hash: &str) -> bool { hashes.get(seq as usize).is_some_and(|h| h == hash) }
     /// The person device `fp` is under, "" none.
@@ -104,7 +110,7 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
         // every field a kind does not use is empty: nothing rides along unchecked
         let uses = |fp: bool, keys: bool, role: bool, rekey: bool, mac: bool| {
             (fp == hex64(&e.fp)) && (fp || e.fp.is_empty()) && (keys == (hex64(&e.id) && hex64(&e.pk))) && (keys || (e.id.is_empty() && e.pk.is_empty()))
-                && (role == (e.role == "admin" || e.role == "member")) && (role || e.role.is_empty())
+                && (role == ["admin", "member", "reader"].contains(&e.role.as_str())) && (role || e.role.is_empty())
                 && (rekey == (e.epoch > 0 && hex64(&e.h))) && (rekey || (e.epoch == 0 && e.h.is_empty())) && (mac == hex64(&e.mac)) && (mac || e.mac.is_empty())
         };
         // the person fields: `who` on the person kinds and optionally on an add, a name (and email) only on `person`
@@ -114,6 +120,7 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
             "create" => uses(true, true, true, false, true) && person(false, false),
             "add" => uses(true, true, true, false, false) && person(false, false),
             "remove" | "leave" | "promote" | "demote" => uses(true, false, false, false, false) && person(false, false),
+            "role" => uses(true, false, true, false, false) && person(false, false),
             "rekey" => uses(false, false, false, true, false) && person(false, false),
             "device" => uses(true, true, false, false, false) && person(false, false),
             "docs-on" | "docs-off" => uses(false, false, false, false, false) && person(false, false),
@@ -128,7 +135,7 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
             if creator.is_some_and(|c| c != e.id) { return bad("not made by the vault's creator"); }
             if !signed(&e.id, &e.msg(vault), &e.sig) { return bad("not signed by its creator"); }
             l.creator = e.id.clone();
-            l.members.insert(e.fp.clone(), Member { id: e.id.clone(), pk: e.pk.clone(), admin: true, person: String::new() });
+            l.members.insert(e.fp.clone(), Member { id: e.id.clone(), pk: e.pk.clone(), admin: true, person: String::new(), reader: false });
         } else {
             // signed by its signer as the list stood before it: an admin, or the member itself for `leave`
             let Some(by) = l.members.get(&e.by).cloned() else { return bad("signed by someone who is no member") };
@@ -139,23 +146,27 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
             let known = l.people.contains_key(&e.who);
             match e.kind.as_str() {
                 "leave" if e.by == e.fp && member => { l.members.remove(&e.fp); l.pending = Some(e.at); }
+                // a reader signs nothing else, also not for its own person
+                _ if by.reader => return bad("a reader only leaves"),
                 // what a person's own device may do without an admin: add a device for that person (never an admin),
                 // name itself as a new person, take that person out
-                "add" if !by.admin && own && !member && e.role == "member" => { l.members.insert(e.fp.clone(), Member { id: e.id.clone(), pk: e.pk.clone(), admin: false, person: e.who.clone() }); }
+                "add" if !by.admin && own && !member && e.role == "member" => { l.members.insert(e.fp.clone(), Member { id: e.id.clone(), pk: e.pk.clone(), admin: false, person: e.who.clone(), reader: false }); }
                 "person" if !by.admin && e.fp == e.by && by.person.is_empty() && !known => {
                     l.people.insert(e.who.clone(), (e.name.clone(), e.email.clone()));
                     l.members.get_mut(&e.fp).unwrap().person = e.who.clone();
                 }
                 "person-remove" if !by.admin && own => drop_person(&mut l, &e.who, e.at),
                 _ if !by.admin => return bad("not signed by an admin"),
-                "add" if !member && (e.who.is_empty() || known) => { l.members.insert(e.fp.clone(), Member { id: e.id.clone(), pk: e.pk.clone(), admin: e.role == "admin", person: e.who.clone() }); }
+                "add" if !member && (e.who.is_empty() || known) => { l.members.insert(e.fp.clone(), Member { id: e.id.clone(), pk: e.pk.clone(), admin: e.role == "admin", person: e.who.clone(), reader: e.role == "reader" }); }
                 "person" if e.fp.is_empty() || member => {
                     l.people.insert(e.who.clone(), (e.name.clone(), e.email.clone()));
                     if member { l.members.get_mut(&e.fp).unwrap().person = e.who.clone(); }
                 }
                 "person-remove" if known => drop_person(&mut l, &e.who, e.at),
                 "remove" if member => { l.members.remove(&e.fp); l.pending = Some(e.at); }
-                "promote" | "demote" if member => { l.members.get_mut(&e.fp).unwrap().admin = e.kind == "promote"; }
+                "promote" if member => { let m = l.members.get_mut(&e.fp).unwrap(); (m.admin, m.reader) = (true, false); }
+                "demote" if member => l.members.get_mut(&e.fp).unwrap().admin = false,
+                "role" if member => { let m = l.members.get_mut(&e.fp).unwrap(); (m.admin, m.reader) = (e.role == "admin", e.role == "reader"); }
                 "docs-on" | "docs-off" => l.docs = e.kind == "docs-on",
                 "rekey" if e.epoch == l.epoch + 1 => {
                     l.epoch = e.epoch;
@@ -426,5 +437,60 @@ mod tests {
         // a Mac that saw the first knows the other history's head is not its own
         let other = check(V, &[l.clone(), vec![x2]].concat(), None).unwrap().0;
         assert!(!one.has(&hashes, other.len - 1, &other.head));
+    }
+    #[test]
+    fn an_admin_adds_and_changes_a_reader_who_signs_nothing_but_its_leave() {
+        let (mut l, a, b, _) = team();
+        let d = Dev::new('d');
+        add(&mut l, &a, named('1', "Ann", &a.fp));
+        add(&mut l, &a, named('2', "Bo", &b.fp));
+        // a reader on a device without a person, and one under a person
+        let reader = |dev: &Dev, pk: char, who: String| Entry { kind: "add".into(), fp: dev.fp.clone(), id: dev.id(), pk: pk.to_string().repeat(64), role: "reader".into(), who, ..Default::default() };
+        add(&mut l, &a, reader(&d, '4', String::new()));
+        let e = Dev::new('e');
+        add(&mut l, &a, reader(&e, '5', who('2')));
+        let list = check(V, &l, None).unwrap().0;
+        assert_eq!((list.reader(&d.fp), list.admin(&d.fp), list.reader(&e.fp), list.person(&e.fp), list.reader(&b.fp)), (true, false, true, who('2').as_str(), false));
+        // what a reader signs: refused, also for itself and for its own person
+        let by = |dev: &Dev, x: Entry| { let list = check(V, &l, None).unwrap().0; check(V, &[l.clone(), vec![sign(V, &list, &dev.fp, &dev.seed, x)]].concat(), None) };
+        let f = Dev::new('f');
+        assert!(by(&e, Entry { kind: "add".into(), fp: f.fp.clone(), id: f.id(), pk: "6".repeat(64), role: "member".into(), who: who('2'), ..Default::default() }).unwrap_err().contains("a reader only leaves"), "a device for its person");
+        assert!(by(&d, Entry { kind: "promote".into(), fp: d.fp.clone(), ..Default::default() }).unwrap_err().contains("a reader only leaves"));
+        assert!(by(&d, Entry { kind: "role".into(), fp: d.fp.clone(), role: "member".into(), ..Default::default() }).unwrap_err().contains("a reader only leaves"));
+        assert!(by(&d, named('9', "Dee", &d.fp)).unwrap_err().contains("a reader only leaves"), "names itself");
+        assert!(by(&e, Entry { kind: "person-remove".into(), who: who('2'), ..Default::default() }).unwrap_err().contains("a reader only leaves"));
+        // a member gives nobody the reader role, also not its own new device
+        assert!(by(&b, reader(&f, '6', who('2'))).unwrap_err().contains("not signed by an admin"));
+        assert!(by(&b, Entry { kind: "role".into(), fp: d.fp.clone(), role: "member".into(), ..Default::default() }).unwrap_err().contains("not signed by an admin"));
+        // its leave: taken, and a removal waits for a new key as for anyone
+        let left = by(&d, Entry { kind: "leave".into(), fp: d.fp.clone(), ..Default::default() }).unwrap().0;
+        assert!(left.pending.is_some() && !left.members.contains_key(&d.fp));
+        // an admin makes it a member, an admin, and a reader again, and a promote of a reader makes an admin
+        add(&mut l, &a, Entry { kind: "role".into(), fp: d.fp.clone(), role: "member".into(), ..Default::default() });
+        assert!(!check(V, &l, None).unwrap().0.reader(&d.fp));
+        add(&mut l, &a, Entry { kind: "role".into(), fp: d.fp.clone(), role: "admin".into(), ..Default::default() });
+        assert!(check(V, &l, None).unwrap().0.admin(&d.fp));
+        add(&mut l, &a, Entry { kind: "role".into(), fp: d.fp.clone(), role: "reader".into(), ..Default::default() });
+        let list = check(V, &l, None).unwrap().0;
+        assert_eq!((list.admin(&d.fp), list.reader(&d.fp)), (false, true));
+        add(&mut l, &a, Entry { kind: "promote".into(), fp: e.fp.clone(), ..Default::default() });
+        let list = check(V, &l, None).unwrap().0;
+        assert_eq!((list.admin(&e.fp), list.reader(&e.fp)), (true, false));
+        // a demote of a reader leaves it a reader
+        add(&mut l, &a, Entry { kind: "demote".into(), fp: d.fp.clone(), ..Default::default() });
+        assert!(check(V, &l, None).unwrap().0.reader(&d.fp));
+        // an admin makes itself a reader while another admin is left, the last admin cannot
+        let list = check(V, &l, None).unwrap().0;
+        let with = |x: Entry| check(V, &[l.clone(), vec![sign(V, &list, &a.fp, &a.seed, x)]].concat(), None);
+        assert!(with(Entry { kind: "role".into(), fp: a.fp.clone(), role: "reader".into(), ..Default::default() }).is_ok());
+        add(&mut l, &a, Entry { kind: "demote".into(), fp: e.fp.clone(), ..Default::default() });
+        let list = check(V, &l, None).unwrap().0;
+        let with = |x: Entry| check(V, &[l.clone(), vec![sign(V, &list, &a.fp, &a.seed, x)]].concat(), None);
+        assert!(with(Entry { kind: "role".into(), fp: a.fp.clone(), role: "reader".into(), ..Default::default() }).unwrap_err().contains("no admin left"));
+        // a role entry's fields: a known role, a member, nothing else
+        assert!(with(Entry { kind: "role".into(), fp: d.fp.clone(), role: "owner".into(), ..Default::default() }).unwrap_err().contains("wrong fields"));
+        assert!(with(Entry { kind: "role".into(), fp: d.fp.clone(), ..Default::default() }).unwrap_err().contains("wrong fields"));
+        assert!(with(Entry { kind: "role".into(), fp: f.fp.clone(), role: "member".into(), ..Default::default() }).unwrap_err().contains("breaks the rules"), "not a member");
+        assert!(with(Entry { kind: "role".into(), fp: d.fp.clone(), role: "member".into(), who: who('1'), ..Default::default() }).unwrap_err().contains("wrong fields"));
     }
 }

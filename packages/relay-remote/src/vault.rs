@@ -272,7 +272,7 @@ impl Keys {
                 ["head", n, h] if hex64(h) => { once(k.head.is_some())?; k.head = Some((n.parse().ok()?, h.into())) }
                 ["expect", h] if hex64(h) => { once(k.expect.is_some())?; k.expect = Some(h.into()) }
                 ["joined", h] if hex64(h) => { once(k.joined.is_some())?; k.joined = Some(h.into()) }
-                ["invite", id, sec, role, e, x, ref who @ ..] if id.len() == 16 && id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) && hex64(sec) && (role == "admin" || role == "member")
+                ["invite", id, sec, role, e, x, ref who @ ..] if id.len() == 16 && id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) && hex64(sec) && ["admin", "member", "reader"].contains(&role)
                     && (who.is_empty() || (who.len() == 1 && hex64(who[0]))) => {
                     k.invites.push(Invited { id: id.into(), secret: sec.into(), role: role.into(), epoch: e.parse().ok()?, expires: x.parse().ok()?, who: who.first().map_or(String::new(), |w| w.to_string()) });
                 }
@@ -482,7 +482,9 @@ impl SealedRemote {
 /// `docs`: an admin turned on making the workspace's notes documents (the member list's `docs-on`); `admin`: this Mac
 /// is an admin of the list; `admins`: the list's admins and `listed` all its members (fingerprints), `people` its people
 /// with their devices, None when there is no list yet.
-pub struct KeyStep { pub keys: Option<Keys>, pub warnings: Vec<String>, pub changed: Vec<(String, String)>, pub errors: Vec<String>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>>, pub people: Option<Vec<members::Person>> }
+pub struct KeyStep { pub keys: Option<Keys>, pub warnings: Vec<String>, pub changed: Vec<(String, String)>, pub errors: Vec<String>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>>, pub people: Option<Vec<members::Person>>,
+    /// this Mac only reads (the server's role for it, which follows the member list), `readers` the list's readers
+    pub reader: bool, pub readers: Option<Vec<String>> }
 use crate::members::{self, List};
 impl SealedRemote {
     fn info(&self) -> Result<Value, String> { Ok((self.call)(json!({"op": "vault_info", "vault": self.vault}), None, None)?.0["vault"].take()) }
@@ -560,6 +562,7 @@ impl SealedRemote {
         let keep = |k: &Keys, step: &mut KeyStep| -> Result<(), String> { save(k)?; *lock(&self.keys) = k.clone(); step.keys = Some(k.clone()); Ok(()) };
         if k.ensure() { keep(&k, &mut step)?; }
         let v = self.info()?;
+        step.reader = v["role"] == "reader";
         if v["epoch"].as_u64().is_none() {
             // a server that stopped reporting the key after this Mac saw a member list: as held back, never skipped
             if k.has_list() {
@@ -605,6 +608,7 @@ impl SealedRemote {
         step.rekeying = list.pending.is_some();
         (step.docs, step.admin) = (list.docs, list.admin(&me));
         step.admins = Some(list.members.iter().filter(|(_, m)| m.admin).map(|(fp, _)| fp.clone()).collect());
+        step.readers = Some(list.members.iter().filter(|(_, m)| m.reader).map(|(fp, _)| fp.clone()).collect());
         step.listed = Some(list.members.keys().cloned().collect());
         step.people = Some(list.persons());
         if list.pending.is_some_and(|at| now.saturating_sub(at) > 3600) { step.warnings.push("Someone left over an hour ago, and the key has not changed since.".into()); }
@@ -716,17 +720,21 @@ impl SealedRemote {
         let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: if on { "docs-on" } else { "docs-off" }.into(), ..Default::default() });
         self.append(&mut k, &list, &e, json!({}), save)
     }
-    /// An admin makes a member an admin, or an admin a member again: a `promote` / `demote` entry, signed by this Mac.
-    /// The server's role follows it; the last admin is never demoted (the list refuses that).
-    pub fn set_admin(&self, fp: &str, on: bool, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<(), String> {
+    /// An admin gives a member the role admin, member or reader, signed by this Mac. Between admin and member a
+    /// `promote` / `demote` entry as before readers (a Relay from before them checks those), else a `role` entry. The
+    /// server's role follows it, and the last admin is never demoted (the list refuses that).
+    pub fn set_role(&self, fp: &str, role: &str, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<(), String> {
+        if !["admin", "member", "reader"].contains(&role) { return Err("role is admin, member or reader".into()); }
         let mut k = self.keys();
         let v = self.info()?;
         let me = v["me"].as_str().unwrap_or_default().to_string();
         let (list, _) = self.list(&k)?.ok_or("this workspace has no member list yet")?;
         if !list.admin(&me) { return Err("only an admin can change a member's role".into()); }
         if !list.members.contains_key(fp) { return Err("not on this workspace's member list".into()); }
-        if list.admin(fp) == on { return Ok(()); }
-        let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: if on { "promote" } else { "demote" }.into(), fp: fp.into(), ..Default::default() });
+        let now = if list.admin(fp) { "admin" } else if list.reader(fp) { "reader" } else { "member" };
+        let kind = match (now, role) { (a, b) if a == b => return Ok(()), ("member", "admin") => "promote", ("admin", "member") => "demote", _ => "role" };
+        let role = if kind == "role" { role.into() } else { String::new() };
+        let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: kind.into(), fp: fp.into(), role, ..Default::default() });
         self.append(&mut k, &list, &e, json!({}), save)
     }
     /// Name the person `who` (new: made, else renamed: admins only), and put device `fp` under it when given: a `person`

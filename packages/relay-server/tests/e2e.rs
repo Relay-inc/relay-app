@@ -1553,15 +1553,67 @@ fn an_admin_of_the_list_makes_a_member_admin() {
     let role = |fp: &str| t.laptop.vault_info(&t.vault).unwrap().members.into_iter().find(|m| m.fp == fp).unwrap().role;
     assert!(!list_of(&t, &a).admin(&b.fp));
     assert_eq!(role(&b.fp), "member", "the server followed the list");
-    assert!(b.remote(&t.vault).set_admin(&b.fp, true, &b.save()).unwrap_err().contains("only an admin"));
-    a.remote(&t.vault).set_admin(&b.fp, true, &a.save()).unwrap();
+    assert!(b.remote(&t.vault).set_role(&b.fp, "admin", &b.save()).unwrap_err().contains("only an admin"));
+    a.remote(&t.vault).set_role(&b.fp, "admin", &a.save()).unwrap();
     assert!(list_of(&t, &b).admin(&b.fp));
     assert_eq!(role(&b.fp), "admin");
     // b's own round sees it, and b may now demote a; demoting the last admin is refused
     assert!(b.step(&t.vault).admin);
-    b.remote(&t.vault).set_admin(&a.fp, false, &b.save()).unwrap();
+    b.remote(&t.vault).set_role(&a.fp, "member", &b.save()).unwrap();
     assert_eq!(role(&a.fp), "member");
-    assert!(b.remote(&t.vault).set_admin(&b.fp, false, &b.save()).unwrap_err().contains("no admin left"));
+    assert!(b.remote(&t.vault).set_role(&b.fp, "member", &b.save()).unwrap_err().contains("no admin left"));
+}
+
+/// A reader, invited as one: its round only pulls, and the server refuses its writes (files, the member list, invites)
+/// with one answer. An admin makes it a member, after which it writes, and a reader again.
+#[test]
+fn a_reader_reads_and_the_server_refuses_its_writes() {
+    use relay_remote::members::READ_ONLY;
+    use relay_remote::sync::{self, Remote};
+    let (t, a, b, _c) = trio("reader", "reader");
+    let role = |fp: &str| t.laptop.vault_info(&t.vault).unwrap().members.into_iter().find(|m| m.fp == fp).unwrap().role;
+    assert!(list_of(&t, &a).reader(&b.fp) && b.step(&t.vault).reader);
+    assert_eq!(role(&b.fp), "reader");
+    a.remote(&t.vault).put("Plan.md", b"from the admin", 1, "").unwrap();
+    // its writes: refused
+    let rb = b.remote(&t.vault);
+    let hash = rb.manifest().unwrap()["Plan.md"].hash.clone();
+    assert_eq!(rb.put("Plan.md", b"mine", 2, &hash).unwrap_err(), READ_ONLY);
+    assert_eq!(rb.put("New.md", b"mine", 2, "").unwrap_err(), READ_ONLY);
+    assert_eq!(rb.delete("Plan.md", &hash).unwrap_err(), READ_ONLY);
+    assert!(b.remote(&t.vault).set_person(&"b".repeat(64), "Bo", "", &b.fp, &b.save()).unwrap_err().contains("a reader only leaves"), "refused before it goes out");
+    // straight to the server: an entry it never gets to check
+    let entry = serde_json::json!({"kind": "promote", "fp": b.fp, "by": b.fp, "seq": 0, "sig": "0".repeat(128)});
+    assert_eq!(b.c.call(serde_json::json!({"op": "vault_append", "vault": t.vault, "entry": entry, "keys": {}})).unwrap_err(), READ_ONLY);
+    assert!(b.invite_for(&t, "member", "").unwrap_err().contains("only an admin"));
+    // a round of its own: pulls, sends nothing, says what stayed here
+    let dir = std::env::temp_dir().join(format!("relay-e2e-reader-folder-{}", std::process::id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    let round = |base: &sync::Manifest| sync::run(sync::Mode::Pull, &dir, base, &mut sync::Walker::default(), &sync::Filter::vault_default(), &b.remote(&t.vault), &|p| p.into(), &|_| false,
+        &sync::Guard { allow_deletes: false, allowed: &[], moved: &[], keep: &|_, _| Ok(()) }, &|_, _| {});
+    let (base, r) = round(&sync::Manifest::new());
+    assert_eq!((r.pulled.clone(), r.errors.clone()), (vec!["Plan.md".to_string()], vec![]));
+    std::fs::write(dir.join("Plan.md"), "mine").unwrap();
+    let (_, r) = round(&base);
+    assert_eq!((r.unsent.clone(), r.errors.clone(), r.pushed.len()), (vec!["Plan.md".to_string()], vec![], 0));
+    let ra = a.remote(&t.vault);
+    ra.manifest().unwrap();
+    assert_eq!(ra.get("Plan.md").unwrap(), b"from the admin");
+    std::fs::remove_dir_all(&dir).ok();
+    // made a member it writes, a reader again it is refused again
+    a.remote(&t.vault).set_role(&b.fp, "member", &a.save()).unwrap();
+    assert_eq!((role(&b.fp), b.step(&t.vault).reader), ("member".to_string(), false));
+    let rb = b.remote(&t.vault);
+    rb.manifest().unwrap();
+    rb.put("Plan.md", b"mine", 2, &hash).unwrap();
+    a.remote(&t.vault).set_role(&b.fp, "reader", &a.save()).unwrap();
+    assert_eq!(role(&b.fp), "reader");
+    assert!(list_of(&t, &b).reader(&b.fp));
+    assert_eq!(b.remote(&t.vault).put("New.md", b"mine", 3, "").unwrap_err(), READ_ONLY);
+    // it may still leave
+    b.remote(&t.vault).remove(&b.fp, &b.save()).unwrap();
+    assert!(!list_of(&t, &a).members.contains_key(&b.fp));
 }
 
 /// A member whose Relay publishes its keys only after an admin's upgrade made the list: trust on upgrade skipped it, so
@@ -1574,12 +1626,12 @@ fn an_admin_adds_a_member_that_upgraded_after_the_list() {
     b.step(&t.vault);
     assert!(!list_of(&t, &a).members.contains_key(&b.fp));
     assert_eq!(a.step(&t.vault).listed.map(|l| l.contains(&b.fp)), Some(false));
-    assert!(a.remote(&t.vault).set_admin(&b.fp, true, &a.save()).unwrap_err().contains("not on this workspace's member list"));
+    assert!(a.remote(&t.vault).set_role(&b.fp, "admin", &a.save()).unwrap_err().contains("not on this workspace's member list"));
     assert!(b.remote(&t.vault).add_listed(&b.fp, &b.save()).unwrap_err().contains("only an admin"));
     a.remote(&t.vault).add_listed(&b.fp, &a.save()).unwrap();
     let l = list_of(&t, &b);
     assert!(l.members.contains_key(&b.fp) && !l.admin(&b.fp));
-    a.remote(&t.vault).set_admin(&b.fp, true, &a.save()).unwrap();
+    a.remote(&t.vault).set_role(&b.fp, "admin", &a.save()).unwrap();
     assert!(b.step(&t.vault).admin);
 }
 

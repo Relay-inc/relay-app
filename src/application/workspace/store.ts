@@ -15,6 +15,8 @@ type WorkspaceState = {
   onboarding: VaultStatus | null;
   /** Per shared vault id: its live channel is connected (`shared-vaults` status), else it syncs by rounds only. */
   live: Record<string, boolean>;
+  /** Per shared vault id: this Mac only reads it (its last round said so), so its pages open read-only. */
+  readers: Record<string, boolean>;
 };
 
 export const useWorkspaceStore = makeStore<WorkspaceState>(() => ({
@@ -25,4 +27,5 @@ export const useWorkspaceStore = makeStore<WorkspaceState>(() => ({
   notesVersion: 0,
   onboarding: null,
   live: {},
+  readers: {},
 }));

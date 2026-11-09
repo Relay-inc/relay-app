@@ -138,20 +138,27 @@ blob name 64 lowercase hex. Anything else is refused.
 |---|---|---|
 | `vault_create {name}` | a full device (not vaults_only, not linked) | `{vault: {id, name}}`, the caller is its admin |
 | `vault_info {vault}` | member | `{vault: {id, name, role, me, members: [{name, fp, role, added, pk, id, sig, mac}], people: [{who, name, email, devices}], invites: [{id, role, expires}], epoch, rekey, keys: {epoch: {sealed, holders}}}}`, `people` the member list's people with their devices' fingerprints (`[]` without a list), invites all for an admin and the caller's own for a member, `keys` only the caller's sealed key and who each rotation was sealed to |
-| `vault_invite {vault, role, wrapped, epoch}` | admin, or a member that is a person on the list (role member only) | `{invite: {id, code, expires}}`, `role` admin or member, `wrapped` hex at most 256 KiB, expires in 24 h; `epoch` the newest key sealed in, refused (`key changed`) when it is not the current one |
-| `vault_invite_revoke {vault, invite}` | admin, or a member for an invite it made | `{}` |
+| `vault_invite {vault, role, wrapped, epoch}` | admin, or a member that is a person on the list (role member only) | `{invite: {id, code, expires}}`, `role` admin, member or reader, `wrapped` hex at most 256 KiB, expires in 24 h; `epoch` the newest key sealed in, refused (`key changed`) when it is not the current one |
+| `vault_invite_revoke {vault, invite}` | admin, or a member for an invite it made | `{}`, only that invite |
 | `vault_join {vault, invite, name, proof}` | anyone with a valid link | `{vault: {id, name}, role, wrapped}`, `proof` = `tls::proof(code, client_fp, server_fp)`, 5 wrong proofs drop the invite, success consumes it, adds the device to `clients.json` as vaults_only when it is new (name deduplicated as in `pair`) and as a member |
 | `vault_remove {vault, fp}` | admin, or the member itself (leave) | `{}`, refused when it would leave members without an admin, a vaults_only client with no vault left is removed from `clients.json`; sets `rekey` |
 | `vault_manifest {vault}` | member | `{blobs: [{name, etag, size, meta, e}], epoch, rekey, role, me: {fp, pk, mac}}`, `meta` hex of the record's meta part, `etag` sha256 hex of the whole record file, `size` its bytes, `e` the epoch in its header |
 | `vault_get {vault, name}` | member | reply line `{ok, len, etag}`, then `len` bytes: the record |
-| `vault_put {vault, name, len, expect}` + `len` bytes | member | `{etag}`, written only if the current record's etag is `expect` (`""`: it must not exist), else `changed meanwhile` |
-| `vault_put_many {vault, files: [{name, len, expect}]}` + the bodies one after the other | member | `{etags: {name: etag}, errors: {name: why}}` |
-| `vault_delete {vault, name, expect}` | member | `{}`, only if the current etag is `expect`, else `changed meanwhile` |
+| `vault_put {vault, name, len, expect}` + `len` bytes | member, not a reader | `{etag}`, written only if the current record's etag is `expect` (`""`: it must not exist), else `changed meanwhile` |
+| `vault_put_many {vault, files: [{name, len, expect}]}` + the bodies one after the other | member, not a reader | `{etags: {name: etag}, errors: {name: why}}` |
+| `vault_delete {vault, name, expect}` | member, not a reader | `{}`, only if the current etag is `expect`, else `changed meanwhile` |
 | `vault_stream {vault, v, since, epoch}` | member | stays open, see Live channel |
 | `vault_pk {vault, pk, id, sig, mac, imac}` | member, for itself | `{}`, `pk` and `id` 64 hex, `sig` 128 hex, `mac` `<epoch>:<64 hex>`, `imac` 64 hex or empty; only the shape is checked here |
 | `vault_log {vault}` | member | `{entries}`: the member list |
-| `vault_append {vault, entry, keys}` | member, `entry.by` the caller | `{}`, only when the whole list still checks (`relay_remote::members::check`); whoever the entry takes off the list (`remove`, `leave`, or `person-remove` with every device of that person) is removed here in the same write; an `add` stores `keys` (epoch: sealed) for the new member; `create` only on an empty list by an admin; `rekey` refused (it goes with `vault_rotate`) |
+| `vault_append {vault, entry, keys}` | member, `entry.by` the caller, a reader only its `leave` | `{}`, only when the whole list still checks (`relay_remote::members::check`); whoever the entry takes off the list (`remove`, `leave`, or `person-remove` with every device of that person) is removed here in the same write; an `add` stores `keys` (epoch: sealed) for the new member; `create` only on an empty list by an admin; `rekey` refused (it goes with `vault_rotate`) |
 | `vault_rotate {vault, epoch, keys: {fp: sealed}, entry}` | admin | `{epoch}`, only the next epoch; `entry` the `rekey` entry, appended in the same write when the list then checks, and a sealed key for exactly the list's members; clears `rekey` and every open invite |
+
+A reader (Roles, below) is refused every write with one answer, `read only: a reader of this workspace cannot change
+it` (`members::READ_ONLY`): `vault_put`, `vault_put_many` (per file), `vault_delete`, `vault_append` other than its
+`leave`, `vault_invite`, `vault_invite_revoke`, and the document ops `doc_push`, `doc_snapshot_put`, `doc_bind` and
+`doc_unbind`. Its `update` frames on the live stream are dropped, its `awareness` frames pass (they only say where it
+is). It still reads (`vault_info`, `vault_manifest`, `vault_get`, `vault_log`, `doc_list`, `doc_pull`, the stream),
+publishes its own keys (`vault_pk`) and leaves.
 
 A `vault_put` (and each file of `vault_put_many`) under another epoch than the current one is refused: `key changed`
 for an older one, `no such key epoch` for a newer one. `revoke` of a client also removes its memberships and sets `rekey`.
@@ -394,12 +401,24 @@ Every hex field is lowercase, and every field a kind does not use is empty.
 
 - `create` (the creator, signed by itself, with `mac`: its identity vouched for under the vault's epoch-0 key, which the
   server never has), `add` (a member with its identity `id`, X25519 key `pk` and `role`), `remove`, `promote`,
-  `demote`, `device` (a member's new keys) are signed by an admin of the list as it stood just before; `leave` by the
+  `demote`, `role` (`fp` gets `role`), `device` (a member's new keys) are signed by an admin of the list as it stood
+  just before, `leave` by the
   member itself; `rekey` (epoch `epoch` is current, the sha256 of its key `h`) by an admin. No entry may leave the list
   without an admin, and none may leave it empty.
-- **Roles** change with `promote` and `demote`, which an admin of the list writes from Members (Make admin, Make
-  member); the server's role follows. A member who was admin on the server before the list came in as a member (trust
-  on upgrade only adds members) and is made admin this way.
+- **Roles** are `admin`, `member` and `reader`, per device. An admin of the list picks one in Members, and its Relay writes
+  `promote` or `demote` between admin and member (as before readers, so a list without readers stays readable for an
+  older Relay) and a `role` entry for anything with reader. `promote` makes anyone an admin, `demote` makes an admin a
+  member and leaves a reader as it is. The server's role follows the list. A member who was admin on the server before
+  the list came in as a member (trust on upgrade only adds members) and is made admin this way.
+- **A reader** reads the workspace and changes nothing. It is invited as one (`vault_invite` with role `reader`, only
+  by an admin) or given the role by an admin. On the list it signs nothing but its own `leave`: no device of its own,
+  no naming of itself, no `person-remove`, also not for its own person. A member gives nobody the reader role. The
+  server refuses its writes (Wire protocol). Its Relay knows it is one from the server's role (`vault_info`), which
+  follows the list: its rounds only pull (`sync::Mode::Pull`: what is unchanged here takes the server's side, a file
+  deleted here comes back, any other change here is kept and not sent, and Settings says how many), its documents take
+  no edit and bind nothing, a file change is not taken into a document, nothing is sealed again under a new key, and
+  its pages open read-only with a line saying why. It still holds every key (it reads). A Relay from before readers
+  refuses a list with a reader or a `role` entry: every member updates first.
 - A `remove` or `leave` leaves the list waiting for a `rekey`; a `device` entry is refused while it waits (the new keys
   could be the removed member's).
 - **A new workspace** gets its list right away: Relay writes the `create` before anything else reaches the server.

@@ -593,6 +593,7 @@ const en = {
   "page.reload": "Reload",
   "page.keepMine": "Keep mine",
   "page.tooBig": "This note is over 1 MB: it shows read-only.",
+  "page.readOnly": "You can read this workspace, not change it. An admin can make you a member.",
   "page.conversations": "Conversations",
   "page.latest": "{n} · latest {time}",
   "page.comments": "Comments",
@@ -1276,8 +1277,12 @@ const en = {
     "Workspaces a team shares with you on a relay-server that is not one of your machines. The server only keeps encrypted files. Each Mac syncs the workspace into a folder of its own. A workspace on one of your machines shows under that machine.",
   "set.sharedAdmin": "Admin",
   "set.sharedMember": "Member",
-  "set.sharedMakeAdmin": "Make admin",
-  "set.sharedMakeMember": "Make member",
+  "set.sharedReader": "Reader",
+  "set.sharedRoleOf": "Role of {name}",
+  "set.sharedUnsent_one":
+    "{n} change in this folder stays on this Mac: you can read this workspace, not change it. Delete the file to get the workspace's version back.",
+  "set.sharedUnsent_other":
+    "{n} changes in this folder stay on this Mac: you can read this workspace, not change it. Delete a file to get the workspace's version back.",
   "set.sharedNotListed": "Not on the list",
   "set.sharedAddToList": "Add to list",
   "set.sharedNotListedHint":

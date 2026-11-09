@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-member-dark|shared-keeper|shared-live|shared-live-dark, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-member-dark|shared-keeper|shared-people|shared-readers|shared-reader|shared-live|shared-live-dark, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
@@ -67,7 +67,11 @@ settings = { ...settings, experimental: { files: fixture !== "files-off" } };
 // which Members (shared_vault_info) finds: the backend then keeps the server under Machines
 // shared-member-dark: shared-member in the dark theme (the vault check's member view, issue 425)
 const member = fixture === "shared-member" || fixture === "shared-member-dark" || fixture === "shared-keeper";
-// shared-people: the member list has people, one with two Macs (vault.sharedPeople)
+// shared-people: the member list has people, one with two Macs (vault.sharedPeople). shared-readers: the same, the
+// Design laptop a reader. shared-reader: this Mac only reads the vault (vault.readerVaults), two changes in its folder
+// left out of its rounds
+const reader = fixture === "shared-reader";
+const people = fixture === "shared-people" || fixture === "shared-readers";
 // shared-rekey: someone left the vault, and the key change waits for a member whose Relay has no public key yet
 // shared-live (-dark): "shared", and a page of the side vault is a shared document two mock peers edit (ticket 9)
 const live = fixture === "shared-live" || fixture === "shared-live-dark";
@@ -77,15 +81,16 @@ const shared =
   fixture === "shared-invite" ||
   fixture === "shared-rekey" ||
   fixture === "shared-unlisted" ||
-  fixture === "shared-people" ||
+  people ||
+  reader ||
   member ||
   live;
 if (shared)
   settings = {
     ...settings,
     extraVaults: [vault.TEAM_VAULT],
-    machines: member ? [] : structuredClone(vault.hubMachines),
-    sharedVaults: structuredClone(member ? vault.memberVaults : vault.sharedVaults),
+    machines: member || reader ? [] : structuredClone(vault.hubMachines),
+    sharedVaults: structuredClone(reader ? vault.readerVaults : member ? vault.memberVaults : vault.sharedVaults),
   };
 // buddy: Buddy switched on, the first project linked to a Buddy project (fixtures/integrations buddy)
 if (fixture === "buddy")
@@ -132,6 +137,17 @@ for (const s of Object.values(sharedStatus).slice(0, 1)) {
   s.listed = vault.sharedMembers
     .map(m => m.fp)
     .filter(fp => fixture !== "shared-unlisted" || fp !== vault.sharedMembers[2].fp);
+  s.readers = fixture === "shared-readers" ? [vault.sharedMembers[2].fp] : reader ? [vault.SHARED_ME] : [];
+  if (reader)
+    Object.assign(s, {
+      admin: false,
+      admins: s.admins.filter((fp: string) => fp !== vault.SHARED_ME),
+      reader: true,
+      unsent: 2,
+      pushed: 0,
+      conflicts: [],
+      held: [],
+    });
 }
 if (fixture === "shared-rekey")
   for (const s of Object.values(sharedStatus))
@@ -142,10 +158,17 @@ if (fixture === "shared-rekey")
       held: [],
       conflicts: [],
     });
-let sharedMembers = structuredClone(vault.sharedMembers);
+let sharedMembers = structuredClone(vault.sharedMembers).map(m => ({
+  ...m,
+  role:
+    (fixture === "shared-readers" && m.fp === vault.sharedMembers[2].fp) || (reader && m.fp === vault.SHARED_ME)
+      ? "reader"
+      : m.role,
+}));
 // the member list's people, as the server reads it and this Mac's round checked it (one list here)
-let sharedPeople: { who: string; name: string; email: string; devices: string[] }[] =
-  fixture === "shared-people" ? structuredClone(vault.sharedPeople) : [];
+let sharedPeople: { who: string; name: string; email: string; devices: string[] }[] = people
+  ? structuredClone(vault.sharedPeople)
+  : [];
 for (const s of Object.values(sharedStatus).slice(0, 1)) s.people = sharedPeople;
 let sharedInvites = [{ id: "4d2e8a1b6c3f9e70", role: "member", expires: Math.floor(Date.now() / 1000) + 20 * 3600 }];
 let pendingInvite: string | null = fixture === "shared-invite" ? vault.inviteLink("b81c0e5f2a7d3946") : null;
@@ -823,11 +846,14 @@ function handle(cmd: string, a: Args): unknown {
       lastSaved = String(a.target);
       return { hash };
     }
-    case "shared_vault_admin": {
-      // an admin's Make admin / Make member: the member list, and the server's role that follows it
+    case "shared_vault_role": {
+      // an admin picks a member's role: the member list, and the server's role that follows it
       const s = sharedStatus[a.id];
-      if (s?.admins) s.admins = a.on ? [...s.admins, a.fp] : s.admins.filter((fp: string) => fp !== a.fp);
-      sharedMembers = sharedMembers.map(m => (m.fp === a.fp ? { ...m, role: a.on ? "admin" : "member" } : m));
+      if (s?.admins)
+        s.admins = [...s.admins.filter((fp: string) => fp !== a.fp), ...(a.role === "admin" ? [a.fp] : [])];
+      if (s?.readers)
+        s.readers = [...s.readers.filter((fp: string) => fp !== a.fp), ...(a.role === "reader" ? [a.fp] : [])];
+      sharedMembers = sharedMembers.map(m => (m.fp === a.fp ? { ...m, role: a.role } : m));
       return null;
     }
     case "shared_vault_person": {

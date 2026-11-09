@@ -608,6 +608,7 @@ export default {
   "page.reload": "Recharger",
   "page.keepMine": "Garder la mienne",
   "page.tooBig": "Cette note dépasse 1 Mo : elle s'affiche en lecture seule.",
+  "page.readOnly": "Vous pouvez lire cet espace de travail, pas le modifier. Un admin peut vous rendre membre.",
   "page.conversations": "Conversations",
   "page.latest": "{n} · dernière {time}",
   "page.comments": "Commentaires",
@@ -1297,8 +1298,12 @@ export default {
     "Les espaces de travail qu'une équipe partage avec vous sur un relay-server qui n'est pas une de vos machines. Le serveur ne garde que des fichiers chiffrés. Chaque Mac synchronise l'espace de travail dans son propre dossier. Un espace de travail sur une de vos machines s'affiche sous cette machine.",
   "set.sharedAdmin": "Admin",
   "set.sharedMember": "Membre",
-  "set.sharedMakeAdmin": "Rendre admin",
-  "set.sharedMakeMember": "Rendre membre",
+  "set.sharedReader": "Lecteur",
+  "set.sharedRoleOf": "Rôle de {name}",
+  "set.sharedUnsent_one":
+    "{n} modification dans ce dossier reste sur ce Mac : vous pouvez lire cet espace de travail, pas le modifier. Supprimez le fichier pour retrouver la version de l'espace de travail.",
+  "set.sharedUnsent_other":
+    "{n} modifications dans ce dossier restent sur ce Mac : vous pouvez lire cet espace de travail, pas le modifier. Supprimez un fichier pour retrouver la version de l'espace de travail.",
   "set.sharedNotListed": "Pas sur la liste",
   "set.sharedAddToList": "Ajouter à la liste",
   "set.sharedNotListedHint":

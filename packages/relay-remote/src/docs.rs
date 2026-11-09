@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
@@ -60,10 +61,10 @@ type On = Arc<dyn Fn(&str, &[u8]) + Send + Sync>;
 /// One shared vault's documents on this Mac. `me`: this device (the first 16 hex of its fingerprint), the author of
 /// what it writes. `on`: called with (document id, Yjs update) for every update another member made (ticket 9's
 /// editor). `busy`: one lock per document, so a live update and a round never work on it at once. `warnings`: what
-/// the user should hear of (`take_warnings`).
+/// the user should hear of (`take_warnings`). `read_only`: this Mac is a reader of the workspace (`set_read_only`).
 pub struct Docs {
     vault: String, me: String, keys: Mutex<Keys>, call: Call, dir: PathBuf, open: Mutex<BTreeMap<String, Open>>, on: Mutex<Vec<On>>,
-    busy: Mutex<BTreeMap<String, Arc<Mutex<()>>>>, warnings: Mutex<Vec<String>>, walker: Mutex<sync::Walker>,
+    busy: Mutex<BTreeMap<String, Arc<Mutex<()>>>>, warnings: Mutex<Vec<String>>, walker: Mutex<sync::Walker>, read_only: AtomicBool,
 }
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> { m.lock().unwrap_or_else(|e| e.into_inner()) }
 
@@ -237,13 +238,17 @@ impl Docs {
             let c = match std::fs::read(dir.join(Self::file(&id))).ok().map(|b| apply(&doc, &b)) { Some(Ok(())) => c, _ => Cursor { path: c.path, at: c.at, out: c.out, ..Cursor::default() } };
             (id, Open { doc, c })
         }).collect();
-        Docs { vault: vault.into(), me: me.into(), keys: Mutex::new(keys), call, dir: dir.into(), open: Mutex::new(open), on: Mutex::default(), busy: Mutex::default(), warnings: Mutex::default(), walker: Mutex::default() }
+        Docs { vault: vault.into(), me: me.into(), keys: Mutex::new(keys), call, dir: dir.into(), open: Mutex::new(open), on: Mutex::default(), busy: Mutex::default(), warnings: Mutex::default(), walker: Mutex::default(), read_only: AtomicBool::new(false) }
     }
     fn file(id: &str) -> String { format!("{}.bin", id.replace('#', "~")) }
     /// The text Relay last wrote to the note's file (or took from it): what a change on disk is measured against.
     fn out_file(&self, id: &str) -> PathBuf { self.dir.join(format!("{}.out", id.replace('#', "~"))) }
     /// The newest keys (after a rotation, keep_keys).
     pub fn set_keys(&self, k: Keys) { *lock(&self.keys) = k; }
+    /// A reader's documents: they only pull. An edit here (a page, a comment, a file change, a move) is refused, so
+    /// nothing waits to be sent that the server would refuse (docs/workspaces.md, Roles).
+    pub fn set_read_only(&self, on: bool) { self.read_only.store(on, Ordering::Relaxed); }
+    fn writable(&self) -> Result<(), String> { if self.read_only.load(Ordering::Relaxed) { Err(crate::members::READ_ONLY.into()) } else { Ok(()) } }
     /// A document's name on the server.
     pub fn name(&self, id: &str) -> String { lock(&self.keys).name(&format!("doc:{id}")) }
     /// The document (a note's, a sidecar or the manifest) whose name on the server is `name`, when this Mac knows it.
@@ -321,6 +326,7 @@ impl Docs {
     /// One comment entry written into note `id`'s sidecar by this Mac (its author), then sent (or with the next sync).
     pub fn put_comment(&self, id: &str, key: &str, json: &str) -> Result<(), String> {
         if !note_id(id) || !entry_key(key) { return Err("not a comment of a note".into()); }
+        self.writable()?;
         let side = format!("{id}#comments");
         let busy = self.busy(&side);
         let _one = lock(&busy);
@@ -351,6 +357,7 @@ impl Docs {
     pub fn create(&self, path: &str, text: &str) -> Result<String, String> {
         if !safe_path(path) { return Err(format!("not a note path: {path}")); }
         if self.taken(path, None) { return Err(format!("already a document: {path}")); }
+        self.writable()?;
         let mut raw = [0u8; 16];
         ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut raw).map_err(|_| "no randomness")?;
         let id = hex(&raw);
@@ -407,6 +414,7 @@ impl Docs {
     }
     /// A change to the manifest (its maps "paths" and "gone"), kept here and sent.
     fn manifest(&self, f: impl FnOnce(&yrs::MapRef, &yrs::MapRef, &mut yrs::TransactionMut)) -> Result<(), String> {
+        self.writable()?;
         let busy = self.busy(MANIFEST);
         let _one = lock(&busy);
         {
@@ -422,6 +430,7 @@ impl Docs {
     /// An edit made here (ticket 9's editor): into this Mac's state, then to the server (or with the next sync).
     pub fn apply_local(&self, id: &str, update: &[u8]) -> Result<(), String> {
         if !valid_id(id) { return Err("not a document id".into()); }
+        self.writable()?;
         let busy = self.busy(id);
         let _one = lock(&busy);
         {
@@ -615,6 +624,7 @@ impl Docs {
     /// whatever it holds now: only what differs changes, and it is sent and passed on like any edit.
     pub fn set_text(&self, id: &str, text: &str, by: &str) -> Result<(), String> {
         if !note_id(id) { return Err("not a note's document".into()); }
+        self.writable()?;
         let busy = self.busy(id);
         let _one = lock(&busy);
         let u = {
@@ -676,8 +686,11 @@ impl Docs {
         // a note's text before its place in the manifest: no Mac learns of a note it cannot read yet
         let mut pending: Vec<String> = lock(&self.open).iter().filter(|(_, o)| o.c.pending).map(|(k, _)| k.clone()).collect();
         pending.sort_by_key(|id| id == MANIFEST);
-        for id in pending { self.send(&id); }
-        self.bind();
+        // a reader has nothing to send and binds nothing (the server refuses both)
+        if self.writable().is_ok() {
+            for id in pending { self.send(&id); }
+            self.bind();
+        }
         Ok(changed)
     }
     /// The notes that are documents, named to the server by their record names (the vault's naming key over the path,
@@ -833,7 +846,7 @@ impl Docs {
     /// documents; the document's own lock keeps everything else off it meanwhile.
     pub fn absorb(&self, root: &Path, filter: &Filter, path: &str, by: &str) -> Result<bool, String> {
         let Some(id) = self.paths().get(path).cloned() else { return Ok(false) };
-        if filter.skips(path, false) || through_link(root, path) { return Ok(false); }
+        if filter.skips(path, false) || through_link(root, path) || self.writable().is_err() { return Ok(false); }
         let busy = self.busy(&id);
         let _one = lock(&busy);
         let (cur, b) = {
@@ -983,7 +996,6 @@ pub fn listing(v: &Value) -> BTreeMap<String, (u64, u64)> {
 mod tests {
     use super::*;
     use crate::vault::VaultKey;
-    use std::sync::atomic::{AtomicBool, Ordering};
 
     const V: &str = "0123456789abcdef";
     /// A server's document ops in memory: per name its log (part, who pushed it).
@@ -1053,6 +1065,36 @@ mod tests {
         assert_eq!(b.id_of(&name), Some(id.clone()));
         assert_eq!(b.id_of(&a.name(&format!("{id}#comments"))), Some(format!("{id}#comments")));
         assert_eq!(b.id_of(&"0".repeat(64)), None);
+    }
+
+    /// A reader's Mac takes the others' documents and changes nothing: no edit, comment, note or move, nothing sent or
+    /// bound, and a file changed on its disk is not taken in.
+    #[test]
+    fn a_reader_pulls_and_sends_nothing() {
+        let (srv, k) = (Server::default(), Keys::from(VaultKey::generate()));
+        let ((a, _), (b, _)) = (mac(&srv, &k, "ro-a", A), mac(&srv, &k, "ro-b", B));
+        let id = a.create("Plan.md", "theirs").unwrap();
+        b.set_read_only(true);
+        b.sync().unwrap();
+        assert_eq!(b.text(&id), "theirs");
+        let sent = || { let f = srv.lock().unwrap(); (f.order.len(), f.bound.len()) };
+        let before = sent();
+        let u = change(&Doc::new(), |x| { let t = x.get_or_insert_text("md"); t.insert(&mut x.transact_mut(), 0, "mine"); });
+        for r in [b.apply_local(&id, &u), b.put_comment(&id, "c1", "{}"), b.set_text(&id, "mine", "restore"), b.create("Other.md", "x").map(|_| ()), b.rename("Plan.md", "Moved.md")] {
+            assert_eq!(r.unwrap_err(), crate::members::READ_ONLY);
+        }
+        let root = tmp("ro-root");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("Plan.md"), "mine").unwrap();
+        assert!(!b.absorb(&root, &Filter::default(), "Plan.md", "disk").unwrap());
+        std::fs::remove_dir_all(&root).ok();
+        b.sync().unwrap();
+        assert_eq!((sent(), b.text(&id)), (before, "theirs".into()));
+        // a reader made member again edits as before
+        b.set_read_only(false);
+        append(&b, &id, " and mine");
+        a.sync().unwrap();
+        assert_eq!(a.text(&id), "theirs and mine");
     }
 
     #[test]

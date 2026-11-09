@@ -157,6 +157,9 @@ pub enum Mode {
     Replica,
     /// both sides may change; a file changed on both with different content keeps both
     TwoWay,
+    /// only the remote changes (a reader of a shared vault): its changes come, nothing goes, a change here stays here
+    /// (`Keep`), a file deleted here comes back
+    Pull,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -164,16 +167,19 @@ pub enum Action {
     Push(String), Pull(String), DeleteRemote(String), DeleteLocal(String),
     /// both changed differently: keep local at `path`, save the remote version locally as `copy`, push both
     Conflict { path: String, copy: String },
+    /// Pull: changed here, left as it is and not sent (`Report::unsent`)
+    Keep(String),
     /// both changed a line-mergeable file (an index like MEMORY.md): union of the lines, written to both sides
     Merge(String),
 }
 fn target(a: &Action) -> &str {
-    match a { Action::Push(p) | Action::Pull(p) | Action::DeleteRemote(p) | Action::DeleteLocal(p) | Action::Merge(p) | Action::Conflict { path: p, .. } => p }
+    match a { Action::Push(p) | Action::Pull(p) | Action::DeleteRemote(p) | Action::DeleteLocal(p) | Action::Merge(p) | Action::Keep(p) | Action::Conflict { path: p, .. } => p }
 }
 
 /// Pure planning, by hash only. TwoWay: a change on one side goes to the other (a delete included), a delete against a
 /// modification keeps the modification, a change on both is a Merge when `mergeable(path)` and a Conflict otherwise.
-/// Replica: push what differs, delete on the remote what the local side lacks. In both modes paths that are one file on
+/// Replica: push what differs, delete on the remote what the local side lacks. Pull: what is unchanged here takes the
+/// remote side, a file deleted here is pulled back, any other change here is kept and not sent. In both modes paths that are one file on
 /// a Mac's disk (`fold`, as the filter compares: `a.md` and `A.md`, `first.md` and `ﬁrst.md`) are skipped and returned:
 /// either would clobber the other.
 pub fn plan(mode: Mode, base: &Manifest, local: &Manifest, remote: &Manifest, copy_name: &dyn Fn(&str) -> String, mergeable: &dyn Fn(&str) -> bool) -> (Vec<Action>, Vec<String>) {
@@ -199,6 +205,11 @@ pub fn plan(mode: Mode, base: &Manifest, local: &Manifest, remote: &Manifest, co
                     _ if mergeable(&p) => Action::Merge(p),
                     _ => Action::Conflict { copy: copy_name(&p), path: p },
                 },
+            },
+            Mode::Pull => match (l == b || l.is_none(), r.is_some()) {
+                (true, true) => Action::Pull(p),
+                (true, false) => Action::DeleteLocal(p),
+                _ => Action::Keep(p),
             },
         });
     }
@@ -251,6 +262,8 @@ pub struct Report {
     pub skipped: Vec<String>, pub errors: Vec<String>,
     /// deletes that wait for the user (`Guard`): these paths keep their base, so every round plans them again
     pub held: Vec<String>,
+    /// Pull: changes here that were not sent (they keep their base, so every round finds them again)
+    pub unsent: Vec<String>,
 }
 
 /// What a round may destroy on this side. More deletes than `max(5, a fifth of the base)` in one TwoWay round wait for
@@ -285,7 +298,7 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
     // either (a vault synced before no_links has such paths in its base, and the server would lose them)
     let linked: BTreeSet<String> = if filter.no_links { base.keys().chain(rm.keys()).filter(|p| through_link(root, p)).cloned().collect() } else { BTreeSet::new() };
     let had = base.keys().filter(|p| !linked.contains(*p)).count();
-    if had > 0 && (local.is_empty() || (mode == Mode::TwoWay && rm.is_empty())) {
+    if had > 0 && (local.is_empty() || (mode != Mode::Replica && rm.is_empty())) {
         rep.errors.push(format!("{} side is empty while the last sync had {had} files: refusing to mirror that", if local.is_empty() { "local" } else { "remote" }));
         return (base.clone(), rep);
     }
@@ -325,7 +338,7 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
         _ => false,
     };
     let deletes = acts.iter().filter(|a| braked(a)).count();
-    if mode == Mode::TwoWay && !guard.allow_deletes && deletes > delete_cap(base) {
+    if mode != Mode::Replica && !guard.allow_deletes && deletes > delete_cap(base) {
         acts.retain(|a| { if braked(a) { rep.held.push(target(a).into()); } !braked(a) });
     }
     let mut next = Manifest::new();
@@ -371,6 +384,7 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
                     Action::Push(p) => (&mut rep.pushed, p), Action::Pull(p) => (&mut rep.pulled, p),
                     Action::DeleteRemote(p) => (&mut rep.deleted_remote, p), Action::DeleteLocal(p) => (&mut rep.deleted_local, p),
                     Action::Merge(p) => (&mut rep.merged, p), Action::Conflict { copy, .. } => (&mut rep.conflicts, copy),
+                    Action::Keep(p) => (&mut rep.unsent, p),
                 };
                 list.push(p.clone());
             }
@@ -408,6 +422,7 @@ fn exec(root: &Path, no_links: bool, local: &Manifest, rm: &Manifest, remote: &d
     let mut put_local = |e: &Entry, d: &[u8]| -> Result<(), String> { inside(&e.path)?; write_atomic(&abs(&e.path), d, Some(e.mtime)).map_err(io)?; walker.note(e); Ok(()) };
     match a {
         Action::Push(_) => unreachable!("pushes go in batches, in run()"),
+        Action::Keep(_) => Ok(vec![]),
         Action::Pull(p) => {
             let (d, e) = fetch(p)?;
             if let Some(old) = same(p)? { if shrinks(&old, &d) { keep(p, &old)?; } }
@@ -689,6 +704,39 @@ mod tests {
         assert_eq!((r.pushed.len(), r.errors.clone()), (1099, vec!["n/0007.md: refused".to_string()]));
         assert!(!base.contains_key("n/0007.md") && base.contains_key("n/0008.md"), "the refused file is retried next round");
         assert_eq!(last.get(), (1100, 1100));
+    }
+
+    // a server that refuses every write, as it does a reader's
+    struct ReadOnly<'a>(&'a Mem);
+    impl Remote for ReadOnly<'_> {
+        fn manifest(&self) -> Result<Manifest, String> { self.0.manifest() }
+        fn get(&self, p: &str) -> Result<Vec<u8>, String> { self.0.get(p) }
+        fn put(&self, _: &str, _: &[u8], _: i64, _: &str) -> Result<(), String> { Err("read only".into()) }
+        fn delete(&self, _: &str, _: &str) -> Result<(), String> { Err("read only".into()) }
+    }
+    #[test]
+    fn a_pull_round_takes_the_remote_and_sends_nothing() {
+        let (t, mut w, mem) = (Tmp::new("pull"), Walker::default(), Mem::default());
+        for p in ["same.md", "edited.md", "deleted.md", "theirs.md", "gone.md"] { mem.set(p, "v1"); }
+        let run_pull = |w: &mut Walker, base: &Manifest| run(Mode::Pull, &t.0, base, w, &Filter::vault_default(), &ReadOnly(&mem), &|p| p.into(), &|_| false, OPEN, &|_, _| {});
+        let (base, r) = run_pull(&mut w, &Manifest::new());
+        assert_eq!((r.pulled.len(), r.errors.len()), (5, 0));
+        // here: an edit, a delete, a new file. There: an edit and a delete
+        t.put("edited.md", "mine");
+        fs::remove_file(t.0.join("deleted.md")).unwrap();
+        t.put("new.md", "mine");
+        mem.set("theirs.md", "v2");
+        mem.files.borrow_mut().remove("gone.md");
+        let (next, r) = run_pull(&mut w, &base);
+        assert!(r.errors.is_empty() && r.pushed.is_empty() && r.deleted_remote.is_empty(), "{r:?}");
+        assert_eq!(r.unsent, vec![s("edited.md"), s("new.md")]);
+        assert_eq!((t.read("edited.md").as_deref(), t.read("new.md").as_deref()), (Some("mine"), Some("mine")), "kept here");
+        assert_eq!((t.read("deleted.md").as_deref(), t.read("theirs.md").as_deref(), t.read("gone.md")), (Some("v1"), Some("v2"), None));
+        assert_eq!((mem.read("edited.md").as_deref(), mem.read("new.md")), (Some("v1"), None), "nothing sent");
+        // the next round finds the same changes, and their change to an edited file waits
+        mem.set("edited.md", "v2");
+        let (_, r) = run_pull(&mut w, &next);
+        assert_eq!((r.unsent, t.read("edited.md").as_deref()), (vec![s("edited.md"), s("new.md")], Some("mine")));
     }
 
     const COPY: &str = "a (conflict srv 2026-10-02 1530).md";

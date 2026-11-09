@@ -599,6 +599,7 @@ export default {
   "page.reload": "Opnieuw laden",
   "page.keepMine": "Mijn versie houden",
   "page.tooBig": "Deze note is groter dan 1 MB: ze is alleen te lezen.",
+  "page.readOnly": "Je kan deze workspace lezen, niet wijzigen. Een beheerder kan je lid maken.",
   "page.conversations": "Gesprekken",
   "page.latest": "{n} · laatste {time}",
   "page.comments": "Opmerkingen",
@@ -1284,8 +1285,12 @@ export default {
     "Workspaces die een team met je deelt op een relay-server die niet een van je machines is. De server bewaart enkel versleutelde bestanden. Elke Mac synchroniseert de workspace naar een eigen map. Een workspace op een van je machines staat onder die machine.",
   "set.sharedAdmin": "Beheerder",
   "set.sharedMember": "Lid",
-  "set.sharedMakeAdmin": "Maak beheerder",
-  "set.sharedMakeMember": "Maak lid",
+  "set.sharedReader": "Lezer",
+  "set.sharedRoleOf": "Rol van {name}",
+  "set.sharedUnsent_one":
+    "{n} wijziging in deze map blijft op deze Mac: je kan deze workspace lezen, niet wijzigen. Verwijder het bestand om de versie van de workspace terug te krijgen.",
+  "set.sharedUnsent_other":
+    "{n} wijzigingen in deze map blijven op deze Mac: je kan deze workspace lezen, niet wijzigen. Verwijder een bestand om de versie van de workspace terug te krijgen.",
   "set.sharedNotListed": "Niet op de lijst",
   "set.sharedAddToList": "Zet op de lijst",
   "set.sharedNotListedHint":

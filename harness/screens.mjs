@@ -1795,6 +1795,43 @@ const VIEWS = {
     await page.getByText("Design laptop").scrollIntoViewIfNeeded();
     await settle(page);
   },
+  // the reader role (PR reader): an admin's Members with a role picker per device, the Design laptop a reader
+  "settings-shared-readers": async () => {
+    await settingsPage("Machines", undefined, "shared-readers");
+    await page.setViewportSize({ width: 900, height: 1200 });
+    await button("Members").first().click();
+    await waitText("Alex Moreau");
+    await page.getByText("Design laptop").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // Invite…: Reader next to Member and Admin
+  "settings-shared-invite-reader": async () => {
+    await settingsPage("Machines", undefined, "shared");
+    await page.setViewportSize({ width: 900, height: 1200 });
+    await button("Invite…").click();
+    await page.getByRole("radio", { name: "Reader" }).click();
+    await page.getByRole("radio", { name: "Reader" }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // a Mac that only reads the workspace: its role, its two changes left out of the rounds, no Invite…
+  "settings-shared-reader": async () => {
+    await settingsPage("Machines", undefined, "shared-reader");
+    await page.setViewportSize({ width: 900, height: 1200 });
+    await button("Members").first().click();
+    await waitText("Studio Mac");
+    await settle(page);
+  },
+  // that Mac's page of a note in the workspace: shown read-only, with why
+  "page-shared-reader": async () => {
+    await open(page, server.url, { fixture: "shared-reader" });
+    await page.keyboard.press("Control+Digit2");
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    for (const folder of ["Contexts", "Contexts/Team", "Contexts/Team/Projects"])
+      await page.locator(`[data-folder="${folder}"]`).click();
+    await page.locator('[data-page="Contexts/Team/Projects/Team Handbook.md"]').click();
+    await waitText("You can read this workspace, not change it.");
+    await settle(page);
+  },
   "settings-shared-vaults": async () => {
     await settingsPage("Machines", undefined, "shared");
     await page.setViewportSize({ width: 900, height: 1600 });

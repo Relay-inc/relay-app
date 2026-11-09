@@ -18,7 +18,7 @@ import {
   removePerson,
   setPerson,
   addToList,
-  setMemberAdmin,
+  setMemberRole,
   setSharedDocs,
   settleShared,
   showRecovery,
@@ -104,13 +104,28 @@ function SharedRow({ vault }: { vault: SharedVault }) {
   const [personForm, setPersonForm] = useState({ pick: "", name: "", email: "" });
   // the member list decides once there is one; before it, the server's word once read (the settings can be older)
   const admins = status?.admins;
-  const roleOf = (fp: string, server: SharedRole) => (admins ? (admins.includes(fp) ? "admin" : "member") : server);
+  const roleOf = (fp: string, server: SharedRole): SharedRole =>
+    admins ? (admins.includes(fp) ? "admin" : status?.readers?.includes(fp) ? "reader" : "member") : server;
   // on the server but not on the member list (its Relay published keys after the list was made): no role, no remove
   const unlisted = (fp: string) => !!status?.listed && !status.listed.includes(fp);
-  const mine: SharedRole = admins ? (status?.admin ? "admin" : "member") : (info?.vault.role ?? vault.role);
+  const mine: SharedRole = admins
+    ? status?.admin
+      ? "admin"
+      : status?.reader
+        ? "reader"
+        : "member"
+    : (info?.vault.role ?? vault.role);
   const admin = mine === "admin";
+  // a reader signs nothing on the member list but its leave: no naming, adding or removing of its own person
+  const own = mine !== "reader";
   const ago = status ? agoParts(status.at) : null;
-  const roleName = (role: string) => t(role === "admin" ? "set.sharedAdmin" : "set.sharedMember");
+  const roleName = (role: string) =>
+    t(role === "admin" ? "set.sharedAdmin" : role === "reader" ? "set.sharedReader" : "set.sharedMember");
+  const roles: [SharedRole, string][] = [
+    ["member", t("set.sharedMember")],
+    ["reader", t("set.sharedReader")],
+    ["admin", t("set.sharedAdmin")],
+  ];
   const until = (expires: number) => sentAt(expires * 1000, locale);
   // people (docs/workspaces.md, People): the member list as this Mac checked it, before its first round the server's
   const people = status?.people ?? info?.vault.people ?? [];
@@ -191,27 +206,35 @@ function SharedRow({ vault }: { vault: SharedVault }) {
             {member.name}
             {member.fp === info.me ? <span className="text-s-muted"> · {t("set.sharedThisMac")}</span> : null}
           </span>
-          <span className={PILL}>
-            {unlisted(member.fp) ? t("set.sharedNotListed") : roleName(roleOf(member.fp, member.role))}
-          </span>
+          {/* an admin picks another member's role here, everyone else sees it */}
+          {status?.admin && admins && !unlisted(member.fp) && member.fp !== info.me && removing !== member.fp ? (
+            <select
+              className={SELECT}
+              aria-label={t("set.sharedRoleOf", { name: member.name })}
+              disabled={busy}
+              value={roleOf(member.fp, member.role)}
+              onChange={e => setMemberRole(vault.id, member.fp, e.target.value as SharedRole)}
+            >
+              {roles.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className={PILL}>
+              {unlisted(member.fp) ? t("set.sharedNotListed") : roleName(roleOf(member.fp, member.role))}
+            </span>
+          )}
           <span className="flex-1"></span>
           {status?.admin && unlisted(member.fp) ? (
             <button className={buttonClass("ghost")} disabled={busy} onClick={() => addToList(vault.id, member.fp)}>
               {t("set.sharedAddToList")}
             </button>
           ) : null}
-          {status?.people && !nested && !unlisted(member.fp) && (status.admin || member.fp === info.me) ? (
+          {status?.people && !nested && !unlisted(member.fp) && (status.admin || (own && member.fp === info.me)) ? (
             <button className={buttonClass("ghost")} disabled={busy} onClick={() => startNaming("", member.fp)}>
               {t("set.sharedNamePerson")}
-            </button>
-          ) : null}
-          {status?.admin && admins && !unlisted(member.fp) && member.fp !== info.me && removing !== member.fp ? (
-            <button
-              className={buttonClass("ghost")}
-              disabled={busy}
-              onClick={() => setMemberAdmin(vault.id, member.fp, !admins.includes(member.fp))}
-            >
-              {t(admins.includes(member.fp) ? "set.sharedMakeMember" : "set.sharedMakeAdmin")}
             </button>
           ) : null}
           {!admin || member.fp === info.me || unlisted(member.fp) ? null : removing === member.fp ? (
@@ -322,6 +345,8 @@ function SharedRow({ vault }: { vault: SharedVault }) {
               </StatusLine>
             ))}
             {status.bad ? <StatusLine level="warn">{tn("set.sharedBad", status.bad)}</StatusLine> : null}
+            {/* a reader's rounds only pull: what changed in the folder here stays here, said once */}
+            {status.unsent ? <StatusLine level="warn">{tn("set.sharedUnsent", status.unsent)}</StatusLine> : null}
             {/* making the notes documents: off until an admin turns it on; every member sees which */}
             {files && (status.admin || status.docs) ? (
               <div className="flex items-start gap-3 py-1">
@@ -448,15 +473,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
       ) : inviting ? (
         <div className="flex flex-wrap items-center gap-2">
           <span className={LABEL}>{t("set.sharedInviteAs")}</span>
-          <Segmented
-            label={t("set.sharedInviteAs")}
-            options={[
-              ["member", t("set.sharedMember")],
-              ["admin", t("set.sharedAdmin")],
-            ]}
-            value={role}
-            onPick={setRole}
-          />
+          <Segmented label={t("set.sharedInviteAs")} options={roles} value={role} onPick={setRole} />
           <span className="flex-1"></span>
           <button className={buttonClass("ghost")} onClick={() => setInviting(false)}>
             {t("mc.cancel")}
@@ -514,7 +531,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
                       </>
                     ) : (
                       <>
-                        {person.who === myself?.who && !link ? (
+                        {own && person.who === myself?.who && !link ? (
                           <button
                             className={buttonClass("ghost")}
                             disabled={busy}
@@ -532,7 +549,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
                             {t("set.sharedRename")}
                           </button>
                         ) : null}
-                        {status?.admin || person.who === myself?.who ? (
+                        {status?.admin || (own && person.who === myself?.who) ? (
                           <button
                             className={buttonClass("ghost")}
                             aria-label={t("set.extraVaultRemove", { name: person.name })}

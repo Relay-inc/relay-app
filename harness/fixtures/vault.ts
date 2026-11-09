@@ -197,6 +197,9 @@ export const sharedVaults = [
 /** shared-member: the same vault on a Mac that joined it with a link, a member there. Its server is not one of this
  *  Mac's machines, so the workspace shows in Settings › Machines › Workspaces. */
 export const memberVaults = [{ ...sharedVaults[0], role: "member", folder: "/Users/me/Shared/Northwind" }];
+/** shared-reader: the same vault on a Mac that only reads it (docs/workspaces.md, Roles), synced into the side vault's
+ *  folder so its notes are there to open as pages. */
+export const readerVaults = [{ ...sharedVaults[0], role: "reader", folder: TEAM_VAULT }];
 /** shared-keeper: the server that member keeps once made admin there, as the backend adds it (shared_vaults::keepers). */
 export const keeperMachine = {
   id: HUB_FP.slice(0, 12),

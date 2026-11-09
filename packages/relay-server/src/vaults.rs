@@ -9,7 +9,7 @@
 
 use crate::channel::Rooms;
 use crate::{clients, device_name, now, save_clients, write_private, Client, CLIENTS};
-use relay_remote::members;
+use relay_remote::members::{self, READ_ONLY};
 use relay_remote::vault::{epoch, split, MAX_EPOCH, MAX_RECORD};
 use relay_remote::{sync, tls};
 use serde_json::{json, Value};
@@ -140,6 +140,10 @@ impl Vaults {
     pub(crate) fn with<T>(&self, id: &str, fp: &str, f: impl FnOnce(&mut Vault, &str) -> Result<T, String>) -> Result<T, String> {
         self.locked(id, |v| { let role = v.role(fp).ok_or("no such vault")?.to_string(); f(v, &role) })
     }
+    /// The same for a write: a reader is refused (`READ_ONLY`, docs/workspaces.md, Roles).
+    pub(crate) fn writing<T>(&self, id: &str, fp: &str, f: impl FnOnce(&mut Vault, &str) -> Result<T, String>) -> Result<T, String> {
+        self.with(id, fp, |v, role| if role == "reader" { Err(READ_ONLY.into()) } else { f(v, role) })
+    }
     /// A read: the caller must be a member now, the blobs it reads are each written whole (temp file and rename).
     pub(crate) fn member(&self, id: &str, fp: &str) -> Result<Vault, String> {
         let v = if hex(id, 16) { load(&self.data, id) } else { None };
@@ -175,13 +179,13 @@ impl Vaults {
     /// An admin opens an invite: its code goes into the link. `epoch`: the newest key the inviter's Relay sealed into
     /// it; one behind is refused (`key changed`): that Relay fetches the new key and invites again. A member that is a
     /// person on the member list may open one too, as member only: for a device of its own, which only its own Relay
-    /// can then add to the list (the list refuses any other).
+    /// can then add to the list (the list refuses any other). A reader opens none.
     pub fn invite(&self, fp: &str, id: &str, role: &str, wrapped: &str, epoch: u64) -> Result<Value, String> {
-        if role != "admin" && role != "member" { return Err("role is admin or member".into()); }
+        if !["admin", "member", "reader"].contains(&role) { return Err("role is admin, member or reader".into()); }
         if wrapped.is_empty() || wrapped.len() > MAX_WRAPPED || !hex(wrapped, wrapped.len()) { return Err("bad wrapped key".into()); }
         self.with(id, fp, |v, me| {
             let person = || v.list().is_some_and(|l| !l.person(fp).is_empty());
-            if me != "admin" && (role != "member" || !person()) { return Err("only an admin can invite".into()); }
+            if me != "admin" && (me != "member" || role != "member" || !person()) { return Err("only an admin can invite".into()); }
             if epoch != v.epoch as u64 { return Err("key changed".into()); }
             let i = Invite { id: tls::random_secret()[..16].into(), code: tls::random_secret(), role: role.into(), wrapped: wrapped.into(), expires: now() + INVITE_SECS, fails: 0, by: fp.into() };
             let out = json!({"invite": {"id": i.id, "code": i.code, "expires": i.expires}});
@@ -191,9 +195,10 @@ impl Vaults {
         })
     }
     pub fn invite_revoke(&self, fp: &str, id: &str, invite: &str) -> Result<(), String> {
-        self.with(id, fp, |v, me| {
+        self.writing(id, fp, |v, me| {
             if me != "admin" && v.invites.iter().any(|i| i.id == invite && i.by != fp) { return Err("only an admin can revoke an invite".into()); }
-            v.invites.retain(|i| i.id != invite && (me == "admin" || i.by == fp));
+            // only that one: a member's revoke never takes another's invites along
+            v.invites.retain(|i| i.id != invite);
             save(&self.data, v)
         })
     }
@@ -333,6 +338,8 @@ impl Vaults {
         let mut gone = vec![];
         self.with(id, fp, |v, me| {
             if e.by != fp { return Err("an entry signed by someone else".into()); }
+            // a reader only leaves (the list refuses the rest too, this says why)
+            if me == "reader" && e.kind != "leave" { return Err(READ_ONLY.into()); }
             match e.kind.as_str() {
                 "create" if !v.log.is_empty() || me != "admin" => return Err("this vault has a member list".into()),
                 "rekey" => return Err("a key change goes with vault_rotate".into()),
@@ -344,8 +351,8 @@ impl Vaults {
             v.log.push(e.clone());
             // the roles here follow the list: who may rotate or invite on this server is who the list says
             match e.kind.as_str() {
-                "add" | "promote" | "demote" => {
-                    let role = match e.kind.as_str() { "promote" => "admin", "demote" => "member", _ => e.role.as_str() };
+                "add" | "promote" | "demote" | "role" => {
+                    let role = match e.kind.as_str() { "promote" => "admin", "demote" if after.reader(&e.fp) => "reader", "demote" => "member", _ => e.role.as_str() };
                     if let Some(m) = v.members.iter_mut().find(|m| m.fp == e.fp) { m.role = role.into(); }
                 }
                 _ => {}
@@ -421,7 +428,7 @@ impl Vaults {
         if !hex(name, 64) { return Err("bad name".into()); }
         if record.len() as u64 > MAX_RECORD || split(record).is_none() { return Err("not a record".into()); }
         let expect = expect.ok_or("expect missing")?;
-        self.with(id, fp, |v, _| {
+        self.writing(id, fp, |v, _| {
             // only under the current key: a Relay that has not fetched the new one fetches it and writes again
             match epoch(record).unwrap_or(0).cmp(&v.epoch) {
                 std::cmp::Ordering::Less => return Err("key changed".into()),
@@ -439,7 +446,7 @@ impl Vaults {
     pub fn delete(&self, fp: &str, id: &str, name: &str, expect: Option<&str>) -> Result<(), String> {
         if !hex(name, 64) { return Err("bad name".into()); }
         let expect = expect.ok_or("expect missing")?;
-        self.with(id, fp, |_, _| {
+        self.writing(id, fp, |_, _| {
             if self.bound(id, name) { return Err(BOUND.into()); }
             let p = self.blobs(id).join(name);
             if etag_at(&p)? != expect { return Err("changed meanwhile".into()); }
@@ -601,6 +608,38 @@ mod tests {
         join(&s, OTHER, &id, "member");
         assert_eq!(s.info(OTHER, &id).unwrap()["vault"]["role"], "admin");
         assert_eq!(clients(&s.data).len(), 2, "a known device is not added twice");
+    }
+
+    #[test]
+    fn a_reader_reads_and_writes_nothing() {
+        let s = store("reader");
+        let id = made(&s);
+        let e1 = s.put(ADMIN, &id, &name('1'), &record(b"m", b"d"), Some("")).unwrap();
+        join(&s, OTHER, &id, "reader");
+        assert_eq!(s.info(OTHER, &id).unwrap()["vault"]["role"], "reader");
+        // reads: the manifest, a record, the members
+        assert_eq!(s.manifest(OTHER, &id).unwrap()["role"], "reader");
+        assert_eq!(s.get(OTHER, &id, &name('1')).unwrap().1, e1);
+        // every write: one answer
+        let ro = |r: Result<Value, String>| assert_eq!(r.unwrap_err(), READ_ONLY);
+        ro(s.put(OTHER, &id, &name('1'), &record(b"m", b"x"), Some(&e1)).map(|e| json!(e)));
+        ro(s.put(OTHER, &id, &name('2'), &record(b"m", b"x"), Some("")).map(|e| json!(e)));
+        ro(s.delete(OTHER, &id, &name('1'), Some(&e1)).map(|_| json!({})));
+        let entry = |kind: &str| json!({"kind": kind, "fp": OTHER, "by": OTHER});
+        ro(s.append(OTHER, &id, &entry("promote"), &Default::default()).map(|_| json!({})));
+        ro(s.append(OTHER, &id, &entry("add"), &Default::default()).map(|_| json!({})));
+        ro(s.doc_bind(OTHER, &id, &[name('3')]).map(|_| json!({})));
+        ro(s.doc_unbind(OTHER, &id, &[name('3')]).map(|_| json!({})));
+        ro(s.doc_push(OTHER, &id, &name('3'), vec![record(&[0; 64], &[0; 64])]).map(|_| json!({})));
+        ro(s.invite_revoke(OTHER, &id, "0000000000000000").map(|_| json!({})));
+        assert!(s.invite(OTHER, &id, "member", &"ab".repeat(32), 0).unwrap_err().contains("only an admin"));
+        assert!(s.invite(OTHER, &id, "reader", &"ab".repeat(32), 0).unwrap_err().contains("only an admin"));
+        assert_eq!(s.get(ADMIN, &id, &name('1')).unwrap().1, e1, "untouched");
+        assert!(s.get(ADMIN, &id, &name('2')).is_err());
+        // its own keys it still publishes, and it may leave
+        s.set_pk(OTHER, &id, &json!({"pk": "b".repeat(64), "id": "d".repeat(64), "sig": "e".repeat(128), "mac": format!("0:{}", "c".repeat(64))})).unwrap();
+        s.remove(OTHER, &id, OTHER).unwrap();
+        assert!(s.manifest(OTHER, &id).is_err());
     }
 
     #[test]
