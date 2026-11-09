@@ -1394,6 +1394,7 @@ const en = {
     "Not every organisation admin is an admin here. An admin of this workspace adds them in its settings (Add organisation admins).",
   "set.orgNoWorkspaces": "No workspaces on this server yet.",
   "set.orgPeople": "People",
+  "set.orgOffboardConfirm": "Offboard",
   "set.orgOffboard": "Offboard…",
   "set.orgOffboardSure":
     "Offboard {name}: they come off {workspaces}, each workspace gets a new key, and their {devices} device(s) can no longer connect to this server. Their Macs keep the files they already have.",

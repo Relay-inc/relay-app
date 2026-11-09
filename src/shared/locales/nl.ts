@@ -1407,6 +1407,7 @@ export default {
     "Niet elke organisatie-admin is hier admin. Een admin van deze workspace voegt hen toe in de instellingen ervan (Organisatie-admins toevoegen).",
   "set.orgNoWorkspaces": "Nog geen workspaces op deze server.",
   "set.orgPeople": "Personen",
+  "set.orgOffboardConfirm": "Offboarden",
   "set.orgOffboard": "Offboarden…",
   "set.orgOffboardSure":
     "{name} offboarden: die gaat uit {workspaces}, elke workspace krijgt een nieuwe sleutel, en de {devices} toestel(len) kunnen niet meer met deze server verbinden. Hun Macs houden de bestanden die ze al hebben.",

@@ -185,7 +185,10 @@ export function MachineOrganisation({ machine }: { machine: Machine }) {
                   <div className={LINE}>
                     <span className="text-xs text-s-fg">{p.name}</span>
                     {p.email ? <span className="text-xs text-s-muted">{p.email}</span> : null}
-                    <span className="text-xs text-s-muted">{p.devices.map(d => d.name).join(", ")}</span>
+                    {/* a device under no person is its own row: its name once */}
+                    {p.devices.length > 1 || p.devices[0]?.name !== p.name ? (
+                      <span className="text-xs text-s-muted">{p.devices.map(d => d.name).join(", ")}</span>
+                    ) : null}
                     <span className="flex-1"></span>
                     {!isAdmin && leaving !== p ? (
                       <button className={buttonClass("danger")} disabled={busy} onClick={() => setLeaving(p)}>
@@ -237,7 +240,7 @@ export function MachineOrganisation({ machine }: { machine: Machine }) {
                             );
                           }}
                         >
-                          {t("set.orgOffboard")}
+                          {t("set.orgOffboardConfirm")}
                         </button>
                         <button className={buttonClass("ghost")} onClick={() => setLeaving(null)}>
                           {t("mc.cancel")}

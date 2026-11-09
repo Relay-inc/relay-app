@@ -1735,6 +1735,40 @@ const VIEWS = {
     await page.getByText("Notes as shared documents").first().scrollIntoViewIfNeeded();
     await settle(page);
   },
+  // the organisation of a full machine's server (PR organisation admin): this Mac an organisation admin, its code, the
+  // admins and Ops Mac to add, Northwind managed and Acme Retail not, the people across both
+  "settings-org": async () => {
+    await settingsPage("Machines", undefined, "shared-org");
+    await page.setViewportSize({ width: 900, height: 1500 });
+    await button("Show…").first().click();
+    await waitText("Organisation admins");
+    await page.getByText("Organisation admins", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // Offboard… on Sam Lee: what happens, and where this Mac is no admin
+  "settings-org-offboard": async () => {
+    await VIEWS["settings-org"]();
+    await page.getByRole("button", { name: "Offboard…", exact: true }).last().click();
+    await waitText("Offboard Sam Lee");
+    await page.getByText("Not in Acme Retail").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // Add as admin… on Ops Mac: compare the code on both Macs first
+  "settings-org-add": async () => {
+    await VIEWS["settings-org"]();
+    await button("Add as admin…").first().click();
+    await waitText("Codes match, add");
+    await page.getByText("Organisation admins", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // a workspace's policy for its admin: Claude Code allowed, Codex not, capture off, and Add organisation admins
+  "settings-shared-policy": async () => {
+    await settingsPage("Machines", undefined, "shared-org");
+    await page.setViewportSize({ width: 900, height: 1500 });
+    await waitText("Agents in this workspace");
+    await page.getByText("Agents in this workspace").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   // the member list's roles in Members, with Make admin / Make member for a list admin (PR member roles)
   "settings-shared-members": async () => {
     await settingsPage("Machines", undefined, "shared");

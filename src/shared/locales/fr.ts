@@ -1421,6 +1421,7 @@ export default {
     "Tous les admins de l'organisation ne sont pas admins ici. Un admin de cet espace les ajoute dans ses réglages (Ajouter les admins de l'organisation).",
   "set.orgNoWorkspaces": "Aucun espace de travail sur ce serveur pour l'instant.",
   "set.orgPeople": "Personnes",
+  "set.orgOffboardConfirm": "Retirer partout",
   "set.orgOffboard": "Retirer partout…",
   "set.orgOffboardSure":
     "Retirer {name} : cette personne quitte {workspaces}, chaque espace reçoit une nouvelle clé, et ses {devices} appareil(s) ne peuvent plus se connecter à ce serveur. Ses Mac gardent les fichiers qu'ils ont déjà.",

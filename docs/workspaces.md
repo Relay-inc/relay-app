@@ -127,7 +127,8 @@ Handshake: a device is accepted when it is in `clients.json`, or a pairing code 
 
 A device that came in through an invite is a *vault-only* client (`Client.vaults_only = true`): it may only send
 `VAULT_OPS` = `pair` (a code from the owner makes it a full device), `vault_info`, `vault_invite`, `vault_invite_revoke`, `vault_join`, `vault_remove`,
-`vault_manifest`, `vault_get`, `vault_put`, `vault_put_many`, `vault_delete`, `vault_stream`, `vault_pk`, `vault_rotate`. It never runs agents, reads a mirror or pairs
+`vault_manifest`, `vault_get`, `vault_put`, `vault_put_many`, `vault_delete`, `vault_stream`, `vault_pk`, `vault_rotate`, and `org_log` (an admin of
+its workspace adds the organisation admins, Organisation below). It never runs agents, reads a mirror or pairs
 further devices. While it is admin of a vault here it also gets `KEEPER_OPS` = `info` (the server's paths and version)
 and `update` (with `signature`, the release's `.sig` of the binary), nothing more. A linked device (a phone) gets no vault ops.
 
@@ -150,7 +151,12 @@ blob name 64 lowercase hex. Anything else is refused.
 | `vault_stream {vault, v, since, epoch}` | member | stays open, see Live channel |
 | `vault_pk {vault, pk, id, sig, mac, imac}` | member, for itself | `{}`, `pk` and `id` 64 hex, `sig` 128 hex, `mac` `<epoch>:<64 hex>`, `imac` 64 hex or empty; only the shape is checked here |
 | `vault_log {vault}` | member | `{entries}`: the member list |
-| `vault_append {vault, entry, keys}` | member, `entry.by` the caller, a reader only its `leave` | `{}`, only when the whole list still checks (`relay_remote::members::check`); whoever the entry takes off the list (`remove`, `leave`, or `person-remove` with every device of that person) is removed here in the same write; an `add` stores `keys` (epoch: sealed) for the new member; `create` only on an empty list by an admin; `rekey` refused (it goes with `vault_rotate`) |
+| `vault_append {vault, entry, keys}` | member, `entry.by` the caller, a reader only its `leave` | `{}`, only when the whole list still checks (`relay_remote::members::check`); whoever the entry takes off the list (`remove`, `leave`, or `person-remove` with every device of that person) is removed here in the same write; an `add` stores `keys` (epoch: sealed, epoch 0 included) for the new member, and may add an organisation admin as admin that never joined (it becomes a member here in the same write); `create` only on an empty list by an admin; `rekey` refused (it goes with `vault_rotate`) |
+| `org_log {from}` | any device | `{entries, len, owner}`: the organisation list from `from` on, `owner` whether the caller is the server's owner (the first full device paired) |
+| `org_append {entry}` | a full device, `entry.by` the caller | `{}`, only when the whole organisation list then still checks (`members::check_org`), `create` only by the owner on an empty list, `add` only of a full device paired here |
+| `org_pk {id, pk, sig}` | a full device, for itself | `{}`, its organisation keys for an admin to add it, only the shape is checked here |
+| `org_overview` | an organisation admin | `{workspaces: [{id, name, list, managed, admin, nohistory, members: [{fp, name, role, person, listed}], people}], people: [{name, email, devices, workspaces: [{id, name, role}]}], admins, candidates: [{fp, name, id, pk, sig}]}`: what each member list says, never a record |
+| `org_revoke {fps}` | an organisation admin | `{revoked: [{fp, name}]}`, those devices (and the phones linked to them) out of `clients.json` as `relay-server revoke` does, never an organisation admin |
 | `vault_rotate {vault, epoch, keys: {fp: sealed}, entry}` | admin | `{epoch}`, only the next epoch; `entry` the `rekey` entry, appended in the same write when the list then checks, and a sealed key for exactly the list's members; clears `rekey` and every open invite |
 
 A reader (Roles, below) is refused every write with one answer, `read only: a reader of this workspace cannot change
@@ -427,6 +433,8 @@ Every hex field is lowercase, and every field a kind does not use is empty.
   no edit and bind nothing, a file change is not taken into a document, nothing is sealed again under a new key, and
   its pages open read-only with a line saying why. It still holds every key (it reads). A Relay from before readers
   refuses a list with a reader or a `role` entry: every member updates first.
+- `policy` (`providers`, `capture`, no other field) is the workspace's policy (below), by an admin. Its two fields are
+  signed only on a `policy` entry, so every entry from before signs as it did.
 - A `remove` or `leave` leaves the list waiting for a `rekey`; a `device` entry is refused while it waits (the new keys
   could be the removed member's).
 - **A new workspace** gets its list right away: Relay writes the `create` before anything else reaches the server.
@@ -476,6 +484,67 @@ Every hex field is lowercase, and every field a kind does not use is empty.
   for a new key (the removed member still holds the current one). An invite does not help such a member: the server
   keeps its old entry and never notes the invite it joined with. Two admins at once:
   the server takes one list, and the other admin takes it on its next round.
+
+## Organisation
+
+A server can have an organisation (`relay-server/src/org.rs`, `relay-remote/src/org.rs`): organisation admins, a role
+above the workspace admin that keeps the server (`KEEPER_OPS`) and manages every workspace on it. It stays within the
+trust model: who is an organisation admin is a signed list, and what one does to a workspace is an entry on that
+workspace's member list, signed by its Mac. The server grants nothing itself.
+
+- **The organisation list** (`org.json` on the server, 0600) has the member list's rules (`members::check_org`): a hash
+  chain of Ed25519-signed entries, checked under the name `org:<server fingerprint>` so it never checks as another
+  server's or as a workspace's. Only four kinds: `create` (by the owner, the first full device paired with the server,
+  its `mac` the sha256 of that name as there is no workspace key), `add` (an organisation admin: its device `fp`, its
+  organisation identity `id` and X25519 key `pk`, role admin, no person), `remove` and `leave`. Everyone on it is an
+  admin and may add or remove another, the last one stays. The server appends only what still checks.
+- **Organisation keys.** Each Mac has, per server, an organisation identity and X25519 key (`org-<server>.key` in the
+  app data, in a workspace key file's format). Its Relay publishes them (`org_pk`, signed by the identity) when the
+  Organisation section opens. An admin adds a device on what it published, but only after the user compared the
+  device's code (12 hex of the keys' sha256) with the one its own screen shows: a server that swapped the publication
+  for its own keys gives another code. The add is refused when the keys changed since the comparison.
+- **Every Mac checks the list** and pins it in its organisation key file: its creator, and the head it last saw. A list
+  held back, forked, or started by another creator adds nobody to any workspace. The first sight is trust on first
+  use: a Mac that has never seen the list takes the one the server gives (a server can start a fake one only before
+  any Mac of the organisation saw the real one, and its admins would then be the server's own keys).
+- **Organisation admins on a workspace.** A new workspace adds the organisation admins as admins right after its
+  `create` (and `nohistory`). An admin of an existing workspace does the same with Add organisation admins in its
+  settings. One that is not on the list goes on with an `add` carrying its organisation keys, and every key of the
+  workspace so far sealed to its organisation key (epoch 0 included, as it never had an invite link). One that is a
+  member or reader is promoted. The organisation admin's Relay takes the epoch-0 key sealed to it when its
+  Organisation section opens (`org::adopt`), checks the list from a `create` vouched for under that key, and from then
+  on signs that workspace's list with its organisation identity. It does not sync the workspace into a folder unless
+  it also joins it.
+- **The overview** (`org_overview`) shows every workspace with what its member list says (people, devices, roles) and
+  whether every organisation admin is an admin of it (Managed, else Not managed), and every person across the
+  workspaces, grouped by a device or an email two lists share. The server reads only the lists and its own device
+  names, never a record.
+- **Offboarding in one step.** Offboard on a person signs, in every workspace this Mac is admin of, a `person-remove`
+  for the person that holds any of their devices, or a `remove` for a device under no person, then runs the key step
+  so the key changes at once. Then `org_revoke` takes the devices off the server: they connect nowhere any more. A
+  workspace where this Mac is no admin keeps the person, which the confirm and the result say, with what to do (ask an
+  admin there, or have them add the organisation admins). An organisation admin is offboarded only after it left the
+  organisation.
+- **What it means.** An organisation admin is an admin of every workspace it manages, so it reads it. Settings says so
+  where the role is given. A consultancy wants exactly that. A team that does not, has no organisation or does not
+  add it to a workspace.
+- **Compatibility.** A relay-server from before answers `unknown request` to `org_*`, and refuses an `add` of a device
+  that never joined. A Relay from before reads a workspace with an organisation admin as any list with one more admin
+  (it is a plain `add`), and never sees the organisation list.
+
+## Policy
+
+A workspace's policy is a `policy` entry on its member list, signed by an admin: `providers`, the agents allowed in it
+(from `members::POLICY_PROVIDERS`: `claude` and `codex`, each once, at least one), and `capture`, on or off (used by
+capture later). The newest one replaces the older. A policy by a member or reader, an unknown provider, none at all, or
+the fields on another kind of entry are refused.
+
+Every member's round takes the policy from the list and keeps it in the workspace's key file (`policy`), so a
+conversation started before the next round still follows it. A conversation or a terminal in that workspace starts
+only with an allowed provider (`policy::check_workspace_policy`, `err.workspace_policy`), and the composer greys out the
+others. Its admin picks the agents and capture in the workspace's settings, a member sees them there. A Relay from
+before refuses a list with a `policy` entry (an entry kind it does not know): every member updates first, as for
+people and readers. A relay-server from before refuses the entry too, so it never gets on a list there.
 
 ## Without history
 

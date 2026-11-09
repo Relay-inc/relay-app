@@ -1415,6 +1415,7 @@ export default {
     "Nicht jeder Organisations-Admin ist hier Admin. Ein Admin dieses Workspace fügt sie in seinen Einstellungen hinzu (Organisations-Admins hinzufügen).",
   "set.orgNoWorkspaces": "Noch keine Workspaces auf diesem Server.",
   "set.orgPeople": "Personen",
+  "set.orgOffboardConfirm": "Offboarden",
   "set.orgOffboard": "Offboarden…",
   "set.orgOffboardSure":
     "{name} offboarden: Die Person verlässt {workspaces}, jeder Workspace bekommt einen neuen Schlüssel, und ihre {devices} Gerät(e) können sich nicht mehr mit diesem Server verbinden. Ihre Macs behalten die Dateien, die sie schon haben.",

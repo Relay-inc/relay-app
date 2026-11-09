@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-member-dark|shared-keeper|shared-people|shared-readers|shared-reader|shared-live|shared-live-dark|shared-nohistory, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-member-dark|shared-keeper|shared-people|shared-readers|shared-reader|shared-live|shared-live-dark|shared-nohistory|shared-org, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
@@ -78,8 +78,12 @@ const live = fixture === "shared-live" || fixture === "shared-live-dark";
 // shared-nohistory: "shared", the workspace Northwind made without history (its member list's `nohistory`): its
 // conflict copy names no Mac
 const noHistory = fixture === "shared-nohistory";
+// shared-org: "shared" on a full machine (not for workspaces only) whose server has an organisation, this Mac one of
+// its admins: Organisation under the machine (docs/workspaces.md, Organisation), Northwind's policy Claude Code only
+const org = fixture === "shared-org";
 const shared =
   fixture === "shared" ||
+  org ||
   noHistory ||
   fixture === "kb-shared" ||
   fixture === "shared-invite" ||
@@ -93,7 +97,7 @@ if (shared)
   settings = {
     ...settings,
     extraVaults: [vault.TEAM_VAULT],
-    machines: member || reader ? [] : structuredClone(vault.hubMachines),
+    machines: member || reader ? [] : org ? vault.hubMachines.map(m => ({ ...m, sharedOnly: false })) : structuredClone(vault.hubMachines),
     sharedVaults: structuredClone(reader ? vault.readerVaults : member ? vault.memberVaults : vault.sharedVaults),
   };
 // buddy: Buddy switched on, the first project linked to a Buddy project (fixtures/integrations buddy)
@@ -153,6 +157,8 @@ for (const s of Object.values(sharedStatus).slice(0, 1)) {
       held: [],
     });
 }
+if (org) for (const s of Object.values(sharedStatus)) s.policy = { providers: ["claude"], capture: false };
+let orgState = structuredClone(vault.organisation);
 if (fixture === "shared-rekey")
   for (const s of Object.values(sharedStatus))
     Object.assign(s, {
@@ -502,6 +508,42 @@ function handle(cmd: string, a: Args): unknown {
         me: vault.SHARED_ME,
       };
     }
+    // the organisation of a machine's server (src-tauri/src/organisation.rs), fixture "shared-org"
+    case "org_status":
+      return org
+        ? { exists: true, me: true, owner: true, code: vault.ORG_CODE, admins: orgState.admins.map((x: { fp: string }) => x.fp) }
+        : { exists: false, me: false, owner: true, code: vault.ORG_CODE, admins: [] };
+    case "org_overview":
+      return structuredClone(orgState);
+    case "org_add_admin": {
+      const c = orgState.candidates.find((x: { fp: string }) => x.fp === a.fp);
+      if (!c || c.code !== a.code) return Promise.reject("the device's keys changed since you compared the code");
+      orgState.candidates = orgState.candidates.filter((x: { fp: string }) => x.fp !== a.fp);
+      orgState.admins = [...orgState.admins, { fp: c.fp, name: c.name }];
+      return null;
+    }
+    case "org_remove_admin":
+      orgState.admins = orgState.admins.filter((x: { fp: string }) => x.fp !== a.fp);
+      return null;
+    case "org_start":
+      return null;
+    case "org_offboard": {
+      const hit = (w: { members: { fp: string }[] }) => w.members.some(m => a.fps.includes(m.fp));
+      const removed = orgState.workspaces.filter((w: any) => hit(w) && w.admin).map((w: any) => w.name);
+      const skipped = orgState.workspaces.filter((w: any) => hit(w) && !w.admin).map((w: any) => w.name);
+      for (const w of orgState.workspaces) if (w.admin) w.members = w.members.filter((m: { fp: string }) => !a.fps.includes(m.fp));
+      orgState.people = orgState.people
+        .map((p: any) => ({ ...p, workspaces: p.workspaces.filter((w: any) => !removed.includes(w.name) || !p.devices.some((d: any) => a.fps.includes(d.fp))) }))
+        .filter((p: any) => !p.devices.every((d: any) => a.fps.includes(d.fp)) || p.workspaces.length);
+      return { removed, skipped, failed: [], revoked: a.fps.length };
+    }
+    case "shared_vault_policy": {
+      const s = sharedStatus[a.id];
+      if (s) s.policy = { providers: a.providers, capture: a.capture };
+      return null;
+    }
+    case "shared_vault_add_org":
+      return 0;
     case "shared_vault_invite_revoke":
       sharedInvites = sharedInvites.filter(i => i.id !== a.invite);
       return null;

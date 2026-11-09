@@ -234,6 +234,65 @@ export const sharedMembers = [
 export const sharedPeople = [
   { who: "a1".repeat(32), name: "Alex Moreau", email: "alex@example.com", devices: [SHARED_ME, sharedMembers[1].fp] },
 ];
+/** shared-org: the server's organisation as its overview shows it to this Mac, one of its admins (Alex Moreau's two
+ *  Macs). Northwind is managed, Acme Retail is not (Alex is no admin there). Sam Lee works in both, the front desk Mac
+ *  only in Acme Retail. One more Mac published its keys, to be added after comparing its code. All fictional. */
+export const ORG_CODE = "5e1d-a07c-33b9";
+const SAM = "9a4f".padEnd(64, "c");
+const DESK = "2b7e".padEnd(64, "e");
+export const organisation = {
+  admins: [
+    { fp: SHARED_ME, name: "This MacBook" },
+    { fp: sharedMembers[1].fp, name: "Studio Mac" },
+  ],
+  candidates: [{ fp: "3d8e".padEnd(64, "d"), name: "Ops Mac", code: "4f1a-92c7-0b3e" }],
+  workspaces: [
+    {
+      id: SHARED_ID,
+      name: "Northwind",
+      list: true,
+      managed: true,
+      admin: true,
+      nohistory: false,
+      members: sharedMembers.map(m => ({ fp: m.fp, name: m.name, role: m.role, person: m.fp === SAM ? "s1".repeat(32) : "a1".repeat(32), listed: true })),
+      people: [],
+    },
+    {
+      id: "fedcba9876543210",
+      name: "Acme Retail",
+      list: true,
+      managed: false,
+      admin: false,
+      nohistory: false,
+      members: [
+        { fp: DESK, name: "Front desk Mac", role: "admin", person: "", listed: true },
+        { fp: SAM, name: "Design laptop", role: "member", person: "s2".repeat(32), listed: true },
+      ],
+      people: [],
+    },
+  ],
+  people: [
+    {
+      name: "Alex Moreau",
+      email: "alex@example.com",
+      devices: [
+        { fp: SHARED_ME, name: "This MacBook" },
+        { fp: sharedMembers[1].fp, name: "Studio Mac" },
+      ],
+      workspaces: [{ id: SHARED_ID, name: "Northwind", role: "admin" }],
+    },
+    { name: "Front desk Mac", email: "", devices: [{ fp: DESK, name: "Front desk Mac" }], workspaces: [{ id: "fedcba9876543210", name: "Acme Retail", role: "admin" }] },
+    {
+      name: "Sam Lee",
+      email: "sam@example.com",
+      devices: [{ fp: SAM, name: "Design laptop" }],
+      workspaces: [
+        { id: SHARED_ID, name: "Northwind", role: "member" },
+        { id: "fedcba9876543210", name: "Acme Retail", role: "member" },
+      ],
+    },
+  ],
+};
 /** An invite link as the backend makes one: the pairing line with vault, invite and secret (dummy hex). */
 export const inviteLink = (invite: string) =>
   `relay://192.168.1.2:47800#fp=${HUB_FP}&code=${"3c".repeat(16)}&vault=${SHARED_ID}&invite=${invite}&secret=${"9e".repeat(32)}`;
