@@ -1557,9 +1557,74 @@ fn a_workspace_made_without_history_says_so_to_every_member() {
     let info = |m: &Member| m.c.call(serde_json::json!({"op": "vault_info", "vault": t.vault})).unwrap()["vault"]["nohistory"].clone();
     assert_eq!((info(&a), info(&b)), (serde_json::json!(true), serde_json::json!(true)));
     assert!(a.keys().nohistory && b.keys().nohistory && b.step(&t.vault).nohistory);
-    // no shared documents yet: they record who wrote each update (K1b makes that anonymous)
-    assert_eq!(a.remote(&t.vault).set_docs(true, &a.save()).unwrap_err(), relay_remote::vault::NO_DOCS_YET);
-    assert!(!list_of(&t, &a).docs);
+}
+
+/// A workspace without history's documents (docs/workspaces.md, Without history): an admin turns them on as anywhere;
+/// each Mac writes as a session of its own, which the server keeps and passes on (log, live stream, cursors) instead
+/// of the device, and writes no `.from`; a Relay that sends no session (one from before) cannot write there.
+#[test]
+fn a_workspace_without_history_has_documents_by_session() {
+    use relay_remote::channel::Event;
+    let t = team("nohistory-docs");
+    let a = Member::new(&t.laptop, &t.lid, &t.key);
+    a.remote(&t.vault).start(true, &a.save()).unwrap();
+    rounds(&t, &[&a], 1);
+    let (b, _) = join(&a.invite(&t, "member"), "nohistory-docs-b");
+    rounds(&t, &[&b, &a, &b], 1);
+    a.remote(&t.vault).set_docs(true, &a.save()).unwrap();
+    assert!(list_of(&t, &a).docs && b.step(&t.vault).docs, "on as anywhere");
+    let dirs = std::env::temp_dir().join(format!("relay-e2e-nohistory-docs-{}", std::process::id()));
+    let da = a.c.docs(&t.vault, a.keys(), &dirs.join("a"), &a.fp);
+    let db = b.c.docs(&t.vault, b.keys(), &dirs.join("b"), &b.fp);
+    let (sa, sb) = (da.me(), db.me());
+    assert!(da.anonymous() && sa.len() == 16 && sa != a.fp[..16] && sb != b.fp[..16] && sa != sb, "{sa} {sb}");
+    let (cb, rb) = events(&b.c, &t.vault, &b.keys());
+    let (ca, ra) = events(&a.c, &t.vault, &a.keys());
+    wait_for(&rb, 10, |e| matches!(e, Event::Live { .. }));
+
+    // made on A, read on B: the log names A's session, never a device, and keeps no `.from`
+    let id = da.create("Plan.md", "# Plan\n").unwrap();
+    db.sync().unwrap();
+    assert_eq!(db.text(&id), "# Plan\n");
+    let page = b.c.call(serde_json::json!({"op": "doc_pull", "vault": t.vault, "doc": da.name(&id), "since": 0, "limit": 10})).unwrap();
+    assert_eq!(page["updates"][0]["from"].as_str(), Some(sa.as_str()));
+    let log = t.s.data.join("vaults").join(&t.vault).join("docs").join(da.name(&id)).join("log");
+    let files: Vec<String> = std::fs::read_dir(&log).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    assert!(files.iter().any(|f| f.ends_with(".sid")) && !files.iter().any(|f| f.ends_with(".from")), "{files:?}");
+    for f in files.iter().filter(|f| f.ends_with(".sid")) {
+        let who = std::fs::read_to_string(log.join(f)).unwrap();
+        assert!(who != a.fp[..16] && who != b.fp[..16], "no device on disk");
+    }
+
+    // live: B's stream gets A's next update from A's session, and A's cursor from it too
+    let edit = da.diff(&id, &[0]).unwrap();
+    let doc = yrs::Doc::new();
+    { use yrs::{Transact, updates::decoder::Decode}; doc.transact_mut().apply_update(yrs::Update::decode_v1(&edit).unwrap()).unwrap(); }
+    let u = { use yrs::{ReadTxn, Text, Transact}; let before = doc.transact().state_vector(); let tx = doc.get_or_insert_text("md"); tx.insert(&mut doc.transact_mut(), 0, "L "); doc.transact().encode_state_as_update_v1(&before) };
+    da.apply_local(&id, &u).unwrap();
+    let Event::Doc { from, .. } = wait_for(&rb, 5, |e| matches!(e, Event::Doc { .. })) else { unreachable!() };
+    assert_eq!(from, sa);
+    wait_for(&ra, 10, |e| matches!(e, Event::Live { .. }));
+    ca.send("awareness", &da.name(&id), br#"{"anchor":1}"#).unwrap();
+    let Event::Frame(f) = wait_for(&rb, 5, |e| matches!(e, Event::Frame(f) if f.kind == "awareness")) else { unreachable!() };
+    assert_eq!(f.from, sa, "a cursor of the same session, no device");
+
+    // a Relay that sends no session (one from before this) cannot write: its push is refused, the log unchanged
+    let mut old = b.keys();
+    old.nohistory = false;
+    let dold = b.c.docs(&t.vault, old, &dirs.join("old"), &b.fp);
+    dold.sync().unwrap();
+    assert_eq!(dold.me(), b.fp[..16]);
+    let before = page_len(&b, &t.vault, &da.name(&id));
+    let _ = dold.create("Other.md", "names its device");
+    assert!(dold.take_warnings().iter().any(|w| w.contains("keeps no record of who wrote what")));
+    assert_eq!(page_len(&b, &t.vault, &da.name(&id)), before);
+    cb.stop();
+    ca.stop();
+    std::fs::remove_dir_all(&dirs).ok();
+}
+fn page_len(m: &Member, vault: &str, doc: &str) -> u64 {
+    m.c.call(serde_json::json!({"op": "doc_pull", "vault": vault, "doc": doc, "since": 0, "limit": 1})).unwrap()["seq"].as_u64().unwrap()
 }
 
 /// An admin on the server before the list, whom another admin's upgrade added as a member (trust on upgrade): only an
@@ -1986,7 +2051,8 @@ fn a_shared_vaults_documents() {
 
     // on the server: nothing readable, and nothing under another key than the vault's
     let stored = s.data.join("vaults").join(&vault).join("docs").join(a.name(&id)).join("log").join(format!("{:012}", 1));
-    assert!(!String::from_utf8_lossy(&std::fs::read(stored).unwrap()).contains("Plan"));
+    assert!(!String::from_utf8_lossy(&std::fs::read(&stored).unwrap()).contains("Plan"));
+    assert_eq!(std::fs::read_to_string(stored.with_file_name(format!("{:012}.from", 1))).unwrap(), lid.fingerprint()[..16], "who pushed it, as before");
     // (a part under another key than the vault's is refused: docs.rs's unit test, a push needs its body after the line)
 
     // the colleague removed: no pull, no push, no list

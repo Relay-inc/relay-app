@@ -315,8 +315,6 @@ impl Keys {
 use crate::members::hex64;
 fn pub_msg(vault: &str, fp: &str, pk: &str, id: &str) -> String { format!("pub:{vault}:{fp}:{pk}:{id}") }
 fn create_msg(vault: &str, fp: &str, id: &str, pk: &str) -> String { format!("create:{vault}:{fp}:{id}:{pk}") }
-/// What `set_docs` answers on a workspace without history: its documents wait until they name no author.
-pub const NO_DOCS_YET: &str = "a workspace without history has no shared documents yet";
 /// What `start` answers a relay-server that knows no member list.
 pub const OLD_SERVER: &str = "This relay-server needs an update for workspaces with a member list.";
 /// Per vault, the member list as this app last checked it: the next round checks only what is new.
@@ -741,8 +739,6 @@ impl SealedRemote {
         let me = v["me"].as_str().unwrap_or_default().to_string();
         let (list, _) = self.list(&k)?.ok_or("this workspace has no member list yet")?;
         if !list.admin(&me) { return Err("only an admin can change this".into()); }
-        // documents record their author per update: on a workspace without history only once that is anonymous too
-        if on && list.nohistory { return Err(NO_DOCS_YET.into()); }
         if list.docs == on { return Ok(()); }
         let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: if on { "docs-on" } else { "docs-off" }.into(), ..Default::default() });
         self.append(&mut k, &list, &e, json!({}), save)

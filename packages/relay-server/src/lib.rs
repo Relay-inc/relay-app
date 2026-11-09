@@ -392,7 +392,7 @@ impl Server {
                 if lens.is_empty() || lens.iter().sum::<u64>() > docs::MAX_PUSH { return reply(&mut w, Err("push too big".into())); }
                 let mut parts = vec![];
                 for l in lens { parts.push(proto::read_body(&mut r, l, relay_remote::docs::MAX_UPDATE)?); }
-                reply(&mut w, self.vaults.doc_push(&fp, s("vault"), s("doc"), parts).map(|seqs| json!({"seq": seqs.last(), "seqs": seqs})))
+                reply(&mut w, self.vaults.doc_push(&fp, s("vault"), s("doc"), s("from"), parts).map(|seqs| json!({"seq": seqs.last(), "seqs": seqs})))
             }
             "doc_pull" => match self.vaults.doc_pull(&fp, s("vault"), s("doc"), req["since"].as_u64().unwrap_or(0), req["limit"].as_u64().unwrap_or(0)) {
                 Ok((mut v, b)) => { v["ok"] = json!(true); proto::write_json(&mut w, &v)?; w.write_all(&b)?; w.shutdown(); Ok(()) }

@@ -210,9 +210,10 @@ pub fn real_path(p: &str) -> Result<String, String> {
 struct One { walker: Walker, allowed: Vec<String>, moved: Vec<(String, String)> }
 /// `live`: each vault's live channel, kept open next to the rounds (keep_live).
 #[derive(Default)]
-/// `live`: each vault's channel and the key epoch it was started with: a newer key starts it again.
+/// `live`: each vault's channel and the key epoch it was started with: a newer key starts it again, as does a key
+/// that says the workspace is without history when the channel's did not (its frames then come from a session).
 /// `docs`: each vault's documents, kept loaded between rounds and live updates.
-pub struct Hub { vaults: Mutex<HashMap<String, Arc<Mutex<One>>>>, pub status: Mutex<HashMap<String, Status>>, live: Mutex<HashMap<String, (Channel, u32)>>,
+pub struct Hub { vaults: Mutex<HashMap<String, Arc<Mutex<One>>>>, pub status: Mutex<HashMap<String, Status>>, live: Mutex<HashMap<String, (Channel, (u32, bool))>>,
     docs: Mutex<HashMap<String, Arc<Docs>>> }
 
 impl Hub {
@@ -323,8 +324,7 @@ impl Hub {
                 if !r.errors.is_empty() { one.allowed = allowed.clone(); }
                 // the workspace's notes made documents, SEED a round, on an admin's Mac once an admin turned it on: only
                 // notes this round left the same here and on the server (the rest stay on the file rounds until then)
-                // never on a workspace without history (yet): a document records who wrote each update
-                if has_docs && st.docs && st.admin && !st.nohistory && r.errors.is_empty() {
+                if has_docs && st.docs && st.admin && r.errors.is_empty() {
                     let agreed = |p: &str, h: &str| next.get(p).is_some_and(|e| e.hash == h) && !r.conflicts.iter().any(|c| c == p);
                     docs.seed(folder, &f, SEED, &agreed);
                     st.warnings.extend(docs.take_warnings());
@@ -501,16 +501,16 @@ impl Hub {
         let mut live = self.live.lock().unwrap();
         // a channel of a vault no longer listed, or one still on an older key than the key file's, stops after this
         // lock is let go (its Down marks it not live); the second starts again with the new key
-        let epochs: HashMap<String, u32> = list.iter().filter_map(|v| load_key(data, &v.id).ok().map(|k| (v.id.clone(), k.epoch()))).collect();
+        let epochs: HashMap<String, (u32, bool)> = list.iter().filter_map(|v| load_key(data, &v.id).ok().map(|k| (v.id.clone(), (k.epoch(), k.nohistory)))).collect();
         let gone: Vec<Channel> = live.keys().filter(|id| !epochs.contains_key(*id)).cloned().collect::<Vec<_>>().into_iter().filter_map(|id| live.remove(&id)).map(|(c, _)| c).collect();
         // one on an older key goes on with the new one, its replay counters kept (Channel::renew)
         for (id, (c, e)) in live.iter_mut() {
-            if epochs.get(id).is_some_and(|n| n != e) { if let Ok(k) = load_key(data, id) { *e = k.epoch(); *c = c.renew(k); } }
+            if epochs.get(id).is_some_and(|n| n != e) { if let Ok(k) = load_key(data, id) { *e = (k.epoch(), k.nohistory); *c = c.renew(k); } }
         }
         for v in list {
             if live.contains_key(&v.id) { continue; }
             let Ok(key) = load_key(data, &v.id) else { continue };
-            let e = key.epoch();
+            let e = (key.epoch(), key.nohistory);
             let (h, id) = (app.clone(), v.id.clone());
             let (d, vid) = (data.to_path_buf(), v.id.clone());
             let folder = v.folder.clone();

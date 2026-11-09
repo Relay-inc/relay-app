@@ -1416,13 +1416,15 @@ fn shared_doc_absorb(state: State<App>, path: String, by: String) {
 }
 
 /// A page's note opened in a shared workspace: when it is a document, its id, everything this Mac has of it (Yjs v1,
-/// base64), this device's fingerprint and the name its cursor shows to others; None for any other note, which an
-/// editor saves as a file.
+/// base64), who this Mac writes as and the name its cursor shows to others; None for any other note, which an editor
+/// saves as a file. Without history (`anonymous`): this run's session and no name (docs/workspaces.md).
 #[tauri::command]
 fn shared_doc_open(state: State<App>, path: String) -> Option<Value> {
     let (vault, _, rel) = shared_note(&state, &path)?;
     let (doc, update) = state.shared.doc_open(&vault, &rel)?;
-    Some(json!({"vault": vault, "doc": doc, "state": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, update), "me": state.machines.id.fingerprint(), "name": sys_name()}))
+    let anon = state.shared.loaded_docs(&vault).is_some_and(|d| d.anonymous());
+    let (me, name) = match state.shared.loaded_docs(&vault) { Some(d) if anon => (d.me(), String::new()), _ => (state.machines.id.fingerprint(), sys_name()) };
+    Some(json!({"vault": vault, "doc": doc, "state": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, update), "me": me, "name": name, "anonymous": anon}))
 }
 /// An edit made in a page's editor to a document (Yjs v1 update, base64): into it and sent, the note written out.
 #[tauri::command]
@@ -1435,16 +1437,18 @@ async fn shared_doc_edit(app: AppHandle, path: String, doc: String, update: Stri
     }).await
 }
 /// A page's history, newest first. A shared workspace's document: its sessions from the log (`Docs::history`), each
-/// author named as the server lists the members. Any other note: the commits of its workspace's git repo that changed
-/// it, when it is in one. `kind`: "doc", "git" or "none".
+/// author named as the server lists the members, or without history no author (`anonymous`: each an anonymous
+/// session). Any other note: the commits of its workspace's git repo that changed it, when it is in one. `kind`:
+/// "doc", "git" or "none".
 #[tauri::command]
 async fn page_history(app: AppHandle, state: State<'_, App>, path: String) -> Result<Value, String> {
     if let Some((vault, _, rel)) = shared_note(&state, &path) {
         if state.shared.loaded_docs(&vault).is_some_and(|d| d.paths().contains_key(&rel)) {
-            let names = shared_vaults::member_names(&state, &vault).await;
+            let anon = state.shared.loaded_docs(&vault).is_some_and(|d| d.anonymous());
+            let names = if anon { Default::default() } else { shared_vaults::member_names(&state, &vault).await };
             let versions = on_files(move || app.state::<App>().shared.doc_history(&vault, &rel).unwrap_or_else(|| Ok(vec![]))).await?;
-            let named = |fp: &str| shared_vaults::name_of(&names, fp);
-            return Ok(json!({"kind": "doc", "versions": versions.iter().rev().map(|v| json!({
+            let named = |fp: &str| if anon { String::new() } else { shared_vaults::name_of(&names, fp) };
+            return Ok(json!({"kind": "doc", "anonymous": anon, "versions": versions.iter().rev().map(|v| json!({
                 "key": v.to.to_string(), "author": named(&v.author), "by": v.by, "at": v.end, "text": v.text, "added": v.added, "removed": v.removed,
             })).collect::<Vec<_>>()}));
         }
@@ -1470,19 +1474,21 @@ fn commented(state: &State<App>, target: &str) -> Result<Commented, String> {
     let roots = { let s = state.settings.lock().unwrap(); policy::all_vaults(&s) };
     comments::locate(&roots, target).map(|(r, rel)| Commented::File(r, rel)).ok_or_else(|| format!("not a note of a workspace: {target}"))
 }
-/// A page's comment threads (comments.rs): `kind` "doc" (shared, every member's) or "file" (this Mac's own).
+/// A page's comment threads (comments.rs): `kind` "doc" (shared, every member's) or "file" (this Mac's own). Without
+/// history (`anonymous`): no author's name, this Mac's own comments known by its sessions, and nobody to mention.
 pub(crate) async fn comments_of(state: &State<'_, App>, target: &str) -> Result<Value, String> {
     match commented(state, target)? {
         Commented::Doc(vault, doc) => {
-            let names = shared_vaults::member_names(state, &vault).await;
             let docs = state.shared.loaded_docs(&vault).ok_or("the workspace's documents are not loaded yet")?;
+            let anon = docs.anonymous();
+            let names = if anon { Default::default() } else { shared_vaults::member_names(state, &vault).await };
             let entries: Vec<comments::Entry> = docs.comments(&doc).into_iter().filter_map(|(k, a, v)| Some((k, a, serde_json::from_str(&v).ok()?))).collect();
-            let name = |a: &str| shared_vaults::name_of(&names, a);
-            let me = docs.me().to_string();
+            let name = |a: &str| if anon { String::new() } else { shared_vaults::name_of(&names, a) };
+            let me = docs.me();
             // who an @ in a comment may name (ticket 12): the other members, by the first 16 hex a mention keeps
             let members: Vec<Value> = names.iter().map(|(fp, n)| (fp.chars().take(16).collect::<String>(), n)).filter(|(fp, _)| *fp != me)
                 .map(|(fp, n)| json!({"fp": fp, "name": n})).collect();
-            Ok(json!({"kind": "doc", "doc": doc, "members": members, "threads": comments::threads(&entries, &|a| a == me, &name)}))
+            Ok(json!({"kind": "doc", "doc": doc, "anonymous": anon, "members": members, "threads": comments::threads(&entries, &|a| docs.is_mine(a), &name)}))
         }
         Commented::File(root, rel) => {
             let me = sys_name();
@@ -1492,9 +1498,12 @@ pub(crate) async fn comments_of(state: &State<'_, App>, target: &str) -> Result<
 }
 /// A comment entry added to a page (`comments::entry`): its key.
 pub(crate) fn comment_add(state: &State<App>, target: &str, kind: &str, on: &str, text: &str, quote: &str, anchor: &Value, mentions: &[String]) -> Result<String, String> {
-    let v = comments::entry(kind, on, text, quote, anchor, mentions)?;
+    let at = commented(state, target)?;
+    // without history nobody is mentioned: a mention names a member's device
+    let anon = matches!(&at, Commented::Doc(vault, _) if state.shared.loaded_docs(vault).is_some_and(|d| d.anonymous()));
+    let v = comments::entry(kind, on, text, quote, anchor, if anon { &[] } else { mentions })?;
     let key = comments::new_key();
-    match commented(state, target)? {
+    match at {
         Commented::Doc(vault, doc) => state.shared.loaded_docs(&vault).ok_or("the workspace's documents are not loaded yet")?.put_comment(&doc, &key, &v.to_string())?,
         Commented::File(root, rel) => comments::add_local(&root, &rel, &key, v)?,
     }
@@ -1513,18 +1522,19 @@ fn entries_of(docs: &relay_remote::docs::Docs, id: &str) -> Vec<comments::Entry>
     docs.comments(id).into_iter().filter_map(|(k, a, v)| Some((k, a, serde_json::from_str(&v).ok()?))).collect()
 }
 /// The Inbox of the workspace in `folder` (ticket 12): its open comment threads that mention this Mac's member or are on a
-/// page this Mac edited, newest first, each with the page it is on. Empty for a workspace of this Mac's own.
+/// page this Mac edited, newest first, each with the page it is on. Empty for a workspace of this Mac's own. Without
+/// history only the pages this Mac edited: there are no mentions.
 #[tauri::command]
 async fn workspace_inbox(state: State<'_, App>, folder: String) -> Result<Vec<Value>, String> {
     let Some(v) = shared_vaults::list(&state.settings.lock().unwrap()).into_iter().find(|v| v.folder == folder) else { return Ok(vec![]) };
     let Some(docs) = state.shared.loaded_docs(&v.id) else { return Ok(vec![]) };
-    let names = shared_vaults::member_names(&state, &v.id).await;
-    let me = docs.me().to_string();
+    let anon = docs.anonymous();
+    let names = if anon { Default::default() } else { shared_vaults::member_names(&state, &v.id).await };
     let mut out: Vec<Value> = docs.paths().into_iter().flat_map(|(rel, id)| {
         let edited = docs.edited(&id);
         let page = format!("{}/{rel}", v.folder.trim_end_matches('/'));
-        comments::threads(&entries_of(&docs, &id), &|a| a == me, &|a| shared_vaults::name_of(&names, a)).into_iter()
-            .filter(move |t| t["resolved"] != true && (t["mentionsMe"] == true || edited))
+        comments::threads(&entries_of(&docs, &id), &|a| docs.is_mine(a), &|a| if anon { String::new() } else { shared_vaults::name_of(&names, a) }).into_iter()
+            .filter(move |t| t["resolved"] != true && ((!anon && t["mentionsMe"] == true) || edited))
             .map(move |t| json!({"page": page, "thread": t})).collect::<Vec<_>>()
     }).collect();
     out.sort_by_key(|x| std::cmp::Reverse(x["thread"]["at"].as_u64().unwrap_or(0)));
@@ -1533,11 +1543,12 @@ async fn workspace_inbox(state: State<'_, App>, folder: String) -> Result<Vec<Va
 /// Ticket 12: the comments in a shared workspace that mention this Mac's member and were not told yet, each a banner,
 /// once (the keys told are kept beside its documents, so a restart tells nothing again), and a bare push to this Mac's
 /// phones (ntfy.sh is public: no name, no text). The first look at a workspace only notes what is there, so an update of
-/// Relay tells nothing old.
+/// Relay tells nothing old. None without history: nobody is mentioned there.
 fn tell_mentions(h: &AppHandle, v: &shared_vaults::Shared) {
     let st = h.state::<App>();
     let Some(docs) = st.shared.loaded_docs(&v.id) else { return };
-    let me = docs.me().to_string();
+    if docs.anonymous() { return; }
+    let me = docs.me();
     let file = data_dir(h).join("shared-docs").join(&v.id).join("mentions-seen.json");
     let first = comments::load_seen(&file).is_none();
     let mut seen = comments::load_seen(&file).unwrap_or_default();

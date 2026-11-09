@@ -49,6 +49,12 @@ pub(crate) struct Vault { pub id: String, pub name: String, pub created: u64, pu
 impl Vault {
     fn role(&self, fp: &str) -> Option<&str> { self.members.iter().find(|m| m.fp == fp).map(|m| m.role.as_str()) }
     fn has_admin(&self) -> bool { self.members.iter().any(|m| m.role == "admin") }
+    /// Made without history (docs/workspaces.md): the member list's entry 1 is `nohistory`, the only place it may be,
+    /// and the log took it only once the whole list checked.
+    pub(crate) fn nohistory(&self) -> bool { self.log.get(1).is_some_and(|e| e.kind == "nohistory") }
+    /// Whether `from` may stand for a document update's author on a workspace without history: a session id (16 hex)
+    /// that is no member's device, so no Relay names a device there (an old one sends none, or its device).
+    pub(crate) fn session_ok(&self, from: &str) -> bool { hex(from, 16) && !self.members.iter().any(|m| m.fp.starts_with(from)) }
     /// The member list as it stands (checked when each entry went on), none when there is none or it no longer checks.
     fn list(&self) -> Option<members::List> { members::check(&self.id, &self.log, None).ok().map(|(l, _)| l) }
 }
@@ -635,7 +641,7 @@ mod tests {
         ro(s.append(OTHER, &id, &entry("add"), &Default::default()).map(|_| json!({})));
         ro(s.doc_bind(OTHER, &id, &[name('3')]).map(|_| json!({})));
         ro(s.doc_unbind(OTHER, &id, &[name('3')]).map(|_| json!({})));
-        ro(s.doc_push(OTHER, &id, &name('3'), vec![record(&[0; 64], &[0; 64])]).map(|_| json!({})));
+        ro(s.doc_push(OTHER, &id, &name('3'), "", vec![record(&[0; 64], &[0; 64])]).map(|_| json!({})));
         ro(s.invite_revoke(OTHER, &id, "0000000000000000").map(|_| json!({})));
         assert!(s.invite(OTHER, &id, "member", &"ab".repeat(32), 0).unwrap_err().contains("only an admin"));
         assert!(s.invite(OTHER, &id, "reader", &"ab".repeat(32), 0).unwrap_err().contains("only an admin"));

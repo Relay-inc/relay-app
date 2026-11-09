@@ -65,6 +65,8 @@ struct Room {
     stamp: Option<SystemTime>, members: HashSet<String>, readers: HashSet<String>, idle_since: Option<Instant>,
     /// the vault's key epoch as vault.json said: a frame under an older key is dropped (a removed member holds it)
     epoch: u64,
+    /// made without history (the member list's entry 1): a frame is passed on from the session its line names
+    nohistory: bool,
 }
 impl Room {
     fn push(&mut self, seq: u64, line: Line) {
@@ -108,11 +110,11 @@ impl Rooms {
 
 impl Rooms {
     /// A document update `fp` pushed (docs.rs): to every other member's open stream, as `{t:"doc", doc, seq, from,
-    /// e, body}` with its place in the document's log. Not kept in the ring: the log has it. One too big for a frame
-    /// is left to the next pull.
-    pub fn doc(&self, id: &str, fp: &str, name: &str, seq: u64, part: &[u8]) {
+    /// e, body}` with its place in the document's log, `from` as the log keeps it (the device, or without history the
+    /// session). Not kept in the ring: the log has it. One too big for a frame is left to the next pull.
+    pub fn doc(&self, id: &str, fp: &str, from: &str, name: &str, seq: u64, part: &[u8]) {
         if part.len() > MAX_BODY { return; }
-        let line: Line = json!({"t": "doc", "doc": name, "seq": seq, "from": &fp[..16], "body": relay_remote::tls::hex(part)}).to_string().into();
+        let line: Line = json!({"t": "doc", "doc": name, "seq": seq, "from": from, "body": relay_remote::tls::hex(part)}).to_string().into();
         let full = {
             let mut all = self.rooms.lock().unwrap();
             let Some(room) = all.get_mut(id) else { return };
@@ -144,6 +146,7 @@ fn refresh(data: &Path, id: &str, room: &mut Room) -> Option<()> {
         let fps = |reader: bool| v["members"].as_array().into_iter().flatten().filter(|m| !reader || m["role"] == "reader").filter_map(|m| m["fp"].as_str().map(String::from)).collect();
         (room.members, room.readers) = (fps(false), fps(true));
         room.epoch = v["epoch"].as_u64().unwrap_or(0);
+        room.nohistory = v["log"][1]["kind"] == "nohistory";
         room.stamp = Some(stamp);
     }
     Some(())
@@ -266,12 +269,18 @@ fn read_frames(vaults: &Vaults, fp: &str, id: &str, me: u64, heard: &AtomicU64, 
         if !KINDS.contains(&kind) || !hex(doc, 64) || v["l"].as_str().is_some_and(|l| l.len() > 100) { return Err("bad frame".into()); }
         if body.len() > MAX_BODY * 2 || body.len() % 2 != 0 || !body.bytes().all(|b| b.is_ascii_hexdigit()) { return Err("frame too big or not hex".into()); }
         // `from`: the sender's device as the TLS handshake proved it; the app binds it in the seal, so the server
-        // cannot pass a frame off as another member's (a member, holding the key, could)
+        // cannot pass a frame off as another member's (a member, holding the key, could). Without history: the
+        // session the line names, no member's device (an old Relay names none: its frames go nowhere)
         let mut out = json!({"t": "frame", "seq": 0, "from": &fp[..16], "e": v["e"].as_u64().unwrap_or(0), "l": v["l"].as_str().unwrap_or(""), "kind": kind, "doc": doc, "n": n, "body": body});
         let full = {
             let mut all = rooms.rooms.lock().unwrap();
             let Some(room) = all.get_mut(id) else { return Ok(()) };
             if !room.members.contains(fp) { return Err("no longer a member".into()); }
+            if room.nohistory {
+                let from = v["from"].as_str().unwrap_or("");
+                if !hex(from, 16) || room.members.iter().any(|m| m.starts_with(from)) { continue; }
+                out["from"] = json!(from);
+            }
             if out["e"].as_u64().unwrap_or(0) < room.epoch || (kind == "update" && room.readers.contains(fp)) { continue; }
             if kind == "update" { room.seq += 1; out["seq"] = json!(room.seq); }
             let line: Line = out.to_string().into();
