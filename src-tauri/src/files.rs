@@ -32,9 +32,15 @@ pub async fn read_image(path: String) -> Result<(String, String), String> {
     }).await.map_err(|e| e.to_string())?
 }
 
-// what macOS would run instead of show: an app, a script, an installer, any file with an execute bit
+// what the system would run instead of show: an app, a script, an installer, any file with an execute bit (macOS),
+// anything Windows runs by its extension (no execute bit there)
 fn runs(path: &Path) -> bool {
-    const RUN: [&str; 9] = ["app", "command", "tool", "terminal", "workflow", "scpt", "pkg", "mpkg", "sh"];
+    #[cfg(not(windows))]
+    const RUN: &[&str] = &["app", "command", "tool", "terminal", "workflow", "scpt", "pkg", "mpkg", "sh"];
+    #[cfg(windows)]
+    const RUN: &[&str] = &["exe", "com", "bat", "cmd", "ps1", "psm1", "vbs", "vbe", "js", "jse", "wsf", "wsh", "msi", "msp",
+        "msix", "appx", "scr", "hta", "cpl", "lnk", "url", "pif", "reg", "jar", "appref-ms", "application", "library-ms",
+        "settingcontent-ms", "sh"];
     let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
     RUN.contains(&ext.as_str()) || std::fs::metadata(path).is_ok_and(|m| m.is_file() && crate::platform::executable(&m))
 }
