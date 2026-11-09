@@ -249,6 +249,9 @@ pub struct Report {
     /// the copy paths
     pub conflicts: Vec<String>,
     pub skipped: Vec<String>, pub errors: Vec<String>,
+    /// files kept out because of their name, also in `skipped`, for the user to rename where they were made: a name
+    /// Windows cannot hold (on Windows, `windows_name`), or one that is the same file as another on this disk (case)
+    pub names: Vec<String>,
     /// deletes that wait for the user (`Guard`): these paths keep their base, so every round plans them again
     pub held: Vec<String>,
 }
@@ -278,7 +281,9 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
     let all = match remote.manifest() { Ok(m) => m, Err(e) => { rep.errors.push(format!("remote manifest: {e}")); return (base.clone(), rep); } };
     let (mut rm, folded) = (Manifest::new(), filter.folded());
     for (p, e) in all {
-        if !safe_rel(&p) || (filter.max_size > 0 && e.size > filter.max_size) { skipped.push(p); }
+        // a name NTFS refuses would land as another file there (`a:b` a stream of `a`, `a.` as `a`, `CON` a device)
+        if cfg!(windows) && safe_rel(&p) && !windows_name(&p) { rep.names.push(p.clone()); skipped.push(p); }
+        else if !safe_rel(&p) || (filter.max_size > 0 && e.size > filter.max_size) { skipped.push(p); }
         else if !folded.skips_folded(&fold(&p), false) { rm.insert(p.clone(), Entry { path: p, ..e }); }
     }
     // with no_links, a path behind a link here stays as it is on both sides: not followed, and not read as deleted
@@ -378,6 +383,7 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
         }
     }
     progress(acts.len(), acts.len());
+    rep.names.extend(clashes.iter().cloned());
     skipped.extend(clashes);
     rep.skipped = skipped;
     (next, rep)
@@ -484,6 +490,18 @@ pub fn write_atomic(path: &Path, data: &[u8], mtime: Option<i64>) -> io::Result<
 /// sides before touching disk.
 pub fn safe_rel(rel: &str) -> bool {
     !rel.is_empty() && !rel.contains(['\0', '\\']) && rel.split('/').all(|s| !s.is_empty() && s != "." && s != "..")
+}
+
+/// Whether every name in `rel` can exist on Windows: none of `< > : " | ? *` or a control character, no dot or space at
+/// the end, and not a device name (CON, PRN, AUX, NUL, COM0-9, LPT0-9, also with ¹²³ and with an extension, as
+/// `nul.txt`). Names that differ in case only are `plan`'s clashes, on every disk.
+pub fn windows_name(rel: &str) -> bool {
+    rel.split('/').all(|n| {
+        let stem = n.split('.').next().unwrap_or("").trim_end_matches(' ').to_ascii_uppercase();
+        let device = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+            || ["COM", "LPT"].iter().any(|d| stem.strip_prefix(d).is_some_and(|x| (x.len() == 1 && x.as_bytes()[0].is_ascii_digit()) || matches!(x, "¹" | "²" | "³")));
+        !n.is_empty() && !device && !n.ends_with(['.', ' ']) && !n.chars().any(|c| c < ' ' || "<>:\"|?*".contains(c))
+    })
 }
 
 pub fn sha256_hex(data: &[u8]) -> String {
@@ -922,6 +940,15 @@ mod tests {
 
     // ---------- helpers
 
+    #[test] fn windows_name_cases() {
+        for ok in ["Notes/a.md", "System/rules/core/memory.md", "CONSOLE.md", "com10.md", "Nul cat.md", ".claude/x", "a b/c d.md", "Café.md", "LPT.md"] {
+            assert!(windows_name(ok), "{ok}");
+        }
+        for bad in ["a:b.md", "Notes/what?.md", "x*.md", "a<b", "a>b", "a|b", "say \"hi\".md", "tab\there", "trail.", "Notes /a.md", "dir./a.md",
+            "CON", "con.md", "Notes/nul.txt", "AUX.tar.gz", "prn", "COM1.md", "lpt9", "com0", "COM\u{b9}.md", "NUL .md"] {
+            assert!(!windows_name(bad), "{bad}");
+        }
+    }
     #[test] fn safe_rel_cases() {
         for bad in ["../x", "/x", "a//b", "a\\b", "a/../b", "./a", "", "a/", "a\0b"] { assert!(!safe_rel(bad), "{bad}"); }
         assert!(safe_rel("Notes/A b.md"));

@@ -92,6 +92,9 @@ export default {
   "vc.contextMismatchTitle": "Notes die een andere context noemen",
   "vc.cardFields": "Projectkaarten met ontbrekende velden",
   "vc.rowWithoutNote": "Rijen in work-state zonder projectnote",
+  "vc.missingTool": "Ontbreekt op deze computer",
+  "vc.missingToolSub":
+    "De hooks van de vault hebben Git Bash (Git for Windows) en jq nodig, de projectindex Python 3. Installeer wat ontbreekt en herstart Relay.",
   "vc.manual": "Vraagt jou",
   "vc.repair": "Herstellen",
   "vc.repairAll": "Alles herstellen ({n})",
@@ -1315,6 +1318,10 @@ export default {
   "set.sharedTrust": "Nieuwe sleutel vertrouwen",
   "set.sharedConflicts_one": "{n} conflict. Beide versies zijn bewaard:",
   "set.sharedConflicts_other": "{n} conflicten. Beide versies zijn bewaard:",
+  "set.sharedNames_one":
+    "{n} bestand niet gesynct op deze computer: de naam kan hier niet bestaan (op Windows, of dezelfde naam als een ander bestand op hoofdletters na). Hernoem het waar het gemaakt is:",
+  "set.sharedNames_other":
+    "{n} bestanden niet gesynct op deze computer: hun namen kunnen hier niet bestaan (op Windows, of dezelfde naam als een ander bestand op hoofdletters na). Hernoem ze waar ze gemaakt zijn:",
   "set.sharedHeld_one":
     "{n} verwijdering tegengehouden: veel bestanden zouden tegelijk verdwijnen. Er gaat niets weg tot je kiest:",
   "set.sharedHeld_other":

@@ -368,8 +368,9 @@ CI (`.github/workflows/checks.yml`) runs the TypeScript checks plus `vite build`
 `cargo check`: on macOS with the tests, on Windows without `relay-server` (a Linux and Mac server) and without tests.
 The app builds for Windows but does little there yet: Unix-only calls (local sockets, process groups, file modes,
 symlinks, this Mac as a work machine, Whisper) sit behind `cfg` gates with stand-ins (`src-tauri/src/platform.rs`,
-`packages/relay-remote/src/sock.rs`), each with a `ponytail:` comment naming the Windows PR (W2 to W4) that fills it
-in.
+`packages/relay-remote/src/sock.rs`), each with a `ponytail:` comment naming the Windows PR that fills it in. A vault
+works there: `.claude` is a directory junction, sync leaves out names NTFS refuses, and the vault check lists Git Bash,
+jq and Python 3 when they are missing (docs/workspaces.md, Members on Windows).
 `cargo check --target x86_64-pc-windows-msvc` from a Mac stops at the C build scripts (ring, SQLite, the Windows
 resource file), which need the Windows SDK: CI is the check.
 

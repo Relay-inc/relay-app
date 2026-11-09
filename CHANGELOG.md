@@ -16,6 +16,7 @@ a PR. Versions follow
 ### Added
 
 - Relay compiles for Windows, and every PR is checked on macOS and Windows. It does not work on Windows yet: conversations and the `relay` command report that local sockets are not supported, and secrets, the login PATH, the `.claude` link of a vault, Whisper and this computer as a work machine are missing there (#451)
+- Vaults on Windows: `.claude` links to `System/` as a directory junction (no admin rights needed), a workspace round there leaves out files whose names Windows cannot hold and lists them under the workspace in Settings › Machines with the case clashes every computer skips, and the vault check lists Git Bash, jq and Python 3 when the vault's hooks or project index need them and they are missing (#PR)
 
 ### Fixed
 

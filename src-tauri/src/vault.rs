@@ -224,7 +224,7 @@ fn create(template: &Path, overlay: Option<&Path>, dest: &Path) -> Result<(), St
         }
     }
     let link = dest.join(".claude");
-    if fs::symlink_metadata(&link).is_err() { crate::platform::symlink("System", &link).map_err(|e| e.to_string())?; }
+    if !crate::platform::dir_link_ok(&link) { crate::platform::dir_link("System", &link).map_err(|e| e.to_string())?; }
     Ok(())
 }
 

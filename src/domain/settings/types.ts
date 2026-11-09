@@ -130,6 +130,8 @@ export type SharedStatus = {
   conflicts: string[];
   errors: string[];
   held: string[];
+  // files the last round left out for their name: one Windows cannot hold (on Windows), or a clash in case only
+  names?: string[];
   bad: number;
   live?: boolean; // the live channel is connected; false or missing: rounds every 10 s only
   // what the member list says is wrong: a list the server cannot be trusted on, another member who saw a newer one, a

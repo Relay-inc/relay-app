@@ -89,11 +89,14 @@ pub fn check(side: &Side, starter: &Starter) -> Vec<Finding> {
     let mut out = vec![];
     let f = |kind, context: &str, path: String, paths, fix| Finding { kind, context: context.into(), path, paths, fix };
     if from_starter(&vault) {
-        if fs::symlink_metadata(vault.join(".claude")).is_err() { out.push(f("claude_link", "", ".claude".into(), vec![], true)); }
+        if !crate::platform::dir_link_ok(&vault.join(".claude")) { out.push(f("claude_link", "", ".claude".into(), vec![], true)); }
         for r in starter.required() {
             if fs::symlink_metadata(vault.join(&r)).is_err() { out.push(f("missing_file", "", r, vec![], true)); }
         }
     }
+    // macOS has what the starter's scripts and hooks run, Windows does not
+    #[cfg(windows)]
+    out.extend(missing_tools(&vault, &windows_has));
     let root = fs::canonicalize(projects::notes_root(side)).unwrap_or_else(|_| vault.clone());
     let contexts = projects::listed(side);
     let rules = projects::rules_dir(side);
@@ -267,7 +270,7 @@ pub fn repair(side: &Side, starter: &Starter, ids: &[String], today: &str) -> Re
     for f in check(side, starter).into_iter().filter(|f| f.fix && ids.contains(&f.id())) {
         let at = vault.join(&f.path);
         match f.kind {
-            "claude_link" => crate::platform::symlink("System", &at).map_err(|e| e.to_string())?,
+            "claude_link" => crate::platform::dir_link("System", &at).map_err(|e| e.to_string())?,
             "missing_file" => {
                 let src = starter.file(&f.path).ok_or_else(|| format!("no starter copy of {}", f.path))?;
                 projects::write_new(&at, &fs::read_to_string(src).map_err(|e| e.to_string())?)?;
@@ -297,6 +300,34 @@ pub fn repair(side: &Side, starter: &Starter, ids: &[String], today: &str) -> Re
         done += 1;
     }
     Ok(done)
+}
+
+/// What runs the vault's own files and is not on this computer, each a finding Repair cannot fix: `python` (Python 3)
+/// for System/scripts/build-index.py, which Relay runs for the project index, and `bash` (Git Bash) and `jq` for the
+/// `.sh` hooks Claude Code runs (in PowerShell without Git Bash, where they fail). `context` names what needs it.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn missing_tools(vault: &Path, has: &dyn Fn(&str) -> bool) -> Vec<Finding> {
+    let hooks = fs::read_dir(vault.join(".claude/hooks")).into_iter().flatten().flatten().any(|e| e.path().extension().is_some_and(|x| x == "sh"));
+    let needs = [("python", "System/scripts/build-index.py", vault.join("System/scripts/build-index.py").is_file()), ("bash", "System/hooks", hooks), ("jq", "System/hooks", hooks)];
+    needs.into_iter().filter(|&(tool, _, needed)| needed && !has(tool))
+        .map(|(tool, by, _)| Finding { kind: "missing_tool", context: by.into(), path: tool.into(), paths: vec![], fix: false }).collect()
+}
+/// Whether a tool `missing_tools` asks for is on this Windows computer: Python 3 as Relay runs it, Git Bash where
+/// Git for Windows puts it (or `CLAUDE_CODE_GIT_BASH_PATH`, Claude Code's setting for it), `jq.exe` on the PATH.
+#[cfg(windows)]
+fn windows_has(tool: &str) -> bool {
+    let on_path = |exe: &str| std::env::var_os("PATH").is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(exe).is_file()));
+    match tool {
+        "python" => crate::platform::python("").is_some(),
+        "jq" => on_path("jq.exe"),
+        _ => {
+            let git = std::env::var_os("PATH").and_then(|p| std::env::split_paths(&p).find(|d| d.join("git.exe").is_file()));
+            std::env::var_os("CLAUDE_CODE_GIT_BASH_PATH").map(PathBuf::from).into_iter()
+                .chain(git.and_then(|d| d.parent().map(|g| g.join("bin/bash.exe"))))
+                .chain(std::env::var_os("ProgramFiles").map(|p| Path::new(&p).join("Git/bin/bash.exe")))
+                .any(|b| b.is_file())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -445,5 +476,16 @@ mod tests {
         assert_eq!(named_contexts("context:\n  - \"[[A]]\"\n  - B\nb: 2"), Some(vec!["A".into(), "B".into()]));
         assert_eq!(named_contexts("context:\nb: 2"), None);
         assert_eq!(named_contexts("b: 2"), None);
+    }
+
+    #[test]
+    fn missing_tools_only_for_what_the_vault_runs() {
+        let v = tmp("tools");
+        assert!(missing_tools(&v, &|_| false).is_empty());
+        w(&v, "System/scripts/build-index.py", "");
+        w(&v, ".claude/hooks/check.sh", "");
+        assert_eq!(kinds(&missing_tools(&v, &|_| false)), ["missing_tool System/scripts/build-index.py python", "missing_tool System/hooks bash", "missing_tool System/hooks jq"]);
+        assert_eq!(kinds(&missing_tools(&v, &|t| t != "jq")), ["missing_tool System/hooks jq"]);
+        assert!(missing_tools(&v, &|_| true).iter().all(|f| !f.fix));
     }
 }
