@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- A new vault and a new team workspace start with an `AGENTS.md` next to `CLAUDE.md`, so Codex and OpenCode load the same rules as Claude Code (it points at `CLAUDE.md` and `System/rules/`, nothing is copied). Checking a vault reports a missing `AGENTS.md` and repairs it on request, an existing vault never gets one unasked.
+
 ## [0.0.49] - 2026-11-08
 
 ### Added

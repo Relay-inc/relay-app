@@ -105,7 +105,7 @@ personal things in each member's own vault), `System/rules/core/team.md` in plac
 interviews whoever runs it about the team: what the workspace is for, who works in it, the contexts, conventions,
 external people and organizations, projects, and what never goes in. On a workspace that started as a personal vault
 it offers to move what is the team's into `team.md` and asks before it removes a personal file. A folder with notes is
-uploaded as it is. The first start of Relay still makes the personal starter vault. `scripts/check-default-vault.py`
+uploaded as it is. Both starters carry an `AGENTS.md` (from the default vault, the overlay does not replace it) that points Codex and OpenCode at `CLAUDE.md` and `System/rules/`, so the one set of rules serves every agent. The first start of Relay still makes the personal starter vault. `scripts/check-default-vault.py`
 checks the team starter too.
 
 **Skills are placed on each Mac.** `System/skills/` never syncs, so after a round that moved a file Relay writes its
