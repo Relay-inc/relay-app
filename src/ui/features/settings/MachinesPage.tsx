@@ -13,6 +13,7 @@ import {
 import { Html } from "../../components/Html";
 import { useT } from "../../hooks/useT";
 import { buttonClass, EMPTY_LIST, ERROR_MESSAGE, FIELD, HINT, SELECT } from "./blocks";
+import { ActionsSection } from "./ActionsSection";
 import { Field } from "./Field";
 import { MachineHost } from "./MachineHost";
 import { MachineRow } from "./MachineRow";
@@ -70,6 +71,7 @@ export function MachinesPage({ active }: { active: boolean }) {
       <Html as="p" className={HINT} html={th("mc.intro")} />
       {/* first, so an invite link that opened Relay shows its join form without scrolling */}
       <SharedVaults vaults={vaults.elsewhere} />
+      <ActionsSection ext="knowledge" name={t("act.knowledge")} />
       {runners.length ? (
         <Section title={t("mc.runDefaultTitle")}>
           <Field label={t("mc.runDefault")} hint={t("mc.runDefaultHelp")} id="mcdefault">

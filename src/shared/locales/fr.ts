@@ -1417,6 +1417,7 @@ export default {
     "Où « Ouvrir dans Terminal » poursuit une conversation. Automatique prend le premier installé : iTerm, WezTerm, puis Terminal.",
   "set.favicons": "Icônes de projet",
   "act.reminders": "Rappels",
+  "act.knowledge": "Espaces de connaissances",
   "vs.title": "Sauvegarde git",
   "vs.help":
     "Toutes les quelques minutes, Relay commite le vault et le pousse vers un dépôt git. Il pousse seulement, il ne tire jamais. Git utilise votre propre connexion : une clé ssh, un credential helper ou <code>gh</code>. Un dépôt public est refusé.",

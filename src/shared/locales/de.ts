@@ -1412,6 +1412,7 @@ export default {
     "Wo „Im Terminal öffnen“ ein Gespräch fortsetzt. Automatisch nimmt das erste installierte: iTerm, WezTerm, dann Terminal.",
   "set.favicons": "Projektsymbole",
   "act.reminders": "Erinnerungen",
+  "act.knowledge": "Wissens-Workspaces",
   "vs.title": "Git-Backup",
   "vs.help":
     "Alle paar Minuten committet Relay den Vault und pusht ihn in ein Git-Repository. Nur Push, nie Pull. Git nutzt deinen eigenen Login: einen SSH-Schlüssel, einen Credential Helper oder <code>gh</code>. Ein öffentliches Repository wird abgelehnt.",

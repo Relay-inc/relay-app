@@ -3056,6 +3056,11 @@ const VIEWS = {
     await settingsPage("General");
     await intoView("reminders.push");
   },
+  // relay knowledge.search's agent access under Machines, below the workspaces
+  "settings-knowledge-access": async () => {
+    await settingsPage("Machines", undefined, "shared");
+    await intoView("knowledge.search");
+  },
   // the vault's git backup under General, after a round that pushed
   "settings-vault-sync": async () => {
     await settingsPage("General");

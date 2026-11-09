@@ -1403,6 +1403,7 @@ export default {
     "Waar “Openen in Terminal” een gesprek verderzet. Automatisch neemt de eerste die geïnstalleerd is: iTerm, WezTerm, dan Terminal.",
   "set.favicons": "Projecticonen",
   "act.reminders": "Herinneringen",
+  "act.knowledge": "Kennisworkspaces",
   "vs.title": "Git-backup",
   "vs.help":
     "Om de paar minuten commit Relay de vault en pusht hem naar een git-repository. Enkel pushen, nooit pullen. Git gebruikt je eigen login: een ssh-sleutel, een credential helper of <code>gh</code>. Een publieke repository wordt geweigerd.",

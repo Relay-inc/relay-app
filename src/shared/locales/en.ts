@@ -1393,6 +1393,7 @@ const en = {
     "Where “Open in Terminal” continues a conversation. Automatic takes the first one installed: iTerm, WezTerm, then Terminal.",
   "set.favicons": "Project icons",
   "act.reminders": "Reminders",
+  "act.knowledge": "Knowledge workspaces",
   "vs.title": "Git backup",
   "vs.help":
     "Every few minutes Relay commits the vault and pushes it to a git repository. It only pushes, it never pulls. Git uses your own login: an ssh key, a credential helper or <code>gh</code>. A public repository is refused.",

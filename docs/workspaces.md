@@ -512,6 +512,22 @@ had a history would keep it. Its row in Settings › Machines and the workspace 
   author, computer or user name (`source-author` on a Reference is the source's author). Hooks do not run in a shared
   workspace.
 
+**Reading it from other conversations.** A conversation is fenced to its own workspace, so one in a client's workspace
+cannot open the knowledge workspace's files. `relay knowledge.search query=… [workspace=…] [limit=…]` searches the
+workspaces without history this Mac is a member of (the `nohistory` in its key file, `shared_vaults::knowledge`), with
+the same note index as ⌘K (`related::passages`), and prints at most 20 passages, 10 by default:
+
+```json
+[{ "workspace": "Know-how", "path": "Notes/Rates.md", "passage": "The rate limit is 60 per minute", "score": 1.23 }]
+```
+
+That is all it gives: the path in the workspace, the workspace's name, the line with the hit and its rank. No title,
+no author, no session, no time, so the history the workspace does not keep does not come back through a search. It
+never reads the user's own vault or a workspace with history, also not when named in `workspace`. It only reads, it is
+`auto` like `reminders.list`, and the user changes that under Settings › Machines › Agent access or in `.relay/config.json`
+(`"knowledge": "ask"`). A conversation that runs in the knowledge workspace itself reads its files as any, the action
+works there too. Writing into it from elsewhere is not built.
+
 What it does not hide:
 
 - **The member list:** who is a member, with which role and devices, and who added whom. It is who may, not who did.
