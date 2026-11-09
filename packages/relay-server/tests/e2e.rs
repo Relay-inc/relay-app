@@ -2217,8 +2217,8 @@ fn an_admin_sets_the_workspace_policy_and_every_member_keeps_it() {
 }
 
 /// SSO (docs/workspaces.md, SSO): an organisation admin signs it on, a device asks what to sign in with before it
-/// joins, a join without a token is refused while it is required (and the invite is not spent), and a device whose
-/// join an SSO login verified goes under a person with that email in the admin's next round. The token check itself
+/// joins, a join without a token is refused while it is required (and the invite is not spent), and a device that
+/// signed in names itself as a person with its login's email, signed by itself (never from the server's word). The token check itself
 /// is in oidc.rs's tests (a fake provider): this server cannot reach a real issuer here.
 #[test]
 fn sso_gates_a_join_and_the_verified_email_goes_on_a_person() {
@@ -2249,19 +2249,26 @@ fn sso_gates_a_join_and_the_verified_email_goes_on_a_person() {
     let ann = Member::new(&Client::new(&line.host, line.port, &line.fp, id.clone()), &id, &k);
     rounds(&t, &[&ann, &a, &ann], 1);
     assert!(list_of(&t, &a).members.contains_key(&ann.fp) && list_of(&t, &a).person(&ann.fp).is_empty());
-    // what the server keeps after an SSO join (oidc::gate): the verified email and name on the joiner's record
+    // a server cannot put an address on a person: what it keeps on the record (oidc::gate) only shows, nothing is signed for it
     edit_vault(&t, |v| {
         let m = v["members"].as_array_mut().unwrap().iter_mut().find(|m| m["fp"] == ann.fp.as_str()).unwrap();
-        m["sso"] = serde_json::json!({"email": "ann@example.com", "name": "Ann Example", "at": 1});
+        m["sso"] = serde_json::json!({"email": "mallory@example.com", "name": "Mallory", "at": 1});
     });
-    rounds(&t, &[&a], 1);
+    let len = list_of(&t, &a).len;
+    rounds(&t, &[&a, &ann], 1);
+    assert_eq!(list_of(&t, &a).len, len);
+    // the joiner whose own login returned an address (the app keeps it in the key file at the join) names itself with it
+    let mut k = ann.keys();
+    k.sso = relay_remote::vault::sso_person("Ann@Example.com", "Ann Example");
+    *ann.file.lock().unwrap() = k.format();
+    assert_eq!(relay_remote::vault::Keys::parse(&k.format()).unwrap().sso, k.sso, "kept in the key file");
+    rounds(&t, &[&ann], 1);
     let l = list_of(&t, &a);
     let p = l.persons().into_iter().find(|p| p.devices.contains(&ann.fp)).unwrap();
-    assert_eq!((p.name.as_str(), p.email.as_str()), ("Ann Example", "ann@example.com"));
+    assert_eq!((p.name.as_str(), p.email.as_str(), ann.keys().sso), ("Ann Example", "ann@example.com", None));
     // once under a person, nothing more is signed for it
-    let len = l.len;
-    rounds(&t, &[&a], 1);
-    assert_eq!(list_of(&t, &a).len, len);
+    rounds(&t, &[&ann, &a], 1);
+    assert_eq!(list_of(&t, &a).len, l.len);
     // turned off: no SSO to sign in with
     org::set_sso(&t.laptop, &mut lk, None, &nosave).unwrap();
     assert_eq!(client::sso_info(&a.invite(&t, "member"), &device("sso-bo")).unwrap(), None);

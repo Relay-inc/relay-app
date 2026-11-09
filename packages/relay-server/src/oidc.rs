@@ -73,28 +73,43 @@ pub fn verify(token: &str, jwks: &Value, sso: &Sso, nonce: &str, now: u64) -> Re
     Ok(Signed { email, name })
 }
 
-/// Per issuer: when its keys were fetched, and the keys.
+/// Per issuer: when its keys were last fetched or tried, and the keys (null while none came).
 static KEYS: Mutex<BTreeMap<String, (u64, Value)>> = Mutex::new(BTreeMap::new());
 /// The issuer's keys: from its discovery document's `jwks_uri`, kept `KEYS_SECS`. `fresh`: fetched again (a token named
-/// a key not among them), at most once a `REFETCH_SECS`.
+/// a key not among them). Whatever the outcome, at most one try a `REFETCH_SECS` per issuer: a joiner can never make
+/// this server fetch more often than that.
 fn jwks(issuer: &str, fresh: bool) -> Result<Value, String> {
     let now = crate::now();
-    if let Some((at, k)) = KEYS.lock().unwrap_or_else(|e| e.into_inner()).get(issuer) {
-        if now.saturating_sub(*at) < if fresh { REFETCH_SECS } else { KEYS_SECS } { return Ok(k.clone()); }
+    let had = {
+        let mut keys = KEYS.lock().unwrap_or_else(|e| e.into_inner());
+        let had = keys.get(issuer).cloned();
+        if let Some((at, k)) = &had {
+            let age = now.saturating_sub(*at);
+            if age < REFETCH_SECS || (!fresh && age < KEYS_SECS && !k.is_null()) {
+                return if k.is_null() { Err(UNREACHABLE.into()) } else { Ok(k.clone()) };
+            }
+        }
+        keys.insert(issuer.into(), (now, had.as_ref().map_or(Value::Null, |h| h.1.clone())));
+        had
+    };
+    let fetched = (|| {
+        let conf = get(&format!("{issuer}/.well-known/openid-configuration"))?;
+        // the discovery document must name the issuer it was fetched for (OIDC Discovery 4.3)
+        if conf["issuer"] != issuer { return Err("its discovery document names another issuer".to_string()); }
+        get(conf["jwks_uri"].as_str().filter(|u| u.starts_with("https://")).ok_or("it publishes no keys over https")?)
+    })();
+    match fetched {
+        Ok(k) => { KEYS.lock().unwrap_or_else(|e| e.into_inner()).insert(issuer.into(), (now, k.clone())); Ok(k) }
+        // logged here, never told to the joiner; the keys from before stay in use
+        Err(e) => { eprintln!("relay-server: SSO: the keys of {issuer}: {e}"); had.map(|h| h.1).filter(|k| !k.is_null()).ok_or_else(|| UNREACHABLE.into()) }
     }
-    let conf = get(&format!("{issuer}/.well-known/openid-configuration"))?;
-    // the discovery document must name the issuer it was fetched for (OIDC Discovery 4.3)
-    if conf["issuer"] != issuer { return Err("SSO: the issuer's discovery document names another issuer".into()); }
-    let uri = conf["jwks_uri"].as_str().filter(|u| u.starts_with("https://")).ok_or("SSO: the issuer publishes no keys over https")?;
-    let k = get(uri)?;
-    KEYS.lock().unwrap_or_else(|e| e.into_inner()).insert(issuer.into(), (now, k.clone()));
-    Ok(k)
 }
+const UNREACHABLE: &str = "SSO: this server cannot reach the sign-in provider's keys now: try again later";
 /// One GET with curl (no HTTP client in this binary, as github.rs), https only, its JSON answer.
 fn get(url: &str) -> Result<Value, String> {
     let out = Command::new("curl").args(["-fsS", "-m", "10", "--proto", "=https", "-H", "Accept: application/json", url]).stdin(Stdio::null()).output().map_err(|e| format!("curl: {e}"))?;
-    if !out.status.success() { return Err(format!("SSO: the issuer did not answer: {}", String::from_utf8_lossy(&out.stderr).trim())); }
-    serde_json::from_slice(&out.stdout).map_err(|e| format!("SSO: {e}"))
+    if !out.status.success() { return Err(String::from_utf8_lossy(&out.stderr).trim().to_string()); }
+    serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())
 }
 
 /// The server's SSO for a device that wants to join (`sso_info`): what to sign in with, none when there is none.

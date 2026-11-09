@@ -352,8 +352,10 @@ impl Server {
             "vault_invite" => reply(&mut w, self.vaults.invite(&fp, s("vault"), s("role"), s("wrapped"), req["epoch"].as_u64().unwrap_or(0))),
             "vault_invite_revoke" => reply(&mut w, self.vaults.invite_revoke(&fp, s("vault"), s("invite")).map(|_| json!({}))),
             "vault_join" => {
-                // SSO first (oidc.rs): without a valid token where it is required, the invite is not even tried
-                let res = oidc::gate(&self.data, &self.fp, &fp, &req).and_then(|sso| self.vaults.join(&fp, s("vault"), s("invite"), s("name"), s("proof"), sso.as_ref()));
+                // a good invite proof first (local and cheap: who has none never makes this server fetch an issuer's keys),
+                // then SSO (oidc.rs) before the invite is spent; a bad proof goes on to count as one
+                let join = |sso: Option<&oidc::Signed>| self.vaults.join(&fp, s("vault"), s("invite"), s("name"), s("proof"), sso);
+                let res = if self.vaults.invite_proven(&fp, s("vault"), s("invite"), s("proof")) { oidc::gate(&self.data, &self.fp, &fp, &req).and_then(|sso| join(sso.as_ref())) } else { join(None) };
                 if res.is_ok() { eprintln!("relay-server: {} joined a shared vault ({peer})", req["name"]); }
                 reply(&mut w, res)
             }

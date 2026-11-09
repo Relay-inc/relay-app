@@ -218,6 +218,10 @@ impl Vaults {
     /// the fifth drops the invite; a good one uses it up. A device new here becomes a vault-only client. One that is a
     /// member already keeps its membership, raised to admin by an admin invite, never lowered (that could leave the
     /// vault without an admin).
+    /// Whether `proof` proves the open invite `invite` of vault `id` for `fp`: read only, nothing counted or spent.
+    pub fn invite_proven(&self, fp: &str, id: &str, invite: &str, proof: &str) -> bool {
+        hex(id, 16) && load(&self.data, id).is_some_and(|v| v.invites.iter().any(|i| i.id == invite && tls::verify_proof(&i.code, fp, &self.fp, proof)))
+    }
     /// `sso`: what the device's SSO login verified (oidc::gate), kept on its record.
     pub fn join(&self, fp: &str, id: &str, invite: &str, name: &str, proof: &str, sso: Option<&crate::oidc::Signed>) -> Result<Value, String> {
         let sso = sso.map(|s| json!({"email": s.email, "name": s.name, "at": now()}));
