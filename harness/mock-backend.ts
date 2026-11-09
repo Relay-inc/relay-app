@@ -767,11 +767,12 @@ function handle(cmd: string, a: Args): unknown {
       const at = Date.now();
       return {
         kind: "doc",
+        ...(anonymousDocs ? { anonymous: true } : {}),
         versions: [
           { key: "9", author: "Ana Vos", by: ["claude"], at: at - 20 * 60_000, text: now, added: 3, removed: 0 },
           { key: "6", author: "Ben Lauwers", by: [""], at: at - 3 * 3600_000, text: cut(3), added: 4, removed: 1 },
           { key: "2", author: "Ana Vos", by: ["disk"], at: at - 2 * 86_400_000, text: cut(7), added: 12, removed: 0 },
-        ],
+        ].map(v => (anonymousDocs ? { ...v, author: "" } : v)),
       };
     }
     case "page_comments": {
@@ -814,6 +815,14 @@ function handle(cmd: string, a: Args): unknown {
         ]);
       }
       const threads = threadsOf(comments.get(path)!);
+      if (anonymousDocs)
+        return {
+          kind: "doc",
+          doc: "d1",
+          anonymous: true,
+          members: [],
+          threads: threads.map(t => ({ ...unnamed(t), replies: t.replies.map(unnamed) })),
+        };
       return teamComments ? { kind: "doc", doc: "d1", members: MEMBERS, threads } : { kind: "file", threads };
     }
     case "workspace_inbox":
@@ -907,7 +916,9 @@ function handle(cmd: string, a: Args): unknown {
       // shared-live: an absolute page (another workspace's note) is a document, seeded once from the note's text
       if (!live || !String(a.path).startsWith("/")) return null;
       if (!liveDoc.getText("md").length) liveDoc.getText("md").insert(0, vault.noteText(String(a.path)).text);
-      return { vault: "v1", doc: "d1", state: b64(Y.encodeStateAsUpdate(liveDoc)), me: "me", name: "Alex" };
+      const state = b64(Y.encodeStateAsUpdate(liveDoc));
+      if (anonymousDocs) return { vault: "v1", doc: "d1", state, me: "5e55105e55105e55", name: "", anonymous: true };
+      return { vault: "v1", doc: "d1", state, me: "me", name: "Alex" };
     }
     case "shared_doc_edit":
       Y.applyUpdate(liveDoc, unb64(String(a.update)), "editor");
@@ -2131,6 +2142,10 @@ type Comment = {
 const comments = new Map<string, Comment[]>(); // a page's comment entries (ticket 11), by its path
 // ticket 12: pages read as a team workspace's documents (members to mention, an Inbox), set with __harness.teamComments
 let teamComments = false;
+// a workspace without history (K1b): its documents' history, comments and cursors name no one, set with
+// __harness.anonymousDocs
+let anonymousDocs = false;
+const unnamed = <T extends { by: string }>(c: T) => ({ ...c, by: "" });
 const ME = "aaaaaaaaaaaaaaaa";
 const MEMBERS = [
   { fp: "bbbbbbbbbbbbbbbb", name: "Ben Lauwers" },
@@ -2353,6 +2368,7 @@ const harness = {
   /** someone changed a note on disk: the next save without force is refused */
   changeOnDisk: () => void (diskChanged = true),
   teamComments: () => void (teamComments = true),
+  anonymousDocs: () => void (anonymousDocs = true),
   // the page last read changed outside Relay: its text through `edit`, then the file watcher's event (watch.rs)
   editOutside: (find: string, put: string) => {
     const now = written.get(lastPage)?.text ?? vault.noteText(lastPage).text;

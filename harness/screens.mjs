@@ -2269,6 +2269,25 @@ const VIEWS = {
     await settle(page);
   },
   "page-co-editing-dark": async () => VIEWS["page-co-editing"]("shared-live-dark"),
+  // K1b: the same on a workspace without history: the cursors read "Anonymous" (the names the peers send are dropped)
+  "page-co-editing-nohistory": async () => {
+    await open(page, server.url, { fixture: "shared-live" });
+    await page.evaluate(() => window.__harness.anonymousDocs());
+    await page.keyboard.press("Control+Digit2");
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    for (const folder of ["Contexts", "Contexts/Team", "Contexts/Team/Projects"])
+      await page.locator(`[data-folder="${folder}"]`).click();
+    await page.locator('[data-page="Contexts/Team/Projects/Team Handbook.md"]').click();
+    await waitText("Stand van zaken");
+    await page.waitForFunction(() => window.__harness.liveText().length > 0, null, { timeout: 4000 });
+    await page.evaluate(() => {
+      window.__harness.peerType("- [ ] Second open loop", "\n- [ ] A third loop, typed by someone");
+      window.__harness.peerCursor("a1b2c3d4e5f6a7b8", "Jonas Peeters", "typed by someone");
+      window.__harness.peerCursor("f0e1d2c3b4a59687", "Jeppe", "It links to", 11);
+    });
+    await waitText("Anonymous");
+    await settle(page);
+  },
   // a project's note as a page in the middle column: properties, its conversations, the body (PR page-view)
   "page-view": async () => {
     await open(page, server.url);
@@ -2526,6 +2545,23 @@ const VIEWS = {
     await VIEWS["page-view"]();
     await page.getByRole("button", { name: "History", exact: true }).click();
     await waitText("Ben Lauwers");
+    await settle(page);
+  },
+  // K1b: the history of a page on a workspace without history: each session "Anonymous session" with its time
+  "page-history-nohistory": async () => {
+    await VIEWS["page-view"]();
+    await page.evaluate(() => window.__harness.anonymousDocs());
+    await page.getByRole("button", { name: "History", exact: true }).click();
+    await waitText("Anonymous session");
+    await settle(page);
+  },
+  // K1b: its comments: every author "Anonymous", no member to mention
+  "page-comments-nohistory": async () => {
+    await VIEWS["page-view"]();
+    await page.evaluate(() => window.__harness.anonymousDocs());
+    await page.getByRole("button", { name: "Comments", exact: true }).click();
+    await waitText("Is this still the first thing to do?");
+    await page.getByText("“First open loop”").click();
     await settle(page);
   },
   // a page's comments beside it (ticket 11): an open thread with a reply, its text marked in the page
