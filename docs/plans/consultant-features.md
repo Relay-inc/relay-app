@@ -1,12 +1,12 @@
 # Plan: four features for a consultancy team
 
-Status: design and plan (phase 1 of 3). No production code yet. Phase 2 builds one PR at a time once the open
-questions below are answered, phase 3 integrates and tests in the harness.
+Status: design and plan, revised after the answers of 2026-11-09. Phase 2 is under way: W1, A1 and U1 are built on
+their own branches (not merged). The rest is built one PR at a time, phase 3 integrates and tests in the harness.
 
 A consultancy asked for four things:
 
 1. Consultants use whichever AI they want, not only Claude Code.
-2. Knowledge lands, anonymised, in a database, so it stays when a consultant leaves.
+2. Knowledge lands in a place that stays when a consultant leaves, without a record of who added what.
 3. A user-management system.
 4. Relay runs on macOS and Windows.
 
@@ -15,59 +15,54 @@ device certificates, the signed member list). None of them adds a second system 
 
 ## Open questions
 
-Only the ones whose answer changes the design. Each has the assumption this plan uses until it is answered.
+Only the ones whose answer changes the design. Answered ones keep the answer and what it changes, open ones keep the
+assumption this plan uses.
 
 **Feature 1, any AI**
 
-1. Which agents or models, concretely? A named list of CLIs, or "any model" (OpenAI, Gemini, Mistral, local models)
-   through an agent that supports many providers? *Assumption: any model through OpenCode (and Pi), plus the four
-   CLIs Relay has. A new CLI only on request.*
-2. Their own logins or company API keys? If keys: does Relay store them, or does each CLI keep its own config?
-   *Assumption: both. The CLI's own login stays the default, Relay can hold a key per provider in the OS secret
-   store and pass it as an environment variable.*
-3. Must a non-Claude agent work in a team workspace, with mail and the orchestrator? *Assumption: team workspaces
-   yes (that is where the team works), mail and orchestrator later.*
-4. Is an agent without permission prompts (Pi) acceptable? *Assumption: allowed in a personal vault, never in a team
-   workspace.*
+1. Which agents or models, concretely? **Answered: Claude Code and Codex (ChatGPT), for now.** OpenCode and Pi stay in
+   Relay as they are but are out of scope for this customer: no work on them in this plan.
+2. Their own logins or company API keys? **Answered: their own logins.** Each consultant signs in to Claude Code and
+   Codex with their own account. A3 (API key per provider) is dropped.
+3. Must a non-Claude agent work in a team workspace? **Answered: yes, Codex may work in a team workspace.** Mail and
+   the orchestrator for Codex were not asked for and stay out (A4 deferred).
+4. Is an agent without permission prompts (Pi) acceptable? **Dropped**, Pi is out of scope.
 
-**Feature 2, knowledge database**
+**Feature 2, knowledge**
 
-5. Which data: notes, decisions, conversation summaries, full transcripts? *Assumption: notes plus a summary per
-   settled conversation (decisions, learnings, how-tos). No raw transcripts.*
-6. What does anonymous mean: the consultant's name out, end-client names out, every person and identifier out?
-   Pseudonymised (an admin can map back) or anonymous (nobody can)? *Assumption: pseudonymised, people and end
-   clients replaced by stable placeholders.*
-7. Where does it live: inside a team workspace (end-to-end encrypted, the server cannot read it), on the relay-server
-   readable by it, or in a database the consultancy owns? *Assumption: inside a team workspace.*
-8. Who reads it: every consultant, management only, agents too? *Assumption: every member of that workspace and
-   their agents.*
-9. Do the contracts with end clients allow keeping their data after the engagement? Pseudonymised data is still
-   personal data under the GDPR. *Unknown, needs the consultancy's answer before anything is built.*
+5. Which data? **Answered: anything.** The knowledge workspace is a workspace like any other, anything may be in it.
+   What it must not have is a record of who added what.
+6. What does anonymous mean? **Answered: no history of who did what.** Content is not pseudonymised. K2 (the
+   anonymiser) is dropped.
+7. Where does it live, and does Relay need a central server next to the relay-server? **Answered by a proposal (see
+   Feature 2 › Design): no separate server.** The knowledge workspace is an ordinary workspace on the customer's
+   relay-server with a flag "without history", set when the workspace is created.
+8. Who reads it? **Answered: who has access is managed by the organisation admin (U3), with an overview per person.**
+9. May end-client data be kept after an engagement? **Answered: data management is the customer's responsibility.**
+   Nothing in the plan waits on it any more.
 
 **Feature 3, user management**
 
-10. Which roles beyond admin and member: read-only, an organisation admin over all workspaces, others? *Assumption:
-    `reader` and an organisation admin.*
-11. Is SSO (Entra ID or another OIDC provider) required in the first version? *Assumption: no, device certificates
-    plus invites first, SSO as a later PR.*
-12. How many people and devices, and does a person use more than one device? *Unknown. Assumption: tens of people,
-    one or two devices each.*
+10. Roles beyond admin and member? **Answered: `reader` and an organisation admin, yes.**
+11. Is SSO required? **Answered: yes, "as we did with Google".** Relay itself has no Google login today (only the
+    GitHub device flow on a server). *Assumption: signing in with Google through OIDC, and Entra ID later through the
+    same OIDC layer.* U4 is in scope, Google first.
+12. How many people and devices? **Answered: several people, each with several devices.** U1 covers a person with
+    several devices.
 
 **Feature 4, Windows**
 
-13. Which features must work on Windows? Meeting recording, "this computer as a work machine", the Design drawer and
-    dictate-anywhere are macOS-only today. *Assumption: conversations, workspaces, boards, mail, Git and Pages. The
-    rest later.*
-14. Windows 11 on x64 only, or also ARM? WSL allowed or not? *Assumption: Windows 11 x64, native, no WSL.*
-15. Is there a code-signing certificate for Windows and a Windows machine to test on? Without a certificate every
-    install shows a SmartScreen warning. *Unknown.*
+13. Which features must work on Windows? *Assumption: conversations, workspaces, boards, mail, Git and Pages. Meeting
+    recording, "this computer as a work machine", the Design drawer and dictate-anywhere later.*
+14. Windows 11 on x64 only, or also ARM? WSL allowed? *Assumption: Windows 11 x64, native, no WSL.*
+15. Code-signing certificate and a test machine? **Partly answered: a Windows machine to test on is available.** The
+    certificate is still unknown. Without one every install shows a SmartScreen warning.
 
 **Across features**
 
-16. Who runs the relay-server: the consultancy on its own infrastructure, or someone for them? *Assumption: the
-    consultancy, on its own server.*
+16. Who runs the relay-server? *Assumption: the consultancy, on its own server.*
 
-## Feature 1: any AI
+## Feature 1: any AI (Claude Code and Codex)
 
 ### Where it stands
 
@@ -76,291 +71,287 @@ Only the ones whose answer changes the design. Each has the assumption this plan
   (`src/shared/plugins.ts:18`): Claude Code, Codex, OpenCode and Pi. One normalised event model
   (`agent_core::Event`) feeds the webview, permissions go through one pending folder. Full table:
   `docs/development.md` › Agent providers.
-- `caps` (18 flags) say what a provider can do, the webview hides the rest. Claude Code has them all. Codex lacks
-  questions, fork and subagents, OpenCode lacks limits and titles, Pi has no permission prompts at all.
-- Any model is already reachable indirectly: OpenCode and Pi list every model their own config knows (OpenRouter,
-  Ollama, LM Studio and so on), and the model picker is searchable for lists of hundreds (#234).
-- Relay manages no AI login or key. Claude Code removes `ANTHROPIC_API_KEY` to run on the subscription
-  (`agent-claude/src/lib.rs:197`), Codex can keep `OPENAI_API_KEY` from the environment (option `auth`), OpenCode
-  and Pi use their own `auth login`. The keychain holds board and calendar tokens only.
+- `caps` (18 flags) say what a provider can do, the webview hides the rest. Codex lacks questions, fork and subagents
+  next to Claude Code, it does ask for permission.
+- Relay manages no AI login or key. Codex keeps its own `codex login` (or `OPENAI_API_KEY` from the environment,
+  option `auth`). That matches answer 2, nothing to build.
 - Claude Code only today:
   - Team workspaces (`err.vault_only_claude`, `session/mod.rs:105`, `lib.rs:1922`). The fence is built from Claude
     Code's deny rules, strict MCP and auto mode (`policy.rs:122-142`).
   - The control pipe with Relay's in-process MCP tools: mail (`actions.rs:91-94`), orchestrator
     (`session/mod.rs:258`), design.
   - Moving a conversation to a work machine (`lib.rs:1699`), vault capture (`lib.rs:644`), multiple accounts.
-- Vault rules: only `CLAUDE.md` and `.claude -> System`. Other CLIs get Relay's actions hint
-  (`prompts/conversation/relay-actions-hint.md`) through their system prompt, but no `AGENTS.md` is written and
-  whether they read `CLAUDE.md` or the skills is not verified.
-- The package READMEs of Codex, OpenCode and Pi say the app itself did not run them live.
+- **Built: A1** (`701bf78f`, branch `relay/relay-a1-agents-md-voor-codex-mw93qs7p`, not merged). The starter vault (and through
+  it the team starter) has an `AGENTS.md` that points at `CLAUDE.md` and `System/rules/` instead of copying them. The
+  vault check lists a missing `AGENTS.md` and repairs it.
+- The Codex package README says the app itself did not run it live.
 
 ### Design
 
-**Recommended: A. Make the open agents first-class, any model through them.** OpenCode (and Codex for OpenAI) become
-equal to Claude Code where it matters for a team:
+**Chosen: make Codex first-class next to Claude Code, in team workspaces too.**
 
-- **Rules for every agent.** The starter and team vaults get an `AGENTS.md` that points to the same rules as
-  `CLAUDE.md`. `vaultcheck.rs` accepts either.
-- **A fence that does not depend on Claude's settings.** Every permission request already passes Relay's pending
-  folder. For providers with `caps.permissions`, Relay answers a request for a path outside the conversation's vault
-  with a deny before it becomes a card, and starts the CLI with its own deny config where it has one (to verify per
-  CLI). Then `err.vault_only_claude` becomes "only providers that ask for permission". Pi stays out of team
+- **Rules for every agent.** Done in A1.
+- **A fence that does not depend on Claude's settings (A2).** Every permission request already passes Relay's pending
+  folder. For Codex, Relay answers a request for a path outside the conversation's vault with a deny before it
+  becomes a card, and starts `codex app-server` with its own sandbox and approval config where it has one (to verify).
+  Then `err.vault_only_claude` becomes an allowlist: Claude Code and Codex. OpenCode and Pi stay out of team
   workspaces. The fence stays a guard, not a sandbox, as `docs/workspaces.md` › Trust says for Claude Code today.
-- **Relay's tools over standard MCP.** Mail, orchestrator and design run over Claude Code's control pipe. A
-  `relay --mcp` stdio server with the same tools reaches every CLI that speaks MCP. Its caller is traced the way the
-  `relay` CLI is traced now (`agent-core/src/peer.rs`).
-- **Keys where wanted.** Settings › Agents gets an optional API key per provider, kept in the OS secret store
-  (feature 4 makes that cross-platform) and passed as an environment variable at spawn, never in `settings.json`.
-  The subscription login stays the default.
-- An organisation can limit which providers and models its workspaces allow (feature 3, policy in the member list).
+- **Logins.** Each consultant's own, as today. No key storage in Relay.
+- **Later, not in this plan:** Relay's tools (mail, orchestrator, design) over a `relay --mcp` stdio server for Codex
+  (A4). Not asked for in answer 3. Codex reaches `relay` actions through the `relay` CLI and the actions hint already.
+- An organisation can narrow the allowed providers per workspace (U3, signed policy in the member list).
 
-Trade-off: the most value for the least code, since the contract exists. What it makes harder: every gap
-(subagents, titles, limits) stays a per-CLI gap, and the quality of an agent depends on its CLI, not on Relay.
-
-**B. Add more CLIs one by one** (for example the CLIs of other model vendors) through the existing contract. Around
-1 to 1.5 days each, each with its own permission model, storage and fence work. Good for one named CLI, does not
-scale to "any".
-
-**C. Relay's own agent loop on an OpenAI-compatible API.** Rejected: it duplicates what the CLIs do (tools, context,
-permissions), moves Relay away from "a shell around the real CLIs", and needs API keys for everything.
+Dropped: adding more CLIs, Relay's own agent loop, an API key store (A3), OpenCode and Pi work.
 
 ### Risks
 
-- The fence for non-Claude agents rests on their permission requests. A CLI that runs a tool without asking (or a
-  shell command that reads elsewhere) gets past it. Same limit as today, but it must be tested per CLI.
-- CLI protocols change without notice (`codex app-server`, `opencode serve`). Fixture tests catch format drift only
-  after a release.
+- The fence for Codex rests on its permission requests. A tool it runs without asking (or a shell command that reads
+  elsewhere) gets past it. Same limit as Claude Code today, but it must be tested on Codex.
+- `codex app-server` changes without notice. Fixture tests catch format drift only after a release.
 
-## Feature 2: knowledge that stays
+## Feature 2: knowledge that stays, without history
 
 ### Where it stands
 
-- No database for knowledge. The relay-server stores files and JSON only (`relay-server/src/lib.rs:139-146`), no
-  database crate. The app has one SQLite (FTS5, BM25) index per folder for related notes (`src-tauri/src/related.rs`).
 - A team workspace already keeps what was written in it: when a member is removed, their notes stay with the team,
-  the key rotates (#322), and every new member reads all of it (an invite carries every epoch's key). Notes, documents
-  (Yjs logs, history kept for good) and comments are on the server, sealed.
-- The server never reads them: only members' devices hold the key (`docs/workspaces.md` › Trust, Keys).
-- Conversations are not shared: transcripts are each CLI's own files on the laptop (`~/.claude/projects/...`), `.claude`
-  never syncs, and nothing about a conversation goes to the server for a workspace.
-- Vault capture already reads a settled conversation for decisions, state and follow-ups and writes them to the vault
-  (Claude Code only, `lib.rs:644`).
-- Nothing anonymises anything today.
+  the key rotates (#322), and every new member reads all of it. The server never reads it (`docs/workspaces.md` ›
+  Trust, Keys).
+- No separate database is needed for "anything may be in it" (answer 5): a workspace holds any file.
+- What links a change to a device or person today is listed below. That list is what the flag has to change.
+
+### Where a device or person is tied to a change today
+
+| Place | What it records | Who sees it | With the flag |
+|---|---|---|---|
+| Files: sealed records (`relay-remote/src/vault.rs` `seal_record`) | meta is path, hash, size, mtime and the member-list head `l`. No writer. | members | Unchanged. Nothing to remove. |
+| Files: server `put` and `delete` (`relay-server/src/vaults.rs:413-443`) | Checks the caller is a member, writes the blob. No log of who wrote it, no log line. | server | Unchanged. The caller's identity is still needed per request for access control. |
+| Files: live `files` frame (`relay-server/src/channel.rs:125`) | `{t:"files"}`, names no sender and no file. | members | Unchanged. |
+| Conflict copies (`relay-remote/src/sync.rs:210`, called from `src-tauri/src/shared_vaults.rs:143, 273, 295, 348` with `sys_name()`) | `Notes/A (conflict <computer name> <minute>).md`, synced to everyone. | members | No machine name: `Notes/A (conflict <minute>).md`. |
+| Documents: server log (`relay-server/src/docs.rs:78`) | A `<seq>.from` file per update with the pusher's fingerprint (16 hex), returned by `doc_pull`. Bound names keep the binder's fingerprint (`doc_bind`, `docs.rs:139`). The daily quota is per member, in memory. | server, members | None of it exists: a workspace without history has no documents (below). |
+| Documents: sealed parts (`relay-remote/src/docs.rs` `take_part`, `Keys::open_doc`) | The author is bound into every sealed update and used for the gap check per author's counter. | members | Not used, no documents. |
+| Page history (`lib.rs` `page_history`, `PageHistory.tsx`) | Sessions per author from the document log, named after the member list. A note that is no document shows the commits of a local git repo, which never syncs (`.git` is filtered). | members | Only the local git case remains, which is the member's own repo on their own Mac. |
+| Comments and the workspace Inbox (`docs.rs` sidecar `#comments`, `PageComments.tsx`, `workspace_inbox`) | Each entry's author is the sealed update's author. Mentions name members. | members | None, comments live on documents. |
+| Live cursors (`awareness` frames, `channel.rs:268`, `src/application/workspace/coedit.ts`) | Sender fingerprint (`from`) plus the computer name inside the sealed body. | members on the same page | None, cursors are only sent for documents. The server refuses `awareness` frames for the workspace. |
+| Shared trash (`shared_vaults.rs:93`, `<data>/shared-trash/<id>/<minute>/<path>`) | What a round deleted or emptied on this Mac, by minute. No device or person. Never synced. | the Mac itself | Unchanged. |
+| Member list and Members (`relay-remote/src/members.rs`, `SharedVaults.tsx`) | Devices, people (U1), roles, and the signed entries of who added, removed or promoted whom. | members | Unchanged. It is access control, not a record of content. The organisation admin needs it (answer 8). |
+| Server stderr (`relay-server/src/lib.rs:264, 351`) | A line when a device pairs or joins a workspace, with its name and IP. | server operator | Unchanged, it logs access, not changes. |
+| Content written by agents or Relay itself (vault capture, hooks, frontmatter templates) | Not checked: whether any of them writes a computer name or author into a note. | members | Unknown. K1 checks capture and the starter vault's templates and hooks, and leaves them out of the flagged workspace if they do. |
 
 ### Design
 
-**Recommended: A. Knowledge as notes in the team workspace, anonymised on the Mac before they are written.**
+**Recommended: a workspace flag "without history", on the customer's relay-server. No separate server.**
 
-- When a conversation in a team workspace settles, capture (extended to every provider with `caps.write`) also writes
-  a knowledge note into a `Knowledge/` folder: the problem, what was decided, what worked, without the chatter.
-- Before it is written, two passes on the Mac:
-  1. Deterministic: names from the workspace's People notes and members, emails, phone numbers, IBANs, addresses
-     become stable placeholders (`[Person 3]`, `[Client A]`). The mapping is a file in the workspace.
-  2. The agent rereads the result for what the rules missed.
-- The consultant sees the note and the replacements as a card (approve, edit, reject) before it goes in. Nothing is
-  written without that click.
-- Reading: the existing FTS5 index plus a `relay knowledge.search` action, so agents in that workspace use it.
-- The server stays blind, there is no new trust boundary, and offboarding is the existing removal with key rotation.
+A central knowledge server next to the relay-server would need its own storage, access control, backup and trust
+model, and the server would read the content. Everything answer 5 to 8 ask for is already a workspace: any file,
+encrypted, access per person through the member list, offboarding through removal and key rotation, managed by the
+organisation admin (U3). What a workspace adds that is unwanted here is the record of who did what, and that is small
+and mostly in documents.
 
-Trade-off: no new system and end-to-end encryption kept. What it makes harder: it is files, so queries across all
-workspaces or a dashboard for management are not possible on the server. And the mapping is readable by every member
-(they all hold the same key), so it is pseudonymised for outsiders, not for members.
+- **The flag.** A signed member-list entry `nohistory`, only allowed as the entry right after `create` and never
+  undone, checked by every Mac like `docs-on` is. Set at creation (a choice in the create dialog), so there is never a
+  history from before the flag. The server sees it in the list it already checks, so it cannot be turned off without
+  every Mac noticing.
+- **No documents.** `docs-on` is refused on a flagged list. The workspace syncs as files, which carry no writer. That
+  removes the per-update `from` log on the server, page history by author, comments and live cursors in one rule. The
+  server also refuses `doc_push`, `doc_bind` and `awareness` frames for a flagged workspace, so an old or modified
+  Relay cannot add them.
+- **Conflict copies without a machine name.** `conflict_copy` gets an empty machine for a flagged workspace.
+- **What stays.** Identity per request (the server must know the caller is a member), the member list (who has
+  access), and the server's access log lines. That is "who may", not "who did".
+- **In the UI.** The workspace shows "without history" in Members and in the workspace switcher. Pages offers no
+  history or comments for it, as for any note that is no document.
 
-**B. A knowledge store on the relay-server that the server can read** (SQLite with FTS, later embeddings), fed with
-anonymised records from the Macs, access per role (feature 3). Central and queryable, but the server then holds
-plaintext for this data, which breaks the workspace promise for it, and needs its own access control, backup and
-GDPR handling.
+Trade-off: the smallest change that removes the record. What it makes harder: no live co-editing, comments or page
+history in the knowledge workspace. Two people editing the same note at once get a conflict copy (without a name).
 
-**C. A sink to a database the consultancy owns.** Relay pushes the same anonymised records (JSON) to an endpoint the
-consultancy runs. Their infrastructure, their rules. Integration work per customer, and Relay cannot vouch for what
-happens downstream.
+**Alternative, if co-editing is wanted there: documents with a throwaway author.** Each Mac seals updates under a
+random author id per session instead of its fingerprint, and the server stores no `from`. This changes the seal
+format and the gap check per author, the most security-sensitive part of documents. About 2 extra days. Only on
+request.
 
-The record format of A is designed so B or C can be added later as a sink without changing capture.
+**Rejected: a separate knowledge server or database.** See above. It also breaks the promise that the server cannot
+read a workspace.
+
+### Reading and writing knowledge from other workspaces
+
+- **K3, search from anywhere.** A conversation in a client workspace is fenced to that workspace, so it cannot read
+  the knowledge workspace. A `relay knowledge.search` action (the `relay` CLI, so Claude Code and Codex both reach it)
+  searches the knowledge workspaces this Mac is a member of with the existing FTS5 index (`src-tauri/src/related.rs`)
+  and returns passages, read-only.
+- **K4, capture into it (optional).** When a conversation settles, vault capture (`lib.rs:644`, Claude Code today,
+  extended to Codex) can propose a knowledge note for the knowledge workspace: the problem, what was decided, what
+  worked. The consultant approves it on a card, it is written as a plain file with no author field. Not asked for
+  explicitly, it is how knowledge gets there without extra effort.
+
+Dropped: the anonymiser (K2), the mapping file, the review of replacements.
 
 ### Risks
 
-- **Legal.** Pseudonymised data stays personal data. Keeping end-client knowledge after an engagement may break the
-  contract with that client. This blocks the build until question 9 is answered.
-- **Anonymisation is never complete.** A project description can identify a client without naming it. The review
-  card is the safety net, so it must be fast or consultants will skip it.
-- The agent that anonymises sees the raw text, but it saw it in the conversation already.
+- **History outside Relay.** A member can still keep their own git repo or backup of the folder on their Mac. Relay
+  does not sync it, but cannot prevent it. Said in the UI.
+- **Content can name its author.** A note that says "written by" is content, and content is not touched (answer 6).
+- **The member list itself.** It shows who is a member and who added whom. If the customer reads "no history" as "no
+  member list either", access control per person (answer 8) is impossible. To confirm.
 
 ## Feature 3: user management
 
 ### Where it stands
 
-- Identity is a device, never a person: a self-signed P-256 certificate, pinned by its SHA-256 fingerprint
+- Identity is a device: a self-signed P-256 certificate, pinned by its SHA-256 fingerprint
   (`relay-remote/src/tls.rs`), one per Mac (`machines.rs:88`). Per workspace each Mac also has an Ed25519 identity and
   an X25519 key (`relay-remote/src/vault.rs:120-127`).
-- The display name is the Mac's computer name (`lib.rs:2667`), unchecked. No email, no account, no SSO (the only
-  OAuth is GitHub's device flow on a server, `relay-server/src/github.rs`).
-- Two Macs of one person are two members. A phone is a linked device of its laptop (`LINKED_OPS`).
-- Roles per workspace: `admin` and `member`. Admins invite (single-use link, 24 h), remove, promote, demote and rotate
-  the key. The member list is an append-only, hash-chained, Ed25519-signed log that every Mac checks
-  (`relay-remote/src/members.rs`). The server cannot forge an entry.
+- **Built: U1** (`6f632b4b`, branch `relay/relay-u1-personen-in-de-ledenlijst-mw93wgkg`, stacked on W1, not
+  merged). The member list knows people: a `person` entry (name, optional email) with devices under it,
+  `person-remove` takes a person off with every device. A person's own device may add a new device of that person.
+  Members shows people with their devices. `vault_info` returns `people`.
+- Roles per workspace: `admin` and `member`. The member list is an append-only, hash-chained, Ed25519-signed log that
+  every Mac checks (`relay-remote/src/members.rs`). The server cannot forge an entry.
 - An admin of any workspace on a server may update that server to a signed release only (`KEEPER_OPS`).
-- No organisation level: nothing lists people across workspaces, offboarding is per workspace, and there is no
-  central policy (`policy.rs` is the per-conversation fence, `permissions.rs` reports macOS privacy grants).
+- No organisation level yet, and no SSO (the only OAuth is GitHub's device flow on a server,
+  `relay-server/src/github.rs`).
 
 ### Design
 
-**Recommended: A. People on top of devices, in the signed member list, plus an organisation admin on the server.**
+**Chosen: people on top of devices (U1, built), `reader`, an organisation admin, then SSO through OIDC.**
 
-- **A person.** New member-list entries: a person (name, optional email) and the devices that belong to them, a new
-  device added by an admin or by one of the person's own devices. The UI shows people, the list still checks
-  devices.
-- **Roles.** `reader` next to `admin` and `member`: the server refuses writes from a reader (`vault_put`,
+- **Roles (U2).** `reader` next to `admin` and `member`: the server refuses writes from a reader (`vault_put`,
   `vault_delete`, document updates), the UI opens notes read-only. Enforcing on the server is enough because every
   write passes it.
-- **Organisation admin.** A server-level role that extends today's keeper: it sees every workspace on the server with
-  its people, and offboards a person in one step (a signed `remove` in every workspace plus `revoke` of their
-  devices). To sign those entries it must be an admin of each list, so a new workspace on such a server adds the
-  organisation admins as admins from the start.
-- **Policy.** The organisation admin can sign workspace settings into the list, the way `docs-on` already works:
-  allowed agent providers (feature 1), knowledge capture on or off (feature 2).
+- **Organisation admin (U3).** A server-level role that extends today's keeper. It gets an overview per person: which
+  workspaces they are in, with which role and which devices (answer 8). It offboards a person in one step (a signed
+  `person-remove` in every workspace plus `revoke` of their devices). To sign those entries it must be an admin of
+  each list, so a new workspace on such a server adds the organisation admins as admins from the start. It can sign
+  workspace policy into the list, the way `docs-on` works: allowed agent providers (feature 1).
+- **SSO (U4, then U5).** A device may join only after an OIDC login. *Assumption from answer 11: Google first, Entra
+  ID through the same layer.* The app runs the login in the browser (authorisation code with PKCE, a loopback
+  redirect), the server checks the ID token (issuer, audience, signature against the provider's keys, an allowed
+  domain or tenant) and binds the verified email to the person (U1's email field). Offboarding in the directory locks
+  the person out at the next connection. Keys stay per device, so a removal still rotates through an admin's Mac.
+  Needs the server to reach the identity provider and an app registration per tenant, which the customer makes.
 
 Trade-off: stays within the trust model (devices and signatures, the server cannot grant itself rights). What it makes
 harder: offboarding still needs an admin's Relay online to rotate keys, and a person who loses every device needs a
 new invite.
 
-**B. SSO (OIDC, for example Entra ID) for enrolment, on top of A.** A device may join only after an OIDC login, the
-server checks the token against the tenant and maps groups to roles. Offboarding in the directory locks the person
-out at the next connection. Needs the server to reach the identity provider and an app registration per tenant.
-Keys stay per device, so a removal still rotates through an admin's Mac. A later PR if question 11 says so.
-
-**C. Accounts with passwords on the server.** Rejected: weaker than device certificates and a second identity system
-next to them.
+Rejected: accounts with passwords on the server (weaker than device certificates, a second identity system).
 
 ### Risks
 
-- Changing the member list is the most security-sensitive code in Relay. Every new entry kind needs the same
-  checks as #322 and #340 (a fork, a held-back list, an entry by a removed admin).
+- Changing the member list is the most security-sensitive code in Relay. Every new entry kind (`reader`, `nohistory`,
+  the organisation admin) needs the same checks as #322 and #340 (a fork, a held-back list, an entry by a removed
+  admin).
 - Organisation admins as admins of every workspace means they can read every workspace. That is likely what a
   consultancy wants, but it must be said in the UI.
+- SSO puts the identity provider in the join path. A provider outage blocks new devices, not existing ones.
 
 ## Feature 4: macOS and Windows
 
 ### Where it stands
 
-The app does not build on Windows, and not on Linux either. The relay-server builds for Linux (Docker, release
-binaries) but not for Windows. There is no `cfg(windows)` anywhere, and there is no Rust CI at all.
+**Built: W1** (`05c353d0`, branch `relay/relay-w1-windows-build-gate-ci-mw9351qy`, not merged). The Rust side
+type-checks for `x86_64-pc-windows-msvc`. Every Unix-only call sits behind a `cfg` gate with a stand-in that fails or
+does nothing, marked with the PR that fills it in: Unix sockets in `relay-remote/sock.rs`, file modes and symlinks in
+`src-tauri/platform.rs`, process groups and `kill`, relay-server and Whisper as macOS-only dependencies, `agent-pi`
+moved to the common dependencies. CI (`checks`) runs the TypeScript checks on macOS and Windows and `cargo check` on
+both. Nothing works on Windows yet.
 
-- **Blocks the build:**
-  - `agent-pi` is declared under the macOS-only dependencies (`src-tauri/Cargo.toml:97`) while `agents.rs:10` uses
-    it everywhere.
-  - `host.rs:6` imports `relay_server::ramdisk`, which only exists on macOS.
-  - Unix sockets without a gate: the `relay` CLI socket (`actions.rs`) and the broker sockets
-    (`relay-remote/src/broker.rs`, `relay-server/src/lib.rs`).
-  - `process_group`, `libc::kill` and `killpg` (`broker.rs`, `plugins.rs`, `agent-core/src/discover.rs`, the Codex and
-    OpenCode bridges).
-  - Unix permissions and symlinks in some fifteen files (`PermissionsExt`, `mode(0o600)`, `os::unix::fs::symlink`).
-  - `transcribe-rs` with `whisper-metal` (`Cargo.toml:63`), probably.
-- **Builds once gated, but broken:**
-  - Secrets go through `/usr/bin/security` (`providers.rs:74-92`, `calendar.rs`, `plugins.rs`, mail).
-  - Hard-coded `/usr/bin/curl`, `/usr/bin/sqlite3`, `/bin/sh`, `/bin/kill`, `/bin/ps`, `scutil`, `xattr`, `shasum`.
-  - Shell and PATH: login shell `$SHELL` or `/bin/zsh -lic`, PATH split on `:`, `HOME`, CLI lookup in Homebrew
-    folders, `python3` for `build-index.py`, a `#!/bin/sh` shim for `relay`, `.sh` hooks in the starter vault.
-  - The `.claude -> System` symlink in every vault (Windows needs Developer Mode or admin rights for symlinks).
-  - The window: `titleBarStyle: Overlay`, the `sidebar` vibrancy the CSS relies on, `macOSPrivateApi`.
-  - The updater manifest publishes `darwin-aarch64` only (`scripts/release.sh:80`). Deep links on Windows need the
-    single-instance plugin.
-  - Shortcuts default to `meta` (the Windows key there), 22 `metaKey` checks, 65 `⌘` glyphs, "This Mac" strings.
-- **macOS by design, with a no-op elsewhere:** banners, keep-awake, the meeting system-audio tap (and `afconvert`,
-  not gated), dictate-anywhere paste, clipboard, the Design drawer snapshot, tray badges, "open in terminal", this Mac
-  as a work machine (LaunchAgent, RAM disk), the privacy-permissions page.
-- **Already cross-platform:** Tauri 2 and its plugins, muda, `notify`, portable-pty (ConPTY), cpal, rusqlite,
-  rustls and rcgen, yrs, async-imap, the board and integration crates, git on PATH.
+What W2 to W6 still have to make work, as found before W1:
+
+- Secrets go through `/usr/bin/security` (`providers.rs:74-92`, `calendar.rs`, `plugins.rs`, mail).
+- Hard-coded `/usr/bin/curl`, `/usr/bin/sqlite3`, `/bin/sh`, `/bin/kill`, `/bin/ps`, `scutil`, `xattr`, `shasum`.
+- Shell and PATH: login shell `$SHELL` or `/bin/zsh -lic`, PATH split on `:`, `HOME`, CLI lookup in Homebrew
+  folders, `python3` for `build-index.py`, a `#!/bin/sh` shim for `relay`, `.sh` hooks in the starter vault.
+- The `.claude -> System` symlink in every vault (Windows needs Developer Mode or admin rights for symlinks).
+- The window: `titleBarStyle: Overlay`, the `sidebar` vibrancy the CSS relies on, `macOSPrivateApi`.
+- The updater manifest publishes `darwin-aarch64` only (`scripts/release.sh:80`). Deep links on Windows need the
+  single-instance plugin.
+- Shortcuts default to `meta` (the Windows key there), 22 `metaKey` checks, 65 `⌘` glyphs, "This Mac" strings.
+- macOS by design, a no-op elsewhere: banners, keep-awake, the meeting system-audio tap, dictate-anywhere paste, the
+  Design drawer snapshot, tray badges, "open in terminal", this Mac as a work machine, the privacy-permissions page.
 
 ### Design
 
-**Recommended: A. Native Windows build of the same app, behind a small platform layer.** WebView2 renders the same
-React app.
+**Chosen: a native Windows build of the same app, behind a small platform layer.** WebView2 renders the same React
+app.
 
 - One `platform` module per concern, chosen at compile time: secrets (the `keyring` crate, macOS Keychain and
-  Windows Credential Manager, same service names), local IPC (named pipes on Windows, the `interprocess` crate or
-  std, with the client process id from `GetNamedPipeClientProcessId`, which keeps the caller tracing),
-  process groups (Job Objects), the user's shell and PATH (PowerShell or `cmd`, `;`, `USERPROFILE`), HTTP through
-  `reqwest` instead of `curl`.
+  Windows Credential Manager, same service names), local IPC (named pipes on Windows, with the client process id from
+  `GetNamedPipeClientProcessId`, which keeps the caller tracing), process groups (Job Objects), the user's shell and
+  PATH (PowerShell or `cmd`, `;`, `USERPROFILE`), HTTP through `reqwest` instead of `curl`.
 - Vault layout: `.claude` as a directory junction on Windows (no admin needed), file names compared as NTFS does,
   `build-index.py` replaced by Relay's own Rust index where Python is missing.
 - The window: native title bar or Mica on Windows, an opaque sidebar where vibrancy is missing, shortcuts as
   `mod` (⌘ on macOS, Ctrl on Windows) with the glyphs following.
-- Features without a Windows equivalent stay off there in v1 (see question 13). Meeting system audio can come later
-  through WASAPI loopback.
+- Features without a Windows equivalent stay off there in v1 (question 13).
 - Release: an NSIS installer and `windows-x86_64` in `latest.json`, built on a Windows runner or VM, signed when
   there is a certificate.
-- A CI job on `windows-latest` and `macos-latest` that runs `cargo check` and `cargo test --workspace`, so a Unix-only
-  call never lands again.
 
-Trade-off: one codebase, Windows users get the real app. What it makes harder: every future PR must keep both
-platforms building (the CI job enforces it), and release builds need a Windows machine.
-
-**B. Windows through WSL.** The app on Windows, agents and vault in WSL. Rejected: two file systems, slow file
-watching across the boundary, and consultants would need WSL set up.
-
-**C. A browser client against the relay-server.** Works on any OS, but it is a second frontend and runs agents on the
-server, which the workspace design deliberately avoids (the server cannot read a workspace). Only if installing an
-app is impossible.
+Rejected: Windows through WSL (two file systems, slow watching, WSL setup per consultant) and a browser client
+against the relay-server (a second frontend, agents on the server).
 
 ### Risks
 
-- **Agent CLIs on Windows.** Whether each CLI (Claude Code, Codex, OpenCode, Pi) runs natively on Windows, and how it
-  finds its config, is not verified here. Relay is only as cross-platform as the agents it runs.
+- **Agent CLIs on Windows.** Whether Claude Code and Codex run natively on Windows, and how they find their config,
+  is not verified here. Only those two matter now (answer 1).
 - **The broker and caller tracing** are the hardest part: conversations survive an app restart through Unix sockets
   and the `relay` CLI identifies its caller through the process tree. Both need a Windows equivalent that keeps the
   same security property.
-- No Windows test machine in the loop today (question 15). Every estimate below assumes one.
+- No certificate yet (question 15): installs show a SmartScreen warning until there is one.
 
 ## Plan of approach
 
 One feature per PR, small enough to review (the review of #278, 4.7k lines, asked for exactly that). Estimates are
 working days with AI, including tests and harness screenshots, calibrated on recent PRs: #278 (shared vaults,
 4,730 lines) was planned at 4 to 4.5 days and merged a day after the plan, #322 (key rotation, 2,114 lines) took
-about a day. Unknown territory (Windows, legal) gets a wider range.
+about a day. Wave 1 of this plan (W1, A1, U1) was built by parallel agents within an hour of the plan, but is not
+reviewed or merged yet, so it does not lower the estimates on its own. Unknown territory (Windows, SSO against a real
+tenant) gets a wider range.
 
 ### PRs
 
-| # | PR | Feature | Depends on | Days |
-|---|---|---|---|---|
-| W1 | Build gate: fix the `agent-pi` dependency, gate every Unix-only call behind a `platform` module with a Windows stub, CI on macOS and Windows (`cargo check`, `cargo test`) | 4 | none | 2 |
-| W2 | Secrets through `keyring` (Keychain and Credential Manager), same service names, no migration needed on macOS | 4 | W1 | 1 |
-| W3 | Processes on Windows: named pipes for the broker and the `relay` CLI with caller tracing, Job Objects, shell and PATH, `reqwest` for `curl` | 4 | W1 | 2.5 to 3.5 |
-| W4 | Vaults on Windows: `.claude` junction, NTFS name rules in sync, no Python needed for the index, starter-vault hooks without `bash` | 4 | W1 | 1.5 |
-| W5 | Window and input: title bar, sidebar without vibrancy, `mod` shortcuts and glyphs, notifications via the Tauri plugin, deep links via single-instance | 4 | W1 | 1.5 |
-| W6 | Release for Windows: NSIS, updater entry, release script on a Windows runner, signing if a certificate exists | 4 | W2 to W5 | 1 to 1.5 |
-| A1 | `AGENTS.md` in the starter and team vaults, `vaultcheck` accepts it | 1 | none | 0.5 |
-| A2 | Fence for providers with permissions (deny outside the vault in the pending folder, CLI deny config), lift "Claude Code only" for workspaces | 1 | A1 | 2 |
-| A3 | API key per provider in the secret store, passed as env at spawn | 1 | W2 | 1 |
-| A4 | `relay --mcp`: mail, orchestrator and design tools over stdio MCP for every CLI | 1 | A2 | 1.5 to 2 |
-| U1 | People: person and device entries in the member list, people in Members | 3 | none | 2 |
-| U2 | `reader` role, enforced on the server, read-only in the UI | 3 | U1 | 1 |
-| U3 | Organisation admin: people across workspaces, offboarding in one step, signed workspace policy (allowed providers, capture) | 3 | U1, U2 | 2 |
-| U4 | SSO enrolment (OIDC), only if question 11 asks for it | 3 | U3 | 3 to 4 |
-| K1 | Knowledge capture: knowledge note per settled workspace conversation, review card, every provider with `caps.write` | 2 | A2, questions 5 to 9 | 2 |
-| K2 | Anonymiser: deterministic pass with the mapping file, agent pass, the replacements on the card | 2 | K1 | 2 |
-| K3 | `relay knowledge.search` on the FTS5 index | 2 | K1 | 1 |
+| # | PR | Feature | Depends on | Days | State |
+|---|---|---|---|---|---|
+| W1 | Build gate: `cfg` gates with Windows stand-ins, `agent-pi` dependency, CI on macOS and Windows | 4 | none | 2 | built, `05c353d0` |
+| A1 | `AGENTS.md` in the starter and team vaults, `vaultcheck` accepts and repairs it | 1 | none | 0.5 | built, `701bf78f` |
+| U1 | People: person and device entries in the member list, people in Members | 3 | none (stacked on W1) | 2 | built, `6f632b4b` |
+| U2 | `reader` role, enforced on the server, read-only in the UI | 3 | U1 | 1 | |
+| K1 | Workspace without history: `nohistory` entry at creation, no documents, server refuses document and awareness traffic, conflict copies without a name, UI label, capture and templates checked for author fields | 2 | U2 (member list) | 1.5 | |
+| U3 | Organisation admin: overview per person, offboarding in one step, signed workspace policy (allowed providers) | 3 | U1, U2, K1 (member list) | 2 to 2.5 | |
+| U4 | SSO enrolment through OIDC, Google first: login in the browser, token check on the server, email bound to the person | 3 | U3 | 3 to 4 | |
+| U5 | Entra ID on the same OIDC layer: tenant check, tested against a real tenant | 3 | U4 | 0.5 to 1 | |
+| A2 | Fence for Codex (deny outside the vault in the pending folder, Codex sandbox config), team workspaces allow Claude Code and Codex | 1 | A1 | 1.5 | |
+| K3 | `relay knowledge.search`: read-only search of the knowledge workspaces from any conversation | 2 | K1 | 1 | |
+| K4 | Capture into the knowledge workspace on a card, Claude Code and Codex (optional) | 2 | K1, A2 | 1.5 | |
+| W2 | Secrets through `keyring` (Keychain and Credential Manager), same service names | 4 | W1 | 1 | |
+| W3 | Processes on Windows: named pipes for the broker and the `relay` CLI with caller tracing, Job Objects, shell and PATH, `reqwest` for `curl` | 4 | W1 | 2.5 to 3.5 | |
+| W4 | Vaults on Windows: `.claude` junction, NTFS name rules in sync, no Python needed for the index, starter-vault hooks without `bash` | 4 | W1 | 1.5 | |
+| W5 | Window and input: title bar, sidebar without vibrancy, `mod` shortcuts and glyphs, notifications via the Tauri plugin, deep links via single-instance | 4 | W1 | 1.5 | |
+| W6 | Release for Windows: NSIS, updater entry, release script on a Windows runner, signing if a certificate exists | 4 | W2 to W5 | 1 to 1.5 | |
 
-Totals: Windows 9.5 to 11 days, any AI 5 to 5.5, user management 5 (plus 3 to 4 for SSO), knowledge 5. Together
-about 25 days without SSO.
+Dropped: A3 (API key per provider, answer 2), K2 (anonymiser, answer 6), A4 (`relay --mcp`, deferred, answer 3), and
+all OpenCode and Pi work (answer 1).
+
+Totals still to build: Windows 7.5 to 9 days, any AI 1.5, user management 6.5 to 8.5 (of which SSO 3.5 to 5),
+knowledge 4 (2.5 without K4). Together about 19.5 to 23 days. Built so far: 4.5.
 
 ### Order
 
-1. **Wave 1, in parallel:** W1 (src-tauri and packages, platform gates), A1 (the vault resources) and U1
-   (`relay-remote/members.rs`, `relay-server/vaults.rs`, Members UI). They touch different files, except a few
-   lines of `relay-server/src/lib.rs` that W1 gates and U1 extends: merge W1 first and rebase U1.
-2. **Wave 2:** W2, W4 and W5 in parallel (different files) with A2 and U2. W3 alone, it touches the broker and
-   `actions.rs`, the same files as A4.
-3. **Wave 3:** A3 (after W2), U3, A4 (after W3, same files), then W6 when W2 to W5 are in.
-4. **Wave 4:** K1 to K3, only after the knowledge questions are answered, since they decide what K1 builds.
-   U4 only when asked for.
+0. **Land wave 1.** W1 first, then U1 rebased on main (it is stacked on W1), A1 on its own.
+1. **Wave 2, in parallel:** U2 (member list), A2 (agents), W2, W4 and W5 (different files). W3 alone, it touches the
+   broker and `actions.rs`. Laurent tests the Windows PRs on his Windows machine.
+2. **Wave 3:** K1 after U2, then K3 and A2-based K4. W6 when W2 to W5 are in.
+3. **Wave 4:** U3 after K1, then U4 and U5.
 
-Not parallel: W3 with A4 (broker, `actions.rs`), U1 with U2 and U3 (member list), K1 with K2. Everything that changes
-`lib.rs` broadly (W1, W5) goes in on its own and the others rebase.
+Not parallel: the member-list chain U2, K1, U3, U4 (each adds entry kinds or roles to `members.rs` and the server's
+checks, so each rebases on the previous). That chain is the critical path, about 8.5 to 10.5 days. Everything that
+changes `lib.rs` broadly (W5) goes in on its own and the others rebase.
 
 ### What phase 3 tests
 
 - Two isolated Relay instances against one relay-server (the existing recipe): a reader writing, an organisation
-  admin offboarding someone, a knowledge note going through review.
-- Codex and OpenCode in a team workspace trying to read outside it.
-- The Windows build installed on a real Windows 11 machine: install, update, a conversation, a workspace round, an
-  app restart with a running conversation (the broker).
+  admin offboarding a person with two devices, a workspace without history (no `from` files on the server, a conflict
+  copy without a name, `docs-on` refused, a document push refused).
+- Codex in a team workspace trying to read outside it.
+- A device joining through a Google login, and refused with an account outside the allowed domain.
+- The Windows build installed on a real Windows 11 machine: install, update, a conversation with Claude Code and with
+  Codex, a workspace round, an app restart with a running conversation (the broker).
