@@ -667,7 +667,7 @@ pub fn passages(dir: &Path, root: &str, text: &str, limit: usize) -> Result<Vec<
         for r in rows {
             let (path, body, s) = r?;
             let Some((_, before, hit, after)) = hit_line(&body, &terms) else { continue };
-            out.push(json!({"path": path, "passage": format!("{before}{hit}{after}"), "score": ((-s) * 1000.0).round() / 1000.0}));
+            out.push(json!({"path": path, "passage": format!("{before}{hit}{after}"), "score": -s}));
         }
         Ok(out)
     })
