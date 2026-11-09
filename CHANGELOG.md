@@ -15,11 +15,11 @@ a PR. Versions follow
 
 ### Added
 
-- Relay compiles for Windows, and every PR is checked on macOS and Windows. It does not work on Windows yet: conversations and the `relay` command report that local sockets are not supported, and secrets, the login PATH, the `.claude` link of a vault, Whisper and this computer as a work machine are missing there.
+- Relay compiles for Windows, and every PR is checked on macOS and Windows. It does not work on Windows yet: conversations and the `relay` command report that local sockets are not supported, and secrets, the login PATH, the `.claude` link of a vault, Whisper and this computer as a work machine are missing there (#451)
 
 ### Fixed
 
-- The Pi agent was only declared as a dependency of the macOS build, so a build for any other system failed on it.
+- The Pi agent was only declared as a dependency of the macOS build, so a build for any other system failed on it (#451)
 
 ## [0.0.49] - 2026-11-08
 
