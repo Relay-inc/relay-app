@@ -1616,6 +1616,26 @@ fn a_reader_reads_and_the_server_refuses_its_writes() {
     assert!(!list_of(&t, &a).members.contains_key(&b.fp));
 }
 
+/// A device that joined with a reader invite goes on the list as a reader, also when an admin adds it without that
+/// invite (Add to list): never as a member, which the server refuses too.
+#[test]
+fn a_device_that_joined_as_reader_is_listed_as_one() {
+    let t = team("reader-late");
+    let (a, b) = (Member::new(&t.laptop, &t.lid, &t.key), Member::new(&t.colleague, &t.cid, &t.key));
+    rounds(&t, &[&a], 1);
+    edit_vault(&t, |v| { for m in v["members"].as_array_mut().unwrap() { if m["fp"] == b.fp.as_str() { m["role"] = serde_json::json!("reader"); } } });
+    b.step(&t.vault);
+    // an add as member, signed by the admin: the server refuses it
+    let l = list_of(&t, &a);
+    let (id, pk) = (b.keys().identity(), b.keys().public());
+    let e = a.keys().sign_entry(&t.vault, &l, &a.fp, relay_remote::members::Entry { kind: "add".into(), fp: b.fp.clone(), id, pk, role: "member".into(), ..Default::default() });
+    let err = a.c.call(serde_json::json!({"op": "vault_append", "vault": t.vault, "entry": e, "keys": {}})).unwrap_err();
+    assert!(err.contains("joined as a reader"), "{err}");
+    // Add to list: as a reader
+    a.remote(&t.vault).add_listed(&b.fp, &a.save()).unwrap();
+    assert!(list_of(&t, &a).reader(&b.fp) && b.step(&t.vault).reader);
+}
+
 /// A member whose Relay publishes its keys only after an admin's upgrade made the list: trust on upgrade skipped it, so
 /// it has no role on the list until an admin adds it, on the same proof (its keys vouched for under the newest key).
 #[test]

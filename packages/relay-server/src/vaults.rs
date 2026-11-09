@@ -344,6 +344,8 @@ impl Vaults {
                 "create" if !v.log.is_empty() || me != "admin" => return Err("this vault has a member list".into()),
                 "rekey" => return Err("a key change goes with vault_rotate".into()),
                 "add" if v.role(&e.fp).is_none() => return Err("only who joined can be added".into()),
+                // who joined with a reader invite goes on the list as a reader: a role entry raises it later, if at all
+                "add" if v.role(&e.fp) == Some("reader") && e.role != "reader" => return Err("joined as a reader: add it as one".into()),
                 _ => {}
             }
             let (before, hashes) = members::check(&v.id, &v.log, None)?;

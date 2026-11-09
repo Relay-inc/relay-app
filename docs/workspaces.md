@@ -411,7 +411,8 @@ Every hex field is lowercase, and every field a kind does not use is empty.
   member and leaves a reader as it is. The server's role follows the list. A member who was admin on the server before
   the list came in as a member (trust on upgrade only adds members) and is made admin this way.
 - **A reader** reads the workspace and changes nothing. It is invited as one (`vault_invite` with role `reader`, only
-  by an admin) or given the role by an admin. On the list it signs nothing but its own `leave`: no device of its own,
+  by an admin) or given the role by an admin. A device that joined with a reader invite goes on the list as a reader,
+  also through trust on upgrade or Add to list, and the server refuses an `add` of it with another role. On the list it signs nothing but its own `leave`: no device of its own,
   no naming of itself, no `person-remove`, also not for its own person. A member gives nobody the reader role. The
   server refuses its writes (Wire protocol). Its Relay knows it is one from the server's role (`vault_info`), which
   follows the list: its rounds only pull (`sync::Mode::Pull`: what is unchanged here takes the server's side, a file

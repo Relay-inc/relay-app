@@ -474,6 +474,9 @@ impl SealedRemote {
         lock(&self.seen).insert(path.into(), Seen { name, etag: etag.into(), hash: sync::sha256_hex(data), size: data.len() as u64, e, mtime: 0 });
     }
 }
+/// The role a device the server has goes onto the list with when no invite of this Mac names it (trust on upgrade, Add
+/// to list): member, or reader when it joined as one, never more than it joined as.
+fn listed_role(m: &Value) -> &'static str { if m["role"] == "reader" { "reader" } else { "member" } }
 /// What `keep_keys` did: `keys` when they changed (saved already), `warnings` for the user (a member list the server
 /// cannot be trusted on, a removal that waits too long for a new key), `changed` the members (fp, name) who publish
 /// other keys than the list has (they set up Relay again; an admin can trust them), and `errors`.
@@ -676,7 +679,7 @@ impl SealedRemote {
             if fp == me { continue; }
             let Some((id, pk)) = k.proven(&self.vault, m, None) else { continue };
             let Some((list, _)) = self.list(k)? else { return Ok(()) };
-            let e = k.sign_entry(&self.vault, &list, me, members::Entry { kind: "add".into(), fp: fp.into(), id, pk, role: "member".into(), ..Default::default() });
+            let e = k.sign_entry(&self.vault, &list, me, members::Entry { kind: "add".into(), fp: fp.into(), id, pk, role: listed_role(m).into(), ..Default::default() });
             self.append(k, &list, &e, json!({}), save)?;
         }
         Ok(())
@@ -778,7 +781,7 @@ impl SealedRemote {
         if k.epoch() != list.epoch { return Err("this Mac does not have the newest key yet".into()); }
         let m = v["members"].as_array().into_iter().flatten().find(|m| m["fp"] == fp).ok_or("not a member of this workspace")?;
         let (id, pk) = k.proven(&self.vault, m, None).ok_or("its keys are not vouched for under the newest key: it needs an invite")?;
-        let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "add".into(), fp: fp.into(), id, pk, role: "member".into(), ..Default::default() });
+        let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "add".into(), fp: fp.into(), id, pk, role: listed_role(m).into(), ..Default::default() });
         self.append(&mut k, &list, &e, json!({}), save)
     }
     /// An admin trusts a member's new keys (it set up Relay again): a `device` entry with what the member publishes now,
