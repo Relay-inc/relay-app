@@ -16,7 +16,7 @@ a PR. Versions follow
 ### Added
 
 - Relay compiles for Windows, and every PR is checked on macOS and Windows. It does not work on Windows yet: conversations and the `relay` command report that local sockets are not supported, and the login PATH, the `.claude` link of a vault, Whisper and this computer as a work machine are missing there (#451)
-- Secrets (integration tokens, plugin secrets, mail passwords, calendar addresses) are kept in Credential Manager on Windows. On the Mac they stay in the keychain under the same names, so nothing has to be entered again (#PR)
+- Secrets (integration tokens, plugin secrets, mail passwords, calendar addresses) are kept in Credential Manager on Windows. On the Mac they stay in the keychain under the same names, so nothing has to be entered again (#457)
 
 ### Fixed
 
