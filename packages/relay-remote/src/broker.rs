@@ -18,7 +18,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::sync::OnceLock;
-use std::os::unix::net::{UnixListener, UnixStream};
+use crate::sock::{UnixListener, UnixStream};
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -98,7 +99,11 @@ impl Agent {
         match &self.stop {
             Some(f) => f(self.pid),
             // the system call, not /bin/kill: a minimal Linux install has no such file
+            #[cfg(unix)]
             None => if self.pid > 0 && unsafe { libc::kill(self.pid as libc::pid_t, libc::SIGKILL) } == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) },
+            // ponytail: no brokers on Windows yet (see sock.rs), so no local agent to stop. W3
+            #[cfg(not(unix))]
+            None => Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "stopping a local agent is not supported on Windows yet")),
         }
     }
 }
@@ -120,8 +125,11 @@ fn launch_as(meta: &Meta, spec: &Spec, id: &str) -> Result<Conn, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let spec = serde_json::to_string(spec).unwrap();
     // its own process group, so a Ctrl-C on `tauri dev` does not reach it; waited for, so it leaves no zombie
-    let mut b = Command::new(exe).arg("--broker").arg(&sock).arg(spec).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
-        .process_group(0).spawn().map_err(|e| format!("broker: {e}"))?;
+    let mut b = Command::new(exe);
+    b.arg("--broker").arg(&sock).arg(spec).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    #[cfg(unix)]
+    b.process_group(0);
+    let mut b = b.spawn().map_err(|e| format!("broker: {e}"))?;
     spawn(move || { b.wait().ok(); });
     for _ in 0..100 {
         if let Ok(c) = connect(&sock, id) {

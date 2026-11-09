@@ -29,7 +29,18 @@ mod design;
 mod commits;
 mod dictation;
 mod files;
+mod platform;
+#[cfg(target_os = "macos")]
 mod host;
+// this Mac as a work machine runs relay-server under launchd, so it is macOS only
+#[cfg(not(target_os = "macos"))]
+mod host {
+    pub fn status() -> serde_json::Value { serde_json::json!({"supported": false, "on": false, "running": false, "ram": false, "fingerprint": "", "clients": []}) }
+    pub fn set(_on: bool) -> Result<serde_json::Value, String> { Err("A work machine needs macOS.".into()) }
+    pub fn pair() -> Result<String, String> { Err("A work machine needs macOS.".into()) }
+    pub fn refresh() {}
+    pub fn work_dir() -> Option<std::path::PathBuf> { None }
+}
 mod machine_git;
 mod machines;
 mod mirror;
@@ -457,6 +468,8 @@ fn save_worktrees(app: &AppHandle, w: &HashMap<String, Vec<String>>) {
 
 /// The user's own login shell, not zsh: a fish or bash user's PATH (npm, Homebrew) lives in that shell's config.
 /// The last line, in case the rc files print something first.
+// ponytail: on Windows there is no $SHELL or /bin/zsh, so this gives the macOS fallback and agents find no CLI. W3
+// reads the PATH there
 fn login_path() -> String {
     let sh = std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/zsh".into());
     Command::new(sh).args(["-lic", "printf '\\n%s' \"$PATH\""]).stdin(Stdio::null()).output()
@@ -2284,13 +2297,13 @@ fn ttl_cached(slot: &Mutex<Option<(std::time::Instant, Value)>>, ttl: std::time:
 }
 fn agents_now(app: &AppHandle, state: &App) -> Value {
     let on = agents::enabled(&state.settings.lock().unwrap());
-    let server_work = relay_server::data_dir().join("work");
+    let server_work = host::work_dir();
     let ps = Command::new("/bin/ps").args(["-axo", "pid=,ppid=,command="]).output().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
     let ours = under_broker(&ps);
     let mut out = vec![];
     for p in on.into_iter().filter(|p| p.caps().background) {
         for mut a in p.sessions(&env_of(app, state, p).env()) {
-            if runs_for_server(&a, &server_work) { continue; }
+            if server_work.as_deref().is_some_and(|w| runs_for_server(&a, w)) { continue; }
             a["provider"] = json!(p.id());
             // the app's own process is listed before its session id reaches app_sids: marked, so the sidebar does not
             // show it as a terminal session meanwhile. It stays in the list, syncBusy reads its busy state after a restart.
@@ -3554,6 +3567,7 @@ pub fn run() {
         .expect("error while running tauri application")
         // a click on the Dock icon brings the window used last back (the main one may be hidden)
         .run(|app, e| match e {
+            #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen { .. } => { windows::show_active(app); }
             tauri::RunEvent::Exit => { quit(app); pty::kill_all(app); plugins::kill_all(app); }
             _ => {}

@@ -20,6 +20,7 @@ use transcribe_rs::onnx::cohere::CohereModel;
 use transcribe_rs::onnx::moonshine::{MoonshineModel, MoonshineVariant};
 use transcribe_rs::onnx::parakeet::ParakeetModel;
 use transcribe_rs::onnx::Quantization;
+#[cfg(target_os = "macos")]
 use transcribe_rs::whisper_cpp::WhisperEngine;
 use transcribe_rs::{SpeechModel, TranscribeOptions};
 
@@ -50,7 +51,11 @@ fn load(m: &Model, dir: &Path) -> Result<Box<dyn SpeechModel>, String> {
         "parakeet-v3" | "parakeet-v2" => Box::new(ParakeetModel::load(dir, int8).map_err(e)?),
         "canary-1b-v2" => Box::new(CanaryModel::load(dir, int8).map_err(e)?),
         "cohere" => Box::new(CohereModel::load(dir, int8).map_err(e)?),
+        #[cfg(target_os = "macos")]
         "whisper-turbo" => Box::new(WhisperEngine::load(&dir.join(m.file)).map_err(e)?), // whisper.cpp on Metal
+        // ponytail: no Whisper on Windows, the ONNX models cover dictation there. whisper.cpp on CPU or Vulkan once asked for
+        #[cfg(not(target_os = "macos"))]
+        "whisper-turbo" => return Err("Whisper runs on macOS only for now, pick another model".into()),
         _ => Box::new(MoonshineModel::load(dir, MoonshineVariant::Base, &Quantization::default()).map_err(e)?),
     })
 }

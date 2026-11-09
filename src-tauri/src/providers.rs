@@ -71,6 +71,8 @@ pub fn set_token(p: &Provider, account: &str, t: &str) -> Result<(), String> {
 }
 
 /// A generic password from the macOS keychain (the plugins keep theirs under their own service, see plugins.rs).
+// ponytail: `/usr/bin/security` (here, calendar.rs, mail, agent-claude's usage_log.rs) fails with "not found" on
+// Windows, so no secret is stored there. W2 moves them all to the keyring crate
 pub fn keychain_get(service: &str, account: &str) -> Option<String> {
     let o = Command::new("/usr/bin/security").args(["find-generic-password", "-s", service, "-a", account, "-w"]).output().ok()?;
     let t = String::from_utf8_lossy(&o.stdout).trim().to_string();
@@ -198,7 +200,7 @@ pub fn original_bytes(p: &Provider, url: &str, jar: &str) -> Result<(&'static st
     original(p, url)?;
     let file = std::env::temp_dir().join(format!("relay-jar-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos())));
     {
-        use std::os::unix::fs::OpenOptionsExt;
+        use crate::platform::OpenOptionsExt;
         std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&file).and_then(|mut f| f.write_all(jar.as_bytes())).map_err(|e| e.to_string())?;
     }
     let conf = format!("url = {}\ncookie = {}\n", curl_quote(url), curl_quote(&file.display().to_string()));

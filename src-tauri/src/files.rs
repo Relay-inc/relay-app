@@ -34,10 +34,9 @@ pub async fn read_image(path: String) -> Result<(String, String), String> {
 
 // what macOS would run instead of show: an app, a script, an installer, any file with an execute bit
 fn runs(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
     const RUN: [&str; 9] = ["app", "command", "tool", "terminal", "workflow", "scpt", "pkg", "mpkg", "sh"];
     let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
-    RUN.contains(&ext.as_str()) || std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    RUN.contains(&ext.as_str()) || std::fs::metadata(path).is_ok_and(|m| m.is_file() && crate::platform::executable(&m))
 }
 /// An attached file in its default app, or shown in Finder (`reveal`). Something that would run (an app, a script)
 /// is only ever shown in Finder: a click on a chip opens a document, it never starts a program.
@@ -103,8 +102,7 @@ mod tests {
         let script = dir.join("run");
         std::fs::write(&doc, "x").unwrap();
         std::fs::write(&script, "#!/bin/sh").unwrap();
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+            crate::platform::set_mode(&script, 0o755).unwrap();
         assert!(!runs(&doc));
         assert!(runs(&script));
         assert!(runs(Path::new("/Applications/Safari.app")));

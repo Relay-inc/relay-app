@@ -16,6 +16,7 @@
 use serde_json::{json, Value};
 use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Write};
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
@@ -79,10 +80,13 @@ struct Server {
 
 impl Server {
     fn spawn(key: String, command: &str, args: &[String], env: &HashMap<String, String>, path: &str) -> Result<Arc<Server>, String> {
-        let mut child = Command::new(command).args(args).env("PATH", path).envs(env)
-            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
-            .process_group(0) // its own group, so stopping it also stops what it started
-            .spawn().map_err(|e| trc_v("err.plugin_start", &format!("{command}: {e}")))?;
+        let mut cmd = Command::new(command);
+        cmd.args(args).env("PATH", path).envs(env).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        // its own group, so stopping it also stops what it started
+        // ponytail: on Windows stopping a plugin leaves what it started running, W3 puts it in a Job Object
+        #[cfg(unix)]
+        cmd.process_group(0);
+        let mut child = cmd.spawn().map_err(|e| trc_v("err.plugin_start", &format!("{command}: {e}")))?;
         let stdin = Arc::new(Mutex::new(child.stdin.take().unwrap()));
         let (out, err) = (child.stdout.take().unwrap(), child.stderr.take().unwrap());
         let tail: Arc<Mutex<VecDeque<String>>> = Default::default();

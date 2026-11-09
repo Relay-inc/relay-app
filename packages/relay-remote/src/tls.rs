@@ -15,6 +15,7 @@ use rustls::{CertificateError, ClientConfig, Connection, DigitallySignedStruct, 
 use std::fs;
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream, ToSocketAddrs};
+#[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -35,8 +36,13 @@ impl Identity {
         fs::create_dir_all(dir)?;
         // the key first, private before its first byte (an older file keeps its mode through open, hence the chmod);
         // the certificate last, so a pair cut off halfway is made again
+        #[cfg(unix)]
         let mut f = fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&key)?;
+        #[cfg(unix)]
         f.set_permissions(fs::Permissions::from_mode(0o600))?;
+        // ponytail: on Windows the key file only has the default ACL of the user's profile, W2 restricts it
+        #[cfg(not(unix))]
+        let mut f = fs::File::create(&key)?;
         f.write_all(&id.key_der)?;
         fs::write(&crt, &id.cert_der)?;
         Ok(id)

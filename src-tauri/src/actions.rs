@@ -18,7 +18,7 @@ use crate::{providers, reminders};
 use board_core::{check_args, Action, Policy, Provider};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::os::unix::net::{UnixListener, UnixStream};
+use relay_remote::sock::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
@@ -146,7 +146,7 @@ pub fn bin_dir(app: &AppHandle) -> Option<PathBuf> {
     let d = app.path().app_data_dir().ok()?.join("bin");
     std::fs::create_dir_all(&d).ok().map(|_| d)
 }
-fn set_mode(p: &std::path::Path, mode: u32) { use std::os::unix::fs::PermissionsExt; std::fs::set_permissions(p, std::fs::Permissions::from_mode(mode)).ok(); }
+fn set_mode(p: &std::path::Path, mode: u32) { crate::platform::set_mode(p, mode).ok(); }
 
 fn serve(app: &AppHandle, c: UnixStream) {
     let mut line = String::new();
@@ -169,11 +169,13 @@ fn serve(app: &AppHandle, c: UnixStream) {
 /// The app conversation a request on the socket comes from: up from the calling process to an agent the app runs.
 /// None when it descends from none (a terminal of the user's own) or the platform cannot tell.
 fn caller(app: &AppHandle, c: &UnixStream) -> Option<String> {
-    use std::os::fd::AsRawFd;
     let agents: std::collections::HashMap<u32, String> = app.state::<crate::App>().procs.lock().unwrap().iter()
         // a remote agent's pid is one on the work machine: it could match a process here
         .filter(|(_, p)| !p.remote).map(|(k, p)| (p.child.id(), k.clone())).collect();
-    let mut pid = agent_core::peer::peer_pid(c.as_raw_fd())?;
+    #[cfg(unix)]
+    let mut pid = agent_core::peer::peer_pid(std::os::fd::AsRawFd::as_raw_fd(c))?;
+    #[cfg(not(unix))]
+    let mut pid: u32 = { let _ = c; None? }; // the stand-in socket has no peer, W3 reads it from the named pipe
     for _ in 0..64 {
         if let Some(k) = agents.get(&pid) { return Some(k.clone()); }
         pid = agent_core::peer::parent(pid).filter(|p| *p > 1)?;
