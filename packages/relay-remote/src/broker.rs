@@ -101,14 +101,14 @@ impl Agent {
             // the system call, not /bin/kill: a minimal Linux install has no such file
             #[cfg(unix)]
             None => if self.pid > 0 && unsafe { libc::kill(self.pid as libc::pid_t, libc::SIGKILL) } == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) },
-            // ponytail: no brokers on Windows yet (see sock.rs), so no local agent to stop. W3
-            #[cfg(not(unix))]
-            None => Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "stopping a local agent is not supported on Windows yet")),
+            // the agent itself, what it started ends with the broker's Job Object once the broker sees it exit
+            #[cfg(windows)]
+            None => if self.pid > 0 { agent_core::job::kill_pid(self.pid) } else { Err(std::io::ErrorKind::NotFound.into()) },
         }
     }
 }
 /// A connection to a broker: the agent, where its stdin goes, and the frames to read (the first `backlog` were
-/// buffered while the app was away). Local brokers are a Unix socket, a work machine's a TLS stream.
+/// buffered while the app was away). Local brokers are a Unix socket (a named pipe on Windows), a work machine's a TLS stream.
 pub struct Conn { pub agent: Agent, pub stdin: Box<dyn Write + Send>, pub frames: Box<dyn BufRead + Send>, pub backlog: usize }
 
 /// The id this Mac's app connects to its own brokers with.
@@ -129,7 +129,18 @@ fn launch_as(meta: &Meta, spec: &Spec, id: &str) -> Result<Conn, String> {
     b.arg("--broker").arg(&sock).arg(spec).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     #[cfg(unix)]
     b.process_group(0);
+    #[cfg(unix)]
     let mut b = b.spawn().map_err(|e| format!("broker: {e}"))?;
+    // Windows: a process group of its own (no Ctrl-C from the console of `tauri dev`), no console window, and out of
+    // a Job Object the app may run in (cargo's), where the job allows that, so the broker outlives the app
+    #[cfg(windows)]
+    let mut b = {
+        use std::os::windows::process::CommandExt;
+        const NEW_GROUP: u32 = 0x200; // CREATE_NEW_PROCESS_GROUP
+        const BREAKAWAY: u32 = 0x0100_0000; // CREATE_BREAKAWAY_FROM_JOB
+        let flags = NEW_GROUP | agent_core::job::NO_WINDOW;
+        b.creation_flags(flags | BREAKAWAY).spawn().or_else(|_| b.creation_flags(flags).spawn()).map_err(|e| format!("broker: {e}"))?
+    };
     spawn(move || { b.wait().ok(); });
     for _ in 0..100 {
         if let Ok(c) = connect(&sock, id) {
@@ -217,8 +228,19 @@ impl State {
 
 pub fn main(sock: &str, spec: &str) {
     let listener = UnixListener::bind(sock).unwrap_or_else(|_| std::process::exit(1));
+    // Windows: the agent and all it starts in a Job Object, ended when the broker goes (see the exit below)
+    #[cfg(windows)]
+    let job = agent_core::job::Job::new().unwrap_or_else(|_| std::process::exit(1));
     let child = serde_json::from_str::<Spec>(spec).map_err(|e| e.to_string())
-        .and_then(|s| s.command().stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string()));
+        .and_then(|s| {
+            let mut c = s.command();
+            c.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+            #[cfg(unix)]
+            let child = c.spawn();
+            #[cfg(windows)]
+            let child = job.spawn(&mut c);
+            child.map_err(|e| e.to_string())
+        });
     let mut child = match child {
         Ok(c) => c,
         Err(e) => { // tell the app why, then go
@@ -239,7 +261,12 @@ pub fn main(sock: &str, spec: &str) {
     // the agent ends: the rest of its output, its exit code, then the broker goes
     let (st2, sock2) = (st.clone(), sock.to_string());
     spawn(move || {
+        // Windows: what the agent started may still hold its output pipes, so the job ends it first and the reads
+        // then see the end. The output already in the pipes is still read.
+        #[cfg(windows)]
+        let code = { let c = child.wait().ok().and_then(|s| s.code()).unwrap_or(-1); job.kill(); c };
         out.join().ok(); err.join().ok();
+        #[cfg(unix)]
         let code = child.wait().ok().and_then(|s| s.code()).unwrap_or(-1);
         st2.lock().unwrap().send(format!("x {code}"));
         fs::remove_file(&sock2).ok();

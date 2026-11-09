@@ -20,6 +20,8 @@ pub const WRITE_MAX: usize = 20_000;
 pub mod discover;
 pub use discover::{discover_commands, http_get, Probe};
 pub mod envelope;
+#[cfg(windows)]
+pub mod job;
 pub mod peer;
 pub mod pending;
 pub mod prompt;
@@ -335,9 +337,14 @@ pub fn run(bin: &str, path: &str, args: &[&str]) -> Option<String> {
     Command::new(bin).args(args).env("PATH", path).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()
         .filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
 }
-/// A program by name on the PATH.
+/// What separates the folders of a PATH.
+pub const PATH_SEP: char = if cfg!(windows) { ';' } else { ':' };
+/// A program by name on the PATH. On Windows also with the extensions it runs a bare name with (`claude.exe`,
+/// `codex.cmd` from npm).
 pub fn which(name: &str, path: &str) -> Option<String> {
-    path.split(':').map(|d| format!("{d}/{name}")).find(|p| Path::new(p).is_file())
+    let exts: &[&str] = if cfg!(windows) { &["", ".exe", ".cmd", ".bat", ".com"] } else { &[""] };
+    path.split(PATH_SEP).flat_map(|d| exts.iter().map(move |e| format!("{d}/{name}{e}")))
+        .find(|p| Path::new(p).is_file())
 }
 /// The first line of `bin --version`, the way most CLIs answer it. Read once per binary file and modification time:
 /// a conversation start asks every time, and each ask would spawn the CLI.

@@ -366,12 +366,42 @@ pnpm format:check             # Prettier
 
 CI (`.github/workflows/checks.yml`) runs the TypeScript checks plus `vite build` on macOS and Windows, then
 `cargo check`: on macOS with the tests, on Windows without `relay-server` (a Linux and Mac server) and without tests.
-The app builds for Windows but does little there yet: Unix-only calls (local sockets, process groups, file modes,
-symlinks, this Mac as a work machine, Whisper) sit behind `cfg` gates with stand-ins (`src-tauri/src/platform.rs`,
-`packages/relay-remote/src/sock.rs`), each with a `ponytail:` comment naming the Windows PR (W2 to W4) that fills it
-in.
-`cargo check --target x86_64-pc-windows-msvc` from a Mac stops at the C build scripts (ring, SQLite, the Windows
-resource file), which need the Windows SDK: CI is the check.
+The app builds for Windows but does not all work there yet: Unix-only calls (file modes, symlinks, this Mac as a
+work machine, Whisper) sit behind `cfg` gates with stand-ins (`src-tauri/src/platform.rs`), each with a `ponytail:`
+comment naming the Windows PR that fills it in.
+
+Processes and local sockets work on Windows:
+
+- **Local sockets** (`packages/relay-remote/src/sock.rs`): named pipes behind the same calls as a Unix socket, for
+  the broker, the `relay` CLI and relay-server's attach. The socket's path stays the address: `bind` makes a pipe
+  `\\.\pipe\relay-<pid>-<n>` and writes its name into the file at the path, `connect` reads it there, so removing the
+  file closes the address as unlinking a socket does. The pipe's DACL allows only the user, remote clients are
+  refused, a client connects at identification level. Timeouts and non-blocking reads are overlapped I/O.
+- **Caller tracing** (`agent_core::peer`): the pid Windows recorded when the CLI opened the pipe
+  (`GetNamedPipeClientProcessId`), then up through the parents. Windows keeps a parent's pid, not the parent, so a
+  parent that started after its child (a reused pid) or one the user may not inspect ends the walk: the call then
+  counts as untraced, as a terminal of the user's own does on macOS.
+- **Process groups** (`agent_core::job`): a Job Object that ends everything in it when it is killed or its last
+  handle closes. Discovery runs its probes in one, a plugin and the codex and OpenCode bridges' CLI in one each, the
+  broker its agent (and ends the job once the agent exits, so nothing that holds the agent's pipes outlives it).
+  Every child starts without a console window. Windows has no SIGTERM for these processes, so `agent_core::terminate`
+  is a hard stop there.
+- **PATH**: `login_path` reads the stored PATH (machine, then user) through PowerShell instead of a login shell, PATH
+  folders are split on `;` (`agent_core::PATH_SEP`), and `agent_core::which` also tries `.exe`, `.cmd`, `.bat` and
+  `.com`. The app writes `relay.cmd` next to the `relay` script.
+
+Type-checking the Windows side from a Mac needs a stand-in C toolchain, the build scripts of ring, SQLite and the
+Windows resource file otherwise want the Windows SDK. With `rustup target add x86_64-pc-windows-msvc` and a folder
+first on the PATH that holds `fakecc` (touches the file after `-o` or in `-Fo`), `fakear` (touches the `-out:` file)
+and `llvm-rc` (touches the `/fo` file):
+
+```sh
+CC_x86_64_pc_windows_msvc=fakecc CXX_x86_64_pc_windows_msvc=fakecc AR_x86_64_pc_windows_msvc=fakear \
+  DOCS_RS=1 WHISPER_DONT_GENERATE_BINDINGS=1 \
+  cargo check --workspace --exclude relay-mobile --exclude relay-server --target x86_64-pc-windows-msvc
+```
+
+Only Rust is checked, nothing is compiled or linked for Windows: CI on `windows-latest` is the real check.
 
 The frontend has a harness (`harness/`, see its README) that runs the real webview against a mocked Tauri backend,
 on the dev server (`pnpm exec vite --config harness/vite.config.ts`, http://127.0.0.1:1430):

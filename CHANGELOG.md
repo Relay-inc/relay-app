@@ -16,6 +16,7 @@ a PR. Versions follow
 ### Added
 
 - Relay compiles for Windows, and every PR is checked on macOS and Windows. It does not work on Windows yet: conversations and the `relay` command report that local sockets are not supported, and secrets, the login PATH, the `.claude` link of a vault, Whisper and this computer as a work machine are missing there (#451)
+- Conversations and the `relay` command run on Windows: local sockets are named pipes open to the user only, `relay` from an agent is traced to its conversation as on macOS, agents, plugins and their children run in a Job Object that ends them together, and the PATH is read from Windows' stored PATH (#PR)
 
 ### Fixed
 

@@ -69,6 +69,8 @@ type Pending = Arc<Mutex<HashMap<i64, mpsc::Sender<Result<Value, String>>>>>;
 struct Server {
     key: String, // the part of the entry that decides how it starts: a different one starts a new process
     child: Mutex<Child>,
+    #[cfg(windows)]
+    job: agent_core::job::Job, // Windows' process group: the server and what it started
     stdin: Arc<Mutex<ChildStdin>>,
     pending: Pending,
     next: AtomicI64,
@@ -82,11 +84,15 @@ impl Server {
     fn spawn(key: String, command: &str, args: &[String], env: &HashMap<String, String>, path: &str) -> Result<Arc<Server>, String> {
         let mut cmd = Command::new(command);
         cmd.args(args).env("PATH", path).envs(env).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
-        // its own group, so stopping it also stops what it started
-        // ponytail: on Windows stopping a plugin leaves what it started running, W3 puts it in a Job Object
+        // its own group (a Job Object on Windows), so stopping it also stops what it started
         #[cfg(unix)]
         cmd.process_group(0);
+        #[cfg(unix)]
         let mut child = cmd.spawn().map_err(|e| trc_v("err.plugin_start", &format!("{command}: {e}")))?;
+        #[cfg(windows)]
+        let job = agent_core::job::Job::new().map_err(|e| trc_v("err.plugin_start", &format!("{command}: {e}")))?;
+        #[cfg(windows)]
+        let mut child = job.spawn(&mut cmd).map_err(|e| trc_v("err.plugin_start", &format!("{command}: {e}")))?;
         let stdin = Arc::new(Mutex::new(child.stdin.take().unwrap()));
         let (out, err) = (child.stdout.take().unwrap(), child.stderr.take().unwrap());
         let tail: Arc<Mutex<VecDeque<String>>> = Default::default();
@@ -111,7 +117,7 @@ impl Server {
             let why = why(&t);
             for (_, tx) in p.lock().unwrap().drain() { tx.send(Err(why.clone())).ok(); }
         });
-        Ok(Arc::new(Server { key, child: Mutex::new(child), stdin, pending, next: AtomicI64::new(1), tail, dead, info: Mutex::new(Value::Null), tools: Mutex::new(None) }))
+        Ok(Arc::new(Server { key, child: Mutex::new(child), #[cfg(windows)] job, stdin, pending, next: AtomicI64::new(1), tail, dead, info: Mutex::new(Value::Null), tools: Mutex::new(None) }))
     }
 
     /// initialize, as a host that understands MCP Apps views, then the notification that completes it.
@@ -170,7 +176,10 @@ impl Drop for Server {
     fn drop(&mut self) {
         let mut child = self.child.lock().unwrap();
         // the group first (a negative pid), the child itself as well in case it left the group
+        #[cfg(unix)]
         Command::new("/bin/kill").args(["-s", "TERM", "--", &format!("-{}", child.id())]).output().ok();
+        #[cfg(windows)]
+        self.job.kill();
         child.kill().ok();
         child.wait().ok();
     }

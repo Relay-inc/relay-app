@@ -10,3 +10,7 @@ serde_json.workspace = true
 libc = "0.2"
 base64 = "0.23"
 shlex = "1"
+
+# Windows: the caller of a named pipe and its parents (src/peer.rs), Job Objects instead of process groups (src/job.rs)
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_Pipes", "Win32_System_Threading"] }

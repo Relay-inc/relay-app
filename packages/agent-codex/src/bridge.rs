@@ -62,7 +62,13 @@ fn prepare_turn(message: &Value, skills: &HashMap<String, Value>) -> Result<Valu
 /// The bridge on `input`/`out`; `gone(code)` is called (from a thread) when codex ends by itself, the process exit in
 /// the app. Returns the exit code.
 pub fn run<W: Write + Send + 'static>(bin: &str, cfg: &Value, input: impl BufRead, out: W, gone: fn(i32)) -> i32 {
-    let Ok(mut codex) = Command::new(bin).arg("app-server").stdin(Stdio::piped()).stdout(Stdio::piped()).spawn() else { return 1 };
+    let mut cmd = Command::new(bin);
+    cmd.arg("app-server").stdin(Stdio::piped()).stdout(Stdio::piped());
+    #[cfg(unix)]
+    let Ok(mut codex) = cmd.spawn() else { return 1 };
+    // Windows: codex and the commands it runs in a Job Object, ended when this bridge goes
+    #[cfg(windows)]
+    let Some((_job, mut codex)) = agent_core::job::Job::new().ok().and_then(|j| j.spawn(&mut cmd).ok().map(|c| (j, c))) else { return 1 };
     let pid = codex.id();
     let cin = Arc::new(Mutex::new(codex.stdin.take().unwrap()));
     let mut cout = BufReader::new(codex.stdout.take().unwrap());

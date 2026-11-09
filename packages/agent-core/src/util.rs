@@ -49,10 +49,9 @@ pub fn command_for(env: &Env, default_bin: &str, name: &str) -> String {
 /// SIGTERM to `pid`.
 #[cfg(unix)]
 pub fn terminate(pid: u32) { unsafe { libc::kill(pid as i32, libc::SIGTERM); } }
-// ponytail: no SIGTERM on Windows, the agent keeps running until it ends by itself (stop() still kills it after the
-// grace). W3 stops it through a Job Object
-#[cfg(not(unix))]
-pub fn terminate(_pid: u32) {}
+/// Windows: the process ends at once, see [`crate::job::kill_pid`]. What it started ends with its Job Object.
+#[cfg(windows)]
+pub fn terminate(pid: u32) { crate::job::kill_pid(pid).ok(); }
 /// SIGTERM to `child`, SIGKILL when it is still there after `grace`; reaped either way.
 pub fn stop(child: &mut Child, grace: Duration) {
     terminate(child.id());

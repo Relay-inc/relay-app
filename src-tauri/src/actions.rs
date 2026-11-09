@@ -133,6 +133,9 @@ pub fn start(app: &AppHandle) {
         let script = format!("#!/bin/sh\nexec '{}' --cli \"$@\"\n", exe.replace('\'', "'\\''"));
         let f = bin.join("relay");
         if std::fs::write(&f, script).is_ok() { set_mode(&f, 0o755); }
+        // Windows: `relay` above serves a POSIX shell (Git Bash), `relay.cmd` serves cmd and PowerShell
+        #[cfg(windows)]
+        std::fs::write(bin.join("relay.cmd"), format!("@\"{}\" --cli %*\r\n", exe.replace('%', "%%"))).ok();
     }
     let path = sock();
     std::fs::create_dir_all(path.parent().unwrap()).ok();
@@ -174,8 +177,9 @@ fn caller(app: &AppHandle, c: &UnixStream) -> Option<String> {
         .filter(|(_, p)| !p.remote).map(|(k, p)| (p.child.id(), k.clone())).collect();
     #[cfg(unix)]
     let mut pid = agent_core::peer::peer_pid(std::os::fd::AsRawFd::as_raw_fd(c))?;
-    #[cfg(not(unix))]
-    let mut pid: u32 = { let _ = c; None? }; // the stand-in socket has no peer, W3 reads it from the named pipe
+    // the pid Windows recorded when the CLI opened the pipe
+    #[cfg(windows)]
+    let mut pid = agent_core::peer::peer_pid(std::os::windows::io::AsRawHandle::as_raw_handle(c))?;
     for _ in 0..64 {
         if let Some(k) = agents.get(&pid) { return Some(k.clone()); }
         pid = agent_core::peer::parent(pid).filter(|p| *p > 1)?;
