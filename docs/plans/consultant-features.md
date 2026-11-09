@@ -80,8 +80,8 @@ assumption this plan uses.
 16. Who runs the relay-server? **Answered (second round): Relay runs it for the customer, or the customer runs it
     itself.** The server code is already public (FSL). The plan builds the install recipe first (S1, Docker) and treats
     a hosted server as a later product (ops, billing, updates and backups at Relay), not in these estimates.
-17. Codex writes inside the workspace without asking, `.claude/` included (found while building A2). *Open, see
-    Feature 1 › Open choice.* Assumption: (a), leave it and document it.
+17. Codex writes inside the workspace without asking, `.claude/` included (found while building A2). **Answered:
+    accept it and write it down in Trust** (done in A2). A5 looks into Codex's permission profiles as a follow-up.
 
 ## Feature 1: any AI (Claude Code and Codex)
 
@@ -105,7 +105,8 @@ assumption this plan uses.
 - **Open as PR: A1** (#452, rebased on `main`). The starter vault (and through it the team starter) has an
   `AGENTS.md` that points at `CLAUDE.md` and `System/rules/` instead of copying them. The vault check lists a missing
   `AGENTS.md` and repairs it.
-- **Built: A2** (`b57fc238`, branch `relay/relay-a2-codex-fence-en-teamworkspaces-mw96qs8q`, on A1, not pushed).
+- **Built: A2** (`b57fc238`, branch `relay/relay-a2-codex-fence-en-teamworkspaces-mw96qs8q`, on A1, not pushed),
+  ready for a PR after A1 (#452).
   Relay checks every permission request Codex raises before it becomes a card: a path outside the workspace, or on
   what the fence keeps (another vault, Relay's data, Claude's config, the workspace's `.claude`), is declined at once.
   In a workspace Codex keeps its sandbox and asks the user, not its own auto review. Team workspaces allow Claude Code
@@ -129,22 +130,22 @@ assumption this plan uses.
 
 Dropped: adding more CLIs, Relay's own agent loop, an API key store (A3), OpenCode and Pi work.
 
-### Open choice: Codex writes inside the workspace without asking
+### Decision: Codex writes inside the workspace without asking
 
-A2 found the edge of that fence. Codex's own sandbox lets it write anywhere inside the workspace without raising a
-request, so Relay never sees those writes, `.claude/` (the workspace's Claude settings and hooks) included. The live run
-with codex-cli 0.163 also showed reads outside the workspace going through without a request: writes outside are
-refused, reads are not. Claude Code's deny rules do not apply to Codex, so nothing fences its reads yet. Option (b)
-does not change that either. A
-consultant's Codex can therefore change the rules every member's Claude Code loads. Three ways:
+A2 found the edge of that fence. Codex's own sandbox (`workspace-write`) lets it write anywhere inside the workspace
+without raising a request, so Relay never sees those writes, `.claude/` (the workspace's Claude settings and hooks)
+included. A consultant's Codex can therefore change the rules every member's Claude Code loads. The live run with
+codex-cli 0.163 also showed reads outside the workspace going through without a request: writes outside are refused,
+reads are not. Claude Code's deny rules do not apply to Codex, so nothing fences its reads yet.
 
-- **(a) Leave it and document it** in `docs/workspaces.md` › Trust. No work. The fence keeps Codex out of other vaults
-  and Relay's data, not out of the workspace's own config. *The plan's assumption.*
-- **(b) Codex read-only in workspaces**: start it with a read-only sandbox there, so every write becomes a request
-  Relay can check. About 0.5 day. Every edit costs a card, which makes Codex much slower to work with than Claude
-  Code in the same workspace.
-- **(c) Codex's permission profiles**: a profile per workspace that allows writes in the workspace except `.claude/`
-  and `System/`, if the Codex version Relay supports has that (not verified). About 1 day, follow-up work after A2.
+**Decided (2026-11-09): accept it and write it down.** A2's `docs/workspaces.md` › Trust already says it: the guard
+sees only what Codex asks for, its sandbox lets it read anywhere and write inside the workspace (its `.claude`
+included) without asking. Rejected: Codex read-only in workspaces (every edit a card, much slower than Claude Code in
+the same workspace).
+
+**Follow-up (A5, after A2):** find out whether Codex's permission profiles can make `.claude/` in a workspace
+read-only while the rest stays writable, and if so start Codex in a workspace with such a profile. About 0.5 to 1 day,
+of which the first part is finding out whether the Codex version Relay supports has it (not verified).
 
 ### Risks
 
@@ -455,8 +456,8 @@ tenant) gets a wider range.
 | A1 | `AGENTS.md` in the starter and team vaults, `vaultcheck` accepts and repairs it | 1 | none | 0.5 | PR #452 |
 | U1 | People: person and device entries in the member list, people in Members | 3 | none (stacked on W1) | 2 | PR #453, on #451 |
 | U2 | `reader` role, enforced on the server, read-only in the UI | 3 | U1 | 1 | built, `c4afc66e` |
-| A2 | Fence for Codex (deny outside the vault in the pending folder, Codex sandbox kept), team workspaces allow Claude Code and Codex | 1 | A1 | 1.5 | built, `b57fc238` |
-| A5 | Codex and the workspace's `.claude/`: (a) document, (b) read-only sandbox in workspaces, (c) permission profiles | 1 | A2 | 0 to 1 | open choice |
+| A2 | Fence for Codex (deny outside the vault in the pending folder, Codex sandbox kept), team workspaces allow Claude Code and Codex, the `.claude` edge written down in Trust | 1 | A1 | 1.5 | built, `b57fc238`, PR after #452 |
+| A5 | Codex's permission profiles: `.claude/` read-only in a workspace if Codex supports it, else written down why not | 1 | A2 | 0.5 to 1 | |
 | K1a | Workspace without history: `nohistory` entry at creation, conflict copies without a name, UI label, capture and templates checked for author fields | 2 | U2 (member list) | 1 | |
 | K1b | Anonymous author per session in documents: no `.from` on the server, session id in seal, gap check and counters, cursors without a name, history and comments by session, no mentions | 2 | K1a | 3.5 to 4.5 | |
 | U3 | Organisation admin: overview per person, offboarding in one step, signed workspace policy (allowed providers) | 3 | U1, U2, K1a (member list) | 2 to 2.5 | |
@@ -482,8 +483,8 @@ all OpenCode and Pi work (answer 1). K1 of the first round (no documents in the 
 K1b (answer 7b).
 
 Totals still to build, W12 not included: Windows 16.5 to 24.5 days (W2 to W6 7.5 to 9, W7 to W11 9 to 15.5), any AI
-0 to 1, user management 5.5 to 7.5 (of which SSO 3.5 to 5), knowledge 7 to 8 (5.5 to 6.5 without K4), server 1.5 to
-2. Together about 30.5 to 43 days. W12 adds 3 to 5 if a CLI needs it. Built so far: 7 (W1, A1, U1, U2, A2), of
+0.5 to 1, user management 5.5 to 7.5 (of which SSO 3.5 to 5), knowledge 7 to 8 (5.5 to 6.5 without K4), server 1.5 to
+2. Together about 31 to 43 days. W12 adds 3 to 5 if a CLI needs it. Built so far: 7 (W1, A1, U1, U2, A2), of
 which 4.5 open as PRs.
 
 What grew since the first round: everything on Windows (W7 to W11, +9 to 15.5 days), the anonymous documents (K1b,
@@ -491,9 +492,10 @@ What grew since the first round: everything on Windows (W7 to W11, +9 to 15.5 da
 
 ### Order
 
-0. **Land wave 1.** #451 (W1) first, then #453 (U1) rebased on `main`, #452 (A1) on its own. Then U2 and A2 as PRs.
+0. **Land wave 1.** #451 (W1) first, then #453 (U1) rebased on `main`, #452 (A1) on its own. Then U2 (on U1) and A2
+   (on A1) as PRs.
 1. **Wave 2, in parallel:** W2, W4 and W5 (different files), S1 (server package and docs only). W3 alone, it touches
-   the broker and `actions.rs`. Laurent tests the Windows PRs on his Windows machine. A5 once the choice is made.
+   the broker and `actions.rs`. Laurent tests the Windows PRs on his Windows machine. A2 as a PR once A1 is in, then A5.
 2. **Wave 3:** K1a after U2, then K1b (seal and gap check, alone in `relay-remote/src/docs.rs`), K3, and K4 after A2.
    W7, W9, W10 and W11 in parallel (separate modules). W8 after W3.
 3. **Wave 4:** U3 after K1a, then U4 and U5. W6 when W2 to W5 are in and there is a certificate.
