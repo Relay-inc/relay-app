@@ -94,11 +94,23 @@ fn close(subs: Vec<Sub>, why: &str) {
 
 /// Every vault's open streams. `epoch` is new at every start of this server: a resume asked against another epoch
 /// starts over (the ring went with the process).
-pub struct Rooms { epoch: String, next: AtomicU64, start: Instant, rooms: Arc<Mutex<HashMap<String, Room>>> }
+/// `sessions`: on a workspace without history, which device first named each session id (`claim`), in memory only.
+pub struct Rooms { epoch: String, next: AtomicU64, start: Instant, rooms: Arc<Mutex<HashMap<String, Room>>>, sessions: Mutex<HashMap<(String, String), String>> }
 impl Default for Rooms {
-    fn default() -> Rooms { Rooms { epoch: random_secret()[..16].into(), next: AtomicU64::new(1), start: Instant::now(), rooms: Arc::default() } }
+    fn default() -> Rooms { Rooms { epoch: random_secret()[..16].into(), next: AtomicU64::new(1), start: Instant::now(), rooms: Arc::default(), sessions: Mutex::default() } }
 }
+/// Session ids `claim` remembers before it starts over.
+const MAX_CLAIMS: usize = 100_000;
 impl Rooms {
+    /// Whether device `fp` may write as session `sid` in vault `id`: the first device that names it holds it while
+    /// this server runs, so one member cannot write as another's session. Never written to disk nor handed out (the
+    /// server knows the device of every request anyway, docs/workspaces.md).
+    // ponytail: forgotten at a restart or past MAX_CLAIMS, then the next device to name a session holds it
+    pub fn claim(&self, id: &str, sid: &str, fp: &str) -> bool {
+        let mut all = self.sessions.lock().unwrap();
+        if all.len() >= MAX_CLAIMS { all.clear(); }
+        all.entry((id.to_string(), sid.to_string())).or_insert_with(|| fp.to_string()) == fp
+    }
     fn now_ms(&self) -> u64 { self.start.elapsed().as_millis() as u64 }
     /// `fp` is out of vault `id` (removed or left): its streams close now, and it may open none until vault.json says
     /// otherwise.
@@ -278,7 +290,7 @@ fn read_frames(vaults: &Vaults, fp: &str, id: &str, me: u64, heard: &AtomicU64, 
             if !room.members.contains(fp) { return Err("no longer a member".into()); }
             if room.nohistory {
                 let from = v["from"].as_str().unwrap_or("");
-                if !hex(from, 16) || room.members.iter().any(|m| m.starts_with(from)) { continue; }
+                if !hex(from, 16) || room.members.iter().any(|m| m.starts_with(from)) || !rooms.claim(id, from, fp) { continue; }
                 out["from"] = json!(from);
             }
             if out["e"].as_u64().unwrap_or(0) < room.epoch || (kind == "update" && room.readers.contains(fp)) { continue; }

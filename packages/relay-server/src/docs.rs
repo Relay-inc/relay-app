@@ -68,6 +68,7 @@ impl Vaults {
             // without history: who pushed it is a session, never a device (an old Relay sends none)
             let anon = v.nohistory();
             if anon && !v.session_ok(from) { return Err(NO_SESSION.into()); }
+            if anon && !self.rooms.claim(id, from, fp) { return Err("another member's session".into()); }
             let (who, file) = if anon { (from.to_string(), "sid") } else { (fp[..16].to_string(), "from") };
             for p in &parts {
                 match epoch(p).unwrap_or(0).cmp(&v.epoch) {
@@ -259,6 +260,12 @@ mod tests {
         }
         let session = "5e55105e55105e55";
         assert_eq!(vs.doc_push(&me, &id, &name, session, vec![part.clone()]).unwrap(), vec![1]);
+        // the session is the device's that named it first: another member cannot write as it
+        let other = "b".repeat(64);
+        let mut v2: Value = serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
+        v2["members"].as_array_mut().unwrap().push(json!({"fp": other, "name": "b", "role": "member", "added": 0}));
+        fs::write(&file, v2.to_string()).unwrap();
+        assert_eq!(vs.doc_push(&other, &id, &name, session, vec![part.clone()]).unwrap_err(), "another member's session");
         let log = vs.doc(&id, &name).join("log");
         assert!(!log.join(format!("{:012}.from", 1)).exists() && fs::read_to_string(log.join(format!("{:012}.sid", 1))).unwrap() == session);
         assert_eq!(vs.doc_pull(&me, &id, &name, 0, 0).unwrap().0["updates"][0]["from"], session);

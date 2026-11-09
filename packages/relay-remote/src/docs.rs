@@ -56,14 +56,14 @@ pub const MAX_DOCS: usize = 10_000;
 /// record name is a document's (`doc_bind`). `bound_as`: the path the server was told is this document's (`doc_bind`),
 /// "" none yet. `seeded`: made from an existing file here (8b), not by an edit. `owners`: a comments sidecar's entries
 /// (map "c"), each with the author of the sealed update that last wrote it, never what the entry says of itself.
-/// Without history: `sid` the session `mine` counts for (another one starts at 1), `seen_at` the log seq of each
-/// session's last update (the oldest are let go past MAX_SESSIONS), `as_author` an own earlier session the pending
-/// update is sealed as (a delete of a comment written then, `put_comment`), "" this session.
+/// Without history: `seen` counts per session (this Mac's too, its counter), `seen_at` the log seq of each session's
+/// last update (the oldest are let go past MAX_SESSIONS), `as_author` an own earlier session the pending update is
+/// sealed as (a delete of a comment written then, `put_comment`), "" this session.
 #[derive(Default, Clone, Serialize, Deserialize)]
 #[serde(default)]
 struct Cursor { seq: u64, epoch: u32, path: String, at: String, out: String, pending: bool, acked: String, mine: u64, seen: BTreeMap<String, u64>,
     lost: std::collections::BTreeSet<String>, via: String, bound_as: String, seeded: bool, owners: BTreeMap<String, String>,
-    sid: String, seen_at: BTreeMap<String, u64>, as_author: String }
+    seen_at: BTreeMap<String, u64>, as_author: String }
 struct Open { doc: Doc, c: Cursor }
 
 type On = Arc<dyn Fn(&str, &[u8]) + Send + Sync>;
@@ -533,8 +533,9 @@ impl Docs {
             let Some(o) = open.get(id).filter(|o| o.c.pending) else { return Ok(()) };
             let txn = o.doc.transact();
             let author = if o.c.as_author.is_empty() { me.clone() } else { o.c.as_author.clone() };
-            // an earlier session goes on from its last counter; a new session starts at 1
-            let n = if author != me { o.c.seen.get(&author).copied().unwrap_or(0) + 1 } else if anon && o.c.sid != me { 1 } else { o.c.mine + 1 };
+            // without history the counter is the session's (a new one starts at 1, an earlier one goes on); `mine`
+            // still counts every update this Mac sent (`edited`, `keep_orphans`)
+            let n = if anon { o.c.seen.get(&author).copied().unwrap_or(0) + 1 } else { o.c.mine + 1 };
             (txn.encode_state_as_update_v1(&sv_of(&o.c.acked)), txn.state_vector().encode_v1(), n, o.c.via.clone(), author)
         };
         let meta = if via.is_empty() { json!({"n": n}) } else { json!({"n": n, "o": via}) };
@@ -555,7 +556,7 @@ impl Docs {
             // an edit made after `update` was taken is still pending: only what was sent counts as held
             let now = o.doc.transact().state_vector().encode_v1();
             (o.c.acked, o.c.pending, o.c.via) = (hex(&sv), now != sv, String::new());
-            if author == me { o.c.mine = n; if anon { o.c.sid = me; } }
+            o.c.mine += 1;
             o.c.as_author.clear();
             Self::saw(o, &author, n, anon);
             if seq == o.c.seq + 1 { (o.c.seq, o.c.epoch) = (seq, epoch); }
