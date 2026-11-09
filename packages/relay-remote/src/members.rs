@@ -171,6 +171,8 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
                 "promote" if member => { let m = l.members.get_mut(&e.fp).unwrap(); (m.admin, m.reader) = (true, false); }
                 "demote" if member => l.members.get_mut(&e.fp).unwrap().admin = false,
                 "role" if member => { let m = l.members.get_mut(&e.fp).unwrap(); (m.admin, m.reader) = (e.role == "admin", e.role == "reader"); }
+                // a document records who wrote each update: none on a workspace without history (yet), checked by every Mac
+                "docs-on" if l.nohistory => return bad("a workspace without history has no shared documents yet"),
                 "docs-on" | "docs-off" => l.docs = e.kind == "docs-on",
                 // never later: a workspace that had a history would keep it, and every member saw it as one with history
                 "nohistory" if i == 1 => l.nohistory = true,
@@ -465,6 +467,8 @@ mod tests {
         // by a member or a reader
         assert!(by(&b, flag()).unwrap_err().contains("not signed by an admin"));
         assert!(by(&c, flag()).unwrap_err().contains("a reader only leaves"));
+        // no shared documents on it, also from an admin who writes the entry by hand
+        assert!(by(&a, Entry { kind: "docs-on".into(), ..Default::default() }).unwrap_err().contains("no shared documents"));
         // with a field, or an entry that would undo it: no such entry
         assert!(by(&a, Entry { kind: "nohistory".into(), fp: b.fp.clone(), ..Default::default() }).unwrap_err().contains("wrong fields"));
         for undo in ["history", "nohistory-off", "history-on"] {

@@ -583,6 +583,9 @@ impl SealedRemote {
         if k.ensure() { keep(&k, &mut step)?; }
         let v = self.info()?;
         step.reader = v["role"] == "reader";
+        // the server's word as a floor, before the list is checked (a joiner's first round, a list held back): it can
+        // only hide the flag, which the list then shows, never make a Mac write its name
+        if v["nohistory"] == true && !k.nohistory { k.nohistory = true; keep(&k, &mut step)?; step.nohistory = true; }
         if v["epoch"].as_u64().is_none() {
             // a server that stopped reporting the key after this Mac saw a member list: as held back, never skipped
             if k.has_list() {
@@ -1141,6 +1144,15 @@ mod tests {
         assert_eq!(old(Keys::from(VaultKey::generate())).start(false, &|_| Ok(())).unwrap_err(), OLD_SERVER);
         // a vault this Mac never saw a list of: nothing to warn about
         assert!(!old(Keys::from(VaultKey::generate())).keep_keys(&|_| Ok(())).unwrap().rekeying);
+    }
+    /// The server says a workspace is without history before this Mac could check the list: taken as a floor, saved.
+    #[test]
+    fn the_servers_nohistory_is_a_floor_before_the_list_checks() {
+        let r = SealedRemote::new("0123456789abcdef", Keys::from(VaultKey::generate()), Box::new(|_, _, _| Ok((json!({"vault": {"me": "a".repeat(64), "members": [], "nohistory": true}}), vec![]))));
+        let saved = Arc::new(Mutex::new(false));
+        let s2 = saved.clone();
+        let st = r.keep_keys(&move |k| { *lock(&s2) = k.nohistory; Ok(()) }).unwrap();
+        assert!(st.nohistory && *lock(&saved));
     }
     #[test]
     fn from_hex_cases() {

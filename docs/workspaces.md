@@ -482,11 +482,12 @@ had a history would keep it. Its row in Settings › Machines and the workspace 
 - **The flag** is the member list's `nohistory` entry, right after `create` (Members, above). Every Mac checks it like
   any entry. Once its Relay saw it, the Mac keeps `nohistory` in its key file, so a round that cannot check the list
   (held back, a fork) still writes nothing that names it. The server reads it from the list and returns it in
-  `vault_info`. It enforces nothing with it yet.
+  `vault_info`, which a Mac takes as a floor before it checked the list (a server can only hide the flag that way,
+  never make a Mac write its name). The server enforces nothing with it yet.
 - **Conflict copies name no Mac:** `Notes/A (conflict 2026-10-02 1530).md` instead of `Notes/A (conflict Studio Mac
   2026-10-02 1530).md`.
 - **No shared documents yet.** A document records the device behind every update, its page history, comments and
-  cursors (Documents, above). Until that is anonymous, an admin cannot turn "Notes as shared documents" on here
+  cursors (Documents, above). Until that is anonymous, the member list refuses a `docs-on` on such a workspace
   (`a workspace without history has no shared documents yet`), the switch does not show, and no round makes notes
   documents.
 - **What Relay writes into it.** The team starter's session protocol asks for no member's name in `Log.md`. Vault
