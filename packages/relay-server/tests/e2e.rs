@@ -2238,7 +2238,7 @@ fn sso_gates_a_join_and_the_verified_email_goes_on_a_person() {
     // a device not paired here asks what to sign in with, on the invite's server
     let link = a.invite(&t, "member");
     let id = device("sso-ann");
-    assert_eq!(client::sso_info(&link, &id).unwrap(), Some(sso.clone()));
+    assert_eq!(client::sso_info(&link).unwrap(), Some(sso.clone()));
     let e = client::vault_join(&link, &id, "ann", None).err().unwrap();
     assert!(e.contains("requires signing in with SSO"), "{e}");
     // a token that does not check: refused before the invite (the issuer is unreachable, or the token bad)
@@ -2271,5 +2271,5 @@ fn sso_gates_a_join_and_the_verified_email_goes_on_a_person() {
     assert_eq!(list_of(&t, &a).len, l.len);
     // turned off: no SSO to sign in with
     org::set_sso(&t.laptop, &mut lk, None, &nosave).unwrap();
-    assert_eq!(client::sso_info(&a.invite(&t, "member"), &device("sso-bo")).unwrap(), None);
+    assert_eq!(client::sso_info(&a.invite(&t, "member")).unwrap(), None);
 }

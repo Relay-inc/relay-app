@@ -44,10 +44,11 @@ pub fn vault_join(line: &str, id: &Identity, name: &str, sso: Option<&Value>) ->
 }
 
 /// What an invite link's server asks a device to sign in with before it joins (docs/workspaces.md, SSO): none when it
-/// has no SSO. Asked on the link's pinned certificate, before the invite is spent.
-pub fn sso_info(line: &str, id: &Identity) -> Result<Option<crate::members::Sso>, String> {
+/// has no SSO. Asked on the link's pinned certificate, before the invite is spent, with a certificate made for this
+/// one question: a server not trusted yet never sees this device's own.
+pub fn sso_info(line: &str) -> Result<Option<crate::members::Sso>, String> {
     let l = PairLine::parse(line).filter(PairLine::is_invite).ok_or("not an invite link (relay://host:port#fp=…&vault=…&invite=…&secret=…)")?;
-    let c = Client { addr: l.addr(), fp: l.fp.clone(), id: id.clone(), link: None };
+    let c = Client { addr: l.addr(), fp: l.fp.clone(), id: Identity::generate().map_err(|e| e.to_string())?, link: None };
     let v = c.call(json!({"op": "sso_info"}))?;
     serde_json::from_value(v["sso"].clone()).map_err(|e| format!("SSO: {e}"))
 }

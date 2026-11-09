@@ -24,9 +24,8 @@ fn sha256(b: &[u8]) -> Vec<u8> { relay_remote::tls::unhex(&relay_remote::sync::s
 
 /// What the invite link's server asks to sign in with before a join: {sso: {issuer, client, domains, required} | null}.
 #[tauri::command]
-pub async fn sso_check(state: St<'_>, link: String) -> Result<Value, String> {
-    let me = state.machines.id.clone();
-    let sso = tauri::async_runtime::spawn_blocking(move || relay_remote::client::sso_info(&link, &me)).await.map_err(|e| e.to_string())??;
+pub async fn sso_check(link: String) -> Result<Value, String> {
+    let sso = tauri::async_runtime::spawn_blocking(move || relay_remote::client::sso_info(&link)).await.map_err(|e| e.to_string())??;
     Ok(json!({"sso": sso}))
 }
 
@@ -39,7 +38,7 @@ pub async fn sso_login(state: St<'_>, link: String) -> Result<Value, String> {
     let line = relay_remote::proto::PairLine::parse(&link).filter(relay_remote::proto::PairLine::is_invite).ok_or("not an invite link")?;
     let gen = LOGIN.fetch_add(1, Ordering::SeqCst) + 1;
     tauri::async_runtime::spawn_blocking(move || {
-        let sso = relay_remote::client::sso_info(&link, &me)?.ok_or("this server has no SSO")?;
+        let sso = relay_remote::client::sso_info(&link)?.ok_or("this server has no SSO")?;
         // what a server not trusted yet says: only what an organisation list would take, before a browser opens on it
         if !sso.valid() { return Err("SSO: the server's sign-in settings are not valid".into()); }
         let conf = get(&format!("{}/.well-known/openid-configuration", sso.issuer))?;
