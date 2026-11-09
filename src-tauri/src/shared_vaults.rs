@@ -64,10 +64,11 @@ pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter()
 /// Relay publishes other keys than the list has (they set it up again), until an admin trusts them.
 /// `rekeying`: someone left and the key has not changed yet (or the member list is held back, which could hide that).
 /// `docs`: an admin turned on making the workspace's notes documents (the member list says so); `admin`: this Mac is
-/// an admin of the list (it may turn that on or off, and make members admins); `admins`: the list's admins and `listed`
-/// all its members, None when the workspace has no list yet.
+/// an admin of the list (it may turn that on or off, and make members admins); `admins`: the list's admins, `listed`
+/// all its members and `people` its people with their devices, None when the workspace has no list yet.
 pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub bad: usize, pub live: bool,
-    pub warnings: Vec<String>, pub changed: Vec<Changed>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>> }
+    pub warnings: Vec<String>, pub changed: Vec<Changed>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>>,
+    pub people: Option<Vec<relay_remote::members::Person>> }
 #[derive(Clone, serde::Serialize)]
 pub struct Changed { pub fp: String, pub name: String }
 
@@ -255,7 +256,7 @@ impl Hub {
                         st.errors.extend(k.errors.into_iter().map(|e| format!("key: {e}")));
                         st.warnings = k.warnings;
                         st.rekeying = k.rekeying;
-                        (st.docs, st.admin, st.admins, st.listed) = (k.docs, k.admin, k.admins, k.listed);
+                        (st.docs, st.admin, st.admins, st.listed, st.people) = (k.docs, k.admin, k.admins, k.listed, k.people);
                         st.changed = k.changed.into_iter().map(|(fp, name)| Changed { fp, name }).collect();
                     }
                     Err(e) => st.errors.push(format!("key: {e}")),
@@ -699,11 +700,13 @@ pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, fold
     Ok(serde_json::json!({"id": joined.id, "name": joined.name}))
 }
 
-/// An invite link for a vault (admins): single use, 24 h. {link, invite: {id, role, expires}}.
+/// An invite link for a vault (admins): single use, 24 h. {link, invite: {id, role, expires}}. With `who`, for a device
+/// of that person (docs/workspaces.md, People): a member may make one for its own person, as member.
 #[tauri::command]
-pub async fn shared_vault_invite(app: AppHandle, state: St<'_>, id: String, role: String) -> Result<Value, String> {
+pub async fn shared_vault_invite(app: AppHandle, state: St<'_>, id: String, role: String, who: Option<String>) -> Result<Value, String> {
     let (key, data) = (load_key(&crate::data_dir(&app), &id)?, crate::data_dir(&app));
     let role = if role == "admin" { "admin" } else { "member" };
+    let who = who.unwrap_or_default();
     let a = app.clone();
     let (link, invite) = on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || {
         let (link, inv, keys) = match c.vault_invite(&v.id, role, &key, &v.host, v.port) {
@@ -719,7 +722,7 @@ pub async fn shared_vault_invite(app: AppHandle, state: St<'_>, id: String, role
         // remembered, so this Mac's round adds whoever joins with it to the member list
         let secret = relay_remote::proto::PairLine::parse(&link).and_then(|l| l.secret).ok_or("the invite link has no secret")?;
         let mut k = load_key(&data, &v.id)?;
-        k.invites.push(relay_remote::vault::Invited { id: inv.id.clone(), secret, role: role.into(), epoch: keys.epoch(), expires: inv.expires });
+        k.invites.push(relay_remote::vault::Invited { id: inv.id.clone(), secret, role: role.into(), epoch: keys.epoch(), expires: inv.expires, who });
         save_key(&data, &v.id, &k)?;
         Ok((link, inv))
     })).await?;
@@ -768,6 +771,37 @@ pub async fn shared_vault_trust(app: AppHandle, state: St<'_>, id: String, fp: S
     if let Some(s) = app.state::<crate::App>().shared.status.lock().unwrap().get_mut(&id) { s.changed.clear(); }
     sync_now();
     Ok(())
+}
+
+/// The people on the member list as it is now, into the vault's last status (as a round would), for the settings.
+fn people_now(app: &AppHandle, id: &str, people: &[relay_remote::members::Person]) -> Value {
+    if let Some(s) = app.state::<crate::App>().shared.status.lock().unwrap().get_mut(id) { s.people = Some(people.to_vec()); }
+    serde_json::json!(people)
+}
+/// Name a person (`who`, "" a new one) and put device `fp` ("" none) under it: an admin, or a device naming itself
+/// (docs/workspaces.md, People). The people after it.
+#[tauri::command]
+pub async fn shared_vault_person(app: AppHandle, state: St<'_>, id: String, who: String, name: String, email: String, fp: String) -> Result<Value, String> {
+    // a new person's id: 32 random bytes, as hex
+    let who = if who.is_empty() { relay_remote::tls::random_secret() + &relay_remote::tls::random_secret() } else { who };
+    let (data, a) = (crate::data_dir(&app), app.clone());
+    let people = on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || c.sealed(&v.id, load_key(&data, &v.id)?).set_person(&who, &name, &email, &fp, &|k| save_key(&data, &v.id, k)))).await?;
+    sync_now();
+    Ok(people_now(&app, &id, &people))
+}
+/// Remove a person with every device under it: an admin, or the person itself from one of its devices. When this Mac
+/// is one of them it left: the vault goes from the settings as with Leave. The people after it, or null when it left.
+#[tauri::command]
+pub async fn shared_vault_remove_person(app: AppHandle, state: St<'_>, id: String, who: String) -> Result<Value, String> {
+    let (data, a) = (crate::data_dir(&app), app.clone());
+    let left = on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || c.sealed(&v.id, load_key(&data, &v.id)?).remove_person(&who, &|k| save_key(&data, &v.id, k)))).await?;
+    let Some(people) = left else {
+        change(&app, &state, |all| { all.retain(|x| x["id"] != id.as_str()); true })?;
+        on_hub(&app, move |hub, data| hub.forget(data, &id)).await?;
+        return Ok(Value::Null);
+    };
+    sync_now();
+    Ok(people_now(&app, &id, &people))
 }
 
 /// The members and open invites of a vault, and this Mac's fingerprint so the list can mark it: {vault, me}.

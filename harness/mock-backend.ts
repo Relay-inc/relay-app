@@ -67,6 +67,7 @@ settings = { ...settings, experimental: { files: fixture !== "files-off" } };
 // which Members (shared_vault_info) finds: the backend then keeps the server under Machines
 // shared-member-dark: shared-member in the dark theme (the vault check's member view, issue 425)
 const member = fixture === "shared-member" || fixture === "shared-member-dark" || fixture === "shared-keeper";
+// shared-people: the member list has people, one with two Macs (vault.sharedPeople)
 // shared-rekey: someone left the vault, and the key change waits for a member whose Relay has no public key yet
 // shared-live (-dark): "shared", and a page of the side vault is a shared document two mock peers edit (ticket 9)
 const live = fixture === "shared-live" || fixture === "shared-live-dark";
@@ -76,6 +77,7 @@ const shared =
   fixture === "shared-invite" ||
   fixture === "shared-rekey" ||
   fixture === "shared-unlisted" ||
+  fixture === "shared-people" ||
   member ||
   live;
 if (shared)
@@ -141,6 +143,10 @@ if (fixture === "shared-rekey")
       conflicts: [],
     });
 let sharedMembers = structuredClone(vault.sharedMembers);
+// the member list's people, as the server reads it and this Mac's round checked it (one list here)
+let sharedPeople: { who: string; name: string; email: string; devices: string[] }[] =
+  fixture === "shared-people" ? structuredClone(vault.sharedPeople) : [];
+for (const s of Object.values(sharedStatus).slice(0, 1)) s.people = sharedPeople;
 let sharedInvites = [{ id: "4d2e8a1b6c3f9e70", role: "member", expires: Math.floor(Date.now() / 1000) + 20 * 3600 }];
 let pendingInvite: string | null = fixture === "shared-invite" ? vault.inviteLink("b81c0e5f2a7d3946") : null;
 const hex = (n: number, seed: number) =>
@@ -454,7 +460,14 @@ function handle(cmd: string, a: Args): unknown {
       }
       const invites = v.role === "admin" ? structuredClone(sharedInvites) : [];
       return {
-        vault: { id: v.id, name: v.name, role: v.role, members: structuredClone(sharedMembers), invites },
+        vault: {
+          id: v.id,
+          name: v.name,
+          role: v.role,
+          members: structuredClone(sharedMembers),
+          people: structuredClone(sharedPeople),
+          invites,
+        },
         me: vault.SHARED_ME,
       };
     }
@@ -816,6 +829,33 @@ function handle(cmd: string, a: Args): unknown {
       if (s?.admins) s.admins = a.on ? [...s.admins, a.fp] : s.admins.filter((fp: string) => fp !== a.fp);
       sharedMembers = sharedMembers.map(m => (m.fp === a.fp ? { ...m, role: a.on ? "admin" : "member" } : m));
       return null;
+    }
+    case "shared_vault_person": {
+      // a person named or renamed (who "" a new one), and the device fp put under it
+      const who = a.who || hex(64, sharedPeople.length + 1);
+      const rest = sharedPeople
+        .filter(p => p.who !== who)
+        .map(p => ({ ...p, devices: p.devices.filter(fp => fp !== a.fp) }));
+      const was = sharedPeople.find(p => p.who === who);
+      const devices = [...(was?.devices ?? []), ...(a.fp && !was?.devices.includes(a.fp) ? [a.fp] : [])];
+      sharedPeople = [...rest, { who, name: a.name, email: a.email, devices }];
+      const s = sharedStatus[a.id];
+      if (s) s.people = sharedPeople;
+      return structuredClone(sharedPeople);
+    }
+    case "shared_vault_remove_person": {
+      // the person with every device under it, null when this Mac was one of them (it left)
+      const gone = sharedPeople.find(p => p.who === a.who)?.devices ?? [];
+      sharedPeople = sharedPeople.filter(p => p.who !== a.who);
+      if (gone.includes(vault.SHARED_ME)) {
+        settings.sharedVaults = (settings.sharedVaults ?? []).filter((x: { id: string }) => x.id !== a.id);
+        delete sharedStatus[a.id];
+        return null;
+      }
+      sharedMembers = sharedMembers.filter(m => !gone.includes(m.fp));
+      const s = sharedStatus[a.id];
+      if (s) s.people = sharedPeople;
+      return structuredClone(sharedPeople);
     }
     case "shared_vault_add": {
       // an admin's Add to list: the member is on the member list now, as member

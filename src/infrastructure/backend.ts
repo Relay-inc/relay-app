@@ -42,6 +42,7 @@ import type {
   Settings,
   SharedInfo,
   SharedInvite,
+  SharedPerson,
   SharedRole,
   SharedStatus,
 } from "../domain/settings/types";
@@ -690,8 +691,15 @@ export const sharedVaultCreate = (machine: string, name: string, folder: string)
 /** Join with an invite link into an empty folder. */
 export const sharedVaultJoin = (link: string, folder: string) =>
   invoke<{ id: string; name: string }>("shared_vault_join", { link, folder });
-export const sharedVaultInvite = (id: string, role: SharedRole) =>
-  invoke<{ link: string; invite: SharedInvite }>("shared_vault_invite", { id, role });
+/** With `who`, for a device of that person: a member may make one for its own person. */
+export const sharedVaultInvite = (id: string, role: SharedRole, who?: string) =>
+  invoke<{ link: string; invite: SharedInvite }>("shared_vault_invite", { id, role, who });
+/** Name a person (`who` "" a new one) and put device `fp` ("" none) under it: the people after it. */
+export const sharedVaultPerson = (id: string, who: string, name: string, email: string, fp: string) =>
+  invoke<SharedPerson[]>("shared_vault_person", { id, who, name, email, fp });
+/** Remove a person with all its devices: the people after it, or null when this Mac was one of them (it left). */
+export const sharedVaultRemovePerson = (id: string, who: string) =>
+  invoke<SharedPerson[] | null>("shared_vault_remove_person", { id, who });
 /** The vault's key as this Mac holds it (64 hex), for any member: what the create gave. */
 export const sharedVaultRecovery = (id: string) => invoke<string>("shared_vault_recovery", { id });
 /** An admin trusts a member's new key (they set up Relay again): this Mac pins what the member publishes now. */

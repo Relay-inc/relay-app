@@ -17,26 +17,43 @@ use std::collections::BTreeMap;
 /// epoch seconds; `by`: the signer's fingerprint; `sig`: its signature over `msg`.
 /// `mac` (create only): the creator's identity vouched for under the vault's epoch-0 key, which the server never has:
 /// a Mac that knows no creator takes a first list only with it.
+/// People (docs/workspaces.md, People): `person` names the person `who` (`name`, optional `email`, made or renamed) and,
+/// with `fp`, puts that device under it. `person-remove` takes the person `who` out with every device under it. An
+/// `add` with `who` adds a device under that person. Members stay devices: a device without a person is as before.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
 pub struct Entry {
     pub seq: u64, pub prev: String, pub kind: String, pub fp: String, pub id: String, pub pk: String, pub role: String,
     pub epoch: u32, pub h: String, pub at: u64, pub by: String, pub sig: String, pub mac: String,
+    pub who: String, pub name: String, pub email: String,
 }
 /// The longest list a server keeps or a Mac takes.
 pub const MAX_ENTRIES: u64 = 10_000;
 impl Entry {
     /// What the signature covers: every field but the signature, and the vault.
+    /// The person fields only when set, so every entry from before people signs as it did: as JSON, a name holds any
+    /// character without two entries reading the same.
     pub fn msg(&self, vault: &str) -> String {
-        format!("member-log:{vault}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}", self.seq, self.prev, self.kind, self.fp, self.id, self.pk, self.role, self.epoch, self.h, self.at, self.by)
+        let base = format!("member-log:{vault}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}", self.seq, self.prev, self.kind, self.fp, self.id, self.pk, self.role, self.epoch, self.h, self.at, self.by);
+        if self.who.is_empty() && self.name.is_empty() && self.email.is_empty() { return base; }
+        format!("{base}:{}:{}", self.who, serde_json::json!([self.name, self.email]))
     }
     /// The entry's hash, which the next one names as `prev`: of what is signed and the signature.
     pub fn hash(&self, vault: &str) -> String { sha256_hex(format!("{}:{}", self.msg(vault), self.sig).as_bytes()) }
 }
 
-/// A member as the list says.
+/// A member as the list says: a device, and `person` the person it is under ("" none).
 #[derive(Clone, Debug, PartialEq)]
-pub struct Member { pub id: String, pub pk: String, pub admin: bool }
+pub struct Member { pub id: String, pub pk: String, pub admin: bool, pub person: String }
+/// A person as the list says, with the devices under it (fingerprints), for the settings.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Person { pub who: String, pub name: String, pub email: String, pub devices: Vec<String> }
+/// A person's name at most, and an email address, in characters.
+pub const MAX_PERSON_NAME: usize = 100;
+const MAX_EMAIL: usize = 254;
+fn good_name(s: &str) -> bool { !s.is_empty() && s.trim() == s && s.chars().count() <= MAX_PERSON_NAME && !s.chars().any(char::is_control) }
+fn good_email(s: &str) -> bool { s.is_empty() || (s.chars().count() <= MAX_EMAIL && s.contains('@') && !s.chars().any(|c| c.is_whitespace() || c.is_control())) }
 /// The list, checked. `epochs`: per epoch after 0, the sha256 of its key and who it was made for. `pending`: when a
 /// member was removed or left and no new key followed yet (epoch seconds of that entry). `head`: the last entry's hash.
 #[derive(Clone, Debug, Default)]
@@ -45,11 +62,22 @@ pub struct List {
     pub pending: Option<u64>, pub len: u64, pub head: String, pub creator: String,
     /// The workspace's notes are made documents (`docs-on`, by an admin).
     pub docs: bool,
+    /// Per person (`who`): its name and email.
+    pub people: BTreeMap<String, (String, String)>,
 }
 impl List {
     pub fn admin(&self, fp: &str) -> bool { self.members.get(fp).is_some_and(|m| m.admin) }
     /// The hash of entry `seq`, from a check that kept them (`check` fills `hashes`).
     pub fn has(&self, hashes: &[String], seq: u64, hash: &str) -> bool { hashes.get(seq as usize).is_some_and(|h| h == hash) }
+    /// The person device `fp` is under, "" none.
+    pub fn person(&self, fp: &str) -> &str { self.members.get(fp).map_or("", |m| m.person.as_str()) }
+    /// Every person with its devices.
+    pub fn persons(&self) -> Vec<Person> {
+        self.people.iter().map(|(who, (name, email))| Person {
+            who: who.clone(), name: name.clone(), email: email.clone(),
+            devices: self.members.iter().filter(|(_, m)| m.person == *who).map(|(fp, _)| fp.clone()).collect(),
+        }).collect()
+    }
 }
 
 pub fn hex64(s: &str) -> bool { lowhex(s, 64) }
@@ -79,13 +107,19 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
                 && (role == (e.role == "admin" || e.role == "member")) && (role || e.role.is_empty())
                 && (rekey == (e.epoch > 0 && hex64(&e.h))) && (rekey || (e.epoch == 0 && e.h.is_empty())) && (mac == hex64(&e.mac)) && (mac || e.mac.is_empty())
         };
+        // the person fields: `who` on the person kinds and optionally on an add, a name (and email) only on `person`
+        let person = |who: bool, name: bool| (if who { hex64(&e.who) } else { e.who.is_empty() || (e.kind == "add" && hex64(&e.who)) })
+            && (if name { good_name(&e.name) && good_email(&e.email) } else { e.name.is_empty() && e.email.is_empty() });
         let shape = match e.kind.as_str() {
-            "create" => uses(true, true, true, false, true),
-            "add" => uses(true, true, true, false, false),
-            "remove" | "leave" | "promote" | "demote" => uses(true, false, false, false, false),
-            "rekey" => uses(false, false, false, true, false),
-            "device" => uses(true, true, false, false, false),
-            "docs-on" | "docs-off" => uses(false, false, false, false, false),
+            "create" => uses(true, true, true, false, true) && person(false, false),
+            "add" => uses(true, true, true, false, false) && person(false, false),
+            "remove" | "leave" | "promote" | "demote" => uses(true, false, false, false, false) && person(false, false),
+            "rekey" => uses(false, false, false, true, false) && person(false, false),
+            "device" => uses(true, true, false, false, false) && person(false, false),
+            "docs-on" | "docs-off" => uses(false, false, false, false, false) && person(false, false),
+            // the device is optional: without one a person is only named or renamed
+            "person" => uses(hex64(&e.fp), false, false, false, false) && person(true, true),
+            "person-remove" => uses(false, false, false, false, false) && person(true, false),
             _ => false,
         };
         if !shape { return bad(&format!("a {} with the wrong fields", e.kind)); }
@@ -94,16 +128,32 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
             if creator.is_some_and(|c| c != e.id) { return bad("not made by the vault's creator"); }
             if !signed(&e.id, &e.msg(vault), &e.sig) { return bad("not signed by its creator"); }
             l.creator = e.id.clone();
-            l.members.insert(e.fp.clone(), Member { id: e.id.clone(), pk: e.pk.clone(), admin: true });
+            l.members.insert(e.fp.clone(), Member { id: e.id.clone(), pk: e.pk.clone(), admin: true, person: String::new() });
         } else {
             // signed by its signer as the list stood before it: an admin, or the member itself for `leave`
             let Some(by) = l.members.get(&e.by).cloned() else { return bad("signed by someone who is no member") };
             if !signed(&by.id, &e.msg(vault), &e.sig) { return bad("not signed by who it names") };
             let member = l.members.contains_key(&e.fp);
+            // the signer is a device of the person the entry is about
+            let own = !by.person.is_empty() && by.person == e.who;
+            let known = l.people.contains_key(&e.who);
             match e.kind.as_str() {
                 "leave" if e.by == e.fp && member => { l.members.remove(&e.fp); l.pending = Some(e.at); }
+                // what a person's own device may do without an admin: add a device for that person (never an admin),
+                // name itself as a new person, take that person out
+                "add" if !by.admin && own && !member && e.role == "member" => { l.members.insert(e.fp.clone(), Member { id: e.id.clone(), pk: e.pk.clone(), admin: false, person: e.who.clone() }); }
+                "person" if !by.admin && e.fp == e.by && by.person.is_empty() && !known => {
+                    l.people.insert(e.who.clone(), (e.name.clone(), e.email.clone()));
+                    l.members.get_mut(&e.fp).unwrap().person = e.who.clone();
+                }
+                "person-remove" if !by.admin && own => drop_person(&mut l, &e.who, e.at),
                 _ if !by.admin => return bad("not signed by an admin"),
-                "add" if !member => { l.members.insert(e.fp.clone(), Member { id: e.id.clone(), pk: e.pk.clone(), admin: e.role == "admin" }); }
+                "add" if !member && (e.who.is_empty() || known) => { l.members.insert(e.fp.clone(), Member { id: e.id.clone(), pk: e.pk.clone(), admin: e.role == "admin", person: e.who.clone() }); }
+                "person" if e.fp.is_empty() || member => {
+                    l.people.insert(e.who.clone(), (e.name.clone(), e.email.clone()));
+                    if member { l.members.get_mut(&e.fp).unwrap().person = e.who.clone(); }
+                }
+                "person-remove" if known => drop_person(&mut l, &e.who, e.at),
                 "remove" if member => { l.members.remove(&e.fp); l.pending = Some(e.at); }
                 "promote" | "demote" if member => { l.members.get_mut(&e.fp).unwrap().admin = e.kind == "promote"; }
                 "docs-on" | "docs-off" => l.docs = e.kind == "docs-on",
@@ -127,6 +177,14 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
         (l.len, l.head) = (i + 1, h);
     }
     Ok((l, hashes))
+}
+
+/// The person `who` out, with every device under it: a removal then waits for a new key, as for one device.
+fn drop_person(l: &mut List, who: &str, at: u64) {
+    let before = l.members.len();
+    l.members.retain(|_, m| m.person != who);
+    if l.members.len() != before { l.pending = Some(at); }
+    l.people.remove(who);
 }
 
 /// A new entry after `list`, signed with `seed` (this member's Ed25519 seed) as `me`.
@@ -229,5 +287,144 @@ mod tests {
         // checked further from what was checked before, the same as from scratch
         let (head, hashes) = check(V, &l[..2], None).unwrap();
         assert_eq!(extend(V, head, hashes, &l[2..], None).unwrap().0.head, list.head);
+    }
+
+    /// The person `who` (named `n`), as the admin `a` makes it, with device `fp` under it.
+    fn named(who: char, n: &str, fp: &str) -> Entry { Entry { kind: "person".into(), who: who.to_string().repeat(64), name: n.into(), fp: fp.into(), ..Default::default() } }
+    fn who(c: char) -> String { c.to_string().repeat(64) }
+    #[test]
+    fn people_group_devices_and_entries_from_before_sign_as_they_did() {
+        let (mut l, a, b, c) = team();
+        // an entry without person fields signs exactly what it did before people
+        assert!(l[1].msg(V).ends_with(&format!(":{}", a.fp)));
+        add(&mut l, &a, named('1', "Ann", &a.fp));
+        add(&mut l, &a, Entry { email: "bo@example.com".into(), ..named('2', "Bo", &b.fp) });
+        // an admin adds a device straight under a person
+        let d = Dev::new('d');
+        add(&mut l, &a, Entry { kind: "add".into(), fp: d.fp.clone(), id: d.id(), pk: "4".repeat(64), role: "member".into(), who: who('2'), ..Default::default() });
+        let list = check(V, &l, None).unwrap().0;
+        let p = list.persons();
+        assert_eq!(p.iter().map(|p| (p.name.as_str(), p.email.as_str(), p.devices.len())).collect::<Vec<_>>(), [("Ann", "", 1), ("Bo", "bo@example.com", 2)]);
+        assert_eq!((list.person(&d.fp), list.person(&c.fp)), (who('2').as_str(), ""), "a device without a person stays as it was");
+        // renamed by an admin, without touching its devices
+        add(&mut l, &a, Entry { kind: "person".into(), who: who('2'), name: "Bo B.".into(), ..Default::default() });
+        let list = check(V, &l, None).unwrap().0;
+        assert_eq!((list.people[&who('2')].0.as_str(), list.persons()[1].devices.len()), ("Bo B.", 2));
+        // a name or email changed after signing
+        let mut forged = l.last().unwrap().clone();
+        forged.name = "Mallory".into();
+        assert!(check(V, &[l[..l.len() - 1].to_vec(), vec![forged]].concat(), None).unwrap_err().contains("not signed by who it names"));
+        // a person unknown to the list gets no device from an admin either
+        let e = Dev::new('e');
+        let list = check(V, &l, None).unwrap().0;
+        let x = sign(V, &list, &a.fp, &a.seed, Entry { kind: "add".into(), fp: e.fp.clone(), id: e.id(), pk: "5".repeat(64), role: "member".into(), who: who('9'), ..Default::default() });
+        assert!(check(V, &[l.clone(), vec![x]].concat(), None).unwrap_err().contains("breaks the rules"));
+    }
+    #[test]
+    fn a_device_adds_only_to_its_own_person_and_never_an_admin() {
+        let (mut l, a, b, c) = team();
+        add(&mut l, &a, named('1', "Ann", &a.fp));
+        add(&mut l, &a, named('2', "Bo", &b.fp));
+        let list = check(V, &l, None).unwrap().0;
+        let d = Dev::new('d');
+        let device = |who: String, role: &str| Entry { kind: "add".into(), fp: d.fp.clone(), id: d.id(), pk: "4".repeat(64), role: role.into(), who, ..Default::default() };
+        let by_b = |e: Entry| check(V, &[l.clone(), vec![sign(V, &list, &b.fp, &b.seed, e)]].concat(), None);
+        // a device that claims another person
+        assert!(by_b(device(who('1'), "member")).unwrap_err().contains("not signed by an admin"));
+        // a person that makes itself admin through its own device
+        assert!(by_b(device(who('2'), "admin")).unwrap_err().contains("not signed by an admin"));
+        // a device without a person adds nobody
+        let x = sign(V, &list, &c.fp, &c.seed, device(String::new(), "member"));
+        assert!(check(V, &[l.clone(), vec![x]].concat(), None).unwrap_err().contains("not signed by an admin"));
+        // its own person, as member: taken
+        let after = by_b(device(who('2'), "member")).unwrap().0;
+        assert_eq!((after.person(&d.fp), after.admin(&d.fp)), (who('2').as_str(), false));
+        // and the new device makes itself admin: refused as ever
+        add(&mut l, &b, device(who('2'), "member"));
+        let list = check(V, &l, None).unwrap().0;
+        let up = sign(V, &list, &d.fp, &d.seed, Entry { kind: "promote".into(), fp: d.fp.clone(), ..Default::default() });
+        assert!(check(V, &[l.clone(), vec![up]].concat(), None).unwrap_err().contains("not signed by an admin"));
+    }
+    #[test]
+    fn a_device_names_itself_once_and_claims_nobody_else() {
+        let (mut l, a, b, c) = team();
+        add(&mut l, &a, named('1', "Ann", &a.fp));
+        let list = check(V, &l, None).unwrap().0;
+        let by = |d: &Dev, e: Entry| check(V, &[l.clone(), vec![sign(V, &list, &d.fp, &d.seed, e)]].concat(), None);
+        // a new person for itself: taken
+        assert_eq!(by(&c, named('3', "Cy", &c.fp)).unwrap().0.person(&c.fp), who('3'));
+        // under a person that exists, for another device, or with no device: refused
+        assert!(by(&c, named('1', "Ann", &c.fp)).unwrap_err().contains("not signed by an admin"), "claims another person");
+        assert!(by(&c, named('3', "Cy", &b.fp)).is_err(), "names another device");
+        assert!(by(&c, Entry { kind: "person".into(), who: who('3'), name: "Cy".into(), ..Default::default() }).is_err());
+        // a person renames itself only through an admin
+        add(&mut l, &c, named('3', "Cy", &c.fp));
+        let list = check(V, &l, None).unwrap().0;
+        let x = sign(V, &list, &c.fp, &c.seed, named('3', "Cyrus", ""));
+        assert!(check(V, &[l.clone(), vec![x]].concat(), None).unwrap_err().contains("not signed by an admin"));
+        // once under a person, a device names no new one
+        let x = sign(V, &list, &c.fp, &c.seed, named('4', "Other", &c.fp));
+        assert!(check(V, &[l.clone(), vec![x]].concat(), None).unwrap_err().contains("not signed by an admin"));
+    }
+    #[test]
+    fn a_person_goes_with_all_its_devices_and_the_list_keeps_an_admin() {
+        let (mut l, a, b, c) = team();
+        let d = Dev::new('d');
+        add(&mut l, &a, named('1', "Ann", &a.fp));
+        add(&mut l, &a, named('2', "Bo", &b.fp));
+        add(&mut l, &a, Entry { kind: "add".into(), fp: d.fp.clone(), id: d.id(), pk: "4".repeat(64), role: "member".into(), who: who('2'), ..Default::default() });
+        add(&mut l, &a, Entry { kind: "promote".into(), fp: d.fp.clone(), ..Default::default() });
+        add(&mut l, &a, named('3', "Cy", &c.fp));
+        let list = check(V, &l, None).unwrap().0;
+        let gone = Entry { kind: "person-remove".into(), who: who('2'), ..Default::default() };
+        // another person's device takes nobody out
+        let x = sign(V, &list, &c.fp, &c.seed, gone.clone());
+        assert!(check(V, &[l.clone(), vec![x]].concat(), None).unwrap_err().contains("not signed by an admin"));
+        // the person itself, through one of its devices (even a member one): both devices go, a new key is due
+        let by_self = check(V, &[l.clone(), vec![sign(V, &list, &b.fp, &b.seed, gone.clone())]].concat(), None).unwrap().0;
+        assert!(by_self.pending.is_some() && !by_self.members.contains_key(&b.fp) && !by_self.members.contains_key(&d.fp) && !by_self.people.contains_key(&who('2')));
+        // an admin: the same
+        add(&mut l, &a, gone);
+        let list = check(V, &l, None).unwrap().0;
+        assert_eq!((list.members.len(), list.persons().len()), (2, 2));
+        // the removed admin device signs nothing any more
+        let late = sign(V, &list, &d.fp, &d.seed, Entry { kind: "rekey".into(), epoch: 1, h: "5".repeat(64), ..Default::default() });
+        assert!(check(V, &[l.clone(), vec![late]].concat(), None).unwrap_err().contains("no member"));
+        // the only admin's person: refused, as for the last admin leaving
+        let x = sign(V, &list, &a.fp, &a.seed, Entry { kind: "person-remove".into(), who: who('1'), ..Default::default() });
+        assert!(check(V, &[l.clone(), vec![x]].concat(), None).unwrap_err().contains("no admin left"));
+        // a person that does not exist
+        let x = sign(V, &list, &a.fp, &a.seed, Entry { kind: "person-remove".into(), who: who('2'), ..Default::default() });
+        assert!(check(V, &[l.clone(), vec![x]].concat(), None).unwrap_err().contains("breaks the rules"));
+    }
+    #[test]
+    fn person_fields_are_checked() {
+        let (l, a, b, _) = team();
+        let list = check(V, &l, None).unwrap().0;
+        let with = |e: Entry| check(V, &[l.clone(), vec![sign(V, &list, &a.fp, &a.seed, e)]].concat(), None);
+        for (n, email) in [("", ""), (" Ann", ""), ("A\nnn", ""), (&"x".repeat(MAX_PERSON_NAME + 1)[..], ""), ("Ann", "ann"), ("Ann", "a nn@example.com")] {
+            assert!(with(Entry { email: email.into(), ..named('1', n, &b.fp) }).unwrap_err().contains("wrong fields"), "{n:?} {email:?}");
+        }
+        assert!(with(named('1', "Ann", &b.fp)).is_ok());
+        assert!(with(Entry { kind: "person".into(), who: "A".repeat(64), name: "Ann".into(), ..Default::default() }).is_err(), "upper-case who");
+        // a person field where none goes
+        assert!(with(Entry { kind: "remove".into(), fp: b.fp.clone(), who: who('1'), ..Default::default() }).unwrap_err().contains("wrong fields"));
+        assert!(with(Entry { kind: "promote".into(), fp: b.fp.clone(), name: "Ann".into(), ..Default::default() }).unwrap_err().contains("wrong fields"));
+        assert!(with(Entry { kind: "person-remove".into(), who: who('1'), name: "Ann".into(), ..Default::default() }).unwrap_err().contains("wrong fields"));
+        let d = Dev::new('d');
+        assert!(with(Entry { kind: "add".into(), fp: d.fp.clone(), id: d.id(), pk: "4".repeat(64), role: "member".into(), who: who('1'), email: "x@y".into(), ..Default::default() }).unwrap_err().contains("wrong fields"));
+    }
+    #[test]
+    fn a_person_entry_on_another_history_does_not_follow() {
+        let (l, a, b, _) = team();
+        let list = check(V, &l, None).unwrap().0;
+        // two entries signed on the same head: a fork, the second never follows the first
+        let x1 = sign(V, &list, &a.fp, &a.seed, named('1', "Ann", &a.fp));
+        let x2 = sign(V, &list, &a.fp, &a.seed, named('2', "Bo", &b.fp));
+        let (one, hashes) = check(V, &[l.clone(), vec![x1]].concat(), None).unwrap();
+        assert!(extend(V, one.clone(), hashes.clone(), &[x2.clone()], None).unwrap_err().contains("out of order"));
+        // a Mac that saw the first knows the other history's head is not its own
+        let other = check(V, &[l.clone(), vec![x2]].concat(), None).unwrap().0;
+        assert!(!one.has(&hashes, other.len - 1, &other.head));
     }
 }

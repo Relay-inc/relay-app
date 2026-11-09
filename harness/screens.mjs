@@ -1769,6 +1769,32 @@ const VIEWS = {
     await page.getByText("Design laptop").scrollIntoViewIfNeeded();
     await settle(page);
   },
+  // people on the member list (PR people): Alex Moreau with this MacBook and the Studio Mac under them, Add a device…,
+  // Rename… and Remove on the person, the Design laptop under no person with Name person…
+  "settings-shared-people": async () => {
+    await settingsPage("Machines", undefined, "shared-people");
+    await page.setViewportSize({ width: 900, height: 1200 });
+    await button("Members").first().click();
+    await waitText("Alex Moreau");
+    await page.getByText("Design laptop").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // Name person… on the Design laptop: an admin picks a person there is or names a new one
+  "settings-shared-person-form": async () => {
+    await VIEWS["settings-shared-people"]();
+    await button("Name person…").first().click();
+    await page.getByPlaceholder("Name", { exact: true }).fill("Sam Lee");
+    await page.getByText("Design laptop").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // after Save: Sam Lee is a person with the Design laptop under them
+  "settings-shared-person-named": async () => {
+    await VIEWS["settings-shared-person-form"]();
+    await button("Save").first().click();
+    await waitText("Sam Lee");
+    await page.getByText("Design laptop").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   "settings-shared-vaults": async () => {
     await settingsPage("Machines", undefined, "shared");
     await page.setViewportSize({ width: 900, height: 1600 });

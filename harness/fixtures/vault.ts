@@ -226,6 +226,11 @@ export const sharedMembers = [
   { name: "Studio Mac", fp: "7c2b".padEnd(64, "b"), role: "admin", added: 1790100000 },
   { name: "Design laptop", fp: "9a4f".padEnd(64, "c"), role: "member", added: 1790200000 },
 ];
+/** shared-people: the member list's people (docs/workspaces.md, People): this MacBook and the Studio Mac are one
+ *  person's, the Design laptop is under none yet. */
+export const sharedPeople = [
+  { who: "a1".repeat(32), name: "Alex Moreau", email: "alex@example.com", devices: [SHARED_ME, sharedMembers[1].fp] },
+];
 /** An invite link as the backend makes one: the pairing line with vault, invite and secret (dummy hex). */
 export const inviteLink = (invite: string) =>
   `relay://192.168.1.2:47800#fp=${HUB_FP}&code=${"3c".repeat(16)}&vault=${SHARED_ID}&invite=${invite}&secret=${"9e".repeat(32)}`;

@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import type { Machine, SharedRole, SharedVault } from "../../../domain/settings/types";
+import type { Machine, SharedInfo, SharedRole, SharedVault } from "../../../domain/settings/types";
 import { agoParts } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
 import { filesOn } from "../../../domain/settings/types";
@@ -15,6 +15,8 @@ import {
   openForm,
   pickSharedFolder,
   removeMember,
+  removePerson,
+  setPerson,
   addToList,
   setMemberAdmin,
   setSharedDocs,
@@ -25,7 +27,17 @@ import {
 } from "../../../application/settings/shared-vaults";
 import { relativeFormat, sentAt } from "../../../shared/format";
 import { useT } from "../../hooks/useT";
-import { buttonClass, ERROR_MESSAGE, FIELD, HINT_IN_ROW, PILL, ROW_ACTIONS, ROW_DETAILS, ROW_HEAD } from "./blocks";
+import {
+  buttonClass,
+  ERROR_MESSAGE,
+  FIELD,
+  HINT_IN_ROW,
+  PILL,
+  ROW_ACTIONS,
+  ROW_DETAILS,
+  ROW_HEAD,
+  SELECT,
+} from "./blocks";
 import { Field } from "./Field";
 import { Footer } from "./Footer";
 import { CommandBlock } from "./MachineSetup";
@@ -87,6 +99,9 @@ function SharedRow({ vault }: { vault: SharedVault }) {
   const [leaving, setLeaving] = useState(false);
   const [trusting, setTrusting] = useState<string | null>(null);
   const [removing, setRemoving] = useState(""); // the member whose Remove asks first, by fingerprint
+  const [removingPerson, setRemovingPerson] = useState(""); // the person whose Remove asks first, by id
+  const [naming, setNaming] = useState<{ who: string; fp: string } | null>(null); // the person form open: who, device
+  const [personForm, setPersonForm] = useState({ pick: "", name: "", email: "" });
   // the member list decides once there is one; before it, the server's word once read (the settings can be older)
   const admins = status?.admins;
   const roleOf = (fp: string, server: SharedRole) => (admins ? (admins.includes(fp) ? "admin" : "member") : server);
@@ -97,6 +112,142 @@ function SharedRow({ vault }: { vault: SharedVault }) {
   const ago = status ? agoParts(status.at) : null;
   const roleName = (role: string) => t(role === "admin" ? "set.sharedAdmin" : "set.sharedMember");
   const until = (expires: number) => sentAt(expires * 1000, locale);
+  // people (docs/workspaces.md, People): the member list as this Mac checked it, before its first round the server's
+  const people = status?.people ?? info?.vault.people ?? [];
+  const myself = info ? people.find(p => p.devices.includes(info.me)) : undefined;
+  const loose = info ? info.vault.members.filter(m => !people.some(p => p.devices.includes(m.fp))) : [];
+  const startNaming = (who: string, fp: string, name = "", email = "") => {
+    setNaming({ who, fp });
+    setPersonForm({ pick: "", name, email });
+  };
+  // a person named or renamed, or a device put under one: new (`pick` "") with the name typed, or one there is
+  const nameForm = naming ? (
+    <form
+      className="flex min-w-0 flex-wrap items-center gap-2 ps-4"
+      onSubmit={async e => {
+        e.preventDefault();
+        const picked = people.find(p => p.who === personForm.pick);
+        const done = picked
+          ? await setPerson(vault.id, picked.who, picked.name, picked.email, naming.fp)
+          : await setPerson(vault.id, naming.who, personForm.name, personForm.email, naming.fp);
+        if (done) setNaming(null);
+      }}
+    >
+      {naming.fp && status?.admin && people.length ? (
+        <select
+          className={SELECT}
+          aria-label={t("set.sharedPerson")}
+          value={personForm.pick}
+          onChange={e => setPersonForm({ ...personForm, pick: e.target.value })}
+        >
+          <option value="">{t("set.sharedPersonNew")}</option>
+          {people.map(p => (
+            <option key={p.who} value={p.who}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      {personForm.pick ? null : (
+        <>
+          <input
+            className={`${FIELD} min-w-0 flex-1 basis-40`}
+            aria-label={t("set.sharedPersonName")}
+            placeholder={t("set.sharedPersonName")}
+            maxLength={100}
+            autoFocus
+            value={personForm.name}
+            onChange={e => setPersonForm({ ...personForm, name: e.target.value })}
+          />
+          <input
+            className={`${FIELD} min-w-0 flex-1 basis-40`}
+            type="email"
+            aria-label={t("set.sharedPersonEmail")}
+            placeholder={t("set.sharedPersonEmail")}
+            value={personForm.email}
+            onChange={e => setPersonForm({ ...personForm, email: e.target.value })}
+          />
+        </>
+      )}
+      <span className="flex-1"></span>
+      <button type="button" className={buttonClass("ghost")} onClick={() => setNaming(null)}>
+        {t("mc.cancel")}
+      </button>
+      <button
+        type="submit"
+        className={buttonClass("primary")}
+        disabled={busy || (!personForm.pick && !personForm.name.trim())}
+      >
+        {t("set.save")}
+      </button>
+    </form>
+  ) : null;
+  // one device: its name, role and the admin's buttons; `nested` under its person
+  const device = (member: SharedInfo["vault"]["members"][number], nested: boolean) =>
+    info ? (
+      <Fragment key={member.fp}>
+        <div className={`flex min-h-7 items-center gap-2 ${nested ? "ps-4" : ""}`}>
+          <span className="min-w-0 truncate text-xs text-s-fg">
+            {member.name}
+            {member.fp === info.me ? <span className="text-s-muted"> · {t("set.sharedThisMac")}</span> : null}
+          </span>
+          <span className={PILL}>
+            {unlisted(member.fp) ? t("set.sharedNotListed") : roleName(roleOf(member.fp, member.role))}
+          </span>
+          <span className="flex-1"></span>
+          {status?.admin && unlisted(member.fp) ? (
+            <button className={buttonClass("ghost")} disabled={busy} onClick={() => addToList(vault.id, member.fp)}>
+              {t("set.sharedAddToList")}
+            </button>
+          ) : null}
+          {status?.people && !nested && !unlisted(member.fp) && (status.admin || member.fp === info.me) ? (
+            <button className={buttonClass("ghost")} disabled={busy} onClick={() => startNaming("", member.fp)}>
+              {t("set.sharedNamePerson")}
+            </button>
+          ) : null}
+          {status?.admin && admins && !unlisted(member.fp) && member.fp !== info.me && removing !== member.fp ? (
+            <button
+              className={buttonClass("ghost")}
+              disabled={busy}
+              onClick={() => setMemberAdmin(vault.id, member.fp, !admins.includes(member.fp))}
+            >
+              {t(admins.includes(member.fp) ? "set.sharedMakeMember" : "set.sharedMakeAdmin")}
+            </button>
+          ) : null}
+          {!admin || member.fp === info.me || unlisted(member.fp) ? null : removing === member.fp ? (
+            <>
+              <span className="text-xs text-s-muted">{t("set.sharedRemoveSure")}</span>
+              <button
+                className={buttonClass("dangerSolid")}
+                disabled={busy}
+                aria-label={t("set.extraVaultRemove", { name: member.name })}
+                onClick={async () => {
+                  await removeMember(vault.id, member.fp);
+                  setRemoving("");
+                }}
+              >
+                {t("ag.remove")}
+              </button>
+              <button className={buttonClass("ghost")} onClick={() => setRemoving("")}>
+                {t("mc.cancel")}
+              </button>
+            </>
+          ) : (
+            <button
+              className={buttonClass("ghost")}
+              aria-label={t("set.extraVaultRemove", { name: member.name })}
+              onClick={() => setRemoving(member.fp)}
+            >
+              {t("ag.remove")}
+            </button>
+          )}
+        </div>
+        {status?.admin && unlisted(member.fp) ? (
+          <span className="text-xs text-s-muted">{t("set.sharedNotListedHint")}</span>
+        ) : null}
+        {naming?.fp === member.fp ? nameForm : null}
+      </Fragment>
+    ) : null;
   return (
     <div className={ROW}>
       <div className={ROW_HEAD}>
@@ -324,77 +475,83 @@ function SharedRow({ vault }: { vault: SharedVault }) {
       ) : null}
 
       {membersOpen ? (
-        <div className="grid gap-1.5">
+        <div className="grid min-w-0 gap-1.5">
           <span className={LABEL}>{t("set.sharedMembers")}</span>
           {info ? (
             <>
-              {info.vault.members.map(member => (
-                <Fragment key={member.fp}>
+              {people.map(person => (
+                <div key={person.who} className="grid min-w-0 grid-cols-1 gap-0.5">
                   <div className="flex min-h-7 items-center gap-2">
-                    <span className="min-w-0 truncate text-xs text-s-fg">
-                      {member.name}
-                      {member.fp === info.me ? <span className="text-s-muted"> · {t("set.sharedThisMac")}</span> : null}
-                    </span>
-                    <span className={PILL}>
-                      {unlisted(member.fp) ? t("set.sharedNotListed") : roleName(roleOf(member.fp, member.role))}
+                    <span
+                      className="min-w-0 truncate text-xs font-medium text-s-fg"
+                      title={person.email ? `${person.name} · ${person.email}` : person.name}
+                    >
+                      {person.name}
+                      {person.email ? <span className="font-normal text-s-muted"> · {person.email}</span> : null}
                     </span>
                     <span className="flex-1"></span>
-                    {status?.admin && unlisted(member.fp) ? (
-                      <button
-                        className={buttonClass("ghost")}
-                        disabled={busy}
-                        onClick={() => addToList(vault.id, member.fp)}
-                      >
-                        {t("set.sharedAddToList")}
-                      </button>
-                    ) : null}
-                    {status?.admin &&
-                    admins &&
-                    !unlisted(member.fp) &&
-                    member.fp !== info.me &&
-                    removing !== member.fp ? (
-                      <button
-                        className={buttonClass("ghost")}
-                        disabled={busy}
-                        onClick={() => setMemberAdmin(vault.id, member.fp, !admins.includes(member.fp))}
-                      >
-                        {t(admins.includes(member.fp) ? "set.sharedMakeMember" : "set.sharedMakeAdmin")}
-                      </button>
-                    ) : null}
-                    {!admin || member.fp === info.me || unlisted(member.fp) ? null : removing === member.fp ? (
+                    {removingPerson === person.who ? (
                       <>
-                        <span className="text-xs text-s-muted">{t("set.sharedRemoveSure")}</span>
+                        <span className="text-xs text-s-muted">
+                          {person.who === myself?.who
+                            ? t("set.sharedRemoveSelfSure")
+                            : t("set.sharedRemovePersonSure", { name: person.name })}
+                        </span>
                         <button
                           className={buttonClass("dangerSolid")}
                           disabled={busy}
-                          aria-label={t("set.extraVaultRemove", { name: member.name })}
+                          aria-label={t("set.extraVaultRemove", { name: person.name })}
                           onClick={async () => {
-                            await removeMember(vault.id, member.fp);
-                            setRemoving("");
+                            await removePerson(vault.id, person.who);
+                            setRemovingPerson("");
                           }}
                         >
                           {t("ag.remove")}
                         </button>
-                        <button className={buttonClass("ghost")} onClick={() => setRemoving("")}>
+                        <button className={buttonClass("ghost")} onClick={() => setRemovingPerson("")}>
                           {t("mc.cancel")}
                         </button>
                       </>
                     ) : (
-                      <button
-                        className={buttonClass("ghost")}
-                        aria-label={t("set.extraVaultRemove", { name: member.name })}
-                        onClick={() => setRemoving(member.fp)}
-                      >
-                        {t("ag.remove")}
-                      </button>
+                      <>
+                        {person.who === myself?.who && !link ? (
+                          <button
+                            className={buttonClass("ghost")}
+                            disabled={busy}
+                            onClick={() => inviteToShared(vault.id, "member", person.who)}
+                          >
+                            {t("set.sharedAddDevice")}
+                          </button>
+                        ) : null}
+                        {status?.admin ? (
+                          <button
+                            className={buttonClass("ghost")}
+                            disabled={busy}
+                            onClick={() => startNaming(person.who, "", person.name, person.email)}
+                          >
+                            {t("set.sharedRename")}
+                          </button>
+                        ) : null}
+                        {status?.admin || person.who === myself?.who ? (
+                          <button
+                            className={buttonClass("ghost")}
+                            aria-label={t("set.extraVaultRemove", { name: person.name })}
+                            onClick={() => setRemovingPerson(person.who)}
+                          >
+                            {t("ag.remove")}
+                          </button>
+                        ) : null}
+                      </>
                     )}
                   </div>
-                  {status?.admin && unlisted(member.fp) ? (
-                    <span className="text-xs text-s-muted">{t("set.sharedNotListedHint")}</span>
-                  ) : null}
-                </Fragment>
+                  {naming?.who === person.who && !naming.fp ? nameForm : null}
+                  {person.devices.flatMap(fp => info.vault.members.filter(m => m.fp === fp)).map(m => device(m, true))}
+                </div>
               ))}
-              {admin && info.vault.invites.length ? (
+              {people.length && loose.length ? <span className={LABEL}>{t("set.sharedNoPerson")}</span> : null}
+              {loose.map(m => device(m, false))}
+              {/* an admin's every open invite, a member's its own (for its devices) */}
+              {info.vault.invites.length ? (
                 <>
                   <span className={LABEL}>{t("set.sharedInvites")}</span>
                   {info.vault.invites.map(invite => (

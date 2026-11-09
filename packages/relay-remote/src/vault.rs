@@ -127,9 +127,10 @@ pub struct Keys {
     ring: BTreeMap<u32, VaultKey>, pub secret: Option<[u8; 32]>, pub sign: Option<[u8; 32]>, pub creator: Option<String>,
     pub head: Option<(u64, String)>, pub expect: Option<String>, pub joined: Option<String>, pub invites: Vec<Invited>,
 }
-/// An invite this Mac made: its id, the link's secret, the role, the epoch it carried keys up to, and when it expires.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Invited { pub id: String, pub secret: String, pub role: String, pub epoch: u32, pub expires: u64 }
+/// An invite this Mac made: its id, the link's secret, the role, the epoch it carried keys up to, when it expires, and
+/// `who`: the person whoever joins with it is added under ("" none).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Invited { pub id: String, pub secret: String, pub role: String, pub epoch: u32, pub expires: u64, pub who: String }
 impl From<VaultKey> for Keys {
     fn from(k: VaultKey) -> Keys { Keys { ring: BTreeMap::from([(0, k)]), secret: None, sign: None, creator: None, head: None, expect: None, joined: None, invites: vec![] } }
 }
@@ -271,8 +272,9 @@ impl Keys {
                 ["head", n, h] if hex64(h) => { once(k.head.is_some())?; k.head = Some((n.parse().ok()?, h.into())) }
                 ["expect", h] if hex64(h) => { once(k.expect.is_some())?; k.expect = Some(h.into()) }
                 ["joined", h] if hex64(h) => { once(k.joined.is_some())?; k.joined = Some(h.into()) }
-                ["invite", id, sec, role, e, x] if id.len() == 16 && id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) && hex64(sec) && (role == "admin" || role == "member") => {
-                    k.invites.push(Invited { id: id.into(), secret: sec.into(), role: role.into(), epoch: e.parse().ok()?, expires: x.parse().ok()? });
+                ["invite", id, sec, role, e, x, ref who @ ..] if id.len() == 16 && id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) && hex64(sec) && (role == "admin" || role == "member")
+                    && (who.is_empty() || (who.len() == 1 && hex64(who[0]))) => {
+                    k.invites.push(Invited { id: id.into(), secret: sec.into(), role: role.into(), epoch: e.parse().ok()?, expires: x.parse().ok()?, who: who.first().map_or(String::new(), |w| w.to_string()) });
                 }
                 [e, h] => {
                     let e = e.parse().ok().filter(|e| *e > 0 && *e <= MAX_EPOCH)?;
@@ -294,7 +296,10 @@ impl Keys {
         if let Some((n, h)) = &self.head { out += &format!("head {n} {h}\n"); }
         if let Some(h) = &self.expect { out += &format!("expect {h}\n"); }
         if let Some(h) = &self.joined { out += &format!("joined {h}\n"); }
-        for i in &self.invites { out += &format!("invite {} {} {} {} {}\n", i.id, i.secret, i.role, i.epoch, i.expires); }
+        for i in &self.invites {
+            out += &format!("invite {} {} {} {} {}", i.id, i.secret, i.role, i.epoch, i.expires);
+            out += &if i.who.is_empty() { "\n".to_string() } else { format!(" {}\n", i.who) };
+        }
         out
     }
     /// What Settings shows as the recovery key: the keys alone. Before any rotation the one hex line it always was.
@@ -475,9 +480,9 @@ impl SealedRemote {
 #[derive(Debug, Default)]
 /// `rekeying`: someone left and the key has not changed yet, or the member list is held back (it could hold a removal).
 /// `docs`: an admin turned on making the workspace's notes documents (the member list's `docs-on`); `admin`: this Mac
-/// is an admin of the list; `admins`: the list's admins and `listed` all its members (fingerprints), None when there
-/// is no list yet.
-pub struct KeyStep { pub keys: Option<Keys>, pub warnings: Vec<String>, pub changed: Vec<(String, String)>, pub errors: Vec<String>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>> }
+/// is an admin of the list; `admins`: the list's admins and `listed` all its members (fingerprints), `people` its people
+/// with their devices, None when there is no list yet.
+pub struct KeyStep { pub keys: Option<Keys>, pub warnings: Vec<String>, pub changed: Vec<(String, String)>, pub errors: Vec<String>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>>, pub people: Option<Vec<members::Person>> }
 use crate::members::{self, List};
 impl SealedRemote {
     fn info(&self) -> Result<Value, String> { Ok((self.call)(json!({"op": "vault_info", "vault": self.vault}), None, None)?.0["vault"].take()) }
@@ -601,6 +606,7 @@ impl SealedRemote {
         (step.docs, step.admin) = (list.docs, list.admin(&me));
         step.admins = Some(list.members.iter().filter(|(_, m)| m.admin).map(|(fp, _)| fp.clone()).collect());
         step.listed = Some(list.members.keys().cloned().collect());
+        step.people = Some(list.persons());
         if list.pending.is_some_and(|at| now.saturating_sub(at) > 3600) { step.warnings.push("Someone left over an hour ago, and the key has not changed since.".into()); }
         let before = k.epoch();
         while k.epoch() < list.epoch {
@@ -619,23 +625,27 @@ impl SealedRemote {
             let Some(l) = list.members.get(fp) else { continue };
             if k.proven(&self.vault, m, None).is_some_and(|(id, pk)| id != l.id || pk != l.pk) { step.changed.push((fp.into(), m["name"].as_str().unwrap_or_default().into())); }
         }
-        if !list.admin(&me) || k.epoch() != list.epoch { return Ok(step); }
+        // an admin adds whoever joined with its invites, a member only a device of its own person (the list refuses others)
+        let mine = list.person(&me).to_string();
+        if k.epoch() != list.epoch || (!list.admin(&me) && (mine.is_empty() || !k.invites.iter().any(|i| i.who == mine))) { return Ok(step); }
         // a joiner proven with an invite this Mac made
         for m in v["members"].as_array().into_iter().flatten() {
             let fp = m["fp"].as_str().unwrap_or_default();
             if list.members.contains_key(fp) { continue; }
-            let Some(inv) = k.invites.iter().find(|i| m["via"].as_str() == Some(i.id.as_str())).cloned() else { continue };
+            let Some(inv) = k.invites.iter().find(|i| m["via"].as_str() == Some(i.id.as_str()) && (list.admin(&me) || i.who == mine)).cloned() else { continue };
             let Some((id, pk)) = k.proven(&self.vault, m, Some(&inv.secret)) else { continue };
             let mut keys = serde_json::Map::new();
             for e in inv.epoch + 1..=k.epoch() { keys.insert(e.to_string(), json!(seal_for(&pk, &self.vault, e, fp, &k.get(e).unwrap().raw)?)); }
-            let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "add".into(), fp: fp.into(), id, pk, role: inv.role.clone(), ..Default::default() });
+            // a person that is gone meanwhile: added without one
+            let who = if list.people.contains_key(&inv.who) { inv.who.clone() } else { String::new() };
+            let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "add".into(), fp: fp.into(), id, pk, role: inv.role.clone(), who, ..Default::default() });
             k.invites.retain(|i| i.id != inv.id);
             self.append(&mut k, &list, &e, json!(keys), save)?;
             step.keys = Some(k.clone());
             // one entry a round: the next one follows the list as it is now
             return Ok(step);
         }
-        if list.pending.is_some() && list.epoch < MAX_EPOCH {
+        if list.admin(&me) && list.pending.is_some() && list.epoch < MAX_EPOCH {
             let (next, e) = (VaultKey::generate(), list.epoch + 1);
             let entry = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "rekey".into(), epoch: e, h: sync::sha256_hex(&next.raw), ..Default::default() });
             let mut sealed = serde_json::Map::new();
@@ -718,6 +728,32 @@ impl SealedRemote {
         if list.admin(fp) == on { return Ok(()); }
         let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: if on { "promote" } else { "demote" }.into(), fp: fp.into(), ..Default::default() });
         self.append(&mut k, &list, &e, json!({}), save)
+    }
+    /// Name the person `who` (new: made, else renamed: admins only), and put device `fp` under it when given: a `person`
+    /// entry signed by this Mac. Without an admin, a device only names itself as a new person (`fp` this Mac). The
+    /// people after it, as the list says.
+    pub fn set_person(&self, who: &str, name: &str, email: &str, fp: &str, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<Vec<members::Person>, String> {
+        let mut k = self.keys();
+        let v = self.info()?;
+        let me = v["me"].as_str().unwrap_or_default().to_string();
+        let (list, _) = self.list(&k)?.ok_or("this workspace has no member list yet")?;
+        let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "person".into(), who: who.into(), name: name.trim().into(), email: email.trim().into(), fp: fp.into(), ..Default::default() });
+        self.append(&mut k, &list, &e, json!({}), save)?;
+        self.persons()
+    }
+    fn persons(&self) -> Result<Vec<members::Person>, String> { Ok(self.list(&self.keys())?.map(|(l, _)| l.persons()).unwrap_or_default()) }
+    /// Take the person `who` out with every device under it (an admin, or one of its own devices): a `person-remove`
+    /// entry signed by this Mac. The server drops those devices in the same write. The people after it, or None when
+    /// this Mac was one of those devices (it left).
+    pub fn remove_person(&self, who: &str, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<Option<Vec<members::Person>>, String> {
+        let mut k = self.keys();
+        let v = self.info()?;
+        let me = v["me"].as_str().unwrap_or_default().to_string();
+        let (list, _) = self.list(&k)?.ok_or("this workspace has no member list yet")?;
+        let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "person-remove".into(), who: who.into(), ..Default::default() });
+        self.append(&mut k, &list, &e, json!({}), save)?;
+        if list.person(&me) == who { return Ok(None); }
+        self.persons().map(Some)
     }
     /// An admin adds a member the server has and the list lacks (its Relay published keys only after the list was made,
     /// so trust on upgrade skipped it): an `add` as member, on the same proof as trust on upgrade, its keys signed by it
@@ -1024,9 +1060,12 @@ mod tests {
         keys.add(1, VaultKey::generate());
         keys.ensure();
         (keys.creator, keys.head, keys.joined) = (Some("c".repeat(64)), Some((4, "d".repeat(64))), Some("e".repeat(64)));
-        keys.invites.push(Invited { id: "0123456789abcdef".into(), secret: "f".repeat(64), role: "member".into(), epoch: 1, expires: 1_900_000_000 });
+        keys.invites.push(Invited { id: "0123456789abcdef".into(), secret: "f".repeat(64), role: "member".into(), epoch: 1, expires: 1_900_000_000, who: String::new() });
+        // one for a device of a person
+        keys.invites.push(Invited { id: "fedcba9876543210".into(), secret: "f".repeat(64), role: "member".into(), epoch: 1, expires: 1_900_000_000, who: "9".repeat(64) });
         let back = Keys::parse(&keys.format()).unwrap();
-        assert_eq!((back.format(), back.head.clone(), back.invites.len()), (keys.format(), keys.head.clone(), 1));
+        assert_eq!((back.format(), back.head.clone(), back.invites.clone()), (keys.format(), keys.head.clone(), keys.invites.clone()));
+        assert!(Keys::parse(&keys.format().replace(&"9".repeat(64), "not-a-person")).is_none());
         assert_eq!(keys.recovery().lines().count(), 2, "the keys alone");
         let f = keys.format();
         let first = f.lines().next().unwrap();

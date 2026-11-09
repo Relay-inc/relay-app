@@ -137,9 +137,9 @@ blob name 64 lowercase hex. Anything else is refused.
 | Request | Who | Reply |
 |---|---|---|
 | `vault_create {name}` | a full device (not vaults_only, not linked) | `{vault: {id, name}}`, the caller is its admin |
-| `vault_info {vault}` | member | `{vault: {id, name, role, me, members: [{name, fp, role, added, pk, id, sig, mac}], invites: [{id, role, expires}], epoch, rekey, keys: {epoch: {sealed, holders}}}}`, invites only for admins (else `[]`), `keys` only the caller's sealed key and who each rotation was sealed to |
-| `vault_invite {vault, role, wrapped, epoch}` | admin | `{invite: {id, code, expires}}`, `role` admin or member, `wrapped` hex at most 256 KiB, expires in 24 h; `epoch` the newest key sealed in, refused (`key changed`) when it is not the current one |
-| `vault_invite_revoke {vault, invite}` | admin | `{}` |
+| `vault_info {vault}` | member | `{vault: {id, name, role, me, members: [{name, fp, role, added, pk, id, sig, mac}], people: [{who, name, email, devices}], invites: [{id, role, expires}], epoch, rekey, keys: {epoch: {sealed, holders}}}}`, `people` the member list's people with their devices' fingerprints (`[]` without a list), invites all for an admin and the caller's own for a member, `keys` only the caller's sealed key and who each rotation was sealed to |
+| `vault_invite {vault, role, wrapped, epoch}` | admin, or a member that is a person on the list (role member only) | `{invite: {id, code, expires}}`, `role` admin or member, `wrapped` hex at most 256 KiB, expires in 24 h; `epoch` the newest key sealed in, refused (`key changed`) when it is not the current one |
+| `vault_invite_revoke {vault, invite}` | admin, or a member for an invite it made | `{}` |
 | `vault_join {vault, invite, name, proof}` | anyone with a valid link | `{vault: {id, name}, role, wrapped}`, `proof` = `tls::proof(code, client_fp, server_fp)`, 5 wrong proofs drop the invite, success consumes it, adds the device to `clients.json` as vaults_only when it is new (name deduplicated as in `pair`) and as a member |
 | `vault_remove {vault, fp}` | admin, or the member itself (leave) | `{}`, refused when it would leave members without an admin, a vaults_only client with no vault left is removed from `clients.json`; sets `rekey` |
 | `vault_manifest {vault}` | member | `{blobs: [{name, etag, size, meta, e}], epoch, rekey, role, me: {fp, pk, mac}}`, `meta` hex of the record's meta part, `etag` sha256 hex of the whole record file, `size` its bytes, `e` the epoch in its header |
@@ -150,7 +150,7 @@ blob name 64 lowercase hex. Anything else is refused.
 | `vault_stream {vault, v, since, epoch}` | member | stays open, see Live channel |
 | `vault_pk {vault, pk, id, sig, mac, imac}` | member, for itself | `{}`, `pk` and `id` 64 hex, `sig` 128 hex, `mac` `<epoch>:<64 hex>`, `imac` 64 hex or empty; only the shape is checked here |
 | `vault_log {vault}` | member | `{entries}`: the member list |
-| `vault_append {vault, entry, keys}` | member, `entry.by` the caller | `{}`, only when the whole list still checks (`relay_remote::members::check`); a `remove`/`leave` removes the member here in the same write; an `add` stores `keys` (epoch: sealed) for the new member; `create` only on an empty list by an admin; `rekey` refused (it goes with `vault_rotate`) |
+| `vault_append {vault, entry, keys}` | member, `entry.by` the caller | `{}`, only when the whole list still checks (`relay_remote::members::check`); whoever the entry takes off the list (`remove`, `leave`, or `person-remove` with every device of that person) is removed here in the same write; an `add` stores `keys` (epoch: sealed) for the new member; `create` only on an empty list by an admin; `rekey` refused (it goes with `vault_rotate`) |
 | `vault_rotate {vault, epoch, keys: {fp: sealed}, entry}` | admin | `{epoch}`, only the next epoch; `entry` the `rekey` entry, appended in the same write when the list then checks, and a sealed key for exactly the list's members; clears `rekey` and every open invite |
 
 A `vault_put` (and each file of `vault_put_many`) under another epoch than the current one is refused: `key changed`
@@ -387,9 +387,10 @@ manifest) and the epoch (to refuse a write under an old key), and checks it fits
 Who is in a workspace, who is an admin and which key is current come from its member list, never from the server's
 own `vault.json` (that one only decides who may connect, and its roles follow the list). The list is an append-only
 chain of entries (`relay_remote::members`), at most 10 000: `{seq, prev, kind, fp, id, pk, role, epoch, h, at, by, sig,
-mac}`, `prev` the hash of the entry before (sha256 of what it signs and its signature), `sig` the Ed25519 signature of
-`by` over every other field but `mac`, and the vault id. Every hex field is lowercase, and every field a kind does not
-use is empty.
+mac, who, name, email}`, `prev` the hash of the entry before (sha256 of what it signs and its signature), `sig` the
+Ed25519 signature of `by` over every other field but `mac`, and the vault id. The person fields `who`, `name` and
+`email` are signed only when one is set (as JSON after the rest), so an entry from before people signs as it did.
+Every hex field is lowercase, and every field a kind does not use is empty.
 
 - `create` (the creator, signed by itself, with `mac`: its identity vouched for under the vault's epoch-0 key, which the
   server never has), `add` (a member with its identity `id`, X25519 key `pk` and `role`), `remove`, `promote`,
@@ -425,6 +426,21 @@ use is empty.
 - **A member who set up Relay again** publishes new keys; every Mac shows it, and an admin can trust them with a
   `device` entry (after a confirm; only when the publication is signed by the new identity and vouched for under the
   newest key, and no removal waits). Every other Mac follows the list.
+- **People** sit on top of devices: members stay devices (certificate fingerprint, identity, key), and a device may
+  belong to a person. `person` (`who` 64 hex, `name` 1 to 100 characters without control characters or outer spaces,
+  `email` optional) names a person, made the first time and renamed after, and with `fp` puts that device under it.
+  `person-remove` (`who`) takes the person off with every device under it, and like a `remove` leaves the list waiting
+  for a `rekey`. An `add` with `who` adds a device under that person. An admin may write any of these. Without an
+  admin, a device may only: name itself as a new person (`fp` itself, while it has none), add a device under its own
+  person as member, and take its own person off (which takes itself off too). A device that claims another person, or
+  a person that adds an admin device through a member device, is refused like any entry by a non-admin. A device
+  without a person stays a member as before, so a list from before people needs no change. A Relay from before people
+  refuses a list once it holds one of these entries: every member updates first. `email` does nothing yet: it is there
+  for a sign-in later. In Members the people show with their devices under them: Add a device… on your own person
+  makes an invite link (as member) that your Relay adds under you, Name person… on a device without one (an admin for
+  any, a member for this Mac), and Rename… and Remove for an admin (Remove also for the person itself, which makes
+  this Mac leave). The grouping comes from the list as this Mac checked it, the server's `people` only before its
+  first round.
 - **A workspace from before the list** gets one from the first admin on this version, in one round: the `create`, then
   an `add` as member for every member the server lists whose Relay already published keys vouched for under the
   workspace key. Later rounds add nobody that way: a member whose Relay published its keys after that shows as Not on

@@ -1193,13 +1193,15 @@ impl Member {
     /// A round's key step, saving as the app does.
     fn step(&self, vault: &str) -> relay_remote::vault::KeyStep { self.remote(vault).keep_keys(&self.save()).unwrap() }
     /// An invite this Mac makes, remembered in its key file as the app does.
-    fn invite(&self, t: &Team, role: &str) -> String {
+    fn invite(&self, t: &Team, role: &str) -> String { self.invite_for(t, role, "").unwrap() }
+    /// The same, for a device of the person `who`.
+    fn invite_for(&self, t: &Team, role: &str, who: &str) -> Result<String, String> {
         let keys = self.keys();
-        let (link, inv) = self.c.vault_invite(&t.vault, role, &keys, &t.host, t.port).unwrap();
+        let (link, inv) = self.c.vault_invite(&t.vault, role, &keys, &t.host, t.port)?;
         let mut k = self.keys();
-        k.invites.push(relay_remote::vault::Invited { id: inv.id, secret: relay_remote::proto::PairLine::parse(&link).unwrap().secret.unwrap(), role: role.into(), epoch: keys.epoch(), expires: inv.expires });
+        k.invites.push(relay_remote::vault::Invited { id: inv.id, secret: relay_remote::proto::PairLine::parse(&link).unwrap().secret.unwrap(), role: role.into(), epoch: keys.epoch(), expires: inv.expires, who: who.into() });
         *self.file.lock().unwrap() = k.format();
-        link
+        Ok(link)
     }
 }
 fn join(link: &str, tag: &str) -> (Member, Identity) {
@@ -1433,6 +1435,36 @@ fn a_member_who_set_up_relay_again_is_trusted_by_hand() {
     let other = { let mut k = relay_remote::vault::Keys::from(relay_remote::vault::VaultKey::generate()); k.ensure(); k.public() };
     edit_vault(&t, |v| { for m in v["members"].as_array_mut().unwrap() { if m["fp"] == b.fp.as_str() { m["pk"] = serde_json::json!(other); } } });
     assert!(a.remote(&t.vault).trust(&b.fp, &a.save()).unwrap_err().contains("not signed by it"));
+}
+
+/// People (docs/workspaces.md, People): the admin and a colleague each name themselves, the colleague adds a second
+/// Mac of its own through its own invite (as member only), and the server lists the person with both devices. A device
+/// claiming another person is refused. Removing the person takes both devices off the list and the server in one entry,
+/// and the admin's next round makes a new key for who is left.
+#[test]
+fn a_person_adds_its_own_device_and_goes_with_all_of_them() {
+    let (t, a, b, c) = trio("people", "member");
+    let (pa, pb) = ("1".repeat(64), "2".repeat(64));
+    a.remote(&t.vault).set_person(&pa, "Ann", "", &a.fp, &a.save()).unwrap();
+    assert_eq!(b.remote(&t.vault).set_person(&pb, "Bo", "bo@example.com", &b.fp, &b.save()).unwrap().len(), 2);
+    // only a person invites without being an admin, and never as admin
+    assert!(c.invite_for(&t, "member", "").unwrap_err().contains("only an admin"));
+    assert!(b.invite_for(&t, "admin", &pb).unwrap_err().contains("only an admin"));
+    let (d, _) = join(&b.invite_for(&t, "member", &pb).unwrap(), "people-d");
+    rounds(&t, &[&d, &b, &d, &a, &c], 1);
+    let l = list_of(&t, &a);
+    assert_eq!((l.person(&d.fp), l.admin(&d.fp)), (pb.as_str(), false));
+    let info = t.laptop.vault_info(&t.vault).unwrap();
+    let bo = info.people.iter().find(|p| p.who == pb).unwrap();
+    assert_eq!((bo.name.as_str(), bo.email.as_str(), bo.devices.len()), ("Bo", "bo@example.com", 2));
+    // a device of Bo claims Ann
+    assert!(b.remote(&t.vault).set_person(&pa, "Ann", "", &b.fp, &b.save()).unwrap_err().contains("not signed by an admin"));
+    assert_eq!(a.remote(&t.vault).remove_person(&pb, &a.save()).unwrap().map(|p| p.len()), Some(1), "the admin is not Bo, Ann is left");
+    let info = t.laptop.vault_info(&t.vault).unwrap();
+    assert!(!info.members.iter().any(|m| m.fp == b.fp || m.fp == d.fp) && info.people.len() == 1, "{info:?}");
+    rounds(&t, &[&a, &c], 1);
+    assert_eq!((list_of(&t, &a).epoch, c.keys().epoch()), (1, 1));
+    assert!(d.c.call(serde_json::json!({"op": "vault_manifest", "vault": t.vault})).is_err());
 }
 
 /// Two admins rotate at once: the server takes one, the other's round takes that key, they end on the same key.

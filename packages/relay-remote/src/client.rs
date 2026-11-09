@@ -46,10 +46,11 @@ pub fn vault_join(line: &str, id: &Identity, name: &str) -> Result<(PairLine, Jo
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
 pub struct VaultRef { pub id: String, pub name: String }
-/// A shared vault in full: its members and, for an admin, the invites still open.
+/// A shared vault in full: its members (devices), the people on its member list with their devices, and the invites
+/// still open (an admin's: all, a member's: its own).
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
-pub struct VaultInfo { pub id: String, pub name: String, pub role: String, pub members: Vec<Member>, pub invites: Vec<Invite> }
+pub struct VaultInfo { pub id: String, pub name: String, pub role: String, pub members: Vec<Member>, pub people: Vec<crate::members::Person>, pub invites: Vec<Invite> }
 /// A device in a shared vault: its name, its certificate's fingerprint, its role and when it was added (unix seconds).
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]

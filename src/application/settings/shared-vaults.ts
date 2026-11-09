@@ -1,5 +1,5 @@
 import { t } from "../../shared/i18n";
-import type { SharedRole } from "../../domain/settings/types";
+import type { SharedPerson, SharedRole } from "../../domain/settings/types";
 import * as backend from "../../infrastructure/backend";
 import { checkMachine } from "./machines-page";
 import { useSettingsStore, type SettingsState } from "./store";
@@ -135,10 +135,11 @@ export async function toggleMembers(id: string) {
   if (!read) change(draft => void delete draft.info[id]);
 }
 
-/** A single-use link for a new member or admin; the open invites follow when they show. */
-export async function inviteToShared(id: string, role: SharedRole) {
+/** A single-use link for a new member or admin, or with `who` for a new device of that person. The open invites follow
+ *  when they show. */
+export async function inviteToShared(id: string, role: SharedRole, who?: string) {
   await run(id, async () => {
-    const made = await backend.sharedVaultInvite(id, role);
+    const made = await backend.sharedVaultInvite(id, role, who);
     change(draft => void (draft.links[id] = made));
     if (id in st().info) await loadInfo(id);
   });
@@ -198,6 +199,41 @@ export const addToList = (id: string, fp: string) =>
     });
     await loadInfo(id);
   });
+/** The people as the member list says after a change this Mac signed, until the next round says it again. */
+function setPeople(id: string, people: SharedPerson[]) {
+  change(draft => {
+    const s = draft.status[id];
+    if (s) s.people = people;
+  });
+}
+/** Name a person (`who` "" a new one) and put device `fp` ("" none) under it (docs/workspaces.md, People). True when
+ *  it went through. */
+export const setPerson = (id: string, who: string, name: string, email: string, fp: string) =>
+  run(id, async () => {
+    setPeople(id, await backend.sharedVaultPerson(id, who, name, email, fp));
+    await loadInfo(id);
+  });
+/** Remove a person with all its devices. When this Mac was one of them it left the vault, as with Leave. */
+export const removePerson = (id: string, who: string) =>
+  run(id, async () => {
+    const people = await backend.sharedVaultRemovePerson(id, who);
+    if (people) {
+      setPeople(id, people);
+      await loadInfo(id);
+      return;
+    }
+    forget(id);
+    await reload();
+  });
+/** A vault this Mac left, out of the settings' state. */
+function forget(id: string) {
+  change(draft => {
+    delete draft.info[id];
+    delete draft.links[id];
+    delete draft.keys[id];
+    delete draft.status[id];
+  });
+}
 export const removeMember = (id: string, fp: string) =>
   run(id, async () => {
     await backend.sharedVaultRemove(id, fp);
@@ -208,12 +244,7 @@ export const leaveShared = (id: string) =>
   run(id, async () => {
     // "" is this Mac to the backend: a member that was removed, or whose vault is gone, cannot ask the server who it is
     await backend.sharedVaultRemove(id, st().info[id]?.me ?? "");
-    change(draft => {
-      delete draft.info[id];
-      delete draft.links[id];
-      delete draft.keys[id];
-      delete draft.status[id];
-    });
+    forget(id);
     await reload();
   });
 

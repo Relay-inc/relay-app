@@ -141,7 +141,10 @@ export type SharedStatus = {
   admin?: boolean; // this Mac is an admin of the member list: it may turn that on or off, and make members admins
   admins?: string[] | null; // the member list's admins (fingerprints); null while the workspace has no list
   listed?: string[] | null; // every member on the member list (fingerprints); null while the workspace has no list
+  people?: SharedPerson[] | null; // the member list's people with their devices; null while the workspace has no list
 };
+/** A person on a shared vault's member list (docs/workspaces.md, People): `who` its id, `devices` fingerprints. */
+export type SharedPerson = { who: string; name: string; email: string; devices: string[] };
 /** An open invite of a shared vault: single use, `expires` in epoch seconds. */
 export type SharedInvite = { id: string; role: SharedRole; expires: number };
 /** A shared vault's members and open invites (`shared_vault_info`), and `me`: this Mac's fingerprint. */
@@ -151,6 +154,7 @@ export type SharedInfo = {
     name: string;
     role: SharedRole;
     members: { name: string; fp: string; role: SharedRole; added: number }[];
+    people?: SharedPerson[]; // as the server reads the member list (a member's Mac checks it itself: `SharedStatus`)
     invites: SharedInvite[];
   };
   me: string;

@@ -49,6 +49,8 @@ pub(crate) struct Vault { pub id: String, pub name: String, pub created: u64, pu
 impl Vault {
     fn role(&self, fp: &str) -> Option<&str> { self.members.iter().find(|m| m.fp == fp).map(|m| m.role.as_str()) }
     fn has_admin(&self) -> bool { self.members.iter().any(|m| m.role == "admin") }
+    /// The member list as it stands (checked when each entry went on), none when there is none or it no longer checks.
+    fn list(&self) -> Option<members::List> { members::check(&self.id, &self.log, None).ok().map(|(l, _)| l) }
 }
 
 /// Exactly `n` lowercase hex characters: every id, code and blob name. Anything else never reaches a path.
@@ -160,20 +162,26 @@ impl Vaults {
         let v = self.member(id, fp)?;
         let role = v.role(fp).unwrap_or_default();
         let members: Vec<Value> = v.members.iter().map(|m| json!({"name": m.name, "fp": m.fp, "role": m.role, "added": m.added, "pk": m.pk, "id": m.id, "sig": m.sig, "mac": m.mac, "imac": m.imac, "via": m.via})).collect();
-        let invites: Vec<Value> = if role == "admin" { v.invites.iter().map(|i| json!({"id": i.id, "role": i.role, "expires": i.expires})).collect() } else { vec![] };
+        // an admin sees every open invite, a member the ones it made (for its own devices)
+        let invites: Vec<Value> = v.invites.iter().filter(|i| role == "admin" || i.by == fp).map(|i| json!({"id": i.id, "role": i.role, "expires": i.expires})).collect();
+        // the people on the member list, each with its devices: for the settings, every member's Mac checks the list itself
+        let people = v.list().map(|l| l.persons()).unwrap_or_default();
         // each rotated key as sealed to the caller (nobody gets another member's), with who it was sealed to: the
         // rotating admin signed that list
         let keys: serde_json::Map<String, Value> = v.keys.iter().filter_map(|(e, by)| by.get(fp).map(|w| (e.clone(), json!({"sealed": w})))).collect();
-        Ok(json!({"vault": {"id": v.id, "name": v.name, "role": role, "me": fp, "members": members, "invites": invites, "epoch": v.epoch, "rekey": v.rekey, "keys": keys}}))
+        Ok(json!({"vault": {"id": v.id, "name": v.name, "role": role, "me": fp, "members": members, "people": people, "invites": invites, "epoch": v.epoch, "rekey": v.rekey, "keys": keys}}))
     }
 
     /// An admin opens an invite: its code goes into the link. `epoch`: the newest key the inviter's Relay sealed into
-    /// it; one behind is refused (`key changed`): that Relay fetches the new key and invites again.
+    /// it; one behind is refused (`key changed`): that Relay fetches the new key and invites again. A member that is a
+    /// person on the member list may open one too, as member only: for a device of its own, which only its own Relay
+    /// can then add to the list (the list refuses any other).
     pub fn invite(&self, fp: &str, id: &str, role: &str, wrapped: &str, epoch: u64) -> Result<Value, String> {
         if role != "admin" && role != "member" { return Err("role is admin or member".into()); }
         if wrapped.is_empty() || wrapped.len() > MAX_WRAPPED || !hex(wrapped, wrapped.len()) { return Err("bad wrapped key".into()); }
         self.with(id, fp, |v, me| {
-            if me != "admin" { return Err("only an admin can invite".into()); }
+            let person = || v.list().is_some_and(|l| !l.person(fp).is_empty());
+            if me != "admin" && (role != "member" || !person()) { return Err("only an admin can invite".into()); }
             if epoch != v.epoch as u64 { return Err("key changed".into()); }
             let i = Invite { id: tls::random_secret()[..16].into(), code: tls::random_secret(), role: role.into(), wrapped: wrapped.into(), expires: now() + INVITE_SECS, fails: 0, by: fp.into() };
             let out = json!({"invite": {"id": i.id, "code": i.code, "expires": i.expires}});
@@ -184,8 +192,8 @@ impl Vaults {
     }
     pub fn invite_revoke(&self, fp: &str, id: &str, invite: &str) -> Result<(), String> {
         self.with(id, fp, |v, me| {
-            if me != "admin" { return Err("only an admin can revoke an invite".into()); }
-            v.invites.retain(|i| i.id != invite);
+            if me != "admin" && v.invites.iter().any(|i| i.id == invite && i.by != fp) { return Err("only an admin can revoke an invite".into()); }
+            v.invites.retain(|i| i.id != invite && (me == "admin" || i.by == fp));
             save(&self.data, v)
         })
     }
@@ -205,8 +213,8 @@ impl Vaults {
                 return Err("wrong invite code".into());
             }
             let inv = v.invites.remove(i);
-            // an invite counts only while its maker is still an admin here
-            if v.role(&inv.by) != Some("admin") { save(&self.data, v).ok(); return Err("this invite is used, expired or revoked".into()); }
+            // an invite counts only while its maker is still an admin here (a member's: still a member, and never for an admin)
+            if v.role(&inv.by).is_none_or(|r| r != "admin" && (r != "member" || inv.role != "member")) { save(&self.data, v).ok(); return Err("this invite is used, expired or revoked".into()); }
             let _c = CLIENTS.lock().unwrap_or_else(|e| e.into_inner());
             let mut list = clients(&self.data);
             let known = list.iter().find(|c| c.fp == fp).map(|c| c.name.clone());
@@ -317,11 +325,12 @@ impl Vaults {
         Ok(json!({"entries": v.log.get(from as usize..).unwrap_or_default(), "len": v.log.len()}))
     }
     /// A member appends an entry it signed (`by` is the caller), only when the whole list then still checks: no member
-    /// can break it for the others. A `remove` or `leave` removes the member here too, in the same write; an `add`
-    /// stores the keys sealed to the new member (`keys`: epoch -> sealed) for the epochs since its invite.
+    /// can break it for the others. Whoever the entry takes off the list (`remove`, `leave`, or a `person-remove` with
+    /// every device of that person) goes here too, in the same write. An `add` stores the keys sealed to the new member
+    /// (`keys`: epoch -> sealed) for the epochs since its invite.
     pub fn append(&self, fp: &str, id: &str, entry: &Value, keys: &serde_json::Map<String, Value>) -> Result<(), String> {
         let e: members::Entry = serde_json::from_value(entry.clone()).map_err(|_| "bad member list entry")?;
-        let mut gone = None;
+        let mut gone = vec![];
         self.with(id, fp, |v, me| {
             if e.by != fp { return Err("an entry signed by someone else".into()); }
             match e.kind.as_str() {
@@ -330,10 +339,9 @@ impl Vaults {
                 "add" if v.role(&e.fp).is_none() => return Err("only who joined can be added".into()),
                 _ => {}
             }
-            let mut log = v.log.clone();
-            log.push(e.clone());
-            members::check(&v.id, &log, None)?;
-            v.log = log;
+            let (before, hashes) = members::check(&v.id, &v.log, None)?;
+            let after = members::extend(&v.id, before.clone(), hashes, std::slice::from_ref(&e), None)?.0;
+            v.log.push(e.clone());
             // the roles here follow the list: who may rotate or invite on this server is who the list says
             match e.kind.as_str() {
                 "add" | "promote" | "demote" => {
@@ -349,17 +357,16 @@ impl Vaults {
                     v.keys.entry(ep.clone()).or_default().insert(e.fp.clone(), w.into());
                 }
             }
-            if e.kind == "remove" || e.kind == "leave" {
-                gone = Some(e.fp.clone());
+            gone = before.members.keys().filter(|fp| !after.members.contains_key(*fp)).cloned().collect();
+            if !gone.is_empty() {
                 // the list (checked above) keeps an admin; the server's own roles follow it
-                v.members.retain(|m| m.fp != e.fp);
-                v.invites.retain(|i| i.by != e.fp);
+                v.members.retain(|m| !gone.contains(&m.fp));
+                v.invites.retain(|i| !gone.contains(&i.by));
                 v.rekey = true;
-                return save(&self.data, v);
             }
             save(&self.data, v)
         })?;
-        if let Some(who) = gone { self.removed(id, &who)?; }
+        for who in gone { self.removed(id, &who)?; }
         Ok(())
     }
 
