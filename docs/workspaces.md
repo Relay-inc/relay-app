@@ -178,11 +178,12 @@ Relay never asks and keeps its rounds.
   those updates follow at once, in order. Not resumed: some may be missing, and the rounds bring them.
 - **App to server:** `{"t": "frame", "kind", "doc", "n", "body"}` and `{"t": "ping"}`. `kind` `update` or `awareness`,
   `doc` a record name (64 hex), `n` the sender's own counter (it starts at the time in µs, so it never repeats), `body`
-  hex of the sealed frame, at most 256 KiB sealed.
+  hex of the sealed frame, at most 256 KiB sealed. On a workspace without history the frame also carries `from`, the
+  sender's session id (Without history, below).
 - **Server to app:** `{"t": "frame", "seq", "from", "e", "kind", "doc", "n", "body"}`, `{"t": "files"}` after another
   member put or deleted a file (the rounds run at once; it names no file), `{"t": "ping"}` every 15 s and
   `{"t": "bye", "why"}` before it closes. `from` is the first 16 hex of the sender's certificate fingerprint, from the
-  handshake. An update gets the next `seq` of its workspace, an awareness frame `seq` 0. A sender never gets its own;
+  handshake, or on a workspace without history the session id the frame named. An update gets the next `seq` of its workspace, an awareness frame `seq` 0. A sender never gets its own;
   Relay also drops a frame whose `from` is its own device, and one whose `n` is not above the last it took from that
   sender for that document and kind.
 - **Seal:** `nonce (12) || ChaCha20-Poly1305(enc_key, aad = "frame:" + vault + ":" + kind + ":" + doc + ":" + from + ":" + n,
@@ -208,7 +209,8 @@ Expired invites are dropped whenever the file is read.
 `<data>/vaults/<id>/blobs/<name>`: one record per file, written to a temp file and renamed, under a per-vault lock so
 the compare-and-swap holds. A record at most `mirror::MAX_FILE` plus 64 KiB.
 
-`<data>/vaults/<id>/docs/<name>/log/<seq>` (and `<seq>.from`, the device that pushed it) and `.../snap/<upto>`: a
+`<data>/vaults/<id>/docs/<name>/log/<seq>` (and `<seq>.from`, the device that pushed it, or on a workspace without
+history `<seq>.sid`, the session id its Relay sent) and `.../snap/<upto>`: a
 document's sealed updates, numbered from 1 with no gap, and any snapshots members stored (see Documents, not handed
 out). Written whole under the vault's lock; never deleted.
 
@@ -232,7 +234,8 @@ an agent. Its edits merge; there are no conflict copies for it.
   rules): `doc_push {vault, doc, updates: [len…]}` with the parts after the line (each at most 4 MiB, one push at
   most 16 MiB, under the vault's current key, else `key changed` / `no such key epoch`), answers `{seq, seqs}`;
   `doc_pull {vault, doc, since, limit}` answers a page of the updates after `since` (at most 1000 and 32 MiB, `more`
-  past either), each with `from`; `doc_list {vault}`. `doc_snapshot_put {vault, doc, upto, len}` stores a member's
+  past either), each with `from` (a session id on a workspace without history, where `doc_push` carries `from` too);
+`doc_list {vault}`. `doc_snapshot_put {vault, doc, upto, len}` stores a member's
   snapshot (a place the log has, at least 200 updates past the last, none replaced) as an unchecked hint for the
   history to come: no pull hands one out, and Relay writes none yet. Limits: 10 000 documents a workspace, 512 MiB a
   member may push into a workspace a day (counted in memory, so a restart starts the day over). A push also goes at
@@ -483,13 +486,26 @@ had a history would keep it. Its row in Settings › Machines and the workspace 
   any entry. Once its Relay saw it, the Mac keeps `nohistory` in its key file, so a round that cannot check the list
   (held back, a fork) still writes nothing that names it. The server reads it from the list and returns it in
   `vault_info`, which a Mac takes as a floor before it checked the list (a server can only hide the flag that way,
-  never make a Mac write its name). The server enforces nothing with it yet.
+  never make a Mac write its name). The server reads it from entry 1 of the stored list for documents (above).
 - **Conflict copies name no Mac:** `Notes/A (conflict 2026-10-02 1530).md` instead of `Notes/A (conflict Studio Mac
   2026-10-02 1530).md`.
-- **No shared documents yet.** A document records the device behind every update, its page history, comments and
-  cursors (Documents, above). Until that is anonymous, the member list refuses a `docs-on` on such a workspace
-  (`a workspace without history has no shared documents yet`), the switch does not show, and no round makes notes
-  documents.
+- **Documents by session.** Documents, live co-editing, comments, page history and cursors work as anywhere, and
+  nobody sees who did what. When a Mac opens such a workspace's documents it picks a random 16-hex session id, a new
+  one at every start of Relay, and seals its updates, comments and cursors under it instead of its device (the AAD
+  binds that id like any author). Its counter per document starts at 1 per session, and the gap check runs per
+  session. `doc_push` and every live frame carry the session id as `from`. The server keeps it in `<seq>.sid` and
+  relays it (pull, live stream, awareness), writes no `.from`, and refuses a push without one or with a member's
+  device in it (`this workspace keeps no record of who wrote what: update Relay to edit its documents`); such a frame
+  is dropped. The first device to name a session holds it while the server runs, in memory only: another member's
+  push under it is refused (`another member's session`), its frames dropped.
+- **What the members see.** Page history lists each session as "Anonymous session" with its time, sessions of one
+  person are not linked. A comment's author is "Anonymous". A Mac keeps the session ids it wrote under
+  (`sessions.json` beside its documents, never synced), so its own comments stay its own after a restart, and a delete
+  of one is sealed as the session that wrote it (only an entry's own author deletes it). Cursors read "Anonymous",
+  coloured by the session id, and carry no name. Nobody is mentioned: comments name no member, the Inbox lists the
+  open threads on pages this Mac edited.
+- **`doc_bind`** still records the device that bound a name, on the server only (for `doc_unbind` and the 10 000 cap):
+  the manifest says `bound` and nothing else.
 - **What Relay writes into it.** The team starter's session protocol asks for no member's name in `Log.md`. Vault
   capture follows the workspace's own rules and adds no author field. The starter's templates and hooks write no
   author, computer or user name (`source-author` on a Reference is the source's author). Hooks do not run in a shared
@@ -509,13 +525,26 @@ What it does not hide:
 |---|---|---|
 | Records, `vault_put` and `vault_delete`, the live `files` frame | No writer | The same |
 | Conflict copies | The Mac's name and the minute | The minute |
-| Documents, page history, comments, cursors | The device per update | Not made (no documents yet) |
+| Documents, page history, comments, cursors | The device per update | A random session id per start of Relay |
 | Member list, Members | Devices, people, roles, who added whom | The same |
 | Server: stderr, quota, rate limit | Per device | The same |
 | Starter session log | The member's name per entry | No names |
 
+What is weaker than with history, in documents:
+
+- **A session id is not authenticated.** The client chooses it. Any member holds the key and can seal under another
+  session's id. The server's in-memory claim stops another device from pushing under a session it saw first, until the
+  server restarts. Within the workspace this is accepted: a member can already write anything.
+- **The gap check is per session.** An update held back inside a session shows. A lost tail of a session (its last
+  updates, with nothing after them) does not. A document keeps the counters of its newest 256 sessions.
+- **Timestamps stay in the sealed meta.** Members could match them with who was online.
+- **The server** still sees the device behind each push at that moment, and keeps the session claim in memory.
+
 **Compatibility.** A Relay from before this refuses a list with a `nohistory` entry, as an unknown kind: every member
-updates before joining such a workspace.
+updates before joining such a workspace. A Relay with the flag but without documents by session refuses a `docs-on`
+on it, so once an admin turns documents on, that Relay stops at the list and syncs nothing of it, and a server of
+that version refuses the `docs-on` itself. Should an older Relay still push, its push carries no session and the
+server refuses it, its frames are dropped. Workspaces with history are unchanged.
 
 ## Key rotation
 
