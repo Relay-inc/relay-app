@@ -592,6 +592,8 @@ export default {
   "page.askAbout": "Vraag over deze pagina",
   "page.ask": "Vraag Claude",
   "page.peers": "Op deze pagina: {names}",
+  "page.anonymous": "Anoniem",
+  "page.anonymousSession": "Anonieme sessie",
   "page.editor": "Tekst van de pagina",
   "page.updatedLinks": "Links bijgewerkt",
   "page.updatedByClaude": "Aangepast door Claude",
@@ -1360,7 +1362,7 @@ export default {
   "set.sharedJoinFolderHelp": "Een lege map op deze Mac. De workspace komt erin.",
   "set.sharedNoHistory": "Workspace zonder historiek",
   "set.sharedNoHistoryHelp":
-    "Relay houdt niet bij wie wat wijzigde: conflictkopieën noemen geen computer. Leden en hun rollen blijven zichtbaar, een klein team is niet anoniem, en een lid kan buiten Relay nog een eigen kopie bijhouden. Dit kan later niet meer uit.",
+    "Relay houdt niet bij wie wat wijzigde: conflictkopieën noemen geen computer, en paginahistoriek, opmerkingen en cursors tonen anonieme sessies. Leden en hun rollen blijven zichtbaar, een klein team is niet anoniem, en een lid kan buiten Relay nog een eigen kopie bijhouden. Dit kan later niet meer uit.",
   "set.sharedNoHistoryLabel": "Zonder historiek",
   "set.sharedNoHistoryTip":
     "Gemaakt zonder historiek: Relay houdt hier niet bij wie wat wijzigde. Leden en hun rollen blijven zichtbaar.",

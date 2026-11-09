@@ -592,6 +592,8 @@ export default {
   "page.askAbout": "Zu dieser Seite fragen",
   "page.ask": "Claude fragen",
   "page.peers": "Auf dieser Seite: {names}",
+  "page.anonymous": "Anonym",
+  "page.anonymousSession": "Anonyme Sitzung",
   "page.editor": "Text der Seite",
   "page.updatedLinks": "Links aktualisiert",
   "page.updatedByClaude": "Von Claude geändert",
@@ -1368,7 +1370,7 @@ export default {
   "set.sharedJoinFolderHelp": "Ein leerer Ordner auf diesem Mac. Der Workspace kommt dort hinein.",
   "set.sharedNoHistory": "Workspace ohne Verlauf",
   "set.sharedNoHistoryHelp":
-    "Relay hält nicht fest, wer was geändert hat: Konfliktkopien nennen keinen Computer. Mitglieder und ihre Rollen bleiben sichtbar, ein kleines Team ist nicht anonym, und ein Mitglied kann außerhalb von Relay weiterhin eine eigene Kopie behalten. Das lässt sich später nicht mehr ausschalten.",
+    "Relay hält nicht fest, wer was geändert hat: Konfliktkopien nennen keinen Computer, und Seitenverlauf, Kommentare und Cursor zeigen anonyme Sitzungen. Mitglieder und ihre Rollen bleiben sichtbar, ein kleines Team ist nicht anonym, und ein Mitglied kann außerhalb von Relay weiterhin eine eigene Kopie behalten. Das lässt sich später nicht mehr ausschalten.",
   "set.sharedNoHistoryLabel": "Ohne Verlauf",
   "set.sharedNoHistoryTip":
     "Ohne Verlauf erstellt: Relay hält hier nicht fest, wer was geändert hat. Mitglieder und ihre Rollen bleiben sichtbar.",

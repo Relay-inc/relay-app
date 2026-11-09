@@ -353,8 +353,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
             {/* a reader's rounds only pull: what changed in the folder here stays here, said once */}
             {status.unsent ? <StatusLine level="warn">{tn("set.sharedUnsent", status.unsent)}</StatusLine> : null}
             {/* making the notes documents: off until an admin turns it on; every member sees which */}
-            {/* a workspace without history has no documents yet: they record who wrote each update */}
-            {files && !status.nohistory && (status.admin || status.docs) ? (
+            {files && (status.admin || status.docs) ? (
               <div className="flex items-start gap-3 py-1">
                 <div className="grid flex-1 gap-0.5">
                   <label htmlFor={`docs-${vault.id}`} className="text-xs text-s-fg">

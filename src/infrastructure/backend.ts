@@ -139,9 +139,10 @@ export const readNote = (target: string) => invoke<unknown>("read_note", { targe
  *  `force`. Resolves to the new text's hash. */
 /** A note changed outside Relay: in a shared workspace, a document's file change becomes an edit of the document. */
 export const sharedDocAbsorb = (path: string, by: string) => invoke<void>("shared_doc_absorb", { path, by });
-/** A page's note as a shared document: its id, everything this Mac has of it (Yjs v1, base64), this device and the name
- *  its cursor shows; null when the note is no document (it is saved as a file). */
-export type SharedDoc = { vault: string; doc: string; state: string; me: string; name: string };
+/** A page's note as a shared document: its id, everything this Mac has of it (Yjs v1, base64), who this Mac writes as
+ *  and the name its cursor shows; null when the note is no document (it is saved as a file). `anonymous`: a workspace
+ *  without history, where `me` is this run's session and no cursor carries a name. */
+export type SharedDoc = { vault: string; doc: string; state: string; me: string; name: string; anonymous?: boolean };
 /** A version in a page's history: a document's session (`added`/`removed` lines against the one before) or a commit. */
 export type PageVersion = {
   key: string;
@@ -152,7 +153,8 @@ export type PageVersion = {
   added?: number;
   removed?: number;
 };
-export type PageHistory = { kind: "doc" | "git" | "none"; versions: PageVersion[] };
+/** `anonymous`: a workspace without history, its versions are sessions with no author. */
+export type PageHistory = { kind: "doc" | "git" | "none"; anonymous?: boolean; versions: PageVersion[] };
 export const pageHistory = (path: string) => invoke<PageHistory>("page_history", { path });
 export const pageRestore = (path: string, text: string) => invoke<void>("page_restore", { path, text });
 /** A page's comment threads (ticket 11): "doc" a shared document's (`doc` its id, every member's), "file" this Mac's. */

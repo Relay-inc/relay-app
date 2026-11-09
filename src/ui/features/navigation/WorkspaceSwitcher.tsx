@@ -238,7 +238,7 @@ function Inbox({ items, onBack, onPick }: { items: InboxItem[]; onBack: () => vo
                 </span>
                 <span className="truncate text-xs text-secondary italic">“{i.thread.quote}”</span>
                 <span className="truncate text-xs text-tertiary">
-                  {last.by}: {last.text}
+                  {last.by || t("page.anonymous")}: {last.text}
                 </span>
               </button>
             );

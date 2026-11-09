@@ -99,17 +99,20 @@ pub struct Rooms { epoch: String, next: AtomicU64, start: Instant, rooms: Arc<Mu
 impl Default for Rooms {
     fn default() -> Rooms { Rooms { epoch: random_secret()[..16].into(), next: AtomicU64::new(1), start: Instant::now(), rooms: Arc::default(), sessions: Mutex::default() } }
 }
-/// Session ids `claim` remembers before it starts over.
-const MAX_CLAIMS: usize = 100_000;
+/// Session ids one device may name per vault while the server runs (one per restart of its Relay): past that it is refused.
+const MAX_CLAIMS: usize = 1000;
 impl Rooms {
     /// Whether device `fp` may write as session `sid` in vault `id`: the first device that names it holds it while
-    /// this server runs, so one member cannot write as another's session. Never written to disk nor handed out (the
-    /// server knows the device of every request anyway, docs/workspaces.md).
-    // ponytail: forgotten at a restart or past MAX_CLAIMS, then the next device to name a session holds it
+    /// this server runs, so one member cannot write as another's session. Never written to disk nor handed out: on
+    /// disk it would be the record of who wrote what that the workspace is without (docs/workspaces.md).
+    // ponytail: forgotten at a restart of the server, then the next device to name a session holds it
     pub fn claim(&self, id: &str, sid: &str, fp: &str) -> bool {
         let mut all = self.sessions.lock().unwrap();
-        if all.len() >= MAX_CLAIMS { all.clear(); }
-        all.entry((id.to_string(), sid.to_string())).or_insert_with(|| fp.to_string()) == fp
+        let key = (id.to_string(), sid.to_string());
+        if let Some(by) = all.get(&key) { return by == fp; }
+        if all.iter().filter(|((v, _), by)| v == id && *by == fp).count() >= MAX_CLAIMS { return false; }
+        all.insert(key, fp.to_string());
+        true
     }
     fn now_ms(&self) -> u64 { self.start.elapsed().as_millis() as u64 }
     /// `fp` is out of vault `id` (removed or left): its streams close now, and it may open none until vault.json says
@@ -290,10 +293,11 @@ fn read_frames(vaults: &Vaults, fp: &str, id: &str, me: u64, heard: &AtomicU64, 
             if !room.members.contains(fp) { return Err("no longer a member".into()); }
             if room.nohistory {
                 let from = v["from"].as_str().unwrap_or("");
-                if !hex(from, 16) || room.members.iter().any(|m| m.starts_with(from)) || !rooms.claim(id, from, fp) { continue; }
+                if !hex(from, 16) || room.members.iter().any(|m| m.starts_with(from)) { continue; }
                 out["from"] = json!(from);
             }
             if out["e"].as_u64().unwrap_or(0) < room.epoch || (kind == "update" && room.readers.contains(fp)) { continue; }
+            if room.nohistory && !rooms.claim(id, out["from"].as_str().unwrap_or(""), fp) { continue; }
             if kind == "update" { room.seq += 1; out["seq"] = json!(room.seq); }
             let line: Line = out.to_string().into();
             if kind == "update" { room.push(room.seq, line.clone()); }

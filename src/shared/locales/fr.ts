@@ -601,6 +601,8 @@ export default {
   "page.askAbout": "Poser une question sur cette page",
   "page.ask": "Demander à Claude",
   "page.peers": "Sur cette page : {names}",
+  "page.anonymous": "Anonyme",
+  "page.anonymousSession": "Session anonyme",
   "page.editor": "Texte de la page",
   "page.updatedLinks": "Liens mis à jour",
   "page.updatedByClaude": "Modifié par Claude",
@@ -1374,7 +1376,7 @@ export default {
   "set.sharedJoinFolderHelp": "Un dossier vide sur ce Mac. L'espace de travail s'y synchronise.",
   "set.sharedNoHistory": "Espace de travail sans historique",
   "set.sharedNoHistoryHelp":
-    "Relay ne garde aucune trace de qui a modifié quoi : les copies de conflit ne nomment aucun ordinateur. Les membres et leurs rôles restent visibles, une petite équipe n'est pas anonyme, et un membre peut toujours garder sa propre copie hors de Relay. Ce choix est définitif.",
+    "Relay ne garde aucune trace de qui a modifié quoi : les copies de conflit ne nomment aucun ordinateur, et l'historique des pages, les commentaires et les curseurs affichent des sessions anonymes. Les membres et leurs rôles restent visibles, une petite équipe n'est pas anonyme, et un membre peut toujours garder sa propre copie hors de Relay. Ce choix est définitif.",
   "set.sharedNoHistoryLabel": "Sans historique",
   "set.sharedNoHistoryTip":
     "Créé sans historique : Relay ne garde ici aucune trace de qui a modifié quoi. Les membres et leurs rôles restent visibles.",

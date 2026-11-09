@@ -586,6 +586,8 @@ const en = {
   "page.askAbout": "Ask about this page",
   "page.ask": "Ask Claude",
   "page.peers": "On this page: {names}",
+  "page.anonymous": "Anonymous",
+  "page.anonymousSession": "Anonymous session",
   "page.editor": "Page text",
   "page.updatedLinks": "Links updated",
   "page.updatedByClaude": "Updated by Claude",
@@ -1349,7 +1351,7 @@ const en = {
   "set.sharedJoinFolderHelp": "An empty folder on this Mac. The workspace syncs into it.",
   "set.sharedNoHistory": "Workspace without history",
   "set.sharedNoHistoryHelp":
-    "Relay keeps no record of who changed what: conflict copies name no computer. Members and their roles stay visible, a small team is not anonymous, and a member can still keep their own copy outside Relay. This cannot be turned off later.",
+    "Relay keeps no record of who changed what: conflict copies name no computer, and page history, comments and cursors show anonymous sessions. Members and their roles stay visible, a small team is not anonymous, and a member can still keep their own copy outside Relay. This cannot be turned off later.",
   "set.sharedNoHistoryLabel": "Without history",
   "set.sharedNoHistoryTip":
     "Made without history: Relay keeps no record here of who changed what. Members and their roles stay visible.",
