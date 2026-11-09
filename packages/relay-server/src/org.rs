@@ -164,11 +164,17 @@ impl Groups {
 }
 
 /// An organisation admin revokes devices after an offboarding: they cannot connect any more, with the devices linked to
-/// them (crate::revoke). Never an organisation admin (take it off the organisation list first). The devices revoked.
+/// them (crate::revoke). Only devices that came in through a workspace (`vaults_only`): never an organisation admin
+/// (take it off the organisation list first), never a fully paired device (the owner's, another admin's, a phone
+/// linked to one), which only the server's owner revokes. The devices revoked.
 pub fn revoke(data: &Path, server: &str, fp: &str, fps: &[String]) -> Result<Value, String> {
     let Some(org) = list(data, server).filter(|l| l.members.contains_key(fp)) else { return Err("only an organisation admin revokes devices".into()) };
     if fps.iter().any(|f| !vaults::hex(f, 64)) { return Err("a device is its full fingerprint".into()); }
     if fps.iter().any(|f| org.members.contains_key(f)) { return Err("an organisation admin: take it off the organisation first".into()); }
+    // crate::revoke also takes a device by its name: neither may hit a full one
+    if clients(data).iter().any(|c| !c.vaults_only && fps.iter().any(|f| *f == c.fp || *f == c.name)) {
+        return Err("a fully paired device, not one that came in through a workspace: only the server's owner revokes it (relay-server revoke)".into());
+    }
     let mut gone = vec![];
     for f in fps { for c in crate::revoke(data, f).map_err(|e| e.to_string())? { gone.push(json!({"fp": c.fp, "name": c.name})); } }
     eprintln!("relay-server: an organisation admin revoked {} device(s) at {}", gone.len(), now());
@@ -238,6 +244,10 @@ mod tests {
         assert!(overview(&v, SERVER, &c.fp).is_err() && overview(&v, SERVER, &b.fp).is_ok());
         assert!(revoke(&d, SERVER, &c.fp, &[b.fp.clone()]).is_err());
         assert!(revoke(&d, SERVER, &b.fp, &[a.fp.clone()]).unwrap_err().contains("organisation admin"));
+        // a fully paired device that is no admin, alone or with one that came in through a workspace: refused, nothing revoked
+        assert!(revoke(&d, SERVER, &b.fp, &[f.fp.clone()]).unwrap_err().contains("fully paired"));
+        assert!(revoke(&d, SERVER, &b.fp, &[c.fp.clone(), f.fp.clone()]).unwrap_err().contains("fully paired"));
+        assert!(clients(&d).iter().any(|x| x.fp == f.fp) && clients(&d).iter().any(|x| x.fp == c.fp));
         assert_eq!(revoke(&d, SERVER, &b.fp, &[c.fp.clone()]).unwrap()["revoked"].as_array().unwrap().len(), 1);
         assert!(!clients(&d).iter().any(|x| x.fp == c.fp));
         fs::remove_dir_all(&d).ok();

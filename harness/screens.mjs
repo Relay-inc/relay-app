@@ -1753,6 +1753,23 @@ const VIEWS = {
     await page.getByText("Not in Acme Retail").scrollIntoViewIfNeeded();
     await settle(page);
   },
+  // People with a self-signed email (PR security fixes on K3 and U3): Robin Kay's shows as Email not verified
+  "settings-org-unverified": async () => {
+    await VIEWS["settings-org"]();
+    await waitText("Robin Kay");
+    await page.getByText("Robin Kay", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // Offboard on Front desk Mac, a fully paired device: off the workspaces, but the server refuses the revoke
+  "settings-org-unrevoked": async () => {
+    await VIEWS["settings-org"]();
+    await page.getByRole("button", { name: "Offboard…", exact: true }).first().click();
+    await waitText("Offboard Front desk Mac");
+    await button("Offboard").click();
+    await waitText("not revoked");
+    await page.getByText("not revoked", { exact: false }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   // Add as admin… on Ops Mac: compare the code on both Macs first
   "settings-org-add": async () => {
     await VIEWS["settings-org"]();

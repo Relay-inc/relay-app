@@ -32,14 +32,15 @@ export function MachineOrganisation({ machine }: { machine: Machine }) {
   const [adding, setAdding] = useState<string | null>(null);
   const [leaving, setLeaving] = useState<OrgPerson | null>(null);
 
-  const step = async (work: () => Promise<unknown>, done?: (r: unknown) => string) => {
+  const step = async (work: () => Promise<unknown>, done?: (r: unknown) => string | { text: string; ok: boolean }) => {
     setBusy(true);
     setMessage(null);
     // no `finally`: the React Compiler does not lower it
     const shown = await work()
       .then(async r => {
         setState(await loadOrganisation(machine.id));
-        return done ? { text: done(r), ok: true } : null;
+        const d = done?.(r);
+        return typeof d === "string" ? { text: d, ok: true } : (d ?? null);
       })
       .catch((error: unknown) => ({ text: String(error), ok: false }));
     setMessage(shown);
@@ -200,7 +201,6 @@ export function MachineOrganisation({ machine }: { machine: Machine }) {
                   <div className={LINE}>
                     <span className="text-xs text-s-fg">{p.name}</span>
                     {p.email ? <span className="text-xs text-s-muted">{p.email}</span> : null}
-                    {p.unverified ? <StatusLine level="warn">{t("set.orgEmailUnverified")}</StatusLine> : null}
                     {/* a device under no person is its own row: its name once */}
                     {p.devices.length > 1 || p.devices[0]?.name !== p.name ? (
                       <span className="text-xs text-s-muted">{p.devices.map(d => d.name).join(", ")}</span>
@@ -212,7 +212,7 @@ export function MachineOrganisation({ machine }: { machine: Machine }) {
                       </button>
                     ) : null}
                   </div>
-                  {p.unverified ? <span className={HINT_IN_ROW}>{t("set.orgEmailUnverifiedHelp")}</span> : null}
+                  {p.unverified ? <StatusLine level="warn">{t("set.orgEmailUnverified")}</StatusLine> : null}
                   <span className={HINT_IN_ROW}>
                     {p.workspaces.map(w => `${w.name} (${w.role ? t(ROLE_KEY[w.role]) : "?"})`).join(" · ")}
                   </span>
@@ -244,15 +244,18 @@ export function MachineOrganisation({ machine }: { machine: Machine }) {
                                 ),
                               r => {
                                 const o = r as Awaited<ReturnType<typeof offboard>>;
-                                return [
+                                const text = [
                                   t("set.orgOffboarded", { name: p.name, n: o.removed.length, revoked: o.revoked }),
                                   ...o.failed.map(f => `${f.name}: ${f.error}`),
                                   o.skipped.length
                                     ? t("set.orgOffboardSkipped", { workspaces: o.skipped.join(", ") })
                                     : "",
+                                  o.unrevoked ? t("set.orgOffboardNotRevoked", { error: o.unrevoked }) : "",
                                 ]
                                   .filter(Boolean)
                                   .join(" ");
+                                // the devices can still connect: not a success
+                                return { text, ok: !o.unrevoked };
                               },
                             );
                           }}

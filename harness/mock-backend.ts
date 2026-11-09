@@ -594,7 +594,12 @@ function handle(cmd: string, a: Args): unknown {
           ),
         }))
         .filter((p: any) => !p.devices.every((d: any) => a.fps.includes(d.fp)) || p.workspaces.length);
-      return { removed, skipped, failed: [], revoked: a.fps.length };
+      // a fully paired device: the server refuses the revoke (org.rs), the workspaces are done
+      const full = a.fps.some((f: string) => vault.ORG_FULL.includes(f));
+      const unrevoked = full
+        ? "a fully paired device, not one that came in through a workspace: only the server's owner revokes it (relay-server revoke)"
+        : null;
+      return { removed, skipped, failed: [], revoked: full ? 0 : a.fps.length, unrevoked };
     }
     case "shared_vault_policy": {
       const s = sharedStatus[a.id];

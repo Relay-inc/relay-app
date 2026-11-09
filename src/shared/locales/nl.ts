@@ -1435,9 +1435,8 @@ export default {
     "Niet elke organisatie-admin is hier admin. Een admin van deze workspace voegt hen toe in de instellingen ervan (Organisatie-admins toevoegen).",
   "set.orgNoWorkspaces": "Nog geen workspaces op deze server.",
   "set.orgPeople": "Personen",
-  "set.orgEmailUnverified": "E-mail niet geverifieerd",
-  "set.orgEmailUnverifiedHelp":
-    "Hun eigen toestel ondertekende dit adres, zonder SSO of een admin, dus het groepeert geen toestellen met die van een andere persoon.",
+  "set.orgEmailUnverified":
+    "E-mail niet geverifieerd: hun eigen toestel ondertekende het, zonder SSO of een admin, dus het groepeert geen toestellen met die van een andere persoon.",
   "set.orgOffboardConfirm": "Offboarden",
   "set.orgOffboard": "Offboarden…",
   "set.orgOffboardSure":
@@ -1445,6 +1444,7 @@ export default {
   "set.orgNoneOfThem": "geen workspace waar jij admin van bent",
   "set.orgOffboardSkipped":
     "Niet uit {workspaces}: daar ben je geen admin. Vraag een admin van die workspace om hen te verwijderen, of om de organisatie-admins toe te voegen.",
+  "set.orgOffboardNotRevoked": "Hun toestellen zijn niet ingetrokken en kunnen nog verbinden met deze server: {error}",
   "set.orgOffboarded": "{name} is uit {n} workspace(s), {revoked} toestel(len) ingetrokken.",
   "set.orgAdded": "Organisatie-admins toegevoegd: {n}.",
   "set.orgAddedNone": "Niets toe te voegen: deze server heeft geen organisatie, of de admins ervan zijn hier al admin.",

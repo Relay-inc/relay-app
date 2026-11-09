@@ -127,7 +127,9 @@ pub async fn org_remove_admin(app: AppHandle, state: St<'_>, machine: String, fp
 
 /// Offboarding in one step (docs/workspaces.md, Organisation): the devices `fps` (one person's) off every workspace
 /// this Mac is admin of, each a signed entry on its list, the key changed right after; then revoked on the server.
-/// {removed: [workspace], skipped: [workspace this Mac is no admin of], failed: [{name, error}], revoked: n}.
+/// {removed: [workspace], skipped: [workspace this Mac is no admin of], failed: [{name, error}], revoked: n,
+/// unrevoked: the server's refusal, null when it revoked them}. The server revokes only devices that came in through a
+/// workspace: a fully paired one is still off the workspaces, and its refusal shows instead of the count.
 #[tauri::command]
 pub async fn org_offboard(app: AppHandle, state: St<'_>, machine: String, fps: Vec<String>) -> Result<Value, String> {
     let (c, data) = self::machine(&app, &state, &machine)?;
@@ -150,9 +152,12 @@ pub async fn org_offboard(app: AppHandle, state: St<'_>, machine: String, fps: V
             });
             match res { Ok(()) => removed.push(name), Err(e) => failed.push(json!({"name": name, "error": e})) }
         }
-        let revoked = c.call(json!({"op": "org_revoke", "fps": fps}))?["revoked"].as_array().map_or(0, |r| r.len());
+        let (revoked, unrevoked) = match c.call(json!({"op": "org_revoke", "fps": fps})) {
+            Ok(v) => (v["revoked"].as_array().map_or(0, |r| r.len()), None),
+            Err(e) => (0, Some(e)),
+        };
         crate::shared_vaults::sync_now();
-        Ok(json!({"removed": removed, "skipped": skipped, "failed": failed, "revoked": revoked}))
+        Ok(json!({"removed": removed, "skipped": skipped, "failed": failed, "revoked": revoked, "unrevoked": unrevoked}))
     }).await
 }
 

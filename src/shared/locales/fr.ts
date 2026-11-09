@@ -1450,9 +1450,8 @@ export default {
     "Tous les admins de l'organisation ne sont pas admins ici. Un admin de cet espace les ajoute dans ses réglages (Ajouter les admins de l'organisation).",
   "set.orgNoWorkspaces": "Aucun espace de travail sur ce serveur pour l'instant.",
   "set.orgPeople": "Personnes",
-  "set.orgEmailUnverified": "E-mail non vérifié",
-  "set.orgEmailUnverifiedHelp":
-    "Leur propre appareil a signé cette adresse, sans SSO ni admin : elle ne regroupe donc aucun appareil avec ceux d'une autre personne.",
+  "set.orgEmailUnverified":
+    "E-mail non vérifié : leur propre appareil l'a signé, sans SSO ni admin, il ne regroupe donc aucun appareil avec ceux d'une autre personne.",
   "set.orgOffboardConfirm": "Retirer partout",
   "set.orgOffboard": "Retirer partout…",
   "set.orgOffboardSure":
@@ -1460,6 +1459,8 @@ export default {
   "set.orgNoneOfThem": "aucun espace dont vous êtes admin",
   "set.orgOffboardSkipped":
     "Pas de {workspaces} : vous n'y êtes pas admin. Demandez à un admin de cet espace de la retirer, ou d'ajouter les admins de l'organisation.",
+  "set.orgOffboardNotRevoked":
+    "Leurs appareils ne sont pas révoqués et peuvent encore se connecter à ce serveur : {error}",
   "set.orgOffboarded": "{name} a quitté {n} espace(s), {revoked} appareil(s) révoqué(s).",
   "set.orgAdded": "Admins de l'organisation ajoutés : {n}.",
   "set.orgAddedNone": "Rien à ajouter : ce serveur n'a pas d'organisation, ou ses admins sont déjà admins ici.",

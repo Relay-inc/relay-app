@@ -1422,9 +1422,8 @@ const en = {
     "Not every organisation admin is an admin here. An admin of this workspace adds them in its settings (Add organisation admins).",
   "set.orgNoWorkspaces": "No workspaces on this server yet.",
   "set.orgPeople": "People",
-  "set.orgEmailUnverified": "Email not verified",
-  "set.orgEmailUnverifiedHelp":
-    "Their own device signed this address, without SSO or an admin, so it groups no devices with another person's.",
+  "set.orgEmailUnverified":
+    "Email not verified: their own device signed it, without SSO or an admin, so it groups no devices with another person's.",
   "set.orgOffboardConfirm": "Offboard",
   "set.orgOffboard": "Offboard…",
   "set.orgOffboardSure":
@@ -1432,6 +1431,7 @@ const en = {
   "set.orgNoneOfThem": "no workspace you are admin of",
   "set.orgOffboardSkipped":
     "Not in {workspaces}: you are no admin there. Ask an admin of that workspace to remove them, or to add the organisation admins.",
+  "set.orgOffboardNotRevoked": "Their devices are not revoked and can still connect to this server: {error}",
   "set.orgOffboarded": "{name} is off {n} workspace(s), {revoked} device(s) revoked.",
   "set.orgAdded": "Organisation admins added: {n}.",
   "set.orgAddedNone": "Nothing to add: this server has no organisation, or its admins are admins here already.",

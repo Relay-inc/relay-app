@@ -156,7 +156,7 @@ blob name 64 lowercase hex. Anything else is refused.
 | `org_append {entry}` | a full device, `entry.by` the caller | `{}`, only when the whole organisation list then still checks (`members::check_org`), `create` only by the owner on an empty list, `add` only of a full device paired here |
 | `org_pk {id, pk, sig}` | a full device, for itself | `{}`, its organisation keys for an admin to add it, only the shape is checked here |
 | `org_overview` | an organisation admin | `{workspaces: [{id, name, list, managed, admin, nohistory, members: [{fp, name, role, person, listed}], people}], people: [{name, email, unverified, devices, workspaces: [{id, name, role}]}], admins, candidates: [{fp, name, id, pk, sig}]}`: what each member list says, never a record (`unverified`: the email is only what the person's own device signed) |
-| `org_revoke {fps}` | an organisation admin | `{revoked: [{fp, name}]}`, those devices (and the phones linked to them) out of `clients.json` as `relay-server revoke` does, never an organisation admin |
+| `org_revoke {fps}` | an organisation admin | `{revoked: [{fp, name}]}`, those devices out of `clients.json` as `relay-server revoke` does. Only devices that came in through a workspace (`vaults_only`): never an organisation admin, never a fully paired device (the owner's, another admin's, a phone linked to one), and then nothing is revoked |
 | `vault_rotate {vault, epoch, keys: {fp: sealed}, entry}` | admin | `{epoch}`, only the next epoch; `entry` the `rekey` entry, appended in the same write when the list then checks, and a sealed key for exactly the list's members; clears `rekey` and every open invite |
 
 A reader (Roles, below) is refused every write with one answer, `read only: a reader of this workspace cannot change
@@ -526,7 +526,11 @@ workspace's member list, signed by its Mac. The server grants nothing itself.
   device names and, for this check, the SSO email on a member's record.
 - **Offboarding in one step.** Offboard on a person signs, in every workspace this Mac is admin of, a `person-remove`
   for the person that holds any of their devices, or a `remove` for a device under no person, then runs the key step
-  so the key changes at once. Then `org_revoke` takes the devices off the server: they connect nowhere any more. A
+  so the key changes at once. Then `org_revoke` takes the devices off the server: they connect nowhere any more. The
+  server revokes only devices that came in through a workspace: a fully paired device (the owner's, another
+  organisation admin's, or a phone linked to one) is refused, so an organisation admin cannot cut the owner off their
+  own server. Such a device is still off the workspaces, the result says it was not revoked and why, and the server's
+  owner revokes it with `relay-server revoke`. A
   workspace where this Mac is no admin keeps the person, which the confirm and the result say, with what to do (ask an
   admin there, or have them add the organisation admins). An organisation admin is offboarded only after it left the
   organisation.

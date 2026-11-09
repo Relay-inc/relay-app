@@ -1445,9 +1445,8 @@ export default {
     "Nicht jeder Organisations-Admin ist hier Admin. Ein Admin dieses Workspace fügt sie in seinen Einstellungen hinzu (Organisations-Admins hinzufügen).",
   "set.orgNoWorkspaces": "Noch keine Workspaces auf diesem Server.",
   "set.orgPeople": "Personen",
-  "set.orgEmailUnverified": "E-Mail nicht bestätigt",
-  "set.orgEmailUnverifiedHelp":
-    "Ihr eigenes Gerät hat diese Adresse signiert, ohne SSO oder Admin, daher gruppiert sie keine Geräte mit denen einer anderen Person.",
+  "set.orgEmailUnverified":
+    "E-Mail nicht bestätigt: ihr eigenes Gerät hat sie signiert, ohne SSO oder Admin, daher gruppiert sie keine Geräte mit denen einer anderen Person.",
   "set.orgOffboardConfirm": "Offboarden",
   "set.orgOffboard": "Offboarden…",
   "set.orgOffboardSure":
@@ -1455,6 +1454,8 @@ export default {
   "set.orgNoneOfThem": "keinen Workspace, dessen Admin du bist",
   "set.orgOffboardSkipped":
     "Nicht aus {workspaces}: Dort bist du kein Admin. Bitte einen Admin dieses Workspace, die Person zu entfernen oder die Organisations-Admins hinzuzufügen.",
+  "set.orgOffboardNotRevoked":
+    "Ihre Geräte sind nicht widerrufen und können sich weiter mit diesem Server verbinden: {error}",
   "set.orgOffboarded": "{name} ist aus {n} Workspace(s) entfernt, {revoked} Gerät(e) widerrufen.",
   "set.orgAdded": "Organisations-Admins hinzugefügt: {n}.",
   "set.orgAddedNone":

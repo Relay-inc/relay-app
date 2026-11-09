@@ -199,12 +199,13 @@ export type OrgOverview = {
   candidates: { fp: string; name: string; code: string | null }[];
 };
 /** What an offboarding did: the workspaces it took the person off, the ones this Mac is no admin of, the failures and
- *  how many devices the server revoked. */
+ *  how many devices the server revoked. `unrevoked`: why the server revoked none (a fully paired device), else null. */
 export type OrgOffboard = {
   removed: string[];
   skipped: string[];
   failed: { name: string; error: string }[];
   revoked: number;
+  unrevoked: string | null;
 };
 /** A person on a shared vault's member list (docs/workspaces.md, People): `who` its id, `devices` fingerprints. */
 export type SharedPerson = { who: string; name: string; email: string; devices: string[] };

@@ -241,6 +241,8 @@ export const ORG_CODE = "5e1d-a07c-33b9";
 const SAM = "9a4f".padEnd(64, "c");
 const DESK = "2b7e".padEnd(64, "e");
 const ROBIN = "6c1f".padEnd(64, "a");
+/** The fully paired devices among the people: the server revokes none of them through an offboarding. */
+export const ORG_FULL = [DESK];
 export const organisation = {
   admins: [
     { fp: SHARED_ME, name: "This MacBook" },
