@@ -537,6 +537,23 @@ workspace's member list, signed by its Mac. The server grants nothing itself.
 - **What it means.** An organisation admin is an admin of every workspace it manages, so it reads it. Settings says so
   where the role is given. A consultancy wants exactly that. A team that does not, has no organisation or does not
   add it to a workspace.
+- **Making an Entra ID app registration** (none exists for Relay, the organisation makes its own, and this is written from
+  Microsoft's docs, not tried against a real tenant yet, and the names of portal screens and fields are not checked
+  against the current portal): in the Microsoft Entra admin center, App registrations › New
+  registration, accounts in this organizational directory only. Under Authentication add the platform "Mobile and
+  desktop applications" ([redirect URIs](https://learn.microsoft.com/en-us/entra/identity-platform/reply-url): that is
+  the platform for "an app that runs natively on a mobile device or desktop machine") with the redirect URI
+  `http://localhost`. Microsoft ignores the port of a localhost redirect URI ("the port component ... is ignored for
+  the purposes of matching a localhost redirect URI", same page), so Relay's random loopback port matches. The page
+  advises `127.0.0.1` over `localhost`, but the portal only takes an http `127.0.0.1` URI through the manifest and the
+  page does not say its port is ignored, so Relay sends `localhost` for Entra. Copy the Application (client) ID into
+  Client ID and the Directory (tenant) ID into Tenant ID. No client secret: "Public clients ... must not use secrets
+  or certificates when redeeming an authorization code"
+  ([authorization code flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow)).
+  "Allow public client flows" is not verified: one Microsoft page says a registration with redirect URIs needs a public
+  client flow configuration, another lists only device code, ROPC, Windows Integrated Auth and Native Authentication
+  as needing it. If the token step answers that a client secret is required, turn it on. The scopes Relay asks
+  (`openid email profile`) need no admin consent as far as these pages say, also not verified.
 - **Compatibility.** A relay-server from before answers `unknown request` to `org_*`, and refuses an `add` of a device
   that never joined. A Relay from before reads a workspace with an organisation admin as any list with one more admin
   (it is a plain `add`), and never sees the organisation list.
@@ -544,15 +561,19 @@ workspace's member list, signed by its Mac. The server grants nothing itself.
 ## SSO
 
 A server's organisation can make joining a workspace there go through a sign-in with an OpenID Connect provider:
-Google first, another issuer through the same check (Entra ID's tenant check comes on top later). It is a gate on
+Google, Microsoft Entra ID (one tenant), or another issuer through the same check. It is a gate on
 joining, on top of the device model: keys stay per device, an invite link is still needed, and the server grants
 itself nothing.
 
 - **The setting is signed.** An organisation admin sets it under Settings › Machines › Organisation › SSO for joining:
-  the provider (Google, or another issuer URL), the OAuth client id, the email domains allowed, and whether signing
-  in is required. It goes on the organisation list as an `sso` entry this Mac signs (`members::check_org`), with the
+  the provider (Google, Microsoft Entra ID with its tenant id, or another issuer URL), the OAuth client id, the email
+  domains allowed (none for Entra ID, below), and whether signing in is required. It goes on the organisation list as an `sso` entry this Mac signs (`members::check_org`), with the
   same rules as every other entry: only an organisation admin signs one, an https issuer, a client id and one to 20
-  lower-case domains, each once. An entry with every field empty turns it off, a newer one replaces the older. The
+  lower-case domains, each once. An Entra ID issuer is `https://login.microsoftonline.com/<tenant id>/v2.0` with
+  the tenant id as a lower-case GUID and no domains: never `common`, `organizations` or a domain name instead of the
+  id (the tenant's discovery document names the GUID issuer, so a domain name would fail its check), and never the
+  tenant of personal Microsoft accounts (`9188040d-6c67-4c5b-b112-36a304b66dad`), which anyone can sign in to. An
+  entry with every field empty turns it off, a newer one replaces the older. The
   server cannot turn it on, off or wider: a changed field breaks the signature. A workspace's member list never takes
   one. There is no client secret anywhere: the app is a public client with PKCE.
 - **Signing in.** The join form asks the link's server what to sign in with (`sso_info`, which a device not paired
@@ -560,7 +581,7 @@ itself nothing.
   then opens the system browser on the issuer's authorisation endpoint (from its discovery document): authorisation
   code, PKCE S256, a fresh `state`, `scope=openid email profile`, `prompt=select_account`, `hd` as a hint when there
   is one domain, and a `nonce`. The redirect comes back to a listener on `127.0.0.1` at a random port, the app checks
-  `state`, swaps the code for tokens at the token endpoint with the code verifier and keeps the ID token in memory
+  `state` (for Entra ID the redirect is `http://localhost:<port>`, below), swaps the code for tokens at the token endpoint with the code verifier and keeps the ID token in memory
   for the join. Google no longer allows custom URI schemes for desktop apps, so the redirect is the loopback address,
   not `relay://`.
 - **The nonce binds the token to the device.** It is `sha256("relay-sso:<server fp>:<device fp>:<salt>")`
@@ -575,8 +596,25 @@ itself nothing.
   a domain). Without a valid token a join is refused when SSO is required. When it is not, a join without one passes
   and a bad one is still refused. The keys are fetched at most once a minute per issuer, used for an hour, and no
   longer than two hours while the issuer cannot be reached: then joins fail closed.
+- **Entra ID: the tenant is the organisation.** For an Entra issuer the server checks the same signature, `iss`, `aud`,
+  `exp`, `iat` and `nonce`, then `tid` equal to the entry's tenant, and takes `oid` as who signed in. The `tid` check
+  is not redundant with `iss`: Entra's keys sign for every tenant (its common keys carry the templated issuer
+  `https://login.microsoftonline.com/{tenantid}/v2.0`), so a good signature says nothing of the tenant, and Microsoft
+  says to "always check that the `tid` in a token matches the tenant ID"
+  ([claims validation](https://learn.microsoft.com/en-us/entra/identity-platform/claims-validation)). A key whose
+  `issuer` names another issuer is not used. There is no domain list: Microsoft documents `email` as optional ("Your
+  app can request the email claim for managed users ... using the `email` optional claim"), and "This value isn't
+  guaranteed to be correct and is mutable over time. Never use it for authorization"
+  ([ID token claims reference](https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims-reference)).
+  `preferred_username` is mutable and "can't be used to make authorization decisions" (same page), and Entra sends
+  no `email_verified`. Microsoft's guidance is to "use the immutable claim values `tid` and `oid` as a combined key"
+  for granting access ([claims validation](https://learn.microsoft.com/en-us/entra/identity-platform/claims-validation)),
+  so the server does: the tenant is the gate, `oid` is the person, and `preferred_username` is shown, never trusted.
+  Guests the tenant invited sign in to it too, so they pass (telling them apart needs a claim not checked here).
 - **What the server keeps.** Never the token. On the joiner's record (`vault.json`) the verified email, the name from
-  the token and when, which an admin sees. Nothing is signed from it.
+  the token and when, which an admin sees, and for Entra ID the `oid` with `preferred_username` in place of the email.
+  Nothing is signed from it. Under Organisation › People an Entra login proves no address: it never marks an email as
+  verified and never groups people by one, but two devices with the same `oid` are one person.
 - **The email on the person.** Once the device is on the member list, its own Relay names itself as a new person with
   the email and name its own login returned (a `person` entry it signs, kept in its key file as `sso` until then). A
   server cannot put an address on anyone. A device that joins under an existing person (Add a device…) keeps that
@@ -598,7 +636,8 @@ itself nothing.
   Google asks for the secret, the token step fails with Google's message.
 - **Compatibility.** A relay-server from before answers `unknown request` to `sso_info` and ignores a token on a join.
   A Relay from before refuses an organisation list with an `sso` entry (an unknown kind), so every organisation
-  admin's Relay needs this version before SSO is turned on. A workspace's member list is unchanged.
+  admin's Relay needs this version before SSO is turned on. A Relay with Google SSO only refuses an organisation list
+with an Entra entry (no domains), so the same holds for Entra ID. A workspace's member list is unchanged.
 
 ## Policy
 
