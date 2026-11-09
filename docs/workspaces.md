@@ -532,6 +532,65 @@ workspace's member list, signed by its Mac. The server grants nothing itself.
   that never joined. A Relay from before reads a workspace with an organisation admin as any list with one more admin
   (it is a plain `add`), and never sees the organisation list.
 
+## SSO
+
+A server's organisation can make joining a workspace there go through a sign-in with an OpenID Connect provider:
+Google first, another issuer through the same check (Entra ID's tenant check comes on top later). It is a gate on
+joining, on top of the device model: keys stay per device, an invite link is still needed, and the server grants
+itself nothing.
+
+- **The setting is signed.** An organisation admin sets it under Settings › Machines › Organisation › SSO for joining:
+  the provider (Google, or another issuer URL), the OAuth client id, the email domains allowed, and whether signing
+  in is required. It goes on the organisation list as an `sso` entry this Mac signs (`members::check_org`), with the
+  same rules as every other entry: only an organisation admin signs one, an https issuer, a client id and one to 20
+  lower-case domains, each once. An entry with every field empty turns it off, a newer one replaces the older. The
+  server cannot turn it on, off or wider: a changed field breaks the signature. A workspace's member list never takes
+  one. There is no client secret anywhere: the app is a public client with PKCE.
+- **Signing in.** The join form asks the link's server what to sign in with (`sso_info`, which a device not paired
+  yet may ask while an invite is open). The app checks that answer against the same rules before it opens anything,
+  then opens the system browser on the issuer's authorisation endpoint (from its discovery document): authorisation
+  code, PKCE S256, a fresh `state`, `scope=openid email profile`, `prompt=select_account`, `hd` as a hint when there
+  is one domain, and a `nonce`. The redirect comes back to a listener on `127.0.0.1` at a random port, the app checks
+  `state`, swaps the code for tokens at the token endpoint with the code verifier and keeps the ID token in memory
+  for the join. Google no longer allows custom URI schemes for desktop apps, so the redirect is the loopback address,
+  not `relay://`.
+- **The nonce binds the token to the device.** It is `sha256("relay-sso:<server fp>:<device fp>:<salt>")`
+  (`org::sso_nonce`) with a fresh salt the join sends along. The server recomputes it from the TLS session's
+  certificate, so a token one device got never joins another.
+- **The server checks the token** at `vault_join` (`oidc.rs`), after the invite proof checks (a device without a good
+  proof never makes the server fetch anything) and before the invite is spent: RS256 against the issuer's keys (its
+  JWKS, found through its discovery document, which must name that issuer), `iss` (Google's with or without
+  `https://`), `aud` the client id (a list with `azp` that client), `exp` and `iat` within a minute of skew, the
+  `nonce`, `email_verified`, the email's domain in the list, and for Google `hd` equal to that domain (an address of
+  the domain on a personal Google account has no `hd`, and Google's docs say to check `hd` when access is limited to
+  a domain). Without a valid token a join is refused when SSO is required. When it is not, a join without one passes
+  and a bad one is still refused. The keys are fetched at most once a minute per issuer, used for an hour, and no
+  longer than two hours while the issuer cannot be reached: then joins fail closed.
+- **What the server keeps.** Never the token. On the joiner's record (`vault.json`) the verified email, the name from
+  the token and when, which an admin sees. Nothing is signed from it.
+- **The email on the person.** Once the device is on the member list, its own Relay names itself as a new person with
+  the email and name its own login returned (a `person` entry it signs, kept in its key file as `sso` until then). A
+  server cannot put an address on anyone. A device that joins under an existing person (Add a device…) keeps that
+  person. A reader signs nothing but its leave, so it stays without one.
+- **Offboarding stays with the organisation admin.** A device that came in through SSO is not checked against the
+  directory again. Doing that without the user needs one of two things this design leaves out: a refresh token kept
+  for each person (Google's docs: a refresh token fails when "the user account may have been deleted or disabled",
+  [OAuth 2.0 for iOS & Desktop Apps](https://developers.google.com/identity/protocols/oauth2/native-app)), which the
+  server would have to store, or a silent sign-in with `prompt=none`, which "will return an error if the user is not
+  already authenticated" and needs that person's browser session
+  ([OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect)), which a server does not
+  have. So SSO is the gate on joining, and removing someone is Offboard (Organisation). Closing their account at the
+  provider stops new joins, not the devices that are in.
+- **Making a Google client** (none exists for Relay, the organisation makes its own): in the Google Cloud console of
+  the organisation's Google Workspace, register the app under Google Auth Platform (Branding, and the user type under
+  Audience), then Clients › Create client › Application type Desktop app, which needs nothing more
+  ([Manage OAuth Clients](https://support.google.com/cloud/answer/15549257)). Copy its client ID into SSO for joining with the Workspace's domain. Google's docs list the client secret as
+  optional for the token request of a desktop app, so Relay sends none. Not verified against a real client yet: if
+  Google asks for the secret, the token step fails with Google's message.
+- **Compatibility.** A relay-server from before answers `unknown request` to `sso_info` and ignores a token on a join.
+  A Relay from before refuses an organisation list with an `sso` entry (an unknown kind), so every organisation
+  admin's Relay needs this version before SSO is turned on. A workspace's member list is unchanged.
+
 ## Policy
 
 A workspace's policy is a `policy` entry on its member list, signed by an admin: `providers`, the agents allowed in it
