@@ -111,12 +111,14 @@ pub async fn org_sso(app: AppHandle, state: St<'_>, machine: String, sso: Option
     let (c, data) = self::machine(&app, &state, &machine)?;
     let sso = sso.map(|mut s| {
         (s.issuer, s.client) = (s.issuer.trim().trim_end_matches('/').to_string(), s.client.trim().to_string());
+        // Entra's tenant id as `tid` carries it: lower case
+        if s.issuer.to_lowercase().starts_with(relay_remote::members::ENTRA) { s.issuer = s.issuer.to_lowercase(); }
         let mut d: Vec<String> = vec![];
         for x in s.domains.iter().map(|x| x.trim().trim_start_matches('@').to_lowercase()).filter(|x| !x.is_empty()) { if !d.contains(&x) { d.push(x); } }
         s.domains = d;
         s
     });
-    blocking(move || org::set_sso(&c, &mut load(&data, &c.fp), sso, &saver(&data, &c.fp)).map_err(|e| e.replace("this change: an sso with the wrong fields", "the issuer must be an https address, with a client id and at least one domain"))).await
+    blocking(move || org::set_sso(&c, &mut load(&data, &c.fp), sso, &saver(&data, &c.fp)).map_err(|e| e.replace("this change: an sso with the wrong fields", "the issuer must be an https address, with a client id and at least one domain (Microsoft Entra ID: a tenant id and no domains)"))).await
 }
 /// An organisation admin takes `fp` off the organisation (this Mac's own: it leaves).
 #[tauri::command]

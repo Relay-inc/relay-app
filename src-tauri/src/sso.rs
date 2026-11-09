@@ -41,14 +41,14 @@ pub async fn sso_login(state: St<'_>, link: String) -> Result<Value, String> {
         let sso = relay_remote::client::sso_info(&link)?.ok_or("this server has no SSO")?;
         // what a server not trusted yet says: only what an organisation list would take, before a browser opens on it
         if !sso.valid() { return Err("SSO: the server's sign-in settings are not valid".into()); }
-        let conf = get(&format!("{}/.well-known/openid-configuration", sso.issuer))?;
+        let conf = get(&relay_remote::members::discovery(&sso.issuer))?;
         let https = |k: &str| conf[k].as_str().filter(|u| u.starts_with("https://")).map(String::from).ok_or(format!("SSO: the issuer has no {k}"));
         let (auth, token_url) = (https("authorization_endpoint")?, https("token_endpoint")?);
         let salt = relay_remote::sync::sha256_hex(random_secret().as_bytes());
         let nonce = relay_remote::org::sso_nonce(&line.fp, &me.fingerprint(), &salt);
         let (verifier, state) = (format!("{}{}", random_secret(), random_secret()), random_secret());
         let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
-        let redirect = format!("http://127.0.0.1:{}", listener.local_addr().map_err(|e| e.to_string())?.port());
+        let redirect = format!("http://{}:{}", loopback(&sso), listener.local_addr().map_err(|e| e.to_string())?.port());
         let url = auth_url(&auth, &sso, &redirect, &b64(&sha256(verifier.as_bytes())), &state, &nonce)?;
         tauri_plugin_opener::open_url(&url, None::<&str>).map_err(|e| e.to_string())?;
         let code = catch(&listener, &state, || LOGIN.load(Ordering::SeqCst) != gen)?;
@@ -57,12 +57,19 @@ pub async fn sso_login(state: St<'_>, link: String) -> Result<Value, String> {
         let t = post(&token_url, &body)?;
         let id_token = t["id_token"].as_str().ok_or_else(|| format!("SSO: no ID token: {}", t["error_description"].as_str().or(t["error"].as_str()).unwrap_or("the issuer sent none")))?.to_string();
         let claims = id_token.split('.').nth(1).and_then(|p| base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(p).ok()).and_then(|b| serde_json::from_slice::<Value>(&b).ok()).unwrap_or_default();
-        Ok(json!({"id_token": id_token, "salt": salt, "email": claims["email"], "name": claims["name"]}))
+        // Entra: the sign-in name, as the server keeps it (oidc.rs): its `email` is optional and not checked
+        let email = if relay_remote::members::entra_tenant(&sso.issuer).is_some() { &claims["preferred_username"] } else { &claims["email"] };
+        Ok(json!({"id_token": id_token, "salt": salt, "email": email, "name": claims["name"]}))
     }).await.map_err(|e| e.to_string())?
 }
 /// Stop waiting for the browser.
 #[tauri::command]
 pub fn sso_cancel() { LOGIN.fetch_add(1, Ordering::SeqCst); }
+
+/// The redirect's host. Entra matches `http://localhost` whatever the port and does not say so of `127.0.0.1`, which its
+/// portal only takes through the manifest: `localhost` there. The listener stays on 127.0.0.1, which the system resolves
+/// localhost to (a browser that tries ::1 first goes on to it).
+fn loopback(sso: &Sso) -> &'static str { if relay_remote::members::entra_tenant(&sso.issuer).is_some() { "localhost" } else { "127.0.0.1" } }
 
 /// The sign-in URL: authorisation code with PKCE (S256), the nonce, and the domain as a hint when there is one.
 fn auth_url(auth: &str, sso: &Sso, redirect: &str, challenge: &str, state: &str, nonce: &str) -> Result<String, String> {
@@ -129,6 +136,11 @@ mod tests {
             assert_eq!(q.get(k).map(String::as_str), Some(v), "{k}");
         }
         assert!(!q.contains_key("client_secret"));
+        // Entra: no domain hint, and the redirect on localhost
+        let entra = Sso { issuer: "https://login.microsoftonline.com/11111111-2222-3333-4444-555555555555/v2.0".into(), domains: vec![], ..sso() };
+        let u = url::Url::parse(&auth_url("https://login.microsoftonline.com/11111111-2222-3333-4444-555555555555/oauth2/v2.0/authorize", &entra, "http://localhost:5000", "ch", "st", "no").unwrap()).unwrap();
+        assert!(!u.query_pairs().any(|(k, _)| k == "hd") && u.query_pairs().any(|(k, v)| k == "prompt" && v == "select_account"));
+        assert_eq!((loopback(&entra), loopback(&sso())), ("localhost", "127.0.0.1"));
         // PKCE S256 as RFC 7636's appendix B example
         assert_eq!(b64(&sha256(b"dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")), "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
     }

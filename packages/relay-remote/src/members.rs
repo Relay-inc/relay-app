@@ -62,14 +62,32 @@ impl Entry {
     fn has_sso(&self) -> bool { !self.issuer.is_empty() || !self.client.is_empty() || !self.domains.is_empty() || self.required }
 }
 /// An SSO entry's fields: all empty (off), or an https issuer, a client id and one to `MAX_DOMAINS` domains, each once.
+/// Microsoft Entra ID (an issuer on `ENTRA`): one tenant by its id, `ENTRA/<tenant id>/v2.0`, and no domains, the tenant
+/// is the organisation (docs/workspaces.md, SSO). Not `common` or `organizations`, which take any tenant, nor the tenant
+/// of personal Microsoft accounts, which takes anyone.
 fn good_sso(e: &Entry) -> bool {
     if !e.has_sso() { return true; }
     let plain = |s: &str, n: usize| !s.is_empty() && s.len() <= n && s.bytes().all(|b| b.is_ascii_graphic());
     let domain = |d: &str| d.len() <= 253 && d.contains('.') && d.split('.').all(|p| !p.is_empty() && !p.starts_with('-') && !p.ends_with('-') && p.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'));
+    let domains = if e.issuer.starts_with(ENTRA) { entra_tenant(&e.issuer).is_some() && e.domains.is_empty() } else { (1..=MAX_DOMAINS).contains(&e.domains.len()) };
     plain(&e.issuer, 200) && e.issuer.starts_with("https://") && !e.issuer.ends_with('/') && !e.issuer.contains(['?', '#'])
-        && plain(&e.client, 200) && (1..=MAX_DOMAINS).contains(&e.domains.len()) && e.domains.iter().all(|d| domain(d))
+        && plain(&e.client, 200) && domains && e.domains.iter().all(|d| domain(d))
         && e.domains.iter().enumerate().all(|(n, d)| !e.domains[..n].contains(d))
 }
+/// Microsoft Entra ID's sign-in host. A tenant's issuer is `ENTRA/<tenant id>/v2.0`.
+pub const ENTRA: &str = "https://login.microsoftonline.com/";
+/// The tenant of personal Microsoft accounts (Microsoft's ID token claims reference, `tid`).
+const ENTRA_PERSONAL: &str = "9188040d-6c67-4c5b-b112-36a304b66dad";
+/// The tenant id of an Entra issuer `ENTRA/<tenant id>/v2.0`: a lower-case GUID, as `tid` carries it. None for any
+/// other issuer, and for Entra's tenant-wide ones.
+pub fn entra_tenant(issuer: &str) -> Option<&str> {
+    let t = issuer.strip_prefix(ENTRA)?.strip_suffix("/v2.0")?;
+    (guid(t) && t != ENTRA_PERSONAL).then_some(t)
+}
+/// An issuer's OIDC discovery document (OIDC Discovery 4): for Entra the tenant's, `ENTRA/<tenant id>/v2.0/.well-known/…`.
+pub fn discovery(issuer: &str) -> String { format!("{issuer}/.well-known/openid-configuration") }
+/// A lower-case GUID, as Entra's `tid` and `oid` carry one.
+pub fn guid(t: &str) -> bool { t.len() == 36 && t.char_indices().all(|(i, c)| if [8, 13, 18, 23].contains(&i) { c == '-' } else { c.is_ascii_digit() || ('a'..='f').contains(&c) }) }
 /// The most email domains an SSO entry allows.
 pub const MAX_DOMAINS: usize = 20;
 /// The server's answer to any write by a reader, and what a reader's Relay says instead of trying.
@@ -752,6 +770,16 @@ mod tests {
             Entry { domains: vec!["example.com".into(), "example.com".into()], ..google(true) }, Entry { domains: vec!["localhost".into()], ..google(true) },
             Entry { required: true, issuer: String::new(), client: String::new(), domains: vec![], ..google(true) },
             Entry { who: "7".repeat(64), ..google(true) }, Entry { fp: b.fp.clone(), ..google(true) }] {
+            assert!(with(&a, x.clone()).unwrap_err().contains("wrong fields"), "{x:?}");
+        }
+        // Entra: one tenant by its id and no domains; not a tenant-wide issuer, a domain name, personal accounts, or domains
+        let entra = |issuer: &str, domains: Vec<String>| Entry { issuer: issuer.into(), client: "00000000-aaaa-bbbb-cccc-111111111111".into(), domains, ..google(true) };
+        const T: &str = "https://login.microsoftonline.com/11111111-2222-3333-4444-555555555555/v2.0";
+        assert_eq!(with(&a, entra(T, vec![])).unwrap().0.sso.unwrap().issuer, T);
+        assert_eq!(entra_tenant(T), Some("11111111-2222-3333-4444-555555555555"));
+        for x in [entra(T, vec!["example.com".into()]), entra("https://login.microsoftonline.com/common/v2.0", vec![]), entra("https://login.microsoftonline.com/organizations/v2.0", vec![]),
+            entra("https://login.microsoftonline.com/example.onmicrosoft.com/v2.0", vec![]), entra("https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0", vec![]),
+            entra("https://login.microsoftonline.com/11111111-2222-3333-4444-555555555555", vec![]), entra("https://login.microsoftonline.com/AAAAAAAA-2222-3333-4444-555555555555/v2.0", vec![])] {
             assert!(with(&a, x.clone()).unwrap_err().contains("wrong fields"), "{x:?}");
         }
         // what a device not paired yet checks a server's word with: the same rules

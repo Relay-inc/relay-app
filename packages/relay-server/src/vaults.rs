@@ -224,7 +224,7 @@ impl Vaults {
     }
     /// `sso`: what the device's SSO login verified (oidc::gate), kept on its record.
     pub fn join(&self, fp: &str, id: &str, invite: &str, name: &str, proof: &str, sso: Option<&crate::oidc::Signed>) -> Result<Value, String> {
-        let sso = sso.map(|s| json!({"email": s.email, "name": s.name, "at": now()}));
+        let sso = sso.map(|s| { let mut v = json!({"email": s.email, "name": s.name, "at": now()}); if !s.oid.is_empty() { v["oid"] = json!(s.oid); } v });
         if !hex(invite, 16) { return Err("bad invite".into()); }
         self.locked(id, |v| {
             let i = v.invites.iter().position(|i| i.id == invite).ok_or("this invite is used, expired or revoked")?;

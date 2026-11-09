@@ -4,8 +4,9 @@
 //! `nonce` (bound to both certificates, relay_remote::org::sso_nonce), `email_verified`, and the email's domain. The
 //! token is never kept: only the verified email and name go on the joiner's record, for the admin who adds it.
 //!
-//! RS256 only, the algorithm Google signs ID tokens with. The issuer is the entry's, so another OIDC provider is the
-//! same check (Entra's tenant check comes on top, U5).
+//! RS256 only, the algorithm Google and Microsoft Entra ID sign ID tokens with. The issuer is the entry's, so another
+//! OIDC provider is the same check. Entra ID (an issuer of one tenant, members::entra_tenant) differs in what names the
+//! person: `tid` must be that tenant, `oid` is who signed in, and there is no verified email to check a domain on.
 
 use base64::Engine;
 use relay_remote::members::Sso;
@@ -30,9 +31,10 @@ const KEYS_SECS: u64 = 3600;
 const REFETCH_SECS: u64 = 60;
 const UNKNOWN_KEY: &str = "the ID token is signed with a key the issuer does not publish";
 
-/// What a valid ID token says about who signed in.
+/// What a valid ID token says about who signed in: the address (Entra: its sign-in name), the name, and for Entra the
+/// user's object id in the tenant (`oid`, empty for any other issuer).
 #[derive(Debug, Clone, PartialEq)]
-pub struct Signed { pub email: String, pub name: String }
+pub struct Signed { pub email: String, pub name: String, pub oid: String }
 
 /// The ID token `token` checked against `jwks` (the issuer's keys) and the organisation's `sso`, for `nonce`, at `now`.
 pub fn verify(token: &str, jwks: &Value, sso: &Sso, nonce: &str, now: u64) -> Result<Signed, String> {
@@ -44,7 +46,9 @@ pub fn verify(token: &str, jwks: &Value, sso: &Sso, nonce: &str, now: u64) -> Re
     let (Some(header), Some(body), Some(sig)) = (b64(h).and_then(|b| serde_json::from_slice::<Value>(&b).ok()), b64(p).and_then(|b| serde_json::from_slice::<Value>(&b).ok()), b64(s)) else { return bad("not an ID token") };
     if header["alg"] != "RS256" { return bad("the ID token is not signed with RS256"); }
     let kid = header["kid"].as_str().unwrap_or_default();
-    let Some(key) = jwks["keys"].as_array().into_iter().flatten().find(|k| k["kty"] == "RSA" && k["kid"].as_str() == Some(kid) && k["use"].as_str().is_none_or(|u| u == "sig")) else { return Err(UNKNOWN_KEY.into()) };
+    let Some(key) = jwks["keys"].as_array().into_iter().flatten().find(|k| k["kty"] == "RSA" && k["kid"].as_str() == Some(kid) && k["use"].as_str().is_none_or(|u| u == "sig")
+        // Entra's keys name the issuer they sign for: a key of another one is not this issuer's
+        && k["issuer"].as_str().is_none_or(|i| i == sso.issuer)) else { return Err(UNKNOWN_KEY.into()) };
     let (Some(n), Some(e)) = (key["n"].as_str().and_then(b64), key["e"].as_str().and_then(b64)) else { return bad("the issuer's key is not an RSA key") };
     let rsa = ring::signature::RsaPublicKeyComponents { n: &n, e: &e };
     if rsa.verify(&ring::signature::RSA_PKCS1_2048_8192_SHA256, format!("{h}.{p}").as_bytes(), &sig).is_err() { return bad("the ID token's signature does not check"); }
@@ -61,6 +65,18 @@ pub fn verify(token: &str, jwks: &Value, sso: &Sso, nonce: &str, now: u64) -> Re
     if body["exp"].as_u64().is_none_or(|exp| exp + SKEW <= now) { return bad("the ID token expired: sign in again"); }
     if body["iat"].as_u64().is_some_and(|iat| iat > now + SKEW) { return bad("the ID token is from the future"); }
     if nonce.is_empty() || str_("nonce") != nonce { return bad("the ID token was not asked for this device"); }
+    let name: String = str_("name").trim().chars().filter(|c| !c.is_control()).take(relay_remote::members::MAX_PERSON_NAME).collect();
+    // Entra ID: the tenant. Its keys sign for every tenant, so a good signature says nothing of which one: `tid` must be
+    // the entry's, as `iss` already is (Microsoft: "Always check that the tid in a token matches the tenant ID").
+    if let Some(tenant) = relay_remote::members::entra_tenant(&sso.issuer) {
+        if str_("tid") != tenant { return bad("the account is not one of the organisation's Microsoft Entra tenant"); }
+        // who signed in is `oid`, immutable in the tenant. `email` is optional and "isn't guaranteed to be correct", so
+        // no domain is checked on it: what shows is `preferred_username`, which Microsoft calls fit for display only.
+        let oid = str_("oid").to_lowercase();
+        if !relay_remote::members::guid(&oid) { return bad("the ID token names no user (oid)"); }
+        let email = str_("preferred_username").trim().to_lowercase().chars().filter(|c| !c.is_control()).take(254).collect();
+        return Ok(Signed { email, name, oid });
+    }
     // a boolean, or the string some providers send
     if body["email_verified"] != true && body["email_verified"] != "true" { return bad("the email address is not verified"); }
     let email = str_("email").to_lowercase();
@@ -69,8 +85,7 @@ pub fn verify(token: &str, jwks: &Value, sso: &Sso, nonce: &str, now: u64) -> Re
     // Google: an account of the organisation's own Google Workspace carries `hd`, its domain. Without it the address is a
     // personal Google account under that domain's email, which Google's docs say not to trust for a domain.
     if (sso.issuer == GOOGLE || !body["hd"].is_null()) && str_("hd").to_lowercase() != domain { return bad("this account is not one of the organisation's Google Workspace"); }
-    let name: String = str_("name").trim().chars().filter(|c| !c.is_control()).take(relay_remote::members::MAX_PERSON_NAME).collect();
-    Ok(Signed { email, name })
+    Ok(Signed { email, name, oid: String::new() })
 }
 
 /// Per issuer: when a fetch was last tried, when its keys last came, and those keys (null while none came).
@@ -97,7 +112,7 @@ fn jwks(issuer: &str, fresh: bool) -> Result<Value, String> {
         had
     };
     let fetched = (|| {
-        let conf = get(&format!("{issuer}/.well-known/openid-configuration"))?;
+        let conf = get(&relay_remote::members::discovery(issuer))?;
         // the discovery document must name the issuer it was fetched for (OIDC Discovery 4.3)
         if conf["issuer"] != issuer { return Err("its discovery document names another issuer".to_string()); }
         get(conf["jwks_uri"].as_str().filter(|u| u.starts_with("https://")).ok_or("it publishes no keys over https")?)
@@ -175,7 +190,7 @@ pub(crate) mod tests {
         let (jwks, s) = (idp.jwks(), sso(GOOGLE, true));
         let check = |t: String| verify(&t, &jwks, &s, &n, now);
         let ok = check(idp.token("Ann@Example.com", &n, now, |_| {})).unwrap();
-        assert_eq!(ok, Signed { email: "ann@example.com".into(), name: "Ann Example".into() });
+        assert_eq!(ok, Signed { email: "ann@example.com".into(), name: "Ann Example".into(), oid: String::new() });
         // Google's issuer without the scheme too, and `aud` as a list
         assert!(check(idp.token("ann@example.com", &n, now, |c| c["iss"] = json!("accounts.google.com"))).is_ok());
         assert!(check(idp.token("ann@example.com", &n, now, |c| c["aud"] = json!([CLIENT]))).is_ok());
@@ -214,6 +229,56 @@ pub(crate) mod tests {
         let s2 = sso("https://idp.example", true);
         let t2 = idp2.token("ann@example.com", &n, now, |c| { c.as_object_mut().unwrap().remove("hd"); });
         assert!(verify(&t2, &idp2.jwks(), &s2, &n, now).is_ok());
+    }
+
+    /// An Entra ID tenant's issuer, and a token as Entra's v2.0 endpoint gives one for `tenant`: `tid`, `oid` and
+    /// `preferred_username`, no `email_verified` and no `hd`.
+    const TENANT: &str = "11111111-2222-3333-4444-555555555555";
+    fn entra(tenant: &str) -> String { format!("https://login.microsoftonline.com/{tenant}/v2.0") }
+    fn entra_claims(c: &mut Value, tenant: &str) {
+        let o = c.as_object_mut().unwrap();
+        for k in ["email", "email_verified", "hd"] { o.remove(k); }
+        o.insert("iss".into(), json!(entra(tenant)));
+        o.insert("tid".into(), json!(tenant));
+        o.insert("oid".into(), json!("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
+        o.insert("preferred_username".into(), json!("Ann@Example.com"));
+        o.insert("ver".into(), json!("2.0"));
+    }
+
+    #[test]
+    fn an_entra_token_checks_only_for_the_organisations_tenant() {
+        let (idp, now, n) = (Idp::new(&entra(TENANT)), 1_800_000_000, "n".repeat(64));
+        let s = Sso { issuer: idp.issuer.clone(), client: CLIENT.into(), domains: vec![], required: true };
+        let (jwks, check) = (idp.jwks(), |t: String| verify(&t, &idp.jwks(), &s, &n, now));
+        // the tenant's discovery document, under the tenant's issuer
+        assert_eq!(relay_remote::members::discovery(&s.issuer), format!("https://login.microsoftonline.com/{TENANT}/v2.0/.well-known/openid-configuration"));
+        // no email at all: `oid` names who signed in, `preferred_username` shows
+        let ok = check(idp.token("", &n, now, |c| entra_claims(c, TENANT))).unwrap();
+        assert_eq!(ok, Signed { email: "ann@example.com".into(), name: "Ann Example".into(), oid: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".into() });
+        // an `email` that is not verified or not in any domain changes nothing: it is not read
+        assert!(check(idp.token("", &n, now, |c| { entra_claims(c, TENANT); c["email"] = json!("ann@evil.example"); })).is_ok());
+        let refused = |edit: &dyn Fn(&mut Value), why: &str| {
+            let e = check(idp.token("", &n, now, |c| { entra_claims(c, TENANT); edit(c) })).expect_err(why);
+            assert!(e.contains(why), "{why}: {e}");
+        };
+        // another tenant, with a good signature: Entra's keys sign for every tenant
+        const OTHER: &str = "99999999-8888-7777-6666-555555555555";
+        refused(&|c| c["tid"] = json!(OTHER), "Entra tenant");
+        refused(&|c| { c.as_object_mut().unwrap().remove("tid"); }, "Entra tenant");
+        refused(&|c| { c["tid"] = json!(OTHER); c["iss"] = json!(entra(OTHER)); }, "another issuer");
+        // personal Microsoft accounts are a tenant too
+        refused(&|c| c["tid"] = json!("9188040d-6c67-4c5b-b112-36a304b66dad"), "Entra tenant");
+        refused(&|c| { c.as_object_mut().unwrap().remove("oid"); }, "names no user");
+        refused(&|c| c["oid"] = json!("ann"), "names no user");
+        refused(&|c| { c.as_object_mut().unwrap().remove("nonce"); }, "not asked for this device");
+        refused(&|c| c["aud"] = json!("another-client"), "another client");
+        // a key Entra publishes for another issuer is not this one's
+        let mut other = jwks.clone();
+        other["keys"][0]["issuer"] = json!(entra(OTHER));
+        assert_eq!(verify(&idp.token("", &n, now, |c| entra_claims(c, TENANT)), &other, &s, &n, now).unwrap_err(), UNKNOWN_KEY);
+        let mut same = jwks.clone();
+        same["keys"][0]["issuer"] = json!(entra(TENANT));
+        assert!(verify(&idp.token("", &n, now, |c| entra_claims(c, TENANT)), &same, &s, &n, now).is_ok());
     }
 
     #[test]
