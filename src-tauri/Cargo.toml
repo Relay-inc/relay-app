@@ -78,6 +78,9 @@ tauri-plugin-deep-link = "2"
 # dictation in any app: the shortcut registered with macOS (src/anywhere.rs)
 tauri-plugin-global-shortcut = "2"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
+# secrets in the login keychain (macOS) and the Credential Manager (Windows), src/secrets.rs. Both native stores,
+# no Linux secret-service: the features only pull in the store of the target being built
+keyring = { version = "3.6.3", features = ["apple-native", "windows-native"] }
 tauri-plugin-updater = "2"
 qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
 

@@ -71,6 +71,7 @@ mod reminders;
 mod retry;
 mod inbox;
 mod scratch;
+mod secrets;
 mod session;
 mod policy;
 mod share;
@@ -3097,15 +3098,11 @@ async fn mail_connect(state: State<'_, App>, email: String, password: String, ho
         if !(1..=256).contains(&password.chars().count()) || password.chars().any(char::is_control) { return Err(trc("err.mail_pw_any")); }
         password
     };
-    // hex (-X) so no password character can end the command line `security -i` reads
-    let hex: String = pw.bytes().map(|b| format!("{b:02x}")).collect();
-    let mut ch = Command::new("/usr/bin/security").arg("-i").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(|e| e.to_string())?;
-    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s relay-mail -a {email} -X {hex}").map_err(|e| e.to_string())?;
-    ch.wait().map_err(|e| e.to_string())?;
+    secrets::set("relay-mail", &email, &pw)?;
     match state.mail.test(&a).await {
         Ok(n) => Ok(json!({"account": account, "result": n})),
         Err(e) => {
-            if e.starts_with("Login failed") { Command::new("/usr/bin/security").args(["delete-generic-password", "-s", "relay-mail", "-a", &email]).output().ok(); }
+            if e.starts_with("Login failed") { secrets::delete("relay-mail", &email).ok(); }
             Err(e)
         }
     }

@@ -40,7 +40,9 @@ impl Identity {
         let mut f = fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&key)?;
         #[cfg(unix)]
         f.set_permissions(fs::Permissions::from_mode(0o600))?;
-        // ponytail: on Windows the key file only has the default ACL of the user's profile, W2 restricts it
+        // Windows has no modes: the key gets the ACL it inherits from `dir`. The app keeps it in its data folder
+        // (%APPDATA%), inside the user's profile, readable only by the user, SYSTEM and Administrators, as 0600 is.
+        // ponytail: no own DACL, a `dir` outside the profile keeps that folder's ACL, set one if a caller ever does that
         #[cfg(not(unix))]
         let mut f = fs::File::create(&key)?;
         f.write_all(&id.key_der)?;

@@ -7,7 +7,11 @@ use std::path::Path;
 /// `OpenOptions::mode`, ignored on Windows.
 #[cfg(unix)]
 pub use std::os::unix::fs::OpenOptionsExt;
-// ponytail: a private file on Windows only has the default ACL of the user's profile, W2 restricts key files
+// Windows has no modes. Every file opened with mode 0o600 (mirror, shared vault and remote keys, phone-share.json,
+// the cookie jar) lives under the app data folder (%APPDATA%) or the temp folder (%LOCALAPPDATA%\Temp), both inside
+// the user's profile, whose inherited ACL gives only the user, SYSTEM and Administrators access. That is what 0600
+// gives on the Mac too (root reads it).
+// ponytail: no own DACL, so a profile whose AppData is redirected to a share keeps the share's ACL, set one if that matters
 #[cfg(not(unix))]
 pub trait OpenOptionsExt { fn mode(&mut self, mode: u32) -> &mut Self; }
 #[cfg(not(unix))]

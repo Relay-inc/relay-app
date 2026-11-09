@@ -1,7 +1,7 @@
 //! The backend half of the board contract (see README, "Integrations"). An integration crate exports one
 //! `Provider`: where its API lives, which calls the webview may make, how the secrets are sent and how an
 //! error reads. The app (src-tauri/src/providers.rs) registers it and does the rest: the secrets live in the
-//! macOS keychain under `vault-app.<id>`, go to `security` and curl over stdin and never reach a webview,
+//! keychain under `vault-app.<id>` (Credential Manager on Windows), go to curl over stdin and never reach a webview,
 //! and the config is settings.json `integrations.<id>`. Nothing in here is specific to one tracker.
 
 use serde_json::Value;
