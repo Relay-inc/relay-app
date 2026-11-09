@@ -8,7 +8,7 @@
 use crate::sync::sha256_hex;
 use crate::tls::{hex, unhex};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// One entry. `kind`: `create`, `add`, `remove`, `leave`, `promote`, `demote`, `rekey` (epoch `epoch` is current, its
 /// key's sha256 `h`), `device` (the member `fp` set up Relay again: new `id` and `pk`), or `docs-on` / `docs-off` (an
@@ -117,6 +117,9 @@ pub struct List {
     pub nohistory: bool,
     /// Per person (`who`): its name and email.
     pub people: BTreeMap<String, (String, String)>,
+    /// The persons a device named itself (`person` by its own device, no admin): their email is only that device's word,
+    /// until an admin names the person again.
+    pub self_named: BTreeSet<String>,
     /// The newest `policy` entry's, none before one.
     pub policy: Option<Policy>,
     /// The newest `sso` entry's (organisation list only), none before one or once one turned it off.
@@ -214,6 +217,7 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
                 "add" if !by.admin && own && !member && e.role == "member" => { l.members.insert(e.fp.clone(), Member { id: e.id.clone(), pk: e.pk.clone(), admin: false, person: e.who.clone(), reader: false }); }
                 "person" if !by.admin && e.fp == e.by && by.person.is_empty() && !known => {
                     l.people.insert(e.who.clone(), (e.name.clone(), e.email.clone()));
+                    l.self_named.insert(e.who.clone());
                     l.members.get_mut(&e.fp).unwrap().person = e.who.clone();
                 }
                 "person-remove" if !by.admin && own => drop_person(&mut l, &e.who, e.at),
@@ -221,6 +225,7 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
                 "add" if !member && (e.who.is_empty() || known) => { l.members.insert(e.fp.clone(), Member { id: e.id.clone(), pk: e.pk.clone(), admin: e.role == "admin", person: e.who.clone(), reader: e.role == "reader" }); }
                 "person" if e.fp.is_empty() || member => {
                     l.people.insert(e.who.clone(), (e.name.clone(), e.email.clone()));
+                    l.self_named.remove(&e.who);
                     if member { l.members.get_mut(&e.fp).unwrap().person = e.who.clone(); }
                 }
                 "person-remove" if known => drop_person(&mut l, &e.who, e.at),
@@ -453,15 +458,20 @@ mod tests {
         add(&mut l, &a, named('1', "Ann", &a.fp));
         let list = check(V, &l, None).unwrap().0;
         let by = |d: &Dev, e: Entry| check(V, &[l.clone(), vec![sign(V, &list, &d.fp, &d.seed, e)]].concat(), None);
-        // a new person for itself: taken
-        assert_eq!(by(&c, named('3', "Cy", &c.fp)).unwrap().0.person(&c.fp), who('3'));
+        // a new person for itself: taken, its email only its own word
+        let own = by(&c, named('3', "Cy", &c.fp)).unwrap().0;
+        assert_eq!(own.person(&c.fp), who('3'));
+        assert!(own.self_named.contains(&who('3')) && !own.self_named.contains(&who('1')));
         // under a person that exists, for another device, or with no device: refused
         assert!(by(&c, named('1', "Ann", &c.fp)).unwrap_err().contains("not signed by an admin"), "claims another person");
         assert!(by(&c, named('3', "Cy", &b.fp)).is_err(), "names another device");
         assert!(by(&c, Entry { kind: "person".into(), who: who('3'), name: "Cy".into(), ..Default::default() }).is_err());
-        // a person renames itself only through an admin
+        // a person renames itself only through an admin, and then the admin vouches for its email
         add(&mut l, &c, named('3', "Cy", &c.fp));
         let list = check(V, &l, None).unwrap().0;
+        let mut renamed = l.clone();
+        add(&mut renamed, &a, Entry { email: "cy@example.com".into(), ..named('3', "Cy", "") });
+        assert!(!check(V, &renamed, None).unwrap().0.self_named.contains(&who('3')));
         let x = sign(V, &list, &c.fp, &c.seed, named('3', "Cyrus", ""));
         assert!(check(V, &[l.clone(), vec![x]].concat(), None).unwrap_err().contains("not signed by an admin"));
         // once under a person, a device names no new one

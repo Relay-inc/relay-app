@@ -200,6 +200,7 @@ export function MachineOrganisation({ machine }: { machine: Machine }) {
                   <div className={LINE}>
                     <span className="text-xs text-s-fg">{p.name}</span>
                     {p.email ? <span className="text-xs text-s-muted">{p.email}</span> : null}
+                    {p.unverified ? <StatusLine level="warn">{t("set.orgEmailUnverified")}</StatusLine> : null}
                     {/* a device under no person is its own row: its name once */}
                     {p.devices.length > 1 || p.devices[0]?.name !== p.name ? (
                       <span className="text-xs text-s-muted">{p.devices.map(d => d.name).join(", ")}</span>
@@ -211,6 +212,7 @@ export function MachineOrganisation({ machine }: { machine: Machine }) {
                       </button>
                     ) : null}
                   </div>
+                  {p.unverified ? <span className={HINT_IN_ROW}>{t("set.orgEmailUnverifiedHelp")}</span> : null}
                   <span className={HINT_IN_ROW}>
                     {p.workspaces.map(w => `${w.name} (${w.role ? t(ROLE_KEY[w.role]) : "?"})`).join(" · ")}
                   </span>

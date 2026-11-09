@@ -1450,6 +1450,9 @@ export default {
     "Tous les admins de l'organisation ne sont pas admins ici. Un admin de cet espace les ajoute dans ses réglages (Ajouter les admins de l'organisation).",
   "set.orgNoWorkspaces": "Aucun espace de travail sur ce serveur pour l'instant.",
   "set.orgPeople": "Personnes",
+  "set.orgEmailUnverified": "E-mail non vérifié",
+  "set.orgEmailUnverifiedHelp":
+    "Leur propre appareil a signé cette adresse, sans SSO ni admin : elle ne regroupe donc aucun appareil avec ceux d'une autre personne.",
   "set.orgOffboardConfirm": "Retirer partout",
   "set.orgOffboard": "Retirer partout…",
   "set.orgOffboardSure":

@@ -155,7 +155,7 @@ blob name 64 lowercase hex. Anything else is refused.
 | `org_log {from}` | any device | `{entries, len, owner}`: the organisation list from `from` on, `owner` whether the caller is the server's owner (the first full device paired) |
 | `org_append {entry}` | a full device, `entry.by` the caller | `{}`, only when the whole organisation list then still checks (`members::check_org`), `create` only by the owner on an empty list, `add` only of a full device paired here |
 | `org_pk {id, pk, sig}` | a full device, for itself | `{}`, its organisation keys for an admin to add it, only the shape is checked here |
-| `org_overview` | an organisation admin | `{workspaces: [{id, name, list, managed, admin, nohistory, members: [{fp, name, role, person, listed}], people}], people: [{name, email, devices, workspaces: [{id, name, role}]}], admins, candidates: [{fp, name, id, pk, sig}]}`: what each member list says, never a record |
+| `org_overview` | an organisation admin | `{workspaces: [{id, name, list, managed, admin, nohistory, members: [{fp, name, role, person, listed}], people}], people: [{name, email, unverified, devices, workspaces: [{id, name, role}]}], admins, candidates: [{fp, name, id, pk, sig}]}`: what each member list says, never a record (`unverified`: the email is only what the person's own device signed) |
 | `org_revoke {fps}` | an organisation admin | `{revoked: [{fp, name}]}`, those devices (and the phones linked to them) out of `clients.json` as `relay-server revoke` does, never an organisation admin |
 | `vault_rotate {vault, epoch, keys: {fp: sealed}, entry}` | admin | `{epoch}`, only the next epoch; `entry` the `rekey` entry, appended in the same write when the list then checks, and a sealed key for exactly the list's members; clears `rekey` and every open invite |
 
@@ -517,8 +517,13 @@ workspace's member list, signed by its Mac. The server grants nothing itself.
   it also joins it.
 - **The overview** (`org_overview`) shows every workspace with what its member list says (people, devices, roles) and
   whether every organisation admin is an admin of it (Managed, else Not managed), and every person across the
-  workspaces, grouped by a device or an email two lists share. The server reads only the lists and its own device
-  names, never a record.
+  workspaces, grouped by a device or a verified email two lists share. An email is verified when an admin signed it
+  on the person, or when the device's own `person` entry carries the address its SSO login proved at the join (the
+  email on its record, `vault.json`). An address a device signed for itself without that is only its word: the person
+  shows it with Email not verified (`unverified` in `org_overview`) and is grouped with nobody by it, so a device
+  cannot join another person's row by claiming their address. The list keeps which persons named themselves
+  (`self_named`), an admin's `person` entry for the same person clears that. The server reads only the lists, its own
+  device names and, for this check, the SSO email on a member's record.
 - **Offboarding in one step.** Offboard on a person signs, in every workspace this Mac is admin of, a `person-remove`
   for the person that holds any of their devices, or a `remove` for a device under no person, then runs the key step
   so the key changes at once. Then `org_revoke` takes the devices off the server: they connect nowhere any more. A

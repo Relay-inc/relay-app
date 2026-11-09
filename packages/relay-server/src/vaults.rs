@@ -35,7 +35,7 @@ pub(crate) struct Member { pub fp: String, pub name: String, pub role: String, p
     #[serde(default)] pk: String, #[serde(default)] id: String, #[serde(default)] sig: String, #[serde(default)] mac: String,
     #[serde(default)] imac: String, #[serde(default)] via: String,
     /// The email and name an SSO login at its join verified (oidc.rs), for the admin who adds it. Never the token.
-    #[serde(default, skip_serializing_if = "Option::is_none")] sso: Option<Value> }
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub(crate) sso: Option<Value> }
 /// `code`: the pairing-style secret the link holds, proven with `tls::proof`. `wrapped`: the vault key sealed under the
 /// link's other secret, handed out on a good proof. `by`: the admin who made it.
 #[derive(serde::Serialize, serde::Deserialize, Clone)]

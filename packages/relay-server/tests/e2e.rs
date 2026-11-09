@@ -2269,6 +2269,16 @@ fn sso_gates_a_join_and_the_verified_email_goes_on_a_person() {
     // once under a person, nothing more is signed for it
     rounds(&t, &[&ann, &a], 1);
     assert_eq!(list_of(&t, &a).len, l.len);
+    // the overview groups people on that email only when the server saw it in this device's login: the record says
+    // another address, so it is Ann's own word and shows marked
+    let unverified = || t.laptop.call(serde_json::json!({"op": "org_overview"})).unwrap()["people"].as_array().unwrap().iter()
+        .find(|p| p["email"] == "ann@example.com").unwrap()["unverified"].clone();
+    assert_eq!(unverified(), true);
+    edit_vault(&t, |v| {
+        let m = v["members"].as_array_mut().unwrap().iter_mut().find(|m| m["fp"] == ann.fp.as_str()).unwrap();
+        m["sso"] = serde_json::json!({"email": "ann@example.com", "name": "Ann Example", "at": 2});
+    });
+    assert_eq!(unverified(), false);
     // turned off: no SSO to sign in with
     org::set_sso(&t.laptop, &mut lk, None, &nosave).unwrap();
     assert_eq!(client::sso_info(&a.invite(&t, "member")).unwrap(), None);

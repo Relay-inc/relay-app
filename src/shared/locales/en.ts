@@ -1422,6 +1422,9 @@ const en = {
     "Not every organisation admin is an admin here. An admin of this workspace adds them in its settings (Add organisation admins).",
   "set.orgNoWorkspaces": "No workspaces on this server yet.",
   "set.orgPeople": "People",
+  "set.orgEmailUnverified": "Email not verified",
+  "set.orgEmailUnverifiedHelp":
+    "Their own device signed this address, without SSO or an admin, so it groups no devices with another person's.",
   "set.orgOffboardConfirm": "Offboard",
   "set.orgOffboard": "Offboard…",
   "set.orgOffboardSure":

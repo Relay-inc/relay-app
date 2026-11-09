@@ -89,8 +89,13 @@ pub fn overview(v: &Vaults, server: &str, fp: &str) -> Result<Value, String> {
         }).collect();
         let persons = l.as_ref().map(|l| l.persons()).unwrap_or_default();
         for m in &w.members {
-            let (who, name, email) = persons.iter().find(|p| p.devices.contains(&m.fp)).map_or((String::new(), String::new(), String::new()), |p| (p.who.clone(), p.name.clone(), p.email.clone()));
-            people.add(&m.fp, names.get(&m.fp).unwrap_or(&m.name), &name, &email, json!({"id": w.id, "name": w.name, "role": role(&m.fp), "who": who}));
+            let p = persons.iter().find(|p| p.devices.contains(&m.fp));
+            let (who, name, email) = p.map_or((String::new(), String::new(), String::new()), |p| (p.who.clone(), p.name.clone(), p.email.clone()));
+            // an email joins people only when an admin set it, or when this device's SSO login here proved it: one a
+            // device signed for itself is its own word, anyone could claim another's address
+            let sso = m.sso.as_ref().and_then(|s| s["email"].as_str()).is_some_and(|e| e.eq_ignore_ascii_case(&email));
+            let verified = !email.is_empty() && (sso || l.as_ref().is_some_and(|l| !l.self_named.contains(&who)));
+            people.add(&m.fp, names.get(&m.fp).unwrap_or(&m.name), &name, &email, verified, json!({"id": w.id, "name": w.name, "role": role(&m.fp), "who": who}));
         }
         let managed = l.as_ref().is_some_and(|l| org.members.keys().all(|a| l.admin(a)));
         spaces.push(json!({"id": w.id, "name": w.name, "list": l.is_some(), "managed": managed, "admin": l.as_ref().is_some_and(|l| l.admin(fp)),
@@ -105,14 +110,21 @@ pub fn overview(v: &Vaults, server: &str, fp: &str) -> Result<Value, String> {
 }
 
 /// People across workspaces: devices joined when one person holds both in some workspace (the persons of each list),
-/// or when two persons share an email. A device under no person stays one of its own.
+/// or when two persons share a verified email (`verified`: set by an admin or proven by SSO). A device under no person
+/// stays one of its own, an unverified email shows marked and joins nobody.
 #[derive(Default)]
-struct Groups { devices: Vec<(String, String, String, String, Vec<Value>)> }
+struct Groups { devices: Vec<Dev> }
+/// A device with its person's name and email (the first list that names it, a verified email before one that is not),
+/// and the workspaces it is in.
+struct Dev { fp: String, device: String, name: String, email: String, verified: bool, ws: Vec<Value> }
 impl Groups {
-    fn add(&mut self, fp: &str, device: &str, name: &str, email: &str, ws: Value) {
-        match self.devices.iter_mut().find(|d| d.0 == fp) {
-            Some(d) => { if d.2.is_empty() { (d.2, d.3) = (name.into(), email.into()); } d.4.push(ws); }
-            None => self.devices.push((fp.into(), device.into(), name.into(), email.into(), vec![ws])),
+    fn add(&mut self, fp: &str, device: &str, name: &str, email: &str, verified: bool, ws: Value) {
+        match self.devices.iter_mut().find(|d| d.fp == fp) {
+            Some(d) => {
+                if d.name.is_empty() || (verified && !d.verified) { (d.name, d.email, d.verified) = (name.into(), email.into(), verified); }
+                d.ws.push(ws);
+            }
+            None => self.devices.push(Dev { fp: fp.into(), device: device.into(), name: name.into(), email: email.into(), verified, ws: vec![ws] }),
         }
     }
     fn out(&self) -> Vec<Value> {
@@ -120,9 +132,9 @@ impl Groups {
         let n = self.devices.len();
         let mut up: Vec<usize> = (0..n).collect();
         fn root(up: &mut [usize], i: usize) -> usize { let mut i = i; while up[i] != i { up[i] = up[up[i]]; i = up[i]; } i }
-        let key = |d: &(String, String, String, String, Vec<Value>)| -> Vec<String> {
-            let mut k: Vec<String> = d.4.iter().filter(|w| w["who"] != "").map(|w| format!("{}:{}", w["id"].as_str().unwrap_or(""), w["who"].as_str().unwrap_or(""))).collect();
-            if !d.3.is_empty() { k.push(format!("@{}", d.3.to_lowercase())); }
+        let key = |d: &Dev| -> Vec<String> {
+            let mut k: Vec<String> = d.ws.iter().filter(|w| w["who"] != "").map(|w| format!("{}:{}", w["id"].as_str().unwrap_or(""), w["who"].as_str().unwrap_or(""))).collect();
+            if d.verified { k.push(format!("@{}", d.email.to_lowercase())); }
             k
         };
         for i in 0..n { for j in 0..i {
@@ -132,9 +144,9 @@ impl Groups {
         let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
         for i in 0..n { let r = root(&mut up, i); groups.entry(r).or_default().push(i); }
         let mut out: Vec<Value> = groups.values().map(|ix| {
-            let named = ix.iter().map(|i| &self.devices[*i]).find(|d| !d.2.is_empty());
+            let named = ix.iter().map(|i| &self.devices[*i]).find(|d| !d.name.is_empty());
             let mut ws: Vec<Value> = vec![];
-            for i in ix { for w in &self.devices[*i].4 {
+            for i in ix { for w in &self.devices[*i].ws {
                 // one row per workspace: the highest role of the person's devices there
                 let rank = |r: &Value| match r.as_str() { Some("admin") => 3, Some("member") => 2, Some("reader") => 1, _ => 0 };
                 match ws.iter_mut().find(|x| x["id"] == w["id"]) {
@@ -142,8 +154,9 @@ impl Groups {
                     None => ws.push(json!({"id": w["id"], "name": w["name"], "role": w["role"]})),
                 }
             } }
-            json!({"name": named.map_or(self.devices[ix[0]].1.clone(), |d| d.2.clone()), "email": named.map_or(String::new(), |d| d.3.clone()),
-                "devices": ix.iter().map(|i| json!({"fp": self.devices[*i].0, "name": self.devices[*i].1})).collect::<Vec<_>>(), "workspaces": ws})
+            json!({"name": named.map_or(self.devices[ix[0]].device.clone(), |d| d.name.clone()), "email": named.map_or(String::new(), |d| d.email.clone()),
+                "unverified": named.is_some_and(|d| !d.email.is_empty() && !d.verified),
+                "devices": ix.iter().map(|i| json!({"fp": self.devices[*i].fp, "name": self.devices[*i].device})).collect::<Vec<_>>(), "workspaces": ws})
         }).collect();
         out.sort_by(|a, b| a["name"].as_str().unwrap_or("").to_lowercase().cmp(&b["name"].as_str().unwrap_or("").to_lowercase()));
         out
@@ -235,15 +248,19 @@ mod tests {
         let mut g = Groups::default();
         let w = |id: &str, role: &str, who: &str| json!({"id": id, "name": id, "role": role, "who": who});
         // Ann: laptop and phone under one person in A, the laptop alone in B; Bo by email in two lists; a lone device
-        g.add("l", "laptop", "Ann", "", w("A", "member", "p1"));
-        g.add("p", "phone", "Ann", "", w("A", "reader", "p1"));
-        g.add("l", "laptop", "", "", w("B", "admin", ""));
-        g.add("x", "bo-mac", "Bo", "bo@example.com", w("A", "member", "p2"));
-        g.add("y", "bo-pc", "Bo B.", "Bo@Example.com", w("B", "member", "p9"));
-        g.add("z", "kiosk", "", "", w("B", "reader", ""));
+        g.add("l", "laptop", "Ann", "", false, w("A", "member", "p1"));
+        g.add("p", "phone", "Ann", "", false, w("A", "reader", "p1"));
+        g.add("l", "laptop", "", "", false, w("B", "admin", ""));
+        g.add("x", "bo-mac", "Bo", "bo@example.com", true, w("A", "member", "p2"));
+        g.add("y", "bo-pc", "Bo B.", "Bo@Example.com", true, w("B", "member", "p9"));
+        g.add("z", "kiosk", "", "", false, w("B", "reader", ""));
+        // a device that names itself with Bo's address: its own row, marked, not one of Bo's
+        g.add("m", "other-mac", "Mallory", "bo@example.com", false, w("C", "member", "p7"));
         let out = g.out();
         let row = |n: &str| out.iter().find(|p| p["name"] == n).unwrap().clone();
-        assert_eq!(out.len(), 3, "{out:?}");
+        assert_eq!(out.len(), 4, "{out:?}");
+        assert_eq!((row("Mallory")["devices"].as_array().unwrap().len(), row("Mallory")["unverified"].clone()), (1, json!(true)));
+        assert_eq!(row("Bo")["unverified"], false);
         assert_eq!(row("Ann")["devices"].as_array().unwrap().len(), 2);
         assert_eq!(row("Ann")["workspaces"], json!([{"id": "A", "name": "A", "role": "member"}, {"id": "B", "name": "B", "role": "admin"}]));
         assert_eq!(row("Bo")["devices"].as_array().unwrap().len(), 2);

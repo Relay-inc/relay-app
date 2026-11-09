@@ -181,10 +181,12 @@ export type OrgWorkspace = {
   members: { fp: string; name: string; role: SharedRole | ""; person: string; listed: boolean }[];
   people: SharedPerson[];
 };
-/** A person across the server's workspaces, grouped by a device or an email they share. */
+/** A person across the server's workspaces, grouped by a device or a verified email they share. `unverified`: the
+ *  email is only what their own device signed (no SSO login the server saw, no admin), it groups nobody. */
 export type OrgPerson = {
   name: string;
   email: string;
+  unverified?: boolean;
   devices: { fp: string; name: string }[];
   workspaces: { id: string; name: string; role: SharedRole | "" }[];
 };

@@ -240,6 +240,7 @@ export const sharedPeople = [
 export const ORG_CODE = "5e1d-a07c-33b9";
 const SAM = "9a4f".padEnd(64, "c");
 const DESK = "2b7e".padEnd(64, "e");
+const ROBIN = "6c1f".padEnd(64, "a");
 export const organisation = {
   admins: [
     { fp: SHARED_ME, name: "This MacBook" },
@@ -267,6 +268,7 @@ export const organisation = {
       members: [
         { fp: DESK, name: "Front desk Mac", role: "admin", person: "", listed: true },
         { fp: SAM, name: "Design laptop", role: "member", person: "s2".repeat(32), listed: true },
+        { fp: ROBIN, name: "Robin's laptop", role: "member", person: "r1".repeat(32), listed: true },
       ],
       people: [],
     },
@@ -282,6 +284,14 @@ export const organisation = {
       workspaces: [{ id: SHARED_ID, name: "Northwind", role: "admin" }],
     },
     { name: "Front desk Mac", email: "", devices: [{ fp: DESK, name: "Front desk Mac" }], workspaces: [{ id: "fedcba9876543210", name: "Acme Retail", role: "admin" }] },
+    // named by its own device, without SSO or an admin: the email shows marked and groups nobody
+    {
+      name: "Robin Kay",
+      email: "robin@example.com",
+      unverified: true,
+      devices: [{ fp: ROBIN, name: "Robin's laptop" }],
+      workspaces: [{ id: "fedcba9876543210", name: "Acme Retail", role: "member" }],
+    },
     {
       name: "Sam Lee",
       email: "sam@example.com",

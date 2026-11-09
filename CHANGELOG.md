@@ -26,6 +26,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- Organisation › People grouped devices of different people when one of them signed another's email address for itself: an address now groups people only when an admin set it or an SSO login proved it at the join, and a self-signed one shows as Email not verified (#PR)
 - `relay knowledge.search` ran for any process that named a running conversation, not only for one the Relay app runs: it now needs the same trace to the app's agent as the user's own reads (#PR)
 - The Pi agent was only declared as a dependency of the macOS build, so a build for any other system failed on it (#451)
 
