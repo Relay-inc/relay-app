@@ -98,6 +98,7 @@ does:
 
 **File names.** NTFS refuses names a Mac takes: `< > : " | ? *` and control characters, a name ending in a dot or a
 space, and the device names CON, PRN, AUX, NUL, COM0-9 and LPT0-9 (with ¹²³, and also with an extension, so `nul.txt`).
+A name with `~` and a digit is left out too: Windows may open `GIT~1` as `.git` (an 8.3 short name), past the filter.
 Written there anyway, such a name lands as another file (`a:b.md` as a stream of `a`, `notes.` as `notes`, `CON` as the
 console). A round on Windows leaves such a file out on both sides (`sync::windows_name`) and lists it under the workspace in Settings ›
 Machines, as it does on every computer with two names that differ in case only (`a.md` and

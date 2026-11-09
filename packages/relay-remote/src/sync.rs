@@ -494,13 +494,17 @@ pub fn safe_rel(rel: &str) -> bool {
 
 /// Whether every name in `rel` can exist on Windows: none of `< > : " | ? *` or a control character, no dot or space at
 /// the end, and not a device name (CON, PRN, AUX, NUL, COM0-9, LPT0-9, also with ¹²³ and with an extension, as
-/// `nul.txt`). Names that differ in case only are `plan`'s clashes, on every disk.
+/// `nul.txt`), and nothing that reads as an 8.3 short name (`~` and a digit, as `GIT~1` or `SETTIN~1.JSO`): Windows
+/// opens such a name as the long one it stands for, which would take a write past the filter into `.git` or a guarded
+/// file. Names that differ in case only are `plan`'s clashes, on every disk.
 pub fn windows_name(rel: &str) -> bool {
     rel.split('/').all(|n| {
         let stem = n.split('.').next().unwrap_or("").trim_end_matches(' ').to_ascii_uppercase();
         let device = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
             || ["COM", "LPT"].iter().any(|d| stem.strip_prefix(d).is_some_and(|x| (x.len() == 1 && x.as_bytes()[0].is_ascii_digit()) || matches!(x, "¹" | "²" | "³")));
-        !n.is_empty() && !device && !n.ends_with(['.', ' ']) && !n.chars().any(|c| c < ' ' || "<>:\"|?*".contains(c))
+        // ponytail: any `~` and digit, also a long name like `draft~2.md`, which is then listed for a rename
+        let short = n.split('~').skip(1).any(|x| x.starts_with(|c: char| c.is_ascii_digit()));
+        !n.is_empty() && !device && !short && !n.ends_with(['.', ' ']) && !n.chars().any(|c| c < ' ' || "<>:\"|?*".contains(c))
     })
 }
 
@@ -941,11 +945,12 @@ mod tests {
     // ---------- helpers
 
     #[test] fn windows_name_cases() {
-        for ok in ["Notes/a.md", "System/rules/core/memory.md", "CONSOLE.md", "com10.md", "Nul cat.md", ".claude/x", "a b/c d.md", "Café.md", "LPT.md"] {
+        for ok in ["Notes/a.md", "System/rules/core/memory.md", "CONSOLE.md", "com10.md", "Nul cat.md", ".claude/x", "a b/c d.md", "Café.md", "LPT.md", "a~b.md", "x~"] {
             assert!(windows_name(ok), "{ok}");
         }
         for bad in ["a:b.md", "Notes/what?.md", "x*.md", "a<b", "a>b", "a|b", "say \"hi\".md", "tab\there", "trail.", "Notes /a.md", "dir./a.md",
-            "CON", "con.md", "Notes/nul.txt", "AUX.tar.gz", "prn", "COM1.md", "lpt9", "com0", "COM\u{b9}.md", "NUL .md"] {
+            "CON", "con.md", "Notes/nul.txt", "AUX.tar.gz", "prn", "COM1.md", "lpt9", "com0", "COM\u{b9}.md", "NUL .md",
+            "GIT~1/hooks/pre-commit", "System/SETTIN~1.JSO", "CLAUDE~1/settings.json", "draft~2.md"] {
             assert!(!windows_name(bad), "{bad}");
         }
     }
