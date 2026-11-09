@@ -20,6 +20,7 @@ pub mod docs;
 pub mod cli;
 pub mod github;
 pub mod mirror;
+pub mod oidc;
 pub mod org;
 #[cfg(target_os = "macos")]
 pub mod ramdisk;
@@ -84,7 +85,7 @@ const VAULT_OPS: &[&str] = &["pair", "vault_info", "vault_invite", "vault_invite
     "vault_get", "vault_put", "vault_put_many", "vault_delete", "vault_stream", "vault_pk", "vault_rotate", "vault_log", "vault_append",
     "doc_push", "doc_pull", "doc_snapshot_put", "doc_list", "doc_bind", "doc_unbind",
     // the organisation list, read only: a vault admin adds the organisation admins to its workspace (org.rs)
-    "org_log"];
+    "org_log", "sso_info"];
 /// What a vault-only device may ask besides, while it is admin of a vault here: it keeps the server, so it sees what
 /// the server is and updates it (`update`, to an official release only: signed with Relay's release key, upgrade.rs).
 /// Never a conversation, the mirror, a phone, GitHub or a vault of its own.
@@ -243,7 +244,8 @@ impl Server {
         let req = proto::read_json(&mut r, MAX_LINE)?;
         let me = clients(&self.data).into_iter().find(|c| c.fp == fp);
         let op = req["op"].as_str().unwrap_or("");
-        if me.is_none() && op != "pair" && op != "vault_join" { return reply(&mut w, Err("not paired".into())); }
+        // a device not paired yet may also ask what SSO a join needs (oidc.rs)
+        if me.is_none() && !["pair", "vault_join", "sso_info"].contains(&op) { return reply(&mut w, Err("not paired".into())); }
         if me.as_ref().is_some_and(|c| c.vaults_only) && !vaults_only_may(&self.data, &fp, op) { return reply(&mut w, Err(format!("{op:?} is not allowed from a device that only shares vaults"))); }
         let my_name = me.as_ref().map(|c| c.name.clone()).unwrap_or_default();
         // past the wall above, a vault-only device asks `update` only as a vault admin: it installs official releases only
@@ -350,12 +352,14 @@ impl Server {
             "vault_invite" => reply(&mut w, self.vaults.invite(&fp, s("vault"), s("role"), s("wrapped"), req["epoch"].as_u64().unwrap_or(0))),
             "vault_invite_revoke" => reply(&mut w, self.vaults.invite_revoke(&fp, s("vault"), s("invite")).map(|_| json!({}))),
             "vault_join" => {
-                let res = self.vaults.join(&fp, s("vault"), s("invite"), s("name"), s("proof"));
+                // SSO first (oidc.rs): without a valid token where it is required, the invite is not even tried
+                let res = oidc::gate(&self.data, &self.fp, &fp, &req).and_then(|sso| self.vaults.join(&fp, s("vault"), s("invite"), s("name"), s("proof"), sso.as_ref()));
                 if res.is_ok() { eprintln!("relay-server: {} joined a shared vault ({peer})", req["name"]); }
                 reply(&mut w, res)
             }
             "vault_remove" => reply(&mut w, self.vaults.remove(&fp, s("vault"), s("fp")).map(|_| json!({}))),
             // the organisation (org.rs): its signed list, and for its admins the overview and a revoke
+            "sso_info" => reply(&mut w, Ok(oidc::info(&self.data, &self.fp))),
             "org_log" => reply(&mut w, Ok(org::log(&self.data, &fp, req["from"].as_u64().unwrap_or(0)))),
             "org_append" => reply(&mut w, org::append(&self.data, &self.fp, &fp, &req["entry"]).map(|_| json!({}))),
             "org_pk" => reply(&mut w, org::publish(&self.data, &fp, &req).map(|_| json!({}))),

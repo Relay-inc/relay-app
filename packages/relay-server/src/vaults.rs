@@ -33,7 +33,9 @@ const MAX_WRAPPED: usize = 256 << 10;
 /// `imac`: proof made with the invite link it joined with, `via` that invite's id (an admin adds it to the member list).
 pub(crate) struct Member { pub fp: String, pub name: String, pub role: String, pub added: u64,
     #[serde(default)] pk: String, #[serde(default)] id: String, #[serde(default)] sig: String, #[serde(default)] mac: String,
-    #[serde(default)] imac: String, #[serde(default)] via: String }
+    #[serde(default)] imac: String, #[serde(default)] via: String,
+    /// The email and name an SSO login at its join verified (oidc.rs), for the admin who adds it. Never the token.
+    #[serde(default, skip_serializing_if = "Option::is_none")] sso: Option<Value> }
 /// `code`: the pairing-style secret the link holds, proven with `tls::proof`. `wrapped`: the vault key sealed under the
 /// link's other secret, handed out on a good proof. `by`: the admin who made it.
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -161,7 +163,7 @@ impl Vaults {
         let name = name.trim();
         if name.is_empty() || name.chars().count() > MAX_NAME || name.chars().any(char::is_control) { return Err(format!("a vault name is 1 to {MAX_NAME} characters")); }
         let id = tls::random_secret()[..16].to_string();
-        let v = Vault { id: id.clone(), name: name.into(), created: now(), members: vec![Member { fp: fp.into(), name: who.into(), role: "admin".into(), added: now(), pk: String::new(), id: String::new(), sig: String::new(), mac: String::new(), imac: String::new(), via: String::new() }], invites: vec![],
+        let v = Vault { id: id.clone(), name: name.into(), created: now(), members: vec![Member { fp: fp.into(), name: who.into(), role: "admin".into(), added: now(), pk: String::new(), id: String::new(), sig: String::new(), mac: String::new(), imac: String::new(), via: String::new(), sso: None }], invites: vec![],
             epoch: 0, keys: BTreeMap::new(), rekey: false, log: vec![] };
         fs::create_dir_all(self.blobs(&id)).map_err(|e| e.to_string())?;
         save(&self.data, &v)?;
@@ -171,7 +173,7 @@ impl Vaults {
     pub fn info(&self, fp: &str, id: &str) -> Result<Value, String> {
         let v = self.member(id, fp)?;
         let role = v.role(fp).unwrap_or_default();
-        let members: Vec<Value> = v.members.iter().map(|m| json!({"name": m.name, "fp": m.fp, "role": m.role, "added": m.added, "pk": m.pk, "id": m.id, "sig": m.sig, "mac": m.mac, "imac": m.imac, "via": m.via})).collect();
+        let members: Vec<Value> = v.members.iter().map(|m| json!({"name": m.name, "fp": m.fp, "role": m.role, "added": m.added, "pk": m.pk, "id": m.id, "sig": m.sig, "mac": m.mac, "imac": m.imac, "via": m.via, "sso": m.sso})).collect();
         // an admin sees every open invite, a member the ones it made (for its own devices)
         let invites: Vec<Value> = v.invites.iter().filter(|i| role == "admin" || i.by == fp).map(|i| json!({"id": i.id, "role": i.role, "expires": i.expires})).collect();
         // the people on the member list, each with its devices: for the settings, every member's Mac checks the list itself
@@ -216,7 +218,9 @@ impl Vaults {
     /// the fifth drops the invite; a good one uses it up. A device new here becomes a vault-only client. One that is a
     /// member already keeps its membership, raised to admin by an admin invite, never lowered (that could leave the
     /// vault without an admin).
-    pub fn join(&self, fp: &str, id: &str, invite: &str, name: &str, proof: &str) -> Result<Value, String> {
+    /// `sso`: what the device's SSO login verified (oidc::gate), kept on its record.
+    pub fn join(&self, fp: &str, id: &str, invite: &str, name: &str, proof: &str, sso: Option<&crate::oidc::Signed>) -> Result<Value, String> {
+        let sso = sso.map(|s| json!({"email": s.email, "name": s.name, "at": now()}));
         if !hex(invite, 16) { return Err("bad invite".into()); }
         self.locked(id, |v| {
             let i = v.invites.iter().position(|i| i.id == invite).ok_or("this invite is used, expired or revoked")?;
@@ -235,8 +239,11 @@ impl Vaults {
             let who = known.clone().unwrap_or_else(|| device_name(&list, name, fp));
             match v.members.iter_mut().find(|m| m.fp == fp) {
                 // with a member list a promotion is an entry on it, never the server's own doing
-                Some(m) => if inv.role == "admin" && v.log.is_empty() { m.role = "admin".into(); },
-                None => v.members.push(Member { fp: fp.into(), name: who.clone(), role: inv.role.clone(), added: now(), pk: String::new(), id: String::new(), sig: String::new(), mac: String::new(), imac: String::new(), via: inv.id.clone() }),
+                Some(m) => {
+                    if inv.role == "admin" && v.log.is_empty() { m.role = "admin".into(); }
+                    if sso.is_some() { m.sso = sso.clone(); }
+                }
+                None => v.members.push(Member { fp: fp.into(), name: who.clone(), role: inv.role.clone(), added: now(), pk: String::new(), id: String::new(), sig: String::new(), mac: String::new(), imac: String::new(), via: inv.id.clone(), sso: sso.clone() }),
             }
             // the vault first: a member that is not a client yet cannot connect, a client in no vault could
             save(&self.data, v)?;
@@ -372,7 +379,7 @@ impl Vaults {
             }
             if e.kind == "add" && v.role(&e.fp).is_none() {
                 let name = clients(&self.data).into_iter().find(|c| c.fp == e.fp).map(|c| c.name).unwrap_or_default();
-                v.members.push(Member { fp: e.fp.clone(), name, role: "admin".into(), added: now(), pk: String::new(), id: String::new(), sig: String::new(), mac: String::new(), imac: String::new(), via: String::new() });
+                v.members.push(Member { fp: e.fp.clone(), name, role: "admin".into(), added: now(), pk: String::new(), id: String::new(), sig: String::new(), mac: String::new(), imac: String::new(), via: String::new(), sso: None });
             }
             if e.kind == "add" {
                 // epoch 0 too: an organisation admin never had an invite link to carry it
@@ -504,7 +511,7 @@ mod tests {
     }
     fn join(s: &Vaults, fp: &str, id: &str, role: &str) {
         let (inv, code) = invite(s, id, role);
-        s.join(fp, id, &inv, "colleague", &tls::proof(&code, fp, SERVER)).unwrap();
+        s.join(fp, id, &inv, "colleague", &tls::proof(&code, fp, SERVER), None).unwrap();
     }
 
     #[test]
@@ -571,7 +578,7 @@ mod tests {
         assert!(s.invite(ADMIN, &id, "member", &"a".repeat(MAX_WRAPPED), 0).is_ok());
         assert!(s.info(ADMIN, &id.to_uppercase()).is_err());
         assert!(s.info(ADMIN, "../../clients.js").is_err());
-        assert!(s.join(OTHER, &id, "nothex", "x", "00").unwrap_err().contains("bad invite"));
+        assert!(s.join(OTHER, &id, "nothex", "x", "00", None).unwrap_err().contains("bad invite"));
     }
 
     #[test]
@@ -581,10 +588,10 @@ mod tests {
         assert!(!invite_open(&s.data));
         let (inv, code) = invite(&s, &id, "member");
         assert!(invite_open(&s.data));
-        for _ in 0..4 { assert!(s.join(OTHER, &id, &inv, "x", &tls::proof("0".repeat(32).as_str(), OTHER, SERVER)).unwrap_err().contains("wrong invite code")); }
+        for _ in 0..4 { assert!(s.join(OTHER, &id, &inv, "x", &tls::proof("0".repeat(32).as_str(), OTHER, SERVER), None).unwrap_err().contains("wrong invite code")); }
         assert_eq!(s.info(ADMIN, &id).unwrap()["vault"]["invites"].as_array().unwrap().len(), 1, "four wrong ones leave it");
-        assert!(s.join(OTHER, &id, &inv, "x", "00").is_err());
-        assert!(s.join(OTHER, &id, &inv, "x", &tls::proof(&code, OTHER, SERVER)).unwrap_err().contains("used, expired or revoked"), "the fifth dropped it");
+        assert!(s.join(OTHER, &id, &inv, "x", "00", None).is_err());
+        assert!(s.join(OTHER, &id, &inv, "x", &tls::proof(&code, OTHER, SERVER), None).unwrap_err().contains("used, expired or revoked"), "the fifth dropped it");
         assert!(!invite_open(&s.data));
         // a day later
         let (inv, code) = invite(&s, &id, "member");
@@ -592,12 +599,12 @@ mod tests {
         v.invites[0].expires = now() - 1;
         save(&s.data, &v).unwrap();
         assert!(!invite_open(&s.data));
-        assert!(s.join(OTHER, &id, &inv, "x", &tls::proof(&code, OTHER, SERVER)).is_err());
+        assert!(s.join(OTHER, &id, &inv, "x", &tls::proof(&code, OTHER, SERVER), None).is_err());
         assert!(s.info(ADMIN, &id).unwrap()["vault"]["invites"].as_array().unwrap().is_empty());
         // revoked
         let (inv, code) = invite(&s, &id, "member");
         s.invite_revoke(ADMIN, &id, &inv).unwrap();
-        assert!(s.join(OTHER, &id, &inv, "x", &tls::proof(&code, OTHER, SERVER)).is_err());
+        assert!(s.join(OTHER, &id, &inv, "x", &tls::proof(&code, OTHER, SERVER), None).is_err());
     }
 
     #[test]
@@ -607,13 +614,13 @@ mod tests {
         let id = made(&s);
         let (inv, code) = invite(&s, &id, "member");
         // a proof for another device's certificate does not count for this one
-        assert!(s.join(OTHER, &id, &inv, "colleague", &tls::proof(&code, ADMIN, SERVER)).is_err());
-        let r = s.join(OTHER, &id, &inv, "colleague", &tls::proof(&code, OTHER, SERVER)).unwrap();
+        assert!(s.join(OTHER, &id, &inv, "colleague", &tls::proof(&code, ADMIN, SERVER), None).is_err());
+        let r = s.join(OTHER, &id, &inv, "colleague", &tls::proof(&code, OTHER, SERVER), None).unwrap();
         assert_eq!((r["role"].as_str(), r["wrapped"].as_str(), r["vault"]["name"].as_str()), (Some("member"), Some("ab".repeat(32).as_str()), Some("Team")));
         let c = clients(&s.data).into_iter().find(|c| c.fp == OTHER).unwrap();
         assert!(c.vaults_only);
         assert_eq!(c.name, "colleague 2", "deduplicated as pair does");
-        assert!(s.join(OTHER, &id, &inv, "colleague", &tls::proof(&code, OTHER, SERVER)).is_err(), "single use");
+        assert!(s.join(OTHER, &id, &inv, "colleague", &tls::proof(&code, OTHER, SERVER), None).is_err(), "single use");
         // a member sees the members, not the invites
         invite(&s, &id, "member");
         let info = s.info(OTHER, &id).unwrap();
@@ -710,7 +717,7 @@ mod tests {
         // ADMIN made that invite; the second admin removes ADMIN, and the link lets nobody in any more
         s.remove(OTHER, &id, ADMIN).unwrap();
         let late = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
-        assert!(s.join(late, &id, &inv, "late", &tls::proof(&code, late, SERVER)).is_err());
+        assert!(s.join(late, &id, &inv, "late", &tls::proof(&code, late, SERVER), None).is_err());
     }
     #[test]
     fn a_revoked_last_admin_hands_over_to_the_longest_member() {
@@ -770,7 +777,7 @@ mod tests {
         let v = info(OTHER);
         assert_eq!((v["epoch"].as_u64(), v["rekey"].as_bool(), v["keys"].as_object().unwrap().len()), (Some(1), Some(false), 1));
         assert_eq!(v["keys"]["1"]["sealed"], "ab".repeat(46), "its own sealed key only");
-        assert!(info(ADMIN)["invites"].as_array().unwrap().is_empty() && s.join(third, &id, &inv, "x", "00").is_err(), "invites carried the old keys");
+        assert!(info(ADMIN)["invites"].as_array().unwrap().is_empty() && s.join(third, &id, &inv, "x", "00", None).is_err(), "invites carried the old keys");
         assert_eq!(s.invite(ADMIN, &id, "member", &"ab".repeat(32), 0).unwrap_err(), "key changed", "an invite with the old keys");
         assert!(s.invite(ADMIN, &id, "member", &"ab".repeat(32), 1).is_ok());
         assert!(s.put(OTHER, &id, &name('1'), &rec(0), Some(&e0)).unwrap_err().contains("key changed"));
