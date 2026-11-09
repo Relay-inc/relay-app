@@ -97,8 +97,13 @@ impl AgentProvider for Codex {
     fn efforts(&self) -> Vec<Choice> { cached_models(&codex_home(&home())).1 }
 
     fn command(&self, env: &Env, l: &Launch) -> Result<Command, String> {
+        // grants.fenced (a workspace or another vault folder): Relay's guard sees only what codex asks, so codex keeps its
+        // sandbox, asks, and asks the user rather than its own reviewer (bridge.rs)
+        let fenced = env.grants.fenced;
+        let sandbox = match pick(env, "sandbox", &SANDBOX) { "danger-full-access" if fenced => "workspace-write", s => s };
+        let approval = match pick(env, "approval", &APPROVAL) { "never" if fenced => "on-request", a => a };
         let cfg = json!({"cwd": env.vault, "model": l.model, "effort": l.effort, "resume": l.resume,
-            "sandbox": pick(env, "sandbox", &SANDBOX), "approval": pick(env, "approval", &APPROVAL), "instructions": agent_core::envelope::HINT});
+            "sandbox": sandbox, "approval": approval, "fenced": fenced, "instructions": agent_core::envelope::HINT});
         let mut cmd = Command::new(std::env::current_exe().map_err(|e| e.to_string())?);
         cmd.arg("--codex-bridge").arg(env.bin).arg(cfg.to_string());
         if pick(env, "auth", &AUTH) == "chatgpt" { cmd.env_remove("OPENAI_API_KEY").env_remove("CODEX_API_KEY"); }
@@ -226,7 +231,7 @@ mod tests {
         let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args[0] == "--codex-bridge" && args[1] == "/opt/codex");
         let cfg: Value = serde_json::from_str(&args[2]).unwrap();
-        assert_eq!(cfg, json!({"cwd": "/Users/me/my vault", "model": "gpt-6.1-sol", "effort": "high", "resume": "019a-1", "sandbox": "workspace-write", "approval": "on-request", "instructions": agent_core::envelope::HINT}));
+        assert_eq!(cfg, json!({"cwd": "/Users/me/my vault", "model": "gpt-6.1-sol", "effort": "high", "resume": "019a-1", "sandbox": "workspace-write", "approval": "on-request", "fenced": false, "instructions": agent_core::envelope::HINT}));
         assert!(cmd.get_envs().any(|(k, v)| k == "OPENAI_API_KEY" && v.is_none()));
         // the settings' choices, an unknown one is the default
         let o = json!({"sandbox": "read-only", "approval": "sometimes", "auth": "api-key"});
@@ -234,6 +239,15 @@ mod tests {
         let cfg: Value = serde_json::from_str(&cmd.get_args().nth(2).unwrap().to_string_lossy()).unwrap();
         assert_eq!((cfg["sandbox"].as_str(), cfg["approval"].as_str(), cfg["resume"].is_null()), (Some("read-only"), Some("on-request"), true));
         assert!(!cmd.get_envs().any(|(k, _)| k == "OPENAI_API_KEY"));
+        // fenced (a workspace): never out of the sandbox, never without asking, read-only and untrusted stay
+        let fence = agent_core::Grants { fenced: true, ..Default::default() };
+        let arg = |o: Value| -> Value { serde_json::from_str(&PROVIDER.command(&Env { grants: &fence, ..env(&p, &o) }, &l).unwrap().get_args().nth(2).unwrap().to_string_lossy()).unwrap() };
+        let cfg = arg(json!({"sandbox": "danger-full-access", "approval": "never"}));
+        assert_eq!((cfg["sandbox"].as_str(), cfg["approval"].as_str(), cfg["fenced"].as_bool()), (Some("workspace-write"), Some("on-request"), Some(true)));
+        let cfg = arg(json!({"sandbox": "read-only", "approval": "untrusted"}));
+        assert_eq!((cfg["sandbox"].as_str(), cfg["approval"].as_str()), (Some("read-only"), Some("untrusted")));
+        let o = json!({"sandbox": "danger-full-access", "approval": "never"});
+        assert_eq!(PROVIDER.command(&env(&p, &o), &l).unwrap().get_args().nth(2).unwrap().to_string_lossy().contains("danger-full-access"), true);
         let e = env(&p, &Value::Null);
         assert_eq!(PROVIDER.terminal(&e, Terminal::Resume("019a-1")).unwrap(), "cd '/Users/me/my vault' && '/opt/codex' resume 019a-1");
         assert!(PROVIDER.terminal(&e, Terminal::Resume("x; rm")).is_none() && PROVIDER.terminal(&e, Terminal::Attach("a")).is_none());

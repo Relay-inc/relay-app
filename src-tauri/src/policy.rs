@@ -3,7 +3,7 @@
 // agents run. lib.rs, session/mod.rs, actions.rs, pty.rs and shared_vaults.rs ask here.
 
 use super::{data_dir, home, need_vault, pty, shared_vaults, trc, trc_v, App, EnvBuf};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Manager};
@@ -119,9 +119,8 @@ fn config_dirs(st: &App, eb: &EnvBuf) -> Vec<String> {
     c
 }
 
-/// A conversation in `eb.vault` fenced in, in its grants: `deny` gets the fence's rules, and another vault
-/// than the main one `fenced` (agent-claude: no own MCP servers or connectors, no hooks, no auto memory, auto mode).
-pub fn fence_in(app: &AppHandle, st: &App, eb: &mut EnvBuf) {
+/// The fence's rules for a conversation in `eb.vault`, and whether that is another vault than the main one.
+fn rules_for(app: &AppHandle, st: &App, eb: &EnvBuf) -> (Vec<String>, bool) {
     let s = st.settings.lock().unwrap().clone();
     let all = all_vaults(&s);
     let shared = all.first().is_some_and(|main| *main != eb.vault);
@@ -129,10 +128,88 @@ pub fn fence_in(app: &AppHandle, st: &App, eb: &mut EnvBuf) {
     let data = data_dir(app).to_string_lossy().into_owned();
     let mut rules = fence(&eb.vault, &all, &configs, shared.then_some(data.as_str()));
     if !shared && all.len() > 1 { rules.extend(shared_copies(&data)); }
+    (rules, shared)
+}
+
+/// A conversation in `eb.vault` fenced in, in its grants: `deny` gets the fence's rules, and another vault
+/// than the main one `fenced` (agent-claude: no own MCP servers or connectors, no hooks, no auto memory, auto mode.
+/// agent-codex: its sandbox kept and its approvals to the user, so they reach `guard`).
+pub fn fence_in(app: &AppHandle, st: &App, eb: &mut EnvBuf) {
+    let (rules, shared) = rules_for(app, st, eb);
     if !rules.is_empty() {
         eb.grants.deny.extend(rules);
     }
     if shared { eb.grants.fenced = true; }
+}
+
+/// The agents a conversation in a workspace or another vault folder may run with: Claude Code applies the fence's
+/// rules itself, Relay guards Codex (`guard`). OpenCode and Pi get no fence, they run in the main vault only.
+pub const FENCED_AGENTS: [&str; 2] = ["claude", "codex"];
+/// The agents whose CLI does not read the fence's rules: Relay checks each permission request they raise.
+const GUARDED: [&str; 1] = ["codex"];
+/// What a guarded agent may name outside a workspace without a deny: the system's programs and devices (Codex asks
+/// for `/bin/zsh -lc '…'`).
+const SYSTEM: [&str; 5] = ["/bin/", "/sbin/", "/usr/", "/opt/homebrew/", "/dev/"];
+
+/// Relay's fence for an agent whose CLI does not read the rules: the same rules `fence` makes, and in another vault
+/// than the main one that vault, outside which nothing may be asked for. A guard, not a sandbox: it sees only what the
+/// agent asks permission for, so what its own sandbox lets it do unasked (reading anywhere, writing in the vault) and a
+/// path a command builds at run time get past it.
+pub struct Guard { rules: Vec<String>, dir: String, shared: bool, home: String }
+
+/// The guard for a conversation of `p` in `vault`, for an agent in GUARDED.
+pub fn guard(app: &AppHandle, st: &App, p: &dyn agent_core::AgentProvider, vault: &str) -> Option<Guard> {
+    if !GUARDED.contains(&p.id()) { return None; }
+    let mut eb = super::env_of(app, st, p);
+    eb.vault = vault.into();
+    let (rules, shared) = rules_for(app, st, &eb);
+    Some(Guard { rules, dir: vault.trim_end_matches('/').into(), shared, home: home() })
+}
+
+/// The answer to a request the guard blocks, in the provider's protocol: a deny, given before it becomes a card.
+pub fn screen(g: &Guard, p: &dyn agent_core::AgentProvider, r: &agent_core::pending::Request) -> Option<String> {
+    let path = blocked(g, r)?;
+    p.respond(r, &json!({"behavior": "deny", "message": format!("{path} is outside this conversation's fence")}))
+}
+
+/// The first path a request names that the guard keeps the agent from: a file it changes, or of a command its folder
+/// and every word that reads as a path (absolute, `~`, `$HOME`, or with `..`, against the command's folder).
+fn blocked(g: &Guard, r: &agent_core::pending::Request) -> Option<String> {
+    let cwd = r.input["cwd"].as_str().filter(|c| c.starts_with('/')).unwrap_or(&g.dir);
+    let at = |t: &str| -> Option<String> {
+        let t = t.strip_prefix("${HOME}").or_else(|| t.strip_prefix("$HOME")).map(|x| format!("{}{x}", g.home))
+            .or_else(|| (t == "~" || t.starts_with("~/")).then(|| format!("{}{}", g.home, &t[1..]))).unwrap_or_else(|| t.to_string());
+        if t.starts_with('/') { Some(lexical(Path::new(&t))) } else if t.contains("..") { Some(lexical(&Path::new(cwd).join(t))) } else { None }
+    };
+    let mut paths = vec![lexical(Path::new(cwd))];
+    if r.tool_name == "Bash" {
+        let cmd = r.input["command"].as_str().unwrap_or("");
+        paths.extend(cmd.split(|c: char| c.is_whitespace() || "'\"`=;|&<>()".contains(c)).filter_map(at));
+    } else {
+        let named = r.input["paths"].as_array().into_iter().flatten().chain(std::iter::once(&r.input["file_path"]));
+        paths.extend(named.filter_map(|p| p.as_str()).filter_map(|p| if p.starts_with('/') { at(p) } else { Some(lexical(&Path::new(cwd).join(p))) }));
+    }
+    let inside = |p: &str| p == g.dir || p.starts_with(&format!("{}/", g.dir)) || SYSTEM.iter().any(|s| p.starts_with(s));
+    paths.into_iter().find(|p| (g.shared && !inside(p)) || g.rules.iter().any(|r| hits(r, p)))
+}
+/// A path with its `.` and `..` worked out, without asking the disk.
+fn lexical(p: &Path) -> String {
+    let mut out = std::path::PathBuf::from("/");
+    for c in p.components() {
+        match c { std::path::Component::ParentDir => { out.pop(); } std::path::Component::Normal(x) => out.push(x), _ => {} }
+    }
+    out.to_string_lossy().into_owned()
+}
+/// Whether a rule of `fence` or `shared_copies` (`Read(//a/b/**)`, `Edit(//a/x.json)`, `Read(//d/shared-*.key)`)
+/// covers a path, whatever its tool: a guarded agent's command may read or write.
+// ponytail: only the shapes those two functions make (a `/**` end, one `*` in a file name), a full glob if they grow
+fn hits(rule: &str, path: &str) -> bool {
+    let Some(pat) = rule.split_once('(').and_then(|(_, r)| r.strip_suffix(')')).and_then(|r| r.strip_prefix('/')) else { return false };
+    if let Some(dir) = pat.strip_suffix("/**") { return path == dir || path.starts_with(&format!("{dir}/")); }
+    match pat.split_once('*') {
+        Some((a, b)) => path.len() >= a.len() + b.len() && path.starts_with(a) && path.ends_with(b) && !path[a.len()..path.len() - b.len()].contains('/'),
+        None => path == pat,
+    }
 }
 
 /// Whether a conversation runs in another vault than the main one: what it reads of the user's own mail, reminders and
@@ -248,5 +325,54 @@ mod tests {
         assert!(copies.contains(&"Read(//me/Library/Application Support/relay/shared-trash/**)".to_string()));
         assert!(nested("/me/vault/team", "/me/vault") && nested("/me/vault", "/me/vault/team") && !nested("/me/vault", "/me/vault2"));
         assert!(fenceable("/me/Team vault") && !fenceable("/me/Team [x]") && !fenceable("/me/a*b"));
+    }
+    /// What codex asks, through its own parser, and what Relay does with it: the deny line, or None for a card.
+    fn ask(g: &Guard, lines: &[serde_json::Value]) -> Option<String> {
+        let p: &dyn agent_core::AgentProvider = &agent_codex::PROVIDER;
+        let mut parse = p.parser();
+        let mut evs = vec![];
+        for l in lines { evs.extend(parse(&l.to_string())); }
+        let Some(agent_core::Event::Permission { request }) = evs.into_iter().find(|e| matches!(e, agent_core::Event::Permission { .. })) else { panic!("no card") };
+        screen(g, p, &request)
+    }
+    fn cmd(command: &str, cwd: &str) -> Vec<serde_json::Value> {
+        vec![json!({"id": 7, "method": "item/commandExecution/requestApproval", "params": {"threadId": "t", "turnId": "u", "itemId": "c", "command": command, "cwd": cwd}})]
+    }
+    fn patch(path: &str) -> Vec<serde_json::Value> {
+        vec![json!({"method": "item/started", "params": {"item": {"type": "fileChange", "id": "f", "status": "inProgress", "changes": [{"path": "/team/shared/a.md", "kind": {"type": "update"}, "diff": "x"}, {"path": path, "kind": {"type": "add"}, "diff": "y"}]}}}),
+             json!({"id": "r8", "method": "item/fileChange/requestApproval", "params": {"threadId": "t", "turnId": "u", "itemId": "f"}})]
+    }
+    #[test]
+    fn codex_is_denied_outside_its_workspace_before_a_card() {
+        let all = ["/me/vault".to_string(), "/team/shared".to_string()];
+        let configs = ["/me/.claude".to_string()];
+        let g = Guard { rules: fence("/team/shared", &all, &configs, Some("/me/data")), dir: "/team/shared".into(), shared: true, home: "/me".into() };
+        let deny = r#"{"id":7,"result":{"decision":"decline"}}"#.to_string();
+        for out in ["/bin/zsh -lc 'cat /me/vault/Inbox.md'", "cat ~/notes.txt", "cat $HOME/x", "cat ../other/x", "cp a.md /tmp/a.md", "ls /me/data"] {
+            assert_eq!(ask(&g, &cmd(out, "/team/shared")), Some(deny.clone()), "{out}");
+        }
+        assert_eq!(ask(&g, &cmd("ls", "/me/vault")), Some(deny.clone()), "a command run from another folder");
+        for ok in ["/bin/zsh -lc 'printf hi > hello.txt'", "curl -s https://example.com 2>/dev/null", "git -C ./Projects push", "/usr/bin/git status"] {
+            assert_eq!(ask(&g, &cmd(ok, "/team/shared")), None, "{ok}");
+        }
+        // a patch is denied for any one of its files outside, or inside on what the fence keeps (its .claude)
+        assert_eq!(ask(&g, &patch("/me/vault/x.md")), Some(r#"{"id":"r8","result":{"decision":"decline"}}"#.into()));
+        assert!(ask(&g, &patch("/team/shared/.claude/settings.json")).is_some());
+        assert_eq!(ask(&g, &patch("/team/shared/b.md")), None);
+        // a main-vault conversation may leave its vault, not into another one or the workspaces' keys
+        let mut rules = fence("/me/vault", &all, &configs, None);
+        rules.extend(shared_copies("/me/data"));
+        let main = Guard { rules, dir: "/me/vault".into(), shared: false, home: "/me".into() };
+        assert!(ask(&main, &cmd("cat /team/shared/x.md", "/me/vault")).is_some());
+        assert!(ask(&main, &cmd("cat /me/data/shared-0a.key", "/me/vault")).is_some());
+        assert_eq!(ask(&main, &cmd("cat /me/code/app/README.md /me/data/shared-0a/key", "/me/vault")), None);
+    }
+    #[test]
+    fn workspaces_run_claude_code_and_codex_only() {
+        let ids: Vec<&str> = crate::agents::PROVIDERS.iter().map(|p| p.id()).collect();
+        assert_eq!(ids.iter().filter(|i| FENCED_AGENTS.contains(i)).collect::<Vec<_>>(), [&"claude", &"codex"]);
+        assert!(ids.contains(&"opencode") && ids.contains(&"pi"));
+        // every guarded agent answers a deny in its own protocol
+        assert!(GUARDED.iter().all(|id| FENCED_AGENTS.contains(id)));
     }
 }

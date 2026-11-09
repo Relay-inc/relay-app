@@ -34,6 +34,15 @@ impl Sink for TauriSink {
     fn permission(&self, req: &pending::Request) {
         let mut r = req.clone();
         (r.project, r.provider, r.relay) = (self.key.clone(), self.p.id().into(), true);
+        // Relay's fence for an agent whose CLI does not read the rules (policy::guard): a deny, never a card
+        let st = self.app.state::<App>();
+        let vault = Some(self.vault.clone()).filter(|v| !v.is_empty())
+            .or_else(|| st.sids.lock().unwrap().get(&self.key).map(|s| s.vault.clone()).filter(|v| !v.is_empty()))
+            .or_else(|| crate::need_vault(&st).ok()).unwrap_or_default();
+        if let Some(line) = crate::policy::guard(&self.app, &st, self.p, &vault).and_then(|g| crate::policy::screen(&g, self.p, &r)) {
+            self.with_proc(|x| { use std::io::Write; writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).ok() });
+            return;
+        }
         pending::write(&self.pending, &r).ok();
     }
     fn committed(&self, repos: Vec<PathBuf>) {

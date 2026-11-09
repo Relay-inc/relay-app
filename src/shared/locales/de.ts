@@ -303,7 +303,7 @@ export default {
   "usage.limitTop": "{name}: {label}",
   "composer.agent": "Agent",
   "composer.agentSharedVault":
-    "Ein Gespräch in einem anderen Workspace als Persönlich läuft mit Claude Code: Seine Grenzen dort beruhen auf den Berechtigungsregeln von Claude Code.",
+    "Ein Gespräch in einem anderen Workspace als Persönlich läuft mit Claude Code oder Codex: Claude Code hält sich dort an seine Berechtigungsregeln, Relay prüft, was Codex anfragt.",
   "set.tab.agents": "Agenten",
   "ag.default": "Standard-Agent",
   "ag.defaultHelp":

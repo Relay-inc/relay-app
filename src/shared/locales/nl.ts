@@ -304,7 +304,7 @@ export default {
   "usage.limitTop": "{name}: {label}",
   "composer.agent": "Agent",
   "composer.agentSharedVault":
-    "Een gesprek in een andere workspace dan Persoonlijk loopt op Claude Code: de beperkingen daar zijn gebouwd op de permissieregels van Claude Code.",
+    "Een gesprek in een andere workspace dan Persoonlijk loopt op Claude Code of Codex: Claude Code houdt zich daar aan zijn permissieregels, Relay controleert wat Codex vraagt.",
   "set.tab.agents": "Agents",
   "ag.default": "Standaardagent",
   "ag.defaultHelp":

@@ -62,7 +62,7 @@ members a key of its own, add a member, make one admin or hide a removal without
 **The fence is a guard, not a sandbox.** It keeps a conversation in its workspace and Claude Code's file tools and file
 commands out of your vault and the other workspaces. It is not a boundary against a member who sets out to reach your
 Mac through a note that steers your agent: a script in Bash or a local socket can still get out, and only the
-auto-mode classifier judges those. Share a workspace with people you would let read what your agent can read. What it
+auto-mode classifier judges those (for Codex, its sandbox and Relay's guard, below). Share a workspace with people you would let read what your agent can read. What it
 does:
 
 - **A conversation stays where it runs.** It runs in its project's vault or workspace, a general one in the one picked
@@ -71,7 +71,19 @@ does:
   of that vault or workspace, and once it started it moves only to its projects. Anywhere but the main vault it also
   may not touch Relay's data folder or Claude's config folders (with their `.claude.json`), and runs with no own MCP
   servers or connectors, no hooks, no auto memory, in auto mode. A main-vault conversation may not read the workspaces'
-  trash, bases and keys. Codex and OpenCode run in the main vault only.
+  trash, bases and keys. Claude Code and Codex run in a workspace, OpenCode and Pi in the main vault only.
+- **Codex has Relay's guard, not Claude Code's rules.** Codex reads no deny rules, so Relay checks every permission
+  request Codex raises before it becomes a card (`policy::guard`, `session/tauri_sink.rs`): a request that names a
+  path outside the workspace (a file it changes, the folder a command runs in, a word of the command that reads as a
+  path: absolute, `~`, `$HOME`, or with `..`) is declined at once, as is one on what the rules above keep (another
+  vault, Relay's data, Claude's config folders, the workspace's `.claude`). The system's programs and devices (`/bin`,
+  `/usr`, `/opt/homebrew`, `/dev`) are not outside. In the main vault the same check runs on those rules only. In a
+  workspace Codex also keeps its sandbox (`danger-full-access` becomes `workspace-write`), asks (`never` becomes
+  `on-request`), and asks the user, not its own auto review. What this is not: the guard sees only what Codex asks
+  for. Its `workspace-write` sandbox lets it read anywhere and write inside the workspace (its `.claude` included)
+  without asking, a path a command builds at run time is not seen, and extra writable roots in the user's own Codex
+  config are not overridden. A Codex conversation opened in a terminal asks there, past the guard, so a workspace's
+  terminal stays Claude Code's.
 - **Nothing a member writes runs on your Mac.** `.claude` never syncs, and of the folder it links to (`System/`) only
   the notes go (`rules/`, `reference/`, `archive/`, `reminders.md`). Names compare as APFS and HFS+ do, a round
   follows no symlink, and a `.claude` linking somewhere the filter cannot guard is refused.

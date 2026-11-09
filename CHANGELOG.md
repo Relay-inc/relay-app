@@ -83,6 +83,7 @@ a PR. Versions follow
 
 ### Changed
 
+- Codex runs in team workspaces and other vault folders next to Claude Code. Relay declines a Codex permission request for a path outside the workspace (or into another vault, Relay's data or Claude's config) before it becomes a card, and keeps Codex in its sandbox and asking there. OpenCode and Pi stay in the main vault.
 - New meeting notes go into `Calendar/Meetings/<year>/` and link their project in `about:` when the title names one. A recording's transcript is saved as a note next to its meeting (`….transcript.md`, linked to the meeting note) and its audio goes to `Attachments/<year>/` (or Obsidian's attachment folder). A vault can choose other folders under `homes` in `.relay/config.json`. Existing notes stay where they are and are still found (#384).
 
 ## [0.0.46] - 2026-11-04

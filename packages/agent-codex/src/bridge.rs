@@ -1,5 +1,5 @@
 //! The app's stdin/stdout to `codex app-server` (JSON-RPC 2.0, one JSON object per line), for one conversation.
-//! Run as `relay --codex-bridge <codex-bin> '<config json>'`; config: {cwd, model, effort, sandbox, approval, resume, instructions}.
+//! Run as `relay --codex-bridge <codex-bin> '<config json>'`; config: {cwd, model, effort, sandbox, approval, fenced, resume, instructions}.
 //!
 //! It does the handshake the app cannot (initialize, initialized, thread/start or thread/resume, which gives the thread id)
 //! and then passes lines both ways: every line codex writes goes to stdout unchanged, every line the app writes goes to
@@ -98,6 +98,8 @@ pub fn run<W: Write + Send + 'static>(bin: &str, cfg: &Value, input: impl BufRea
         if let Some(m) = text(cfg, "model") { opts["model"] = m.into(); }
         if let Some(e) = text(cfg, "effort") { opts["config"] = json!({"model_reasoning_effort": e}); }
         if let Some(i) = text(cfg, "instructions") { opts["developerInstructions"] = i.into(); }
+        // a fenced conversation: approvals to the app (Relay's guard and the cards), never to codex's own auto review
+        if cfg["fenced"] == true { opts["approvalsReviewer"] = "user".into(); }
         let mut r = None;
         if let Some(id) = text(cfg, "resume") {
             let mut p = opts.clone();

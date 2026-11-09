@@ -427,7 +427,7 @@ const VIEWS = {
     await page.getByRole("button", { name: "Runs in", exact: true }).locator("visible=true").first().click();
     await waitText("Northwind");
   },
-  // the workspace Northwind picked there: no Runs on, and Claude Code is the only agent to pick
+  // the workspace Northwind picked there: no Runs on, and Claude Code and Codex are the agents to pick
   "composer-vault-picked": async () => {
     await open(page, server.url, { fixture: "shared" });
     await page.evaluate(() => window.__harness.emit("menu", "new-general"));

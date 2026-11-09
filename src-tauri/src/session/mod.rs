@@ -101,8 +101,8 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         },
     };
     let shared = dir != main;
-    // Codex and OpenCode get no fence (fence below): a shared vault's conversation is Claude Code's only
-    if shared && p.id() != "claude" { return Err(trc("err.vault_only_claude")); }
+    // OpenCode and Pi get no fence: a shared vault's conversation is Claude Code's (its own rules) or Codex's (Relay's guard)
+    if shared && !crate::policy::FENCED_AGENTS.contains(&p.id()) { return Err(trc("err.vault_agents")); }
     let extra = if shared { dir.as_str() } else { "" };
     // a fork carries the other conversation's transcript: only one from this same vault
     let fork_vault = |f: &str| state.sids.lock().unwrap().values().find(|s| s.sid == f).map(|s| s.vault.clone()).unwrap_or_default();
