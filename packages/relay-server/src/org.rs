@@ -92,10 +92,12 @@ pub fn overview(v: &Vaults, server: &str, fp: &str) -> Result<Value, String> {
             let p = persons.iter().find(|p| p.devices.contains(&m.fp));
             let (who, name, email) = p.map_or((String::new(), String::new(), String::new()), |p| (p.who.clone(), p.name.clone(), p.email.clone()));
             // an email joins people only when an admin set it, or when this device's SSO login here proved it: one a
-            // device signed for itself is its own word, anyone could claim another's address
-            let sso = m.sso.as_ref().and_then(|s| s["email"].as_str()).is_some_and(|e| e.eq_ignore_ascii_case(&email));
+            // device signed for itself is its own word, anyone could claim another's address. An Entra login proves no
+            // address (oidc.rs: its sign-in name is for display only), its `oid` joins the devices of one user instead.
+            let oid = m.sso.as_ref().and_then(|s| s["oid"].as_str()).unwrap_or_default();
+            let sso = oid.is_empty() && m.sso.as_ref().and_then(|s| s["email"].as_str()).is_some_and(|e| e.eq_ignore_ascii_case(&email));
             let verified = !email.is_empty() && (sso || l.as_ref().is_some_and(|l| !l.self_named.contains(&who)));
-            people.add(&m.fp, names.get(&m.fp).unwrap_or(&m.name), &name, &email, verified, json!({"id": w.id, "name": w.name, "role": role(&m.fp), "who": who}));
+            people.add(&m.fp, names.get(&m.fp).unwrap_or(&m.name), &name, &email, verified, oid, json!({"id": w.id, "name": w.name, "role": role(&m.fp), "who": who}));
         }
         let managed = l.as_ref().is_some_and(|l| org.members.keys().all(|a| l.admin(a)));
         spaces.push(json!({"id": w.id, "name": w.name, "list": l.is_some(), "managed": managed, "admin": l.as_ref().is_some_and(|l| l.admin(fp)),
@@ -110,21 +112,22 @@ pub fn overview(v: &Vaults, server: &str, fp: &str) -> Result<Value, String> {
 }
 
 /// People across workspaces: devices joined when one person holds both in some workspace (the persons of each list),
-/// or when two persons share a verified email (`verified`: set by an admin or proven by SSO). A device under no person
+/// or when two persons share a verified email (`verified`: set by an admin or proven by SSO), or one Entra user (`oid`). A device under no person
 /// stays one of its own, an unverified email shows marked and joins nobody.
 #[derive(Default)]
 struct Groups { devices: Vec<Dev> }
 /// A device with its person's name and email (the first list that names it, a verified email before one that is not),
 /// and the workspaces it is in.
-struct Dev { fp: String, device: String, name: String, email: String, verified: bool, ws: Vec<Value> }
+struct Dev { fp: String, device: String, name: String, email: String, verified: bool, oid: String, ws: Vec<Value> }
 impl Groups {
-    fn add(&mut self, fp: &str, device: &str, name: &str, email: &str, verified: bool, ws: Value) {
+    fn add(&mut self, fp: &str, device: &str, name: &str, email: &str, verified: bool, oid: &str, ws: Value) {
         match self.devices.iter_mut().find(|d| d.fp == fp) {
             Some(d) => {
                 if d.name.is_empty() || (verified && !d.verified) { (d.name, d.email, d.verified) = (name.into(), email.into(), verified); }
+                if d.oid.is_empty() { d.oid = oid.into(); }
                 d.ws.push(ws);
             }
-            None => self.devices.push(Dev { fp: fp.into(), device: device.into(), name: name.into(), email: email.into(), verified, ws: vec![ws] }),
+            None => self.devices.push(Dev { fp: fp.into(), device: device.into(), name: name.into(), email: email.into(), verified, oid: oid.into(), ws: vec![ws] }),
         }
     }
     fn out(&self) -> Vec<Value> {
@@ -135,6 +138,7 @@ impl Groups {
         let key = |d: &Dev| -> Vec<String> {
             let mut k: Vec<String> = d.ws.iter().filter(|w| w["who"] != "").map(|w| format!("{}:{}", w["id"].as_str().unwrap_or(""), w["who"].as_str().unwrap_or(""))).collect();
             if d.verified { k.push(format!("@{}", d.email.to_lowercase())); }
+            if !d.oid.is_empty() { k.push(format!("oid:{}", d.oid)); }
             k
         };
         for i in 0..n { for j in 0..i {
@@ -258,17 +262,21 @@ mod tests {
         let mut g = Groups::default();
         let w = |id: &str, role: &str, who: &str| json!({"id": id, "name": id, "role": role, "who": who});
         // Ann: laptop and phone under one person in A, the laptop alone in B; Bo by email in two lists; a lone device
-        g.add("l", "laptop", "Ann", "", false, w("A", "member", "p1"));
-        g.add("p", "phone", "Ann", "", false, w("A", "reader", "p1"));
-        g.add("l", "laptop", "", "", false, w("B", "admin", ""));
-        g.add("x", "bo-mac", "Bo", "bo@example.com", true, w("A", "member", "p2"));
-        g.add("y", "bo-pc", "Bo B.", "Bo@Example.com", true, w("B", "member", "p9"));
-        g.add("z", "kiosk", "", "", false, w("B", "reader", ""));
+        g.add("l", "laptop", "Ann", "", false, "", w("A", "member", "p1"));
+        g.add("p", "phone", "Ann", "", false, "", w("A", "reader", "p1"));
+        g.add("l", "laptop", "", "", false, "", w("B", "admin", ""));
+        g.add("x", "bo-mac", "Bo", "bo@example.com", true, "", w("A", "member", "p2"));
+        g.add("y", "bo-pc", "Bo B.", "Bo@Example.com", true, "", w("B", "member", "p9"));
+        g.add("z", "kiosk", "", "", false, "", w("B", "reader", ""));
+        // Cy signed in with Entra on two Macs: one user (`oid`), whatever the sign-in names say
+        g.add("c1", "cy-mac", "Cy", "cy@example.com", false, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", w("A", "member", "p3"));
+        g.add("c2", "cy-pc", "Cy", "cy.renamed@example.com", false, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", w("B", "member", "p8"));
         // a device that names itself with Bo's address: its own row, marked, not one of Bo's
-        g.add("m", "other-mac", "Mallory", "bo@example.com", false, w("C", "member", "p7"));
+        g.add("m", "other-mac", "Mallory", "bo@example.com", false, "", w("C", "member", "p7"));
         let out = g.out();
         let row = |n: &str| out.iter().find(|p| p["name"] == n).unwrap().clone();
-        assert_eq!(out.len(), 4, "{out:?}");
+        assert_eq!(out.len(), 5, "{out:?}");
+        assert_eq!((row("Cy")["devices"].as_array().unwrap().len(), row("Cy")["unverified"].clone()), (2, json!(true)));
         assert_eq!((row("Mallory")["devices"].as_array().unwrap().len(), row("Mallory")["unverified"].clone()), (1, json!(true)));
         assert_eq!(row("Bo")["unverified"], false);
         assert_eq!(row("Ann")["devices"].as_array().unwrap().len(), 2);
