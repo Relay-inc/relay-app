@@ -703,9 +703,10 @@ pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String,
 }
 
 /// Join a shared vault with an invite link: this Mac pairs with the server as a vault-only device (when it is not
-/// paired yet), gets the key out of the link and syncs the vault into `folder`, which must be empty.
+/// paired yet), gets the key out of the link and syncs the vault into `folder`, which must be empty. `sso`: the SSO
+/// login's {id_token, salt, email, name} (sso.rs) when the server asks for one.
 #[tauri::command]
-pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, folder: String) -> Result<Value, String> {
+pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, folder: String, sso: Option<Value>) -> Result<Value, String> {
     let s = state.settings.lock().unwrap().clone();
     let folder = new_folder(&app, &state, &folder, true)?;
     // a vault this Mac is in already: joining again would wipe its key, base and trash and leave its folder unsynced
@@ -716,8 +717,11 @@ pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, fold
     // the folder before the single-use invite is spent: one that cannot be made fails here, with the link still good
     std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
     let (me, name) = (state.machines.id.clone(), crate::sys_name());
-    let (line, joined, mut key) = tauri::async_runtime::spawn_blocking(move || relay_remote::client::vault_join(&link, &me, &name)).await.map_err(|e| e.to_string())??;
+    let token = sso.as_ref().map(|s| serde_json::json!({"id_token": s["id_token"], "salt": s["salt"]}));
+    let (line, joined, mut key) = tauri::async_runtime::spawn_blocking(move || relay_remote::client::vault_join(&link, &me, &name, token.as_ref())).await.map_err(|e| e.to_string())??;
     key.ensure();
+    // this Mac names itself with its login's email once it is on the member list (relay_remote::vault, keep_keys)
+    key.sso = sso.and_then(|s| relay_remote::vault::sso_person(s["email"].as_str()?, s["name"].as_str().unwrap_or_default()));
     if !valid_id(&joined.id) { return Err(format!("not a workspace id: {:?}", joined.id)); }
     // a vault this Mac had before: its old base would make the new, empty folder look like a mass delete
     let vid = joined.id.clone();

@@ -55,7 +55,8 @@ pub async fn org_status(app: AppHandle, state: St<'_>, machine: String) -> Resul
         let (mut k, save) = (load(&data, &c.fp), saver(&data, &c.fp));
         let code = org::publish(&c, &mut k, &save)?;
         let o = org::fetch(&c, &mut k, &save)?;
-        Ok(json!({"exists": o.list.is_some(), "me": o.me, "owner": o.owner, "code": code, "admins": o.admins().iter().map(|a| a.fp.clone()).collect::<Vec<_>>()}))
+        let sso = o.list.as_ref().and_then(|l| l.sso.clone());
+        Ok(json!({"exists": o.list.is_some(), "me": o.me, "owner": o.owner, "code": code, "admins": o.admins().iter().map(|a| a.fp.clone()).collect::<Vec<_>>(), "sso": sso}))
     }).await
 }
 /// The owner starts the organisation, this Mac its first admin.
@@ -102,6 +103,20 @@ pub async fn org_add_admin(app: AppHandle, state: St<'_>, machine: String, fp: S
         if org::code(&id, &pk) != code { return Err("the device's keys changed since you compared the code".into()); }
         org::add(&c, &mut load(&data, &c.fp), &fp, &id, &pk, &saver(&data, &c.fp))
     }).await
+}
+/// An organisation admin sets the server's SSO (docs/workspaces.md, SSO), or turns it off with none: a signed entry on
+/// the organisation list. Domains are taken lower case, without spaces, each once.
+#[tauri::command]
+pub async fn org_sso(app: AppHandle, state: St<'_>, machine: String, sso: Option<relay_remote::members::Sso>) -> Result<(), String> {
+    let (c, data) = self::machine(&app, &state, &machine)?;
+    let sso = sso.map(|mut s| {
+        (s.issuer, s.client) = (s.issuer.trim().trim_end_matches('/').to_string(), s.client.trim().to_string());
+        let mut d: Vec<String> = vec![];
+        for x in s.domains.iter().map(|x| x.trim().trim_start_matches('@').to_lowercase()).filter(|x| !x.is_empty()) { if !d.contains(&x) { d.push(x); } }
+        s.domains = d;
+        s
+    });
+    blocking(move || org::set_sso(&c, &mut load(&data, &c.fp), sso, &saver(&data, &c.fp)).map_err(|e| e.replace("this change: an sso with the wrong fields", "the issuer must be an https address, with a client id and at least one domain"))).await
 }
 /// An organisation admin takes `fp` off the organisation (this Mac's own: it leaves).
 #[tauri::command]
