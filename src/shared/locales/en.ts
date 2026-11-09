@@ -216,6 +216,7 @@ const en = {
   "mig.teamChats":
     "These conversations continue in {target}. Their transcripts stay on this Mac, but what they already hold (everything said and every file read in them) can end up in notes every member sees:",
   "ws.team": "team",
+  "ws.noHistory": "without history",
   "ws.live": "live",
   "ws.rounds": "syncing every 10 s",
   "ws.openFolder": "Open a folder as workspace…",
@@ -1346,6 +1347,12 @@ const en = {
   "set.sharedFolder": "Folder",
   "set.sharedNewFolderHelp": "An empty folder starts as a new workspace. A folder with notes is uploaded as it is.",
   "set.sharedJoinFolderHelp": "An empty folder on this Mac. The workspace syncs into it.",
+  "set.sharedNoHistory": "Workspace without history",
+  "set.sharedNoHistoryHelp":
+    "Relay keeps no record of who changed what: conflict copies name no computer. Members and their roles stay visible, a small team is not anonymous, and a member can still keep their own copy outside Relay. This cannot be turned off later.",
+  "set.sharedNoHistoryLabel": "Without history",
+  "set.sharedNoHistoryTip":
+    "Made without history: Relay keeps no record here of who changed what. Members and their roles stay visible.",
   "set.sharedCreate": "Create",
   "set.sharedRecovery": "Recovery key",
   "set.sharedRecoveryHelp":

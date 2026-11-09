@@ -1899,6 +1899,35 @@ const VIEWS = {
     await waitText("Team Handbook");
     await page.getByText("Hiring 2027", { exact: true }).scrollIntoViewIfNeeded();
   },
+  // New workspace on this machine…: the name, the folder, and Workspace without history with what it hides and what not
+  // (PR workspace without history)
+  "settings-shared-new": async () => {
+    await settingsPage("Machines", undefined, "shared");
+    await page.setViewportSize({ width: 900, height: 1000 });
+    await button("New workspace on this machine…").click();
+    await page.locator("#shared-name").fill("Knowledge");
+    if (await page.locator("#shared-nohistory").count()) await page.locator("#shared-nohistory").check();
+    await button("Create").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // a workspace made without history: its row in Settings › Machines says so next to the role, its conflict copy
+  // names no Mac, and it offers no shared documents yet
+  "settings-shared-nohistory": async () => {
+    await settingsPage("Machines", undefined, "shared-nohistory");
+    await page.setViewportSize({ width: 900, height: 1000 });
+    await waitText("Show recovery key");
+    await page
+      .getByText("Show recovery key")
+      .first()
+      .evaluate(el => el.scrollIntoView({ block: "center" }));
+    await settle(page);
+  },
+  // the footer's workspace menu with that workspace: Northwind "team · without history · live"
+  "workspace-menu-nohistory": async () => {
+    await open(page, server.url, { fixture: "shared-nohistory" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await waitText("Open a folder as workspace…");
+  },
   // the footer's workspace menu: Personal, the side vault and the workspace Northwind, with the three actions (PR workspace-switcher)
   // the menu says which shared workspace's live channel is connected: Northwind "team · live"
   "workspace-menu-live": async () => {

@@ -106,7 +106,15 @@ export type SettingsState = {
     messages: Record<string, Message | null>; // per vault, "form" for the new and join forms
     busy: Record<string, boolean>; // what runs: a vault's id (one action per row at a time), or "form"
     // the one form, a new vault on `machine` or joining one (machine ""): where it and the "form" message show
-    form: { mode: "" | "new" | "join"; machine: string; name: string; folder: string; link: string };
+    // noHistory: a new workspace made without history (docs/workspaces.md), for good
+    form: {
+      mode: "" | "new" | "join";
+      machine: string;
+      name: string;
+      folder: string;
+      link: string;
+      noHistory: boolean;
+    };
   };
   pluginsPage: {
     loaded: boolean; // the secrets are known
@@ -196,7 +204,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     keys: {},
     messages: {},
     busy: {},
-    form: { mode: "", machine: "", name: "", folder: "", link: "" },
+    form: { mode: "", machine: "", name: "", folder: "", link: "", noHistory: false },
   },
   pluginsPage: { loaded: false, secrets: {}, imports: [], messages: {}, tests: {} },
   integrations: {

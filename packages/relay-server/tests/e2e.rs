@@ -1226,7 +1226,7 @@ fn trio(tag: &str, b_role: &str) -> (Team, Member, Member, Member) {
     let t = team(tag);
     let a = Member::new(&t.laptop, &t.lid, &t.key);
     // as the app does right after making a workspace: the member list first
-    a.remote(&t.vault).start(&a.save()).unwrap();
+    a.remote(&t.vault).start(false, &a.save()).unwrap();
     rounds(&t, &[&a], 1);
     let (b, _) = join(&a.invite(&t, b_role), &format!("{tag}-b"));
     rounds(&t, &[&b, &a], 1);
@@ -1536,8 +1536,30 @@ fn an_existing_workspace_gets_a_member_list() {
     let l = list_of(&t, &a);
     assert_eq!((l.members.len(), l.admin(&a.fp), l.admin(&b.fp), b.keys().creator, b.keys().head.map(|h| h.0)), (2, true, false, Some(a.keys().identity()), Some(l.len)));
     // the server's own removal is refused now: the list decides; and the only admin cannot leave
+    assert_eq!(a.c.call(serde_json::json!({"op": "vault_info", "vault": t.vault})).unwrap()["vault"]["nohistory"], false, "made as before");
+    assert!(!b.step(&t.vault).nohistory);
     assert!(t.laptop.vault_remove(&t.vault, &b.fp).unwrap_err().contains("member list"));
     assert!(a.remote(&t.vault).remove(&a.fp, &a.save()).unwrap_err().contains("no admin left"));
+}
+
+/// A workspace made without history (docs/workspaces.md): the entry right after the creation, `vault_info` says so to
+/// every member, and a member who joins later knows it from the list, kept in its key file.
+#[test]
+fn a_workspace_made_without_history_says_so_to_every_member() {
+    let t = team("nohistory");
+    let a = Member::new(&t.laptop, &t.lid, &t.key);
+    a.remote(&t.vault).start(true, &a.save()).unwrap();
+    rounds(&t, &[&a], 1);
+    let (b, _) = join(&a.invite(&t, "member"), "nohistory-b");
+    rounds(&t, &[&b, &a, &b], 1);
+    let l = list_of(&t, &a);
+    assert!(l.nohistory && l.members.contains_key(&b.fp) && l.len == 3, "create, nohistory, add");
+    let info = |m: &Member| m.c.call(serde_json::json!({"op": "vault_info", "vault": t.vault})).unwrap()["vault"]["nohistory"].clone();
+    assert_eq!((info(&a), info(&b)), (serde_json::json!(true), serde_json::json!(true)));
+    assert!(a.keys().nohistory && b.keys().nohistory && b.step(&t.vault).nohistory);
+    // no shared documents yet: they record who wrote each update (K1b makes that anonymous)
+    assert_eq!(a.remote(&t.vault).set_docs(true, &a.save()).unwrap_err(), relay_remote::vault::NO_DOCS_YET);
+    assert!(!list_of(&t, &a).docs);
 }
 
 /// An admin on the server before the list, whom another admin's upgrade added as a member (trust on upgrade): only an

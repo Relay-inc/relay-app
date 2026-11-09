@@ -10,7 +10,7 @@ import { useSettingsStore, type SettingsState } from "./store";
 type Shared = SettingsState["shared"];
 const st = () => useSettingsStore.getState().shared;
 const change = (recipe: (draft: Shared) => void) => useSettingsStore.setState(draft => recipe(draft.shared));
-const CLOSED: Shared["form"] = { mode: "", machine: "", name: "", folder: "", link: "" };
+const CLOSED: Shared["form"] = { mode: "", machine: "", name: "", folder: "", link: "", noHistory: false };
 
 /** Runs `work` with `key` busy: a vault's id (its row's buttons off until it ends) or "form". Its error shows under
  *  `key`. True when it worked. */
@@ -83,7 +83,7 @@ export function openForm(mode: Shared["form"]["mode"], machine = st().form.machi
     draft.messages.form = null;
   });
 }
-export const editForm = (patch: Partial<Pick<Shared["form"], "name" | "link">>) =>
+export const editForm = (patch: Partial<Pick<Shared["form"], "name" | "link" | "noHistory">>) =>
   change(draft => void Object.assign(draft.form, patch));
 export async function pickSharedFolder() {
   const folder = await backend.pickFolder();
@@ -93,9 +93,9 @@ export async function pickSharedFolder() {
 /** Make the vault on the form's machine: the form closes and its row shows the recovery key (a failed reload leaves
  *  it to Show recovery key). */
 export async function createSharedVault() {
-  const { machine, name, folder } = st().form;
+  const { machine, name, folder, noHistory } = st().form;
   await run("form", async () => {
-    const { id, recovery } = await backend.sharedVaultCreate(machine, name, folder);
+    const { id, recovery } = await backend.sharedVaultCreate(machine, name, folder, noHistory);
     change(draft => {
       draft.keys[id] = recovery;
       draft.form = { ...CLOSED, machine }; // what the reload says shows under that machine

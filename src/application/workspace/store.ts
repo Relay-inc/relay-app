@@ -17,6 +17,7 @@ type WorkspaceState = {
   live: Record<string, boolean>;
   /** Per shared vault id: this Mac only reads it (its last round said so), so its pages open read-only. */
   readers: Record<string, boolean>;
+  nohistory: Record<string, boolean>; // the shared workspaces made without history, by id
 };
 
 export const useWorkspaceStore = makeStore<WorkspaceState>(() => ({
@@ -28,4 +29,5 @@ export const useWorkspaceStore = makeStore<WorkspaceState>(() => ({
   onboarding: null,
   live: {},
   readers: {},
+  nohistory: {},
 }));

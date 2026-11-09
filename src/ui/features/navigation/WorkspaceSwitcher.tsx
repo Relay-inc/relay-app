@@ -145,6 +145,7 @@ export function WorkspaceSwitcher({
                   {[
                     // a team workspace says first how it syncs; the path, the longest, last where it may be cut
                     workspace.team ? t("ws.team") : "",
+                    workspace.nohistory ? t("ws.noHistory") : "",
                     workspace.team ? t(workspace.live ? "ws.live" : "ws.rounds") : "",
                     tn("ws.notes", workspace.notes),
                     workspace.folder.replace(/^\/Users\/[^/]+/, "~"),

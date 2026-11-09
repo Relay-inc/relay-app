@@ -12,7 +12,9 @@ use std::collections::BTreeMap;
 
 /// One entry. `kind`: `create`, `add`, `remove`, `leave`, `promote`, `demote`, `rekey` (epoch `epoch` is current, its
 /// key's sha256 `h`), `device` (the member `fp` set up Relay again: new `id` and `pk`), or `docs-on` / `docs-off` (an
-/// admin turns the making of the workspace's notes into documents on or off; no other field). `fp`: the member it is about;
+/// admin turns the making of the workspace's notes into documents on or off; no other field), or `nohistory` (the
+/// workspace keeps no record of who wrote what, docs/workspaces.md, Without history: only as the entry right after
+/// `create`, by its creator, no other field, and no entry undoes it). `fp`: the member it is about;
 /// `id`, `pk`: its Ed25519 identity and X25519 key (create, add, device). `role`: admin, member or reader (create: admin,
 /// add, and `role`, which an admin signs to give the member `fp` that role). `at`:
 /// epoch seconds; `by`: the signer's fingerprint; `sig`: its signature over `msg`.
@@ -67,6 +69,8 @@ pub struct List {
     pub pending: Option<u64>, pub len: u64, pub head: String, pub creator: String,
     /// The workspace's notes are made documents (`docs-on`, by an admin).
     pub docs: bool,
+    /// The workspace was made without history (`nohistory`, right after `create`): for good.
+    pub nohistory: bool,
     /// Per person (`who`): its name and email.
     pub people: BTreeMap<String, (String, String)>,
 }
@@ -123,7 +127,7 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
             "role" => uses(true, false, true, false, false) && person(false, false),
             "rekey" => uses(false, false, false, true, false) && person(false, false),
             "device" => uses(true, true, false, false, false) && person(false, false),
-            "docs-on" | "docs-off" => uses(false, false, false, false, false) && person(false, false),
+            "docs-on" | "docs-off" | "nohistory" => uses(false, false, false, false, false) && person(false, false),
             // the device is optional: without one a person is only named or renamed
             "person" => uses(hex64(&e.fp), false, false, false, false) && person(true, true),
             "person-remove" => uses(false, false, false, false, false) && person(true, false),
@@ -168,6 +172,9 @@ pub fn extend(vault: &str, mut l: List, mut hashes: Vec<String>, entries: &[Entr
                 "demote" if member => l.members.get_mut(&e.fp).unwrap().admin = false,
                 "role" if member => { let m = l.members.get_mut(&e.fp).unwrap(); (m.admin, m.reader) = (e.role == "admin", e.role == "reader"); }
                 "docs-on" | "docs-off" => l.docs = e.kind == "docs-on",
+                // never later: a workspace that had a history would keep it, and every member saw it as one with history
+                "nohistory" if i == 1 => l.nohistory = true,
+                "nohistory" => return bad("without history only right after the creation"),
                 "rekey" if e.epoch == l.epoch + 1 => {
                     l.epoch = e.epoch;
                     l.epochs.insert(e.epoch, (e.h.clone(), l.members.keys().cloned().collect()));
@@ -437,6 +444,38 @@ mod tests {
         // a Mac that saw the first knows the other history's head is not its own
         let other = check(V, &[l.clone(), vec![x2]].concat(), None).unwrap().0;
         assert!(!one.has(&hashes, other.len - 1, &other.head));
+    }
+    #[test]
+    fn a_workspace_without_history_says_so_right_after_its_creation_and_for_good() {
+        let (team, a, b, c) = team();
+        assert!(!check(V, &team, None).unwrap().0.nohistory);
+        let mut l = team[..1].to_vec();
+        add(&mut l, &a, Entry { kind: "nohistory".into(), ..Default::default() });
+        add(&mut l, &a, Entry { kind: "add".into(), fp: b.fp.clone(), id: b.id(), pk: "2".repeat(64), role: "member".into(), ..Default::default() });
+        add(&mut l, &a, Entry { kind: "add".into(), fp: c.fp.clone(), id: c.id(), pk: "3".repeat(64), role: "reader".into(), ..Default::default() });
+        let (list, hashes) = check(V, &l, Some(&a.id())).unwrap();
+        assert!(list.nohistory && list.members.len() == 3);
+        let by = |dev: &Dev, x: Entry| check(V, &[l.clone(), vec![sign(V, &list, &dev.fp, &dev.seed, x)]].concat(), None);
+        let flag = || Entry { kind: "nohistory".into(), ..Default::default() };
+        // later in the list, or a second one: refused, by an admin too
+        assert!(by(&a, flag()).unwrap_err().contains("only right after the creation"), "a second one");
+        let list0 = check(V, &team, None).unwrap().0;
+        let late = sign(V, &list0, &a.fp, &a.seed, flag());
+        assert!(check(V, &[team.clone(), vec![late]].concat(), None).unwrap_err().contains("only right after the creation"), "later");
+        // by a member or a reader
+        assert!(by(&b, flag()).unwrap_err().contains("not signed by an admin"));
+        assert!(by(&c, flag()).unwrap_err().contains("a reader only leaves"));
+        // with a field, or an entry that would undo it: no such entry
+        assert!(by(&a, Entry { kind: "nohistory".into(), fp: b.fp.clone(), ..Default::default() }).unwrap_err().contains("wrong fields"));
+        for undo in ["history", "nohistory-off", "history-on"] {
+            assert!(by(&a, Entry { kind: undo.into(), ..Default::default() }).unwrap_err().contains("wrong fields"), "{undo}");
+        }
+        // the list without it: entry 1 dropped, what follows no longer follows. And a list the creator made again
+        // without it is not the one a member saw (vault.rs refuses that as a fork)
+        let dropped: Vec<Entry> = [&l[..1], &l[2..]].concat();
+        assert!(check(V, &dropped, None).is_err());
+        let again = check(V, &team, None).unwrap().0;
+        assert!(!list.has(&hashes, again.len - 1, &again.head));
     }
     #[test]
     fn an_admin_adds_and_changes_a_reader_who_signs_nothing_but_its_leave() {

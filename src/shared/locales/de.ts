@@ -217,6 +217,7 @@ export default {
   "mig.teamChats":
     "Diese Gespräche laufen in {target} weiter. Ihre Transkripte bleiben auf diesem Mac, aber was sie schon enthalten (alles Gesagte und jede gelesene Datei) kann in Notizen landen, die jedes Mitglied sieht:",
   "ws.team": "Team",
+  "ws.noHistory": "ohne Verlauf",
   "ws.live": "live",
   "ws.rounds": "synchronisiert alle 10 s",
   "ws.openFolder": "Ordner als Workspace öffnen…",
@@ -1365,6 +1366,12 @@ export default {
   "set.sharedNewFolderHelp":
     "Ein leerer Ordner startet als neuer Workspace. Ein Ordner mit Notizen wird so hochgeladen, wie er ist.",
   "set.sharedJoinFolderHelp": "Ein leerer Ordner auf diesem Mac. Der Workspace kommt dort hinein.",
+  "set.sharedNoHistory": "Workspace ohne Verlauf",
+  "set.sharedNoHistoryHelp":
+    "Relay hält nicht fest, wer was geändert hat: Konfliktkopien nennen keinen Computer. Mitglieder und ihre Rollen bleiben sichtbar, ein kleines Team ist nicht anonym, und ein Mitglied kann außerhalb von Relay weiterhin eine eigene Kopie behalten. Das lässt sich später nicht mehr ausschalten.",
+  "set.sharedNoHistoryLabel": "Ohne Verlauf",
+  "set.sharedNoHistoryTip":
+    "Ohne Verlauf erstellt: Relay hält hier nicht fest, wer was geändert hat. Mitglieder und ihre Rollen bleiben sichtbar.",
   "set.sharedCreate": "Erstellen",
   "set.sharedRecovery": "Wiederherstellungsschlüssel",
   "set.sharedRecoveryHelp":

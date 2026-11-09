@@ -206,6 +206,17 @@ pub const TEAM_DROP: [&str; 3] = ["System/rules/core/user-profile.md", "System/r
 /// without TEAM_DROP, with the team overlay (the app's resources/team-vault: CLAUDE.md, team.md, the team setup skill)
 /// copied over it. Otherwise as `create_default`.
 pub fn create_team(template: &Path, overlay: &Path, dest: &Path) -> Result<(), String> { create(template, Some(overlay), dest) }
+/// What the team starter's session log asks of each entry, and what it asks in a workspace made without history
+/// (docs/workspaces.md): no member's name.
+const LOG_WITH_NAME: &str = "what the member came in to do (with their name)";
+const LOG_WITHOUT_NAME: &str = "what the member came in to do (no names: this workspace keeps no record of who did what)";
+/// The team starter in `dest`, made without history: its session protocol asks for no name in `Log.md`.
+pub fn without_names(dest: &Path) -> Result<(), String> {
+    let p = dest.join("System/rules/core/session-protocol.md");
+    let s = fs::read_to_string(&p).map_err(|e| e.to_string())?;
+    if !s.contains(LOG_WITH_NAME) { return Ok(()); }
+    relay_remote::sync::write_atomic(&p, s.replace(LOG_WITH_NAME, LOG_WITHOUT_NAME).as_bytes(), None).map(|_| ()).map_err(|e| e.to_string())
+}
 fn create(template: &Path, overlay: Option<&Path>, dest: &Path) -> Result<(), String> {
     if dest.join("System/rules/core/work-state.md").is_file() { return Ok(()); }
     // hidden files (.DS_Store) do not count, someone else's notes do
@@ -486,6 +497,11 @@ mod tests {
         assert!(fs::read_to_string(dest.join("System/skills/setup/SKILL.md")).unwrap().contains("team.md"));
         assert!(!fs::read_to_string(dest.join(".relay/config.json")).unwrap().contains("Personal"));
         assert_eq!(fs::read_link(dest.join(".claude")).unwrap(), PathBuf::from("System"));
+        // made without history: the session log asks for no member's name
+        let log = || fs::read_to_string(dest.join("System/rules/core/session-protocol.md")).unwrap();
+        assert!(log().contains(LOG_WITH_NAME), "the starter's line, or without_names changes nothing");
+        without_names(&dest).unwrap();
+        assert!(!log().contains("with their name") && log().contains(LOG_WITHOUT_NAME));
         // the personal first start is as it was
         let own = tmp("own").join("Relay");
         create_default(&shipped("default-vault"), &own).unwrap();

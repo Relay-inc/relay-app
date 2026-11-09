@@ -145,6 +145,7 @@ export type SharedStatus = {
   reader?: boolean; // this Mac only reads the workspace: its rounds only pull
   readers?: string[] | null; // the member list's readers (fingerprints), null while the workspace has no list
   unsent?: number; // a reader's changes in the folder that its rounds leave out
+  nohistory?: boolean; // made without history (the member list's `nohistory`): its conflict copies name no Mac
 };
 /** A person on a shared vault's member list (docs/workspaces.md, People): `who` its id, `devices` fingerprints. */
 export type SharedPerson = { who: string; name: string; email: string; devices: string[] };

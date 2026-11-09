@@ -685,9 +685,10 @@ export const onVaultSync = (handler: (last: NonNullable<VaultSync["last"]>) => v
 export const sharedVaultsStatus = () => invoke<Record<string, SharedStatus>>("shared_vaults_status");
 export const onSharedVaults = (handler: (status: Record<string, SharedStatus>) => void) =>
   listen<Record<string, SharedStatus>>("shared-vaults", e => handler(e.payload));
-/** A new vault on a paired machine; `recovery` is its key (64 hex), shown again with `sharedVaultRecovery`. */
-export const sharedVaultCreate = (machine: string, name: string, folder: string) =>
-  invoke<{ id: string; recovery: string }>("shared_vault_create", { machine, name, folder });
+/** A new vault on a paired machine; `recovery` is its key (64 hex), shown again with `sharedVaultRecovery`.
+ *  `noHistory`: made without history, for good. */
+export const sharedVaultCreate = (machine: string, name: string, folder: string, noHistory = false) =>
+  invoke<{ id: string; recovery: string }>("shared_vault_create", { machine, name, folder, noHistory });
 /** Join with an invite link into an empty folder. */
 export const sharedVaultJoin = (link: string, folder: string) =>
   invoke<{ id: string; name: string }>("shared_vault_join", { link, folder });

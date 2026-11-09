@@ -137,7 +137,7 @@ blob name 64 lowercase hex. Anything else is refused.
 | Request | Who | Reply |
 |---|---|---|
 | `vault_create {name}` | a full device (not vaults_only, not linked) | `{vault: {id, name}}`, the caller is its admin |
-| `vault_info {vault}` | member | `{vault: {id, name, role, me, members: [{name, fp, role, added, pk, id, sig, mac}], people: [{who, name, email, devices}], invites: [{id, role, expires}], epoch, rekey, keys: {epoch: {sealed, holders}}}}`, `people` the member list's people with their devices' fingerprints (`[]` without a list), invites all for an admin and the caller's own for a member, `keys` only the caller's sealed key and who each rotation was sealed to |
+| `vault_info {vault}` | member | `{vault: {id, name, role, me, members: [{name, fp, role, added, pk, id, sig, mac}], people: [{who, name, email, devices}], invites: [{id, role, expires}], epoch, rekey, keys: {epoch: {sealed, holders}}, nohistory}}`, `people` the member list's people with their devices' fingerprints (`[]` without a list), `nohistory` whether the list makes the workspace one without history (read from the list like the roles), invites all for an admin and the caller's own for a member, `keys` only the caller's sealed key and who each rotation was sealed to |
 | `vault_invite {vault, role, wrapped, epoch}` | admin, or a member that is a person on the list (role member only) | `{invite: {id, code, expires}}`, `role` admin, member or reader, `wrapped` hex at most 256 KiB, expires in 24 h; `epoch` the newest key sealed in, refused (`key changed`) when it is not the current one |
 | `vault_invite_revoke {vault, invite}` | admin, or a member for an invite it made | `{}`, only that invite |
 | `vault_join {vault, invite, name, proof}` | anyone with a valid link | `{vault: {id, name}, role, wrapped}`, `proof` = `tls::proof(code, client_fp, server_fp)`, 5 wrong proofs drop the invite, success consumes it, adds the device to `clients.json` as vaults_only when it is new (name deduplicated as in `pair`) and as a member |
@@ -405,6 +405,9 @@ Every hex field is lowercase, and every field a kind does not use is empty.
   just before, `leave` by the
   member itself; `rekey` (epoch `epoch` is current, the sha256 of its key `h`) by an admin. No entry may leave the list
   without an admin, and none may leave it empty.
+- `nohistory` (no other field) makes the workspace one without history (below). Only as entry 1, right after `create`,
+  so signed by the creator. Anywhere else, a second one, or one by a member or reader is refused, and no entry undoes
+  it. A list without it is another history than the one a member saw, which its Relay refuses as a fork.
 - **Roles** are `admin`, `member` and `reader`, per device. An admin of the list picks one in Members, and its Relay writes
   `promote` or `demote` between admin and member (as before readers, so a list without readers stays readable for an
   older Relay) and a `role` entry for anything with reader. `promote` makes anyone an admin, `demote` makes an admin a
@@ -469,6 +472,49 @@ Every hex field is lowercase, and every field a kind does not use is empty.
   for a new key (the removed member still holds the current one). An invite does not help such a member: the server
   keeps its old entry and never notes the invite it joined with. Two admins at once:
   the server takes one list, and the other admin takes it on its next round.
+
+## Without history
+
+A workspace made without history keeps what its members write, and no record of who wrote what. It is chosen once,
+when the workspace is made (New workspace › Workspace without history), and cannot be turned off: a workspace that
+had a history would keep it. Its row in Settings › Machines and the workspace menu say "Without history".
+
+- **The flag** is the member list's `nohistory` entry, right after `create` (Members, above). Every Mac checks it like
+  any entry. Once its Relay saw it, the Mac keeps `nohistory` in its key file, so a round that cannot check the list
+  (held back, a fork) still writes nothing that names it. The server reads it from the list and returns it in
+  `vault_info`. It enforces nothing with it yet.
+- **Conflict copies name no Mac:** `Notes/A (conflict 2026-10-02 1530).md` instead of `Notes/A (conflict Studio Mac
+  2026-10-02 1530).md`.
+- **No shared documents yet.** A document records the device behind every update, its page history, comments and
+  cursors (Documents, above). Until that is anonymous, an admin cannot turn "Notes as shared documents" on here
+  (`a workspace without history has no shared documents yet`), the switch does not show, and no round makes notes
+  documents.
+- **What Relay writes into it.** The team starter's session protocol asks for no member's name in `Log.md`. Vault
+  capture follows the workspace's own rules and adds no author field. The starter's templates and hooks write no
+  author, computer or user name (`source-author` on a Reference is the source's author). Hooks do not run in a shared
+  workspace.
+
+What it does not hide:
+
+- **The member list:** who is a member, with which role and devices, and who added whom. It is who may, not who did.
+- **The server** still knows the device behind each request (access control), logs a line per pairing or join, and
+  counts quota and rate limits per device.
+- **A small team is not anonymous.** With three members and one of them online, a change at 14:02 names that person.
+- **Copies outside Relay.** A member can keep their own git repo or backup of the folder. Relay does not sync it and
+  cannot prevent it.
+- **Content.** A note that says who wrote it is content, and Relay does not touch content.
+
+| Where a change could name a device | In a workspace with history | Without history |
+|---|---|---|
+| Records, `vault_put` and `vault_delete`, the live `files` frame | No writer | The same |
+| Conflict copies | The Mac's name and the minute | The minute |
+| Documents, page history, comments, cursors | The device per update | Not made (no documents yet) |
+| Member list, Members | Devices, people, roles, who added whom | The same |
+| Server: stderr, quota, rate limit | Per device | The same |
+| Starter session log | The member's name per entry | No names |
+
+**Compatibility.** A Relay from before this refuses a list with a `nohistory` entry, as an unknown kind: every member
+updates before joining such a workspace.
 
 ## Key rotation
 

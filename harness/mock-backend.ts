@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-member-dark|shared-keeper|shared-people|shared-readers|shared-reader|shared-live|shared-live-dark, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-member-dark|shared-keeper|shared-people|shared-readers|shared-reader|shared-live|shared-live-dark|shared-nohistory, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
@@ -75,8 +75,12 @@ const people = fixture === "shared-people" || fixture === "shared-readers";
 // shared-rekey: someone left the vault, and the key change waits for a member whose Relay has no public key yet
 // shared-live (-dark): "shared", and a page of the side vault is a shared document two mock peers edit (ticket 9)
 const live = fixture === "shared-live" || fixture === "shared-live-dark";
+// shared-nohistory: "shared", the workspace Northwind made without history (its member list's `nohistory`): its
+// conflict copy names no Mac
+const noHistory = fixture === "shared-nohistory";
 const shared =
   fixture === "shared" ||
+  noHistory ||
   fixture === "kb-shared" ||
   fixture === "shared-invite" ||
   fixture === "shared-rekey" ||
@@ -170,6 +174,9 @@ let sharedPeople: { who: string; name: string; email: string; devices: string[] 
   ? structuredClone(vault.sharedPeople)
   : [];
 for (const s of Object.values(sharedStatus).slice(0, 1)) s.people = sharedPeople;
+if (noHistory)
+  for (const s of Object.values(sharedStatus).slice(0, 1))
+    Object.assign(s, { nohistory: true, conflicts: s.conflicts.map((c: string) => c.replace(/\(conflict [^)]*? (\d{4}-)/, "(conflict $1")) });
 let sharedInvites = [{ id: "4d2e8a1b6c3f9e70", role: "member", expires: Math.floor(Date.now() / 1000) + 20 * 3600 }];
 let pendingInvite: string | null = fixture === "shared-invite" ? vault.inviteLink("b81c0e5f2a7d3946") : null;
 const hex = (n: number, seed: number) =>
@@ -444,6 +451,7 @@ function handle(cmd: string, a: Args): unknown {
         ...(settings.sharedVaults ?? []),
         { id, name: a.name.trim(), host, port, fp, folder: a.folder, role: "admin" },
       ];
+      if (a.noHistory) sharedStatus[id] = { at: Math.floor(Date.now() / 1000), pushed: 0, pulled: 0, conflicts: [], errors: [], held: [], bad: 0, admin: true, nohistory: true };
       return { id, recovery: hex(64, 5) };
     }
     // the key this Mac holds, the same one `shared_vault_create` gave

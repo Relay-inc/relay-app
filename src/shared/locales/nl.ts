@@ -217,6 +217,7 @@ export default {
   "mig.teamChats":
     "Deze gesprekken lopen verder in {target}. Hun transcripten blijven op deze Mac, maar wat ze al bevatten (alles wat gezegd is en elk bestand dat ze lazen) kan in notities belanden die elk lid ziet:",
   "ws.team": "team",
+  "ws.noHistory": "zonder historiek",
   "ws.live": "live",
   "ws.rounds": "synchroniseert elke 10 s",
   "ws.openFolder": "Open een map als workspace…",
@@ -1357,6 +1358,12 @@ export default {
   "set.sharedFolder": "Map",
   "set.sharedNewFolderHelp": "Een lege map start als nieuwe workspace. Een map met notities gaat online zoals ze is.",
   "set.sharedJoinFolderHelp": "Een lege map op deze Mac. De workspace komt erin.",
+  "set.sharedNoHistory": "Workspace zonder historiek",
+  "set.sharedNoHistoryHelp":
+    "Relay houdt niet bij wie wat wijzigde: conflictkopieën noemen geen computer. Leden en hun rollen blijven zichtbaar, een klein team is niet anoniem, en een lid kan buiten Relay nog een eigen kopie bijhouden. Dit kan later niet meer uit.",
+  "set.sharedNoHistoryLabel": "Zonder historiek",
+  "set.sharedNoHistoryTip":
+    "Gemaakt zonder historiek: Relay houdt hier niet bij wie wat wijzigde. Leden en hun rollen blijven zichtbaar.",
   "set.sharedCreate": "Maken",
   "set.sharedRecovery": "Herstelsleutel",
   "set.sharedRecoveryHelp":

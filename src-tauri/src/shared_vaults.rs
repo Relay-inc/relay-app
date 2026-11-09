@@ -71,7 +71,9 @@ pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub confl
     pub people: Option<Vec<relay_remote::members::Person>>,
     /// `reader`: this Mac only reads the workspace (its rounds only pull, docs/workspaces.md, Roles), `readers` the
     /// list's readers, `unsent` changes in the folder here a reader's round left out
-    pub reader: bool, pub readers: Option<Vec<String>>, pub unsent: usize }
+    pub reader: bool, pub readers: Option<Vec<String>>, pub unsent: usize,
+    /// the workspace was made without history (docs/workspaces.md): its conflict copies name no Mac
+    pub nohistory: bool }
 #[derive(Clone, serde::Serialize)]
 pub struct Changed { pub fp: String, pub name: String }
 
@@ -252,6 +254,7 @@ impl Hub {
                 std::fs::create_dir_all(&v.folder).ok();
                 let base: Manifest = crate::util::read_json(base_path(data, &v.id));
                 let remote = client(v, me).sealed(&v.id, key.clone());
+                st.nohistory = key.nohistory;
                 // the keys first: a new one taken, the members pinned, this Mac's keys sent, a due rotation made
                 // (admin); every change saved before anything goes on (docs/workspaces.md, Key rotation)
                 match remote.keep_keys(&|k| save_key(data, &v.id, k)) {
@@ -260,10 +263,13 @@ impl Hub {
                         st.warnings = k.warnings;
                         st.rekeying = k.rekeying;
                         (st.docs, st.admin, st.admins, st.listed, st.people, st.reader, st.readers) = (k.docs, k.admin, k.admins, k.listed, k.people, k.reader, k.readers);
+                        st.nohistory |= k.nohistory;
                         st.changed = k.changed.into_iter().map(|(fp, name)| Changed { fp, name }).collect();
                     }
                     Err(e) => st.errors.push(format!("key: {e}")),
                 }
+                // a workspace without history: its conflict copies carry the minute alone, no Mac's name
+                let name = if st.nohistory { "" } else { name };
                 // the documents: every log the server has further, the notes they changed written out; a note that is a
                 // document stays out of the file rounds, so it never has two writers (docs/workspaces.md, Documents)
                 let docs = self.docs(data, v, me, load_key(data, &v.id).unwrap_or_else(|_| key.clone()));
@@ -317,7 +323,8 @@ impl Hub {
                 if !r.errors.is_empty() { one.allowed = allowed.clone(); }
                 // the workspace's notes made documents, SEED a round, on an admin's Mac once an admin turned it on: only
                 // notes this round left the same here and on the server (the rest stay on the file rounds until then)
-                if has_docs && st.docs && st.admin && r.errors.is_empty() {
+                // never on a workspace without history (yet): a document records who wrote each update
+                if has_docs && st.docs && st.admin && !st.nohistory && r.errors.is_empty() {
                     let agreed = |p: &str, h: &str| next.get(p).is_some_and(|e| e.hash == h) && !r.conflicts.iter().any(|c| c == p);
                     docs.seed(folder, &f, SEED, &agreed);
                     st.warnings.extend(docs.take_warnings());
@@ -355,7 +362,8 @@ impl Hub {
             let Ok(f) = filter(Path::new(folder)) else { return };
             let stamp = chrono::Local::now().format("%Y-%m-%d %H%M").to_string();
             let root = Path::new(folder);
-            let keep = |p: &str, b: &[u8]| { sync::write_atomic(&root.join(conflict_copy(&f, p, &crate::sys_name(), &stamp)), b, None).ok(); };
+            let name = if self.status.lock().unwrap().get(id).is_some_and(|s| s.nohistory) { String::new() } else { crate::sys_name() };
+            let keep = |p: &str, b: &[u8]| { sync::write_atomic(&root.join(conflict_copy(&f, p, &name, &stamp)), b, None).ok(); };
             for p in docs.export(root, &f, &keep).0 { crate::watch::exported(&root.join(&p)); }
         });
     }
@@ -636,9 +644,10 @@ pub fn shared_vault_pending_invite() -> Option<String> { INVITE.lock().unwrap().
 pub fn shared_vaults_status(state: St) -> Value { serde_json::to_value(&*state.shared.status.lock().unwrap()).unwrap_or_default() }
 
 /// Make a shared vault on a paired machine: the server keeps it, this Mac makes the key. A folder that is not there
-/// or empty starts as Relay's team starter (vault::create_team); one with notes is uploaded as it is. Returns {id, recovery}.
+/// or empty starts as Relay's team starter (vault::create_team); one with notes is uploaded as it is. `no_history`:
+/// made without history (docs/workspaces.md), for good. Returns {id, recovery}.
 #[tauri::command]
-pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String, name: String, folder: String) -> Result<Value, String> {
+pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String, name: String, folder: String, no_history: Option<bool>) -> Result<Value, String> {
     let s = state.settings.lock().unwrap().clone();
     let m = crate::machines::Machines::find(&s, &machine).ok_or("pick a paired machine for the vault")?;
     let name: String = name.trim().chars().filter(|c| !c.is_control()).take(60).collect();
@@ -653,6 +662,8 @@ pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String,
         // the folder first: a vault that could not get its notes is not made on the server at all
         let empty = !std::fs::read_dir(&folder).is_ok_and(|mut d| d.any(|e| e.is_ok_and(|e| e.file_name() != ".DS_Store")));
         if empty { crate::vault::create_team(&template, &overlay, Path::new(&folder))?; }
+        // without history: the starter asks for no member's name in what it keeps (a folder with notes is the user's)
+        if empty && no_history.unwrap_or(false) { crate::vault::without_names(Path::new(&folder))?; }
         // this Mac's own secrets with the key: saved before the server hears of them (the first round sends them)
         let mut k = Keys::from(VaultKey::generate());
         k.ensure();
@@ -667,7 +678,7 @@ pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String,
     let (vid, c) = (r.id.clone(), client(&Shared { id: r.id.clone(), name: String::new(), host: m["host"].as_str().unwrap_or("").into(), port: m["port"].as_u64().unwrap_or(0) as u16,
         fp: m["fp"].as_str().unwrap_or("").into(), folder: String::new(), role: String::new() }, &state.machines.id));
     let (k2, me) = (key.clone(), state.machines.id.fingerprint());
-    tauri::async_runtime::spawn_blocking(move || c.sealed(&vid, k2).start(&|k| save_key(&data, &vid, k)).map_err(|e| {
+    tauri::async_runtime::spawn_blocking(move || c.sealed(&vid, k2).start(no_history.unwrap_or(false), &|k| save_key(&data, &vid, k)).map_err(|e| {
         // nothing left behind: the workspace on the server (its only member leaving takes it along) and the key file
         c.vault_remove(&vid, &me).ok();
         std::fs::remove_file(key_path(&data, &vid)).ok();
@@ -962,6 +973,8 @@ mod tests {
         // a rule's conflict copy goes out of rules/, which loads into every conversation; a note's stays beside it
         assert_eq!(conflict_copy(&f, "System/rules/core/memory.md", "m", "s"), "System/conflicts/rules/core/memory (conflict m s).md");
         assert_eq!(conflict_copy(&f, "Notes/a.md", "m", "s"), "Notes/a (conflict m s).md");
+        assert_eq!(conflict_copy(&f, "Notes/a.md", "", "s"), "Notes/a (conflict s).md", "without history");
+        assert_eq!(conflict_copy(&f, "System/rules/a.md", "", "s"), "System/conflicts/rules/a (conflict s).md");
         // the same folder on a Mac's disk, by case or by a ligature: out of rules/ too
         assert_eq!(conflict_copy(&f, "system/Rules/core/memory.md", "m", "s"), "System/conflicts/rules/core/memory (conflict m s).md");
         assert_eq!(conflict_copy(&f, "Sy\u{FB06}em/rules/a.md", "m", "s"), "System/conflicts/rules/a (conflict m s).md");

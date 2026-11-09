@@ -169,11 +169,14 @@ impl Vaults {
         // an admin sees every open invite, a member the ones it made (for its own devices)
         let invites: Vec<Value> = v.invites.iter().filter(|i| role == "admin" || i.by == fp).map(|i| json!({"id": i.id, "role": i.role, "expires": i.expires})).collect();
         // the people on the member list, each with its devices: for the settings, every member's Mac checks the list itself
-        let people = v.list().map(|l| l.persons()).unwrap_or_default();
+        // made without history (docs/workspaces.md), read from the member list as the people are
+        let list = v.list();
+        let people = list.as_ref().map(|l| l.persons()).unwrap_or_default();
         // each rotated key as sealed to the caller (nobody gets another member's), with who it was sealed to: the
         // rotating admin signed that list
         let keys: serde_json::Map<String, Value> = v.keys.iter().filter_map(|(e, by)| by.get(fp).map(|w| (e.clone(), json!({"sealed": w})))).collect();
-        Ok(json!({"vault": {"id": v.id, "name": v.name, "role": role, "me": fp, "members": members, "people": people, "invites": invites, "epoch": v.epoch, "rekey": v.rekey, "keys": keys}}))
+        Ok(json!({"vault": {"id": v.id, "name": v.name, "role": role, "me": fp, "members": members, "people": people, "invites": invites, "epoch": v.epoch, "rekey": v.rekey, "keys": keys,
+            "nohistory": list.is_some_and(|l| l.nohistory)}}))
     }
 
     /// An admin opens an invite: its code goes into the link. `epoch`: the newest key the inviter's Relay sealed into

@@ -217,11 +217,13 @@ pub fn plan(mode: Mode, base: &Manifest, local: &Manifest, remote: &Manifest, co
 }
 
 /// "Notes/A.md","LServer","2026-10-02 1530" -> "Notes/A (conflict LServer 2026-10-02 1530).md". A dotfile or a name
-/// without a dot gets the tag at the end, so the copy keeps its kind.
+/// without a dot gets the tag at the end, so the copy keeps its kind. No machine (a workspace without history):
+/// "Notes/A (conflict 2026-10-02 1530).md".
 pub fn conflict_copy(path: &str, machine: &str, stamp: &str) -> String {
     let (dir, name) = match path.rfind('/') { Some(i) => path.split_at(i + 1), None => ("", path) };
     let (stem, ext) = match name.rfind('.') { Some(i) if i > 0 => name.split_at(i), _ => (name, "") };
-    format!("{dir}{stem} (conflict {machine} {stamp}){ext}")
+    let tag = if machine.is_empty() { stamp.to_string() } else { format!("{machine} {stamp}") };
+    format!("{dir}{stem} (conflict {tag}){ext}")
 }
 
 /// Line union for an index: the local lines in their order, then the remote lines the local side lacks, in their order,
@@ -980,6 +982,7 @@ mod tests {
         assert_eq!(conflict_copy("x/.env", "m", "s"), "x/.env (conflict m s)");
         assert_eq!(conflict_copy("v1.2/notes", "m", "s"), "v1.2/notes (conflict m s)");
         assert_eq!(conflict_copy("a.tar.gz", "m", "s"), "a.tar (conflict m s).gz");
+        assert_eq!(conflict_copy("Notes/A.md", "", "2026-10-02 1530"), "Notes/A (conflict 2026-10-02 1530).md", "without history");
     }
     #[test] fn merge_lines_cases() {
         assert_eq!(merge_lines("a\nb\n", "a\nc\n"), "a\nb\nc\n");

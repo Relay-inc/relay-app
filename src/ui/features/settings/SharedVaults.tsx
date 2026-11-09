@@ -277,6 +277,11 @@ function SharedRow({ vault }: { vault: SharedVault }) {
         <div className={ROW_DETAILS}>
           <span className="text-[13px] font-semibold text-s-fg">{vault.name}</span>
           <span className={PILL}>{roleName(mine)}</span>
+          {status?.nohistory ? (
+            <span className={PILL} title={t("set.sharedNoHistoryTip")}>
+              {t("set.sharedNoHistoryLabel")}
+            </span>
+          ) : null}
           <span className="font-mono text-xs text-s-muted">{vault.host}</span>
         </div>
         <div className={ROW_ACTIONS}>
@@ -348,7 +353,8 @@ function SharedRow({ vault }: { vault: SharedVault }) {
             {/* a reader's rounds only pull: what changed in the folder here stays here, said once */}
             {status.unsent ? <StatusLine level="warn">{tn("set.sharedUnsent", status.unsent)}</StatusLine> : null}
             {/* making the notes documents: off until an admin turns it on; every member sees which */}
-            {files && (status.admin || status.docs) ? (
+            {/* a workspace without history has no documents yet: they record who wrote each update */}
+            {files && !status.nohistory && (status.admin || status.docs) ? (
               <div className="flex items-start gap-3 py-1">
                 <div className="grid flex-1 gap-0.5">
                   <label htmlFor={`docs-${vault.id}`} className="text-xs text-s-fg">
@@ -644,6 +650,14 @@ function SharedForm({ machine }: { machine: string }) {
           />
         </Field>
         {folder}
+        <Field label={t("set.sharedNoHistory")} hint={t("set.sharedNoHistoryHelp")} id="shared-nohistory">
+          <input
+            id="shared-nohistory"
+            type="checkbox"
+            checked={form.noHistory}
+            onChange={e => editForm({ noHistory: e.target.checked })}
+          />
+        </Field>
         {footer(t("set.sharedCreate"), busy || !form.name.trim() || !form.folder, createSharedVault)}
       </div>
     );

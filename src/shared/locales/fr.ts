@@ -219,6 +219,7 @@ export default {
   "mig.teamChats":
     "Ces conversations continuent dans {target}. Leurs transcriptions restent sur ce Mac, mais ce qu'elles contiennent déjà (tout ce qui a été dit et chaque fichier lu) peut finir dans des notes que chaque membre voit :",
   "ws.team": "équipe",
+  "ws.noHistory": "sans historique",
   "ws.live": "en direct",
   "ws.rounds": "synchronisé toutes les 10 s",
   "ws.openFolder": "Ouvrir un dossier comme espace de travail…",
@@ -1371,6 +1372,12 @@ export default {
   "set.sharedNewFolderHelp":
     "Un dossier vide démarre comme nouvel espace de travail. Un dossier avec des notes est envoyé tel quel.",
   "set.sharedJoinFolderHelp": "Un dossier vide sur ce Mac. L'espace de travail s'y synchronise.",
+  "set.sharedNoHistory": "Espace de travail sans historique",
+  "set.sharedNoHistoryHelp":
+    "Relay ne garde aucune trace de qui a modifié quoi : les copies de conflit ne nomment aucun ordinateur. Les membres et leurs rôles restent visibles, une petite équipe n'est pas anonyme, et un membre peut toujours garder sa propre copie hors de Relay. Ce choix est définitif.",
+  "set.sharedNoHistoryLabel": "Sans historique",
+  "set.sharedNoHistoryTip":
+    "Créé sans historique : Relay ne garde ici aucune trace de qui a modifié quoi. Les membres et leurs rôles restent visibles.",
   "set.sharedCreate": "Créer",
   "set.sharedRecovery": "Clé de récupération",
   "set.sharedRecoveryHelp":

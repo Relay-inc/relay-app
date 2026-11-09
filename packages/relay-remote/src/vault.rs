@@ -122,17 +122,20 @@ fn frame_aad(e: u32, l: &str, vault: &str, kind: &str, doc: &str, from: &str, n:
 /// `head`: the member list as this Mac last checked it (length, last hash); the server may only add to it. `expect`:
 /// the head an invite link named, until the list is checked once. `joined`: the link's secret, until an admin added
 /// this Mac to the list. `invites`: the invites this Mac made (id, secret, role, epoch), until their joiner is added.
+/// `nohistory`: the member list says the workspace was made without history, kept here once seen, so a round that
+/// cannot check the list (held back, a fork) still writes nothing that names this Mac.
 #[derive(Clone)]
 pub struct Keys {
     ring: BTreeMap<u32, VaultKey>, pub secret: Option<[u8; 32]>, pub sign: Option<[u8; 32]>, pub creator: Option<String>,
     pub head: Option<(u64, String)>, pub expect: Option<String>, pub joined: Option<String>, pub invites: Vec<Invited>,
+    pub nohistory: bool,
 }
 /// An invite this Mac made: its id, the link's secret, the role, the epoch it carried keys up to, when it expires, and
 /// `who`: the person whoever joins with it is added under ("" none).
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Invited { pub id: String, pub secret: String, pub role: String, pub epoch: u32, pub expires: u64, pub who: String }
 impl From<VaultKey> for Keys {
-    fn from(k: VaultKey) -> Keys { Keys { ring: BTreeMap::from([(0, k)]), secret: None, sign: None, creator: None, head: None, expect: None, joined: None, invites: vec![] } }
+    fn from(k: VaultKey) -> Keys { Keys { ring: BTreeMap::from([(0, k)]), secret: None, sign: None, creator: None, head: None, expect: None, joined: None, invites: vec![], nohistory: false } }
 }
 impl std::fmt::Debug for Keys { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "Keys(epoch {})", self.epoch()) } }
 impl Keys {
@@ -272,6 +275,7 @@ impl Keys {
                 ["head", n, h] if hex64(h) => { once(k.head.is_some())?; k.head = Some((n.parse().ok()?, h.into())) }
                 ["expect", h] if hex64(h) => { once(k.expect.is_some())?; k.expect = Some(h.into()) }
                 ["joined", h] if hex64(h) => { once(k.joined.is_some())?; k.joined = Some(h.into()) }
+                ["nohistory"] => { once(k.nohistory)?; k.nohistory = true }
                 ["invite", id, sec, role, e, x, ref who @ ..] if id.len() == 16 && id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) && hex64(sec) && ["admin", "member", "reader"].contains(&role)
                     && (who.is_empty() || (who.len() == 1 && hex64(who[0]))) => {
                     k.invites.push(Invited { id: id.into(), secret: sec.into(), role: role.into(), epoch: e.parse().ok()?, expires: x.parse().ok()?, who: who.first().map_or(String::new(), |w| w.to_string()) });
@@ -296,6 +300,7 @@ impl Keys {
         if let Some((n, h)) = &self.head { out += &format!("head {n} {h}\n"); }
         if let Some(h) = &self.expect { out += &format!("expect {h}\n"); }
         if let Some(h) = &self.joined { out += &format!("joined {h}\n"); }
+        if self.nohistory { out += "nohistory\n"; }
         for i in &self.invites {
             out += &format!("invite {} {} {} {} {}", i.id, i.secret, i.role, i.epoch, i.expires);
             out += &if i.who.is_empty() { "\n".to_string() } else { format!(" {}\n", i.who) };
@@ -304,12 +309,14 @@ impl Keys {
     }
     /// What Settings shows as the recovery key: the keys alone. Before any rotation the one hex line it always was.
     pub fn recovery(&self) -> String {
-        Keys { secret: None, sign: None, creator: None, head: None, expect: None, joined: None, invites: vec![], ..self.clone() }.format().trim_end().to_string()
+        Keys { secret: None, sign: None, creator: None, head: None, expect: None, joined: None, invites: vec![], nohistory: false, ..self.clone() }.format().trim_end().to_string()
     }
 }
 use crate::members::hex64;
 fn pub_msg(vault: &str, fp: &str, pk: &str, id: &str) -> String { format!("pub:{vault}:{fp}:{pk}:{id}") }
 fn create_msg(vault: &str, fp: &str, id: &str, pk: &str) -> String { format!("create:{vault}:{fp}:{id}:{pk}") }
+/// What `set_docs` answers on a workspace without history: its documents wait until they name no author.
+pub const NO_DOCS_YET: &str = "a workspace without history has no shared documents yet";
 /// What `start` answers a relay-server that knows no member list.
 pub const OLD_SERVER: &str = "This relay-server needs an update for workspaces with a member list.";
 /// Per vault, the member list as this app last checked it: the next round checks only what is new.
@@ -487,7 +494,9 @@ fn listed_role(m: &Value) -> &'static str { if m["role"] == "reader" { "reader" 
 /// with their devices, None when there is no list yet.
 pub struct KeyStep { pub keys: Option<Keys>, pub warnings: Vec<String>, pub changed: Vec<(String, String)>, pub errors: Vec<String>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>>, pub people: Option<Vec<members::Person>>,
     /// this Mac only reads (the server's role for it, which follows the member list), `readers` the list's readers
-    pub reader: bool, pub readers: Option<Vec<String>> }
+    pub reader: bool, pub readers: Option<Vec<String>>,
+    /// the workspace was made without history (the member list's `nohistory`, or this Mac saw it before)
+    pub nohistory: bool }
 use crate::members::{self, List};
 impl SealedRemote {
     fn info(&self) -> Result<Value, String> { Ok((self.call)(json!({"op": "vault_info", "vault": self.vault}), None, None)?.0["vault"].take()) }
@@ -539,15 +548,23 @@ impl SealedRemote {
         *lock(&self.keys) = k.clone();
         Ok(())
     }
-    /// A new vault's member list, before anything else reaches the server: its first entry, by this Mac.
-    pub fn start(&self, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<(), String> {
+    /// A new vault's member list, before anything else reaches the server: its first entry, by this Mac, and with
+    /// `nohistory` the entry right after it that makes the workspace one without history (docs/workspaces.md).
+    pub fn start(&self, nohistory: bool, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<(), String> {
         let mut k = self.keys();
         if k.ensure() { save(&k)?; }
         let v = self.info()?;
         if v["epoch"].is_null() { return Err(OLD_SERVER.into()); }
         let me = v["me"].as_str().unwrap_or_default().to_string();
         let e = k.creation(&self.vault, &me);
-        self.append(&mut k, &List::default(), &e, json!({}), save)
+        self.append(&mut k, &List::default(), &e, json!({}), save)?;
+        if !nohistory { return Ok(()); }
+        // saved before the entry goes out: a Mac that made it never writes its name into the workspace
+        k.nohistory = true;
+        save(&k)?;
+        let list = members::check(&self.vault, std::slice::from_ref(&e), None)?.0;
+        let flag = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: "nohistory".into(), ..Default::default() });
+        self.append(&mut k, &list, &flag, json!({}), save)
     }
     /// Before a round (docs/workspaces.md, Members and Key rotation), with `vault_info` and the member list:
     /// 1. this member's secrets made where missing, and saved before the server hears of them;
@@ -561,7 +578,7 @@ impl SealedRemote {
     /// yet gets one from its first admin on this version (trust on upgrade).
     pub fn keep_keys(&self, save: &dyn Fn(&Keys) -> Result<(), String>) -> Result<KeyStep, String> {
         let mut k = self.keys();
-        let mut step = KeyStep::default();
+        let mut step = KeyStep { nohistory: k.nohistory, ..Default::default() };
         let keep = |k: &Keys, step: &mut KeyStep| -> Result<(), String> { save(k)?; *lock(&self.keys) = k.clone(); step.keys = Some(k.clone()); Ok(()) };
         if k.ensure() { keep(&k, &mut step)?; }
         let v = self.info()?;
@@ -610,6 +627,8 @@ impl SealedRemote {
         *lock(&self.checked) = Some((list.clone(), hashes.clone()));
         step.rekeying = list.pending.is_some();
         (step.docs, step.admin) = (list.docs, list.admin(&me));
+        if list.nohistory && !k.nohistory { k.nohistory = true; keep(&k, &mut step)?; }
+        step.nohistory = k.nohistory;
         step.admins = Some(list.members.iter().filter(|(_, m)| m.admin).map(|(fp, _)| fp.clone()).collect());
         step.readers = Some(list.members.iter().filter(|(_, m)| m.reader).map(|(fp, _)| fp.clone()).collect());
         step.listed = Some(list.members.keys().cloned().collect());
@@ -719,6 +738,8 @@ impl SealedRemote {
         let me = v["me"].as_str().unwrap_or_default().to_string();
         let (list, _) = self.list(&k)?.ok_or("this workspace has no member list yet")?;
         if !list.admin(&me) { return Err("only an admin can change this".into()); }
+        // documents record their author per update: on a workspace without history only once that is anonymous too
+        if on && list.nohistory { return Err(NO_DOCS_YET.into()); }
         if list.docs == on { return Ok(()); }
         let e = k.sign_entry(&self.vault, &list, &me, members::Entry { kind: if on { "docs-on" } else { "docs-off" }.into(), ..Default::default() });
         self.append(&mut k, &list, &e, json!({}), save)
@@ -1070,12 +1091,13 @@ mod tests {
         assert_eq!(keys.format().lines().count(), 1, "before any rotation the file is the one hex line it always was");
         keys.add(1, VaultKey::generate());
         keys.ensure();
-        (keys.creator, keys.head, keys.joined) = (Some("c".repeat(64)), Some((4, "d".repeat(64))), Some("e".repeat(64)));
+        (keys.creator, keys.head, keys.joined, keys.nohistory) = (Some("c".repeat(64)), Some((4, "d".repeat(64))), Some("e".repeat(64)), true);
         keys.invites.push(Invited { id: "0123456789abcdef".into(), secret: "f".repeat(64), role: "member".into(), epoch: 1, expires: 1_900_000_000, who: String::new() });
         // one for a device of a person
         keys.invites.push(Invited { id: "fedcba9876543210".into(), secret: "f".repeat(64), role: "member".into(), epoch: 1, expires: 1_900_000_000, who: "9".repeat(64) });
         let back = Keys::parse(&keys.format()).unwrap();
-        assert_eq!((back.format(), back.head.clone(), back.invites.clone()), (keys.format(), keys.head.clone(), keys.invites.clone()));
+        assert_eq!((back.format(), back.head.clone(), back.invites.clone(), back.nohistory), (keys.format(), keys.head.clone(), keys.invites.clone(), true));
+        assert!(Keys::parse(&format!("{}nohistory\n", keys.format())).is_none(), "once");
         assert!(Keys::parse(&keys.format().replace(&"9".repeat(64), "not-a-person")).is_none());
         assert_eq!(keys.recovery().lines().count(), 2, "the keys alone");
         let f = keys.format();
@@ -1116,7 +1138,7 @@ mod tests {
         assert!(st.rekeying && st.warnings.iter().any(|w| w.contains("stopped reporting")), "{st:?}");
         assert!(old(k.clone()).remove(&"b".repeat(64), &|_| Ok(())).unwrap_err().contains("member list"));
         assert!(!lock(&calls).iter().any(|o| o == "vault_remove"), "never the server's removal alone");
-        assert_eq!(old(Keys::from(VaultKey::generate())).start(&|_| Ok(())).unwrap_err(), OLD_SERVER);
+        assert_eq!(old(Keys::from(VaultKey::generate())).start(false, &|_| Ok(())).unwrap_err(), OLD_SERVER);
         // a vault this Mac never saw a list of: nothing to warn about
         assert!(!old(Keys::from(VaultKey::generate())).keep_keys(&|_| Ok(())).unwrap().rekeying);
     }

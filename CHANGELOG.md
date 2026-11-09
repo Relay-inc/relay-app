@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- A new workspace can be made without history: Relay keeps no record in it of who changed what. Its conflict copies carry the minute without a computer name, it offers no shared documents yet, and the team starter asks for no names in its session log. Members and roles stay visible, which Settings says when you choose it. It cannot be turned off, and every member's Relay needs this version to join one (#PR).
 - A workspace member can be a reader: an admin invites someone as Reader, or picks Reader for a device in Members. A reader's Relay only takes what the workspace has, its pages open read-only, and a change in its folder stays on that Mac with a note saying so. The server refuses every write by a reader. Every member's Relay needs this version before a workspace has a reader (#455).
 - Workspaces know people, not only Macs: Members shows each person with their devices under them. Name a person for a Mac, add another Mac of your own with Add a device… (no admin needed), and an admin renames or removes a person with all their devices in one step. Every member's Relay needs this version before a workspace uses people (#453).
 - Relay compiles for Windows, and every PR is checked on macOS and Windows. It does not work on Windows yet: conversations and the `relay` command report that local sockets are not supported, and secrets, the login PATH, the `.claude` link of a vault, Whisper and this computer as a work machine are missing there (#451)
