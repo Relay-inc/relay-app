@@ -73,7 +73,9 @@ pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub confl
     /// list's readers, `unsent` changes in the folder here a reader's round left out
     pub reader: bool, pub readers: Option<Vec<String>>, pub unsent: usize,
     /// the workspace was made without history (docs/workspaces.md): its conflict copies name no Mac
-    pub nohistory: bool }
+    pub nohistory: bool,
+    /// the workspace's signed policy (docs/workspaces.md, Policy): the agent providers allowed, capture on or off
+    pub policy: Option<relay_remote::members::Policy> }
 #[derive(Clone, serde::Serialize)]
 pub struct Changed { pub fp: String, pub name: String }
 
@@ -260,7 +262,7 @@ impl Hub {
                 std::fs::create_dir_all(&v.folder).ok();
                 let base: Manifest = crate::util::read_json(base_path(data, &v.id));
                 let remote = client(v, me).sealed(&v.id, key.clone());
-                st.nohistory = key.nohistory;
+                (st.nohistory, st.policy) = (key.nohistory, key.policy.clone());
                 // the keys first: a new one taken, the members pinned, this Mac's keys sent, a due rotation made
                 // (admin); every change saved before anything goes on (docs/workspaces.md, Key rotation)
                 match remote.keep_keys(&|k| save_key(data, &v.id, k)) {
@@ -270,6 +272,7 @@ impl Hub {
                         st.rekeying = k.rekeying;
                         (st.docs, st.admin, st.admins, st.listed, st.people, st.reader, st.readers) = (k.docs, k.admin, k.admins, k.listed, k.people, k.reader, k.readers);
                         st.nohistory |= k.nohistory;
+                        st.policy = k.policy;
                         st.changed = k.changed.into_iter().map(|(fp, name)| Changed { fp, name }).collect();
                     }
                     Err(e) => st.errors.push(format!("key: {e}")),
@@ -689,10 +692,14 @@ pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String,
         std::fs::remove_file(key_path(&data, &vid)).ok();
         e
     })).await.map_err(|e| e.to_string())??;
+    // the server's organisation admins as admins, from the start (docs/workspaces.md, Organisation): a failure here
+    // leaves the workspace made and says so, its admin adds them later from the workspace's settings
+    let (vid, data, c) = (r.id.clone(), crate::data_dir(&app), state.machines.client(&m));
+    let org = tauri::async_runtime::spawn_blocking(move || crate::organisation::add_admins(&data, &c, &vid)).await.map_err(|e| e.to_string())?;
     let v = Shared { id: r.id.clone(), name: r.name, host: m["host"].as_str().unwrap_or("").into(), port: m["port"].as_u64().unwrap_or(0) as u16,
         fp: m["fp"].as_str().unwrap_or("").into(), folder: at, role: "admin".into() };
     add(&app, &state, &v)?;
-    Ok(serde_json::json!({"id": r.id, "recovery": key.recovery()}))
+    Ok(serde_json::json!({"id": r.id, "recovery": key.recovery(), "org": org.as_ref().ok(), "orgError": org.err()}))
 }
 
 /// Join a shared vault with an invite link: this Mac pairs with the server as a vault-only device (when it is not
@@ -796,6 +803,25 @@ pub async fn shared_vault_trust(app: AppHandle, state: St<'_>, id: String, fp: S
     if let Some(s) = app.state::<crate::App>().shared.status.lock().unwrap().get_mut(&id) { s.changed.clear(); }
     sync_now();
     Ok(())
+}
+
+/// An admin sets the workspace's policy (docs/workspaces.md, Policy): the agent providers allowed and capture.
+#[tauri::command]
+pub async fn shared_vault_policy(app: AppHandle, state: St<'_>, id: String, providers: Vec<String>, capture: bool) -> Result<(), String> {
+    let (data, a, p) = (crate::data_dir(&app), app.clone(), providers.clone());
+    on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || c.sealed(&v.id, load_key(&data, &v.id)?).set_policy(&p, capture, &|k| save_key(&data, &v.id, k)))).await?;
+    if let Some(s) = app.state::<crate::App>().shared.status.lock().unwrap().get_mut(&id) { s.policy = Some(relay_remote::members::Policy { providers, capture }); }
+    app.emit("shared-vaults", serde_json::to_value(&*app.state::<crate::App>().shared.status.lock().unwrap()).unwrap_or_default()).ok();
+    Ok(())
+}
+/// An admin makes the server's organisation admins admins of this workspace (docs/workspaces.md, Organisation). How
+/// many changed.
+#[tauri::command]
+pub async fn shared_vault_add_org(app: AppHandle, state: St<'_>, id: String) -> Result<usize, String> {
+    let (data, a) = (crate::data_dir(&app), app.clone());
+    let n = on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || crate::organisation::add_admins(&data, &c, &v.id))).await?;
+    sync_now();
+    Ok(n)
 }
 
 /// The people on the member list as it is now, into the vault's last status (as a round would), for the settings.
