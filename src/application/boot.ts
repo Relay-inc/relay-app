@@ -9,7 +9,8 @@ import * as backend from "../infrastructure/backend";
 import { storage } from "../infrastructure/storage";
 import { t } from "../shared/i18n";
 import { applyTheme } from "../infrastructure/window";
-import { ghOn, initLanguage, mailOn, setSettingsState, settings } from "./settings/settings";
+import { ghOn, initLanguage, isKey, mailOn, setSettingsState, settings } from "./settings/settings";
+import { MENU_COMMANDS, type CommandId } from "../domain/settings/shortcuts";
 import { noteChanged } from "./navigation/pages";
 import { loadSnapshot, pollSnapshot, project, refreshIcons, reloadIcons, checkFavicons } from "./workspace/vault";
 import { onboard, runSetup, takeSetup } from "./workspace/vault-setup";
@@ -139,6 +140,24 @@ function onMenu(item: string) {
   else if (item === "reopen-chat") void reopenLast();
   else if (item === "close-chat" && !isView(selected()) && !cs().chats[selected()]?.draft) closeChat(selected());
   else if (item === "run-setup") void runSetup();
+}
+
+// the menu bar's items with a key (src-tauri/src/lib.rs build_menu), by their command in Settings › Shortcuts
+const MENU_ITEMS: Partial<Record<CommandId, string>> = {
+  "app.newProject": "new-project",
+  "app.newGeneral": "new-general",
+  "app.reopenChat": "reopen-chat",
+  "app.closeChat": "close-chat",
+};
+/** A Windows window has no menu bar: the main window hands its keys here and they do what the menu item does on
+ *  macOS. Whether the key was one of them. */
+export function menuKey(e: KeyboardEvent) {
+  const id = MENU_COMMANDS.find(command => isKey(e, command));
+  if (!id) return false;
+  if (id === "app.newWindow") void backend.newWindow();
+  else if (id === "app.settings") void backend.openSettingsWindow();
+  else onMenu(MENU_ITEMS[id] ?? "");
+  return true;
 }
 
 async function loadSettingsAndVault() {

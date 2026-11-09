@@ -7,6 +7,7 @@ import { MarkerIcon } from "./MarkerIcon";
 import { MyPoints } from "./MyPoints";
 import { NotesEditor, type NotesApi } from "./NotesEditor";
 import { Transcript } from "./Transcript";
+import { bindingLabel } from "../../../domain/settings/shortcuts";
 
 /** The Live step: the notes on the left (the note's `## Notes`, saved as you type) under the briefing's My points, the
  *  live transcript on the right. Works without a recording. When the notes were changed outside Relay a notice says so
@@ -62,7 +63,7 @@ export function LiveStep({ meeting, notes, noteText }: { meeting: Meeting; notes
         <div className="flex-none h-9.5 flex items-center gap-4 border-t border-separator text-xs text-secondary">
           {(["action", "decision", "question"] as const).map((kind, i) => (
             <span key={kind} className="inline-flex items-center gap-1.5">
-              <span className="font-semibold">⌘{i + 1}</span>
+              <span className="font-semibold">{bindingLabel(`mod+Digit${i + 1}`)}</span>
               <MarkerIcon kind={kind} />
               {t(`meet.${kind}`)}
             </span>

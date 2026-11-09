@@ -7,8 +7,11 @@ import {
   COMMANDS,
   isBinding,
   pickedDigit,
+  pickLabel,
+  pickMods,
   pressed,
   refusal,
+  resolve,
   withBindings,
   workspaceDigit,
   workspaceKeyLabel,
@@ -121,4 +124,72 @@ test("quick capture's key is nobody else's: no Relay command has it and it is no
   assert.deepEqual(refusal(none, "app.capture", "meta+KeyN"), { why: "taken", by: "app.newWindow" });
   // a dictation shortcut on the same key is refused too
   assert.deepEqual(refusal(none, "app.capture", "shift+meta+KeyD", ["shift+meta+KeyD"]), { why: "taken" });
+});
+
+/** Runs `check` as WebView2 on Windows would: its user agent names Windows. */
+function onWindows(check: () => void) {
+  const was = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    value: { userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Edg/142.0" },
+    configurable: true,
+  });
+  try {
+    check();
+  } finally {
+    if (was) Object.defineProperty(globalThis, "navigator", was);
+    else delete (globalThis as { navigator?: unknown }).navigator;
+  }
+}
+
+test("mod is ⌘ on the Mac and Ctrl on Windows, in the defaults and in a press", () => {
+  assert.equal(resolve("alt+mod+KeyT"), "alt+meta+KeyT");
+  assert.deepEqual(bindingsOf(none, "app.quickAsk"), ["meta+KeyK", "meta+KeyO"]);
+  assert.ok(pressed(none, "app.newProject", key("t", "KeyT", { meta: true })));
+  onWindows(() => {
+    assert.equal(resolve("alt+mod+KeyT"), "ctrl+alt+KeyT");
+    assert.equal(resolve("ctrl+KeyC"), "ctrl+KeyC");
+    assert.deepEqual(bindingsOf(none, "app.quickAsk"), ["ctrl+KeyK", "ctrl+KeyO"]);
+    assert.ok(pressed(none, "app.newProject", key("t", "KeyT", { ctrl: true })));
+    assert.ok(!pressed(none, "app.newProject", key("t", "KeyT", { meta: true })));
+    assert.ok(pressed(none, "app.newGeneral", key("t", "KeyT", { ctrl: true, alt: true })));
+    // ⌘F and ⌃F are one key here
+    assert.deepEqual(bindingsOf(none, "chat.find"), ["ctrl+KeyF"]);
+    // the defaults still drop out of the settings
+    assert.deepEqual(withBindings(none, "app.quickAsk", ["ctrl+KeyK", "ctrl+KeyO"]).shortcuts, {});
+  });
+});
+
+test("labels read like Windows' there: Ctrl+Alt+Shift+K, Enter, Win", () => {
+  onWindows(() => {
+    assert.equal(bindingLabel("mod+Comma"), "Ctrl+,");
+    assert.equal(bindingLabel("alt+shift+mod+KeyK"), "Ctrl+Alt+Shift+K");
+    assert.equal(bindingLabel("mod+Enter"), "Ctrl+Enter");
+    assert.equal(bindingLabel("shift+Enter"), "Shift+Enter");
+    assert.equal(bindingLabel("ctrl+alt+meta+KeyN"), "Ctrl+Alt+Win+N");
+    assert.equal(bindingLabel("Backspace"), "Backspace");
+    assert.equal(bindingLabel("j"), "J");
+    assert.equal(workspaceKeyLabel(none, 2), "Ctrl+2");
+    assert.equal(pickLabel("alt"), "Alt+1–9");
+    assert.deepEqual(pickMods(), ["", "alt", "ctrl"]);
+  });
+  assert.equal(bindingLabel("mod+Enter"), "⌘↵");
+  assert.equal(pickLabel("meta"), "⌘1–9");
+  assert.deepEqual(pickMods(), ["", "alt", "ctrl", "meta"]);
+});
+
+test("Windows keeps the edit keys, Alt+F4 and every Win key for itself", () => {
+  onWindows(() => {
+    assert.equal(refusal(none, "app.quickAsk", "ctrl+KeyV")?.why, "reserved");
+    assert.equal(refusal(none, "app.quickAsk", "ctrl+KeyY")?.why, "reserved");
+    assert.equal(refusal(none, "app.quickAsk", "alt+F4")?.why, "reserved");
+    assert.equal(refusal(none, "app.quickAsk", "meta+KeyJ")?.why, "reserved");
+    // a command's own default stays allowed: Ctrl+A ticks all mails, Ctrl+C stops the turn
+    assert.equal(refusal(none, "mail.selectAll", "ctrl+KeyA"), null);
+    assert.equal(refusal(none, "app.stop", "ctrl+KeyC"), null);
+    assert.equal(refusal(none, "app.quickAsk", "k")?.why, "typing");
+    assert.deepEqual(refusal(none, "app.quickAsk", "ctrl+KeyT"), { why: "taken", by: "app.newProject" });
+  });
+  // on the Mac the Win key is ⌘ and free, ⌃V is not an edit key
+  assert.equal(refusal(none, "app.quickAsk", "meta+KeyJ"), null);
+  assert.equal(refusal(none, "app.quickAsk", "ctrl+KeyV"), null);
 });

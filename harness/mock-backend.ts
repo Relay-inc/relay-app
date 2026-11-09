@@ -2,7 +2,8 @@
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
 // events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-member-dark|shared-keeper|shared-live|shared-live-dark, ?sel=<selection key> (what the window
-// opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
+// opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened),
+// ?platform=windows (the app as it runs on Windows).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
 import * as embeds from "./fixtures/embeds";
@@ -28,6 +29,13 @@ type Call = { cmd: string; args: Args; at: number };
 
 const query = new URLSearchParams(location.search);
 const fixture = query.get("fixture") || "default";
+// ?platform=windows: the app as WebView2 on Windows runs it, whose user agent names Windows (src/shared/platform.ts):
+// Ctrl keys and their labels, no menu bar, an opaque sidebar
+if (query.get("platform") === "windows")
+  Object.defineProperty(navigator, "userAgent", {
+    value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0 Edg/142.0",
+    configurable: true,
+  });
 const onboarding = fixture === "onboarding";
 const isSettingsWindow = location.pathname.endsWith("settings.html");
 
@@ -1173,6 +1181,8 @@ function handle(cmd: string, a: Args): unknown {
       return a.state;
     case "active_window":
       return "main";
+    case "new_window":
+      return null;
     case "ui_state_set":
       localStorage.setItem(a.key, a.value);
       if (keepState) sessionStorage.setItem(`mockUi:${a.key}`, a.value);
@@ -2027,7 +2037,17 @@ function collectionRow(path: string, text: string) {
           ? "briefed"
           : "planned";
   const links = [...text.matchAll(/\[\[([^\]|#\n]+)/g)].map(x => x[1].trim());
-  return { p: path, t: stem, k: kind, at: Math.floor(NOW_S - 3 * 86400), date, stage, props, links, tags: props.tags ?? [] };
+  return {
+    p: path,
+    t: stem,
+    k: kind,
+    at: Math.floor(NOW_S - 3 * 86400),
+    date,
+    stage,
+    props,
+    links,
+    tags: props.tags ?? [],
+  };
 }
 const pageRel = (p: unknown) => String(p).replace(vault.VAULT, "").replace(/^\//, "");
 // shared-live: the Mac's document of the page, which the editor and the mock peers share, and the cursors sent

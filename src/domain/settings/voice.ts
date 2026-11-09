@@ -1,5 +1,6 @@
 /** Settings › Voice: three ways to dictate, each switched on with its own shortcut (in the composer; from any app into a
  *  new conversation; from any app pasted where the cursor is), the speech model and language, and meetings. */
+import { bindingLabel } from "./shortcuts.ts";
 export type VoiceMode = "both" | "hold" | "tap"; // both: held records until release, tapped until the next tap
 export type VoiceCfg = {
   on?: boolean; // dictation in the composer, on unless false
@@ -34,7 +35,6 @@ export const DEFAULT_SHORTCUTS = {
 } as const;
 export type ShortcutKey = keyof typeof DEFAULT_SHORTCUTS;
 const MODS = ["ctrl", "alt", "shift", "meta"] as const;
-const SYMBOLS: Record<(typeof MODS)[number], string> = { ctrl: "⌃", alt: "⌥", shift: "⇧", meta: "⌘" };
 const valid = (id: string | undefined): id is string => !!id && /^((ctrl|alt|shift|meta)\+)*[A-Za-z0-9]+$/.test(id);
 
 /** The voice settings with their defaults filled in. */
@@ -53,17 +53,8 @@ export const voiceOf = (cfg: VoiceCfg | undefined) => ({
   summarize: cfg?.summarize !== false,
 });
 
-/** A shortcut as the Mac writes it: ⌃⌥⇧⌘ in that order, then the key ("KeyD" as D, "Digit1" as 1). */
-export function shortcutLabel(id: string) {
-  const parts = id.split("+");
-  const code = parts.pop() ?? "";
-  const key = code.replace(/^Key(?=[A-Z]$)/, "").replace(/^Digit(?=\d$)/, "");
-  return (
-    MODS.filter(mod => parts.includes(mod))
-      .map(mod => SYMBOLS[mod])
-      .join("") + key
-  );
-}
+/** A shortcut as the platform writes it: ⌃⌥⇧⌘ then the key on the Mac ("KeyD" as D), Ctrl+Alt+D on Windows. */
+export const shortcutLabel = (id: string) => bindingLabel(id);
 /** The shortcut a key press makes, or null while only modifiers are down or none is (a plain letter would type).
  *  Function keys may go alone. */
 export function shortcutOf(e: Pick<KeyboardEvent, "code" | "altKey" | "shiftKey" | "ctrlKey" | "metaKey">) {

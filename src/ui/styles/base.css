@@ -211,6 +211,10 @@
   body.main {
     background: transparent;
   }
+  /* Windows: an opaque window without the material, the sidebar paints --sidebar itself (navigation.css) */
+  :root[data-os="windows"] body.main {
+    background: var(--bg);
+  }
   /* React's root fills the window */
   #root {
     width: 100%;

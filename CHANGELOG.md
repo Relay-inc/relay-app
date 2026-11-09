@@ -16,6 +16,7 @@ a PR. Versions follow
 ### Added
 
 - Relay compiles for Windows, and every PR is checked on macOS and Windows. It does not work on Windows yet: conversations and the `relay` command report that local sockets are not supported, and secrets, the login PATH, the `.claude` link of a vault, Whisper and this computer as a work machine are missing there (#451)
+- On Windows, Relay has the normal title bar, a sidebar in the theme's colour that follows light and dark, Ctrl where macOS has ⌘ in every shortcut and its label (Settings › Shortcuts included), toasts for a finished turn or a waiting card, and a `relay://` link or a second start goes to the window that is already open (#W5)
 
 ### Fixed
 

@@ -4,6 +4,8 @@ import { close, dictate, initCapture, save, type, useCaptureStore } from "../../
 import { useDictationStore } from "../../application/conversations/dictation";
 import { useT } from "../hooks/useT";
 import { Icon } from "../components/Icon";
+import { bindingLabel } from "../../domain/settings/shortcuts";
+import { modKey } from "../../shared/platform";
 
 /** Quick capture (K7): a text field, a mic for the existing dictation, and Save to Inbox (⌘↵). Esc puts the window away
  *  and keeps what was typed. The note's name is the minute it is saved in. */
@@ -26,7 +28,7 @@ export function CaptureWindow() {
       className="h-screen flex flex-col gap-2.5 p-3.5 bg-bg text-label"
       onKeyDown={e => {
         if (e.key === "Escape") void close();
-        if (e.key === "Enter" && e.metaKey) void save();
+        if (e.key === "Enter" && modKey(e)) void save();
       }}
     >
       <textarea
@@ -60,7 +62,7 @@ export function CaptureWindow() {
           onClick={() => void save()}
         >
           {t("capture.save")}
-          <span className="text-[11px] opacity-80">⌘↵</span>
+          <span className="text-[11px] opacity-80">{bindingLabel("mod+Enter")}</span>
         </button>
       </div>
     </div>

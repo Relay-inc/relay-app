@@ -370,6 +370,14 @@ The app builds for Windows but does little there yet: Unix-only calls (local soc
 symlinks, this Mac as a work machine, Whisper) sit behind `cfg` gates with stand-ins (`src-tauri/src/platform.rs`,
 `packages/relay-remote/src/sock.rs`), each with a `ponytail:` comment naming the Windows PR (W2 to W4) that fills it
 in.
+The window on Windows comes from `src-tauri/tauri.windows.conf.json` (merged over `tauri.conf.json`): the native title
+bar, opaque, no sidebar material, so the css paints the sidebar (`:root[data-os="windows"]`). It has no menu bar: the
+main window takes the menu's keys itself (`menuKey` in `src/application/boot.ts`). A default shortcut says `mod` for
+the command key, ⌘ on macOS and Ctrl on Windows, and `bindingLabel` writes it the platform's way
+(`src/domain/settings/shortcuts.ts`, the platform from `src/shared/platform.ts`). Banners are toasts through
+`tauri-plugin-notification`, a second start and a `relay://` link reach the running window through
+`tauri-plugin-single-instance`, both Windows-only dependencies. The harness runs the Windows side with
+`?platform=windows`.
 `cargo check --target x86_64-pc-windows-msvc` from a Mac stops at the C build scripts (ring, SQLite, the Windows
 resource file), which need the Windows SDK: CI is the check.
 

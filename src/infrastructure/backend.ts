@@ -109,6 +109,8 @@ export const uiLang = () => invoke<string>("ui_lang");
 /** The macOS locale in the UI language (nl-BE for nl), for dates and sorting. */
 export const uiLocale = () => invoke<string>("ui_locale");
 export const openSettingsWindow = (tab?: string) => invoke("open_settings_window", tab ? { tab } : {});
+/** Another Relay window (Ctrl-N on Windows, macOS has it in the menu bar). */
+export const newWindow = () => invoke("new_window");
 /** Relay's updates (src-tauri/src/updater.rs): the last check's answer, a new check, and installing what it found
  *  (restarts the app). */
 export const updatesStatus = () => invoke<UpdatesStatus>("updates_status");

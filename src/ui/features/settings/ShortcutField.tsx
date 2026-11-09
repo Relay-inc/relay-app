@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { shortcutLabel, shortcutOf } from "../../../domain/settings/voice";
 import { useT } from "../../hooks/useT";
 import { buttonClass } from "./blocks";
+import { isMac } from "../../../shared/platform";
 
 /** A shortcut, set by pressing it: a click starts listening (the app's own global shortcuts step aside meanwhile, see
  *  `onListening`), the next combination with a modifier is taken, Escape cancels. With `record` (Settings ›
@@ -52,7 +53,7 @@ export function ShortcutField({
     <button
       id={id}
       className={`${buttonClass()} min-w-28 font-mono ${listening ? "ring-1 ring-s-primary" : ""}`}
-      title={t(record ? "keys.recordHelp" : "voice.shortcutRecordHelp")}
+      title={t(record ? "keys.recordHelp" : isMac() ? "voice.shortcutRecordHelp" : "voice.shortcutRecordHelpWin")}
       onClick={() => setListening(!listening)}
       onBlur={() => setListening(false)}
     >
