@@ -113,9 +113,12 @@ pub fn client(v: &Shared, me: &Identity) -> Client { Client::new(&v.host, v.port
 /// follows a symlink: one the user made in the folder would otherwise take a member's writes out of it. A link to a
 /// folder with a name `fold` cannot match as APFS does (not plain ASCII) is refused: a member's `MÉTA/settings.json`
 /// would otherwise pass for another file than `Méta/settings.json` and land in it.
+/// Codex's own config folders (`.codex`: config, rules, hooks, `.agents`: skills) never go either, at any depth, as
+/// `.claude`. One that synced before stays on every Mac and on the server as it is, only no longer sent or fetched:
+/// a round drops it from its base without deleting it on either side (`sync::run`).
 pub fn filter(folder: &Path) -> Result<Filter, String> {
     let mut f = Filter::vault_default();
-    f.names.push(".claude".into());
+    f.names.extend([".claude", ".codex", ".agents"].map(String::from));
     f.no_links = true;
     let link = std::fs::read_link(folder.join(".claude")).ok();
     let target = link.clone().and_then(|t| {
@@ -916,6 +919,10 @@ mod tests {
         for p in ["System/rules/core/memory.md", "System/reminders.md", "Notes/settings.json", "System/conflicts/rules/core/memory (conflict m s).md"] { assert!(!f.skips(p, false), "{p}"); }
         // generated on each Mac from the cards, never synced
         for p in ["System/rules/core/work-state.md", "System/index/repos.json"] { assert!(f.skips(p, false), "{p}"); }
+        // Codex's config, rules, hooks and skills, at the root, in a subfolder and by case, as .claude
+        for p in [".codex/config.toml", ".codex/hooks.json", ".agents/skills/a/SKILL.md", "Notes/.codex/config.toml", "Notes/.agents/skills/a/x.sh", ".Codex/config.toml"] { assert!(f.skips(p, false), "{p}"); }
+        assert!(f.skips(".codex", true) && f.skips(".agents", true));
+        for p in ["Notes/codex.md", "Notes/agents/a.md", "AGENTS.md"] { assert!(!f.skips(p, false), "{p}"); }
         // a rule's conflict copy goes out of rules/, which loads into every conversation; a note's stays beside it
         assert_eq!(conflict_copy(&f, "System/rules/core/memory.md", "m", "s"), "System/conflicts/rules/core/memory (conflict m s).md");
         assert_eq!(conflict_copy(&f, "Notes/a.md", "m", "s"), "Notes/a (conflict m s).md");

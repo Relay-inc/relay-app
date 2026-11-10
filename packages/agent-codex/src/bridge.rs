@@ -38,16 +38,18 @@ const PROFILE: &str = "relay-workspace";
 /// (`codex sandbox`, then a real thread): without one of these `zsh -lc`, git or a here-document fails.
 /// - `:minimal`: macOS's own system folders (dyld, /bin, /usr, /System, /dev, /etc and the like), without which no
 ///   program starts.
-/// - `/opt/homebrew`: the Homebrew programs, as Relay's guard lets them through (policy.rs, `SYSTEM`).
-/// - `~/.gitconfig` and `~/.config/git`: git stops with "unable to access" when it cannot read its global config.
+/// - `/opt/homebrew`: the Homebrew programs, as Relay's guard lets them through (policy.rs, `SYSTEM`). Not its `var`,
+///   where the databases and logs of Homebrew services live.
+/// - `~/.gitconfig` and the files `config`, `ignore` and `attributes` of `~/.config/git`: git stops with "unable to
+///   access" when it cannot read its global config. Not that folder whole, git's credential store can be in it.
 /// `:tmpdir` (the user's `$TMPDIR`) stays writable as in `:workspace`: here-documents and xcrun need it. `/tmp` does not.
 /// The workspace itself is the project root. Codex itself is not in the sandbox: it reads `~/.codex` (login, sessions)
 /// as before, its commands do not. A workspace conversation gets no project repos, so none are listed.
 fn readable(home: &str) -> Map<String, Value> {
     let home = home.trim_end_matches('/');
     let mut fs = Map::new();
-    for (p, a) in [(":root", "none"), (":slash_tmp", "none"), (":minimal", "read"), ("/opt/homebrew", "read")] { fs.insert(p.into(), a.into()); }
-    if home.starts_with('/') { for x in [".gitconfig", ".config/git"] { fs.insert(format!("{home}/{x}"), "read".into()); } }
+    for (p, a) in [(":root", "none"), (":slash_tmp", "none"), (":minimal", "read"), ("/opt/homebrew", "read"), ("/opt/homebrew/var", "none")] { fs.insert(p.into(), a.into()); }
+    if home.starts_with('/') { for x in [".gitconfig", ".config/git/config", ".config/git/ignore", ".config/git/attributes"] { fs.insert(format!("{home}/{x}"), "read".into()); } }
     fs
 }
 // the first codex-cli this ran against with permission profiles (docs/workspaces.md › Trust)
@@ -309,7 +311,8 @@ mod tests {
         assert_eq!(p["approvalsReviewer"], "user");
         assert_eq!(p["config"]["default_permissions"], PROFILE);
         // nothing outside the workspace to read but the system's programs and git's config, the agents' files kept
-        let outside = json!({":root": "none", ":slash_tmp": "none", ":minimal": "read", "/opt/homebrew": "read", "/me/.gitconfig": "read", "/me/.config/git": "read"});
+        let outside = json!({":root": "none", ":slash_tmp": "none", ":minimal": "read", "/opt/homebrew": "read", "/opt/homebrew/var": "none",
+            "/me/.gitconfig": "read", "/me/.config/git/config": "read", "/me/.config/git/ignore": "read", "/me/.config/git/attributes": "read"});
         let mut fs = outside.clone();
         fs[":project_roots"] = json!({".claude": "read", "CLAUDE.md": "read", "CLAUDE.local.md": "read", "AGENTS.md": "read", "AGENTS.override.md": "read", ".codex": "read", ".agents": "read", ".git": "read"});
         assert_eq!(p["config"]["permissions"], json!({"relay-workspace": {"extends": ":workspace", "filesystem": fs}}));
