@@ -20,6 +20,7 @@ use transcribe_rs::onnx::cohere::CohereModel;
 use transcribe_rs::onnx::moonshine::{MoonshineModel, MoonshineVariant};
 use transcribe_rs::onnx::parakeet::ParakeetModel;
 use transcribe_rs::onnx::Quantization;
+#[cfg(feature = "whisper")]
 use transcribe_rs::whisper_cpp::WhisperEngine;
 use transcribe_rs::{SpeechModel, TranscribeOptions};
 
@@ -50,7 +51,10 @@ fn load(m: &Model, dir: &Path) -> Result<Box<dyn SpeechModel>, String> {
         "parakeet-v3" | "parakeet-v2" => Box::new(ParakeetModel::load(dir, int8).map_err(e)?),
         "canary-1b-v2" => Box::new(CanaryModel::load(dir, int8).map_err(e)?),
         "cohere" => Box::new(CohereModel::load(dir, int8).map_err(e)?),
+        #[cfg(feature = "whisper")]
         "whisper-turbo" => Box::new(WhisperEngine::load(&dir.join(m.file)).map_err(e)?), // whisper.cpp, Metal on a Mac, the CPU on Windows
+        #[cfg(not(feature = "whisper"))]
+        "whisper-turbo" => return Err("this build has no Whisper".into()),
         _ => Box::new(MoonshineModel::load(dir, MoonshineVariant::Base, &Quantization::default()).map_err(e)?),
     })
 }

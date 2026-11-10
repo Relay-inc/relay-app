@@ -367,7 +367,7 @@ pnpm format:check             # Prettier
 CI (`.github/workflows/checks.yml`) runs the TypeScript checks plus `vite build` on macOS and Windows, then
 `cargo check`: on macOS with the tests, on Windows without `relay-server` (a Linux and Mac server) and without tests.
 The app builds for Windows but does little there yet: Unix-only calls (local sockets, process groups, file modes,
-symlinks, this Mac as a work machine, Whisper) sit behind `cfg` gates with stand-ins (`src-tauri/src/platform.rs`,
+symlinks, this Mac as a work machine) sit behind `cfg` gates with stand-ins (`src-tauri/src/platform.rs`,
 `packages/relay-remote/src/sock.rs`), each with a `ponytail:` comment naming the Windows PR (W2 to W4) that fills it
 in.
 The window on Windows comes from `src-tauri/tauri.windows.conf.json` (merged over `tauri.conf.json`): the native title
@@ -382,8 +382,19 @@ A meeting on Windows records the microphone and the default output device, which
 reads and resamples the tracks in-process at Stop (`read_16k` in `src-tauri/src/meeting.rs`) instead of `afconvert`,
 and keeps the 16 kHz WAV mix (~115 MB an hour) where the Mac keeps m4a. Whether the microphone is switched off comes
 from the privacy settings in the registry (`src-tauri/src/permissions.rs`), checked before the recording starts.
+Whisper (dictation and meetings, `src-tauri/src/dictation.rs`) runs on whisper.cpp through transcribe-rs: on Metal on a
+Mac, on the CPU on Windows. whisper-rs-sys builds whisper.cpp with cmake and MSVC and generates its bindings with
+bindgen, which needs libclang: the `windows-latest` runner has cmake, MSVC and LLVM, so `cargo check` there compiles
+whisper.cpp for real. A build on another Windows machine needs the Visual Studio C++ tools, cmake and LLVM (or
+`LIBCLANG_PATH`). ggml optimises for the CPU it is built on: a Windows release build sets `GGML_NATIVE=OFF` in its
+environment (whisper-rs-sys passes `GGML_*` to cmake), which builds for AVX2, or the app may not start on an older CPU.
+Vulkan (transcribe-rs's `whisper-vulkan`) is not in: it needs the Vulkan SDK and `VULKAN_SDK` on the build machine,
+which the runner does not have. The model download checks its SHA-256 with `sha2`, curl and tar come with Windows 10
+and later.
 `cargo check --target x86_64-pc-windows-msvc` from a Mac stops at the C build scripts (ring, SQLite, the Windows
-resource file), which need the Windows SDK: CI is the check.
+resource file), which need the Windows SDK: CI is the check. With fake C tools for those (`DOCS_RS=1` skips the cmake
+builds), add `--no-default-features`: whisper-rs-sys cannot generate its bindings without Windows' C headers, and the
+bindings it ships are laid out for another platform, so the cross-check leaves the `whisper` feature out.
 
 The frontend has a harness (`harness/`, see its README) that runs the real webview against a mocked Tauri backend,
 on the dev server (`pnpm exec vite --config harness/vite.config.ts`, http://127.0.0.1:1430):
