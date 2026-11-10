@@ -11,7 +11,7 @@ export function machinePick(list: MachineChoice[] | undefined, picked: string | 
   return list.find(machine => machine.default)?.id ?? "";
 }
 
-/** Settings › Machines: the shared vaults each machine keeps (the vault's server pinned by that machine's fingerprint),
+/** Settings › Workspaces: the shared vaults each machine keeps (the vault's server pinned by that machine's fingerprint),
  *  and the rest, on a server that is not one of this Mac's machines: a vault this Mac joined with a link. */
 export function vaultsByMachine(machines: Machine[], vaults: SharedVault[]) {
   const on: Record<string, SharedVault[]> = Object.fromEntries(machines.map(machine => [machine.id, []]));
@@ -24,6 +24,11 @@ export function vaultsByMachine(machines: Machine[], vaults: SharedVault[]) {
   }
   return { on, elsewhere };
 }
+
+/** The machines whose server can have an organisation this Mac takes part in: the fully paired ones, where it can be
+ *  the owner (the first full device) or an organisation admin (docs/workspaces.md, Organisation). Settings shows its
+ *  Organisation tab only when there is one: asking the server would publish this Mac's organisation keys there. */
+export const orgMachines = (machines: Machine[]) => machines.filter(machine => !machine.sharedOnly);
 
 /** An excluded vault folder as it is saved: trimmed, slashes at the ends dropped. Null when it is empty, absolute or
  *  climbs out of the vault with "..". */

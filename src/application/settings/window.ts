@@ -11,7 +11,10 @@ import { useSettingsStore, type SettingsTab } from "./store";
 
 // The settings window, laid out like bb's: the pages in a sidebar on the left, the window title follows the page.
 // General holds the vault folder with its mapping and the language, Projects the projects the user customised,
-// Agents the coding-agent CLIs, Integrations the external services, Plugins the MCP servers that bring views, Machines the computers running relay-server, Voice dictation, Shortcuts the keys (read only), Updates Relay itself and the agent CLIs; each
+// Agents the coding-agent CLIs, Integrations the external services, Plugins the MCP servers that bring views,
+// Workspaces the workspaces shared on a relay-server, Organisation the organisation of a server (shown only with a fully
+// paired machine, SettingsApp), Machines the computers running relay-server, Voice dictation, Shortcuts the keys (read
+// only), Updates Relay itself and the agent CLIs; each
 // page's use cases are in <page>-page.ts and integrations.ts. Saving emits "settings-changed" from the backend, the main window follows it.
 export const TABS = [
   ["general", "set.tab.general", "gear"],
@@ -19,6 +22,8 @@ export const TABS = [
   ["agents", "set.tab.agents", "agent"],
   ["integrations", "set.tab.integrations", "plug"],
   ["plugins", "set.tab.plugins", "puzzle"],
+  ["workspaces", "set.tab.workspaces", "folderLinked"],
+  ["organisation", "set.tab.organisation", "lock"],
   ["machines", "set.tab.machines", "server"],
   ["voice", "set.tab.voice", "mic"],
   ["shortcuts", "set.tab.shortcuts", "keyboard"],
@@ -48,7 +53,7 @@ export async function initSettingsWindow() {
   });
   void watchUpdates();
   void watchVaultSync();
-  // an invite link that opened Relay: the join form (the backend opens the window on Machines)
+  // an invite link that opened Relay: the join form (the backend opens the window on Workspaces)
   void watchSharedVaults();
   showTitle();
   void backend.onSettingsGo(to => {

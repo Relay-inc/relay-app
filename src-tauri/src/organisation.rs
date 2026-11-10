@@ -1,5 +1,5 @@
 // A server's organisation from this Mac (docs/workspaces.md, Organisation): the Organisation section of a machine
-// under Settings › Machines. This Mac's organisation keys per server are org-<server>.key in the app data, in a
+// under Settings › Organisation. This Mac's organisation keys per server are org-<server>.key in the app data, in a
 // workspace key file's format: its identity, its X25519 key and the organisation list's pins (creator, head).
 // Every change is an entry this Mac signs: on the organisation list, or on a workspace's member list.
 
