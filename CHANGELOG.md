@@ -7,14 +7,16 @@ To release: move Unreleased under a new version heading with the date, then set 
 the root `Cargo.toml` (`[workspace.package]`, the app and relay-server read it there, `tauri.conf.json` reads it from
 `package.json`) and the image tag in `deploy/relay-server/compose.yml`. Once that is on main, run `scripts/release.sh` on a Mac, on main: it builds Relay and publishes it as
 GitHub release `v<version>` with this version's section as its notes, then pushes relay-server's image and attaches
-its Linux binaries (`scripts/push-server-image.sh`). Nothing of a release runs in GitHub Actions, only the checks of
-a PR. Versions follow
+its Linux binaries (`scripts/push-server-image.sh`). The Windows installer is the one part built in GitHub Actions
+(`.github/workflows/windows.yml`, started by the release): the script waits for it and adds it to the release
+(docs/development.md › Releasing for Windows). Versions follow
 [semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
 
 ### Added
 
+- Relay installs on Windows x64 with `Relay_<version>_x64-setup.exe`: for the current user without admin rights, with `relay://` links, `relay` in cmd and PowerShell, and an uninstall that removes it all. Relay on Windows updates itself like on the Mac. The installer is not code-signed yet, so Windows shows a SmartScreen warning when it is opened: More info, then Run anyway (#479)
 - Relay compiles for Windows, and every PR is checked on macOS and Windows. It does not work on Windows yet: conversations and the `relay` command report that local sockets are not supported, and the login PATH, the `.claude` link of a vault, Whisper and this computer as a work machine are missing there (#451)
 - A new vault and a new team workspace start with an `AGENTS.md` next to `CLAUDE.md`, so Codex and OpenCode load the same rules as Claude Code (it points at `CLAUDE.md` and `System/rules/`, nothing is copied). Checking a vault reports a missing `AGENTS.md` and repairs it on request, an existing vault never gets one unasked (#452).
 - Workspaces know people, not only Macs: Members shows each person with their devices under them. Name a person for a Mac, add another Mac of your own with Add a device… (no admin needed), and an admin renames or removes a person with all their devices in one step. Every member's Relay needs this version before a workspace uses people (#453).
