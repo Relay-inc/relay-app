@@ -166,8 +166,8 @@ does:
 space, and the device names CON, PRN, AUX, NUL, COM0-9 and LPT0-9 (with ¹²³, and also with an extension, so `nul.txt`).
 A name with `~` and a digit is left out too: Windows may open `GIT~1` as `.git` (an 8.3 short name), past the filter.
 Written there anyway, such a name lands as another file (`a:b.md` as a stream of `a`, `notes.` as `notes`, `CON` as the
-console). A round on Windows leaves such a file out on both sides (`sync::windows_name`) and lists it under the workspace in Settings ›
-Machines, as it does on every computer with two names that differ in case only (`a.md` and
+console). A round on Windows leaves such a file out on both sides (`sync::windows_name`) and lists it on the workspace's page in Settings ›
+Workspaces, as it does on every computer with two names that differ in case only (`a.md` and
 `A.md`, one file on APFS and NTFS). Relay never renames a member's file. The team agreement: in a workspace with a
 Windows member, name files so Windows can hold them, and whoever made a listed file renames it on their Mac. The Mac
 syncs these files as before.
@@ -364,8 +364,8 @@ an agent. Its edits merge; there are no conflict copies for it.
   wrote it (to the trash first otherwise), unless another note has that place now or the file rounds keep it out. A
   note that is a document, and its old path until that file is gone, stay out of the file rounds. A live update is
   taken on a thread of its own, under the same lock as the rounds.
-- **Which notes are documents.** None until an admin turns it on (Settings › Machines, "Notes as shared
-  documents"): a `docs-on` entry in the member list, signed like any other, which every member checks; `docs-off`
+- **Which notes are documents.** None until an admin turns it on (Settings › Workspaces, the workspace's page, Policy, "Notes as
+  shared documents"): a `docs-on` entry in the member list, signed like any other, which every member checks; `docs-off`
   turns it off again. Then each round on an admin's Mac makes up to 50 notes documents: `.md` files the file rounds
   would sync, not through a link, no conflict copy, at most 2 MiB, and only once the last file round left the file the
   same here and on the server; never past 10 000 documents. A note's text goes to the server before its place in the
@@ -485,7 +485,7 @@ manifest) and the epoch (to refuse a write under an old key), and checks it fits
   invite named, until checked once), `joined <hex>` (the invite secret, until this Mac is added), and
   `invite <id> <secret> <role> <epoch>` per open invite this Mac made. Every value is checked (64 lowercase hex where it
   is a key or hash); a duplicate or unknown line makes the file unreadable. The keys alone are the recovery key Relay
-  shows when the workspace is made, and again on its row in Settings › Machines.
+  shows when the workspace is made, and again on its page in Settings › Workspaces.
 
 ## Members
 
@@ -653,7 +653,7 @@ Google, Microsoft Entra ID (one tenant), or another issuer through the same chec
 joining, on top of the device model: keys stay per device, an invite link is still needed, and the server grants
 itself nothing.
 
-- **The setting is signed.** An organisation admin sets it under Settings › Machines › Organisation › SSO for joining:
+- **The setting is signed.** An organisation admin sets it under Settings › Organisation › SSO for joining:
   the provider (Google, Microsoft Entra ID with its tenant id, or another issuer URL), the OAuth client id, the email
   domains allowed (none for Entra ID, below), and whether signing in is required. It goes on the organisation list as an `sso` entry this Mac signs (`members::check_org`), with the
   same rules as every other entry: only an organisation admin signs one, an https issuer, a client id and one to 20
@@ -745,7 +745,7 @@ people and readers. A relay-server from before refuses the entry too, so it neve
 
 A workspace made without history keeps what its members write, and no record of who wrote what. It is chosen once,
 when the workspace is made (New workspace › Workspace without history), and cannot be turned off: a workspace that
-had a history would keep it. Its row in Settings › Machines and the workspace menu say "Without history".
+had a history would keep it. Its row and its page in Settings › Workspaces and the workspace menu say "Without history".
 
 - **The flag** is the member list's `nohistory` entry, right after `create` (Members, above). Every Mac checks it like
   any entry. Once its Relay saw it, the Mac keeps `nohistory` in its key file, so a round that cannot check the list
@@ -788,7 +788,7 @@ the same note index as ⌘K (`related::passages`), and prints at most 20 passage
 That is all it gives: the path in the workspace, the workspace's name, the line with the hit and its rank. No title,
 no author, no session, no time, so the history the workspace does not keep does not come back through a search. It
 never reads the user's own vault or a workspace with history, also not when named in `workspace`. It only reads, it is
-`auto` like `reminders.list`, and the user changes that under Settings › Machines › Agent access or in `.relay/config.json`
+`auto` like `reminders.list`, and the user changes that under Settings › Workspaces › Agent access or in `.relay/config.json`
 (`"knowledge": "ask"`). It runs only for a conversation the app runs: the caller is traced from the socket up to one of
 its agents, as for the user's own reads, so a process that only found the socket and named a running conversation
 gets nothing. On Windows the trace does not prove which conversation calls (the user's own reads are off there), but
@@ -875,8 +875,8 @@ The pairing line with three more fields, and from member lists on two more:
 `relay://<host>:<port>#fp=<64 hex>&code=<32 hex>&vault=<16 hex>&invite=<16 hex>&secret=<64 hex>&creator=<64 hex>&head=<64 hex>`
 (`creator` the identity the member list starts with, `head` the list's last hash when the invite was made).
 `PairLine` parses them as optional `vault`, `invite`, `secret`. A line with all three is an invite.
-A link that opens Relay opens Settings › Machines with it in the join form. That page shows a workspace under the
+A link that opens Relay opens Settings › Workspaces with it in the join form. That page lists a workspace under the
 machine that keeps it (the workspace's `fp` is the machine's), and under Workspaces when its server is not one of this
-Mac's machines, as for a member who joined with a link.
+Mac's machines, as for a member who joined with a link. Each row opens the workspace's page.
 
 The client side lives in `packages/relay-remote` (`vault.rs`, `client.rs`), the server side in `packages/relay-server/src/vaults.rs`.
