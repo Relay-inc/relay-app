@@ -21,6 +21,7 @@ a PR. Versions follow
 
 - Codex runs in team workspaces and other vault folders next to Claude Code. Relay declines a Codex permission request for a path outside the workspace (or into another vault, Relay's data or Claude's config) before it becomes a card, and keeps Codex in its sandbox and asking there. OpenCode and Pi stay in the main vault. (#456)
 - Codex in a team workspace can no longer change `.claude`, `CLAUDE.md`, `AGENTS.md` or its own config there without asking, and starts without the MCP servers, plugins and apps of your own Codex config. A workspace needs Codex 0.163 or newer. (#468)
+- Codex in a team workspace no longer reads your files outside it: only the workspace, the system's and Homebrew's programs, git's own config and the temp folder. A workspace's `.codex` and `.agents` no longer sync, what synced before stays where it is. (#469)
 
 ## [0.0.49] - 2026-11-08
 
