@@ -54,6 +54,7 @@ resolved. Only `workState` is required; a missing `reminders` file is created by
 | `src-tauri/src/calendar.rs`, `src/domain/calendar/`, `src/application/calendar/` | Google calendars, read through each one's secret iCal address (kept in the keychain, service `relay-calendar`, never in settings.json or the webview). The meetings of the next 12 hours, recurring ones expanded; the ones about to start sit at the top of Waiting with a banner 5 minutes before, and a meeting note or a briefing about one starts from its card (restricted, like a conversation about a mail). |
 | `src/application/board/`, `src/ui/features/board/` | The board in the sidebar, one per switched-on integration. Moving a card writes to the tracker right away. See [Integrations](#integrations). |
 | `src-tauri/src/providers.rs` | The backend registry of the integrations: token in the keychain, the curl call, settings migration. |
+| `src-tauri/src/secrets.rs` | Every secret of the app (integrations, plugins, mail, calendars) on one set of names: the login keychain through `/usr/bin/security` on macOS (the tool made every existing entry, so reading them from the app itself would ask for approval per entry), Credential Manager through the `keyring` crate on Windows (`<account>.<service>`). Tests use a map in memory. |
 | `packages/` | The integrations and the agent providers, one package each (TypeScript + Rust + strings + tests), and `board-core` and `agent-core`, their contracts. |
 | `src-tauri/src/vault.rs`, `src/application/workspace/vault-setup.ts`, `src/ui/features/workspace/` | The per-vault mapping: detection, found / missing, the first-launch screen and the mapping rows in Settings. |
 | `src-tauri/src/machines.rs`, `mirror.rs`, `machine_git.rs` | Work machines (relay-server in the LAN, `packages/relay-server`): pairing, where a conversation runs, the vault's mirror there. Settings › Machines connects a machine to GitHub with a code typed on github.com (the token stays on the machine, sealed like the mirror) and lists its repos with Push and To Mac (a snapshot on `relay/<machine>`, fetched into this Mac's checkout without checking it out). A conversation about a project with a repo gets that repo at its first start there, cloned or fetched, as an extra folder next to the mirrored vault it runs in. Moving it back to this Mac with work not pushed in that repo asks first. |
@@ -61,12 +62,12 @@ resolved. Only `workState` is required; a missing `reminders` file is created by
 
 State lives in `~/Library/Application Support/be.laurentmeersman.relay/`: `settings.json`,
 `sessions.json` (conversation to session id, and to its provider when that is not Claude Code) and `pending/`. Board provider tokens sit
-in the macOS keychain (`vault-app.<provider>`, account `token`, so `vault-app.productive`) and never reach the webview.
+in the keychain (`vault-app.<provider>`, account `token`, so `vault-app.productive`) and never reach the webview.
 
 ## Integrations
 
 The sidebar board shows one of these per vault project. (The agents that answer in the conversations are the other kind of package: [Agent providers](#agent-providers).) Set them up under Vault › Settings… › Integrations; every
-secret goes to the macOS keychain (service `vault-app.<id>`), never to settings.json or the webview. How to get a
+secret goes to the keychain (service `vault-app.<id>`), never to settings.json or the webview. How to get a
 key and what the backend lets through is in each package's README.
 
 | Tracker | Project › board | Package |
@@ -367,7 +368,7 @@ pnpm format:check             # Prettier
 CI (`.github/workflows/checks.yml`) runs the TypeScript checks plus `vite build` on macOS and Windows, then
 `cargo check`: on macOS with the tests, on Windows without the app's tests (they still call Unix-only APIs). On Windows
 relay-server's unit tests run, its e2e tests build, and its update test runs.
-The app builds for Windows but does not all work there yet: Unix-only calls (file modes, symlinks) sit behind `cfg`
+The app builds for Windows but does not all work there yet: Unix-only calls (symlinks) sit behind `cfg`
 gates with stand-ins (`src-tauri/src/platform.rs`), each with a `ponytail:` comment naming the Windows PR that fills
 it in.
 The window on Windows comes from `src-tauri/tauri.windows.conf.json` (merged over `tauri.conf.json`): the native title

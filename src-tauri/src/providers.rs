@@ -2,7 +2,7 @@
 // -linear) that exports a board_core::Provider: where its API lives, which calls the webview may make, how the
 // secrets are sent and how an error reads. This module registers them (PROVIDERS, the one place) and does the
 // part they share: the secrets live in the macOS keychain under `vault-app.<id>` (one entry per name in
-// `secrets`), go to `security` and curl over stdin, never as an argument (visible in the process list), and
+// `secrets`), go to the keychain (secrets.rs) and to curl over stdin, never as an argument (visible in the process list), and
 // never go back to a webview. The rest of a provider's config is in settings.json under `integrations.<id>`.
 // Listing, moving and mapping cards is the webview's side (the same packages, src/providers/index.ts).
 // Buddy (packages/integration-buddy) is registered here too for its keychain and allowlist, but is no board: it only
@@ -70,28 +70,14 @@ pub fn set_token(p: &Provider, account: &str, t: &str) -> Result<(), String> {
     keychain_set(&service(p), account, t)
 }
 
-/// A generic password from the macOS keychain (the plugins keep theirs under their own service, see plugins.rs).
-// ponytail: `/usr/bin/security` (here, calendar.rs, mail, agent-claude's usage_log.rs) fails with "not found" on
-// Windows, so no secret is stored there. W2 moves them all to the keyring crate
-pub fn keychain_get(service: &str, account: &str) -> Option<String> {
-    let o = Command::new("/usr/bin/security").args(["find-generic-password", "-s", service, "-a", account, "-w"]).output().ok()?;
-    let t = String::from_utf8_lossy(&o.stdout).trim().to_string();
-    (o.status.success() && !t.is_empty()).then_some(t)
-}
-/// Save a generic password, or remove it when empty. The value goes to `security -i` over stdin, never as an argument
-/// (visible in the process list), quoted so spaces and quotes survive. Printable ASCII only: `security -w` prints
-/// anything else as hex, so it would not read back.
+/// A generic password from the keychain (the plugins keep theirs under their own service, see plugins.rs).
+pub fn keychain_get(service: &str, account: &str) -> Option<String> { crate::secrets::get(service, account) }
+/// Save a generic password, or remove it when empty. Printable ASCII only, as before: what `security -w` saved
+/// for earlier versions read back as hex otherwise.
 pub fn keychain_set(service: &str, account: &str, value: &str) -> Result<(), String> {
-    if value.is_empty() {
-        Command::new("/usr/bin/security").args(["delete-generic-password", "-s", service, "-a", account]).output().map_err(|e| e.to_string())?;
-        return Ok(());
-    }
+    if value.is_empty() { return crate::secrets::delete(service, account); }
     if value.len() > 500 || !value.chars().all(|c| (' '..='~').contains(&c)) { return Err(trc("err.secret_chars")); }
-    let mut ch = Command::new("/usr/bin/security").arg("-i").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(|e| e.to_string())?;
-    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s {} -a {} -w {}", curl_quote(service), curl_quote(account), curl_quote(value)).map_err(|e| e.to_string())?;
-    ch.wait().map_err(|e| e.to_string())?;
-    // `security -i` exits 0 even when the command inside failed, so read it back
-    if keychain_get(service, account).as_deref() == Some(value) { Ok(()) } else { Err(trc("err.keychain")) }
+    crate::secrets::set(service, account, value).map_err(|_| trc("err.keychain"))
 }
 
 // ---------- one call
