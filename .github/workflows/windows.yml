@@ -1,0 +1,108 @@
+# Relay for Windows x64: the NSIS installer (per user, no admin), built on a Windows runner, installed and uninstalled
+# once on that runner, kept as the artifact relay-windows-x64. By hand (Actions › windows › Run workflow), for every
+# published release, and on a PR that changes the installer or this workflow (workflow_dispatch only offers a workflow
+# that is on main, and the build is too long for every PR). scripts/release.sh waits for a release's run, signs its
+# installer for the updater on the Mac (the updater key never leaves it, so this build makes no .sig) and puts it in
+# the release and in latest.json.
+# Authenticode signing is off until there is a certificate: set the repository variable WINDOWS_SIGN to `azure` or
+# `pfx` and the secrets it names (docs/development.md › Releasing for Windows).
+name: windows
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/windows.yml
+      - src-tauri/windows/**
+      - src-tauri/tauri.windows.conf.json
+  release:
+    types: [published]
+jobs:
+  installer:
+    runs-on: windows-latest
+    env:
+      # whisper.cpp for any x64 CPU with AVX2, not only the runner's (docs/development.md › Windows)
+      GGML_NATIVE: "OFF"
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: rustup update stable --no-self-update
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows-release
+      # the build's own config on top of tauri.conf.json and tauri.windows.conf.json: no updater artifacts (their
+      # signature is made on the Mac) and, once switched on, the Authenticode signature of relay.exe, the installer
+      # and its uninstaller
+      - name: Signing
+        shell: pwsh
+        env:
+          WINDOWS_SIGN: ${{ vars.WINDOWS_SIGN }}
+          SIGN_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          SIGN_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          SIGN_PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+          TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $win = @{}
+          switch ($env:WINDOWS_SIGN) {
+            'azure' {
+              cargo install artifact-signing-cli --locked
+              $win.signCommand = "artifact-signing-cli -e $env:SIGN_ENDPOINT -a $env:SIGN_ACCOUNT -c $env:SIGN_PROFILE -d Relay %1"
+            }
+            'pfx' {
+              $pfx = Join-Path $env:RUNNER_TEMP relay.pfx
+              [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+              $pw = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+              $win.certificateThumbprint = (Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $pw).Thumbprint
+              Remove-Item $pfx
+              $win.digestAlgorithm = 'sha256'
+              $win.timestampUrl = $env:TIMESTAMP_URL
+            }
+            default {
+              if ($env:WINDOWS_SIGN) { throw "WINDOWS_SIGN is '$env:WINDOWS_SIGN', not azure or pfx" }
+              'Authenticode signing is off: the installer is unsigned'
+            }
+          }
+          @{ bundle = @{ createUpdaterArtifacts = $false; windows = $win } } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8NoBOM $env:RUNNER_TEMP\ci.conf.json
+          Get-Content $env:RUNNER_TEMP\ci.conf.json
+      - name: Build
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: pnpm tauri build --bundles nsis --config "$env:RUNNER_TEMP\ci.conf.json"
+      # what the installer does, on a clean user: relay.exe, the relay:// link, the CLI in the user's Path, and all of
+      # it gone again after an uninstall
+      - name: Install and uninstall
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem target\release\bundle\nsis\*-setup.exe)[0].FullName
+          Start-Process $setup -ArgumentList '/S' -Wait
+          $dir = Join-Path $env:LOCALAPPDATA Relay
+          $bin = Join-Path $dir bin
+          $link = 'HKCU:\Software\Classes\relay\shell\open\command'
+          function UserPath { (Get-Item HKCU:\Environment).GetValue('Path', '', 'DoNotExpandEnvironmentNames') -split ';' }
+          if (-not (Test-Path "$dir\relay.exe")) { Get-ChildItem $dir; throw "no relay.exe in $dir" }
+          if ((Get-Content "$bin\relay.cmd") -ne "@`"$dir\relay.exe`" --cli %*") { throw "relay.cmd: $(Get-Content "$bin\relay.cmd")" }
+          if ((UserPath) -notcontains $bin) { throw "$bin is not in the user's Path: $(UserPath)" }
+          "relay:// opens $((Get-Item $link).GetValue(''))"
+          # in place (_?=), else the uninstaller copies itself away and returns at once
+          Start-Process "$dir\uninstall.exe" -ArgumentList '/S', "_?=$dir" -Wait
+          if (Test-Path "$dir\relay.exe") { throw 'relay.exe is still there' }
+          if (Test-Path $bin) { throw "$bin is still there" }
+          if ((UserPath) -contains $bin) { throw "$bin is still in the user's Path" }
+          if (Test-Path $link) { throw 'relay:// is still registered' }
+          'installed and uninstalled'
+      - uses: actions/upload-artifact@v5
+        with:
+          name: relay-windows-x64
+          path: target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
