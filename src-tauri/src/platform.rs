@@ -196,6 +196,29 @@ pub fn same_dir(a: &str, b: &str) -> bool {
     real(a) == real(b)
 }
 
+/// An absolute path as a Claude Code permission rule writes it, without the rule's own leading `/`: `Read(/` + this +
+/// `/**)` is `Read(//Users/me/vault/**)`. macOS: the path itself. Windows: Claude Code matches its rules against the
+/// POSIX form of a path, `C:\Users\alice` is `/c/Users/alice` (code.claude.com/docs/en/permissions, read 2026-11-10),
+/// so `/` separators, the drive as `/c`, `\\?\` dropped, the case of the rest kept. A share stays `//server/share/a`,
+/// a form those docs do not name (`fenceable` refuses a vault there). No trailing `/`.
+pub fn claude_rule_path(p: &str, windows: bool) -> String {
+    if !windows { return p.trim_end_matches('/').to_string(); }
+    let s = p.replace('\\', "/");
+    let drive = |x: &str| matches!(x.as_bytes(), [d, b':', ..] if d.is_ascii_alphabetic());
+    // `\\?\` and `\\.\` before a drive or `UNC\` are that drive or share (as `norm_path`), any other device path stays one
+    let s = ["//?/", "//./"].iter().find_map(|d| s.strip_prefix(d)).and_then(|r| r.strip_prefix("UNC/").map(|u| format!("//{u}")).or_else(|| drive(r).then(|| r.to_string()))).unwrap_or(s);
+    let s = s.trim_end_matches('/');
+    if drive(s) { format!("/{}{}", s[..1].to_ascii_lowercase(), &s[2..]) } else { s.to_string() }
+}
+/// A rule's path as `claude_rule_path` wrote it, the way Windows writes it again (`/c/Users/a` is `c:/Users/a`), for
+/// `norm_path`. On macOS, and anything else on Windows: as it is.
+pub fn from_claude_rule_path(p: &str, windows: bool) -> String {
+    match p.as_bytes() {
+        [b'/', d, rest @ ..] if windows && d.is_ascii_alphabetic() && rest.first().is_none_or(|&c| c == b'/') => format!("{}:{}", *d as char, &p[2..]),
+        _ => p.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

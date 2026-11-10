@@ -238,8 +238,8 @@ const TEXT: &[(&str, [&str; 4])] = &[
         "Un coffre ou un espace de travail est en cours d'ajout : renvoyez dans un instant", "Ein Vault oder Workspace wird gerade hinzugefügt: sende gleich noch einmal"]),
     ("err.refence_busy", ["A conversation is still working: adding a vault or workspace restarts every conversation, try again when its turn has ended", "Een gesprek is nog bezig: een vault of workspace toevoegen herstart elk gesprek, probeer opnieuw als de beurt klaar is",
         "Une conversation travaille encore : ajouter un coffre ou un espace de travail redémarre chaque conversation, réessayez quand son tour est fini", "Ein Gespräch arbeitet noch: Einen Vault oder Workspace hinzuzufügen startet jedes Gespräch neu, versuche es nach dem Ende seiner Runde erneut"]),
-    ("err.unfenceable_vault", ["A vault folder may not have [ ] * ? or \\ in its path: {v}. Relay could not keep conversations out of it", "Een vaultmap mag geen [ ] * ? of \\ in het pad hebben: {v}. Relay kan gesprekken er dan niet buiten houden",
-        "Un dossier de coffre ne peut pas contenir [ ] * ? ou \\ dans son chemin : {v}. Relay ne pourrait pas en tenir les conversations à l'écart", "Ein Vault-Ordner darf kein [ ] * ? oder \\ im Pfad haben: {v}. Relay könnte Gespräche nicht davon fernhalten"]),
+    ("err.unfenceable_vault", ["A vault folder may not have [ ] * or ? in its path, and on Windows it must be on a drive letter, not a network share: {v}. Relay could not keep conversations out of it", "Een vaultmap mag geen [ ] * of ? in het pad hebben, en moet op Windows op een stationsletter staan, niet op een netwerkshare: {v}. Relay kan gesprekken er dan niet buiten houden",
+        "Un dossier de coffre ne peut pas contenir [ ] * ou ? dans son chemin, et sous Windows il doit être sur une lettre de lecteur, pas sur un partage réseau : {v}. Relay ne pourrait pas en tenir les conversations à l'écart", "Ein Vault-Ordner darf kein [ ] * oder ? im Pfad haben und muss unter Windows auf einem Laufwerksbuchstaben liegen, nicht auf einer Netzwerkfreigabe: {v}. Relay könnte Gespräche nicht davon fernhalten"]),
     ("err.nested_vault", ["One folder lies inside the other: {v}. Each vault and workspace needs its own folder, so a conversation in one cannot see the other",
         "De ene map ligt in de andere: {v}. Elke vault en workspace heeft een eigen map nodig, zodat een gesprek in de ene de andere niet ziet",
         "Un dossier se trouve dans l'autre : {v}. Chaque coffre et espace de travail a besoin de son propre dossier, pour qu'une conversation dans l'un ne voie pas l'autre",
@@ -2557,7 +2557,7 @@ fn set_settings(app: AppHandle, state: State<App>, mut settings: Value) -> Resul
     // the shared vaults are this app's to write (shared_vaults.rs): what the window sends back is ignored
     s["sharedVaults"] = state.settings.lock().unwrap()["sharedVaults"].clone();
     let shared: Vec<String> = shared_vaults::list(&s).into_iter().map(|x| x.folder).collect();
-    if !policy::fenceable(&v) { return Err(tr_v(lang, "err.unfenceable_vault", &v)); }
+    if !policy::fenceable(&v, cfg!(windows)) { return Err(tr_v(lang, "err.unfenceable_vault", &v)); }
     // the main vault may not hold a shared vault's folder or lie inside one either
     if let Some(o) = shared.iter().find(|o| policy::nested(&v, o)) { return Err(tr_v(lang, "err.nested_vault", &format!("{v}, {o}"))); }
     let protected = { let p = agents::get("claude").ok(); p.map(|p| policy::protected(&app, &env_of(&app, &state, p))).unwrap_or_default() };
