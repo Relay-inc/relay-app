@@ -26,7 +26,12 @@ Then Settings › Agents › Codex › Use. The program defaults to the first of
   workspace or another vault folder (`grants.fenced`) `danger-full-access` runs as `workspace-write`, `never` as
   `on-request`, and `approvalsReviewer` is `user`, so every approval reaches the app, where Relay's guard declines one
   outside the fence before it is a card (`docs/workspaces.md` › Trust). The fileChange approval carries every changed
-  path (`input.paths`) for that check.
+  path (`input.paths`) for that check. Fenced, `workspace-write` becomes the permission profile `relay-workspace`
+  (`default_permissions` and `permissions` in the thread's `config`, no `sandbox`: codex takes one or the other): it
+  extends `:workspace` and keeps `.claude`, `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.codex`, `.agents` and `.git`
+  read-only. The bridge reads `config/read` for the folder first and sets each MCP server in it `enabled = false`,
+  with `features.plugins` and `features.apps` off. It refuses a codex older than 0.163 (from initialize's `userAgent`),
+  which would ignore the profile. Checked against codex-cli 0.163.0.
 - **Events** (`src/app_server.rs`): the thread/start or resume response and `thread/started` → session;
   `item/agentMessage/delta` → text (whole `agentMessage` items when not streamed); reasoning summary deltas → thinking;
   `item/started` / `item/completed` of `commandExecution` → Bash, `fileChange` → Edit (Write when it only adds files),

@@ -79,11 +79,16 @@ does:
   vault, Relay's data, Claude's config folders, the workspace's `.claude`). The system's programs and devices (`/bin`,
   `/usr`, `/opt/homebrew`, `/dev`) are not outside. In the main vault the same check runs on those rules only. In a
   workspace Codex also keeps its sandbox (`danger-full-access` becomes `workspace-write`), asks (`never` becomes
-  `on-request`), and asks the user, not its own auto review. What this is not: the guard sees only what Codex asks
-  for. Its `workspace-write` sandbox lets it read anywhere and write inside the workspace (its `.claude` included)
-  without asking, a path a command builds at run time is not seen, and extra writable roots in the user's own Codex
-  config are not overridden. A Codex conversation opened in a terminal asks there, past the guard, so a workspace's
-  terminal stays Claude Code's.
+  `on-request`), and asks the user, not its own auto review. Its `workspace-write` runs as Relay's own Codex
+  permission profile (`relay-workspace`, which extends Codex's `:workspace`): it writes inside the workspace without
+  asking, except in `.claude` (and the folder it links to), `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.codex`,
+  `.agents` and `.git`, which its sandbox keeps read-only, so a write there fails or comes as a request the guard
+  declines. Extra writable roots in the user's own Codex config do not apply there. Codex starts there without the
+  MCP servers of its config, its plugins and its apps, as Claude Code runs with `--strict-mcp-config`. This needs
+  codex-cli 0.163 or newer, an older Codex is refused in a workspace (it would ignore the profile). What this is not:
+  the guard sees only what Codex asks for. Codex's sandbox lets it read anywhere, and a path a command builds at run
+  time is not seen by the guard. A Codex conversation opened in a terminal asks there, past the guard and without
+  the profile, so a workspace's terminal stays Claude Code's.
 - **Nothing a member writes runs on your Mac.** `.claude` never syncs, and of the folder it links to (`System/`) only
   the notes go (`rules/`, `reference/`, `archive/`, `reminders.md`). Names compare as APFS and HFS+ do, a round
   follows no symlink, and a `.claude` linking somewhere the filter cannot guard is refused.

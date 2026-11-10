@@ -27,10 +27,10 @@ const EOF: i32 = i32::MIN; // codex ended during the handshake
 
 fn text(v: &Value, k: &str) -> Option<String> { v[k].as_str().filter(|s| !s.is_empty()).map(String::from) }
 
-// what a fenced conversation's profile keeps read-only in the workspace. `.claude` covers the folder it links to
-// (codex resolves the link). `.codex`, `.agents` and `.git` are what `:workspace` itself keeps, which a profile's own
-// `:project_roots` table replaces, so they are listed again.
-const READ_ONLY: [&str; 5] = [".claude", "AGENTS.md", ".codex", ".agents", ".git"];
+// what a fenced conversation's profile keeps read-only in the workspace: the agents' config and instructions.
+// `.claude` covers the folder it links to (codex resolves the link). `.codex`, `.agents` and `.git` are what
+// `:workspace` itself keeps, which a profile's own `:project_roots` table replaces, so they are listed again.
+const READ_ONLY: [&str; 7] = [".claude", "CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", ".codex", ".agents", ".git"];
 const PROFILE: &str = "relay-workspace";
 // the first codex-cli this ran against with permission profiles (docs/workspaces.md › Trust)
 const MIN_FENCED: (u32, u32) = (0, 163);
@@ -283,7 +283,7 @@ mod tests {
         assert!(p.get("sandbox").is_none()); // a profile, not a sandbox mode: codex refuses both
         assert_eq!(p["approvalsReviewer"], "user");
         assert_eq!(p["config"]["default_permissions"], PROFILE);
-        assert_eq!(p["config"]["permissions"], json!({"relay-workspace": {"extends": ":workspace", "filesystem": {":project_roots": {".claude": "read", "AGENTS.md": "read", ".codex": "read", ".agents": "read", ".git": "read"}}}}));
+        assert_eq!(p["config"]["permissions"], json!({"relay-workspace": {"extends": ":workspace", "filesystem": {":project_roots": {".claude": "read", "CLAUDE.md": "read", "CLAUDE.local.md": "read", "AGENTS.md": "read", ".codex": "read", ".agents": "read", ".git": "read"}}}}));
         assert_eq!(p["config"]["mcp_servers"], json!({"node_repl": {"enabled": false}, "fake": {"enabled": false}}));
         assert_eq!(p["config"]["features"], json!({"plugins": false, "apps": false}));
         // read-only stays read-only (nothing to keep), still without MCP servers
