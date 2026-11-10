@@ -1,6 +1,6 @@
 // Dictation from any app (Settings › Voice): two shortcuts registered with the system (macOS or Windows), so they record
 // wherever the cursor is, held or tapped as the mode says. One starts a new conversation in Relay with what was said (the
-// main window comes forward, src/application/boot.ts sends it); the other pastes the text (dictation.rs) into the app in
+// main window comes forward, src/application/boot.ts sends it), the other pastes the text (dictation.rs) into the app in
 // front: the clipboard is kept aside, the text put on it, ⌘V (Ctrl+V on Windows) sent, and the clipboard put back.
 // Sending ⌘V needs Accessibility on the Mac, without it the text stays on the clipboard to paste by hand. Windows asks
 // for nothing. A small pill at the bottom of the screen (overlay.html) shows the level and the transcribing. It never
