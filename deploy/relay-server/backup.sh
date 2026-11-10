@@ -6,6 +6,8 @@
 # Left out: the RAM working copy (work) and Claude Code itself (.local, .cache), which the next start installs again.
 # Runs against compose.yml next to this script, COMPOSE_PROJECT_NAME picks another project (the smoke test does).
 set -eu
+# the backup holds the server's private key: readable by its owner only
+umask 077
 dir=$(cd "$(dirname "$0")" && pwd)
 compose() { docker compose -f "$dir/compose.yml" "$@"; }
 # a container of the service itself, with its volume, no ports, as the image's user

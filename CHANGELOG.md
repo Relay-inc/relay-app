@@ -3,9 +3,9 @@
 Every PR adds a line under **Unreleased**, in the group that fits (Added, Changed, Fixed, Removed). CI fails a PR
 that doesn't touch this file; the `skip-changelog` label opts out (docs, CI, refactors nobody notices).
 
-To release: move Unreleased under a new version heading with the date, then set that version in `package.json` and
+To release: move Unreleased under a new version heading with the date, then set that version in `package.json`,
 the root `Cargo.toml` (`[workspace.package]`, the app and relay-server read it there, `tauri.conf.json` reads it from
-`package.json`). Once that is on main, run `scripts/release.sh` on a Mac, on main: it builds Relay and publishes it as
+`package.json`) and the image tag in `deploy/relay-server/compose.yml`. Once that is on main, run `scripts/release.sh` on a Mac, on main: it builds Relay and publishes it as
 GitHub release `v<version>` with this version's section as its notes, then pushes relay-server's image and attaches
 its Linux binaries (`scripts/push-server-image.sh`). Nothing of a release runs in GitHub Actions, only the checks of
 a PR. Versions follow
@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- A recipe to run relay-server for a team on a Linux box with Docker: `deploy/relay-server/compose.yml` on the published image with a healthcheck (`relay-server health`), `backup.sh` to back up and restore the server with its certificate, so paired Macs keep trusting it on a new box, and a guide in `docs/relay-server.md` from opening the port to the first pairing, updates and what the server keeps (#PR).
 - A server's organisation can require signing in with Google before a device joins a workspace there: an organisation admin sets the client ID, the email domains and whether it is required under Settings › Machines › Organisation › SSO for joining, and the join form shows Sign in with Google, then who signed in. The server checks the ID token at the join and keeps only the email, which the device puts on its person. Removing someone still goes through Offboard. Every organisation admin's Relay and the relay-server need this version before SSO is turned on (#464).
 - SSO for joining takes Microsoft Entra ID: an organisation admin picks it with the tenant ID and the app registration's client ID, the join form shows Sign in with Microsoft, and the server only takes tokens of that tenant. Every account of the tenant may join: there is no email domain list for Entra (#466).
 - A server can have an organisation: its owner starts it under Settings › Machines › Organisation, and organisation admins (added after comparing a code on both Macs) see every workspace on the server with its people and roles, and offboard a person in one step: off every workspace they are admin of, with a new key there, and their devices revoked on the server. New workspaces add the organisation admins as admins, an existing one when its admin chooses Add organisation admins. An admin also sets a workspace's policy: which agents may run in it and whether capture is on. Every member's Relay and the relay-server need this version before a workspace has a policy (#463).
