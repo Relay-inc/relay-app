@@ -101,7 +101,7 @@ jobs:
           if ((UserPath) -contains $bin) { throw "$bin is still in the user's Path" }
           if (Test-Path $link) { throw 'relay:// is still registered' }
           'installed and uninstalled'
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: relay-windows-x64
           path: target/release/bundle/nsis/*-setup.exe
