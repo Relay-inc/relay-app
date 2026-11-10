@@ -94,8 +94,9 @@ qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
 [target.'cfg(windows)'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-notification = "2"
-# whether the microphone is switched off in Windows' privacy settings (src/permissions.rs)
-windows-sys = { version = "0.61", features = ["Win32_System_Registry"] }
+# whether the microphone is switched off in Windows' privacy settings (src/permissions.rs), and dictation's paste:
+# the clipboard, Ctrl+V and the window in front (src/anywhere.rs)
+windows-sys = { version = "0.61", features = ["Win32_System_Registry", "Win32_Foundation", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 
 # the red menu bar title when a reminder is overdue (src/tray.rs), same versions as tauri's tray-icon
 [target.'cfg(target_os = "macos")'.dependencies]

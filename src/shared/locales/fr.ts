@@ -2000,6 +2000,7 @@ export default {
   "pill.copied": "Copié, collez avec ⌘V",
   "pill.noModel": "Pas de modèle vocal : voir Réglages › Voix",
   "pill.silent": "Aucun son du micro",
+  "pill.micOff": "Micro désactivé dans les paramètres Windows",
   "pill.failed": "La dictée a échoué",
   "voice.chat": "Nouvelle conversation depuis toute app",
   "voice.chatHelp":

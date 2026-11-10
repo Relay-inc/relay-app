@@ -1977,6 +1977,7 @@ export default {
   "pill.copied": "Gekopieerd, plak met ⌘V",
   "pill.noModel": "Geen spraakmodel: zie Instellingen › Spraak",
   "pill.silent": "Geen geluid van de microfoon",
+  "pill.micOff": "Microfoon uit in Windows-instellingen",
   "pill.failed": "Dicteren mislukt",
   "voice.chat": "Nieuw gesprek vanuit elke app",
   "voice.chatHelp": "Zeg wat je wil, waar je ook bent: Relay komt naar voren en start er een nieuw gesprek mee.",

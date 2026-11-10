@@ -232,6 +232,8 @@ pub(crate) fn start(app: &AppHandle, level: Box<dyn Fn(f32) + Send>) -> Result<(
     let (m, _) = picked(app, false)?;
     let dir = models_dir(app)?.join(m.id);
     if !installed(&dir) { return Err("model".into()); }
+    // switched off in Windows' privacy settings: say so (meeting.rs, the same answer) instead of recording silence
+    if super::permissions::microphone_off() { return Err("microphone".into()); }
     let mut rec = state.rec.lock().unwrap();
     if rec.is_some() { return Ok(()); }
     let loaded = state.loaded.clone();

@@ -1967,6 +1967,7 @@ const en = {
   "pill.copied": "Copied, paste with ⌘V",
   "pill.noModel": "No speech model: see Settings › Voice",
   "pill.silent": "No sound from the microphone",
+  "pill.micOff": "Microphone off in Windows Settings",
   "pill.failed": "Dictation failed",
   "voice.chat": "New conversation from any app",
   "voice.chatHelp": "Say what you want from anywhere: Relay comes forward and starts a new conversation with it.",

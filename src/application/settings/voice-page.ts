@@ -9,8 +9,9 @@ import {
   dictationPauseShortcuts,
 } from "../../infrastructure/backend";
 import { shortcutLabel, voiceOf, type ShortcutKey } from "../../domain/settings/voice";
-import { bindingsOf, COMMANDS, type CommandId } from "../../domain/settings/shortcuts";
+import { bindingsOf, COMMANDS, reserved, type CommandId } from "../../domain/settings/shortcuts";
 import { t } from "../../shared/i18n";
+import { isMac } from "../../shared/platform";
 import { makeStore } from "../make-store";
 import { useSettingsStore } from "./store";
 import { save } from "./window";
@@ -103,13 +104,17 @@ export async function saveShortcut(key: ShortcutKey, shortcut: string) {
     id => COMMANDS[id].scope === "app" && bindingsOf(current(), id).includes(shortcut),
   );
   const label = shortcutLabel(shortcut);
+  // Windows keeps every Win key and the edit keys for itself (a global one would take Ctrl+V from every app)
+  const system = !isMac() && reserved(shortcut);
   set(draft => {
     draft.shortcutError[key] = taken
       ? t("voice.shortcutTaken", { key: label })
       : command
         ? t("keys.taken", { key: label, name: t(`keys.${command}`) })
-        : undefined;
+        : system
+          ? t("keys.reservedWin", { key: label })
+          : undefined;
   });
-  if (!taken && !command) await saveVoice({ [key]: shortcut });
+  if (!taken && !command && !system) await saveVoice({ [key]: shortcut });
 }
 export const pauseShortcuts = (paused: boolean) => dictationPauseShortcuts(paused).catch(() => {});

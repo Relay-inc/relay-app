@@ -403,9 +403,11 @@ export function Composer({ className }: { className: string }) {
           <div className="flex items-center gap-2 mb-2 text-xs text-secondary">
             <span className="flex-1">
               {dictationError
-                ? t(dictationError === "silent" ? "composer.dictationSilent" : "composer.dictationFailed", {
-                    error: dictationError,
-                  })
+                ? dictationError === "microphone"
+                  ? t("rec.micOff")
+                  : t(dictationError === "silent" ? "composer.dictationSilent" : "composer.dictationFailed", {
+                      error: dictationError,
+                    })
                 : dictation === "downloading"
                   ? t("composer.dictationDownloading", { pct: Math.round(progress * 100) })
                   : t("composer.dictationModel")}

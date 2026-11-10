@@ -87,7 +87,8 @@ export function VoicePage({ active }: { active: boolean }) {
           <Switch id="voicepaste" on={voice.pasteOn} onToggle={pasteOn => saveVoice({ pasteOn })} />
         </Field>
         {voice.pasteOn ? shortcutRow("pasteShortcut", t("voice.anyAppShortcutHelp")) : null}
-        {voice.pasteOn ? (
+        {/* Windows lets any app send Ctrl+V, there is nothing to allow */}
+        {voice.pasteOn && isMac() ? (
           <Field label={t("voice.access")} className="pl-6" hint={t(access ? "voice.accessOk" : "voice.accessHelp")}>
             {access ? (
               <span className={OK_MESSAGE}>{t("voice.accessAllowed")}</span>

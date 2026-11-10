@@ -1992,6 +1992,7 @@ export default {
   "pill.copied": "Kopiert, mit ⌘V einfügen",
   "pill.noModel": "Kein Sprachmodell: siehe Einstellungen › Sprache",
   "pill.silent": "Kein Ton vom Mikrofon",
+  "pill.micOff": "Mikrofon in den Windows-Einstellungen aus",
   "pill.failed": "Diktieren fehlgeschlagen",
   "voice.chat": "Neue Unterhaltung aus jeder App",
   "voice.chatHelp": "Sag von überall, was du willst: Relay kommt nach vorne und startet damit eine neue Unterhaltung.",

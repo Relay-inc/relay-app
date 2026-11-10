@@ -35,9 +35,9 @@ export const COMMANDS = {
   "app.back": { scope: "app", keys: ["mod+BracketLeft"] },
   // the pages' editor shows the markdown it hides
   "app.showMarkdown": { scope: "app", keys: ["shift+mod+KeyM"] },
-  // registered with macOS (anywhere.rs), so it works from any app. ⌘⇧N would be Finder's New Folder and every browser's
-  // private window: three modifiers keep it clear of those
-  "app.capture": { scope: "app", keys: ["ctrl+alt+meta+KeyN"] },
+  // registered with the system (anywhere.rs), so it works from any app. ⌘⇧N would be Finder's New Folder and every
+  // browser's private window: three modifiers keep it clear of those. On Windows Ctrl+Alt+N, the Win key is the system's
+  "app.capture": { scope: "app", keys: ["ctrl+alt+mod+KeyN"] },
   "chat.send": { scope: "chat", keys: ["Enter"] },
   "chat.find": { scope: "chat", keys: ["mod+KeyF", "ctrl+KeyF"] },
   "card.confirm": { scope: "card", keys: ["Enter"] },
@@ -120,7 +120,8 @@ const MAC_RESERVED = new Set([
 ]);
 // what Windows or a text field answers: the edit keys and closing the window. Every Win key is the system's too
 const WIN_RESERVED = new Set(["ctrl+KeyC", "ctrl+KeyV", "ctrl+KeyX", "ctrl+KeyZ", "ctrl+KeyY", "ctrl+KeyA", "alt+F4"]);
-const reserved = (binding: string) =>
+/** Whether macOS, Windows or a text field answers the binding before Relay sees it. */
+export const reserved = (binding: string) =>
   isMac() ? MAC_RESERVED.has(binding) : WIN_RESERVED.has(binding) || split(binding).mods.includes("meta");
 
 type Keys = Pick<KeyboardEvent, "key" | "code" | "altKey" | "shiftKey" | "ctrlKey" | "metaKey">;

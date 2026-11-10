@@ -16,7 +16,9 @@ export function CaptureWindow() {
   const saving = useCaptureStore(s => s.saving);
   const focus = useCaptureStore(s => s.focus);
   const phase = useDictationStore(s => s.phase);
-  const dictationError = useDictationStore(s => s.error);
+  const failed = useDictationStore(s => s.error);
+  // the microphone switched off in Windows' privacy settings gets the meeting recorder's notice
+  const dictationError = failed === "microphone" ? t("rec.micOff") : failed;
   const field = useRef<HTMLTextAreaElement>(null);
   useEffect(() => void initCapture(), []);
   // brought forward again: the field takes the focus, whatever app had it

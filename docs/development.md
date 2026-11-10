@@ -391,6 +391,13 @@ environment (whisper-rs-sys passes `GGML_*` to cmake), which builds for AVX2, or
 Vulkan (transcribe-rs's `whisper-vulkan`) is not in: it needs the Vulkan SDK and `VULKAN_SDK` on the build machine,
 which the runner does not have. The model download checks its SHA-256 with `sha2`, curl and tar come with Windows 10
 and later.
+Dictation from any app (`src-tauri/src/anywhere.rs`) registers its shortcuts through tauri-plugin-global-shortcut on
+Windows too (global-hotkey's `RegisterHotKey`, a release is polled). Pasting there needs no permission: the window in
+front when the shortcut went down (`GetForegroundWindow`) gets the focus back if it lost it, the clipboard's formats
+that are plain memory are kept aside (GDI handles such as `CF_BITMAP` are not, Windows makes them again from
+`CF_DIB`), the text goes on it, Ctrl+V goes out through `SendInput` once the shortcut's modifiers are up, and the
+clipboard comes back 400 ms later unless something else was copied. The defaults there use Ctrl instead of the Win key,
+Alt+Space and Alt+Shift (`keys` in `anywhere.rs`, `defaultShortcuts` in `src/domain/settings/voice.ts`).
 `cargo check --target x86_64-pc-windows-msvc` from a Mac stops at the C build scripts (ring, SQLite, the Windows
 resource file), which need the Windows SDK: CI is the check. With fake C tools for those (`DOCS_RS=1` skips the cmake
 builds), add `--no-default-features`: whisper-rs-sys cannot generate its bindings without Windows' C headers, and the

@@ -19,6 +19,7 @@ a PR. Versions follow
 - On Windows, Relay has the normal title bar, a sidebar in the theme's colour that follows light and dark, Ctrl where macOS has ⌘ in every shortcut and its label (Settings › Shortcuts included), toasts for a finished turn or a waiting card, and a `relay://` link or a second start goes to the window that is already open (#459)
 - On Windows, recording a meeting takes the microphone and what the computer plays, transcribes it with the ONNX models and keeps the audio as .wav. A microphone switched off in Windows' privacy settings is said before the recording starts, and Settings › Permissions shows it (#470)
 - On Windows, Whisper works for dictation and meetings, on the processor: download it in Settings › Voice like on the Mac (#471)
+- On Windows, dictating into any app works: the shortcut records wherever the cursor is, the text is pasted with Ctrl+V into the window that was in front, and the clipboard is put back after. Its keys there are Ctrl+Space in Relay, Ctrl+Shift+Space for a new conversation, Ctrl+Alt+Space to paste and Ctrl+Alt+N for quick capture, changeable in Settings › Shortcuts. A microphone switched off in Windows' privacy settings is said in the pill and the composer (#PR)
 
 ### Fixed
 

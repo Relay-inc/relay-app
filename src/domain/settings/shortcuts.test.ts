@@ -11,12 +11,14 @@ import {
   pickMods,
   pressed,
   refusal,
+  reserved,
   resolve,
   withBindings,
   workspaceDigit,
   workspaceKeyLabel,
 } from "./shortcuts.ts";
 import type { Settings } from "./types.ts";
+import { defaultShortcuts, voiceOf } from "./voice.ts";
 
 const key = (
   key: string,
@@ -192,4 +194,29 @@ test("Windows keeps the edit keys, Alt+F4 and every Win key for itself", () => {
   // on the Mac the Win key is ⌘ and free, ⌃V is not an edit key
   assert.equal(refusal(none, "app.quickAsk", "meta+KeyJ"), null);
   assert.equal(refusal(none, "app.quickAsk", "ctrl+KeyV"), null);
+});
+
+test("Windows has its own dictation and capture keys: Ctrl where the Mac has the Win key, Alt+Space or Alt+Shift", () => {
+  assert.deepEqual(defaultShortcuts(), {
+    shortcut: "alt+Space",
+    chatShortcut: "alt+shift+Space",
+    pasteShortcut: "ctrl+alt+Space",
+  });
+  assert.deepEqual(bindingsOf(none, "app.capture"), ["ctrl+alt+meta+KeyN"]);
+  onWindows(() => {
+    const voice = voiceOf(undefined);
+    const dictation = [voice.shortcut, voice.chatShortcut, voice.pasteShortcut];
+    assert.deepEqual(dictation, ["ctrl+Space", "ctrl+shift+Space", "ctrl+alt+Space"]);
+    const [capture] = bindingsOf(none, "app.capture");
+    assert.equal(capture, "ctrl+alt+KeyN");
+    assert.equal(bindingLabel(capture), "Ctrl+Alt+N");
+    assert.equal(refusal(none, "app.capture", capture, dictation), null);
+    for (const binding of [...dictation, capture]) {
+      assert.ok(!reserved(binding) && !binding.startsWith("alt+"), binding);
+      for (const id of Object.keys(COMMANDS) as (keyof typeof COMMANDS)[])
+        if (id !== "app.capture") assert.ok(!bindingsOf(none, id).includes(binding), `${binding} ${id}`);
+    }
+    // a saved key stays what it is
+    assert.equal(voiceOf({ pasteShortcut: "ctrl+shift+KeyD" }).pasteShortcut, "ctrl+shift+KeyD");
+  });
 });
