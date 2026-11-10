@@ -32,12 +32,16 @@ mod files;
 mod platform;
 #[cfg(target_os = "macos")]
 mod host;
-// this Mac as a work machine runs relay-server under launchd, so it is macOS only
-#[cfg(not(target_os = "macos"))]
+// this PC as a work machine: relay-server under Task Scheduler
+#[cfg(windows)]
+#[path = "host_windows.rs"]
+mod host;
+// relay-server runs on Linux on its own (Docker), the app is not its host there
+#[cfg(not(any(target_os = "macos", windows)))]
 mod host {
     pub fn status() -> serde_json::Value { serde_json::json!({"supported": false, "on": false, "running": false, "ram": false, "fingerprint": "", "clients": []}) }
-    pub fn set(_on: bool) -> Result<serde_json::Value, String> { Err("A work machine needs macOS.".into()) }
-    pub fn pair() -> Result<String, String> { Err("A work machine needs macOS.".into()) }
+    pub fn set(_on: bool) -> Result<serde_json::Value, String> { Err("A work machine needs macOS or Windows.".into()) }
+    pub fn pair() -> Result<String, String> { Err("A work machine needs macOS or Windows.".into()) }
     pub fn refresh() {}
     pub fn work_dir() -> Option<std::path::PathBuf> { None }
 }
