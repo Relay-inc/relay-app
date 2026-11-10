@@ -2283,3 +2283,22 @@ fn sso_gates_a_join_and_the_verified_email_goes_on_a_person() {
     org::set_sso(&t.laptop, &mut lk, None, &nosave).unwrap();
     assert_eq!(client::sso_info(&a.invite(&t, "member")).unwrap(), None);
 }
+
+#[test]
+fn health_answers_with_the_servers_own_certificate_only_that() {
+    let s = start("health");
+    let out = bin().arg("health").env("RELAY_SERVER_DATA", &s.data).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(String::from_utf8_lossy(&out.stdout).starts_with(&format!("ok {}", env!("CARGO_PKG_VERSION"))));
+    // the server's own certificate gets nothing else
+    let port = serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(s.data.join("serve.json")).unwrap()).unwrap()["port"].as_u64().unwrap() as u16;
+    let own = Identity::load_or_create(&s.data, "identity").unwrap();
+    let as_server = Client::new("127.0.0.1", port, &own.fingerprint(), own);
+    assert!(as_server.info().unwrap_err().contains("only health"));
+    // a stranger does not get through the handshake
+    assert!(Client::new("127.0.0.1", port, &as_server.fp, device("stranger")).call(serde_json::json!({"op": "health"})).is_err());
+    // not serving: fails
+    let gone = std::env::temp_dir().join(format!("relay-e2e-health-none-{}", std::process::id()));
+    assert!(!bin().arg("health").env("RELAY_SERVER_DATA", &gone).output().unwrap().status.success());
+    std::fs::remove_dir_all(&gone).ok();
+}

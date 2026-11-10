@@ -14,6 +14,7 @@ const USAGE: &str = "relay-server: runs Relay conversations on this machine
   relay-server service                                  a service file that keeps `serve` running
   relay-server info                                     this server's fingerprint and data folder
   relay-server version                                  this binary's version (Relay's)
+  relay-server health                                   whether `serve` answers here (a container's healthcheck)
   relay-server git-credential <token file> <get|store|erase>
                                                         git's credential helper for github.com, set by the server
 
@@ -72,6 +73,15 @@ pub fn run(a: &[String]) {
             println!("fingerprint {}\ndata {}", id.fingerprint(), data.display());
         }
         Some("version") => println!("{}", crate::upgrade::VERSION),
+        Some("health") => {
+            // a TLS handshake with this server's own certificate on the port `serve` wrote, and one request
+            let id = crate::identity(&data).unwrap_or_else(|e| fail(e));
+            let port = std::fs::read_to_string(data.join("serve.json")).ok().and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                .and_then(|v| v["port"].as_u64()).unwrap_or_else(|| fail("not serving (no serve.json)"));
+            let fp = id.fingerprint();
+            let v = relay_remote::client::Client::new("127.0.0.1", port as u16, &fp, id).call(serde_json::json!({"op": "health"})).unwrap_or_else(|e| fail(e));
+            println!("ok {} on port {port}", v["version"].as_str().unwrap_or("?"));
+        }
         Some("git-credential") => {
             let (Some(file), Some(op)) = (a.get(2), a.get(3)) else { fail("git-credential <token file> <get|store|erase>") };
             let mut input = String::new();

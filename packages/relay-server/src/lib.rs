@@ -236,14 +236,16 @@ impl Server {
         let peer = tcp.peer_addr().map(|a| a.to_string()).unwrap_or_default();
         // inside the handshake: a known device, or any device while a pairing code or a vault's invite is open (it may
         // then only pair or join)
-        let data = self.data.clone();
-        let allow: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(move |fp: &str| clients(&data).iter().any(|c| c.fp == fp) || pairing(&data).is_some() || vaults::invite_open(&data));
+        // and the server's own certificate, for `relay-server health` (it may only ask that)
+        let (data, own) = (self.data.clone(), self.fp.clone());
+        let allow: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(move |fp: &str| fp == own || clients(&data).iter().any(|c| c.fp == fp) || pairing(&data).is_some() || vaults::invite_open(&data));
         let (duplex, fp) = self.acceptor.accept(tcp, HANDSHAKE, allow).map_err(|e| io::Error::other(format!("{peer}: {e}")))?;
         let (r, mut w) = duplex.split();
         let mut r = BufReader::new(r);
         let req = proto::read_json(&mut r, MAX_LINE)?;
         let me = clients(&self.data).into_iter().find(|c| c.fp == fp);
         let op = req["op"].as_str().unwrap_or("");
+        if fp == self.fp { return reply(&mut w, if op == "health" { Ok(json!({"version": upgrade::VERSION})) } else { Err("only health with the server's own certificate".into()) }); }
         // a device not paired yet may also ask what SSO a join needs (oidc.rs)
         if me.is_none() && !["pair", "vault_join", "sso_info"].contains(&op) { return reply(&mut w, Err("not paired".into())); }
         if me.as_ref().is_some_and(|c| c.vaults_only) && !vaults_only_may(&self.data, &fp, op) { return reply(&mut w, Err(format!("{op:?} is not allowed from a device that only shares vaults"))); }
