@@ -494,7 +494,8 @@ workflow runs by hand (Actions › windows › Run workflow, once the workflow i
 and on a PR that changes the installer or the workflow. It installs the build silently on the runner, checks it and
 uninstalls it, then keeps the installer as the run's artifact `relay-windows-x64` (about 13 MB). The first two runs,
 without a Rust cache, took 17 and 21 minutes, 14.5 and 18 of them in `tauri build`, well inside the runner's limits.
-`Swatinem/rust-cache` keeps the build's dependencies for the next run.
+With `Swatinem/rust-cache` holding the dependencies a run takes about 11 minutes (9.5 in `tauri build`, most of it
+the app's own release build with LTO).
 
 What the installer does (`src-tauri/tauri.windows.conf.json` › `bundle.windows.nsis`, Tauri's NSIS template and
 `src-tauri/windows/hooks.nsh`):
