@@ -69,9 +69,11 @@ pub fn project_home(st: &App, project: &str) -> Result<(String, String), String>
 /// Write and the other editing tools): Read and Edit on every other vault and on its transcripts in each config folder.
 /// `data`, for a shared vault: also Relay's data folder, each Claude config folder whole with its `.claude.json` (prompts,
 /// MCP servers, settings, hooks, plugins: what runs for the next conversations), and its own `.claude` for Edit.
-pub fn fence(dir: &str, vaults: &[String], configs: &[String], data: Option<&str>) -> Vec<String> {
-    let rule = |p: &str| ["Read", "Edit"].map(|t| format!("{t}(/{}/**)", p.trim_end_matches('/')));
-    let file = |p: &str| ["Read", "Edit"].map(|t| format!("{t}(/{p})"));
+/// Paths as `platform::claude_rule_path` writes them for Claude Code, on Windows by its rules (`windows`).
+pub fn fence(dir: &str, vaults: &[String], configs: &[String], data: Option<&str>, windows: bool) -> Vec<String> {
+    let rp = |p: &str| crate::platform::claude_rule_path(p, windows);
+    let rule = |p: &str| ["Read", "Edit"].map(|t| format!("{t}(/{}/**)", rp(p)));
+    let file = |p: &str| ["Read", "Edit"].map(|t| format!("{t}(/{})", rp(p)));
     let mut out = vec![];
     for v in vaults.iter().filter(|v| v.trim_end_matches('/') != dir.trim_end_matches('/')) {
         out.extend(rule(v));
@@ -85,10 +87,10 @@ pub fn fence(dir: &str, vaults: &[String], configs: &[String], data: Option<&str
         }
         out.extend(file(&format!("{}/.claude.json", home())));
         let dir = dir.trim_end_matches('/');
-        out.push(format!("Edit(/{dir}/.claude/**)"));
+        out.push(format!("Edit(/{}/.claude/**)", rp(dir)));
         // and the folder that `.claude` links to (System/ in a vault Relay makes): what Claude Code runs from there
         if let Some(t) = std::fs::canonicalize(format!("{dir}/.claude")).ok().filter(|t| t.starts_with(dir) && t != Path::new(dir)) {
-            let t = t.to_string_lossy();
+            let t = rp(&t.to_string_lossy());
             for x in ["settings.json", "settings.local.json"] { out.push(format!("Edit(/{t}/{x})")); }
             for x in ["hooks", "skills", "agents", "commands"] { out.push(format!("Edit(/{t}/{x}/**)")); }
         }
@@ -97,12 +99,19 @@ pub fn fence(dir: &str, vaults: &[String], configs: &[String], data: Option<&str
 }
 /// What Relay's data folder keeps of the shared vaults in plaintext or as keys: their trash, bases and keys. A
 /// main-vault conversation may not read those either.
-pub fn shared_copies(data: &str) -> Vec<String> {
-    let d = data.trim_end_matches('/');
+pub fn shared_copies(data: &str, windows: bool) -> Vec<String> {
+    let d = crate::platform::claude_rule_path(data, windows);
     ["shared-trash/**", "shared-base/**", "shared-*.key"].iter().flat_map(|x| ["Read", "Edit"].map(|t| format!("{t}(/{d}/{x})"))).collect()
 }
-/// Whether a folder can be fenced: a permission rule reads `[`, `*`, `?` and `\` in a path as a pattern.
-pub fn fenceable(p: &str) -> bool { !p.contains(['[', ']', '*', '?', '\\']) }
+/// Whether a folder can be fenced: a permission rule reads `[`, `*`, `?` and on macOS `\` in a path as a pattern. On
+/// Windows `\` is a separator (`platform::claude_rule_path`), and the folder must be on a drive: the docs name no rule
+/// form for a share, and tell to map one to a drive letter.
+pub fn fenceable(p: &str, windows: bool) -> bool {
+    if !windows { return !p.contains(['[', ']', '*', '?', '\\']); }
+    let r = crate::platform::claude_rule_path(p, true);
+    let b = r.as_bytes();
+    b.len() >= 2 && b[0] == b'/' && b[1].is_ascii_alphabetic() && b.get(2).is_none_or(|&c| c == b'/') && !r.contains(['[', ']', '*', '?'])
+}
 /// Whether one vault folder is the other or lies inside it: a fence around one would then cover the other too.
 pub fn nested(a: &str, b: &str) -> bool {
     let (a, b) = (Path::new(a), Path::new(b));
@@ -126,8 +135,8 @@ fn rules_for(app: &AppHandle, st: &App, eb: &EnvBuf) -> (Vec<String>, bool) {
     let shared = all.first().is_some_and(|main| *main != eb.vault);
     let configs = config_dirs(st, eb);
     let data = data_dir(app).to_string_lossy().into_owned();
-    let mut rules = fence(&eb.vault, &all, &configs, shared.then_some(data.as_str()));
-    if !shared && all.len() > 1 { rules.extend(shared_copies(&data)); }
+    let mut rules = fence(&eb.vault, &all, &configs, shared.then_some(data.as_str()), cfg!(windows));
+    if !shared && all.len() > 1 { rules.extend(shared_copies(&data, cfg!(windows))); }
     (rules, shared)
 }
 
@@ -235,7 +244,8 @@ fn blocked(g: &Guard, r: &agent_core::pending::Request) -> Option<String> {
 // ponytail: only the shapes those two functions make (a `/**` end, one `*` in a file name), a full glob if they grow
 fn hits(rule: &str, path: &str, windows: bool) -> bool {
     let Some(pat) = rule.split_once('(').and_then(|(_, r)| r.strip_suffix(')')).and_then(|r| r.strip_prefix('/')) else { return false };
-    // the rule's path as `blocked` has the paths it checks (`*` is a plain character there)
+    // the rule's path as `blocked` has the paths it checks (`*` is a plain character there), `/c/a` on Windows as `c:/a`
+    let pat = &crate::platform::from_claude_rule_path(pat, windows);
     let pat = &crate::platform::norm_path(pat, pat, windows);
     // a path with a wildcard (`/me/va*/x`, which the shell expands): whether one of the paths it may stand for is covered
     if path.contains(['*', '?', '[']) {
@@ -312,8 +322,8 @@ pub static CAPTURES: std::sync::Mutex<Vec<u32>> = std::sync::Mutex::new(Vec::new
 /// `empty`: a joined vault starts in an empty folder.
 pub fn check_folder(folder: &str, others: &[String], protected: &[String], empty: bool) -> Result<(), String> {
     let home = home();
-    if folder.is_empty() || !folder.starts_with('/') { return Err(trc("err.vault_pick")); }
-    if !fenceable(folder) { return Err(trc_v("err.unfenceable_vault", folder)); }
+    if folder.is_empty() || !crate::platform::is_abs(folder, cfg!(windows)) { return Err(trc("err.vault_pick")); }
+    if !fenceable(folder, cfg!(windows)) { return Err(trc_v("err.unfenceable_vault", folder)); }
     if let Some(o) = others.iter().find(|o| nested(folder, o)) { return Err(trc_v("err.nested_vault", &format!("{folder}, {o}"))); }
     if let Some(p) = protected.iter().find(|p| Path::new(p).starts_with(folder) || Path::new(folder).starts_with(p)) { return Err(trc_v("err.vault_protected", &format!("{folder}, {p}"))); }
     // the home folder may hold vaults, it may not be one or lie inside one
@@ -361,20 +371,61 @@ mod tests {
         let all = ["/me/vault".to_string(), "/team/shared/".to_string()];
         let configs = ["/me/.claude".to_string()];
         let slug = |v: &str| agent_claude::slug(v);
-        assert_eq!(fence("/me/vault", &all, &configs, None), [
+        assert_eq!(fence("/me/vault", &all, &configs, None, false), [
             "Read(//team/shared/**)".to_string(), "Edit(//team/shared/**)".into(),
             format!("Read(//me/.claude/projects/{}/**)", slug("/team/shared")), format!("Edit(//me/.claude/projects/{}/**)", slug("/team/shared"))]);
         // in a shared vault: the main vault, Relay's data, each config folder whole with its .claude.json, its own .claude
-        let shared = fence("/team/shared/", &all, &configs, Some("/me/Library/Application Support/relay"));
+        let shared = fence("/team/shared/", &all, &configs, Some("/me/Library/Application Support/relay"), false);
         for r in ["Read(//me/vault/**)", "Read(//me/Library/Application Support/relay/**)", "Read(//me/.claude/**)", "Edit(//me/.claude/**)",
                   "Read(//me/.claude.json)", "Edit(//me/.claude.json)", "Edit(//team/shared/.claude/**)"] {
             assert!(shared.contains(&r.to_string()), "{r}");
         }
-        assert!(fence("/me/vault", &all[..1], &configs, None).is_empty(), "one vault, nothing to fence");
-        let copies = shared_copies("/me/Library/Application Support/relay/");
+        assert!(fence("/me/vault", &all[..1], &configs, None, false).is_empty(), "one vault, nothing to fence");
+        let copies = shared_copies("/me/Library/Application Support/relay/", false);
         assert!(copies.contains(&"Read(//me/Library/Application Support/relay/shared-trash/**)".to_string()));
         assert!(nested("/me/vault/team", "/me/vault") && nested("/me/vault", "/me/vault/team") && !nested("/me/vault", "/me/vault2"));
-        assert!(fenceable("/me/Team vault") && !fenceable("/me/Team [x]") && !fenceable("/me/a*b"));
+        assert!(fenceable("/me/Team vault", false) && !fenceable("/me/Team [x]", false) && !fenceable("/me/a*b", false));
+    }
+    // Claude Code on Windows matches its rules against `/c/Users/...` (code.claude.com/docs/en/permissions): the fence
+    // writes that form, a vault there may have `\` in its path, and Relay's own guard reads the rules back
+    #[test]
+    fn claude_code_on_windows_gets_rules_in_its_own_path_form() {
+        let (main, team) = (r"C:\Users\Ann\Relay".to_string(), r"D:\Work\Team Notes".to_string());
+        let all = [main.clone(), team.clone()];
+        let configs = [r"C:\Users\Ann\.claude".to_string()];
+        // Claude Code names a project's transcript folder after its path, every other character a `-`: `C:\Users\me\x` is
+        // `C--Users-me-x` (anthropics/claude-code issues 39413, 86685). Not verified here: those issues show a lower-case
+        // drive (`c--`) too, when the path came in that way, and nothing on long paths
+        assert_eq!(agent_claude::slug(&team), "D--Work-Team-Notes");
+        assert_eq!(fence(&main, &all, &configs, None, true), [
+            "Read(//d/Work/Team Notes/**)", "Edit(//d/Work/Team Notes/**)",
+            "Read(//c/Users/Ann/.claude/projects/D--Work-Team-Notes/**)", "Edit(//c/Users/Ann/.claude/projects/D--Work-Team-Notes/**)"]);
+        // the form std's canonicalize gives (`\\?\`), a trailing `\`, `/` separators: the same rules
+        let other = [r"\\?\C:\Users\Ann\Relay\".to_string(), "D:/Work/Team Notes/".to_string()];
+        assert_eq!(fence(&other[0], &other, &[], None, true), ["Read(//d/Work/Team Notes/**)", "Edit(//d/Work/Team Notes/**)"]);
+        let data = r"C:\Users\Ann\AppData\Roaming\relay";
+        let shared = fence(&team, &all, &configs, Some(data), true);
+        for r in ["Read(//c/Users/Ann/Relay/**)", "Read(//c/Users/Ann/AppData/Roaming/relay/**)", "Edit(//c/Users/Ann/.claude/**)",
+                  "Read(//c/Users/Ann/.claude.json)", "Edit(//d/Work/Team Notes/.claude/**)"] {
+            assert!(shared.contains(&r.to_string()), "{r}");
+        }
+        assert!(shared_copies(data, true).contains(&"Read(//c/Users/Ann/AppData/Roaming/relay/shared-*.key)".to_string()));
+        assert!(shared.iter().all(|r| !r.contains('\\') && !r.contains(":/")), "no Windows form left: {shared:?}");
+        // a vault on a drive may have `\` and spaces, a share or a pattern character may not be one
+        for ok in [main.as_str(), team.as_str(), r"\\?\C:\Users\Ann\Relay", "c:/users/ann/relay", r"E:\"] { assert!(fenceable(ok, true), "{ok}"); }
+        for bad in [r"\\server\share\Relay", r"\\?\UNC\server\share\Relay", r"\\.\pipe\x", r"C:\a[1]", r"C:\a*", r"C:\a?", r"Users\Ann", ""] { assert!(!fenceable(bad, true), "{bad}"); }
+        assert!(!fenceable(r"C:\Users\Ann\Relay", false), "on macOS a `\\` is still a pattern character");
+        // the round trip: each rule covers its folder however Windows writes a path in it, and nothing next to it
+        let rules = fence(&team, &all, &configs, Some(data), true);
+        let hit = |p: &str| rules.iter().any(|r| hits(r, &crate::platform::norm_path(p, p, true), true));
+        for p in [r"C:\Users\Ann\Relay\Inbox.md", r"c:/users/ann/relay", r"\\?\C:\USERS\ANN\RELAY\x", r"C:\Users\Ann\.claude\projects\x.jsonl", r"C:\Users\Ann\AppData\Roaming\relay\k"] {
+            assert!(hit(p), "{p}");
+        }
+        for p in [r"C:\Users\Ann\Relay2\x", r"C:\Users\Ann\code\x", r"D:\Work\Team Notes\a.md", r"C:\c\Users\Ann\Relay\x"] { assert!(!hit(p), "{p}"); }
+        // a share as Relay's data folder (a redirected AppData): written and read back as one, Claude Code's reading of it unverified
+        assert_eq!(shared_copies(r"\\srv\home\relay", true)[0], "Read(///srv/home/relay/shared-trash/**)");
+        assert!(hits("Read(///srv/home/relay/**)", "//srv/home/relay/x", true));
+        assert!(!hits("Read(///srv/home/relay/**)", "c:/srv/home/relay/x", true));
     }
     /// What codex asks, through its own parser, and what Relay does with it: the deny line, or None for a card.
     fn ask(g: &Guard, lines: &[serde_json::Value]) -> Option<String> {
@@ -397,7 +448,7 @@ mod tests {
     fn codex_is_denied_outside_its_workspace_before_a_card() {
         let all = ["/me/vault".to_string(), "/team/shared".to_string()];
         let configs = ["/me/.claude".to_string()];
-        let g = Guard::new(fence("/team/shared", &all, &configs, Some("/me/data")), "/team/shared", true, "/me", false, |_| None);
+        let g = Guard::new(fence("/team/shared", &all, &configs, Some("/me/data"), false), "/team/shared", true, "/me", false, |_| None);
         let deny = r#"{"id":7,"result":{"decision":"decline"}}"#.to_string();
         for out in ["/bin/zsh -lc 'cat /me/vault/Inbox.md'", "cat ~/notes.txt", "cat $HOME/x", "cat ../other/x", "cp a.md /tmp/a.md", "ls /me/data"] {
             assert_eq!(ask(&g, &cmd(out, "/team/shared")), Some(deny.clone()), "{out}");
@@ -411,8 +462,8 @@ mod tests {
         assert!(ask(&g, &patch("/team/shared/.claude/settings.json")).is_some());
         assert_eq!(ask(&g, &patch("/team/shared/b.md")), None);
         // a main-vault conversation may leave its vault, not into another one or the workspaces' keys
-        let mut rules = fence("/me/vault", &all, &configs, None);
-        rules.extend(shared_copies("/me/data"));
+        let mut rules = fence("/me/vault", &all, &configs, None, false);
+        rules.extend(shared_copies("/me/data", false));
         let main = Guard::new(rules, "/me/vault", false, "/me", false, |_| None);
         assert!(ask(&main, &cmd("cat /team/shared/x.md", "/me/vault")).is_some());
         assert!(ask(&main, &cmd("cat /me/data/shared-0a.key", "/me/vault")).is_some());
@@ -423,7 +474,7 @@ mod tests {
         let all = [r"C:\Users\me\vault".to_string(), r"C:\Users\me\Team".to_string()];
         let configs = [r"C:\Users\me\.claude".to_string()];
         let data = r"C:\Users\me\AppData\Roaming\relay";
-        let g = Guard::new(fence(r"C:\Users\me\Team", &all, &configs, Some(data)), r"C:\Users\me\Team", true, r"C:\Users\me", true, |_| None);
+        let g = Guard::new(fence(r"C:\Users\me\Team", &all, &configs, Some(data), true), r"C:\Users\me\Team", true, r"C:\Users\me", true, |_| None);
         let deny = r#"{"id":7,"result":{"decision":"decline"}}"#.to_string();
         let ps = |c: &str| format!(r"'C:\Program Files\PowerShell\7\pwsh.exe' -Command '{c}'");
         // the main vault in every spelling, the home folder's ways, another drive, a share, `..` out of the workspace
@@ -448,8 +499,8 @@ mod tests {
         }
         for ok in [r"cmd.exe /c dir /b /o:n /?", r"ipconfig /all"] { assert_eq!(ask(&g, &cmd(ok, r"C:\Users\me\Team")), None, "{ok}"); }
         // a main-vault conversation: the other vault's rules hold in each spelling Windows opens as that folder
-        let mut rules = fence(r"C:\Users\me\vault", &all, &configs, None);
-        rules.extend(shared_copies(data));
+        let mut rules = fence(r"C:\Users\me\vault", &all, &configs, None, true);
+        rules.extend(shared_copies(data, true));
         let main = Guard::new(rules, r"C:\Users\me\vault", false, r"C:\Users\me", true, |_| None);
         for out in [r"type C:\Users\me\team\x.md", r"type C:\Users\me\Team.\x.md", r"type C:\Users\me\Team. .\x.md", r"type \\.\c:\users\me\team\x", r"type C:\Users\me\TEAM~1\x"] {
             assert!(ask(&main, &cmd(out, r"C:\Users\me\vault")).is_some(), "{out}");
@@ -469,7 +520,7 @@ mod tests {
     #[test]
     fn codex_cannot_hide_a_path_behind_the_shell_or_a_variable() {
         let all = ["/me/vault".to_string(), "/team/shared".to_string()];
-        let g = Guard::new(fence("/team/shared", &all, &[], Some("/me/data")), "/team/shared", true, "/me", false, |_| None);
+        let g = Guard::new(fence("/team/shared", &all, &[], Some("/me/data"), false), "/team/shared", true, "/me", false, |_| None);
         // the first word drops only as one word of a system program, not with an operator glued on
         for out in ["/bin/true;cat</me/vault/x", "/bin/true&&cat /me/vault/x", "'/bin/zsh' -lc 'cat /me/vault/x'", "cat $PWD/../vault/x", "cat ${D}/../../me/vault/x"] {
             assert!(ask(&g, &cmd(out, "/team/shared")).is_some(), "{out}");
@@ -479,8 +530,8 @@ mod tests {
     #[test]
     fn codex_cannot_reach_a_fenced_path_through_a_wildcard_or_a_variable() {
         let all = ["/me/vault".to_string(), "/team/shared".to_string()];
-        let mut rules = fence("/me/vault", &all, &[], None);
-        rules.extend(shared_copies("/me/data"));
+        let mut rules = fence("/me/vault", &all, &[], None, false);
+        rules.extend(shared_copies("/me/data", false));
         let main = Guard::new(rules, "/me/vault", false, "/me", false, |_| None);
         for out in ["cat /team/sh*/x.md", "cat /team/{shared,y}/x", "cat /{team/shared,x}/y", "cat /{me/vault,x}/y", "cat /te?m/shared/x", "cat /team/[s]hared/x", "cat /me/data/*.key", "cat /me/$V/x", "cat /me/**/x.md"] {
             assert!(ask(&main, &cmd(out, "/me/vault")).is_some(), "{out}");
@@ -489,13 +540,13 @@ mod tests {
         // braces that are no path (awk, a PowerShell block) are words like any other
         for ok in ["awk '{print $1}' notes.md", "Get-ChildItem | ForEach-Object { $_.Name }"] { assert_eq!(ask(&main, &cmd(ok, "/me/vault")), None, "{ok}"); }
         for ok in ["ls /usr/lib/*.dylib", "cat /me/code/*.md", "cat /me/data/shared-0a/*.md"] { assert_eq!(ask(&main, &cmd(ok, "/me/vault")), None, "{ok}"); }
-        let g = Guard::new(fence("/team/shared", &all, &[], Some("/me/data")), "/team/shared", true, "/me", false, |_| None);
+        let g = Guard::new(fence("/team/shared", &all, &[], Some("/me/data"), false), "/team/shared", true, "/me", false, |_| None);
         for out in [r#""/bin/zsh$(cat /me/vault/x>o)" -c x"#, "'/bin/zsh'$(cat</me/vault/x) -c x", "/bin/zsh$(cat</me/vault/x) -c x", "/bin/z*</me/vault/x"] {
             assert!(ask(&g, &cmd(out, "/team/shared")).is_some(), "{out}");
         }
         // on Windows: an NTFS stream of the other vault's folder, a wildcard in it
         let all = [r"C:\Users\me\vault".to_string(), r"C:\Users\me\Team".to_string()];
-        let w = Guard::new(fence(r"C:\Users\me\vault", &all, &[], None), r"C:\Users\me\vault", false, r"C:\Users\me", true, |_| None);
+        let w = Guard::new(fence(r"C:\Users\me\vault", &all, &[], None, true), r"C:\Users\me\vault", false, r"C:\Users\me", true, |_| None);
         for out in [r"type C:\Users\me\Team::$INDEX_ALLOCATION\x.md", r"type C:\Users\me\Team\x.md:s", r"type C:\Users\me\te*\x.md", r"type C:\Users\me\T?am\x"] {
             assert!(ask(&w, &cmd(out, r"C:\Users\me\vault")).is_some(), "{out}");
         }

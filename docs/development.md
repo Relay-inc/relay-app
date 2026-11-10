@@ -407,6 +407,18 @@ own popup window with the opener's profile, and handles that window's `window.cl
 WKUIDelegate for that). The picture for `design_snapshot` is `ICoreWebView2::CapturePreview` as PNG into a memory
 stream, through `with_webview`.
 
+The fence for Claude Code on Windows (`policy::fence`): Claude Code turns a Windows path into its POSIX form before it
+matches a permission rule, `C:\Users\alice` is `/c/Users/alice` (code.claude.com/docs/en/permissions, read 2026-11-10).
+`platform::claude_rule_path` writes every path of the fence that way (`Read(//c/Users/alice/Team/**)`: `/` separators,
+the drive as `/c`, `\\?\` dropped, the case of the rest kept), and Relay's guard reads a rule back through
+`platform::from_claude_rule_path` before it compares paths the Windows way (`norm_path`). A vault on Windows must be on
+a drive letter (`policy::fenceable`): those docs name no rule form for a network share and tell to map one to a drive.
+The transcript folder under `<config>/projects/` is `agent_claude::slug` of the path as on macOS, `C:\Users\me\x` is
+`C--Users-me-x` (as shown in anthropics/claude-code issues 39413 and 86685). Not verified on Windows yet: whether
+Claude Code matches rules there without regard to case, what it does with a rule for a share (`///server/share/...`, when
+Relay's data folder or a Claude config folder is on one), and whether its own slug lowercases the drive letter (those
+issues show both `C--` and `c--`).
+
 Processes and local sockets work on Windows:
 
 - **Local sockets** (`packages/relay-remote/src/sock.rs`): named pipes behind the same calls as a Unix socket, for
