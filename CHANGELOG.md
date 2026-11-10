@@ -44,7 +44,7 @@ a PR. Versions follow
 
 ### Fixed
 
-- Workspaces on Windows: Relay's guard for Codex read paths the macOS way, so a path with `\`, a drive letter, another case or `%USERPROFILE%` got past it or a workspace's own files were refused, and its system programs were the Mac's. A workspace's policy is now found however its folder is written, and Codex's permission profile there reads Windows' folders and git's config under the profile folder (#PR)
+- Workspaces on Windows: Relay's guard for Codex read paths the macOS way, so a path with `\`, a drive letter, another case or `%USERPROFILE%` got past it or a workspace's own files were refused, and its system programs were the Mac's. A workspace's policy is now found however its folder is written, and Codex's permission profile there reads Windows' folders and git's config under the profile folder (#476)
 - The Pi agent was only declared as a dependency of the macOS build, so a build for any other system failed on it (#451)
 - Organisation › People grouped devices of different people when one of them signed another's email address for itself: an address now groups people only when an admin set it or an SSO login proved it at the join, and a self-signed one shows as Email not verified (#465)
 - An organisation admin's offboarding could revoke fully paired devices on the server, also the owner's: the server now revokes only devices that came in through a workspace, refuses the rest, and Organisation › People says the devices were not revoked and why (#465)
