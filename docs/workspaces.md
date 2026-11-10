@@ -87,7 +87,9 @@ does:
   MCP servers of its config, its plugins and its apps, as Claude Code runs with `--strict-mcp-config`. This needs
   codex-cli 0.163 or newer, an older Codex is refused in a workspace (it would ignore the profile). What this is not:
   the guard sees only what Codex asks for. Codex's sandbox lets it read anywhere, and a path a command builds at run
-  time is not seen by the guard. A Codex conversation opened in a terminal asks there, past the guard and without
+  time is not seen by the guard. A workspace's `.codex` and `.agents` do sync: Codex loads a project's
+  `.codex/config.toml` only in a folder the user trusted in Codex, so do not mark a workspace trusted there. A Codex
+  conversation opened in a terminal asks there, past the guard and without
   the profile, so a workspace's terminal stays Claude Code's.
 - **Nothing a member writes runs on your Mac.** `.claude` never syncs, and of the folder it links to (`System/`) only
   the notes go (`rules/`, `reference/`, `archive/`, `reminders.md`). Names compare as APFS and HFS+ do, a round
