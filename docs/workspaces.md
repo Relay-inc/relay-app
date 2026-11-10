@@ -117,6 +117,20 @@ does:
   command can write there without asking. A workspace's `.codex` and `.agents` do not sync (below). A Codex
   conversation opened in a terminal asks there, past the guard and without
   the profile, so a workspace's terminal stays Claude Code's.
+  **Codex on Windows.** The guard compares paths the Windows way there (`platform::norm_path`): `\` and `/`, any case,
+  the drive letter, `\\?\` and shares are one path, and `~`, `$HOME`, `$env:NAME` and `%NAME%` are written out. A word
+  starting with a single `/` is a switch there (`cmd /c`), not a path. Codex runs every command in PowerShell (`pwsh`,
+  else Windows PowerShell, `cmd.exe` as the last fallback, codex-cli 0.163's `shell_detect.rs`), never `/bin/zsh -lc`,
+  so the system's programs there are `%SystemRoot%`, `%ProgramFiles%` and `%ProgramFiles(x86)%` (PowerShell and Git for
+  Windows): the program folders of Codex's own `:minimal` on Windows, without `C:\ProgramData`. The shell's own path
+  (`'C:\Program Files\PowerShell\7\pwsh.exe' -Command '…'`) counts as one word. Another path with a space in a
+  command is read up to the space, as on macOS, which may decline what was inside. The profile reads `:minimal` and git's
+  global config under the profile folder there, no Homebrew. Not tested on Windows: codex-cli's elevated Windows
+  sandbox refuses a profile without read access to `:root` ("requires effective `:root` read access",
+  `windows-sandbox-rs/src/resolved_permissions.rs`), and Relay's keeps `:root` at `none`, so a workspace's Codex
+  commands are expected to fail there rather than read outside it (fail-closed). The alternative is `:root` read on
+  Windows, with which Codex's commands read outside the workspace, as they do in the main vault. Which one stays is
+  decided after a test on Windows.
 - **Nothing a member writes runs on your Mac.** `.claude` never syncs, and of the folder it links to (`System/`) only
   the notes go (`rules/`, `reference/`, `archive/`, `reminders.md`). Codex's `.codex` (config, rules, hooks) and
   `.agents` (skills) never sync either, at any depth. One that synced before this stays as it is on every Mac and on

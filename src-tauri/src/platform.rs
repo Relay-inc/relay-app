@@ -87,6 +87,96 @@ pub fn python(path: &str) -> Option<std::process::Command> {
     }
 }
 
+/// A path as Relay compares paths: absolute, `.` and `..` worked out (never above the root) without asking the disk,
+/// relative ones against `base` (an absolute path). On macOS the std way (`lexical`), as before. On Windows the
+/// forms Windows takes (`C:\a`, `c:/a`, mixed separators, `\\server\share\a`, `\\?\C:\a`, `\\?\UNC\server\share\a`,
+/// `\a` on `base`'s drive) all become one: `/` separators and lower case (Windows' file names are not case
+/// sensitive), the drive as `c:` and a share as `//server/share`, no trailing `/`. A pure function so the Windows
+/// side is tested on a Mac too, where std::path does not read `C:\`.
+pub fn norm_path(p: &str, base: &str, windows: bool) -> String {
+    if !windows {
+        let p = Path::new(p);
+        return lexical(&if p.is_absolute() { p.to_path_buf() } else { Path::new(base).join(p) });
+    }
+    let s = p.replace('\\', "/");
+    let s = s.strip_prefix("//?/UNC/").map(|r| format!("//{r}")).or_else(|| s.strip_prefix("//?/").map(String::from)).unwrap_or(s);
+    let drive = |x: &str| x.len() >= 2 && x.as_bytes()[0].is_ascii_alphabetic() && x.as_bytes()[1] == b':';
+    let (root, rest) = if drive(&s) {
+        (s[..2].to_lowercase(), s[2..].to_string())
+    } else if let Some(r) = s.strip_prefix("//") {
+        let mut it = r.splitn(3, '/');
+        let (server, share) = (it.next().unwrap_or(""), it.next().unwrap_or(""));
+        (format!("//{server}/{share}").to_lowercase(), it.next().unwrap_or("").to_string())
+    } else {
+        // `\a` on base's drive (or share), `a` inside base
+        let b = if is_abs(base, true) { norm_path(base, "c:", true) } else { "c:".to_string() };
+        let root = if b.starts_with("//") { b.splitn(5, '/').take(4).collect::<Vec<_>>().join("/") } else { b.chars().take(2).collect() };
+        if s.starts_with('/') { (root, s) } else { return norm_path(&format!("{b}/{s}"), base, true) }
+    };
+    let mut segs: Vec<String> = vec![];
+    for c in rest.split('/') {
+        match c { "" | "." => {} ".." => { segs.pop(); } x => segs.push(x.to_lowercase()) }
+    }
+    if segs.is_empty() { root } else { format!("{root}/{}", segs.join("/")) }
+}
+/// A path with its `.` and `..` worked out, without asking the disk (macOS).
+fn lexical(p: &Path) -> String {
+    let mut out = std::path::PathBuf::from("/");
+    for c in p.components() {
+        match c { std::path::Component::ParentDir => { out.pop(); } std::path::Component::Normal(x) => out.push(x), _ => {} }
+    }
+    out.to_string_lossy().into_owned()
+}
+/// Whether a word is an absolute path. On Windows a drive (`C:\`, `c:/`, also `C:x`), a share or `\\?\` path, or `\a`
+/// on the current drive. Not `/a`: that is a switch there (`cmd /c`, `dir /b`, `findstr /i`).
+pub fn is_abs(p: &str, windows: bool) -> bool {
+    if !windows { return p.starts_with('/'); }
+    let b = p.as_bytes();
+    (b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':') || p.starts_with('\\') || p.starts_with("//")
+}
+/// A word with the user's home folder written out: `~`, `$HOME`, `${HOME}`. On Windows also, in any case,
+/// `$env:NAME`, `${env:NAME}` (PowerShell, which Codex runs commands in there) and `%NAME%` (cmd) at its start, with
+/// `env` for the variable (USERPROFILE and HOME are `home`). An unknown variable stays as written.
+pub fn expand_home(t: &str, home: &str, windows: bool, env: impl Fn(&str) -> Option<String>) -> String {
+    if !windows {
+        return t.strip_prefix("${HOME}").or_else(|| t.strip_prefix("$HOME")).map(|x| format!("{home}{x}"))
+            .or_else(|| (t == "~" || t.starts_with("~/")).then(|| format!("{home}{}", &t[1..]))).unwrap_or_else(|| t.to_string());
+    }
+    if t == "~" || t.starts_with("~/") || t.starts_with("~\\") { return format!("{home}{}", &t[1..]); }
+    let lower = t.to_ascii_lowercase();
+    let (name, rest) = if let Some(r) = lower.strip_prefix("${env:").and_then(|r| r.split_once('}')) { r }
+        else if let Some(r) = lower.strip_prefix("${").and_then(|r| r.split_once('}')).filter(|(n, _)| *n == "home") { r }
+        else if let Some(r) = lower.strip_prefix('%').and_then(|r| r.split_once('%')) { r }
+        else if let Some(r) = lower.strip_prefix("$env:").or_else(|| lower.strip_prefix('$').filter(|r| r.starts_with("home"))) {
+            r.split_at(r.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(r.len()))
+        } else { return t.to_string() };
+    let value = if name == "home" || name == "userprofile" { Some(home.to_string()) } else { env(&name.to_uppercase()) };
+    match value { Some(v) if !v.is_empty() => format!("{v}{}", &t[t.len() - rest.len()..]), _ => t.to_string() }
+}
+/// The folders of the system's programs and devices, normalized as `norm_path` and with a trailing `/`: what a guarded
+/// agent may name outside a workspace. macOS: what Codex asks for there (`/bin/zsh -lc '…'`) and Homebrew. Windows:
+/// the program folders of Codex's own `:minimal` there (Windows, Program Files twice), where its shell (PowerShell, then
+/// cmd) and Git for Windows live, by `env` (SystemRoot, ProgramFiles, ProgramFiles(x86)) with Codex's `C:\` defaults.
+/// Not ProgramData, which holds other programs' data.
+pub fn system_dirs(windows: bool, env: impl Fn(&str) -> Option<String>) -> Vec<String> {
+    if !windows { return ["/bin/", "/sbin/", "/usr/", "/opt/homebrew/", "/dev/"].map(String::from).to_vec(); }
+    [("SystemRoot", r"C:\Windows"), ("ProgramFiles", r"C:\Program Files"), ("ProgramFiles(x86)", r"C:\Program Files (x86)")]
+        .iter().map(|(k, d)| format!("{}/", norm_path(&env(k).filter(|v| !v.is_empty()).unwrap_or(d.to_string()), d, true))).collect()
+}
+/// Whether two folder paths are the same folder: by their real paths when they exist (links, and on Windows
+/// without the `\\?\` that std's canonicalize adds), then as `norm_path` has them (case and separators on Windows).
+pub fn same_dir(a: &str, b: &str) -> bool {
+    let real = |p: &str| {
+        #[cfg(windows)]
+        let r = dunce::canonicalize(p);
+        #[cfg(not(windows))]
+        let r = std::fs::canonicalize(p);
+        let p = r.map(|r| r.to_string_lossy().into_owned()).unwrap_or_else(|_| p.to_string());
+        norm_path(&p, &p, cfg!(windows))
+    };
+    real(a) == real(b)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,6 +193,54 @@ mod tests {
         assert!(dir_link_ok(&at));
         assert!(std::fs::symlink_metadata(&at).unwrap().file_type().is_symlink());
         assert_eq!(std::fs::read_to_string(at.join("CLAUDE.md")).unwrap(), "x");
+        std::fs::remove_dir_all(&v).unwrap();
+    }
+
+    // every way Windows writes a path is one path, the Mac's stay as they were
+    #[test]
+    fn paths_are_normalized_per_platform() {
+        let w = |p: &str| norm_path(p, r"C:\Users\me\Team", true);
+        for p in [r"C:\Users\me\vault", "c:/users/ME/Vault/", r"C:\Users\me/vault\.", r"C:\Users\me\x\..\vault", r"\\?\C:\Users\me\vault", r"\Users\me\vault", r"..\vault", r"C:\..\..\Users\me\vault"] {
+            assert_eq!(w(p), "c:/users/me/vault", "{p}");
+        }
+        assert_eq!(w(r"\\Server\Share\a\..\b"), "//server/share/b");
+        assert_eq!(w(r"\\?\UNC\server\share\b"), "//server/share/b");
+        assert_eq!(norm_path(r"\x", r"\\server\share\team", true), "//server/share/x");
+        assert_eq!((w("C:"), w(r"D:\"), w("a.md")), ("c:".into(), "d:".into(), "c:/users/me/team/a.md".into()));
+        assert_eq!(norm_path("x", "relative", true), "c:/x", "no endless loop on a relative base");
+        assert_eq!(norm_path("/me/Vault/../a/", "/", false), "/me/a");
+        assert_eq!(norm_path("b", "/me/Vault", false), "/me/Vault/b", "case kept on macOS");
+        assert!(is_abs(r"C:\a", true) && is_abs("c:/a", true) && is_abs(r"\\s\x", true) && is_abs(r"\a", true));
+        assert!(!is_abs("/c", true) && !is_abs("a", true) && !is_abs(r"C:\a", false) && is_abs("/a", false));
+    }
+    #[test]
+    fn home_and_variables_are_written_out() {
+        let env = |k: &str| (k == "APPDATA").then(|| r"C:\Users\me\AppData\Roaming".to_string());
+        let w = |t: &str| expand_home(t, r"C:\Users\me", true, env);
+        for (t, out) in [("~", r"C:\Users\me"), (r"~\a", r"C:\Users\me\a"), ("~/a", r"C:\Users\me/a"), (r"$HOME\a", r"C:\Users\me\a"), (r"$home\a", r"C:\Users\me\a"),
+                         (r"${HOME}\a", r"C:\Users\me\a"), (r"$env:USERPROFILE\a", r"C:\Users\me\a"), (r"${env:UserProfile}\a", r"C:\Users\me\a"),
+                         (r"%USERPROFILE%\a", r"C:\Users\me\a"), (r"$env:APPDATA\relay", r"C:\Users\me\AppData\Roaming\relay"), (r"%appdata%\relay", r"C:\Users\me\AppData\Roaming\relay"),
+                         (r"$env:NOPE\a", r"$env:NOPE\a"), ("$homework", "$homework"), ("a~", "a~")] {
+            assert_eq!(w(t), out, "{t}");
+        }
+        let m = |t: &str| expand_home(t, "/me", false, |_| Some("x".into()));
+        assert_eq!((m("~/a"), m("$HOME/a"), m("${HOME}/a"), m("$home/a"), m("%USERPROFILE%")), ("/me/a".into(), "/me/a".into(), "/me/a".into(), "$home/a".into(), "%USERPROFILE%".into()));
+        assert_eq!(system_dirs(true, |_| None), ["c:/windows/", "c:/program files/", "c:/program files (x86)/"]);
+        assert_eq!(system_dirs(false, |_| None)[0], "/bin/");
+    }
+    // a workspace folder is found however the folder is written: a link to it, a trailing `/`, `..` (macOS: a
+    // symlink, and a case that differs is another folder there)
+    #[cfg(unix)]
+    #[test]
+    fn same_dir_by_real_path() {
+        let v = std::env::temp_dir().join(format!("relay-same-dir-{}", std::process::id()));
+        std::fs::create_dir_all(v.join("Team/sub")).unwrap();
+        let (team, link) = (v.join("Team"), v.join("link"));
+        symlink(&team, &link).unwrap();
+        let t = team.to_string_lossy().into_owned();
+        for other in [format!("{t}/"), format!("{t}/sub/.."), link.to_string_lossy().into_owned()] { assert!(same_dir(&t, &other), "{other}"); }
+        assert!(!same_dir(&t, &v.join("Team/sub").to_string_lossy()));
+        assert!(same_dir("/no/such/x/", "/no/such/x") && !same_dir("/no/such/x", "/no/such/X"));
         std::fs::remove_dir_all(&v).unwrap();
     }
 }
