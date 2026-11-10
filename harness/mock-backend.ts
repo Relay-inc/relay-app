@@ -1191,7 +1191,8 @@ function handle(cmd: string, a: Args): unknown {
       return structuredClone(voiceModels);
     case "dictation_model":
     case "permissions":
-      return { microphone: "ok", accessibility: "ok", fullDisk: "missing", systemAudio: null, notifications: null };
+      // mic-off: the microphone switched off in Windows' privacy settings (src-tauri/src/permissions.rs)
+      return { microphone: fixture === "mic-off" ? "missing" : "ok", accessibility: "ok", fullDisk: "missing", systemAudio: null, notifications: null };
     case "permissions_open":
       return null;
     case "dictation_access":
@@ -1211,6 +1212,7 @@ function handle(cmd: string, a: Args): unknown {
       dictationLevels = null;
       return null;
     case "meeting_record_start":
+      if (fixture === "mic-off") return Promise.reject("microphone");
       meetingTicks = { channel: channelId(a.onTick), index: 0 };
       return { system: true, why: null };
     case "meeting_record_stop":

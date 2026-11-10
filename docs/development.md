@@ -378,6 +378,10 @@ the command key, ⌘ on macOS and Ctrl on Windows, and `bindingLabel` writes it 
 `tauri-plugin-notification`, a second start and a `relay://` link reach the running window through
 `tauri-plugin-single-instance`, both Windows-only dependencies. The harness runs the Windows side with
 `?platform=windows`.
+A meeting on Windows records the microphone and the default output device, which cpal opens as WASAPI loopback, then
+reads and resamples the tracks in-process at Stop (`read_16k` in `src-tauri/src/meeting.rs`) instead of `afconvert`,
+and keeps the 16 kHz WAV mix (~115 MB an hour) where the Mac keeps m4a. Whether the microphone is switched off comes
+from the privacy settings in the registry (`src-tauri/src/permissions.rs`), checked before the recording starts.
 `cargo check --target x86_64-pc-windows-msvc` from a Mac stops at the C build scripts (ring, SQLite, the Windows
 resource file), which need the Windows SDK: CI is the check.
 
