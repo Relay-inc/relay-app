@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.50] - 2026-11-10
+
 ### Added
 
 - GitHub Projects as a board: pick one of your own or your organizations' projects per vault project, its Status field makes the columns. Drag a card to change its status, New task adds a draft item, a click opens the issue or pull request on GitHub. Set it up with a token under Settings › Integrations › GitHub Projects (#483).
