@@ -147,7 +147,8 @@ pub fn fence_in(app: &AppHandle, st: &App, eb: &mut EnvBuf) {
 /// workspace at `dir`, or no policy, refuses nothing.
 pub fn check_workspace_policy(app: &AppHandle, st: &App, dir: &str, provider: &str) -> Result<(), String> {
     let s = st.settings.lock().unwrap().clone();
-    let Some(v) = crate::shared_vaults::list(&s).into_iter().find(|v| v.folder == dir) else { return Ok(()) };
+    // the same folder however it is written (links, and on Windows `\\?\`, case and separators)
+    let Some(v) = crate::shared_vaults::list(&s).into_iter().find(|v| crate::platform::same_dir(&v.folder, dir)) else { return Ok(()) };
     match crate::shared_vaults::load_key(&data_dir(app), &v.id).ok().and_then(|k| k.policy) {
         Some(p) if !p.providers.iter().any(|x| x == provider) => Err(crate::trc("err.workspace_policy")),
         _ => Ok(()),
@@ -160,15 +161,19 @@ pub fn check_workspace_policy(app: &AppHandle, st: &App, dir: &str, provider: &s
 pub const FENCED_AGENTS: [&str; 2] = relay_remote::members::POLICY_PROVIDERS;
 /// The agents whose CLI does not read the fence's rules: Relay checks each permission request they raise.
 const GUARDED: [&str; 1] = ["codex"];
-/// What a guarded agent may name outside a workspace without a deny: the system's programs and devices (Codex asks
-/// for `/bin/zsh -lc '…'`).
-const SYSTEM: [&str; 5] = ["/bin/", "/sbin/", "/usr/", "/opt/homebrew/", "/dev/"];
 
 /// Relay's fence for an agent whose CLI does not read the rules: the same rules `fence` makes, and in another vault
 /// than the main one that vault, outside which nothing may be asked for. A guard, not a sandbox: it sees only what the
 /// agent asks permission for, so what its own sandbox lets it do unasked (reading anywhere, writing in the vault) and a
 /// path a command builds at run time get past it.
-pub struct Guard { rules: Vec<String>, dir: String, shared: bool, home: String }
+/// Paths are compared as `platform::norm_path` has them, on Windows by the Windows rules (`windows`). `system`: what
+/// it may name outside a workspace without a deny (`platform::system_dirs`).
+pub struct Guard { rules: Vec<String>, dir: String, shared: bool, home: String, windows: bool, system: Vec<String> }
+impl Guard {
+    fn new(rules: Vec<String>, dir: &str, shared: bool, home: &str, windows: bool, env: impl Fn(&str) -> Option<String>) -> Guard {
+        Guard { rules, dir: crate::platform::norm_path(dir, dir, windows), shared, home: home.into(), windows, system: crate::platform::system_dirs(windows, env) }
+    }
+}
 
 /// The guard for a conversation of `p` in `vault`, for an agent in GUARDED.
 pub fn guard(app: &AppHandle, st: &App, p: &dyn agent_core::AgentProvider, vault: &str) -> Option<Guard> {
@@ -176,7 +181,7 @@ pub fn guard(app: &AppHandle, st: &App, p: &dyn agent_core::AgentProvider, vault
     let mut eb = super::env_of(app, st, p);
     eb.vault = vault.into();
     let (rules, shared) = rules_for(app, st, &eb);
-    Some(Guard { rules, dir: vault.trim_end_matches('/').into(), shared, home: home() })
+    Some(Guard::new(rules, vault, shared, &home(), cfg!(windows), |k| std::env::var(k).ok()))
 }
 
 /// The answer to a request the guard blocks, in the provider's protocol: a deny, given before it becomes a card.
@@ -185,43 +190,71 @@ pub fn screen(g: &Guard, p: &dyn agent_core::AgentProvider, r: &agent_core::pend
     p.respond(r, &json!({"behavior": "deny", "message": format!("{path} is outside this conversation's fence")}))
 }
 
+/// What splits a command into words besides whitespace: the shell's quotes and operators.
+const SPLIT: &str = "'\"`=;|&<>()";
 /// The first path a request names that the guard keeps the agent from: a file it changes, or of a command its folder
 /// and every word that reads as a path (absolute, `~`, `$HOME`, or with `..`, against the command's folder).
 fn blocked(g: &Guard, r: &agent_core::pending::Request) -> Option<String> {
-    let cwd = r.input["cwd"].as_str().filter(|c| c.starts_with('/')).unwrap_or(&g.dir);
+    use crate::platform::{expand_home, is_abs, norm_path};
+    let w = g.windows;
+    let cwd = r.input["cwd"].as_str().filter(|c| is_abs(c, w)).unwrap_or(&g.dir);
     let at = |t: &str| -> Option<String> {
-        let t = t.strip_prefix("${HOME}").or_else(|| t.strip_prefix("$HOME")).map(|x| format!("{}{x}", g.home))
-            .or_else(|| (t == "~" || t.starts_with("~/")).then(|| format!("{}{}", g.home, &t[1..]))).unwrap_or_else(|| t.to_string());
-        if t.starts_with('/') { Some(lexical(Path::new(&t))) } else if t.contains("..") { Some(lexical(&Path::new(cwd).join(t))) } else { None }
+        let t = expand_home(t, &g.home, w, |k| std::env::var(k).ok());
+        // a variable still in it (`$PWD\..\x`) moves where `..` leads: refused as written
+        if t.contains("..") && t.contains(['$', '%']) { return Some(format!("?{t}")); }
+        (is_abs(&t, w) || t.contains("..")).then(|| norm_path(&t, cwd, w))
     };
-    let mut paths = vec![lexical(Path::new(cwd))];
+    let system = |p: &str| g.system.iter().any(|s| p.starts_with(s.as_str()));
+    let mut paths = vec![norm_path(cwd, cwd, w)];
     if r.tool_name == "Bash" {
         let cmd = r.input["command"].as_str().unwrap_or("");
-        paths.extend(cmd.split(|c: char| c.is_whitespace() || "'\"`=;|&<>()".contains(c)).filter_map(at));
+        // the shell codex runs the command in, quoted when its path has a space (`'C:\Program Files\PowerShell\7\pwsh.exe'
+        // -Command '…'` on Windows): dropped whole when it is a system program, so its words are no paths of their own
+        // single quotes only (nothing expands in them, as shlex_join writes it) and a whole word, or a plain word
+        let plain = |p: &str| !p.contains(|c| SPLIT.contains(c) || "${}*?[~".contains(c));
+        let first = match cmd.strip_prefix('\'') {
+            Some(q) => q.find('\'').filter(|&e| q[e + 1..].chars().next().is_none_or(char::is_whitespace)).map(|e| (&q[..e], &q[e + 1..])),
+            None => cmd.split_once(char::is_whitespace).filter(|(p, _)| plain(p)),
+        };
+        let cmd = first.filter(|(p, _)| at(p).is_some_and(|p| system(&format!("{p}/")))).map_or(cmd, |(_, rest)| rest);
+        paths.extend(cmd.split(|c: char| c.is_whitespace() || SPLIT.contains(c)).filter_map(at));
     } else {
         let named = r.input["paths"].as_array().into_iter().flatten().chain(std::iter::once(&r.input["file_path"]));
-        paths.extend(named.filter_map(|p| p.as_str()).filter_map(|p| if p.starts_with('/') { at(p) } else { Some(lexical(&Path::new(cwd).join(p))) }));
+        paths.extend(named.filter_map(|p| p.as_str()).filter_map(|p| if is_abs(p, w) { at(p) } else { Some(norm_path(p, cwd, w)) }));
     }
-    let inside = |p: &str| p == g.dir || p.starts_with(&format!("{}/", g.dir)) || SYSTEM.iter().any(|s| p.starts_with(s));
-    paths.into_iter().find(|p| (g.shared && !inside(p)) || g.rules.iter().any(|r| hits(r, p)))
-}
-/// A path with its `.` and `..` worked out, without asking the disk.
-fn lexical(p: &Path) -> String {
-    let mut out = std::path::PathBuf::from("/");
-    for c in p.components() {
-        match c { std::path::Component::ParentDir => { out.pop(); } std::path::Component::Normal(x) => out.push(x), _ => {} }
-    }
-    out.to_string_lossy().into_owned()
+    let inside = |p: &str| p == g.dir || p.starts_with(&format!("{}/", g.dir)) || system(p);
+    let murky = |p: &str| p.starts_with('?') || crate::platform::murky(p, w);
+    paths.into_iter().find(|p| murky(p) || (g.shared && !inside(p)) || g.rules.iter().any(|r| hits(r, p, w)))
 }
 /// Whether a rule of `fence` or `shared_copies` (`Read(//a/b/**)`, `Edit(//a/x.json)`, `Read(//d/shared-*.key)`)
 /// covers a path, whatever its tool: a guarded agent's command may read or write.
 // ponytail: only the shapes those two functions make (a `/**` end, one `*` in a file name), a full glob if they grow
-fn hits(rule: &str, path: &str) -> bool {
+fn hits(rule: &str, path: &str, windows: bool) -> bool {
     let Some(pat) = rule.split_once('(').and_then(|(_, r)| r.strip_suffix(')')).and_then(|r| r.strip_prefix('/')) else { return false };
+    // the rule's path as `blocked` has the paths it checks (`*` is a plain character there)
+    let pat = &crate::platform::norm_path(pat, pat, windows);
+    // a path with a wildcard (`/me/va*/x`, which the shell expands): whether one of the paths it may stand for is covered
+    if path.contains(['*', '?', '[']) {
+        let (p, d): (Vec<&str>, Vec<&str>) = (path.split('/').collect(), pat.trim_end_matches("/**").split('/').collect());
+        let fits = |n: usize| d.iter().zip(&p).take(n).all(|(d, p)| seg_match(p.as_bytes(), d.as_bytes()));
+        return if pat.ends_with("/**") { p.len() >= d.len() && fits(d.len()) } else { p.len() == d.len() && fits(d.len()) };
+    }
     if let Some(dir) = pat.strip_suffix("/**") { return path == dir || path.starts_with(&format!("{dir}/")); }
     match pat.split_once('*') {
         Some((a, b)) => path.len() >= a.len() + b.len() && path.starts_with(a) && path.ends_with(b) && !path[a.len()..path.len() - b.len()].contains('/'),
         None => path == pat,
+    }
+}
+/// Whether the shell may expand the path segment `p` (`*`, `?`, `[…]` as one character) to `t`.
+// ponytail: backtracking on `*`, fine for one path segment of a command
+fn seg_match(p: &[u8], t: &[u8]) -> bool {
+    let after = |end: u8| p.iter().position(|&c| c == end).map_or(&p[p.len()..], |i| &p[i + 1..]);
+    match p.first() {
+        None => t.is_empty(),
+        Some(b'*') => (0..=t.len()).any(|i| seg_match(&p[1..], &t[i..])),
+        Some(b'?') => !t.is_empty() && seg_match(&p[1..], &t[1..]),
+        Some(b'[') => !t.is_empty() && seg_match(after(b']'), &t[1..]),
+        Some(c) => t.first() == Some(c) && seg_match(&p[1..], &t[1..]),
     }
 }
 
@@ -351,15 +384,16 @@ mod tests {
     fn cmd(command: &str, cwd: &str) -> Vec<serde_json::Value> {
         vec![json!({"id": 7, "method": "item/commandExecution/requestApproval", "params": {"threadId": "t", "turnId": "u", "itemId": "c", "command": command, "cwd": cwd}})]
     }
-    fn patch(path: &str) -> Vec<serde_json::Value> {
-        vec![json!({"method": "item/started", "params": {"item": {"type": "fileChange", "id": "f", "status": "inProgress", "changes": [{"path": "/team/shared/a.md", "kind": {"type": "update"}, "diff": "x"}, {"path": path, "kind": {"type": "add"}, "diff": "y"}]}}}),
+    fn patch(path: &str) -> Vec<serde_json::Value> { patch_after("/team/shared/a.md", path) }
+    fn patch_after(first: &str, path: &str) -> Vec<serde_json::Value> {
+        vec![json!({"method": "item/started", "params": {"item": {"type": "fileChange", "id": "f", "status": "inProgress", "changes": [{"path": first, "kind": {"type": "update"}, "diff": "x"}, {"path": path, "kind": {"type": "add"}, "diff": "y"}]}}}),
              json!({"id": "r8", "method": "item/fileChange/requestApproval", "params": {"threadId": "t", "turnId": "u", "itemId": "f"}})]
     }
     #[test]
     fn codex_is_denied_outside_its_workspace_before_a_card() {
         let all = ["/me/vault".to_string(), "/team/shared".to_string()];
         let configs = ["/me/.claude".to_string()];
-        let g = Guard { rules: fence("/team/shared", &all, &configs, Some("/me/data")), dir: "/team/shared".into(), shared: true, home: "/me".into() };
+        let g = Guard::new(fence("/team/shared", &all, &configs, Some("/me/data")), "/team/shared", true, "/me", false, |_| None);
         let deny = r#"{"id":7,"result":{"decision":"decline"}}"#.to_string();
         for out in ["/bin/zsh -lc 'cat /me/vault/Inbox.md'", "cat ~/notes.txt", "cat $HOME/x", "cat ../other/x", "cp a.md /tmp/a.md", "ls /me/data"] {
             assert_eq!(ask(&g, &cmd(out, "/team/shared")), Some(deny.clone()), "{out}");
@@ -375,10 +409,90 @@ mod tests {
         // a main-vault conversation may leave its vault, not into another one or the workspaces' keys
         let mut rules = fence("/me/vault", &all, &configs, None);
         rules.extend(shared_copies("/me/data"));
-        let main = Guard { rules, dir: "/me/vault".into(), shared: false, home: "/me".into() };
+        let main = Guard::new(rules, "/me/vault", false, "/me", false, |_| None);
         assert!(ask(&main, &cmd("cat /team/shared/x.md", "/me/vault")).is_some());
         assert!(ask(&main, &cmd("cat /me/data/shared-0a.key", "/me/vault")).is_some());
         assert_eq!(ask(&main, &cmd("cat /me/code/app/README.md /me/data/shared-0a/key", "/me/vault")), None);
+    }
+    #[test]
+    fn codex_on_windows_is_fenced_however_a_path_is_written() {
+        let all = [r"C:\Users\me\vault".to_string(), r"C:\Users\me\Team".to_string()];
+        let configs = [r"C:\Users\me\.claude".to_string()];
+        let data = r"C:\Users\me\AppData\Roaming\relay";
+        let g = Guard::new(fence(r"C:\Users\me\Team", &all, &configs, Some(data)), r"C:\Users\me\Team", true, r"C:\Users\me", true, |_| None);
+        let deny = r#"{"id":7,"result":{"decision":"decline"}}"#.to_string();
+        let ps = |c: &str| format!(r"'C:\Program Files\PowerShell\7\pwsh.exe' -Command '{c}'");
+        // the main vault in every spelling, the home folder's ways, another drive, a share, `..` out of the workspace
+        for out in [r"Get-Content C:\Users\me\vault\Inbox.md", r"Get-Content c:/users/ME/Vault/Inbox.md", r"type C:\Users\me/vault\x.md",
+                    r"Get-Content \\?\C:\Users\me\vault\x.md", r"Get-Content ~\notes.txt", r"Get-Content $env:USERPROFILE\x", r"Get-Content $HOME\x",
+                    r"type %USERPROFILE%\x", r"Get-Content ${env:userprofile}\x", r"Get-Content D:\other\x", r"Get-Content \\server\share\x",
+                    r"Get-Content ..\vault\x", r"Get-Content C:\Users\me\Team\..\vault\x", r"Get-Content C:\Users\me\AppData\Roaming\relay\shared-0a.key"] {
+            assert_eq!(ask(&g, &cmd(&ps(out), r"C:\Users\me\Team")), Some(deny.clone()), "{out}");
+        }
+        assert_eq!(ask(&g, &cmd(&ps("dir"), r"c:\users\me\VAULT")), Some(deny.clone()), "a command run from another folder");
+        // its shell, Windows' own programs, Git for Windows, a switch, the workspace in any spelling
+        for ok in [ps("Set-Content hello.txt hi"), ps(r"Get-Content C:\USERS\ME\team\a.md"), ps(r"Get-Content c:/users/me/team/sub/../a.md"),
+                   r"C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -Command 'git status'".into(), r"cmd.exe /c dir /b".into(),
+                   ps("git status"), ps(r"C:\Windows\System32\where.exe git"), ps(r"Get-Content .\a.md")] {
+            assert_eq!(ask(&g, &cmd(&ok, r"C:\Users\me\Team")), None, "{ok}");
+        }
+        // a root path PowerShell reads on the current drive, device paths, admin shares, short names, `..` after a variable
+        for out in [r"Get-Content /Users/me/vault/x.md", r"Get-Content \\.\C:\Users\me\vault\x", r"Get-Content \\?\GLOBALROOT\Device\HarddiskVolume3\x",
+                    r"Get-Content \\localhost\c$\Users\me\Team\a.md", r"Get-Content \\PC1\C$\x", r"Get-Content C:\Users\me\TEAM~1\a.md", r"Get-Content $PWD\..\vault\x",
+                    r"Get-Content %CD%\..\vault\x", r"Get-Content C:\Users\me\vault.\x", r"cmd.exe /c type /Users/me/vault/x.md"] {
+            assert_eq!(ask(&g, &cmd(&ps(out), r"C:\Users\me\Team")), Some(deny.clone()), "{out}");
+        }
+        for ok in [r"cmd.exe /c dir /b /o:n /?", r"ipconfig /all"] { assert_eq!(ask(&g, &cmd(ok, r"C:\Users\me\Team")), None, "{ok}"); }
+        // a main-vault conversation: the other vault's rules hold in each spelling Windows opens as that folder
+        let mut rules = fence(r"C:\Users\me\vault", &all, &configs, None);
+        rules.extend(shared_copies(data));
+        let main = Guard::new(rules, r"C:\Users\me\vault", false, r"C:\Users\me", true, |_| None);
+        for out in [r"type C:\Users\me\team\x.md", r"type C:\Users\me\Team.\x.md", r"type C:\Users\me\Team. .\x.md", r"type \\.\c:\users\me\team\x", r"type C:\Users\me\TEAM~1\x"] {
+            assert!(ask(&main, &cmd(out, r"C:\Users\me\vault")).is_some(), "{out}");
+        }
+        assert_eq!(ask(&main, &cmd(r"type C:\Users\me\code\README.md", r"C:\Users\me\vault")), None);
+        // a path with a space inside the command splits as on macOS: its first part counts, so this is a deny
+        assert!(ask(&g, &cmd(&ps(r"& 'C:\Program Files\Git\cmd\git.exe' status"), r"C:\Users\me\Team")).is_some());
+        // a patch: any of its files outside, or the workspace's .claude in another case
+        assert!(ask(&g, &patch_after(r"C:\Users\me\Team\a.md", r"C:\Users\me\vault\x.md")).is_some());
+        assert!(ask(&g, &patch_after(r"C:\Users\me\Team\a.md", r"c:\users\me\team\.CLAUDE\settings.json")).is_some());
+        assert_eq!(ask(&g, &patch_after(r"C:\Users\me\Team\a.md", r"C:/Users/me/Team/b.md")), None);
+        // the system folders follow the environment
+        let d = Guard::new(vec![], r"D:\Team", true, r"D:\me", true, |k| (k == "ProgramFiles").then(|| r"D:\Apps".to_string()));
+        assert_eq!(ask(&d, &cmd(r"'D:\Apps\PowerShell\7\pwsh.exe' -Command dir", r"D:\Team")), None);
+        assert!(ask(&d, &cmd(r"'C:\Program Files\PowerShell\7\pwsh.exe' -Command dir", r"D:\Team")).is_some());
+    }
+    #[test]
+    fn codex_cannot_hide_a_path_behind_the_shell_or_a_variable() {
+        let all = ["/me/vault".to_string(), "/team/shared".to_string()];
+        let g = Guard::new(fence("/team/shared", &all, &[], Some("/me/data")), "/team/shared", true, "/me", false, |_| None);
+        // the first word drops only as one word of a system program, not with an operator glued on
+        for out in ["/bin/true;cat</me/vault/x", "/bin/true&&cat /me/vault/x", "'/bin/zsh' -lc 'cat /me/vault/x'", "cat $PWD/../vault/x", "cat ${D}/../../me/vault/x"] {
+            assert!(ask(&g, &cmd(out, "/team/shared")).is_some(), "{out}");
+        }
+        assert_eq!(ask(&g, &cmd("'/bin/zsh' -lc 'cat notes/a.md'", "/team/shared")), None);
+    }
+    #[test]
+    fn codex_cannot_reach_a_fenced_path_through_a_wildcard_or_a_variable() {
+        let all = ["/me/vault".to_string(), "/team/shared".to_string()];
+        let mut rules = fence("/me/vault", &all, &[], None);
+        rules.extend(shared_copies("/me/data"));
+        let main = Guard::new(rules, "/me/vault", false, "/me", false, |_| None);
+        for out in ["cat /team/sh*/x.md", "cat /team/{shared,y}/x", "cat /{team/shared,x}/y", "cat /{me/vault,x}/y", "cat /te?m/shared/x", "cat /team/[s]hared/x", "cat /me/data/*.key", "cat /me/$V/x", "cat /me/**/x.md"] {
+            assert!(ask(&main, &cmd(out, "/me/vault")).is_some(), "{out}");
+        }
+        for ok in ["ls /usr/lib/*.dylib", "cat /me/code/*.md", "cat /me/data/shared-0a/*.md"] { assert_eq!(ask(&main, &cmd(ok, "/me/vault")), None, "{ok}"); }
+        let g = Guard::new(fence("/team/shared", &all, &[], Some("/me/data")), "/team/shared", true, "/me", false, |_| None);
+        for out in [r#""/bin/zsh$(cat /me/vault/x>o)" -c x"#, "'/bin/zsh'$(cat</me/vault/x) -c x", "/bin/zsh$(cat</me/vault/x) -c x", "/bin/z*</me/vault/x"] {
+            assert!(ask(&g, &cmd(out, "/team/shared")).is_some(), "{out}");
+        }
+        // on Windows: an NTFS stream of the other vault's folder, a wildcard in it
+        let all = [r"C:\Users\me\vault".to_string(), r"C:\Users\me\Team".to_string()];
+        let w = Guard::new(fence(r"C:\Users\me\vault", &all, &[], None), r"C:\Users\me\vault", false, r"C:\Users\me", true, |_| None);
+        for out in [r"type C:\Users\me\Team::$INDEX_ALLOCATION\x.md", r"type C:\Users\me\Team\x.md:s", r"type C:\Users\me\te*\x.md", r"type C:\Users\me\T?am\x"] {
+            assert!(ask(&w, &cmd(out, r"C:\Users\me\vault")).is_some(), "{out}");
+        }
+        assert_eq!(ask(&w, &cmd(r"type C:\Users\me\code\*.md", r"C:\Users\me\vault")), None);
     }
     #[test]
     fn workspaces_run_claude_code_and_codex_only() {

@@ -95,7 +95,7 @@ mod worktrees;
 
 use session::{account_of, limit_key, pipe_reply, quit, reattach, reattach_remote, spawn_or_get, Proc};
 
-fn home() -> String { std::env::var("HOME").unwrap_or_default() }
+fn home() -> String { agent_core::home() }
 /// The vault folder from the settings, "" before one is chosen.
 fn vault(st: &App) -> String {
     st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string()

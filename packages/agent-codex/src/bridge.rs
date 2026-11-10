@@ -45,11 +45,23 @@ const PROFILE: &str = "relay-workspace";
 /// `:tmpdir` (the user's `$TMPDIR`) stays writable as in `:workspace`: here-documents and xcrun need it. `/tmp` does not.
 /// The workspace itself is the project root. Codex itself is not in the sandbox: it reads `~/.codex` (login, sessions)
 /// as before, its commands do not. A workspace conversation gets no project repos, so none are listed.
-fn readable(home: &str) -> Map<String, Value> {
-    let home = home.trim_end_matches('/');
+///
+/// On Windows (`windows`), from codex-cli 0.163's source, not measured on a Windows machine: `:minimal` is
+/// `C:\Windows`, `C:\Program Files`, `C:\Program Files (x86)` and `C:\ProgramData` there, which holds its shell
+/// (PowerShell, else cmd) and Git for Windows, so Homebrew has no counterpart. Git's global config is the same files
+/// under the profile folder (`%USERPROFILE%\.gitconfig`, `.config\git`). Which folder `:tmpdir` is there is not
+/// checked.
+// ponytail: codex's elevated Windows sandbox refuses a profile without `:root` read ("requires effective `:root` read
+// access"), so a workspace's commands fail there rather than read outside. `:root` read is the way if that is wanted
+fn readable(home: &str, windows: bool) -> Map<String, Value> {
+    let (sep, abs) = if windows {
+        ('\\', home.as_bytes().get(1) == Some(&b':') || home.starts_with("\\\\"))
+    } else { ('/', home.starts_with('/')) };
+    let home = home.trim_end_matches(['/', '\\']);
     let mut fs = Map::new();
-    for (p, a) in [(":root", "none"), (":slash_tmp", "none"), (":minimal", "read"), ("/opt/homebrew", "read"), ("/opt/homebrew/var", "none")] { fs.insert(p.into(), a.into()); }
-    if home.starts_with('/') { for x in [".gitconfig", ".config/git/config", ".config/git/ignore", ".config/git/attributes"] { fs.insert(format!("{home}/{x}"), "read".into()); } }
+    for (p, a) in [(":root", "none"), (":slash_tmp", "none"), (":minimal", "read")] { fs.insert(p.into(), a.into()); }
+    if !windows { for (p, a) in [("/opt/homebrew", "read"), ("/opt/homebrew/var", "none")] { fs.insert(p.into(), a.into()); } }
+    if abs { for x in [".gitconfig", ".config/git/config", ".config/git/ignore", ".config/git/attributes"] { fs.insert(format!("{home}{sep}{}", x.replace('/', &sep.to_string())), "read".into()); } }
     fs
 }
 // the first codex-cli this ran against with permission profiles (docs/workspaces.md › Trust)
@@ -82,7 +94,7 @@ fn thread_params(cfg: &Value, mcp: &[String]) -> Value {
         config.insert("features".into(), json!({"plugins": false, "apps": false}));
         config.insert("mcp_servers".into(), mcp.iter().map(|n| (n.clone(), json!({"enabled": false}))).collect::<Map<_, _>>().into());
         // codex takes a sandbox or a profile, not both: both modes a workspace allows become Relay's profile
-        let mut fs = readable(cfg["home"].as_str().unwrap_or(""));
+        let mut fs = readable(cfg["home"].as_str().unwrap_or(""), cfg!(windows));
         let base = if sandbox == "workspace-write" {
             fs.insert(":project_roots".into(), READ_ONLY.iter().map(|p| (p.to_string(), json!("read"))).collect::<Map<_, _>>().into());
             ":workspace"
@@ -336,6 +348,16 @@ mod tests {
         assert!(p["config"]["permissions"][PROFILE]["filesystem"].get("/.gitconfig").is_none());
     }
 
+    #[test]
+    fn a_windows_workspace_profile_reads_windows_paths() {
+        let fs = readable(r"C:\Users\me\", true);
+        assert_eq!(Value::Object(fs), json!({":root": "none", ":slash_tmp": "none", ":minimal": "read",
+            r"C:\Users\me\.gitconfig": "read", r"C:\Users\me\.config\git\config": "read", r"C:\Users\me\.config\git\ignore": "read", r"C:\Users\me\.config\git\attributes": "read"}));
+        assert!(readable(r"\\server\home\me", true).contains_key(r"\\server\home\me\.gitconfig"));
+        // no home known, or a Mac path on Windows: no home path at all
+        for h in ["", "/me", "me"] { assert_eq!(readable(h, true).len(), 3, "{h}"); }
+        assert_eq!(readable("/me", false)["/me/.gitconfig"], "read");
+    }
     #[test]
     fn only_a_codex_with_permission_profiles_runs_fenced() {
         assert!(has_profiles("relay/0.163.0 (Mac OS 26.4.1; arm64) unknown (relay; 0.1.0)"));
