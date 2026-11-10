@@ -1735,6 +1735,95 @@ const VIEWS = {
     await page.getByText("Notes as shared documents").first().scrollIntoViewIfNeeded();
     await settle(page);
   },
+  // the organisation of a full machine's server (PR organisation admin): this Mac an organisation admin, its code, the
+  // admins and Ops Mac to add, Northwind managed and Acme Retail not, the people across both
+  "settings-org": async () => {
+    await settingsPage("Machines", undefined, "shared-org");
+    await page.setViewportSize({ width: 900, height: 1500 });
+    await button("Show…").first().click();
+    await waitText("Organisation admins");
+    await page.getByText("Organisation admins", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // Offboard… on Sam Lee: what happens, and where this Mac is no admin
+  "settings-org-offboard": async () => {
+    await VIEWS["settings-org"]();
+    await page.getByRole("button", { name: "Offboard…", exact: true }).last().click();
+    await waitText("Offboard Sam Lee");
+    await page.getByText("Not in Acme Retail").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // People with a self-signed email (PR security fixes on K3 and U3): Jonas Peeters's shows as Email not verified
+  "settings-org-unverified": async () => {
+    await VIEWS["settings-org"]();
+    await waitText("Jonas Peeters");
+    await page.getByText("Jonas Peeters", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // Offboard on Front desk Mac, a fully paired device: off the workspaces, but the server refuses the revoke
+  "settings-org-unrevoked": async () => {
+    await VIEWS["settings-org"]();
+    await page.getByRole("button", { name: "Offboard…", exact: true }).first().click();
+    await waitText("Offboard Front desk Mac");
+    await button("Offboard").click();
+    await waitText("not revoked");
+    await page.getByText("not revoked", { exact: false }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // Add as admin… on Ops Mac: compare the code on both Macs first
+  "settings-org-add": async () => {
+    await VIEWS["settings-org"]();
+    await button("Add as admin…").first().click();
+    await waitText("Codes match, add");
+    await page.getByText("Organisation admins", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // SSO for joining (PR SSO through OIDC): Google, a client id and a domain filled in, required, before Turn on
+  "settings-org-sso": async () => {
+    await VIEWS["settings-org"]();
+    await waitText("SSO for joining");
+    await page.getByLabel("Client ID").fill("123-example.apps.googleusercontent.com");
+    await page.getByLabel("Email domains").fill("example.com");
+    await page.getByText("SSO for joining", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // Microsoft Entra ID picked (PR Entra ID): a tenant id instead of the issuer and the email domains
+  "settings-org-sso-entra": async () => {
+    await VIEWS["settings-org"]();
+    await waitText("SSO for joining");
+    await page.getByLabel("Provider").selectOption("entra");
+    await page.getByLabel("Tenant ID").fill("11111111-2222-3333-4444-555555555555");
+    await page.getByLabel("Client ID").fill("00000000-aaaa-bbbb-cccc-111111111111");
+    if (await page.getByLabel("Email domains").count()) throw new Error("email domains shown for Entra");
+    await page.getByText("SSO for joining", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // the same, turned on: the tenant's issuer signed on the organisation list, read back as Entra
+  "settings-org-sso-entra-on": async () => {
+    await VIEWS["settings-org-sso-entra"]();
+    await button("Turn on").click();
+    await waitText("SSO saved on the organisation list.");
+    if ((await page.getByLabel("Tenant ID").inputValue()) !== "11111111-2222-3333-4444-555555555555")
+      throw new Error("the tenant did not come back");
+    await page.getByText("SSO for joining", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // the same, turned on: signed on the organisation list
+  "settings-org-sso-on": async () => {
+    await VIEWS["settings-org-sso"]();
+    await button("Turn on").click();
+    await waitText("SSO saved on the organisation list.");
+    await page.getByText("SSO for joining", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // a workspace's policy for its admin: Claude Code allowed, Codex not, capture off, and Add organisation admins
+  "settings-shared-policy": async () => {
+    await settingsPage("Machines", undefined, "shared-org");
+    await page.setViewportSize({ width: 900, height: 1500 });
+    await waitText("Agents in this workspace");
+    await page.getByText("Agents in this workspace").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   // the member list's roles in Members, with Make admin / Make member for a list admin (PR member roles)
   "settings-shared-members": async () => {
     await settingsPage("Machines", undefined, "shared");
@@ -1775,6 +1864,69 @@ const VIEWS = {
     await page.setViewportSize({ width: 900, height: 1000 });
     await waitText("not synced here");
     await page.getByText("not synced here").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // people on the member list (PR people): Alex Moreau with this MacBook and the Studio Mac under them, Add a device…,
+  // Rename… and Remove on the person, the Design laptop under no person with Name person…
+  "settings-shared-people": async () => {
+    await settingsPage("Machines", undefined, "shared-people");
+    await page.setViewportSize({ width: 900, height: 1200 });
+    await button("Members").first().click();
+    await waitText("Alex Moreau");
+    await page.getByText("Design laptop").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // Name person… on the Design laptop: an admin picks a person there is or names a new one
+  "settings-shared-person-form": async () => {
+    await VIEWS["settings-shared-people"]();
+    await button("Name person…").first().click();
+    await page.getByPlaceholder("Name", { exact: true }).fill("Sam Lee");
+    await page.getByText("Design laptop").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // after Save: Sam Lee is a person with the Design laptop under them
+  "settings-shared-person-named": async () => {
+    await VIEWS["settings-shared-person-form"]();
+    await button("Save").first().click();
+    await waitText("Sam Lee");
+    await page.getByText("Design laptop").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // the reader role (PR reader): an admin's Members with a role picker per device, the Design laptop a reader
+  "settings-shared-readers": async () => {
+    await settingsPage("Machines", undefined, "shared-readers");
+    await page.setViewportSize({ width: 900, height: 1200 });
+    await button("Members").first().click();
+    await waitText("Alex Moreau");
+    await page.getByText("Design laptop").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // Invite…: Reader next to Member and Admin
+  "settings-shared-invite-reader": async () => {
+    await settingsPage("Machines", undefined, "shared");
+    await page.setViewportSize({ width: 900, height: 1200 });
+    await button("Invite…").click();
+    await page.getByRole("radio", { name: "Reader" }).click();
+    await page.getByRole("radio", { name: "Reader" }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // a Mac that only reads the workspace: its role, its two changes left out of the rounds, no Invite…
+  "settings-shared-reader": async () => {
+    await settingsPage("Machines", undefined, "shared-reader");
+    await page.setViewportSize({ width: 900, height: 1200 });
+    await button("Members").first().click();
+    await waitText("Studio Mac");
+    await settle(page);
+  },
+  // that Mac's page of a note in the workspace: shown read-only, with why
+  "page-shared-reader": async () => {
+    await open(page, server.url, { fixture: "shared-reader" });
+    await page.keyboard.press("Control+Digit2");
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    for (const folder of ["Contexts", "Contexts/Team", "Contexts/Team/Projects"])
+      await page.locator(`[data-folder="${folder}"]`).click();
+    await page.locator('[data-page="Contexts/Team/Projects/Team Handbook.md"]').click();
+    await waitText("You can read this workspace, not change it.");
     await settle(page);
   },
   "settings-shared-vaults": async () => {
@@ -1829,6 +1981,27 @@ const VIEWS = {
     await waitText("Join a workspace");
     await intoView("Join a workspace");
   },
+  // the invite's server asks to sign in with Google first (PR SSO through OIDC): Join waits for it
+  "settings-shared-join-sso": async () => {
+    await VIEWS["settings-shared-join"]();
+    await waitText("Sign in with Google");
+    await intoView("Join a workspace");
+  },
+  // the invite's server asks an Entra ID tenant (PR Entra ID): Sign in with Microsoft, no domain in the hint
+  "settings-shared-join-entra": async () => {
+    await settingsPage("Machines", undefined, "shared-invite-entra");
+    await page.setViewportSize({ width: 900, height: 1000 });
+    await waitText("Sign in with Microsoft");
+    await waitText("a Microsoft account of its organisation");
+    await intoView("Join a workspace");
+  },
+  // signed in: who, then the usual Join
+  "settings-shared-join-signed": async () => {
+    await VIEWS["settings-shared-join-sso"]();
+    await button("Sign in with Google").click();
+    await waitText("Signed in as sofie.claes@example.com");
+    await intoView("Join a workspace");
+  },
   // the other vault folders under General: a path, Remove, and the project shown under another name (the main vault
   // has one)
   "settings-other-vaults": async () => {
@@ -1843,6 +2016,35 @@ const VIEWS = {
     await page.getByPlaceholder("Search in Side vault").fill("h");
     await waitText("Team Handbook");
     await page.getByText("Hiring 2027", { exact: true }).scrollIntoViewIfNeeded();
+  },
+  // New workspace on this machine…: the name, the folder, and Workspace without history with what it hides and what not
+  // (PR workspace without history)
+  "settings-shared-new": async () => {
+    await settingsPage("Machines", undefined, "shared");
+    await page.setViewportSize({ width: 900, height: 1000 });
+    await button("New workspace on this machine…").click();
+    await page.locator("#shared-name").fill("Knowledge");
+    if (await page.locator("#shared-nohistory").count()) await page.locator("#shared-nohistory").check();
+    await button("Create").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // a workspace made without history: its row in Settings › Machines says so next to the role, its conflict copy
+  // names no Mac, and it offers no shared documents yet
+  "settings-shared-nohistory": async () => {
+    await settingsPage("Machines", undefined, "shared-nohistory");
+    await page.setViewportSize({ width: 900, height: 1000 });
+    await waitText("Show recovery key");
+    await page
+      .getByText("Show recovery key")
+      .first()
+      .evaluate(el => el.scrollIntoView({ block: "center" }));
+    await settle(page);
+  },
+  // the footer's workspace menu with that workspace: Northwind "team · without history · live"
+  "workspace-menu-nohistory": async () => {
+    await open(page, server.url, { fixture: "shared-nohistory" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await waitText("Open a folder as workspace…");
   },
   // the footer's workspace menu: Personal, the side vault and the workspace Northwind, with the three actions (PR workspace-switcher)
   // the menu says which shared workspace's live channel is connected: Northwind "team · live"
@@ -2194,6 +2396,25 @@ const VIEWS = {
     await settle(page);
   },
   "page-co-editing-dark": async () => VIEWS["page-co-editing"]("shared-live-dark"),
+  // K1b: the same on a workspace without history: the cursors read "Anonymous" (the names the peers send are dropped)
+  "page-co-editing-nohistory": async () => {
+    await open(page, server.url, { fixture: "shared-live" });
+    await page.evaluate(() => window.__harness.anonymousDocs());
+    await page.keyboard.press("Control+Digit2");
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    for (const folder of ["Contexts", "Contexts/Team", "Contexts/Team/Projects"])
+      await page.locator(`[data-folder="${folder}"]`).click();
+    await page.locator('[data-page="Contexts/Team/Projects/Team Handbook.md"]').click();
+    await waitText("Stand van zaken");
+    await page.waitForFunction(() => window.__harness.liveText().length > 0, null, { timeout: 4000 });
+    await page.evaluate(() => {
+      window.__harness.peerType("- [ ] Second open loop", "\n- [ ] A third loop, typed by someone");
+      window.__harness.peerCursor("a1b2c3d4e5f6a7b8", "Jonas Peeters", "typed by someone");
+      window.__harness.peerCursor("f0e1d2c3b4a59687", "Jeppe", "It links to", 11);
+    });
+    await waitText("Anonymous");
+    await settle(page);
+  },
   // a project's note as a page in the middle column: properties, its conversations, the body (PR page-view)
   "page-view": async () => {
     await open(page, server.url);
@@ -2455,6 +2676,23 @@ const VIEWS = {
     await VIEWS["page-view"]();
     await page.getByRole("button", { name: "History", exact: true }).click();
     await waitText("Ben Lauwers");
+    await settle(page);
+  },
+  // K1b: the history of a page on a workspace without history: each session "Anonymous session" with its time
+  "page-history-nohistory": async () => {
+    await VIEWS["page-view"]();
+    await page.evaluate(() => window.__harness.anonymousDocs());
+    await page.getByRole("button", { name: "History", exact: true }).click();
+    await waitText("Anonymous session");
+    await settle(page);
+  },
+  // K1b: its comments: every author "Anonymous", no member to mention
+  "page-comments-nohistory": async () => {
+    await VIEWS["page-view"]();
+    await page.evaluate(() => window.__harness.anonymousDocs());
+    await page.getByRole("button", { name: "Comments", exact: true }).click();
+    await waitText("Is this still the first thing to do?");
+    await page.getByText("“First open loop”").click();
     await settle(page);
   },
   // a page's comments beside it (ticket 11): an open thread with a reply, its text marked in the page
@@ -2982,6 +3220,11 @@ const VIEWS = {
   "settings-reminders-access": async () => {
     await settingsPage("General");
     await intoView("reminders.push");
+  },
+  // relay knowledge.search's agent access under Machines, below the workspaces
+  "settings-knowledge-access": async () => {
+    await settingsPage("Machines", undefined, "shared");
+    await intoView("knowledge.search");
   },
   // the vault's git backup under General, after a round that pushed
   "settings-vault-sync": async () => {

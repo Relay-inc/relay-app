@@ -15,6 +15,11 @@
 //! nobody.
 //!
 //! On this Mac, per vault: each document's state (dir/<id>.bin) and how far it has the log (`Cursor`, dir/index.json).
+//!
+//! A workspace without history (docs/workspaces.md, Without history): the author of what this Mac writes is not its
+//! device but a random session id (`session`), a new one after every restart. Counters and the gap check go per
+//! session, and the server stores and relays that id instead of the pusher's device. This Mac keeps its own session ids
+//! (dir/sessions.json, never synced), so its comments of an earlier session stay its own.
 
 use crate::sync::{self, fold, Filter};
 use crate::tls::{hex, unhex};
@@ -23,6 +28,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
@@ -50,20 +56,39 @@ pub const MAX_DOCS: usize = 10_000;
 /// record name is a document's (`doc_bind`). `bound_as`: the path the server was told is this document's (`doc_bind`),
 /// "" none yet. `seeded`: made from an existing file here (8b), not by an edit. `owners`: a comments sidecar's entries
 /// (map "c"), each with the author of the sealed update that last wrote it, never what the entry says of itself.
+/// Without history: `seen` counts per session (this Mac's too, its counter), `seen_at` the log seq of each session's
+/// last update (the oldest are let go past MAX_SESSIONS), `as_author` an own earlier session the pending update is
+/// sealed as (a delete of a comment written then, `put_comment`), "" this session.
 #[derive(Default, Clone, Serialize, Deserialize)]
 #[serde(default)]
 struct Cursor { seq: u64, epoch: u32, path: String, at: String, out: String, pending: bool, acked: String, mine: u64, seen: BTreeMap<String, u64>,
-    lost: std::collections::BTreeSet<String>, via: String, bound_as: String, seeded: bool, owners: BTreeMap<String, String> }
+    lost: std::collections::BTreeSet<String>, via: String, bound_as: String, seeded: bool, owners: BTreeMap<String, String>,
+    seen_at: BTreeMap<String, u64>, as_author: String }
 struct Open { doc: Doc, c: Cursor }
 
 type On = Arc<dyn Fn(&str, &[u8]) + Send + Sync>;
-/// One shared vault's documents on this Mac. `me`: this device (the first 16 hex of its fingerprint), the author of
-/// what it writes. `on`: called with (document id, Yjs update) for every update another member made (ticket 9's
+/// Sessions whose counters one document keeps, without history. The oldest are let go (their gap check with them).
+const MAX_SESSIONS: usize = 256;
+/// This run's session id on vault `vault` for device `device` (16 hex), on a workspace without history: random, the
+/// same for its documents and its live channel until the app quits, a new one after a restart.
+pub fn session(vault: &str, device: &str) -> String {
+    lock(sessions()).entry((vault.into(), device.into())).or_insert_with(|| crate::tls::random_secret()[..16].to_string()).clone()
+}
+fn sessions() -> &'static Mutex<BTreeMap<(String, String), String>> {
+    static ALL: std::sync::OnceLock<Mutex<BTreeMap<(String, String), String>>> = std::sync::OnceLock::new();
+    ALL.get_or_init(Mutex::default)
+}
+/// A restart in a test: the next `session` for this device is a new one.
+#[cfg(test)]
+pub(crate) fn forget_session(vault: &str, device: &str) { lock(sessions()).remove(&(vault.to_string(), device.to_string())); }
+/// One shared vault's documents on this Mac. `me`: this device (the first 16 hex of its fingerprint). `author`: who
+/// what it writes is sealed as, `me` or on a workspace without history (`anon`) this run's session id. `own`: every
+/// session id this Mac wrote under (dir/sessions.json, never synced). `on`: called with (document id, Yjs update) for every update another member made (ticket 9's
 /// editor). `busy`: one lock per document, so a live update and a round never work on it at once. `warnings`: what
-/// the user should hear of (`take_warnings`).
+/// the user should hear of (`take_warnings`). `read_only`: this Mac is a reader of the workspace (`set_read_only`).
 pub struct Docs {
-    vault: String, me: String, keys: Mutex<Keys>, call: Call, dir: PathBuf, open: Mutex<BTreeMap<String, Open>>, on: Mutex<Vec<On>>,
-    busy: Mutex<BTreeMap<String, Arc<Mutex<()>>>>, warnings: Mutex<Vec<String>>, walker: Mutex<sync::Walker>,
+    vault: String, me: String, author: Mutex<String>, anon: AtomicBool, own: Mutex<std::collections::BTreeSet<String>>, keys: Mutex<Keys>, call: Call, dir: PathBuf, open: Mutex<BTreeMap<String, Open>>, on: Mutex<Vec<On>>,
+    busy: Mutex<BTreeMap<String, Arc<Mutex<()>>>>, warnings: Mutex<Vec<String>>, walker: Mutex<sync::Walker>, read_only: AtomicBool,
 }
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> { m.lock().unwrap_or_else(|e| e.into_inner()) }
 
@@ -237,13 +262,38 @@ impl Docs {
             let c = match std::fs::read(dir.join(Self::file(&id))).ok().map(|b| apply(&doc, &b)) { Some(Ok(())) => c, _ => Cursor { path: c.path, at: c.at, out: c.out, ..Cursor::default() } };
             (id, Open { doc, c })
         }).collect();
-        Docs { vault: vault.into(), me: me.into(), keys: Mutex::new(keys), call, dir: dir.into(), open: Mutex::new(open), on: Mutex::default(), busy: Mutex::default(), warnings: Mutex::default(), walker: Mutex::default() }
+        let own = std::fs::read_to_string(dir.join("sessions.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        let d = Docs { vault: vault.into(), me: me.into(), author: Mutex::new(me.into()), anon: AtomicBool::new(false), own: Mutex::new(own), keys: Mutex::new(keys.clone()), call, dir: dir.into(), open: Mutex::new(open), on: Mutex::default(), busy: Mutex::default(), warnings: Mutex::default(), walker: Mutex::default(), read_only: AtomicBool::new(false) };
+        d.set_keys(keys);
+        d
     }
     fn file(id: &str) -> String { format!("{}.bin", id.replace('#', "~")) }
     /// The text Relay last wrote to the note's file (or took from it): what a change on disk is measured against.
     fn out_file(&self, id: &str) -> PathBuf { self.dir.join(format!("{}.out", id.replace('#', "~"))) }
-    /// The newest keys (after a rotation, keep_keys).
-    pub fn set_keys(&self, k: Keys) { *lock(&self.keys) = k; }
+    /// The newest keys (after a rotation, keep_keys). Once they say the workspace is without history, what this Mac
+    /// writes from then on is this run's session's, kept in the own list before anything is sealed under it.
+    pub fn set_keys(&self, k: Keys) {
+        if k.nohistory && !self.anon.load(Ordering::SeqCst) {
+            let s = session(&self.vault, &self.me);
+            let mut own = lock(&self.own);
+            // ponytail: one id per restart, never pruned, 16 bytes each, a list per workspace
+            if own.insert(s.clone()) {
+                std::fs::create_dir_all(&self.dir).ok();
+                if let Err(e) = sync::write_atomic(&self.dir.join("sessions.json"), serde_json::to_string(&*own).unwrap().as_bytes(), None) { self.warn(format!("this Mac's sessions not kept: {e}")); }
+            }
+            *lock(&self.author) = s;
+            self.anon.store(true, Ordering::SeqCst);
+        }
+        *lock(&self.keys) = k;
+    }
+    /// The workspace is without history: this Mac writes as a session, not as its device.
+    pub fn anonymous(&self) -> bool { self.anon.load(Ordering::SeqCst) }
+    /// Whether `author` is this Mac: its device, or without history any session it wrote under (also before a restart).
+    pub fn is_mine(&self, author: &str) -> bool { author == *lock(&self.author) || (self.anonymous() && lock(&self.own).contains(author)) }
+    /// A reader's documents: they only pull. An edit here (a page, a comment, a file change, a move) is refused, so
+    /// nothing waits to be sent that the server would refuse (docs/workspaces.md, Roles).
+    pub fn set_read_only(&self, on: bool) { self.read_only.store(on, Ordering::Relaxed); }
+    fn writable(&self) -> Result<(), String> { if self.read_only.load(Ordering::Relaxed) { Err(crate::members::READ_ONLY.into()) } else { Ok(()) } }
     /// A document's name on the server.
     pub fn name(&self, id: &str) -> String { lock(&self.keys).name(&format!("doc:{id}")) }
     /// The document (a note's, a sidecar or the manifest) whose name on the server is `name`, when this Mac knows it.
@@ -319,24 +369,38 @@ impl Docs {
         entries_of(&o.doc).into_iter().filter_map(|(k, v)| Some((k.clone(), owners.get(&k)?.clone(), v))).collect()
     }
     /// One comment entry written into note `id`'s sidecar by this Mac (its author), then sent (or with the next sync).
+    /// Without history, a delete of a comment this Mac wrote in an earlier session is sealed as that session: only an
+    /// entry's own author deletes it, and every Mac sees that session as the author.
     pub fn put_comment(&self, id: &str, key: &str, json: &str) -> Result<(), String> {
         if !note_id(id) || !entry_key(key) { return Err("not a comment of a note".into()); }
+        self.writable()?;
         let side = format!("{id}#comments");
         let busy = self.busy(&side);
         let _one = lock(&busy);
+        let on = serde_json::from_str::<Value>(json).ok().filter(|v| v["k"] == "delete").and_then(|v| v["on"].as_str().map(String::from));
+        let earlier = on.and_then(|on| lock(&self.open).get(&side).and_then(|o| o.c.owners.get(&on).cloned()))
+            .filter(|a| self.anonymous() && self.is_mine(a) && *a != self.me()).unwrap_or_default();
+        self.settle(&side, &earlier)?;
         {
             let mut open = lock(&self.open);
             let o = Self::entry(&mut open, &side);
             change(&o.doc, |d| { let m = d.get_or_insert_map("c"); m.insert(&mut d.transact_mut(), key, json); });
-            o.c.owners.insert(key.to_string(), self.me.clone());
-            o.c.pending = true;
+            o.c.owners.insert(key.to_string(), if earlier.is_empty() { self.me() } else { earlier.clone() });
+            (o.c.pending, o.c.as_author) = (true, earlier);
             self.save(&open, &side)?;
         }
         if let Err(e) = self.push(&side) { self.warn(format!("not sent yet, again at the next sync: {e}")); }
         Ok(())
     }
-    /// This device as the author of what it writes.
-    pub fn me(&self) -> &str { &self.me }
+    /// Who what this Mac writes is sealed as: its device (16 hex), or without history this run's session id.
+    pub fn me(&self) -> String { lock(&self.author).clone() }
+    /// What waits to be sent of a document goes out first when it is to be sealed as another of this Mac's sessions
+    /// than `author` ("" this one), so one update never mixes two. The caller holds the document's lock.
+    fn settle(&self, id: &str, author: &str) -> Result<(), String> {
+        let other = lock(&self.open).get(id).is_some_and(|o| o.c.pending && o.c.as_author != author);
+        if other { self.push(id).map_err(|e| format!("an earlier edit is not sent yet, try again: {e}"))?; }
+        Ok(())
+    }
     /// Whether this Mac ever sent an edit of a document (its Inbox counts the comments on pages it edited, ticket 12).
     pub fn edited(&self, id: &str) -> bool { lock(&self.open).get(id).is_some_and(|o| o.c.mine > 0) }
 
@@ -351,6 +415,7 @@ impl Docs {
     pub fn create(&self, path: &str, text: &str) -> Result<String, String> {
         if !safe_path(path) { return Err(format!("not a note path: {path}")); }
         if self.taken(path, None) { return Err(format!("already a document: {path}")); }
+        self.writable()?;
         let mut raw = [0u8; 16];
         ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut raw).map_err(|_| "no randomness")?;
         let id = hex(&raw);
@@ -407,6 +472,7 @@ impl Docs {
     }
     /// A change to the manifest (its maps "paths" and "gone"), kept here and sent.
     fn manifest(&self, f: impl FnOnce(&yrs::MapRef, &yrs::MapRef, &mut yrs::TransactionMut)) -> Result<(), String> {
+        self.writable()?;
         let busy = self.busy(MANIFEST);
         let _one = lock(&busy);
         {
@@ -422,15 +488,18 @@ impl Docs {
     /// An edit made here (ticket 9's editor): into this Mac's state, then to the server (or with the next sync).
     pub fn apply_local(&self, id: &str, update: &[u8]) -> Result<(), String> {
         if !valid_id(id) { return Err("not a document id".into()); }
+        self.writable()?;
         let busy = self.busy(id);
         let _one = lock(&busy);
+        self.settle(id, "")?;
         {
+            let me = self.me();
             let mut open = lock(&self.open);
             let o = Self::entry(&mut open, id);
             let side = id.contains('#');
             let before = if side { entries_of(&o.doc) } else { BTreeMap::new() };
             apply(&o.doc, update)?;
-            if side { own_entries(o, &before, &self.me); }
+            if side { own_entries(o, &before, &me); }
             o.c.pending = true;
             self.save(&open, id)?;
         }
@@ -455,22 +524,30 @@ impl Docs {
     /// Send what this Mac has of a document and the server does not hold yet (everything past `acked`), as one update
     /// with this device's next counter. Its seq moves the cursor only when it is the next one; else
     /// others wrote meanwhile and the next pull brings theirs (and this one, which applies as nothing).
-    /// The caller holds the document's lock.
+    /// Without history: sealed as this run's session (or `as_author`), its counter that session's, the session id
+    /// sent along for the server to keep instead of this device. The caller holds the document's lock.
     fn flush(&self, id: &str) -> Result<(), String> {
-        let (update, sv, n, via) = {
+        let (me, anon) = (self.me(), self.anonymous());
+        let (update, sv, n, via, author) = {
             let open = lock(&self.open);
             let Some(o) = open.get(id).filter(|o| o.c.pending) else { return Ok(()) };
             let txn = o.doc.transact();
-            (txn.encode_state_as_update_v1(&sv_of(&o.c.acked)), txn.state_vector().encode_v1(), o.c.mine + 1, o.c.via.clone())
+            let author = if o.c.as_author.is_empty() { me.clone() } else { o.c.as_author.clone() };
+            // without history the counter is the session's (a new one starts at 1, an earlier one goes on). `mine`
+            // still counts every update this Mac sent (`edited`, `keep_orphans`)
+            let n = if anon { o.c.seen.get(&author).copied().unwrap_or(0) + 1 } else { o.c.mine + 1 };
+            (txn.encode_state_as_update_v1(&sv_of(&o.c.acked)), txn.state_vector().encode_v1(), n, o.c.via.clone(), author)
         };
         let meta = if via.is_empty() { json!({"n": n}) } else { json!({"n": n, "o": via}) };
         if update.len() as u64 > MAX_UPDATE { return Err("an edit too big for one update".into()); }
         let (name, part) = {
             let k = lock(&self.keys);
             let name = k.name(&format!("doc:{id}"));
-            (name.clone(), k.seal_doc(&self.vault, &name, "u", 0, &self.me, meta, &update)?)
+            (name.clone(), k.seal_doc(&self.vault, &name, "u", 0, &author, meta, &update)?)
         };
-        let (v, _) = (self.call)(json!({"op": "doc_push", "vault": self.vault, "doc": name, "updates": [part.len()]}), Some(part), None)?;
+        let mut req = json!({"op": "doc_push", "vault": self.vault, "doc": name, "updates": [part.len()]});
+        if anon { req["from"] = json!(author); }
+        let (v, _) = (self.call)(req, Some(part), None)?;
         let seq = v["seq"].as_u64().ok_or("no seq")?;
         let epoch = lock(&self.keys).epoch();
         {
@@ -478,8 +555,10 @@ impl Docs {
             let o = Self::entry(&mut open, id);
             // an edit made after `update` was taken is still pending: only what was sent counts as held
             let now = o.doc.transact().state_vector().encode_v1();
-            (o.c.acked, o.c.mine, o.c.pending, o.c.via) = (hex(&sv), n, now != sv, String::new());
-            o.c.seen.insert(self.me.clone(), n);
+            (o.c.acked, o.c.pending, o.c.via) = (hex(&sv), now != sv, String::new());
+            o.c.mine += 1;
+            o.c.as_author.clear();
+            Self::saw(o, &author, n, anon);
             if seq == o.c.seq + 1 { (o.c.seq, o.c.epoch) = (seq, epoch); }
             self.save(&open, id)?;
         }
@@ -554,16 +633,31 @@ impl Docs {
         let before = if side { entries_of(&o.doc) } else { BTreeMap::new() };
         apply(&o.doc, &p.body)?;
         if side { own_entries(o, &before, &p.author); }
-        // a gap in an author's counter: the server holds updates back (or gave them to nobody)
+        // a gap in an author's counter: the server holds updates back (or gave them to nobody). Without history an
+        // author is a session: a gap inside it shows, a lost tail of it (nothing after it) does not
         if let Some(n) = p.meta["n"].as_u64() {
             let last = o.c.seen.get(&p.author).copied().unwrap_or(0);
             if last > 0 && n > last + 1 { self.warn(format!("updates from {} to {} held back by the server ({} missing)", p.author, if o.c.path.is_empty() { "a document" } else { &o.c.path }, n - last - 1)); }
-            if n > last { o.c.seen.insert(p.author.clone(), n); }
+            if n > last { Self::saw(o, &p.author, n, self.anonymous()); }
         }
         // a longer member list than this Mac holds, as for records and frames
         let theirs = p.list.split_once(':').and_then(|(n, _)| n.parse::<u64>().ok()).unwrap_or(0);
         if theirs > keys.head.as_ref().map_or(0, |(n, _)| *n) { self.warn("Another member has seen a newer member list than the server gives this Mac.".into()); }
         Ok(p.body)
+    }
+
+    /// `author`'s last counter in a document is `n`. Without history also when (log seq), and only the newest
+    /// MAX_SESSIONS sessions kept: one per restart of every member's app would grow without end.
+    fn saw(o: &mut Open, author: &str, n: u64, anon: bool) {
+        o.c.seen.insert(author.to_string(), n);
+        if !anon { return; }
+        o.c.seen_at.insert(author.to_string(), o.c.seq);
+        while o.c.seen.len() > MAX_SESSIONS {
+            let Some(old) = o.c.seen.keys().min_by_key(|a| o.c.seen_at.get(*a).copied().unwrap_or(0)).cloned() else { break };
+            o.c.seen.remove(&old);
+            o.c.seen_at.remove(&old);
+        }
+        o.c.seen_at.retain(|a, _| o.c.seen.contains_key(a));
     }
 
     /// A document's history, oldest session first: its whole log read from the server (only what this Mac did not
@@ -615,6 +709,7 @@ impl Docs {
     /// whatever it holds now: only what differs changes, and it is sent and passed on like any edit.
     pub fn set_text(&self, id: &str, text: &str, by: &str) -> Result<(), String> {
         if !note_id(id) { return Err("not a note's document".into()); }
+        self.writable()?;
         let busy = self.busy(id);
         let _one = lock(&busy);
         let u = {
@@ -676,8 +771,11 @@ impl Docs {
         // a note's text before its place in the manifest: no Mac learns of a note it cannot read yet
         let mut pending: Vec<String> = lock(&self.open).iter().filter(|(_, o)| o.c.pending).map(|(k, _)| k.clone()).collect();
         pending.sort_by_key(|id| id == MANIFEST);
-        for id in pending { self.send(&id); }
-        self.bind();
+        // a reader has nothing to send and binds nothing (the server refuses both)
+        if self.writable().is_ok() {
+            for id in pending { self.send(&id); }
+            self.bind();
+        }
         Ok(changed)
     }
     /// The notes that are documents, named to the server by their record names (the vault's naming key over the path,
@@ -833,7 +931,7 @@ impl Docs {
     /// documents; the document's own lock keeps everything else off it meanwhile.
     pub fn absorb(&self, root: &Path, filter: &Filter, path: &str, by: &str) -> Result<bool, String> {
         let Some(id) = self.paths().get(path).cloned() else { return Ok(false) };
-        if filter.skips(path, false) || through_link(root, path) { return Ok(false); }
+        if filter.skips(path, false) || through_link(root, path) || self.writable().is_err() { return Ok(false); }
         let busy = self.busy(&id);
         let _one = lock(&busy);
         let (cur, b) = {
@@ -983,7 +1081,6 @@ pub fn listing(v: &Value) -> BTreeMap<String, (u64, u64)> {
 mod tests {
     use super::*;
     use crate::vault::VaultKey;
-    use std::sync::atomic::{AtomicBool, Ordering};
 
     const V: &str = "0123456789abcdef";
     /// A server's document ops in memory: per name its log (part, who pushed it).
@@ -997,7 +1094,8 @@ mod tests {
             let mut f = srv.lock().unwrap();
             let doc = req["doc"].as_str().unwrap_or("").to_string();
             match req["op"].as_str().unwrap() {
-                "doc_push" => { f.order.push(doc.clone()); let log = f.logs.entry(doc).or_default(); log.push((body.unwrap(), me.clone())); Ok((json!({"seq": log.len()}), vec![])) }
+                // as the server: the device that pushed it, or without history the session the push names
+                "doc_push" => { f.order.push(doc.clone()); let who = req["from"].as_str().map_or(me.clone(), String::from); let log = f.logs.entry(doc).or_default(); log.push((body.unwrap(), who)); Ok((json!({"seq": log.len()}), vec![])) }
                 "doc_pull" => {
                     let since = req["since"].as_u64().unwrap() as usize;
                     let log = f.logs.get(&doc).cloned().unwrap_or_default();
@@ -1053,6 +1151,36 @@ mod tests {
         assert_eq!(b.id_of(&name), Some(id.clone()));
         assert_eq!(b.id_of(&a.name(&format!("{id}#comments"))), Some(format!("{id}#comments")));
         assert_eq!(b.id_of(&"0".repeat(64)), None);
+    }
+
+    /// A reader's Mac takes the others' documents and changes nothing: no edit, comment, note or move, nothing sent or
+    /// bound, and a file changed on its disk is not taken in.
+    #[test]
+    fn a_reader_pulls_and_sends_nothing() {
+        let (srv, k) = (Server::default(), Keys::from(VaultKey::generate()));
+        let ((a, _), (b, _)) = (mac(&srv, &k, "ro-a", A), mac(&srv, &k, "ro-b", B));
+        let id = a.create("Plan.md", "theirs").unwrap();
+        b.set_read_only(true);
+        b.sync().unwrap();
+        assert_eq!(b.text(&id), "theirs");
+        let sent = || { let f = srv.lock().unwrap(); (f.order.len(), f.bound.len()) };
+        let before = sent();
+        let u = change(&Doc::new(), |x| { let t = x.get_or_insert_text("md"); t.insert(&mut x.transact_mut(), 0, "mine"); });
+        for r in [b.apply_local(&id, &u), b.put_comment(&id, "c1", "{}"), b.set_text(&id, "mine", "restore"), b.create("Other.md", "x").map(|_| ()), b.rename("Plan.md", "Moved.md")] {
+            assert_eq!(r.unwrap_err(), crate::members::READ_ONLY);
+        }
+        let root = tmp("ro-root");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("Plan.md"), "mine").unwrap();
+        assert!(!b.absorb(&root, &Filter::default(), "Plan.md", "disk").unwrap());
+        std::fs::remove_dir_all(&root).ok();
+        b.sync().unwrap();
+        assert_eq!((sent(), b.text(&id)), (before, "theirs".into()));
+        // a reader made member again edits as before
+        b.set_read_only(false);
+        append(&b, &id, " and mine");
+        a.sync().unwrap();
+        assert_eq!(a.text(&id), "theirs and mine");
     }
 
     #[test]
@@ -1348,6 +1476,99 @@ mod tests {
         std::fs::remove_dir_all(tmp("gap-b")).ok();
     }
 
+
+    /// Keys of a workspace without history.
+    fn anon_keys() -> Keys { let mut k = Keys::from(VaultKey::generate()); k.nohistory = true; k }
+    /// The same Mac after a restart: its state kept, a new session.
+    fn restarted(srv: &Server, keys: &Keys, tag: &str, me: &str) -> Docs {
+        forget_session(V, me);
+        Docs::new(V, keys.clone(), call(srv, me, &Arc::new(AtomicBool::new(true))), &tmp(tag), me)
+    }
+    /// The log's (author, counter) per update, as a reader opens them.
+    fn authors(srv: &Server, k: &Keys, name: &str) -> Vec<(String, u64)> {
+        srv.lock().unwrap().logs[name].iter().map(|(p, who)| { let o = k.open_doc(V, name, "u", 0, who, p).unwrap(); (o.author, o.meta["n"].as_u64().unwrap()) }).collect()
+    }
+
+    /// Without history every Mac writes as this run's session, sealed under it and named by it to the server, never
+    /// its device. After a restart a new session whose counter starts at 1, which no other Mac takes for a gap. A
+    /// gap inside a session is still warned, the history goes by session, and this Mac knows its earlier sessions.
+    #[test]
+    fn without_history_each_run_writes_as_a_session_of_its_own() {
+        let (srv, k) = (Server::default(), anon_keys());
+        let ((a, _), (b, _)) = (mac(&srv, &k, "anon-a", A), mac(&srv, &k, "anon-b", "bbbbbbbbbbbbbbb1"));
+        let s1 = a.me();
+        assert!(a.anonymous() && s1.len() == 16 && s1 != A && s1 != b.me(), "{s1}");
+        let id = a.create("Plan.md", "one\n").unwrap();
+        append(&a, &id, "two\n");
+        let name = a.name(&id);
+        assert_eq!(authors(&srv, &k, &name), [(s1.clone(), 1), (s1.clone(), 2)]);
+        b.sync().unwrap();
+        // A again, after a restart: a new session, counting from 1
+        drop(a);
+        let a = restarted(&srv, &k, "anon-a", A);
+        let s2 = a.me();
+        assert!(s2 != s1 && s2 != A);
+        append(&a, &id, "three\n");
+        assert_eq!(authors(&srv, &k, &name).last().unwrap(), &(s2.clone(), 1));
+        b.sync().unwrap();
+        assert!(!b.take_warnings().iter().any(|w| w.contains("held back")), "a new session is no gap");
+        assert_eq!(b.text(&id), "one\ntwo\nthree\n");
+        // the history: one version per session, none named by a device
+        let v = b.history(&id).unwrap();
+        let got: Vec<(&str, &str)> = v.iter().map(|v| (v.author.as_str(), v.text.as_str())).collect();
+        assert_eq!(got, [(s1.as_str(), "one\ntwo\n"), (s2.as_str(), "one\ntwo\nthree\n")]);
+        // a gap inside a session: warned as before
+        append(&a, &id, "4");
+        let held = srv.lock().unwrap().logs.get_mut(&name).unwrap().pop().unwrap();
+        append(&a, &id, "5");
+        b.sync().unwrap();
+        assert!(b.take_warnings().iter().any(|w| w.contains("held back") && w.contains(&s2)), "within a session");
+        let _ = held;
+        // this Mac's own sessions, before the restart too, not another Mac's
+        assert!(a.is_mine(&s1) && a.is_mine(&s2) && !b.is_mine(&s1) && !a.is_mine(&b.me()));
+        std::fs::remove_dir_all(tmp("anon-a")).ok();
+        std::fs::remove_dir_all(tmp("anon-b")).ok();
+    }
+
+    /// Without history a comment's author is a session. After a restart this Mac still knows it as its own, and its
+    /// delete is sealed as that session, so every Mac sees the entry's own author delete it.
+    #[test]
+    fn without_history_an_own_comment_stays_deletable_after_a_restart() {
+        let (srv, k) = (Server::default(), anon_keys());
+        let ((a, _), (b, _)) = (mac(&srv, &k, "anon-com-a", A), mac(&srv, &k, "anon-com-b", "bbbbbbbbbbbbbbb2"));
+        let id = a.create("Plan.md", "x\n").unwrap();
+        a.put_comment(&id, "c1", r#"{"k":"comment","t":"Why?"}"#).unwrap();
+        let s1 = a.me();
+        drop(a);
+        let a = restarted(&srv, &k, "anon-com-a", A);
+        a.sync().unwrap();
+        a.put_comment(&id, "r1", r#"{"k":"reply","on":"c1","t":"later"}"#).unwrap();
+        a.put_comment(&id, "d1", r#"{"k":"delete","on":"c1"}"#).unwrap();
+        b.sync().unwrap();
+        let by: BTreeMap<String, String> = b.comments(&id).into_iter().map(|(key, au, _)| (key, au)).collect();
+        assert_eq!((by["c1"].as_str(), by["d1"].as_str()), (s1.as_str(), s1.as_str()), "the delete is the comment's own session's");
+        assert_eq!(by["r1"], a.me(), "anything else is this session's");
+        assert!(a.is_mine(&by["c1"]) && !b.is_mine(&by["c1"]));
+        // the earlier session's counter goes on where it was: no gap for anyone
+        let side = a.name(&format!("{id}#comments"));
+        let mine: Vec<u64> = authors(&srv, &k, &side).into_iter().filter(|(au, _)| *au == s1).map(|(_, n)| n).collect();
+        assert_eq!(mine, [1, 2]);
+        assert!(!b.take_warnings().iter().any(|w| w.contains("held back")));
+        std::fs::remove_dir_all(tmp("anon-com-a")).ok();
+        std::fs::remove_dir_all(tmp("anon-com-b")).ok();
+    }
+
+    /// Without history a document keeps the counters of its newest MAX_SESSIONS sessions, with history every author.
+    #[test]
+    fn old_sessions_are_let_go() {
+        let mut o = Open { doc: Doc::new(), c: Cursor::default() };
+        for i in 0..MAX_SESSIONS as u64 + 10 { o.c.seq = i + 1; Docs::saw(&mut o, &format!("{i:016x}"), 1, true); }
+        assert_eq!((o.c.seen.len(), o.c.seen_at.len()), (MAX_SESSIONS, MAX_SESSIONS));
+        assert!(!o.c.seen.contains_key(&format!("{:016x}", 9)) && o.c.seen.contains_key(&format!("{:016x}", 10)), "the oldest went");
+        let mut d = Open { doc: Doc::new(), c: Cursor::default() };
+        for i in 0..MAX_SESSIONS + 10 { Docs::saw(&mut d, &format!("{i:016x}"), 1, false); }
+        assert_eq!((d.c.seen.len(), d.c.seen_at.len()), (MAX_SESSIONS + 10, 0));
+    }
 
     /// `merge3`'s edits made on a string, as `take_disk` makes them on the document.
     fn merged(base: &str, cur: &str, disk: &str) -> String {

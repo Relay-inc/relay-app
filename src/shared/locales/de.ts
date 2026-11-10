@@ -220,6 +220,7 @@ export default {
   "mig.teamChats":
     "Diese Gespräche laufen in {target} weiter. Ihre Transkripte bleiben auf diesem Mac, aber was sie schon enthalten (alles Gesagte und jede gelesene Datei) kann in Notizen landen, die jedes Mitglied sieht:",
   "ws.team": "Team",
+  "ws.noHistory": "ohne Verlauf",
   "ws.live": "live",
   "ws.rounds": "synchronisiert alle 10 s",
   "ws.openFolder": "Ordner als Workspace öffnen…",
@@ -594,6 +595,8 @@ export default {
   "page.askAbout": "Zu dieser Seite fragen",
   "page.ask": "Claude fragen",
   "page.peers": "Auf dieser Seite: {names}",
+  "page.anonymous": "Anonym",
+  "page.anonymousSession": "Anonyme Sitzung",
   "page.editor": "Text der Seite",
   "page.updatedLinks": "Links aktualisiert",
   "page.updatedByClaude": "Von Claude geändert",
@@ -603,6 +606,7 @@ export default {
   "page.reload": "Neu laden",
   "page.keepMine": "Meine behalten",
   "page.tooBig": "Diese Notiz ist größer als 1 MB: sie ist nur lesbar.",
+  "page.readOnly": "Du kannst diesen Workspace lesen, nicht ändern. Ein Admin kann dich zum Mitglied machen.",
   "page.conversations": "Unterhaltungen",
   "page.latest": "{n} · zuletzt {time}",
   "page.comments": "Kommentare",
@@ -1294,8 +1298,12 @@ export default {
     "Workspaces, die ein Team mit dir auf einem relay-server teilt, der keine deiner Maschinen ist. Der Server speichert nur verschlüsselte Dateien. Jeder Mac synchronisiert den Workspace in einen eigenen Ordner. Ein Workspace auf einer deiner Maschinen steht unter dieser Maschine.",
   "set.sharedAdmin": "Admin",
   "set.sharedMember": "Mitglied",
-  "set.sharedMakeAdmin": "Zum Admin machen",
-  "set.sharedMakeMember": "Zum Mitglied machen",
+  "set.sharedReader": "Leser",
+  "set.sharedRoleOf": "Rolle von {name}",
+  "set.sharedUnsent_one":
+    "{n} Änderung in diesem Ordner bleibt auf diesem Mac: du kannst diesen Workspace lesen, nicht ändern. Lösche die Datei, um die Version des Workspace zurückzubekommen.",
+  "set.sharedUnsent_other":
+    "{n} Änderungen in diesem Ordner bleiben auf diesem Mac: du kannst diesen Workspace lesen, nicht ändern. Lösche eine Datei, um die Version des Workspace zurückzubekommen.",
   "set.sharedNotListed": "Nicht auf der Liste",
   "set.sharedAddToList": "Auf die Liste setzen",
   "set.sharedNotListedHint":
@@ -1343,6 +1351,17 @@ export default {
   "set.sharedLink": "Einladungslink · {role}",
   "set.sharedLinkHelp": "Einmalig, gültig bis {time}. Schick ihn in einer privaten Nachricht.",
   "set.sharedDone": "Fertig",
+  "set.sharedNamePerson": "Person benennen…",
+  "set.sharedRename": "Umbenennen…",
+  "set.sharedAddDevice": "Gerät hinzufügen…",
+  "set.sharedPerson": "Person",
+  "set.sharedPersonNew": "Neue Person",
+  "set.sharedPersonName": "Name",
+  "set.sharedPersonEmail": "E-Mail (optional)",
+  "set.sharedNoPerson": "Geräte ohne Person",
+  "set.sharedRemovePersonSure":
+    "{name} mit allen Geräten entfernen? Ihre Macs behalten die Dateien, die sie schon haben.",
+  "set.sharedRemoveSelfSure": "Dich selbst mit allen Geräten entfernen? Dieser Mac verlässt den Workspace dann auch.",
   "set.sharedThisMac": "dieser Mac",
   "set.sharedInvites": "Offene Einladungen",
   "set.sharedInviteOpen": "{role}, gültig bis {time}",
@@ -1357,6 +1376,12 @@ export default {
   "set.sharedNewFolderHelp":
     "Ein leerer Ordner startet als neuer Workspace. Ein Ordner mit Notizen wird so hochgeladen, wie er ist.",
   "set.sharedJoinFolderHelp": "Ein leerer Ordner auf diesem Mac. Der Workspace kommt dort hinein.",
+  "set.sharedNoHistory": "Workspace ohne Verlauf",
+  "set.sharedNoHistoryHelp":
+    "Relay hält nicht fest, wer was geändert hat: Konfliktkopien nennen keinen Computer, und Seitenverlauf, Kommentare und Cursor zeigen anonyme Sitzungen. Mitglieder und ihre Rollen bleiben sichtbar, ein kleines Team ist nicht anonym, und ein Mitglied kann außerhalb von Relay weiterhin eine eigene Kopie behalten. Das lässt sich später nicht mehr ausschalten.",
+  "set.sharedNoHistoryLabel": "Ohne Verlauf",
+  "set.sharedNoHistoryTip":
+    "Ohne Verlauf erstellt: Relay hält hier nicht fest, wer was geändert hat. Mitglieder und ihre Rollen bleiben sichtbar.",
   "set.sharedCreate": "Erstellen",
   "set.sharedRecovery": "Wiederherstellungsschlüssel",
   "set.sharedRecoveryHelp":
@@ -1366,6 +1391,104 @@ export default {
   "set.sharedLinkLabel": "Einladungslink",
   "set.sharedLinkLabelHelp": "Der relay://-Link, den dir ein Admin geschickt hat.",
   "set.sharedJoinButton": "Beitreten",
+  "set.ssoTitle": "SSO zum Beitreten",
+  "set.ssoOnRequired": "An: Ein Gerät meldet sich an, bevor es hier einem Workspace beitritt",
+  "set.ssoOnOptional": "An: Ein Gerät kann sich beim Beitreten anmelden",
+  "set.ssoOff": "Aus: Ein Einladungslink allein genügt zum Beitreten",
+  "set.ssoProvider": "Anbieter",
+  "set.ssoOther": "Anderer OpenID-Connect-Anbieter",
+  "set.ssoEntra": "Microsoft Entra ID",
+  "set.ssoTenant": "Mandanten-ID",
+  "set.ssoTenantHelp":
+    "Die ID deines Entra-Mandanten, eine GUID. Jedes Konto dieses Mandanten darf beitreten: Entra liefert keine verifizierte E-Mail-Adresse, an der sich eine Domain prüfen ließe.",
+  "set.ssoClientHelpEntra":
+    "Die Anwendungs-ID (Client-ID) der App-Registrierung, die du für Relay angelegt hast. Ein Client-Secret ist nicht nötig.",
+  "set.ssoJoinRequiredTenant":
+    "Dieser Server bittet dich, dich vor dem Beitritt mit einem Microsoft-Konto seiner Organisation anzumelden.",
+  "set.ssoJoinOptionalTenant": "Dieser Server lässt dich mit einem Microsoft-Konto seiner Organisation anmelden.",
+  "set.ssoIssuer": "Issuer",
+  "set.ssoIssuerHelp": "Die Issuer-URL des Anbieters, wie seine ID-Tokens sie nennen.",
+  "set.ssoClient": "Client-ID",
+  "set.ssoClientHelp":
+    "Der OAuth-Client, den du für Relay angelegt hast (ein Desktop-App-Client). Ein Client-Secret ist nicht nötig.",
+  "set.ssoDomains": "E-Mail-Domains",
+  "set.ssoDomainsHelp": "Wer beitreten darf: Adressen in diesen Domains, durch Kommas getrennt.",
+  "set.ssoRequired": "Zum Beitreten nötig",
+  "set.ssoRequiredHelp": "Aus: Die Anmeldung wird angeboten, und ein Link allein genügt weiterhin.",
+  "set.ssoTurnOn": "Einschalten",
+  "set.ssoSave": "Speichern",
+  "set.ssoTurnOff": "Ausschalten",
+  "set.ssoSaved": "SSO in der Organisationsliste gespeichert.",
+  "set.ssoTurnedOff": "SSO ausgeschaltet.",
+  "set.ssoHelp":
+    "Beim Beitreten prüft der Server das ID-Token der Anmeldung und behält nur die E-Mail-Adresse darin, nie das Token. Jemanden entfernen läuft weiter über Offboarden: Der Anbieter teilt diesem Server nicht mit, wenn ein Konto geschlossen wird.",
+  "set.ssoJoinLabel": "Anmelden",
+  "set.ssoJoinRequired":
+    "Dieser Server bittet dich, dich vor dem Beitreten anzumelden, mit einer Adresse in {domains}.",
+  "set.ssoJoinOptional": "Dieser Server lässt dich mit einer Adresse in {domains} anmelden.",
+  "set.ssoSignIn": "Mit {provider} anmelden",
+  "set.ssoSignInAgain": "Erneut anmelden",
+  "set.ssoWaiting": "Warte auf den Browser…",
+  "set.ssoSignedInAs": "Angemeldet als {email}",
+  "set.org": "Organisation",
+  "set.orgShow": "Anzeigen…",
+  "set.orgHide": "Ausblenden",
+  "set.orgAdmin": "Organisations-Admin",
+  "set.orgNone":
+    "Dieser Server hat noch keine Organisation. Sein Besitzer, der erste damit gekoppelte Mac, kann eine starten.",
+  "set.orgNoneOwner":
+    "Dieser Server hat noch keine Organisation. Als Besitzer kannst du eine starten: Dieser Mac wird ihr erster Organisations-Admin.",
+  "set.orgStart": "Organisation starten",
+  "set.orgNotAdmin":
+    "Dieser Server hat eine Organisation. Um Organisations-Admin zu werden, fügt ein Admin diesen Mac hinzu, nachdem er seinen Code verglichen hat: {code}",
+  "set.orgReads":
+    "Organisations-Admins sind Admin jedes Workspace, den sie auf diesem Server verwalten, und können ihn lesen. Neue Workspaces fügen sie von Anfang an hinzu.",
+  "set.orgYourCode": "Code dieses Mac: {code}",
+  "set.orgAdmins": "Organisations-Admins",
+  "set.orgRemoveAdmin": "Entfernen",
+  "set.orgCodeBad": "nicht vom Gerät signiert",
+  "set.orgAddAdmin": "Als Admin hinzufügen…",
+  "set.orgAddSure":
+    "Füge {name} nur hinzu, wenn sein Bildschirm denselben Code zeigt: {code}. Ein anderer Code bedeutet die Schlüssel von jemand anderem.",
+  "set.orgCodesMatch": "Codes stimmen, hinzufügen",
+  "set.orgAddHelp":
+    "Ein gekoppelter Mac erscheint hier, sobald sein Bereich Organisation geöffnet wurde. Sein Code steht in diesem Bereich.",
+  "set.orgWorkspaces": "Workspaces",
+  "set.orgManaged": "Verwaltet",
+  "set.orgUnmanaged": "Nicht verwaltet",
+  "set.orgDevices_one": "{n} Gerät",
+  "set.orgDevices_other": "{n} Geräte",
+  "set.orgUnmanagedHelp":
+    "Nicht jeder Organisations-Admin ist hier Admin. Ein Admin dieses Workspace fügt sie in seinen Einstellungen hinzu (Organisations-Admins hinzufügen).",
+  "set.orgNoWorkspaces": "Noch keine Workspaces auf diesem Server.",
+  "set.orgPeople": "Personen",
+  "set.orgEmailUnverified":
+    "E-Mail nicht bestätigt: ihr eigenes Gerät hat sie signiert, ohne SSO oder Admin, daher gruppiert sie keine Geräte mit denen einer anderen Person.",
+  "set.orgOffboardConfirm": "Offboarden",
+  "set.orgOffboard": "Offboarden…",
+  "set.orgOffboardSure":
+    "{name} offboarden: Die Person verlässt {workspaces}, jeder Workspace bekommt einen neuen Schlüssel, und ihre {devices} Gerät(e) können sich nicht mehr mit diesem Server verbinden. Ihre Macs behalten die Dateien, die sie schon haben.",
+  "set.orgNoneOfThem": "keinen Workspace, dessen Admin du bist",
+  "set.orgOffboardSkipped":
+    "Nicht aus {workspaces}: Dort bist du kein Admin. Bitte einen Admin dieses Workspace, die Person zu entfernen oder die Organisations-Admins hinzuzufügen.",
+  "set.orgOffboardNotRevoked":
+    "Ihre Geräte sind nicht widerrufen und können sich weiter mit diesem Server verbinden: {error}",
+  "set.orgOffboarded": "{name} ist aus {n} Workspace(s) entfernt, {revoked} Gerät(e) widerrufen.",
+  "set.orgAdded": "Organisations-Admins hinzugefügt: {n}.",
+  "set.orgAddedNone":
+    "Nichts hinzuzufügen: Dieser Server hat keine Organisation, oder ihre Admins sind hier schon Admin.",
+  "set.orgCreateFailed": "Erstellt, aber die Organisations-Admins sind noch nicht darauf: {error}",
+  "set.orgAddToWorkspace": "Organisations-Admins hinzufügen",
+  "set.orgAddToWorkspaceHelp":
+    "Macht die Organisations-Admins dieses Servers zu Admins dieses Workspace. Sie können ihn dann lesen.",
+  "set.policyAgents": "Agenten in diesem Workspace",
+  "set.policyAgentsHelp":
+    "Ein Gespräch hier startet nur mit einem Agenten, den du erlaubst. In die Mitgliederliste signiert, folgt ihm das Relay jedes Mitglieds.",
+  "set.policyCapture": "Capture",
+  "set.policyCaptureHelp": "Ob Capture in diesem Workspace an ist.",
+  "set.policyIs": "Richtlinie: {agents}, Capture {capture}",
+  "set.policyCaptureOn": "an",
+  "set.policyCaptureOff": "aus",
   "set.title": "Einstellungen",
   "set.vaultHelp":
     "Der Ordner deines Workspaces Persönlich, dein Obsidian-Vault. Gespräche starten darin, und die Seitenleiste liest daraus work-state und Erinnerungen.",
@@ -1395,6 +1518,7 @@ export default {
     "Wo „Im Terminal öffnen“ ein Gespräch fortsetzt. Automatisch nimmt das erste installierte: iTerm, WezTerm, dann Terminal.",
   "set.favicons": "Projektsymbole",
   "act.reminders": "Erinnerungen",
+  "act.knowledge": "Wissens-Workspaces",
   "vs.title": "Git-Backup",
   "vs.help":
     "Alle paar Minuten committet Relay den Vault und pusht ihn in ein Git-Repository. Nur Push, nie Pull. Git nutzt deinen eigenen Login: einen SSH-Schlüssel, einen Credential Helper oder <code>gh</code>. Ein öffentliches Repository wird abgelehnt.",
@@ -2272,7 +2396,7 @@ export default {
   "mc.sharedOnlyRow":
     "Nur für Workspaces. Der Workspace Persönlich, Claude-Kontext und Memory dieses Macs gehen nicht hierher, und hier läuft kein Gespräch. Um das zu ändern, vergiss die Maschine und kopple sie neu.",
   "mc.keeperRow":
-    "Du betreust diesen Server als Admin eines Workspaces darauf: Du kannst ihn von hier aktualisieren. Er führt kein Gespräch für dich und hält keinen Mirror. Er verschwindet aus dieser Liste, sobald du hier von keinem Workspace mehr Admin bist.",
+    "Du betreust diesen Server als Admin eines Workspaces darauf: du kannst ihn von hier aktualisieren. Er führt kein Gespräch für dich und hält keinen Mirror. Er verschwindet aus dieser Liste, sobald du hier von keinem Workspace mehr Admin bist.",
   "mc.pair": "Koppeln",
   "mc.pairing": "Koppeln…",
   "mc.setupTitle": "Maschine einrichten",

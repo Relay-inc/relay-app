@@ -913,10 +913,10 @@ fn two_macs_share_a_vault_through_the_server() {
     let key = Keys::from(VaultKey::generate());
     let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
     let cid = device("share-colleague");
-    let (line, joined, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let (line, joined, theirs) = client::vault_join(&link, &cid, "colleague", None).unwrap();
     assert_eq!((joined.id.as_str(), joined.role.as_str(), theirs.recovery()), (vault.as_str(), "member", key.recovery()));
     let colleague = Client::new(&line.host, line.port, &line.fp, cid.clone());
-    assert!(client::vault_join(&link, &device("share-late"), "late").is_err(), "a link works once");
+    assert!(client::vault_join(&link, &device("share-late"), "late", None).is_err(), "a link works once");
 
     let dir = |t: &str| { let d = std::env::temp_dir().join(format!("relay-share-{t}-{}", std::process::id())); std::fs::remove_dir_all(&d).ok(); std::fs::create_dir_all(&d).unwrap(); d };
     let (a, b) = (dir("a"), dir("b"));
@@ -981,7 +981,7 @@ fn a_tidy_of_many_notes_is_one_round_through_the_server() {
     let key = Keys::from(VaultKey::generate());
     let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
     let cid = device("tidy-colleague");
-    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague", None).unwrap();
     let colleague = Client::new(&line.host, line.port, &line.fp, cid);
     let dir = |t: &str| { let d = std::env::temp_dir().join(format!("relay-tidy-{t}-{}", std::process::id())); std::fs::remove_dir_all(&d).ok(); std::fs::create_dir_all(&d).unwrap(); d };
     let (a, b) = (dir("a"), dir("b"));
@@ -1035,7 +1035,7 @@ fn filing_the_inbox_of_a_shared_workspace_holds_nothing_on_a_members_mac() {
     let key = Keys::from(VaultKey::generate());
     let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
     let cid = device("inbox-colleague");
-    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague", None).unwrap();
     let colleague = Client::new(&line.host, line.port, &line.fp, cid);
     let dir = |t: &str| { let d = std::env::temp_dir().join(format!("relay-inbox-{t}-{}", std::process::id())); std::fs::remove_dir_all(&d).ok(); std::fs::create_dir_all(&d).unwrap(); d };
     let (a, b) = (dir("a"), dir("b"));
@@ -1101,7 +1101,7 @@ fn a_shared_vaults_live_channel() {
     let key = Keys::from(VaultKey::generate());
     let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
     let cid = device("chan-colleague");
-    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague", None).unwrap();
     let colleague = Client::new(&line.host, line.port, &line.fp, cid.clone());
     let doc = key.name("Projects/Acme.md");
 
@@ -1209,18 +1209,20 @@ impl Member {
     /// A round's key step, saving as the app does.
     fn step(&self, vault: &str) -> relay_remote::vault::KeyStep { self.remote(vault).keep_keys(&self.save()).unwrap() }
     /// An invite this Mac makes, remembered in its key file as the app does.
-    fn invite(&self, t: &Team, role: &str) -> String {
+    fn invite(&self, t: &Team, role: &str) -> String { self.invite_for(t, role, "").unwrap() }
+    /// The same, for a device of the person `who`.
+    fn invite_for(&self, t: &Team, role: &str, who: &str) -> Result<String, String> {
         let keys = self.keys();
-        let (link, inv) = self.c.vault_invite(&t.vault, role, &keys, &t.host, t.port).unwrap();
+        let (link, inv) = self.c.vault_invite(&t.vault, role, &keys, &t.host, t.port)?;
         let mut k = self.keys();
-        k.invites.push(relay_remote::vault::Invited { id: inv.id, secret: relay_remote::proto::PairLine::parse(&link).unwrap().secret.unwrap(), role: role.into(), epoch: keys.epoch(), expires: inv.expires });
+        k.invites.push(relay_remote::vault::Invited { id: inv.id, secret: relay_remote::proto::PairLine::parse(&link).unwrap().secret.unwrap(), role: role.into(), epoch: keys.epoch(), expires: inv.expires, who: who.into() });
         *self.file.lock().unwrap() = k.format();
-        link
+        Ok(link)
     }
 }
 fn join(link: &str, tag: &str) -> (Member, Identity) {
     let id = device(tag);
-    let (line, _, k) = client::vault_join(link, &id, tag).unwrap();
+    let (line, _, k) = client::vault_join(link, &id, tag, None).unwrap();
     (Member::new(&Client::new(&line.host, line.port, &line.fp, id.clone()), &id, &k), id)
 }
 fn rounds(t: &Team, ms: &[&Member], n: usize) { for _ in 0..n { for m in ms { m.step(&t.vault); } } }
@@ -1240,7 +1242,7 @@ fn trio(tag: &str, b_role: &str) -> (Team, Member, Member, Member) {
     let t = team(tag);
     let a = Member::new(&t.laptop, &t.lid, &t.key);
     // as the app does right after making a workspace: the member list first
-    a.remote(&t.vault).start(&a.save()).unwrap();
+    a.remote(&t.vault).start(false, &a.save()).unwrap();
     rounds(&t, &[&a], 1);
     let (b, _) = join(&a.invite(&t, b_role), &format!("{tag}-b"));
     rounds(&t, &[&b, &a], 1);
@@ -1451,6 +1453,36 @@ fn a_member_who_set_up_relay_again_is_trusted_by_hand() {
     assert!(a.remote(&t.vault).trust(&b.fp, &a.save()).unwrap_err().contains("not signed by it"));
 }
 
+/// People (docs/workspaces.md, People): the admin and a colleague each name themselves, the colleague adds a second
+/// Mac of its own through its own invite (as member only), and the server lists the person with both devices. A device
+/// claiming another person is refused. Removing the person takes both devices off the list and the server in one entry,
+/// and the admin's next round makes a new key for who is left.
+#[test]
+fn a_person_adds_its_own_device_and_goes_with_all_of_them() {
+    let (t, a, b, c) = trio("people", "member");
+    let (pa, pb) = ("1".repeat(64), "2".repeat(64));
+    a.remote(&t.vault).set_person(&pa, "Ann", "", &a.fp, &a.save()).unwrap();
+    assert_eq!(b.remote(&t.vault).set_person(&pb, "Bo", "bo@example.com", &b.fp, &b.save()).unwrap().len(), 2);
+    // only a person invites without being an admin, and never as admin
+    assert!(c.invite_for(&t, "member", "").unwrap_err().contains("only an admin"));
+    assert!(b.invite_for(&t, "admin", &pb).unwrap_err().contains("only an admin"));
+    let (d, _) = join(&b.invite_for(&t, "member", &pb).unwrap(), "people-d");
+    rounds(&t, &[&d, &b, &d, &a, &c], 1);
+    let l = list_of(&t, &a);
+    assert_eq!((l.person(&d.fp), l.admin(&d.fp)), (pb.as_str(), false));
+    let info = t.laptop.vault_info(&t.vault).unwrap();
+    let bo = info.people.iter().find(|p| p.who == pb).unwrap();
+    assert_eq!((bo.name.as_str(), bo.email.as_str(), bo.devices.len()), ("Bo", "bo@example.com", 2));
+    // a device of Bo claims Ann
+    assert!(b.remote(&t.vault).set_person(&pa, "Ann", "", &b.fp, &b.save()).unwrap_err().contains("not signed by an admin"));
+    assert_eq!(a.remote(&t.vault).remove_person(&pb, &a.save()).unwrap().map(|p| p.len()), Some(1), "the admin is not Bo, Ann is left");
+    let info = t.laptop.vault_info(&t.vault).unwrap();
+    assert!(!info.members.iter().any(|m| m.fp == b.fp || m.fp == d.fp) && info.people.len() == 1, "{info:?}");
+    rounds(&t, &[&a, &c], 1);
+    assert_eq!((list_of(&t, &a).epoch, c.keys().epoch()), (1, 1));
+    assert!(d.c.call(serde_json::json!({"op": "vault_manifest", "vault": t.vault})).is_err());
+}
+
 /// Two admins rotate at once: the server takes one, the other's round takes that key, they end on the same key.
 #[test]
 fn two_admins_rotating_at_once_end_on_one_key() {
@@ -1520,8 +1552,95 @@ fn an_existing_workspace_gets_a_member_list() {
     let l = list_of(&t, &a);
     assert_eq!((l.members.len(), l.admin(&a.fp), l.admin(&b.fp), b.keys().creator, b.keys().head.map(|h| h.0)), (2, true, false, Some(a.keys().identity()), Some(l.len)));
     // the server's own removal is refused now: the list decides; and the only admin cannot leave
+    assert_eq!(a.c.call(serde_json::json!({"op": "vault_info", "vault": t.vault})).unwrap()["vault"]["nohistory"], false, "made as before");
+    assert!(!b.step(&t.vault).nohistory);
     assert!(t.laptop.vault_remove(&t.vault, &b.fp).unwrap_err().contains("member list"));
     assert!(a.remote(&t.vault).remove(&a.fp, &a.save()).unwrap_err().contains("no admin left"));
+}
+
+/// A workspace made without history (docs/workspaces.md): the entry right after the creation, `vault_info` says so to
+/// every member, and a member who joins later knows it from the list, kept in its key file.
+#[test]
+fn a_workspace_made_without_history_says_so_to_every_member() {
+    let t = team("nohistory");
+    let a = Member::new(&t.laptop, &t.lid, &t.key);
+    a.remote(&t.vault).start(true, &a.save()).unwrap();
+    rounds(&t, &[&a], 1);
+    let (b, _) = join(&a.invite(&t, "member"), "nohistory-b");
+    rounds(&t, &[&b, &a, &b], 1);
+    let l = list_of(&t, &a);
+    assert!(l.nohistory && l.members.contains_key(&b.fp) && l.len == 3, "create, nohistory, add");
+    let info = |m: &Member| m.c.call(serde_json::json!({"op": "vault_info", "vault": t.vault})).unwrap()["vault"]["nohistory"].clone();
+    assert_eq!((info(&a), info(&b)), (serde_json::json!(true), serde_json::json!(true)));
+    assert!(a.keys().nohistory && b.keys().nohistory && b.step(&t.vault).nohistory);
+}
+
+/// A workspace without history's documents (docs/workspaces.md, Without history): an admin turns them on as anywhere;
+/// each Mac writes as a session of its own, which the server keeps and passes on (log, live stream, cursors) instead
+/// of the device, and writes no `.from`. A Relay that sends no session (one from before) cannot write there.
+#[test]
+fn a_workspace_without_history_has_documents_by_session() {
+    use relay_remote::channel::Event;
+    let t = team("nohistory-docs");
+    let a = Member::new(&t.laptop, &t.lid, &t.key);
+    a.remote(&t.vault).start(true, &a.save()).unwrap();
+    rounds(&t, &[&a], 1);
+    let (b, _) = join(&a.invite(&t, "member"), "nohistory-docs-b");
+    rounds(&t, &[&b, &a, &b], 1);
+    a.remote(&t.vault).set_docs(true, &a.save()).unwrap();
+    assert!(list_of(&t, &a).docs && b.step(&t.vault).docs, "on as anywhere");
+    let dirs = std::env::temp_dir().join(format!("relay-e2e-nohistory-docs-{}", std::process::id()));
+    let da = a.c.docs(&t.vault, a.keys(), &dirs.join("a"), &a.fp);
+    let db = b.c.docs(&t.vault, b.keys(), &dirs.join("b"), &b.fp);
+    let (sa, sb) = (da.me(), db.me());
+    assert!(da.anonymous() && sa.len() == 16 && sa != a.fp[..16] && sb != b.fp[..16] && sa != sb, "{sa} {sb}");
+    let (cb, rb) = events(&b.c, &t.vault, &b.keys());
+    let (ca, ra) = events(&a.c, &t.vault, &a.keys());
+    wait_for(&rb, 10, |e| matches!(e, Event::Live { .. }));
+
+    // made on A, read on B: the log names A's session, never a device, and keeps no `.from`
+    let id = da.create("Plan.md", "# Plan\n").unwrap();
+    db.sync().unwrap();
+    assert_eq!(db.text(&id), "# Plan\n");
+    let page = b.c.call(serde_json::json!({"op": "doc_pull", "vault": t.vault, "doc": da.name(&id), "since": 0, "limit": 10})).unwrap();
+    assert_eq!(page["updates"][0]["from"].as_str(), Some(sa.as_str()));
+    let log = t.s.data.join("vaults").join(&t.vault).join("docs").join(da.name(&id)).join("log");
+    let files: Vec<String> = std::fs::read_dir(&log).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    assert!(files.iter().any(|f| f.ends_with(".sid")) && !files.iter().any(|f| f.ends_with(".from")), "{files:?}");
+    for f in files.iter().filter(|f| f.ends_with(".sid")) {
+        let who = std::fs::read_to_string(log.join(f)).unwrap();
+        assert!(who != a.fp[..16] && who != b.fp[..16], "no device on disk");
+    }
+
+    // live: B's stream gets A's next update from A's session, and A's cursor from it too
+    let edit = da.diff(&id, &[0]).unwrap();
+    let doc = yrs::Doc::new();
+    { use yrs::{Transact, updates::decoder::Decode}; doc.transact_mut().apply_update(yrs::Update::decode_v1(&edit).unwrap()).unwrap(); }
+    let u = { use yrs::{ReadTxn, Text, Transact}; let before = doc.transact().state_vector(); let tx = doc.get_or_insert_text("md"); tx.insert(&mut doc.transact_mut(), 0, "L "); doc.transact().encode_state_as_update_v1(&before) };
+    da.apply_local(&id, &u).unwrap();
+    let Event::Doc { from, .. } = wait_for(&rb, 5, |e| matches!(e, Event::Doc { .. })) else { unreachable!() };
+    assert_eq!(from, sa);
+    wait_for(&ra, 10, |e| matches!(e, Event::Live { .. }));
+    ca.send("awareness", &da.name(&id), br#"{"anchor":1}"#).unwrap();
+    let Event::Frame(f) = wait_for(&rb, 5, |e| matches!(e, Event::Frame(f) if f.kind == "awareness")) else { unreachable!() };
+    assert_eq!(f.from, sa, "a cursor of the same session, no device");
+
+    // a Relay that sends no session (one from before this) cannot write: its push is refused, the log unchanged
+    let mut old = b.keys();
+    old.nohistory = false;
+    let dold = b.c.docs(&t.vault, old, &dirs.join("old"), &b.fp);
+    dold.sync().unwrap();
+    assert_eq!(dold.me(), b.fp[..16]);
+    let before = page_len(&b, &t.vault, &da.name(&id));
+    let _ = dold.create("Other.md", "names its device");
+    assert!(dold.take_warnings().iter().any(|w| w.contains("keeps no record of who wrote what")));
+    assert_eq!(page_len(&b, &t.vault, &da.name(&id)), before);
+    cb.stop();
+    ca.stop();
+    std::fs::remove_dir_all(&dirs).ok();
+}
+fn page_len(m: &Member, vault: &str, doc: &str) -> u64 {
+    m.c.call(serde_json::json!({"op": "doc_pull", "vault": vault, "doc": doc, "since": 0, "limit": 1})).unwrap()["seq"].as_u64().unwrap()
 }
 
 /// An admin on the server before the list, whom another admin's upgrade added as a member (trust on upgrade): only an
@@ -1537,15 +1656,87 @@ fn an_admin_of_the_list_makes_a_member_admin() {
     let role = |fp: &str| t.laptop.vault_info(&t.vault).unwrap().members.into_iter().find(|m| m.fp == fp).unwrap().role;
     assert!(!list_of(&t, &a).admin(&b.fp));
     assert_eq!(role(&b.fp), "member", "the server followed the list");
-    assert!(b.remote(&t.vault).set_admin(&b.fp, true, &b.save()).unwrap_err().contains("only an admin"));
-    a.remote(&t.vault).set_admin(&b.fp, true, &a.save()).unwrap();
+    assert!(b.remote(&t.vault).set_role(&b.fp, "admin", &b.save()).unwrap_err().contains("only an admin"));
+    a.remote(&t.vault).set_role(&b.fp, "admin", &a.save()).unwrap();
     assert!(list_of(&t, &b).admin(&b.fp));
     assert_eq!(role(&b.fp), "admin");
     // b's own round sees it, and b may now demote a; demoting the last admin is refused
     assert!(b.step(&t.vault).admin);
-    b.remote(&t.vault).set_admin(&a.fp, false, &b.save()).unwrap();
+    b.remote(&t.vault).set_role(&a.fp, "member", &b.save()).unwrap();
     assert_eq!(role(&a.fp), "member");
-    assert!(b.remote(&t.vault).set_admin(&b.fp, false, &b.save()).unwrap_err().contains("no admin left"));
+    assert!(b.remote(&t.vault).set_role(&b.fp, "member", &b.save()).unwrap_err().contains("no admin left"));
+}
+
+/// A reader, invited as one: its round only pulls, and the server refuses its writes (files, the member list, invites)
+/// with one answer. An admin makes it a member, after which it writes, and a reader again.
+#[test]
+fn a_reader_reads_and_the_server_refuses_its_writes() {
+    use relay_remote::members::READ_ONLY;
+    use relay_remote::sync::{self, Remote};
+    let (t, a, b, _c) = trio("reader", "reader");
+    let role = |fp: &str| t.laptop.vault_info(&t.vault).unwrap().members.into_iter().find(|m| m.fp == fp).unwrap().role;
+    assert!(list_of(&t, &a).reader(&b.fp) && b.step(&t.vault).reader);
+    assert_eq!(role(&b.fp), "reader");
+    a.remote(&t.vault).put("Plan.md", b"from the admin", 1, "").unwrap();
+    // its writes: refused
+    let rb = b.remote(&t.vault);
+    let hash = rb.manifest().unwrap()["Plan.md"].hash.clone();
+    assert_eq!(rb.put("Plan.md", b"mine", 2, &hash).unwrap_err(), READ_ONLY);
+    assert_eq!(rb.put("New.md", b"mine", 2, "").unwrap_err(), READ_ONLY);
+    assert_eq!(rb.delete("Plan.md", &hash).unwrap_err(), READ_ONLY);
+    assert!(b.remote(&t.vault).set_person(&"b".repeat(64), "Bo", "", &b.fp, &b.save()).unwrap_err().contains("a reader only leaves"), "refused before it goes out");
+    // straight to the server: an entry it never gets to check
+    let entry = serde_json::json!({"kind": "promote", "fp": b.fp, "by": b.fp, "seq": 0, "sig": "0".repeat(128)});
+    assert_eq!(b.c.call(serde_json::json!({"op": "vault_append", "vault": t.vault, "entry": entry, "keys": {}})).unwrap_err(), READ_ONLY);
+    assert!(b.invite_for(&t, "member", "").unwrap_err().contains("only an admin"));
+    // a round of its own: pulls, sends nothing, says what stayed here
+    let dir = std::env::temp_dir().join(format!("relay-e2e-reader-folder-{}", std::process::id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    let round = |base: &sync::Manifest| sync::run(sync::Mode::Pull, &dir, base, &mut sync::Walker::default(), &sync::Filter::vault_default(), &b.remote(&t.vault), &|p| p.into(), &|_| false,
+        &sync::Guard { allow_deletes: false, allowed: &[], moved: &[], keep: &|_, _| Ok(()) }, &|_, _| {});
+    let (base, r) = round(&sync::Manifest::new());
+    assert_eq!((r.pulled.clone(), r.errors.clone()), (vec!["Plan.md".to_string()], vec![]));
+    std::fs::write(dir.join("Plan.md"), "mine").unwrap();
+    let (_, r) = round(&base);
+    assert_eq!((r.unsent.clone(), r.errors.clone(), r.pushed.len()), (vec!["Plan.md".to_string()], vec![], 0));
+    let ra = a.remote(&t.vault);
+    ra.manifest().unwrap();
+    assert_eq!(ra.get("Plan.md").unwrap(), b"from the admin");
+    std::fs::remove_dir_all(&dir).ok();
+    // made a member it writes, a reader again it is refused again
+    a.remote(&t.vault).set_role(&b.fp, "member", &a.save()).unwrap();
+    assert_eq!((role(&b.fp), b.step(&t.vault).reader), ("member".to_string(), false));
+    let rb = b.remote(&t.vault);
+    rb.manifest().unwrap();
+    rb.put("Plan.md", b"mine", 2, &hash).unwrap();
+    a.remote(&t.vault).set_role(&b.fp, "reader", &a.save()).unwrap();
+    assert_eq!(role(&b.fp), "reader");
+    assert!(list_of(&t, &b).reader(&b.fp));
+    assert_eq!(b.remote(&t.vault).put("New.md", b"mine", 3, "").unwrap_err(), READ_ONLY);
+    // it may still leave
+    b.remote(&t.vault).remove(&b.fp, &b.save()).unwrap();
+    assert!(!list_of(&t, &a).members.contains_key(&b.fp));
+}
+
+/// A device that joined with a reader invite goes on the list as a reader, also when an admin adds it without that
+/// invite (Add to list): never as a member, which the server refuses too.
+#[test]
+fn a_device_that_joined_as_reader_is_listed_as_one() {
+    let t = team("reader-late");
+    let (a, b) = (Member::new(&t.laptop, &t.lid, &t.key), Member::new(&t.colleague, &t.cid, &t.key));
+    rounds(&t, &[&a], 1);
+    edit_vault(&t, |v| { for m in v["members"].as_array_mut().unwrap() { if m["fp"] == b.fp.as_str() { m["role"] = serde_json::json!("reader"); } } });
+    b.step(&t.vault);
+    // an add as member, signed by the admin: the server refuses it
+    let l = list_of(&t, &a);
+    let (id, pk) = (b.keys().identity(), b.keys().public());
+    let e = a.keys().sign_entry(&t.vault, &l, &a.fp, relay_remote::members::Entry { kind: "add".into(), fp: b.fp.clone(), id, pk, role: "member".into(), ..Default::default() });
+    let err = a.c.call(serde_json::json!({"op": "vault_append", "vault": t.vault, "entry": e, "keys": {}})).unwrap_err();
+    assert!(err.contains("joined as a reader"), "{err}");
+    // Add to list: as a reader
+    a.remote(&t.vault).add_listed(&b.fp, &a.save()).unwrap();
+    assert!(list_of(&t, &a).reader(&b.fp) && b.step(&t.vault).reader);
 }
 
 /// A member whose Relay publishes its keys only after an admin's upgrade made the list: trust on upgrade skipped it, so
@@ -1558,12 +1749,12 @@ fn an_admin_adds_a_member_that_upgraded_after_the_list() {
     b.step(&t.vault);
     assert!(!list_of(&t, &a).members.contains_key(&b.fp));
     assert_eq!(a.step(&t.vault).listed.map(|l| l.contains(&b.fp)), Some(false));
-    assert!(a.remote(&t.vault).set_admin(&b.fp, true, &a.save()).unwrap_err().contains("not on this workspace's member list"));
+    assert!(a.remote(&t.vault).set_role(&b.fp, "admin", &a.save()).unwrap_err().contains("not on this workspace's member list"));
     assert!(b.remote(&t.vault).add_listed(&b.fp, &b.save()).unwrap_err().contains("only an admin"));
     a.remote(&t.vault).add_listed(&b.fp, &a.save()).unwrap();
     let l = list_of(&t, &b);
     assert!(l.members.contains_key(&b.fp) && !l.admin(&b.fp));
-    a.remote(&t.vault).set_admin(&b.fp, true, &a.save()).unwrap();
+    a.remote(&t.vault).set_role(&b.fp, "admin", &a.save()).unwrap();
     assert!(b.step(&t.vault).admin);
 }
 
@@ -1650,7 +1841,7 @@ fn team(tag: &str) -> Team {
     let key = Keys::from(VaultKey::generate());
     let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
     let cid = device(&format!("{tag}-colleague"));
-    let (line, _, _) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let (line, _, _) = client::vault_join(&link, &cid, "colleague", None).unwrap();
     let colleague = Client::new(&line.host, line.port, &line.fp, cid.clone());
     Team { s, laptop, lid, colleague, cid, vault, key, host: l.host.clone(), port: l.port }
 }
@@ -1794,7 +1985,7 @@ fn a_shared_vaults_documents() {
     let key = Keys::from(VaultKey::generate());
     let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
     let cid = device("docs-colleague");
-    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
+    let (line, _, theirs) = client::vault_join(&link, &cid, "colleague", None).unwrap();
     let colleague = Client::new(&line.host, line.port, &line.fp, cid.clone());
     let dirs = std::env::temp_dir().join(format!("relay-e2e-docs-{}", std::process::id()));
     let a = laptop.docs(&vault, key.clone(), &dirs.join("a"), &lid.fingerprint());
@@ -1876,7 +2067,8 @@ fn a_shared_vaults_documents() {
 
     // on the server: nothing readable, and nothing under another key than the vault's
     let stored = s.data.join("vaults").join(&vault).join("docs").join(a.name(&id)).join("log").join(format!("{:012}", 1));
-    assert!(!String::from_utf8_lossy(&std::fs::read(stored).unwrap()).contains("Plan"));
+    assert!(!String::from_utf8_lossy(&std::fs::read(&stored).unwrap()).contains("Plan"));
+    assert_eq!(std::fs::read_to_string(stored.with_file_name(format!("{:012}.from", 1))).unwrap(), lid.fingerprint()[..16], "who pushed it, as before");
     // (a part under another key than the vault's is refused: docs.rs's unit test, a push needs its body after the line)
 
     // the colleague removed: no pull, no push, no list
@@ -1885,4 +2077,244 @@ fn a_shared_vaults_documents() {
     assert!(b.pull(&id).is_err());
     assert!(colleague.call(json!({"op": "doc_list", "vault": vault})).is_err());
     std::fs::remove_dir_all(&dirs).ok();
+}
+
+/// An invite to `vault` that `m` makes and remembers in its key file, as the app does.
+fn invite_to(m: &Member, t: &Team, vault: &str, role: &str) -> String {
+    let keys = m.keys();
+    let (link, inv) = m.c.vault_invite(vault, role, &keys, &t.host, t.port).unwrap();
+    let mut k = m.keys();
+    k.invites.push(relay_remote::vault::Invited { id: inv.id, secret: relay_remote::proto::PairLine::parse(&link).unwrap().secret.unwrap(), role: role.into(), epoch: keys.epoch(), expires: inv.expires, who: String::new() });
+    *m.file.lock().unwrap() = k.format();
+    link
+}
+/// `vault`'s member list as `c` reads it from the server.
+fn list_in(c: &Client, vault: &str) -> relay_remote::members::List {
+    let entries: Vec<relay_remote::members::Entry> = serde_json::from_value(c.call(serde_json::json!({"op": "vault_log", "vault": vault})).unwrap()["entries"].clone()).unwrap();
+    relay_remote::members::check(vault, &entries, None).unwrap().0
+}
+
+/// The organisation (docs/workspaces.md, Organisation): the owner starts it and adds a second admin on the keys it
+/// published (their codes match); a new workspace gets the organisation admins from its creation, an existing one when
+/// its admin adds them; the second admin's Mac takes the keys sealed to it and offboards a person from every workspace
+/// it is admin of in one go, then revokes the device. Where it is no admin, the person stays.
+#[test]
+fn an_organisation_admin_is_on_every_new_workspace_and_offboards_a_person_everywhere() {
+    use relay_remote::org;
+    use relay_remote::vault::{Keys, VaultKey};
+    use serde_json::json;
+    let t = team("org");
+    let nosave = |_: &Keys| Ok(());
+    // the laptop paired first: it owns the server and starts the organisation
+    let mut lk = Keys::from(VaultKey::generate());
+    lk.ensure();
+    org::start(&t.laptop, &mut lk, &nosave).unwrap();
+    assert!(org::start(&t.laptop, &mut lk, &nosave).unwrap_err().contains("already"));
+    // a second full device publishes its keys, the owner compares the code and adds it
+    let bid = device("org-boss");
+    let (l, _) = client::pair(&pair_line(&t.s), &bid, "boss").unwrap();
+    let boss = Client::new(&l.host, l.port, &l.fp, bid.clone());
+    let mut bk = Keys::from(VaultKey::generate());
+    let code = org::publish(&boss, &mut bk, &nosave).unwrap();
+    assert!(org::fetch(&boss, &mut bk, &nosave).is_ok_and(|o| !o.me && !o.owner && o.list.is_some()));
+    let ov = t.laptop.call(json!({"op": "org_overview"})).unwrap();
+    let cand = ov["candidates"].as_array().unwrap().iter().find(|c| c["fp"] == bid.fingerprint().as_str()).unwrap().clone();
+    let (id, pk) = org::proven(&t.laptop.fp, &bid.fingerprint(), &cand).unwrap();
+    assert_eq!(org::code(&id, &pk), code);
+    // a publication changed on the way (the server's own keys) no longer proves
+    assert!(org::proven(&t.laptop.fp, &bid.fingerprint(), &json!({"id": id, "pk": "1".repeat(64), "sig": cand["sig"]})).is_none());
+    org::add(&t.laptop, &mut lk, &bid.fingerprint(), &id, &pk, &nosave).unwrap();
+    let o = org::fetch(&boss, &mut bk, &nosave).unwrap();
+    assert!(o.me && o.admins().len() == 2);
+    // a device that only shares vaults reads the list, and nothing else of the organisation
+    assert!(t.colleague.call(json!({"op": "org_log"})).is_ok());
+    for op in ["org_overview", "org_append", "org_revoke", "org_pk"] { assert!(t.colleague.call(json!({"op": op})).unwrap_err().contains("not allowed"), "{op}"); }
+
+    // the first workspace, from before: its admin's list, a member on it, and the organisation admins not
+    let a = Member::new(&t.laptop, &t.lid, &t.key);
+    a.remote(&t.vault).start(false, &a.save()).unwrap();
+    rounds(&t, &[&a], 1);
+    let (c, cid) = join(&a.invite(&t, "member"), "org-c");
+    rounds(&t, &[&c, &a, &c], 1);
+    let managed = |id: &str| boss.call(json!({"op": "org_overview"})).unwrap()["workspaces"].as_array().unwrap().iter().find(|w| w["id"] == id).unwrap()["managed"].clone();
+    assert_eq!(managed(&t.vault), json!(false));
+    // a new workspace, made as the app does: its list, then the organisation admins as admins
+    let w2 = t.laptop.vault_create("Second").unwrap().id;
+    let a2 = Member::new(&t.laptop, &t.lid, &Keys::from(VaultKey::generate()));
+    a2.remote(&w2).start(false, &a2.save()).unwrap();
+    assert_eq!(a2.remote(&w2).add_org(&o.admins(), &a2.save()).unwrap(), 1, "the laptop is admin already");
+    assert!(list_in(&t.laptop, &w2).admin(&bid.fingerprint()) && managed(&w2) == json!(true));
+    // the boss's Mac takes the workspace key sealed to its organisation key, and works the list as its admin
+    let b2 = Member::new(&boss, &bid, &org::adopt(&boss, &w2, &bk).unwrap());
+    let step = b2.step(&w2);
+    assert!(step.admin && step.errors.is_empty() && step.warnings.is_empty(), "{step:?}");
+    // a key the server seals itself to the boss's organisation key is not the workspace's: its list does not check
+    assert!(org::adopt(&boss, &t.vault, &bk).is_err(), "not added there yet");
+    // the existing workspace: its admin adds the organisation admins
+    assert_eq!(a.remote(&t.vault).add_org(&o.admins(), &a.save()).unwrap(), 1);
+    assert_eq!(managed(&t.vault), json!(true));
+    let b1 = Member::new(&boss, &bid, &org::adopt(&boss, &t.vault, &bk).unwrap());
+    assert!(b1.step(&t.vault).admin);
+    // the colleague joins the second workspace as a person, and a third one the boss is no admin of
+    let (_, _, k2) = client::vault_join(&invite_to(&a2, &t, &w2, "member"), &cid, "org-c", None).unwrap();
+    let c2 = Member::new(&c.c, &cid, &k2);
+    for m in [&c2, &a2, &c2] { m.step(&w2); }
+    a2.remote(&w2).set_person(&"7".repeat(64), "Cy", "cy@example.com", &c.fp, &a2.save()).unwrap();
+    let w3 = t.laptop.vault_create("Third").unwrap().id;
+    let a3 = Member::new(&t.laptop, &t.lid, &Keys::from(VaultKey::generate()));
+    a3.remote(&w3).start(false, &a3.save()).unwrap();
+    let (_, _, k3) = client::vault_join(&invite_to(&a3, &t, &w3, "member"), &cid, "org-c", None).unwrap();
+    let c3 = Member::new(&c.c, &cid, &k3);
+    for m in [&c3, &a3, &c3] { m.step(&w3); }
+    // the overview: the colleague is one person in three workspaces
+    let ov = boss.call(json!({"op": "org_overview"})).unwrap();
+    let cy = ov["people"].as_array().unwrap().iter().find(|p| p["devices"].as_array().unwrap().iter().any(|d| d["fp"] == c.fp.as_str())).unwrap().clone();
+    assert_eq!((cy["name"].as_str(), cy["workspaces"].as_array().unwrap().len()), (Some("Cy"), 3), "{cy}");
+    // offboarding: off every list the boss is admin of (a person-remove, a remove), refused where it is not
+    let gone = vec![c.fp.clone()];
+    assert_eq!(b2.remote(&w2).remove_devices(&gone, &b2.save()).unwrap(), 1);
+    assert_eq!(b1.remote(&t.vault).remove_devices(&gone, &b1.save()).unwrap(), 1);
+    assert!(org::adopt(&boss, &w3, &bk).is_err(), "no member of the third one");
+    assert!(!list_in(&t.laptop, &w2).members.contains_key(&c.fp) && !list_in(&t.laptop, &t.vault).members.contains_key(&c.fp));
+    assert!(list_in(&t.laptop, &w3).members.contains_key(&c.fp), "where the boss is no admin the person stays");
+    // the boss's next round changes the key for who is left
+    assert_eq!(b2.step(&w2).keys.map(|k| k.epoch()), Some(1));
+    // and the device is revoked: it connects nowhere any more. Never an organisation admin
+    assert!(boss.call(json!({"op": "org_revoke", "fps": [t.lid.fingerprint()]})).unwrap_err().contains("organisation admin"));
+    assert!(c.c.call(json!({"op": "org_revoke", "fps": [bid.fingerprint()]})).is_err());
+    assert_eq!(boss.call(json!({"op": "org_revoke", "fps": gone})).unwrap()["revoked"].as_array().unwrap().len(), 1);
+    assert!(c3.c.call(json!({"op": "vault_manifest", "vault": w3})).is_err());
+    // the owner takes the boss off the organisation: a new workspace no longer adds it
+    org::remove(&t.laptop, &mut lk, &bid.fingerprint(), &nosave).unwrap();
+    assert_eq!(org::fetch(&t.laptop, &mut lk, &nosave).unwrap().admins().len(), 1);
+    assert!(!org::fetch(&boss, &mut bk, &nosave).unwrap().me);
+}
+
+/// An organisation list held back or forked by the server is noticed by a Mac that saw it before.
+#[test]
+fn a_held_back_or_forked_organisation_list_is_refused() {
+    use relay_remote::org;
+    use relay_remote::vault::{Keys, VaultKey};
+    let t = team("org-fork");
+    let mut lk = Keys::from(VaultKey::generate());
+    lk.ensure();
+    let nosave = |_: &Keys| Ok(());
+    org::start(&t.laptop, &mut lk, &nosave).unwrap();
+    let path = t.s.data.join("org.json");
+    let kept = std::fs::read_to_string(&path).unwrap();
+    // emptied: held back
+    std::fs::write(&path, "{}").unwrap();
+    assert!(org::fetch(&t.laptop, &mut lk, &nosave).unwrap_err().contains("held back"));
+    let mut other = Keys::from(VaultKey::generate());
+    other.ensure();
+    std::fs::write(&path, &kept).unwrap();
+    assert!(org::fetch(&t.laptop, &mut lk, &nosave).is_ok());
+    // its creation made by another key: not what this Mac pinned (nor signed by it)
+    let mut v: serde_json::Value = serde_json::from_str(&kept).unwrap();
+    v["log"][0]["id"] = serde_json::json!(other.identity());
+    std::fs::write(&path, v.to_string()).unwrap();
+    assert!(org::fetch(&t.laptop, &mut lk, &nosave).is_err());
+}
+
+/// A workspace's policy (docs/workspaces.md, Policy): an admin signs it, every member's round takes it and keeps it in
+/// its key file, a member cannot sign one, and the server refuses a policy entry that does not check.
+#[test]
+fn an_admin_sets_the_workspace_policy_and_every_member_keeps_it() {
+    let (t, a, b, _) = trio("policy", "member");
+    a.remote(&t.vault).set_policy(&["codex".to_string()], true, &a.save()).unwrap();
+    let want = Some(relay_remote::members::Policy { providers: vec!["codex".into()], capture: true });
+    assert_eq!((b.step(&t.vault).policy, b.keys().policy), (want.clone(), want.clone()));
+    assert!(b.remote(&t.vault).set_policy(&["claude".to_string()], false, &b.save()).unwrap_err().contains("only an admin"));
+    assert!(a.remote(&t.vault).set_policy(&["opencode".to_string()], false, &a.save()).unwrap_err().contains("wrong fields"));
+    assert!(a.remote(&t.vault).set_policy(&[], false, &a.save()).is_err());
+    // a newer one replaces it
+    a.remote(&t.vault).set_policy(&["claude".to_string(), "codex".to_string()], false, &a.save()).unwrap();
+    assert_eq!(b.step(&t.vault).policy.unwrap().providers, ["claude", "codex"]);
+}
+
+/// SSO (docs/workspaces.md, SSO): an organisation admin signs it on, a device asks what to sign in with before it
+/// joins, a join without a token is refused while it is required (and the invite is not spent), and a device that
+/// signed in names itself as a person with its login's email, signed by itself (never from the server's word). The token check itself
+/// is in oidc.rs's tests (a fake provider): this server cannot reach a real issuer here.
+#[test]
+fn sso_gates_a_join_and_the_verified_email_goes_on_a_person() {
+    use relay_remote::members::Sso;
+    use relay_remote::org;
+    use relay_remote::vault::{Keys, VaultKey};
+    let t = team("sso");
+    let a = Member::new(&t.laptop, &t.lid, &t.key);
+    a.remote(&t.vault).start(false, &a.save()).unwrap();
+    rounds(&t, &[&a], 1);
+    let nosave = |_: &Keys| Ok(());
+    let mut lk = Keys::from(VaultKey::generate());
+    lk.ensure();
+    org::start(&t.laptop, &mut lk, &nosave).unwrap();
+    let sso = Sso { issuer: "https://idp.invalid".into(), client: "relay-test".into(), domains: vec!["example.com".into()], required: true };
+    org::set_sso(&t.laptop, &mut lk, Some(sso.clone()), &nosave).unwrap();
+    // a device not paired here asks what to sign in with, on the invite's server
+    let link = a.invite(&t, "member");
+    let id = device("sso-ann");
+    assert_eq!(client::sso_info(&link).unwrap(), Some(sso.clone()));
+    let e = client::vault_join(&link, &id, "ann", None).err().unwrap();
+    assert!(e.contains("requires signing in with SSO"), "{e}");
+    // a token that does not check: refused before the invite (the issuer is unreachable, or the token bad)
+    assert!(client::vault_join(&link, &id, "ann", Some(&serde_json::json!({"id_token": "a.b.c", "salt": "5".repeat(64)}))).is_err());
+    // not required any more: the same invite still works, without a token
+    org::set_sso(&t.laptop, &mut lk, Some(Sso { required: false, ..sso }), &nosave).unwrap();
+    let (line, _, k) = client::vault_join(&link, &id, "ann", None).unwrap();
+    let ann = Member::new(&Client::new(&line.host, line.port, &line.fp, id.clone()), &id, &k);
+    rounds(&t, &[&ann, &a, &ann], 1);
+    assert!(list_of(&t, &a).members.contains_key(&ann.fp) && list_of(&t, &a).person(&ann.fp).is_empty());
+    // a server cannot put an address on a person: what it keeps on the record (oidc::gate) only shows, nothing is signed for it
+    edit_vault(&t, |v| {
+        let m = v["members"].as_array_mut().unwrap().iter_mut().find(|m| m["fp"] == ann.fp.as_str()).unwrap();
+        m["sso"] = serde_json::json!({"email": "mallory@example.com", "name": "Mallory", "at": 1});
+    });
+    let len = list_of(&t, &a).len;
+    rounds(&t, &[&a, &ann], 1);
+    assert_eq!(list_of(&t, &a).len, len);
+    // the joiner whose own login returned an address (the app keeps it in the key file at the join) names itself with it
+    let mut k = ann.keys();
+    k.sso = relay_remote::vault::sso_person("Ann@Example.com", "Ann Example");
+    *ann.file.lock().unwrap() = k.format();
+    assert_eq!(relay_remote::vault::Keys::parse(&k.format()).unwrap().sso, k.sso, "kept in the key file");
+    rounds(&t, &[&ann], 1);
+    let l = list_of(&t, &a);
+    let p = l.persons().into_iter().find(|p| p.devices.contains(&ann.fp)).unwrap();
+    assert_eq!((p.name.as_str(), p.email.as_str(), ann.keys().sso), ("Ann Example", "ann@example.com", None));
+    // once under a person, nothing more is signed for it
+    rounds(&t, &[&ann, &a], 1);
+    assert_eq!(list_of(&t, &a).len, l.len);
+    // the overview groups people on that email only when the server saw it in this device's login: the record says
+    // another address, so it is Ann's own word and shows marked
+    let unverified = || t.laptop.call(serde_json::json!({"op": "org_overview"})).unwrap()["people"].as_array().unwrap().iter()
+        .find(|p| p["email"] == "ann@example.com").unwrap()["unverified"].clone();
+    assert_eq!(unverified(), true);
+    edit_vault(&t, |v| {
+        let m = v["members"].as_array_mut().unwrap().iter_mut().find(|m| m["fp"] == ann.fp.as_str()).unwrap();
+        m["sso"] = serde_json::json!({"email": "ann@example.com", "name": "Ann Example", "at": 2});
+    });
+    assert_eq!(unverified(), false);
+    // turned off: no SSO to sign in with
+    org::set_sso(&t.laptop, &mut lk, None, &nosave).unwrap();
+    assert_eq!(client::sso_info(&a.invite(&t, "member")).unwrap(), None);
+}
+
+#[test]
+fn health_answers_with_the_servers_own_certificate_only_that() {
+    let s = start("health");
+    let out = bin().arg("health").env("RELAY_SERVER_DATA", &s.data).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(String::from_utf8_lossy(&out.stdout).starts_with(&format!("ok {}", env!("CARGO_PKG_VERSION"))));
+    // the server's own certificate gets nothing else
+    let port = serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(s.data.join("serve.json")).unwrap()).unwrap()["port"].as_u64().unwrap() as u16;
+    let own = Identity::load_or_create(&s.data, "identity").unwrap();
+    let as_server = Client::new("127.0.0.1", port, &own.fingerprint(), own);
+    assert!(as_server.info().unwrap_err().contains("only health"));
+    // a stranger does not get through the handshake
+    assert!(Client::new("127.0.0.1", port, &as_server.fp, device("stranger")).call(serde_json::json!({"op": "health"})).is_err());
+    // not serving: fails
+    let gone = std::env::temp_dir().join(format!("relay-e2e-health-none-{}", std::process::id()));
+    assert!(!bin().arg("health").env("RELAY_SERVER_DATA", &gone).output().unwrap().status.success());
+    std::fs::remove_dir_all(&gone).ok();
 }

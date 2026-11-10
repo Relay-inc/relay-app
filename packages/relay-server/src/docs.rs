@@ -1,8 +1,9 @@
 //! A shared vault's documents on the server (docs/workspaces.md, Documents): per document an append-only log of
 //! sealed Yjs updates and the sealed snapshots members write now and then. Nothing here reads, merges or deletes them:
 //! the log is the document's history. A document is a folder under the vault, named as the members name it (64 hex,
-//! the vault's naming key over its id); `log/<seq>` (with `log/<seq>.from`, the device that pushed it) and
-//! `snap/<upto>`, each written whole (temp file and rename).
+//! the vault's naming key over its id); `log/<seq>` (with `log/<seq>.from`, the device that pushed it, or on a
+//! workspace without history `log/<seq>.sid`, the session id its Relay sent) and `snap/<upto>`, each written whole
+//! (temp file and rename).
 
 use crate::vaults::{dir, hex, Vaults};
 use relay_remote::docs::{MAX_PULL, MAX_UPDATE, PULL_LIMIT, SNAPSHOT_EVERY};
@@ -14,6 +15,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+/// What a workspace without history answers a push that names no session, or a member's device as one.
+pub const NO_SESSION: &str = "this workspace keeps no record of who wrote what: update Relay to edit its documents";
 /// One push at most, in bytes.
 pub const MAX_PUSH: u64 = 4 * MAX_UPDATE;
 /// The shortest sealed part: the header, two nonces, two tags.
@@ -55,11 +58,18 @@ impl Vaults {
     }
 
     /// Append `parts` (sealed updates) to a document's log, under the vault's current key; returns their seqs. The
-    /// other members' live streams get each one that fits a frame.
-    pub fn doc_push(&self, fp: &str, id: &str, name: &str, parts: Vec<Vec<u8>>) -> Result<Vec<u64>, String> {
+    /// other members' live streams get each one that fits a frame. `from`: the session id the pusher's Relay sent,
+    /// what a workspace without history keeps and passes on instead of the pusher's device. It refuses a push
+    /// without one or with a member's device in it. Elsewhere `from` is not read.
+    pub fn doc_push(&self, fp: &str, id: &str, name: &str, from: &str, parts: Vec<Vec<u8>>) -> Result<Vec<u64>, String> {
         if !hex(name, 64) { return Err("bad doc".into()); }
         if parts.is_empty() || parts.iter().any(|p| p.len() < MIN_PART || p.len() as u64 > MAX_UPDATE || split(p).is_none()) { return Err("not an update".into()); }
-        let seqs = self.with(id, fp, |v, _| {
+        let (seqs, who) = self.writing(id, fp, |v, _| {
+            // without history: who pushed it is a session, never a device (an old Relay sends none)
+            let anon = v.nohistory();
+            if anon && !v.session_ok(from) { return Err(NO_SESSION.into()); }
+            if anon && !self.rooms.claim(id, from, fp) { return Err("another member's session".into()); }
+            let (who, file) = if anon { (from.to_string(), "sid") } else { (fp[..16].to_string(), "from") };
             for p in &parts {
                 match epoch(p).unwrap_or(0).cmp(&v.epoch) {
                     std::cmp::Ordering::Less => return Err("key changed".into()),
@@ -75,14 +85,14 @@ impl Vaults {
             let mut seqs = vec![];
             for p in &parts {
                 n += 1;
-                sync::write_atomic(&log.join(format!("{n:012}.from")), fp[..16].as_bytes(), None).map_err(|e| e.to_string())?;
+                sync::write_atomic(&log.join(format!("{n:012}.{file}")), who.as_bytes(), None).map_err(|e| e.to_string())?;
                 sync::write_atomic(&at(&log, n), p, None).map_err(|e| e.to_string())?;
                 self.docs.lengths.lock().unwrap().insert((id.into(), name.into()), n);
                 seqs.push(n);
             }
-            Ok(seqs)
+            Ok((seqs, who))
         })?;
-        for (p, s) in parts.iter().zip(&seqs) { self.rooms.doc(id, fp, name, *s, p); }
+        for (p, s) in parts.iter().zip(&seqs) { self.rooms.doc(id, fp, &who, name, *s, p); }
         Ok(seqs)
     }
 
@@ -99,7 +109,7 @@ impl Vaults {
         for s in since + 1..=n {
             if !updates.is_empty() && (body.len() as u64 > MAX_PULL || updates.len() as u64 >= limit) { break; }
             let b = fs::read(at(&d.join("log"), s)).map_err(|e| e.to_string())?;
-            let who = fs::read_to_string(d.join("log").join(format!("{s:012}.from"))).unwrap_or_default();
+            let who = fs::read_to_string(d.join("log").join(format!("{s:012}.from"))).or_else(|_| fs::read_to_string(d.join("log").join(format!("{s:012}.sid")))).unwrap_or_default();
             updates.push(json!({"seq": s, "len": b.len(), "from": who}));
             body.extend(b);
             last = s;
@@ -113,7 +123,7 @@ impl Vaults {
     pub fn doc_snapshot(&self, fp: &str, id: &str, name: &str, upto: u64, part: &[u8]) -> Result<(), String> {
         if !hex(name, 64) { return Err("bad doc".into()); }
         if part.len() < MIN_PART || part.len() as u64 > MAX_RECORD || split(part).is_none() { return Err("not a snapshot".into()); }
-        self.with(id, fp, |v, _| {
+        self.writing(id, fp, |v, _| {
             if epoch(part) != Some(v.epoch) { return Err("key changed".into()); }
             let d = self.doc(id, name);
             if upto == 0 || upto > self.length(id, name) { return Err("no such place in the log".into()); }
@@ -129,7 +139,7 @@ impl Vaults {
     /// existing note) only an admin binds; a name bound already stays as it is. At most MAX_DOCS names per member.
     pub fn doc_bind(&self, fp: &str, id: &str, names: &[String]) -> Result<(), String> {
         if names.len() > 1000 || names.iter().any(|n| !hex(n, 64)) { return Err("bad names".into()); }
-        self.with(id, fp, |_, role| {
+        self.writing(id, fp, |_, role| {
             let d = dir(self.data()).join(id).join("bound");
             fs::create_dir_all(&d).map_err(|e| e.to_string())?;
             let mine = fs::read_dir(&d).into_iter().flatten().flatten().filter(|e| fs::read_to_string(e.path()).is_ok_and(|b| b == fp)).count();
@@ -144,7 +154,7 @@ impl Vaults {
     /// who bound a name, or an admin; a name not bound is skipped.
     pub fn doc_unbind(&self, fp: &str, id: &str, names: &[String]) -> Result<(), String> {
         if names.len() > 1000 || names.iter().any(|n| !hex(n, 64)) { return Err("bad names".into()); }
-        self.with(id, fp, |_, role| {
+        self.writing(id, fp, |_, role| {
             let d = dir(self.data()).join(id).join("bound");
             for n in names {
                 let Ok(by) = fs::read_to_string(d.join(n)) else { continue };
@@ -185,18 +195,18 @@ mod tests {
         let name = "d".repeat(64);
         // a part's shape: header (a 28-byte meta), meta, body; what is in them is the members' business
         let part = |e: u32| { let mut p = (28u32 | (e << 20)).to_be_bytes().to_vec(); p.extend([7u8; 28 + 40]); p };
-        assert_eq!(vs.doc_push(&me, &id, &name, vec![part(0), part(0)]).unwrap(), vec![1, 2]);
-        assert_eq!(vs.doc_push(&me, &id, &name, vec![part(1)]).unwrap_err(), "no such key epoch");
-        assert_eq!(vs.doc_push(&"b".repeat(64), &id, &name, vec![part(0)]).unwrap_err(), "no such vault", "not a member");
-        assert_eq!(vs.doc_push(&me, &id, "nothex", vec![part(0)]).unwrap_err(), "bad doc");
-        assert_eq!(vs.doc_push(&me, &id, &name, vec![vec![0; 8]]).unwrap_err(), "not an update");
+        assert_eq!(vs.doc_push(&me, &id, &name, "", vec![part(0), part(0)]).unwrap(), vec![1, 2]);
+        assert_eq!(vs.doc_push(&me, &id, &name, "", vec![part(1)]).unwrap_err(), "no such key epoch");
+        assert_eq!(vs.doc_push(&"b".repeat(64), &id, &name, "", vec![part(0)]).unwrap_err(), "no such vault", "not a member");
+        assert_eq!(vs.doc_push(&me, &id, "nothex", "", vec![part(0)]).unwrap_err(), "bad doc");
+        assert_eq!(vs.doc_push(&me, &id, &name, "", vec![vec![0; 8]]).unwrap_err(), "not an update");
         // the vault's key changed: a part under the old one is a removed member's, or a Relay behind
         let file = dir(&data).join(&id).join("vault.json");
         let mut v: Value = serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
         v["epoch"] = json!(1);
         fs::write(&file, v.to_string()).unwrap();
-        assert_eq!(vs.doc_push(&me, &id, &name, vec![part(0)]).unwrap_err(), "key changed");
-        for _ in 3..=205 { vs.doc_push(&me, &id, &name, vec![part(1)]).unwrap(); }
+        assert_eq!(vs.doc_push(&me, &id, &name, "", vec![part(0)]).unwrap_err(), "key changed");
+        for _ in 3..=205 { vs.doc_push(&me, &id, &name, "", vec![part(1)]).unwrap(); }
         // snapshots (kept, not handed out): only of a place in the log, under the current key, SNAPSHOT_EVERY apart
         assert!(vs.doc_snapshot(&me, &id, &name, 900, &part(1)).is_err());
         assert!(vs.doc_snapshot(&me, &id, &name, 200, &part(0)).is_err());
@@ -226,6 +236,44 @@ mod tests {
         assert!(vs.manifest(&me, &id).unwrap()["blobs"].as_array().unwrap().iter().all(|b| b["bound"].is_null()));
         vs.doc_bind(&me, &id, &[note.clone()]).unwrap();
         assert_eq!(vs.manifest(&me, &id).unwrap()["blobs"][0]["bound"], json!(true), "said in the manifest");
+        fs::remove_dir_all(&data).ok();
+    }
+
+    /// A workspace without history (its member list's entry 1): a push names a session, which the log keeps instead
+    /// of the device (no `.from`) and a pull hands out. One without a session, or with a member's device as one, is
+    /// refused (an old Relay's, or one that would name a device).
+    #[test]
+    fn without_history_the_log_keeps_sessions_not_devices() {
+        let data = std::env::temp_dir().join(format!("relay-docs-nohistory-{}", std::process::id()));
+        let vs = Vaults::new(&data, &"f".repeat(64));
+        let me = "a".repeat(64);
+        let id = vs.create(&me, "laptop", "Team").unwrap()["vault"]["id"].as_str().unwrap().to_string();
+        let name = "d".repeat(64);
+        let part = { let mut p = 28u32.to_be_bytes().to_vec(); p.extend([7u8; 28 + 40]); p };
+        // as made: `create`, then `nohistory` (the log took them once the list checked)
+        let file = dir(&data).join(&id).join("vault.json");
+        let mut v: Value = serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
+        v["log"] = json!([{"kind": "create"}, {"kind": "nohistory"}]);
+        fs::write(&file, v.to_string()).unwrap();
+        for (from, why) in [("", "none"), (&me[..16], "the pusher's device"), ("0123", "not 16 hex"), ("A123456789abcdef", "not lowercase")] {
+            assert_eq!(vs.doc_push(&me, &id, &name, from, vec![part.clone()]).unwrap_err(), NO_SESSION, "{why}");
+        }
+        let session = "5e55105e55105e55";
+        assert_eq!(vs.doc_push(&me, &id, &name, session, vec![part.clone()]).unwrap(), vec![1]);
+        // the session is the device's that named it first: another member cannot write as it
+        let other = "b".repeat(64);
+        let mut v2: Value = serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
+        v2["members"].as_array_mut().unwrap().push(json!({"fp": other, "name": "b", "role": "member", "added": 0}));
+        fs::write(&file, v2.to_string()).unwrap();
+        assert_eq!(vs.doc_push(&other, &id, &name, session, vec![part.clone()]).unwrap_err(), "another member's session");
+        let log = vs.doc(&id, &name).join("log");
+        assert!(!log.join(format!("{:012}.from", 1)).exists() && fs::read_to_string(log.join(format!("{:012}.sid", 1))).unwrap() == session);
+        assert_eq!(vs.doc_pull(&me, &id, &name, 0, 0).unwrap().0["updates"][0]["from"], session);
+        // without the flag: the device, whatever the push names
+        v["log"] = json!([]);
+        fs::write(&file, v.to_string()).unwrap();
+        vs.doc_push(&me, &id, &name, session, vec![part.clone()]).unwrap();
+        assert_eq!(vs.doc_pull(&me, &id, &name, 1, 0).unwrap().0["updates"][0]["from"], &me[..16]);
         fs::remove_dir_all(&data).ok();
     }
 }

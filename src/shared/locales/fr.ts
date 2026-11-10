@@ -222,6 +222,7 @@ export default {
   "mig.teamChats":
     "Ces conversations continuent dans {target}. Leurs transcriptions restent sur ce Mac, mais ce qu'elles contiennent déjà (tout ce qui a été dit et chaque fichier lu) peut finir dans des notes que chaque membre voit :",
   "ws.team": "équipe",
+  "ws.noHistory": "sans historique",
   "ws.live": "en direct",
   "ws.rounds": "synchronisé toutes les 10 s",
   "ws.openFolder": "Ouvrir un dossier comme espace de travail…",
@@ -603,6 +604,8 @@ export default {
   "page.askAbout": "Poser une question sur cette page",
   "page.ask": "Demander à Claude",
   "page.peers": "Sur cette page : {names}",
+  "page.anonymous": "Anonyme",
+  "page.anonymousSession": "Session anonyme",
   "page.editor": "Texte de la page",
   "page.updatedLinks": "Liens mis à jour",
   "page.updatedByClaude": "Modifié par Claude",
@@ -611,6 +614,7 @@ export default {
   "page.reload": "Recharger",
   "page.keepMine": "Garder la mienne",
   "page.tooBig": "Cette note dépasse 1 Mo : elle s'affiche en lecture seule.",
+  "page.readOnly": "Vous pouvez lire cet espace de travail, pas le modifier. Un admin peut vous rendre membre.",
   "page.conversations": "Conversations",
   "page.latest": "{n} · dernière {time}",
   "page.comments": "Commentaires",
@@ -1301,8 +1305,12 @@ export default {
     "Les espaces de travail qu'une équipe partage avec vous sur un relay-server qui n'est pas une de vos machines. Le serveur ne garde que des fichiers chiffrés. Chaque Mac synchronise l'espace de travail dans son propre dossier. Un espace de travail sur une de vos machines s'affiche sous cette machine.",
   "set.sharedAdmin": "Admin",
   "set.sharedMember": "Membre",
-  "set.sharedMakeAdmin": "Rendre admin",
-  "set.sharedMakeMember": "Rendre membre",
+  "set.sharedReader": "Lecteur",
+  "set.sharedRoleOf": "Rôle de {name}",
+  "set.sharedUnsent_one":
+    "{n} modification dans ce dossier reste sur ce Mac : vous pouvez lire cet espace de travail, pas le modifier. Supprimez le fichier pour retrouver la version de l'espace de travail.",
+  "set.sharedUnsent_other":
+    "{n} modifications dans ce dossier restent sur ce Mac : vous pouvez lire cet espace de travail, pas le modifier. Supprimez un fichier pour retrouver la version de l'espace de travail.",
   "set.sharedNotListed": "Pas sur la liste",
   "set.sharedAddToList": "Ajouter à la liste",
   "set.sharedNotListedHint":
@@ -1349,6 +1357,17 @@ export default {
   "set.sharedLink": "Lien d'invitation · {role}",
   "set.sharedLinkHelp": "Usage unique, valable jusqu'à {time}. Envoyez-le en message privé.",
   "set.sharedDone": "Terminé",
+  "set.sharedNamePerson": "Nommer la personne…",
+  "set.sharedRename": "Renommer…",
+  "set.sharedAddDevice": "Ajouter un appareil…",
+  "set.sharedPerson": "Personne",
+  "set.sharedPersonNew": "Nouvelle personne",
+  "set.sharedPersonName": "Nom",
+  "set.sharedPersonEmail": "E-mail (facultatif)",
+  "set.sharedNoPerson": "Appareils sans personne",
+  "set.sharedRemovePersonSure":
+    "Retirer {name} avec tous ses appareils ? Ses Mac gardent les fichiers qu'ils ont déjà.",
+  "set.sharedRemoveSelfSure": "Vous retirer avec tous vos appareils ? Ce Mac quitte aussi l'espace de travail.",
   "set.sharedThisMac": "ce Mac",
   "set.sharedInvites": "Invitations en attente",
   "set.sharedInviteOpen": "{role}, valable jusqu'à {time}",
@@ -1363,6 +1382,12 @@ export default {
   "set.sharedNewFolderHelp":
     "Un dossier vide démarre comme nouvel espace de travail. Un dossier avec des notes est envoyé tel quel.",
   "set.sharedJoinFolderHelp": "Un dossier vide sur ce Mac. L'espace de travail s'y synchronise.",
+  "set.sharedNoHistory": "Espace de travail sans historique",
+  "set.sharedNoHistoryHelp":
+    "Relay ne garde aucune trace de qui a modifié quoi : les copies de conflit ne nomment aucun ordinateur, et l'historique des pages, les commentaires et les curseurs affichent des sessions anonymes. Les membres et leurs rôles restent visibles, une petite équipe n'est pas anonyme, et un membre peut toujours garder sa propre copie hors de Relay. Ce choix est définitif.",
+  "set.sharedNoHistoryLabel": "Sans historique",
+  "set.sharedNoHistoryTip":
+    "Créé sans historique : Relay ne garde ici aucune trace de qui a modifié quoi. Les membres et leurs rôles restent visibles.",
   "set.sharedCreate": "Créer",
   "set.sharedRecovery": "Clé de récupération",
   "set.sharedRecoveryHelp":
@@ -1372,6 +1397,102 @@ export default {
   "set.sharedLinkLabel": "Lien d'invitation",
   "set.sharedLinkLabelHelp": "Le lien relay:// qu'un admin vous a envoyé.",
   "set.sharedJoinButton": "Rejoindre",
+  "set.ssoTitle": "SSO pour rejoindre",
+  "set.ssoOnRequired": "Activé : un appareil se connecte avant de rejoindre un espace ici",
+  "set.ssoOnOptional": "Activé : un appareil peut se connecter quand il rejoint",
+  "set.ssoOff": "Désactivé : un lien d'invitation suffit pour rejoindre",
+  "set.ssoProvider": "Fournisseur",
+  "set.ssoOther": "Autre fournisseur OpenID Connect",
+  "set.ssoEntra": "Microsoft Entra ID",
+  "set.ssoTenant": "ID du tenant",
+  "set.ssoTenantHelp":
+    "L'ID de votre tenant Entra, un GUID. Tout compte de ce tenant peut rejoindre : Entra ne donne pas d'adresse vérifiée sur laquelle contrôler un domaine.",
+  "set.ssoClientHelpEntra":
+    "L'ID d'application (client) de l'inscription d'application créée pour Relay. Aucun secret client n'est nécessaire.",
+  "set.ssoJoinRequiredTenant":
+    "Ce serveur vous demande de vous connecter avec un compte Microsoft de son organisation avant de rejoindre.",
+  "set.ssoJoinOptionalTenant": "Ce serveur permet de vous connecter avec un compte Microsoft de son organisation.",
+  "set.ssoIssuer": "Émetteur",
+  "set.ssoIssuerHelp": "L'URL d'émetteur du fournisseur, telle que ses jetons d'identité la nomment.",
+  "set.ssoClient": "ID client",
+  "set.ssoClientHelp":
+    "Le client OAuth créé pour Relay (un client d'application de bureau). Aucun secret client n'est nécessaire.",
+  "set.ssoDomains": "Domaines e-mail",
+  "set.ssoDomainsHelp": "Qui peut rejoindre : les adresses de ces domaines, séparés par des virgules.",
+  "set.ssoRequired": "Obligatoire pour rejoindre",
+  "set.ssoRequiredHelp": "Désactivé : la connexion est proposée, et un lien seul permet encore de rejoindre.",
+  "set.ssoTurnOn": "Activer",
+  "set.ssoSave": "Enregistrer",
+  "set.ssoTurnOff": "Désactiver",
+  "set.ssoSaved": "SSO enregistré sur la liste de l'organisation.",
+  "set.ssoTurnedOff": "SSO désactivé.",
+  "set.ssoHelp":
+    "Quand un appareil rejoint, le serveur vérifie le jeton d'identité de la connexion et ne garde que l'adresse e-mail qu'il contient, jamais le jeton. Retirer quelqu'un passe toujours par Retirer partout : le fournisseur ne prévient pas ce serveur quand un compte est fermé.",
+  "set.ssoJoinLabel": "Connexion",
+  "set.ssoJoinRequired": "Ce serveur demande de vous connecter avant de rejoindre, avec une adresse de {domains}.",
+  "set.ssoJoinOptional": "Ce serveur permet de vous connecter avec une adresse de {domains}.",
+  "set.ssoSignIn": "Se connecter avec {provider}",
+  "set.ssoSignInAgain": "Se reconnecter",
+  "set.ssoWaiting": "En attente du navigateur…",
+  "set.ssoSignedInAs": "Connecté en tant que {email}",
+  "set.org": "Organisation",
+  "set.orgShow": "Afficher…",
+  "set.orgHide": "Masquer",
+  "set.orgAdmin": "Admin de l'organisation",
+  "set.orgNone":
+    "Ce serveur n'a pas encore d'organisation. Son propriétaire, le premier Mac appairé, peut en créer une.",
+  "set.orgNoneOwner":
+    "Ce serveur n'a pas encore d'organisation. En tant que propriétaire, vous pouvez en créer une : ce Mac en devient le premier admin.",
+  "set.orgStart": "Créer l'organisation",
+  "set.orgNotAdmin":
+    "Ce serveur a une organisation. Pour en devenir admin, un admin ajoute ce Mac après avoir comparé son code : {code}",
+  "set.orgReads":
+    "Les admins de l'organisation sont admins de chaque espace de travail qu'ils gèrent sur ce serveur, et peuvent le lire. Les nouveaux espaces les ajoutent dès le départ.",
+  "set.orgYourCode": "Code de ce Mac : {code}",
+  "set.orgAdmins": "Admins de l'organisation",
+  "set.orgRemoveAdmin": "Retirer",
+  "set.orgCodeBad": "non signé par l'appareil",
+  "set.orgAddAdmin": "Ajouter comme admin…",
+  "set.orgAddSure":
+    "N'ajoutez {name} que si son écran affiche le même code : {code}. Un autre code signifie les clés de quelqu'un d'autre.",
+  "set.orgCodesMatch": "Les codes concordent, ajouter",
+  "set.orgAddHelp":
+    "Un Mac appairé apparaît ici dès que sa section Organisation a été ouverte. Son code se trouve dans cette section.",
+  "set.orgWorkspaces": "Espaces de travail",
+  "set.orgManaged": "Géré",
+  "set.orgUnmanaged": "Non géré",
+  "set.orgDevices_one": "{n} appareil",
+  "set.orgDevices_other": "{n} appareils",
+  "set.orgUnmanagedHelp":
+    "Tous les admins de l'organisation ne sont pas admins ici. Un admin de cet espace les ajoute dans ses réglages (Ajouter les admins de l'organisation).",
+  "set.orgNoWorkspaces": "Aucun espace de travail sur ce serveur pour l'instant.",
+  "set.orgPeople": "Personnes",
+  "set.orgEmailUnverified":
+    "E-mail non vérifié : leur propre appareil l'a signé, sans SSO ni admin, il ne regroupe donc aucun appareil avec ceux d'une autre personne.",
+  "set.orgOffboardConfirm": "Retirer partout",
+  "set.orgOffboard": "Retirer partout…",
+  "set.orgOffboardSure":
+    "Retirer {name} : cette personne quitte {workspaces}, chaque espace reçoit une nouvelle clé, et ses {devices} appareil(s) ne peuvent plus se connecter à ce serveur. Ses Mac gardent les fichiers qu'ils ont déjà.",
+  "set.orgNoneOfThem": "aucun espace dont vous êtes admin",
+  "set.orgOffboardSkipped":
+    "Pas de {workspaces} : vous n'y êtes pas admin. Demandez à un admin de cet espace de la retirer, ou d'ajouter les admins de l'organisation.",
+  "set.orgOffboardNotRevoked":
+    "Leurs appareils ne sont pas révoqués et peuvent encore se connecter à ce serveur : {error}",
+  "set.orgOffboarded": "{name} a quitté {n} espace(s), {revoked} appareil(s) révoqué(s).",
+  "set.orgAdded": "Admins de l'organisation ajoutés : {n}.",
+  "set.orgAddedNone": "Rien à ajouter : ce serveur n'a pas d'organisation, ou ses admins sont déjà admins ici.",
+  "set.orgCreateFailed": "Créé, mais les admins de l'organisation n'y sont pas encore : {error}",
+  "set.orgAddToWorkspace": "Ajouter les admins de l'organisation",
+  "set.orgAddToWorkspaceHelp":
+    "Fait des admins de l'organisation de ce serveur des admins de cet espace. Ils peuvent alors le lire.",
+  "set.policyAgents": "Agents dans cet espace",
+  "set.policyAgentsHelp":
+    "Une conversation ici ne démarre qu'avec un agent que vous autorisez. Signé dans la liste des membres, le Relay de chaque membre le suit.",
+  "set.policyCapture": "Capture",
+  "set.policyCaptureHelp": "Si la capture est activée dans cet espace.",
+  "set.policyIs": "Politique : {agents}, capture {capture}",
+  "set.policyCaptureOn": "activée",
+  "set.policyCaptureOff": "désactivée",
   "set.title": "Réglages",
   "set.vaultHelp":
     "Le dossier de votre espace de travail Personnel, votre coffre Obsidian. Les conversations y démarrent, et la barre latérale y lit le work-state et les rappels.",
@@ -1400,6 +1521,7 @@ export default {
     "Où « Ouvrir dans Terminal » poursuit une conversation. Automatique prend le premier installé : iTerm, WezTerm, puis Terminal.",
   "set.favicons": "Icônes de projet",
   "act.reminders": "Rappels",
+  "act.knowledge": "Espaces de connaissances",
   "vs.title": "Sauvegarde git",
   "vs.help":
     "Toutes les quelques minutes, Relay commite le vault et le pousse vers un dépôt git. Il pousse seulement, il ne tire jamais. Git utilise votre propre connexion : une clé ssh, un credential helper ou <code>gh</code>. Un dépôt public est refusé.",

@@ -22,7 +22,7 @@ static APP: std::sync::OnceLock<AppHandle> = std::sync::OnceLock::new();
 fn b64(b: &[u8]) -> String { base64::engine::general_purpose::STANDARD.encode(b) }
 
 /// A shared vault as the settings keep it: the server it lives on (pinned by its fingerprint), its folder here and this
-/// device's role there ("admin" or "member").
+/// device's role there ("admin", "member" or "reader").
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Shared { pub id: String, pub name: String, pub host: String, pub port: u16, pub fp: String, pub folder: String, #[serde(default)] pub role: String }
 
@@ -64,12 +64,20 @@ pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter()
 /// Relay publishes other keys than the list has (they set it up again), until an admin trusts them.
 /// `rekeying`: someone left and the key has not changed yet (or the member list is held back, which could hide that).
 /// `docs`: an admin turned on making the workspace's notes documents (the member list says so); `admin`: this Mac is
-/// an admin of the list (it may turn that on or off, and make members admins); `admins`: the list's admins and `listed`
-/// all its members, None when the workspace has no list yet.
+/// an admin of the list (it may turn that on or off, and make members admins); `admins`: the list's admins, `listed`
+/// all its members and `people` its people with their devices, None when the workspace has no list yet.
 /// `names`: files the last round left out for their name (sync::Report::names), to rename where they were made.
 pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub bad: usize, pub live: bool,
     pub names: Vec<String>,
-    pub warnings: Vec<String>, pub changed: Vec<Changed>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>> }
+    pub warnings: Vec<String>, pub changed: Vec<Changed>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>>,
+    pub people: Option<Vec<relay_remote::members::Person>>,
+    /// `reader`: this Mac only reads the workspace (its rounds only pull, docs/workspaces.md, Roles), `readers` the
+    /// list's readers, `unsent` changes in the folder here a reader's round left out
+    pub reader: bool, pub readers: Option<Vec<String>>, pub unsent: usize,
+    /// the workspace was made without history (docs/workspaces.md): its conflict copies name no Mac
+    pub nohistory: bool,
+    /// the workspace's signed policy (docs/workspaces.md, Policy): the agent providers allowed, capture on or off
+    pub policy: Option<relay_remote::members::Policy> }
 #[derive(Clone, serde::Serialize)]
 pub struct Changed { pub fp: String, pub name: String }
 
@@ -93,6 +101,11 @@ pub fn save_key(data: &Path, id: &str, keys: &Keys) -> Result<(), String> {
 }
 pub fn load_key(data: &Path, id: &str) -> Result<Keys, String> {
     std::fs::read_to_string(key_path(data, id)).ok().and_then(|k| Keys::parse(&k)).ok_or_else(|| format!("the key of workspace {id} is missing on this Mac"))
+}
+/// The knowledge workspaces: the shared ones this Mac is a member of whose key file says `nohistory` (kept there once
+/// the member list said so, docs/workspaces.md, Without history). Nothing else, never the user's own vault.
+pub fn knowledge(s: &Value, data: &Path) -> Vec<Shared> {
+    list(s).into_iter().filter(|v| load_key(data, &v.id).is_ok_and(|k| k.nohistory)).collect()
 }
 /// Where a round keeps what it deletes or mostly empties here: <data>/shared-trash/<id>/<round's minute>/<path>.
 fn trash(data: &Path, id: &str) -> PathBuf { data.join("shared-trash").join(id) }
@@ -209,9 +222,10 @@ pub fn real_path(p: &str) -> Result<String, String> {
 struct One { walker: Walker, allowed: Vec<String>, moved: Vec<(String, String)> }
 /// `live`: each vault's live channel, kept open next to the rounds (keep_live).
 #[derive(Default)]
-/// `live`: each vault's channel and the key epoch it was started with: a newer key starts it again.
+/// `live`: each vault's channel and the key epoch it was started with: a newer key starts it again, as does a key
+/// that says the workspace is without history when the channel's did not (its frames then come from a session).
 /// `docs`: each vault's documents, kept loaded between rounds and live updates.
-pub struct Hub { vaults: Mutex<HashMap<String, Arc<Mutex<One>>>>, pub status: Mutex<HashMap<String, Status>>, live: Mutex<HashMap<String, (Channel, u32)>>,
+pub struct Hub { vaults: Mutex<HashMap<String, Arc<Mutex<One>>>>, pub status: Mutex<HashMap<String, Status>>, live: Mutex<HashMap<String, (Channel, (u32, bool))>>,
     docs: Mutex<HashMap<String, Arc<Docs>>> }
 
 impl Hub {
@@ -253,6 +267,7 @@ impl Hub {
                 std::fs::create_dir_all(&v.folder).ok();
                 let base: Manifest = crate::util::read_json(base_path(data, &v.id));
                 let remote = client(v, me).sealed(&v.id, key.clone());
+                (st.nohistory, st.policy) = (key.nohistory, key.policy.clone());
                 // the keys first: a new one taken, the members pinned, this Mac's keys sent, a due rotation made
                 // (admin); every change saved before anything goes on (docs/workspaces.md, Key rotation)
                 match remote.keep_keys(&|k| save_key(data, &v.id, k)) {
@@ -260,14 +275,19 @@ impl Hub {
                         st.errors.extend(k.errors.into_iter().map(|e| format!("key: {e}")));
                         st.warnings = k.warnings;
                         st.rekeying = k.rekeying;
-                        (st.docs, st.admin, st.admins, st.listed) = (k.docs, k.admin, k.admins, k.listed);
+                        (st.docs, st.admin, st.admins, st.listed, st.people, st.reader, st.readers) = (k.docs, k.admin, k.admins, k.listed, k.people, k.reader, k.readers);
+                        st.nohistory |= k.nohistory;
+                        st.policy = k.policy;
                         st.changed = k.changed.into_iter().map(|(fp, name)| Changed { fp, name }).collect();
                     }
                     Err(e) => st.errors.push(format!("key: {e}")),
                 }
+                // a workspace without history: its conflict copies carry the minute alone, no Mac's name
+                let name = if st.nohistory { "" } else { name };
                 // the documents: every log the server has further, the notes they changed written out; a note that is a
                 // document stays out of the file rounds, so it never has two writers (docs/workspaces.md, Documents)
                 let docs = self.docs(data, v, me, load_key(data, &v.id).unwrap_or_else(|_| key.clone()));
+                docs.set_read_only(st.reader);
                 let has_docs = match docs.sync() {
                     Ok(_) => true,
                     // a relay-server from before documents: none there, nothing to say every round
@@ -303,12 +323,14 @@ impl Hub {
                 let to = trash(data, &v.id).join(&stamp);
                 let keep = |p: &str, d: &[u8]| sync::write_atomic(&to.join(p), d, None);
                 let guard = Guard { allow_deletes: false, allowed: &allowed, moved: &moved, keep: &keep };
-                let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, &mut one.walker, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
+                // a reader's round only takes what the server has: what changed here stays here, said once (`unsent`)
+                let mode = if st.reader { Mode::Pull } else { Mode::TwoWay };
+                let (next, r) = sync::run(mode, Path::new(&v.folder), &base, &mut one.walker, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
                 // ponytail: any error keeps the whole list for the next round, which only looks again
                 if looked && r.errors.is_empty() { docs.forget_let_go(&let_go.into_iter().filter(|p| !f.prefixes.contains(p)).collect::<Vec<_>>()); }
                 // files still under an older key, sealed again under the newest
                 // ponytail: 100 a round, a big workspace takes a few rounds after a rotation
-                if r.errors.is_empty() { remote.reseal(100); }
+                if r.errors.is_empty() && !st.reader { remote.reseal(100); }
                 // a record written with a member list this Mac's does not hold: held back from it, or a fork
                 for w in remote.list_warnings() { if !st.warnings.contains(&w) { st.warnings.push(w); } }
                 // a round that failed (the server out of reach) keeps what the user let through for the next one
@@ -325,7 +347,7 @@ impl Hub {
                 // the next round plans against this base: one not written is an error, not a quiet success
                 if next != base { if let Err(e) = write_base(data, &v.id, &next) { st.errors.push(format!("base: {e}")); } }
                 st = Status { pushed: r.pushed.len() + r.deleted_remote.len(), pulled: r.pulled.len() + r.deleted_local.len(),
-                    conflicts: r.conflicts, errors: [r.errors, st.errors].concat(), held: r.held, names: r.names, bad: remote.bad().len(), ..st };
+                    conflicts: r.conflicts, errors: [r.errors, st.errors].concat(), held: r.held, names: r.names, bad: remote.bad().len(), unsent: r.unsent.len(), ..st };
             }
         }
         // still under the vault's lock: a leave waiting for this round removes the status after it
@@ -340,6 +362,7 @@ impl Hub {
     /// A note of vault `id` (in `folder`, `path` relative) changed on disk, by `by` ("claude", "disk", "relay"): taken
     /// into its document when it is one (Docs::absorb), on a thread of its own (it sends).
     pub fn absorb(&self, id: &str, folder: &str, path: &str, by: &str) {
+        if self.status.lock().unwrap().get(id).is_some_and(|s| s.reader) { return; }
         let Some(docs) = self.docs.lock().unwrap().get(id).cloned() else { return };
         let (folder, path, by) = (folder.to_string(), path.to_string(), by.to_string());
         std::thread::spawn(move || { if let Ok(f) = filter(Path::new(&folder)) { docs.absorb(Path::new(&folder), &f, &path, &by).ok(); } });
@@ -352,7 +375,8 @@ impl Hub {
             let Ok(f) = filter(Path::new(folder)) else { return };
             let stamp = chrono::Local::now().format("%Y-%m-%d %H%M").to_string();
             let root = Path::new(folder);
-            let keep = |p: &str, b: &[u8]| { sync::write_atomic(&root.join(conflict_copy(&f, p, &crate::sys_name(), &stamp)), b, None).ok(); };
+            let name = if self.status.lock().unwrap().get(id).is_some_and(|s| s.nohistory) { String::new() } else { crate::sys_name() };
+            let keep = |p: &str, b: &[u8]| { sync::write_atomic(&root.join(conflict_copy(&f, p, &name, &stamp)), b, None).ok(); };
             for p in docs.export(root, &f, &keep).0 { crate::watch::exported(&root.join(&p)); }
         });
     }
@@ -424,8 +448,8 @@ impl Hub {
         self.with_vault(&v.id, || c.sealed(&v.id, load_key(data, &v.id)?).set_docs(on, &|k| save_key(data, &v.id, k)))
     }
     /// An admin makes a member an admin, or an admin a member again (a signed entry in the member list).
-    pub fn set_admin(&self, data: &Path, v: &Shared, c: &Client, fp: &str, on: bool) -> Result<(), String> {
-        self.with_vault(&v.id, || c.sealed(&v.id, load_key(data, &v.id)?).set_admin(fp, on, &|k| save_key(data, &v.id, k)))
+    pub fn set_role(&self, data: &Path, v: &Shared, c: &Client, fp: &str, role: &str) -> Result<(), String> {
+        self.with_vault(&v.id, || c.sealed(&v.id, load_key(data, &v.id)?).set_role(fp, role, &|k| save_key(data, &v.id, k)))
     }
     /// An admin adds a member the server has and the member list lacks (a signed `add`, as member).
     pub fn add_listed(&self, data: &Path, v: &Shared, c: &Client, fp: &str) -> Result<(), String> {
@@ -490,16 +514,16 @@ impl Hub {
         let mut live = self.live.lock().unwrap();
         // a channel of a vault no longer listed, or one still on an older key than the key file's, stops after this
         // lock is let go (its Down marks it not live); the second starts again with the new key
-        let epochs: HashMap<String, u32> = list.iter().filter_map(|v| load_key(data, &v.id).ok().map(|k| (v.id.clone(), k.epoch()))).collect();
+        let epochs: HashMap<String, (u32, bool)> = list.iter().filter_map(|v| load_key(data, &v.id).ok().map(|k| (v.id.clone(), (k.epoch(), k.nohistory)))).collect();
         let gone: Vec<Channel> = live.keys().filter(|id| !epochs.contains_key(*id)).cloned().collect::<Vec<_>>().into_iter().filter_map(|id| live.remove(&id)).map(|(c, _)| c).collect();
         // one on an older key goes on with the new one, its replay counters kept (Channel::renew)
         for (id, (c, e)) in live.iter_mut() {
-            if epochs.get(id).is_some_and(|n| n != e) { if let Ok(k) = load_key(data, id) { *e = k.epoch(); *c = c.renew(k); } }
+            if epochs.get(id).is_some_and(|n| n != e) { if let Ok(k) = load_key(data, id) { *e = (k.epoch(), k.nohistory); *c = c.renew(k); } }
         }
         for v in list {
             if live.contains_key(&v.id) { continue; }
             let Ok(key) = load_key(data, &v.id) else { continue };
-            let e = key.epoch();
+            let e = (key.epoch(), key.nohistory);
             let (h, id) = (app.clone(), v.id.clone());
             let (d, vid) = (data.to_path_buf(), v.id.clone());
             let folder = v.folder.clone();
@@ -633,9 +657,10 @@ pub fn shared_vault_pending_invite() -> Option<String> { INVITE.lock().unwrap().
 pub fn shared_vaults_status(state: St) -> Value { serde_json::to_value(&*state.shared.status.lock().unwrap()).unwrap_or_default() }
 
 /// Make a shared vault on a paired machine: the server keeps it, this Mac makes the key. A folder that is not there
-/// or empty starts as Relay's team starter (vault::create_team); one with notes is uploaded as it is. Returns {id, recovery}.
+/// or empty starts as Relay's team starter (vault::create_team); one with notes is uploaded as it is. `no_history`:
+/// made without history (docs/workspaces.md), for good. Returns {id, recovery}.
 #[tauri::command]
-pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String, name: String, folder: String) -> Result<Value, String> {
+pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String, name: String, folder: String, no_history: Option<bool>) -> Result<Value, String> {
     let s = state.settings.lock().unwrap().clone();
     let m = crate::machines::Machines::find(&s, &machine).ok_or("pick a paired machine for the vault")?;
     let name: String = name.trim().chars().filter(|c| !c.is_control()).take(60).collect();
@@ -650,6 +675,8 @@ pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String,
         // the folder first: a vault that could not get its notes is not made on the server at all
         let empty = !std::fs::read_dir(&folder).is_ok_and(|mut d| d.any(|e| e.is_ok_and(|e| e.file_name() != ".DS_Store")));
         if empty { crate::vault::create_team(&template, &overlay, Path::new(&folder))?; }
+        // without history: the starter asks for no member's name in what it keeps (a folder with notes is the user's)
+        if empty && no_history.unwrap_or(false) { crate::vault::without_names(Path::new(&folder))?; }
         // this Mac's own secrets with the key: saved before the server hears of them (the first round sends them)
         let mut k = Keys::from(VaultKey::generate());
         k.ensure();
@@ -664,22 +691,27 @@ pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String,
     let (vid, c) = (r.id.clone(), client(&Shared { id: r.id.clone(), name: String::new(), host: m["host"].as_str().unwrap_or("").into(), port: m["port"].as_u64().unwrap_or(0) as u16,
         fp: m["fp"].as_str().unwrap_or("").into(), folder: String::new(), role: String::new() }, &state.machines.id));
     let (k2, me) = (key.clone(), state.machines.id.fingerprint());
-    tauri::async_runtime::spawn_blocking(move || c.sealed(&vid, k2).start(&|k| save_key(&data, &vid, k)).map_err(|e| {
+    tauri::async_runtime::spawn_blocking(move || c.sealed(&vid, k2).start(no_history.unwrap_or(false), &|k| save_key(&data, &vid, k)).map_err(|e| {
         // nothing left behind: the workspace on the server (its only member leaving takes it along) and the key file
         c.vault_remove(&vid, &me).ok();
         std::fs::remove_file(key_path(&data, &vid)).ok();
         e
     })).await.map_err(|e| e.to_string())??;
+    // the server's organisation admins as admins, from the start (docs/workspaces.md, Organisation): a failure here
+    // leaves the workspace made and says so, its admin adds them later from the workspace's settings
+    let (vid, data, c) = (r.id.clone(), crate::data_dir(&app), state.machines.client(&m));
+    let org = tauri::async_runtime::spawn_blocking(move || crate::organisation::add_admins(&data, &c, &vid)).await.map_err(|e| e.to_string())?;
     let v = Shared { id: r.id.clone(), name: r.name, host: m["host"].as_str().unwrap_or("").into(), port: m["port"].as_u64().unwrap_or(0) as u16,
         fp: m["fp"].as_str().unwrap_or("").into(), folder: at, role: "admin".into() };
     add(&app, &state, &v)?;
-    Ok(serde_json::json!({"id": r.id, "recovery": key.recovery()}))
+    Ok(serde_json::json!({"id": r.id, "recovery": key.recovery(), "org": org.as_ref().ok(), "orgError": org.err()}))
 }
 
 /// Join a shared vault with an invite link: this Mac pairs with the server as a vault-only device (when it is not
-/// paired yet), gets the key out of the link and syncs the vault into `folder`, which must be empty.
+/// paired yet), gets the key out of the link and syncs the vault into `folder`, which must be empty. `sso`: the SSO
+/// login's {id_token, salt, email, name} (sso.rs) when the server asks for one.
 #[tauri::command]
-pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, folder: String) -> Result<Value, String> {
+pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, folder: String, sso: Option<Value>) -> Result<Value, String> {
     let s = state.settings.lock().unwrap().clone();
     let folder = new_folder(&app, &state, &folder, true)?;
     // a vault this Mac is in already: joining again would wipe its key, base and trash and leave its folder unsynced
@@ -690,8 +722,11 @@ pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, fold
     // the folder before the single-use invite is spent: one that cannot be made fails here, with the link still good
     std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
     let (me, name) = (state.machines.id.clone(), crate::sys_name());
-    let (line, joined, mut key) = tauri::async_runtime::spawn_blocking(move || relay_remote::client::vault_join(&link, &me, &name)).await.map_err(|e| e.to_string())??;
+    let token = sso.as_ref().map(|s| serde_json::json!({"id_token": s["id_token"], "salt": s["salt"]}));
+    let (line, joined, mut key) = tauri::async_runtime::spawn_blocking(move || relay_remote::client::vault_join(&link, &me, &name, token.as_ref())).await.map_err(|e| e.to_string())??;
     key.ensure();
+    // this Mac names itself with its login's email once it is on the member list (relay_remote::vault, keep_keys)
+    key.sso = sso.and_then(|s| relay_remote::vault::sso_person(s["email"].as_str()?, s["name"].as_str().unwrap_or_default()));
     if !valid_id(&joined.id) { return Err(format!("not a workspace id: {:?}", joined.id)); }
     // a vault this Mac had before: its old base would make the new, empty folder look like a mass delete
     let vid = joined.id.clone();
@@ -704,11 +739,13 @@ pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, fold
     Ok(serde_json::json!({"id": joined.id, "name": joined.name}))
 }
 
-/// An invite link for a vault (admins): single use, 24 h. {link, invite: {id, role, expires}}.
+/// An invite link for a vault (admins): single use, 24 h. {link, invite: {id, role, expires}}. With `who`, for a device
+/// of that person (docs/workspaces.md, People): a member may make one for its own person, as member.
 #[tauri::command]
-pub async fn shared_vault_invite(app: AppHandle, state: St<'_>, id: String, role: String) -> Result<Value, String> {
+pub async fn shared_vault_invite(app: AppHandle, state: St<'_>, id: String, role: String, who: Option<String>) -> Result<Value, String> {
     let (key, data) = (load_key(&crate::data_dir(&app), &id)?, crate::data_dir(&app));
-    let role = if role == "admin" { "admin" } else { "member" };
+    let role = match role.as_str() { "admin" => "admin", "reader" => "reader", _ => "member" };
+    let who = who.unwrap_or_default();
     let a = app.clone();
     let (link, invite) = on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || {
         let (link, inv, keys) = match c.vault_invite(&v.id, role, &key, &v.host, v.port) {
@@ -724,7 +761,7 @@ pub async fn shared_vault_invite(app: AppHandle, state: St<'_>, id: String, role
         // remembered, so this Mac's round adds whoever joins with it to the member list
         let secret = relay_remote::proto::PairLine::parse(&link).and_then(|l| l.secret).ok_or("the invite link has no secret")?;
         let mut k = load_key(&data, &v.id)?;
-        k.invites.push(relay_remote::vault::Invited { id: inv.id.clone(), secret, role: role.into(), epoch: keys.epoch(), expires: inv.expires });
+        k.invites.push(relay_remote::vault::Invited { id: inv.id.clone(), secret, role: role.into(), epoch: keys.epoch(), expires: inv.expires, who });
         save_key(&data, &v.id, &k)?;
         Ok((link, inv))
     })).await?;
@@ -740,13 +777,15 @@ pub async fn shared_vault_docs(app: AppHandle, state: St<'_>, id: String, on: bo
     sync_now();
     Ok(())
 }
-/// An admin makes a member an admin, or an admin a member again (docs/workspaces.md, Members): the server's role follows.
+/// An admin gives a member the role admin, member or reader (docs/workspaces.md, Roles): the server's role follows.
 #[tauri::command]
-pub async fn shared_vault_admin(app: AppHandle, state: St<'_>, id: String, fp: String, on: bool) -> Result<(), String> {
-    let (data, a, who) = (crate::data_dir(&app), app.clone(), fp.clone());
-    on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.set_admin(&data, &v, &c, &fp, on)).await?;
+pub async fn shared_vault_role(app: AppHandle, state: St<'_>, id: String, fp: String, role: String) -> Result<(), String> {
+    let (data, a, who, r) = (crate::data_dir(&app), app.clone(), fp.clone(), role.clone());
+    on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.set_role(&data, &v, &c, &fp, &r)).await?;
     if let Some(s) = app.state::<crate::App>().shared.status.lock().unwrap().get_mut(&id) {
-        if let Some(admins) = s.admins.as_mut() { admins.retain(|x| *x != who); if on { admins.push(who); } }
+        for (list, on) in [(s.admins.as_mut(), role == "admin"), (s.readers.as_mut(), role == "reader")] {
+            if let Some(l) = list { l.retain(|x| *x != who); if on { l.push(who.clone()); } }
+        }
     }
     sync_now();
     Ok(())
@@ -773,6 +812,56 @@ pub async fn shared_vault_trust(app: AppHandle, state: St<'_>, id: String, fp: S
     if let Some(s) = app.state::<crate::App>().shared.status.lock().unwrap().get_mut(&id) { s.changed.clear(); }
     sync_now();
     Ok(())
+}
+
+/// An admin sets the workspace's policy (docs/workspaces.md, Policy): the agent providers allowed and capture.
+#[tauri::command]
+pub async fn shared_vault_policy(app: AppHandle, state: St<'_>, id: String, providers: Vec<String>, capture: bool) -> Result<(), String> {
+    let (data, a, p) = (crate::data_dir(&app), app.clone(), providers.clone());
+    on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || c.sealed(&v.id, load_key(&data, &v.id)?).set_policy(&p, capture, &|k| save_key(&data, &v.id, k)))).await?;
+    if let Some(s) = app.state::<crate::App>().shared.status.lock().unwrap().get_mut(&id) { s.policy = Some(relay_remote::members::Policy { providers, capture }); }
+    app.emit("shared-vaults", serde_json::to_value(&*app.state::<crate::App>().shared.status.lock().unwrap()).unwrap_or_default()).ok();
+    Ok(())
+}
+/// An admin makes the server's organisation admins admins of this workspace (docs/workspaces.md, Organisation). How
+/// many changed.
+#[tauri::command]
+pub async fn shared_vault_add_org(app: AppHandle, state: St<'_>, id: String) -> Result<usize, String> {
+    let (data, a) = (crate::data_dir(&app), app.clone());
+    let n = on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || crate::organisation::add_admins(&data, &c, &v.id))).await?;
+    sync_now();
+    Ok(n)
+}
+
+/// The people on the member list as it is now, into the vault's last status (as a round would), for the settings.
+fn people_now(app: &AppHandle, id: &str, people: &[relay_remote::members::Person]) -> Value {
+    if let Some(s) = app.state::<crate::App>().shared.status.lock().unwrap().get_mut(id) { s.people = Some(people.to_vec()); }
+    serde_json::json!(people)
+}
+/// Name a person (`who`, "" a new one) and put device `fp` ("" none) under it: an admin, or a device naming itself
+/// (docs/workspaces.md, People). The people after it.
+#[tauri::command]
+pub async fn shared_vault_person(app: AppHandle, state: St<'_>, id: String, who: String, name: String, email: String, fp: String) -> Result<Value, String> {
+    // a new person's id: 32 random bytes, as hex
+    let who = if who.is_empty() { relay_remote::tls::random_secret() + &relay_remote::tls::random_secret() } else { who };
+    let (data, a) = (crate::data_dir(&app), app.clone());
+    let people = on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || c.sealed(&v.id, load_key(&data, &v.id)?).set_person(&who, &name, &email, &fp, &|k| save_key(&data, &v.id, k)))).await?;
+    sync_now();
+    Ok(people_now(&app, &id, &people))
+}
+/// Remove a person with every device under it: an admin, or the person itself from one of its devices. When this Mac
+/// is one of them it left: the vault goes from the settings as with Leave. The people after it, or null when it left.
+#[tauri::command]
+pub async fn shared_vault_remove_person(app: AppHandle, state: St<'_>, id: String, who: String) -> Result<Value, String> {
+    let (data, a) = (crate::data_dir(&app), app.clone());
+    let left = on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || c.sealed(&v.id, load_key(&data, &v.id)?).remove_person(&who, &|k| save_key(&data, &v.id, k)))).await?;
+    let Some(people) = left else {
+        change(&app, &state, |all| { all.retain(|x| x["id"] != id.as_str()); true })?;
+        on_hub(&app, move |hub, data| hub.forget(data, &id)).await?;
+        return Ok(Value::Null);
+    };
+    sync_now();
+    Ok(people_now(&app, &id, &people))
 }
 
 /// The members and open invites of a vault, and this Mac's fingerprint so the list can mark it: {vault, me}.
@@ -924,6 +1013,8 @@ mod tests {
         // a rule's conflict copy goes out of rules/, which loads into every conversation; a note's stays beside it
         assert_eq!(conflict_copy(&f, "System/rules/core/memory.md", "m", "s"), "System/conflicts/rules/core/memory (conflict m s).md");
         assert_eq!(conflict_copy(&f, "Notes/a.md", "m", "s"), "Notes/a (conflict m s).md");
+        assert_eq!(conflict_copy(&f, "Notes/a.md", "", "s"), "Notes/a (conflict s).md", "without history");
+        assert_eq!(conflict_copy(&f, "System/rules/a.md", "", "s"), "System/conflicts/rules/a (conflict s).md");
         // the same folder on a Mac's disk, by case or by a ligature: out of rules/ too
         assert_eq!(conflict_copy(&f, "system/Rules/core/memory.md", "m", "s"), "System/conflicts/rules/core/memory (conflict m s).md");
         assert_eq!(conflict_copy(&f, "Sy\u{FB06}em/rules/a.md", "m", "s"), "System/conflicts/rules/a (conflict m s).md");

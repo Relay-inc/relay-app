@@ -8,6 +8,7 @@ import { useT } from "../../hooks/useT";
 import { buttonClass, ERROR_MESSAGE, HINT_IN_ROW, PILL, ROW_ACTIONS, ROW_DETAILS, ROW_HEAD } from "./blocks";
 import { MachineGithub } from "./MachineGithub";
 import { MachineMirror } from "./MachineMirror";
+import { MachineOrganisation } from "./MachineOrganisation";
 import { MachineRepos } from "./MachineRepos";
 import { CommandBlock } from "./MachineSetup";
 import { MachineVaults } from "./SharedVaults";
@@ -131,6 +132,7 @@ export function MachineRow({ machine, vaults }: { machine: Machine; vaults?: Sha
         <>
           <MachineGithub machine={machine} hasRepos={!!status.repos} />
           {status.repos ? <MachineRepos machine={machine} /> : null}
+          <MachineOrganisation machine={machine} />
         </>
       ) : null}
       <MachineVaults machine={machine} vaults={vaults} />

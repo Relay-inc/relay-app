@@ -20,6 +20,8 @@ pub mod docs;
 pub mod cli;
 pub mod github;
 pub mod mirror;
+pub mod oidc;
+pub mod org;
 #[cfg(target_os = "macos")]
 pub mod ramdisk;
 pub mod upgrade;
@@ -101,7 +103,9 @@ const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answ
 /// further devices, and makes no vaults of its own. `pair` with a code from the owner makes it a full device.
 const VAULT_OPS: &[&str] = &["pair", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
     "vault_get", "vault_put", "vault_put_many", "vault_delete", "vault_stream", "vault_pk", "vault_rotate", "vault_log", "vault_append",
-    "doc_push", "doc_pull", "doc_snapshot_put", "doc_list", "doc_bind", "doc_unbind"];
+    "doc_push", "doc_pull", "doc_snapshot_put", "doc_list", "doc_bind", "doc_unbind",
+    // the organisation list, read only: a vault admin adds the organisation admins to its workspace (org.rs)
+    "org_log", "sso_info"];
 /// What a vault-only device may ask besides, while it is admin of a vault here: it keeps the server, so it sees what
 /// the server is and updates it (`update`, to an official release only: signed with Relay's release key, upgrade.rs).
 /// Never a conversation, the mirror, a phone, GitHub or a vault of its own.
@@ -297,15 +301,18 @@ impl Server {
         let peer = tcp.peer_addr().map(|a| a.to_string()).unwrap_or_default();
         // inside the handshake: a known device, or any device while a pairing code or a vault's invite is open (it may
         // then only pair or join)
-        let data = self.data.clone();
-        let allow: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(move |fp: &str| clients(&data).iter().any(|c| c.fp == fp) || pairing(&data).is_some() || vaults::invite_open(&data));
+        // and the server's own certificate, for `relay-server health` (it may only ask that)
+        let (data, own) = (self.data.clone(), self.fp.clone());
+        let allow: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(move |fp: &str| fp == own || clients(&data).iter().any(|c| c.fp == fp) || pairing(&data).is_some() || vaults::invite_open(&data));
         let (duplex, fp) = self.acceptor.accept(tcp, HANDSHAKE, allow).map_err(|e| io::Error::other(format!("{peer}: {e}")))?;
         let (r, mut w) = duplex.split();
         let mut r = BufReader::new(r);
         let req = proto::read_json(&mut r, MAX_LINE)?;
         let me = clients(&self.data).into_iter().find(|c| c.fp == fp);
         let op = req["op"].as_str().unwrap_or("");
-        if me.is_none() && op != "pair" && op != "vault_join" { return reply(&mut w, Err("not paired".into())); }
+        if fp == self.fp { return reply(&mut w, if op == "health" { Ok(json!({"version": upgrade::VERSION})) } else { Err("only health with the server's own certificate".into()) }); }
+        // a device not paired yet may also ask what SSO a join needs (oidc.rs)
+        if me.is_none() && !["pair", "vault_join", "sso_info"].contains(&op) { return reply(&mut w, Err("not paired".into())); }
         if me.as_ref().is_some_and(|c| c.vaults_only) && !vaults_only_may(&self.data, &fp, op) { return reply(&mut w, Err(format!("{op:?} is not allowed from a device that only shares vaults"))); }
         let my_name = me.as_ref().map(|c| c.name.clone()).unwrap_or_default();
         // past the wall above, a vault-only device asks `update` only as a vault admin: it installs official releases only
@@ -412,11 +419,24 @@ impl Server {
             "vault_invite" => reply(&mut w, self.vaults.invite(&fp, s("vault"), s("role"), s("wrapped"), req["epoch"].as_u64().unwrap_or(0))),
             "vault_invite_revoke" => reply(&mut w, self.vaults.invite_revoke(&fp, s("vault"), s("invite")).map(|_| json!({}))),
             "vault_join" => {
-                let res = self.vaults.join(&fp, s("vault"), s("invite"), s("name"), s("proof"));
+                // a good invite proof first (local and cheap: who has none never makes this server fetch an issuer's keys),
+                // then SSO (oidc.rs) before the invite is spent; a bad proof goes on to count as one
+                let join = |sso: Option<&oidc::Signed>| self.vaults.join(&fp, s("vault"), s("invite"), s("name"), s("proof"), sso);
+                let res = if self.vaults.invite_proven(&fp, s("vault"), s("invite"), s("proof")) { oidc::gate(&self.data, &self.fp, &fp, &req).and_then(|sso| join(sso.as_ref())) } else { join(None) };
                 if res.is_ok() { eprintln!("relay-server: {} joined a shared vault ({peer})", req["name"]); }
                 reply(&mut w, res)
             }
             "vault_remove" => reply(&mut w, self.vaults.remove(&fp, s("vault"), s("fp")).map(|_| json!({}))),
+            // the organisation (org.rs): its signed list, and for its admins the overview and a revoke
+            "sso_info" => reply(&mut w, Ok(oidc::info(&self.data, &self.fp))),
+            "org_log" => reply(&mut w, Ok(org::log(&self.data, &fp, req["from"].as_u64().unwrap_or(0)))),
+            "org_append" => reply(&mut w, org::append(&self.data, &self.fp, &fp, &req["entry"]).map(|_| json!({}))),
+            "org_pk" => reply(&mut w, org::publish(&self.data, &fp, &req).map(|_| json!({}))),
+            "org_overview" => reply(&mut w, org::overview(&self.vaults, &self.fp, &fp)),
+            "org_revoke" => {
+                let fps: Vec<String> = req["fps"].as_array().into_iter().flatten().filter_map(|f| f.as_str().map(String::from)).collect();
+                reply(&mut w, org::revoke(&self.data, &self.fp, &fp, &fps))
+            }
             "vault_manifest" => reply(&mut w, self.vaults.manifest(&fp, s("vault"))),
             "vault_log" => reply(&mut w, self.vaults.log(&fp, s("vault"), req["from"].as_u64().unwrap_or(0))),
             "vault_append" => {
@@ -457,7 +477,7 @@ impl Server {
                 if lens.is_empty() || lens.iter().sum::<u64>() > docs::MAX_PUSH { return reply(&mut w, Err("push too big".into())); }
                 let mut parts = vec![];
                 for l in lens { parts.push(proto::read_body(&mut r, l, relay_remote::docs::MAX_UPDATE)?); }
-                reply(&mut w, self.vaults.doc_push(&fp, s("vault"), s("doc"), parts).map(|seqs| json!({"seq": seqs.last(), "seqs": seqs})))
+                reply(&mut w, self.vaults.doc_push(&fp, s("vault"), s("doc"), s("from"), parts).map(|seqs| json!({"seq": seqs.last(), "seqs": seqs})))
             }
             "doc_pull" => match self.vaults.doc_pull(&fp, s("vault"), s("doc"), req["since"].as_u64().unwrap_or(0), req["limit"].as_u64().unwrap_or(0)) {
                 Ok((mut v, b)) => { v["ok"] = json!(true); proto::write_json(&mut w, &v)?; w.write_all(&b)?; w.shutdown(); Ok(()) }

@@ -1,5 +1,5 @@
 import { t } from "../../shared/i18n";
-import type { SharedRole } from "../../domain/settings/types";
+import type { SharedPerson, SharedRole } from "../../domain/settings/types";
 import * as backend from "../../infrastructure/backend";
 import { checkMachine } from "./machines-page";
 import { useSettingsStore, type SettingsState } from "./store";
@@ -10,7 +10,7 @@ import { useSettingsStore, type SettingsState } from "./store";
 type Shared = SettingsState["shared"];
 const st = () => useSettingsStore.getState().shared;
 const change = (recipe: (draft: Shared) => void) => useSettingsStore.setState(draft => recipe(draft.shared));
-const CLOSED: Shared["form"] = { mode: "", machine: "", name: "", folder: "", link: "" };
+const CLOSED: Shared["form"] = { mode: "", machine: "", name: "", folder: "", link: "", noHistory: false };
 
 /** Runs `work` with `key` busy: a vault's id (its row's buttons off until it ends) or "form". Its error shows under
  *  `key`. True when it worked. */
@@ -49,10 +49,36 @@ export async function takeInvite() {
   const link = await backend.sharedVaultPendingInvite().catch(() => null);
   if (!link) return;
   change(draft => {
-    draft.form = { ...draft.form, mode: "join", machine: "", link };
+    draft.form = { ...draft.form, mode: "join", machine: "", link, sso: undefined, login: null };
     draft.messages.form = null;
   });
+  void checkSso();
 }
+
+/** What the join form's link's server asks to sign in with (docs/workspaces.md, SSO), asked once per link. A link
+ *  that is no invite yet, or a server that cannot be reached, asks nothing: the join says why. */
+async function checkSso() {
+  const link = st().form.link.trim();
+  if (!/^relay:\/\/.*[#&]invite=/.test(link)) return;
+  const sso = await backend.ssoCheck(link).catch(() => null);
+  change(draft => {
+    if (draft.form.link.trim() === link) draft.form.sso = sso;
+  });
+}
+/** Sign in in the browser for the join form's link: the login shows in the form, the join sends it. */
+export async function ssoSignIn() {
+  const link = st().form.link.trim();
+  await run("sso", async () => {
+    const login = await backend.ssoLogin(link);
+    change(draft => {
+      if (draft.form.link.trim() === link) draft.form.login = login;
+    });
+  });
+  // a sign-in error shows where the form's do
+  const failed = st().messages.sso;
+  if (failed) change(draft => void (draft.messages.form = failed));
+}
+export const ssoCancel = () => void backend.ssoCancel();
 
 /** The rounds so far and then each one as it ends, and the invite links (`vault-invite` is a ping: the backend has
  *  the link). Once, when the window opens. */
@@ -83,8 +109,15 @@ export function openForm(mode: Shared["form"]["mode"], machine = st().form.machi
     draft.messages.form = null;
   });
 }
-export const editForm = (patch: Partial<Pick<Shared["form"], "name" | "link">>) =>
-  change(draft => void Object.assign(draft.form, patch));
+export function editForm(patch: Partial<Pick<Shared["form"], "name" | "link" | "noHistory">>) {
+  const relink = patch.link !== undefined && patch.link !== st().form.link;
+  change(draft => {
+    Object.assign(draft.form, patch);
+    // another link: another server, and a login that was for the one before
+    if (relink) [draft.form.sso, draft.form.login] = [undefined, null];
+  });
+  if (relink) void checkSso();
+}
 export async function pickSharedFolder() {
   const folder = await backend.pickFolder();
   if (folder) change(draft => void (draft.form.folder = folder));
@@ -93,11 +126,13 @@ export async function pickSharedFolder() {
 /** Make the vault on the form's machine: the form closes and its row shows the recovery key (a failed reload leaves
  *  it to Show recovery key). */
 export async function createSharedVault() {
-  const { machine, name, folder } = st().form;
+  const { machine, name, folder, noHistory } = st().form;
   await run("form", async () => {
-    const { id, recovery } = await backend.sharedVaultCreate(machine, name, folder);
+    const { id, recovery, orgError } = await backend.sharedVaultCreate(machine, name, folder, noHistory);
     change(draft => {
       draft.keys[id] = recovery;
+      // made, but the organisation admins are not on it yet: said under the new workspace
+      if (orgError) draft.messages[id] = { text: t("set.orgCreateFailed", { error: orgError }), ok: false };
       draft.form = { ...CLOSED, machine }; // what the reload says shows under that machine
     });
     await reload();
@@ -105,9 +140,9 @@ export async function createSharedVault() {
   await takeInvite();
 }
 export async function joinSharedVault() {
-  const { link, folder } = st().form;
+  const { link, folder, login } = st().form;
   await run("form", async () => {
-    await backend.sharedVaultJoin(link.trim(), folder);
+    await backend.sharedVaultJoin(link.trim(), folder, login ?? null);
     change(draft => void (draft.form = CLOSED)); // the invite is spent: closed also when the reload fails
     await reload();
   });
@@ -135,10 +170,11 @@ export async function toggleMembers(id: string) {
   if (!read) change(draft => void delete draft.info[id]);
 }
 
-/** A single-use link for a new member or admin; the open invites follow when they show. */
-export async function inviteToShared(id: string, role: SharedRole) {
+/** A single-use link for a new member or admin, or with `who` for a new device of that person. The open invites follow
+ *  when they show. */
+export async function inviteToShared(id: string, role: SharedRole, who?: string) {
   await run(id, async () => {
-    const made = await backend.sharedVaultInvite(id, role);
+    const made = await backend.sharedVaultInvite(id, role, who);
     change(draft => void (draft.links[id] = made));
     if (id in st().info) await loadInfo(id);
   });
@@ -169,6 +205,23 @@ export const setSharedDocs = (id: string, on: boolean) =>
       if (s) s.docs = on;
     });
   });
+/** An admin sets the workspace's policy (docs/workspaces.md, Policy): the providers allowed and capture. */
+export const setSharedPolicy = (id: string, providers: string[], capture: boolean) =>
+  run(id, async () => {
+    await backend.sharedVaultPolicy(id, providers, capture);
+    change(draft => {
+      const s = draft.status[id];
+      if (s) s.policy = { providers, capture };
+    });
+  });
+/** An admin makes the server's organisation admins admins of the workspace (docs/workspaces.md, Organisation). */
+export const addOrgAdmins = (id: string) =>
+  run(id, async () => {
+    const n = await backend.sharedVaultAddOrg(id);
+    change(
+      draft => void (draft.messages[id] = { text: n ? t("set.orgAdded", { n }) : t("set.orgAddedNone"), ok: true }),
+    );
+  });
 /** An admin trusts a member's new key, after they said they set up Relay again (docs/workspaces.md, Key rotation). */
 export const trustMember = (id: string, fp: string) =>
   run(id, async () => {
@@ -178,13 +231,14 @@ export const trustMember = (id: string, fp: string) =>
       if (s) s.changed = (s.changed ?? []).filter(c => c.fp !== fp);
     });
   });
-/** An admin makes a member an admin, or an admin a member again (docs/workspaces.md, Members). */
-export const setMemberAdmin = (id: string, fp: string, on: boolean) =>
+/** An admin gives a member the role admin, member or reader (docs/workspaces.md, Roles). */
+export const setMemberRole = (id: string, fp: string, role: SharedRole) =>
   run(id, async () => {
-    await backend.sharedVaultAdmin(id, fp, on);
+    await backend.sharedVaultRole(id, fp, role);
     change(draft => {
       const s = draft.status[id];
-      if (s?.admins) s.admins = on ? [...s.admins.filter(a => a !== fp), fp] : s.admins.filter(a => a !== fp);
+      if (s?.admins) s.admins = [...s.admins.filter(a => a !== fp), ...(role === "admin" ? [fp] : [])];
+      if (s?.readers) s.readers = [...s.readers.filter(a => a !== fp), ...(role === "reader" ? [fp] : [])];
     });
     await loadInfo(id);
   });
@@ -198,6 +252,41 @@ export const addToList = (id: string, fp: string) =>
     });
     await loadInfo(id);
   });
+/** The people as the member list says after a change this Mac signed, until the next round says it again. */
+function setPeople(id: string, people: SharedPerson[]) {
+  change(draft => {
+    const s = draft.status[id];
+    if (s) s.people = people;
+  });
+}
+/** Name a person (`who` "" a new one) and put device `fp` ("" none) under it (docs/workspaces.md, People). True when
+ *  it went through. */
+export const setPerson = (id: string, who: string, name: string, email: string, fp: string) =>
+  run(id, async () => {
+    setPeople(id, await backend.sharedVaultPerson(id, who, name, email, fp));
+    await loadInfo(id);
+  });
+/** Remove a person with all its devices. When this Mac was one of them it left the vault, as with Leave. */
+export const removePerson = (id: string, who: string) =>
+  run(id, async () => {
+    const people = await backend.sharedVaultRemovePerson(id, who);
+    if (people) {
+      setPeople(id, people);
+      await loadInfo(id);
+      return;
+    }
+    forget(id);
+    await reload();
+  });
+/** A vault this Mac left, out of the settings' state. */
+function forget(id: string) {
+  change(draft => {
+    delete draft.info[id];
+    delete draft.links[id];
+    delete draft.keys[id];
+    delete draft.status[id];
+  });
+}
 export const removeMember = (id: string, fp: string) =>
   run(id, async () => {
     await backend.sharedVaultRemove(id, fp);
@@ -208,12 +297,7 @@ export const leaveShared = (id: string) =>
   run(id, async () => {
     // "" is this Mac to the backend: a member that was removed, or whose vault is gone, cannot ask the server who it is
     await backend.sharedVaultRemove(id, st().info[id]?.me ?? "");
-    change(draft => {
-      delete draft.info[id];
-      delete draft.links[id];
-      delete draft.keys[id];
-      delete draft.status[id];
-    });
+    forget(id);
     await reload();
   });
 

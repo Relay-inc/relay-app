@@ -158,7 +158,8 @@ Handshake: a device is accepted when it is in `clients.json`, or a pairing code 
 
 A device that came in through an invite is a *vault-only* client (`Client.vaults_only = true`): it may only send
 `VAULT_OPS` = `pair` (a code from the owner makes it a full device), `vault_info`, `vault_invite`, `vault_invite_revoke`, `vault_join`, `vault_remove`,
-`vault_manifest`, `vault_get`, `vault_put`, `vault_put_many`, `vault_delete`, `vault_stream`, `vault_pk`, `vault_rotate`. It never runs agents, reads a mirror or pairs
+`vault_manifest`, `vault_get`, `vault_put`, `vault_put_many`, `vault_delete`, `vault_stream`, `vault_pk`, `vault_rotate`, and `org_log` (an admin of
+its workspace adds the organisation admins, Organisation below). It never runs agents, reads a mirror or pairs
 further devices. While it is admin of a vault here it also gets `KEEPER_OPS` = `info` (the server's paths and version)
 and `update` (with `signature`, the release's `.sig` of the binary), nothing more. A linked device (a phone) gets no vault ops.
 
@@ -168,21 +169,33 @@ blob name 64 lowercase hex. Anything else is refused.
 | Request | Who | Reply |
 |---|---|---|
 | `vault_create {name}` | a full device (not vaults_only, not linked) | `{vault: {id, name}}`, the caller is its admin |
-| `vault_info {vault}` | member | `{vault: {id, name, role, me, members: [{name, fp, role, added, pk, id, sig, mac}], invites: [{id, role, expires}], epoch, rekey, keys: {epoch: {sealed, holders}}}}`, invites only for admins (else `[]`), `keys` only the caller's sealed key and who each rotation was sealed to |
-| `vault_invite {vault, role, wrapped, epoch}` | admin | `{invite: {id, code, expires}}`, `role` admin or member, `wrapped` hex at most 256 KiB, expires in 24 h; `epoch` the newest key sealed in, refused (`key changed`) when it is not the current one |
-| `vault_invite_revoke {vault, invite}` | admin | `{}` |
+| `vault_info {vault}` | member | `{vault: {id, name, role, me, members: [{name, fp, role, added, pk, id, sig, mac}], people: [{who, name, email, devices}], invites: [{id, role, expires}], epoch, rekey, keys: {epoch: {sealed, holders}}, nohistory}}`, `people` the member list's people with their devices' fingerprints (`[]` without a list), `nohistory` whether the list makes the workspace one without history (read from the list like the roles), invites all for an admin and the caller's own for a member, `keys` only the caller's sealed key and who each rotation was sealed to |
+| `vault_invite {vault, role, wrapped, epoch}` | admin, or a member that is a person on the list (role member only) | `{invite: {id, code, expires}}`, `role` admin, member or reader, `wrapped` hex at most 256 KiB, expires in 24 h; `epoch` the newest key sealed in, refused (`key changed`) when it is not the current one |
+| `vault_invite_revoke {vault, invite}` | admin, or a member for an invite it made | `{}`, only that invite |
 | `vault_join {vault, invite, name, proof}` | anyone with a valid link | `{vault: {id, name}, role, wrapped}`, `proof` = `tls::proof(code, client_fp, server_fp)`, 5 wrong proofs drop the invite, success consumes it, adds the device to `clients.json` as vaults_only when it is new (name deduplicated as in `pair`) and as a member |
 | `vault_remove {vault, fp}` | admin, or the member itself (leave) | `{}`, refused when it would leave members without an admin, a vaults_only client with no vault left is removed from `clients.json`; sets `rekey` |
 | `vault_manifest {vault}` | member | `{blobs: [{name, etag, size, meta, e}], epoch, rekey, role, me: {fp, pk, mac}}`, `meta` hex of the record's meta part, `etag` sha256 hex of the whole record file, `size` its bytes, `e` the epoch in its header |
 | `vault_get {vault, name}` | member | reply line `{ok, len, etag}`, then `len` bytes: the record |
-| `vault_put {vault, name, len, expect}` + `len` bytes | member | `{etag}`, written only if the current record's etag is `expect` (`""`: it must not exist), else `changed meanwhile` |
-| `vault_put_many {vault, files: [{name, len, expect}]}` + the bodies one after the other | member | `{etags: {name: etag}, errors: {name: why}}` |
-| `vault_delete {vault, name, expect}` | member | `{}`, only if the current etag is `expect`, else `changed meanwhile` |
+| `vault_put {vault, name, len, expect}` + `len` bytes | member, not a reader | `{etag}`, written only if the current record's etag is `expect` (`""`: it must not exist), else `changed meanwhile` |
+| `vault_put_many {vault, files: [{name, len, expect}]}` + the bodies one after the other | member, not a reader | `{etags: {name: etag}, errors: {name: why}}` |
+| `vault_delete {vault, name, expect}` | member, not a reader | `{}`, only if the current etag is `expect`, else `changed meanwhile` |
 | `vault_stream {vault, v, since, epoch}` | member | stays open, see Live channel |
 | `vault_pk {vault, pk, id, sig, mac, imac}` | member, for itself | `{}`, `pk` and `id` 64 hex, `sig` 128 hex, `mac` `<epoch>:<64 hex>`, `imac` 64 hex or empty; only the shape is checked here |
 | `vault_log {vault}` | member | `{entries}`: the member list |
-| `vault_append {vault, entry, keys}` | member, `entry.by` the caller | `{}`, only when the whole list still checks (`relay_remote::members::check`); a `remove`/`leave` removes the member here in the same write; an `add` stores `keys` (epoch: sealed) for the new member; `create` only on an empty list by an admin; `rekey` refused (it goes with `vault_rotate`) |
+| `vault_append {vault, entry, keys}` | member, `entry.by` the caller, a reader only its `leave` | `{}`, only when the whole list still checks (`relay_remote::members::check`); whoever the entry takes off the list (`remove`, `leave`, or `person-remove` with every device of that person) is removed here in the same write; an `add` stores `keys` (epoch: sealed, epoch 0 included) for the new member, and may add an organisation admin as admin that never joined (it becomes a member here in the same write); `create` only on an empty list by an admin; `rekey` refused (it goes with `vault_rotate`) |
+| `org_log {from}` | any device | `{entries, len, owner}`: the organisation list from `from` on, `owner` whether the caller is the server's owner (the first full device paired) |
+| `org_append {entry}` | a full device, `entry.by` the caller | `{}`, only when the whole organisation list then still checks (`members::check_org`), `create` only by the owner on an empty list, `add` only of a full device paired here |
+| `org_pk {id, pk, sig}` | a full device, for itself | `{}`, its organisation keys for an admin to add it, only the shape is checked here |
+| `org_overview` | an organisation admin | `{workspaces: [{id, name, list, managed, admin, nohistory, members: [{fp, name, role, person, listed}], people}], people: [{name, email, unverified, devices, workspaces: [{id, name, role}]}], admins, candidates: [{fp, name, id, pk, sig}]}`: what each member list says, never a record (`unverified`: the email is only what the person's own device signed) |
+| `org_revoke {fps}` | an organisation admin | `{revoked: [{fp, name}]}`, those devices out of `clients.json` as `relay-server revoke` does. Only devices that came in through a workspace (`vaults_only`): never an organisation admin, never a fully paired device (the owner's, another admin's, a phone linked to one), and then nothing is revoked |
 | `vault_rotate {vault, epoch, keys: {fp: sealed}, entry}` | admin | `{epoch}`, only the next epoch; `entry` the `rekey` entry, appended in the same write when the list then checks, and a sealed key for exactly the list's members; clears `rekey` and every open invite |
+
+A reader (Roles, below) is refused every write with one answer, `read only: a reader of this workspace cannot change
+it` (`members::READ_ONLY`): `vault_put`, `vault_put_many` (per file), `vault_delete`, `vault_append` other than its
+`leave`, `vault_invite`, `vault_invite_revoke`, and the document ops `doc_push`, `doc_snapshot_put`, `doc_bind` and
+`doc_unbind`. Its `update` frames on the live stream are dropped, its `awareness` frames pass (they only say where it
+is). It still reads (`vault_info`, `vault_manifest`, `vault_get`, `vault_log`, `doc_list`, `doc_pull`, the stream),
+publishes its own keys (`vault_pk`) and leaves.
 
 A `vault_put` (and each file of `vault_put_many`) under another epoch than the current one is refused: `key changed`
 for an older one, `no such key epoch` for a newer one. `revoke` of a client also removes its memberships and sets `rekey`.
@@ -202,11 +215,13 @@ Relay never asks and keeps its rounds.
   those updates follow at once, in order. Not resumed: some may be missing, and the rounds bring them.
 - **App to server:** `{"t": "frame", "kind", "doc", "n", "body"}` and `{"t": "ping"}`. `kind` `update` or `awareness`,
   `doc` a record name (64 hex), `n` the sender's own counter (it starts at the time in µs, so it never repeats), `body`
-  hex of the sealed frame, at most 256 KiB sealed.
+  hex of the sealed frame, at most 256 KiB sealed. On a workspace without history the frame also carries `from`, the
+  sender's session id (Without history, below).
 - **Server to app:** `{"t": "frame", "seq", "from", "e", "kind", "doc", "n", "body"}`, `{"t": "files"}` after another
   member put or deleted a file (the rounds run at once; it names no file), `{"t": "ping"}` every 15 s and
   `{"t": "bye", "why"}` before it closes. `from` is the first 16 hex of the sender's certificate fingerprint, from the
-  handshake. An update gets the next `seq` of its workspace, an awareness frame `seq` 0. A sender never gets its own;
+  handshake, or on a workspace without history the session id the frame named. An update gets the next `seq` of its
+  workspace, an awareness frame `seq` 0. A sender never gets its own;
   Relay also drops a frame whose `from` is its own device, and one whose `n` is not above the last it took from that
   sender for that document and kind.
 - **Seal:** `nonce (12) || ChaCha20-Poly1305(enc_key, aad = "frame:" + vault + ":" + kind + ":" + doc + ":" + from + ":" + n,
@@ -232,7 +247,8 @@ Expired invites are dropped whenever the file is read.
 `<data>/vaults/<id>/blobs/<name>`: one record per file, written to a temp file and renamed, under a per-vault lock so
 the compare-and-swap holds. A record at most `mirror::MAX_FILE` plus 64 KiB.
 
-`<data>/vaults/<id>/docs/<name>/log/<seq>` (and `<seq>.from`, the device that pushed it) and `.../snap/<upto>`: a
+`<data>/vaults/<id>/docs/<name>/log/<seq>` (and `<seq>.from`, the device that pushed it, or on a workspace without
+history `<seq>.sid`, the session id its Relay sent) and `.../snap/<upto>`: a
 document's sealed updates, numbered from 1 with no gap, and any snapshots members stored (see Documents, not handed
 out). Written whole under the vault's lock; never deleted.
 
@@ -256,7 +272,8 @@ an agent. Its edits merge; there are no conflict copies for it.
   rules): `doc_push {vault, doc, updates: [len…]}` with the parts after the line (each at most 4 MiB, one push at
   most 16 MiB, under the vault's current key, else `key changed` / `no such key epoch`), answers `{seq, seqs}`;
   `doc_pull {vault, doc, since, limit}` answers a page of the updates after `since` (at most 1000 and 32 MiB, `more`
-  past either), each with `from`; `doc_list {vault}`. `doc_snapshot_put {vault, doc, upto, len}` stores a member's
+  past either), each with `from` (a session id on a workspace without history, where `doc_push` carries `from` too),
+  and `doc_list {vault}`. `doc_snapshot_put {vault, doc, upto, len}` stores a member's
   snapshot (a place the log has, at least 200 updates past the last, none replaced) as an unchecked hint for the
   history to come: no pull hands one out, and Relay writes none yet. Limits: 10 000 documents a workspace, 512 MiB a
   member may push into a workspace a day (counted in memory, so a restart starts the day over). A push also goes at
@@ -418,18 +435,37 @@ manifest) and the epoch (to refuse a write under an old key), and checks it fits
 Who is in a workspace, who is an admin and which key is current come from its member list, never from the server's
 own `vault.json` (that one only decides who may connect, and its roles follow the list). The list is an append-only
 chain of entries (`relay_remote::members`), at most 10 000: `{seq, prev, kind, fp, id, pk, role, epoch, h, at, by, sig,
-mac}`, `prev` the hash of the entry before (sha256 of what it signs and its signature), `sig` the Ed25519 signature of
-`by` over every other field but `mac`, and the vault id. Every hex field is lowercase, and every field a kind does not
-use is empty.
+mac, who, name, email}`, `prev` the hash of the entry before (sha256 of what it signs and its signature), `sig` the
+Ed25519 signature of `by` over every other field but `mac`, and the vault id. The person fields `who`, `name` and
+`email` are signed only when one is set (as JSON after the rest), so an entry from before people signs as it did.
+Every hex field is lowercase, and every field a kind does not use is empty.
 
 - `create` (the creator, signed by itself, with `mac`: its identity vouched for under the vault's epoch-0 key, which the
   server never has), `add` (a member with its identity `id`, X25519 key `pk` and `role`), `remove`, `promote`,
-  `demote`, `device` (a member's new keys) are signed by an admin of the list as it stood just before; `leave` by the
+  `demote`, `role` (`fp` gets `role`), `device` (a member's new keys) are signed by an admin of the list as it stood
+  just before, `leave` by the
   member itself; `rekey` (epoch `epoch` is current, the sha256 of its key `h`) by an admin. No entry may leave the list
   without an admin, and none may leave it empty.
-- **Roles** change with `promote` and `demote`, which an admin of the list writes from Members (Make admin, Make
-  member); the server's role follows. A member who was admin on the server before the list came in as a member (trust
-  on upgrade only adds members) and is made admin this way.
+- `nohistory` (no other field) makes the workspace one without history (below). Only as entry 1, right after `create`,
+  so signed by the creator. Anywhere else, a second one, or one by a member or reader is refused, and no entry undoes
+  it. A list without it is another history than the one a member saw, which its Relay refuses as a fork.
+- **Roles** are `admin`, `member` and `reader`, per device. An admin of the list picks one in Members, and its Relay writes
+  `promote` or `demote` between admin and member (as before readers, so a list without readers stays readable for an
+  older Relay) and a `role` entry for anything with reader. `promote` makes anyone an admin, `demote` makes an admin a
+  member and leaves a reader as it is. The server's role follows the list. A member who was admin on the server before
+  the list came in as a member (trust on upgrade only adds members) and is made admin this way.
+- **A reader** reads the workspace and changes nothing. It is invited as one (`vault_invite` with role `reader`, only
+  by an admin) or given the role by an admin. A device that joined with a reader invite goes on the list as a reader,
+  also through trust on upgrade or Add to list, and the server refuses an `add` of it with another role. On the list it signs nothing but its own `leave`: no device of its own,
+  no naming of itself, no `person-remove`, also not for its own person. A member gives nobody the reader role. The
+  server refuses its writes (Wire protocol). Its Relay knows it is one from the server's role (`vault_info`), which
+  follows the list: its rounds only pull (`sync::Mode::Pull`: what is unchanged here takes the server's side, a file
+  deleted here comes back, any other change here is kept and not sent, and Settings says how many), its documents take
+  no edit and bind nothing, a file change is not taken into a document, nothing is sealed again under a new key, and
+  its pages open read-only with a line saying why. It still holds every key (it reads). A Relay from before readers
+  refuses a list with a reader or a `role` entry: every member updates first.
+- `policy` (`providers`, `capture`, no other field) is the workspace's policy (below), by an admin. Its two fields are
+  signed only on a `policy` entry, so every entry from before signs as it did.
 - A `remove` or `leave` leaves the list waiting for a `rekey`; a `device` entry is refused while it waits (the new keys
   could be the removed member's).
 - **A new workspace** gets its list right away: Relay writes the `create` before anything else reaches the server.
@@ -456,6 +492,21 @@ use is empty.
 - **A member who set up Relay again** publishes new keys; every Mac shows it, and an admin can trust them with a
   `device` entry (after a confirm; only when the publication is signed by the new identity and vouched for under the
   newest key, and no removal waits). Every other Mac follows the list.
+- **People** sit on top of devices: members stay devices (certificate fingerprint, identity, key), and a device may
+  belong to a person. `person` (`who` 64 hex, `name` 1 to 100 characters without control characters or outer spaces,
+  `email` optional) names a person, made the first time and renamed after, and with `fp` puts that device under it.
+  `person-remove` (`who`) takes the person off with every device under it, and like a `remove` leaves the list waiting
+  for a `rekey`. An `add` with `who` adds a device under that person. An admin may write any of these. Without an
+  admin, a device may only: name itself as a new person (`fp` itself, while it has none), add a device under its own
+  person as member, and take its own person off (which takes itself off too). A device that claims another person, or
+  a person that adds an admin device through a member device, is refused like any entry by a non-admin. A device
+  without a person stays a member as before, so a list from before people needs no change. A Relay from before people
+  refuses a list once it holds one of these entries: every member updates first. `email` does nothing yet: it is there
+  for a sign-in later. In Members the people show with their devices under them: Add a device… on your own person
+  makes an invite link (as member) that your Relay adds under you, Name person… on a device without one (an admin for
+  any, a member for this Mac), and Rename… and Remove for an admin (Remove also for the person itself, which makes
+  this Mac leave). The grouping comes from the list as this Mac checked it, the server's `people` only before its
+  first round.
 - **A workspace from before the list** gets one from the first admin on this version, in one round: the `create`, then
   an `add` as member for every member the server lists whose Relay already published keys vouched for under the
   workspace key. Later rounds add nobody that way: a member whose Relay published its keys after that shows as Not on
@@ -464,6 +515,263 @@ use is empty.
   for a new key (the removed member still holds the current one). An invite does not help such a member: the server
   keeps its old entry and never notes the invite it joined with. Two admins at once:
   the server takes one list, and the other admin takes it on its next round.
+
+## Organisation
+
+A server can have an organisation (`relay-server/src/org.rs`, `relay-remote/src/org.rs`): organisation admins, a role
+above the workspace admin that keeps the server (`KEEPER_OPS`) and manages every workspace on it. It stays within the
+trust model: who is an organisation admin is a signed list, and what one does to a workspace is an entry on that
+workspace's member list, signed by its Mac. The server grants nothing itself.
+
+- **The organisation list** (`org.json` on the server, 0600) has the member list's rules (`members::check_org`): a hash
+  chain of Ed25519-signed entries, checked under the name `org:<server fingerprint>` so it never checks as another
+  server's or as a workspace's. Only four kinds: `create` (by the owner, the first full device paired with the server,
+  its `mac` the sha256 of that name as there is no workspace key), `add` (an organisation admin: its device `fp`, its
+  organisation identity `id` and X25519 key `pk`, role admin, no person), `remove` and `leave`. Everyone on it is an
+  admin and may add or remove another, the last one stays. The server appends only what still checks.
+- **Organisation keys.** Each Mac has, per server, an organisation identity and X25519 key (`org-<server>.key` in the
+  app data, in a workspace key file's format). Its Relay publishes them (`org_pk`, signed by the identity) when the
+  Organisation section opens. An admin adds a device on what it published, but only after the user compared the
+  device's code (12 hex of the keys' sha256) with the one its own screen shows: a server that swapped the publication
+  for its own keys gives another code. The add is refused when the keys changed since the comparison.
+- **Every Mac checks the list** and pins it in its organisation key file: its creator, and the head it last saw. A list
+  held back, forked, or started by another creator adds nobody to any workspace. The first sight is trust on first
+  use: a Mac that has never seen the list takes the one the server gives (a server can start a fake one only before
+  any Mac of the organisation saw the real one, and its admins would then be the server's own keys).
+- **Organisation admins on a workspace.** A new workspace adds the organisation admins as admins right after its
+  `create` (and `nohistory`). An admin of an existing workspace does the same with Add organisation admins in its
+  settings. One that is not on the list goes on with an `add` carrying its organisation keys, and every key of the
+  workspace so far sealed to its organisation key (epoch 0 included, as it never had an invite link). One that is a
+  member or reader is promoted. The organisation admin's Relay takes the epoch-0 key sealed to it when its
+  Organisation section opens (`org::adopt`), checks the list from a `create` vouched for under that key, and from then
+  on signs that workspace's list with its organisation identity. It does not sync the workspace into a folder unless
+  it also joins it.
+- **The overview** (`org_overview`) shows every workspace with what its member list says (people, devices, roles) and
+  whether every organisation admin is an admin of it (Managed, else Not managed), and every person across the
+  workspaces, grouped by a device or a verified email two lists share. An email is verified when an admin signed it
+  on the person, or when the device's own `person` entry carries the address its SSO login proved at the join (the
+  email on its record, `vault.json`). An address a device signed for itself without that is only its word: the person
+  shows it with Email not verified (`unverified` in `org_overview`) and is grouped with nobody by it, so a device
+  cannot join another person's row by claiming their address. The list keeps which persons named themselves
+  (`self_named`), an admin's `person` entry for the same person clears that. The server reads only the lists, its own
+  device names and, for this check, the SSO email on a member's record.
+- **Offboarding in one step.** Offboard on a person signs, in every workspace this Mac is admin of, a `person-remove`
+  for the person that holds any of their devices, or a `remove` for a device under no person, then runs the key step
+  so the key changes at once. Then `org_revoke` takes the devices off the server: they connect nowhere any more. The
+  server revokes only devices that came in through a workspace: a fully paired device (the owner's, another
+  organisation admin's, or a phone linked to one) is refused, so an organisation admin cannot cut the owner off their
+  own server. Such a device is still off the workspaces, the result says it was not revoked and why, and the server's
+  owner revokes it with `relay-server revoke`. A
+  workspace where this Mac is no admin keeps the person, which the confirm and the result say, with what to do (ask an
+  admin there, or have them add the organisation admins). An organisation admin is offboarded only after it left the
+  organisation.
+- **What it means.** An organisation admin is an admin of every workspace it manages, so it reads it. Settings says so
+  where the role is given. A consultancy wants exactly that. A team that does not, has no organisation or does not
+  add it to a workspace.
+- **Making an Entra ID app registration** (none exists for Relay, the organisation makes its own, and this is written from
+  Microsoft's docs, not tried against a real tenant yet, and the names of portal screens and fields are not checked
+  against the current portal): in the Microsoft Entra admin center, App registrations › New
+  registration, accounts in this organizational directory only. Under Authentication add the platform "Mobile and
+  desktop applications" ([redirect URIs](https://learn.microsoft.com/en-us/entra/identity-platform/reply-url): that is
+  the platform for "an app that runs natively on a mobile device or desktop machine") with the redirect URI
+  `http://localhost`. Microsoft ignores the port of a localhost redirect URI ("the port component ... is ignored for
+  the purposes of matching a localhost redirect URI", same page), so Relay's random loopback port matches. The page
+  advises `127.0.0.1` over `localhost`, but the portal only takes an http `127.0.0.1` URI through the manifest and the
+  page does not say its port is ignored, so Relay sends `localhost` for Entra. Copy the Application (client) ID into
+  Client ID and the Directory (tenant) ID into Tenant ID. No client secret: "Public clients ... must not use secrets
+  or certificates when redeeming an authorization code"
+  ([authorization code flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow)).
+  "Allow public client flows" is not verified: one Microsoft page says a registration with redirect URIs needs a public
+  client flow configuration, another lists only device code, ROPC, Windows Integrated Auth and Native Authentication
+  as needing it. If the token step answers that a client secret is required, turn it on. The scopes Relay asks
+  (`openid email profile`) need no admin consent as far as these pages say, also not verified.
+- **Compatibility.** A relay-server from before answers `unknown request` to `org_*`, and refuses an `add` of a device
+  that never joined. A Relay from before reads a workspace with an organisation admin as any list with one more admin
+  (it is a plain `add`), and never sees the organisation list.
+
+## SSO
+
+A server's organisation can make joining a workspace there go through a sign-in with an OpenID Connect provider:
+Google, Microsoft Entra ID (one tenant), or another issuer through the same check. It is a gate on
+joining, on top of the device model: keys stay per device, an invite link is still needed, and the server grants
+itself nothing.
+
+- **The setting is signed.** An organisation admin sets it under Settings › Machines › Organisation › SSO for joining:
+  the provider (Google, Microsoft Entra ID with its tenant id, or another issuer URL), the OAuth client id, the email
+  domains allowed (none for Entra ID, below), and whether signing in is required. It goes on the organisation list as an `sso` entry this Mac signs (`members::check_org`), with the
+  same rules as every other entry: only an organisation admin signs one, an https issuer, a client id and one to 20
+  lower-case domains, each once. An Entra ID issuer is `https://login.microsoftonline.com/<tenant id>/v2.0` with
+  the tenant id as a lower-case GUID and no domains: never `common`, `organizations` or a domain name instead of the
+  id (the tenant's discovery document names the GUID issuer, so a domain name would fail its check), and never the
+  tenant of personal Microsoft accounts (`9188040d-6c67-4c5b-b112-36a304b66dad`), which anyone can sign in to. An
+  entry with every field empty turns it off, a newer one replaces the older. The
+  server cannot turn it on, off or wider: a changed field breaks the signature. A workspace's member list never takes
+  one. There is no client secret anywhere: the app is a public client with PKCE.
+- **Signing in.** The join form asks the link's server what to sign in with (`sso_info`, which a device not paired
+  yet may ask while an invite is open). The app checks that answer against the same rules before it opens anything,
+  then opens the system browser on the issuer's authorisation endpoint (from its discovery document): authorisation
+  code, PKCE S256, a fresh `state`, `scope=openid email profile`, `prompt=select_account`, `hd` as a hint when there
+  is one domain, and a `nonce`. The redirect comes back to a listener on `127.0.0.1` at a random port, the app checks
+  `state` (for Entra ID the redirect is `http://localhost:<port>`, below), swaps the code for tokens at the token endpoint with the code verifier and keeps the ID token in memory
+  for the join. Google no longer allows custom URI schemes for desktop apps, so the redirect is the loopback address,
+  not `relay://`.
+- **The nonce binds the token to the device.** It is `sha256("relay-sso:<server fp>:<device fp>:<salt>")`
+  (`org::sso_nonce`) with a fresh salt the join sends along. The server recomputes it from the TLS session's
+  certificate, so a token one device got never joins another.
+- **The server checks the token** at `vault_join` (`oidc.rs`), after the invite proof checks (a device without a good
+  proof never makes the server fetch anything) and before the invite is spent: RS256 against the issuer's keys (its
+  JWKS, found through its discovery document, which must name that issuer), `iss` (Google's with or without
+  `https://`), `aud` the client id (a list with `azp` that client), `exp` and `iat` within a minute of skew, the
+  `nonce`, `email_verified`, the email's domain in the list, and for Google `hd` equal to that domain (an address of
+  the domain on a personal Google account has no `hd`, and Google's docs say to check `hd` when access is limited to
+  a domain). Without a valid token a join is refused when SSO is required. When it is not, a join without one passes
+  and a bad one is still refused. The keys are fetched at most once a minute per issuer, used for an hour, and no
+  longer than two hours while the issuer cannot be reached: then joins fail closed.
+- **Entra ID: the tenant is the organisation.** For an Entra issuer the server checks the same signature, `iss`, `aud`,
+  `exp`, `iat` and `nonce`, then `tid` equal to the entry's tenant, and takes `oid` as who signed in. The `tid` check
+  is not redundant with `iss`: Entra's keys sign for every tenant (its common keys carry the templated issuer
+  `https://login.microsoftonline.com/{tenantid}/v2.0`), so a good signature says nothing of the tenant, and Microsoft
+  says to "always check that the `tid` in a token matches the tenant ID"
+  ([claims validation](https://learn.microsoft.com/en-us/entra/identity-platform/claims-validation)). A key whose
+  `issuer` names another issuer is not used. There is no domain list: Microsoft documents `email` as optional ("Your
+  app can request the email claim for managed users ... using the `email` optional claim"), and "This value isn't
+  guaranteed to be correct and is mutable over time. Never use it for authorization"
+  ([ID token claims reference](https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims-reference)).
+  `preferred_username` is mutable and "can't be used to make authorization decisions" (same page), and Entra sends
+  no `email_verified`. Microsoft's guidance is to "use the immutable claim values `tid` and `oid` as a combined key"
+  for granting access ([claims validation](https://learn.microsoft.com/en-us/entra/identity-platform/claims-validation)),
+  so the server does: the tenant is the gate, `oid` is the person, and `preferred_username` is shown, never trusted.
+  Guests the tenant invited sign in to it too, so they pass (telling them apart needs a claim not checked here).
+- **What the server keeps.** Never the token. On the joiner's record (`vault.json`) the verified email, the name from
+  the token and when, which an admin sees, and for Entra ID the `oid` with `preferred_username` in place of the email.
+  Nothing is signed from it. Under Organisation › People an Entra login proves no address: it never marks an email as
+  verified and never groups people by one, but two devices with the same `oid` are one person.
+- **The email on the person.** Once the device is on the member list, its own Relay names itself as a new person with
+  the email and name its own login returned (a `person` entry it signs, kept in its key file as `sso` until then). A
+  server cannot put an address on anyone. A device that joins under an existing person (Add a device…) keeps that
+  person. A reader signs nothing but its leave, so it stays without one.
+- **Offboarding stays with the organisation admin.** A device that came in through SSO is not checked against the
+  directory again. Doing that without the user needs one of two things this design leaves out: a refresh token kept
+  for each person (Google's docs: a refresh token fails when "the user account may have been deleted or disabled",
+  [OAuth 2.0 for iOS & Desktop Apps](https://developers.google.com/identity/protocols/oauth2/native-app)), which the
+  server would have to store, or a silent sign-in with `prompt=none`, which "will return an error if the user is not
+  already authenticated" and needs that person's browser session
+  ([OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect)), which a server does not
+  have. So SSO is the gate on joining, and removing someone is Offboard (Organisation). Closing their account at the
+  provider stops new joins, not the devices that are in.
+- **Making a Google client** (none exists for Relay, the organisation makes its own): in the Google Cloud console of
+  the organisation's Google Workspace, register the app under Google Auth Platform (Branding, and the user type under
+  Audience), then Clients › Create client › Application type Desktop app, which needs nothing more
+  ([Manage OAuth Clients](https://support.google.com/cloud/answer/15549257)). Copy its client ID into SSO for joining with the Workspace's domain. Google's docs list the client secret as
+  optional for the token request of a desktop app, so Relay sends none. Not verified against a real client yet: if
+  Google asks for the secret, the token step fails with Google's message.
+- **Compatibility.** A relay-server from before answers `unknown request` to `sso_info` and ignores a token on a join.
+  A Relay from before refuses an organisation list with an `sso` entry (an unknown kind), so every organisation
+  admin's Relay needs this version before SSO is turned on. A Relay with Google SSO only refuses an organisation list
+with an Entra entry (no domains), so the same holds for Entra ID. A workspace's member list is unchanged.
+
+## Policy
+
+A workspace's policy is a `policy` entry on its member list, signed by an admin: `providers`, the agents allowed in it
+(from `members::POLICY_PROVIDERS`: `claude` and `codex`, each once, at least one), and `capture`, on or off (used by
+capture later). The newest one replaces the older. A policy by a member or reader, an unknown provider, none at all, or
+the fields on another kind of entry are refused.
+
+Every member's round takes the policy from the list and keeps it in the workspace's key file (`policy`), so a
+conversation started before the next round still follows it. A conversation or a terminal in that workspace starts
+only with an allowed provider (`policy::check_workspace_policy`, `err.workspace_policy`), and the composer greys out the
+others. Its admin picks the agents and capture in the workspace's settings, a member sees them there. A Relay from
+before refuses a list with a `policy` entry (an entry kind it does not know): every member updates first, as for
+people and readers. A relay-server from before refuses the entry too, so it never gets on a list there.
+
+## Without history
+
+A workspace made without history keeps what its members write, and no record of who wrote what. It is chosen once,
+when the workspace is made (New workspace › Workspace without history), and cannot be turned off: a workspace that
+had a history would keep it. Its row in Settings › Machines and the workspace menu say "Without history".
+
+- **The flag** is the member list's `nohistory` entry, right after `create` (Members, above). Every Mac checks it like
+  any entry. Once its Relay saw it, the Mac keeps `nohistory` in its key file, so a round that cannot check the list
+  (held back, a fork) still writes nothing that names it. The server reads it from the list and returns it in
+  `vault_info`, which a Mac takes as a floor before it checked the list (a server can only hide the flag that way,
+  never make a Mac write its name). The server reads it from entry 1 of the stored list for documents (above).
+- **Conflict copies name no Mac:** `Notes/A (conflict 2026-10-02 1530).md` instead of `Notes/A (conflict Studio Mac
+  2026-10-02 1530).md`.
+- **Documents by session.** Documents, live co-editing, comments, page history and cursors work as anywhere, and
+  nobody sees who did what. When a Mac opens such a workspace's documents it picks a random 16-hex session id, a new
+  one at every start of Relay, and seals its updates, comments and cursors under it instead of its device (the AAD
+  binds that id like any author). Its counter per document starts at 1 per session, and the gap check runs per
+  session. `doc_push` and every live frame carry the session id as `from`. The server keeps it in `<seq>.sid` and
+  relays it (pull, live stream, awareness), writes no `.from`, and refuses a push without one or with a member's
+  device in it (`this workspace keeps no record of who wrote what: update Relay to edit its documents`), and drops
+  such a frame. The first device to name a session holds it while the server runs, in memory only: another member's
+  push under it is refused (`another member's session`), its frames dropped.
+- **What the members see.** Page history lists each session as "Anonymous session" with its time, sessions of one
+  person are not linked. A comment's author is "Anonymous". A Mac keeps the session ids it wrote under
+  (`sessions.json` beside its documents, never synced), so its own comments stay its own after a restart, and a delete
+  of one is sealed as the session that wrote it (only an entry's own author deletes it). Cursors read "Anonymous",
+  coloured by the session id, and carry no name. Nobody is mentioned: comments name no member, the Inbox lists the
+  open threads on pages this Mac edited.
+- **`doc_bind`** still records the device that bound a name, on the server only (for `doc_unbind` and the 10 000 cap):
+  the manifest says `bound` and nothing else.
+- **What Relay writes into it.** The team starter's session protocol asks for no member's name in `Log.md`. Vault
+  capture follows the workspace's own rules and adds no author field. The starter's templates and hooks write no
+  author, computer or user name (`source-author` on a Reference is the source's author). Hooks do not run in a shared
+  workspace.
+
+**Reading it from other conversations.** A conversation is fenced to its own workspace, so one in a client's workspace
+cannot open the knowledge workspace's files. `relay knowledge.search query=… [workspace=…] [limit=…]` searches the
+workspaces without history this Mac is a member of (the `nohistory` in its key file, `shared_vaults::knowledge`), with
+the same note index as ⌘K (`related::passages`), and prints at most 20 passages, 10 by default:
+
+```json
+[{ "workspace": "Know-how", "path": "Notes/Rates.md", "passage": "The rate limit is 60 per minute", "score": 1.23 }]
+```
+
+That is all it gives: the path in the workspace, the workspace's name, the line with the hit and its rank. No title,
+no author, no session, no time, so the history the workspace does not keep does not come back through a search. It
+never reads the user's own vault or a workspace with history, also not when named in `workspace`. It only reads, it is
+`auto` like `reminders.list`, and the user changes that under Settings › Machines › Agent access or in `.relay/config.json`
+(`"knowledge": "ask"`). It runs only for a conversation the app runs: the caller is traced from the socket up to one of
+its agents, as for the user's own reads, so a process that only found the socket and named a running conversation
+gets nothing. On Windows the trace does not prove which conversation calls (the user's own reads are off there), but
+every conversation gets the same passages, so a traced call is enough. A conversation that runs in the knowledge
+workspace itself reads its files as any, the action works there too. Writing into it from elsewhere is not built.
+
+What it does not hide:
+
+- **The member list:** who is a member, with which role and devices, and who added whom. It is who may, not who did.
+- **The server** still knows the device behind each request (access control), logs a line per pairing or join, and
+  counts quota and rate limits per device.
+- **A small team is not anonymous.** With three members and one of them online, a change at 14:02 names that person.
+- **Copies outside Relay.** A member can keep their own git repo or backup of the folder. Relay does not sync it and
+  cannot prevent it.
+- **Content.** A note that says who wrote it is content, and Relay does not touch content.
+
+| Where a change could name a device | In a workspace with history | Without history |
+|---|---|---|
+| Records, `vault_put` and `vault_delete`, the live `files` frame | No writer | The same |
+| Conflict copies | The Mac's name and the minute | The minute |
+| Documents, page history, comments, cursors | The device per update | A random session id per start of Relay |
+| Member list, Members | Devices, people, roles, who added whom | The same |
+| Server: stderr, quota, rate limit | Per device | The same |
+| Starter session log | The member's name per entry | No names |
+
+What is weaker than with history, in documents:
+
+- **A session id is not authenticated.** The client chooses it. Any member holds the key and can seal under another
+  session's id. The server's in-memory claim stops another device from pushing under a session it saw first, until the
+  server restarts. Within the workspace this is accepted: a member can already write anything.
+- **The gap check is per session.** An update held back inside a session shows. A lost tail of a session (its last
+  updates, with nothing after them) does not. A document keeps the counters of its newest 256 sessions.
+- **Timestamps stay in the sealed meta.** Members could match them with who was online.
+- **The server** still sees the device behind each push at that moment, and keeps the session claim in memory.
+
+**Compatibility.** A Relay from before this refuses a list with a `nohistory` entry, as an unknown kind: every member
+updates before joining such a workspace. A Relay with the flag but without documents by session refuses a `docs-on`
+on it, so once an admin turns documents on, that Relay stops at the list and syncs nothing of it, and a server of
+that version refuses the `docs-on` itself. Should an older Relay still push, its push carries no session and the
+server refuses it, its frames are dropped. Workspaces with history are unchanged.
 
 ## Key rotation
 

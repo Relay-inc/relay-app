@@ -135,6 +135,18 @@ pub fn fence_in(app: &AppHandle, st: &App, eb: &mut EnvBuf) {
     if shared { eb.grants.fenced = true; }
 }
 
+/// A workspace's signed policy (docs/workspaces.md, Policy) at the start of a conversation in folder `dir`: a provider it
+/// does not allow is refused. The policy as the member list last said it, kept in the workspace's key file; no shared
+/// workspace at `dir`, or no policy, refuses nothing.
+pub fn check_workspace_policy(app: &AppHandle, st: &App, dir: &str, provider: &str) -> Result<(), String> {
+    let s = st.settings.lock().unwrap().clone();
+    let Some(v) = crate::shared_vaults::list(&s).into_iter().find(|v| v.folder == dir) else { return Ok(()) };
+    match crate::shared_vaults::load_key(&data_dir(app), &v.id).ok().and_then(|k| k.policy) {
+        Some(p) if !p.providers.iter().any(|x| x == provider) => Err(crate::trc("err.workspace_policy")),
+        _ => Ok(()),
+    }
+}
+
 /// Whether a conversation runs in another vault than the main one: what it reads of the user's own mail, reminders and
 /// calendar could end up in that vault. Its session records the vault at init, before any tool runs.
 pub fn in_shared_vault(st: &App, key: &str) -> bool { st.sids.lock().unwrap().get(key).is_some_and(|s| !s.vault.is_empty()) }

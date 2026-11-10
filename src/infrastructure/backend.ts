@@ -42,8 +42,14 @@ import type {
   Settings,
   SharedInfo,
   SharedInvite,
+  SharedPerson,
   SharedRole,
   SharedStatus,
+  OrgOffboard,
+  OrgOverview,
+  OrgStatus,
+  Sso,
+  SsoLogin,
 } from "../domain/settings/types";
 import type {
   ExtraVault,
@@ -140,9 +146,10 @@ export const readNote = (target: string) => invoke<unknown>("read_note", { targe
  *  `force`. Resolves to the new text's hash. */
 /** A note changed outside Relay: in a shared workspace, a document's file change becomes an edit of the document. */
 export const sharedDocAbsorb = (path: string, by: string) => invoke<void>("shared_doc_absorb", { path, by });
-/** A page's note as a shared document: its id, everything this Mac has of it (Yjs v1, base64), this device and the name
- *  its cursor shows; null when the note is no document (it is saved as a file). */
-export type SharedDoc = { vault: string; doc: string; state: string; me: string; name: string };
+/** A page's note as a shared document: its id, everything this Mac has of it (Yjs v1, base64), who this Mac writes as
+ *  and the name its cursor shows; null when the note is no document (it is saved as a file). `anonymous`: a workspace
+ *  without history, where `me` is this run's session and no cursor carries a name. */
+export type SharedDoc = { vault: string; doc: string; state: string; me: string; name: string; anonymous?: boolean };
 /** A version in a page's history: a document's session (`added`/`removed` lines against the one before) or a commit. */
 export type PageVersion = {
   key: string;
@@ -153,7 +160,8 @@ export type PageVersion = {
   added?: number;
   removed?: number;
 };
-export type PageHistory = { kind: "doc" | "git" | "none"; versions: PageVersion[] };
+/** `anonymous`: a workspace without history, its versions are sessions with no author. */
+export type PageHistory = { kind: "doc" | "git" | "none"; anonymous?: boolean; versions: PageVersion[] };
 export const pageHistory = (path: string) => invoke<PageHistory>("page_history", { path });
 export const pageRestore = (path: string, text: string) => invoke<void>("page_restore", { path, text });
 /** A page's comment threads (ticket 11): "doc" a shared document's (`doc` its id, every member's), "file" this Mac's. */
@@ -686,21 +694,41 @@ export const onVaultSync = (handler: (last: NonNullable<VaultSync["last"]>) => v
 export const sharedVaultsStatus = () => invoke<Record<string, SharedStatus>>("shared_vaults_status");
 export const onSharedVaults = (handler: (status: Record<string, SharedStatus>) => void) =>
   listen<Record<string, SharedStatus>>("shared-vaults", e => handler(e.payload));
-/** A new vault on a paired machine; `recovery` is its key (64 hex), shown again with `sharedVaultRecovery`. */
-export const sharedVaultCreate = (machine: string, name: string, folder: string) =>
-  invoke<{ id: string; recovery: string }>("shared_vault_create", { machine, name, folder });
+/** A new vault on a paired machine; `recovery` is its key (64 hex), shown again with `sharedVaultRecovery`.
+ *  `noHistory`: made without history, for good. */
+export const sharedVaultCreate = (machine: string, name: string, folder: string, noHistory = false) =>
+  invoke<{ id: string; recovery: string; org?: number | null; orgError?: string | null }>("shared_vault_create", {
+    machine,
+    name,
+    folder,
+    noHistory,
+  });
 /** Join with an invite link into an empty folder. */
-export const sharedVaultJoin = (link: string, folder: string) =>
-  invoke<{ id: string; name: string }>("shared_vault_join", { link, folder });
-export const sharedVaultInvite = (id: string, role: SharedRole) =>
-  invoke<{ link: string; invite: SharedInvite }>("shared_vault_invite", { id, role });
+export const sharedVaultJoin = (link: string, folder: string, sso: SsoLogin | null) =>
+  invoke<{ id: string; name: string }>("shared_vault_join", { link, folder, sso });
+// ---------- SSO before a join (src-tauri/src/sso.rs)
+/** What the invite link's server asks to sign in with, null for nothing. */
+export const ssoCheck = (link: string) => invoke<{ sso: Sso | null }>("sso_check", { link }).then(r => r.sso);
+/** Sign in in the browser for a join with `link`. */
+export const ssoLogin = (link: string) => invoke<SsoLogin>("sso_login", { link });
+export const ssoCancel = () => invoke("sso_cancel");
+/** With `who`, for a device of that person: a member may make one for its own person. */
+export const sharedVaultInvite = (id: string, role: SharedRole, who?: string) =>
+  invoke<{ link: string; invite: SharedInvite }>("shared_vault_invite", { id, role, who });
+/** Name a person (`who` "" a new one) and put device `fp` ("" none) under it: the people after it. */
+export const sharedVaultPerson = (id: string, who: string, name: string, email: string, fp: string) =>
+  invoke<SharedPerson[]>("shared_vault_person", { id, who, name, email, fp });
+/** Remove a person with all its devices: the people after it, or null when this Mac was one of them (it left). */
+export const sharedVaultRemovePerson = (id: string, who: string) =>
+  invoke<SharedPerson[] | null>("shared_vault_remove_person", { id, who });
 /** The vault's key as this Mac holds it (64 hex), for any member: what the create gave. */
 export const sharedVaultRecovery = (id: string) => invoke<string>("shared_vault_recovery", { id });
 /** An admin trusts a member's new key (they set up Relay again): this Mac pins what the member publishes now. */
 export const sharedVaultTrust = (id: string, fp: string) => invoke("shared_vault_trust", { id, fp });
 export const sharedVaultDocs = (id: string, on: boolean) => invoke("shared_vault_docs", { id, on });
 /** An admin makes a member an admin (`on`), or an admin a member again: a signed entry in the member list. */
-export const sharedVaultAdmin = (id: string, fp: string, on: boolean) => invoke("shared_vault_admin", { id, fp, on });
+export const sharedVaultRole = (id: string, fp: string, role: SharedRole) =>
+  invoke("shared_vault_role", { id, fp, role });
 /** An admin adds a member the server has and the member list lacks (a signed entry, as member). */
 export const sharedVaultAdd = (id: string, fp: string) => invoke("shared_vault_add", { id, fp });
 export const sharedVaultInfo = (id: string) => invoke<SharedInfo>("shared_vault_info", { id });
@@ -708,6 +736,24 @@ export const sharedVaultInviteRevoke = (id: string, invite: string) =>
   invoke("shared_vault_invite_revoke", { id, invite });
 /** Remove a member, or leave the vault with this Mac's own fingerprint (the folder stays). */
 export const sharedVaultRemove = (id: string, fp: string) => invoke("shared_vault_remove", { id, fp });
+/** An admin sets the workspace's policy: the agent providers allowed and capture (a signed entry in the member list). */
+export const sharedVaultPolicy = (id: string, providers: string[], capture: boolean) =>
+  invoke("shared_vault_policy", { id, providers, capture });
+/** An admin makes the server's organisation admins admins of the workspace: how many changed. */
+export const sharedVaultAddOrg = (id: string) => invoke<number>("shared_vault_add_org", { id });
+
+// ---------- the organisation of a machine's server (src-tauri/src/organisation.rs)
+export const orgStatus = (machine: string) => invoke<OrgStatus>("org_status", { machine });
+export const orgStart = (machine: string) => invoke("org_start", { machine });
+export const orgOverview = (machine: string) => invoke<OrgOverview>("org_overview", { machine });
+/** Add a device as organisation admin, with the code the user compared on both Macs. */
+export const orgAddAdmin = (machine: string, fp: string, code: string) =>
+  invoke("org_add_admin", { machine, fp, code });
+export const orgRemoveAdmin = (machine: string, fp: string) => invoke("org_remove_admin", { machine, fp });
+/** One person's devices off every workspace this Mac is admin of, then revoked on the server. */
+/** Set the server's SSO on its organisation list, or turn it off with null. */
+export const orgSso = (machine: string, sso: Sso | null) => invoke("org_sso", { machine, sso });
+export const orgOffboard = (machine: string, fps: string[]) => invoke<OrgOffboard>("org_offboard", { machine, fps });
 /** The held deletes of a vault the user saw (`paths`): through in its next round, or the files put back. */
 export const sharedVaultHeld = (id: string, allow: boolean, paths: string[]) =>
   invoke("shared_vault_held", { id, allow, paths });

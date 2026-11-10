@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-member-dark|shared-keeper|shared-live|shared-live-dark, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-member-dark|shared-keeper|shared-people|shared-readers|shared-reader|shared-live|shared-live-dark|shared-nohistory|shared-org|shared-windows, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened),
 // ?platform=windows (the app as it runs on Windows).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
@@ -75,24 +75,46 @@ settings = { ...settings, experimental: { files: fixture !== "files-off" } };
 // which Members (shared_vault_info) finds: the backend then keeps the server under Machines
 // shared-member-dark: shared-member in the dark theme (the vault check's member view, issue 425)
 const member = fixture === "shared-member" || fixture === "shared-member-dark" || fixture === "shared-keeper";
+// shared-people: the member list has people, one with two Macs (vault.sharedPeople). shared-readers: the same, the
+// Design laptop a reader. shared-reader: this Mac only reads the vault (vault.readerVaults), two changes in its folder
+// left out of its rounds
+const reader = fixture === "shared-reader";
+const people = fixture === "shared-people" || fixture === "shared-readers";
 // shared-rekey: someone left the vault, and the key change waits for a member whose Relay has no public key yet
 // shared-live (-dark): "shared", and a page of the side vault is a shared document two mock peers edit (ticket 9)
 const live = fixture === "shared-live" || fixture === "shared-live-dark";
+// shared-nohistory: "shared", the workspace Northwind made without history (its member list's `nohistory`): its
+// conflict copy names no Mac
+const noHistory = fixture === "shared-nohistory";
+// shared-org: "shared" on a full machine (not for workspaces only) whose server has an organisation, this Mac one of
+// its admins: Organisation under the machine (docs/workspaces.md, Organisation), Northwind's policy Claude Code only
+const org = fixture === "shared-org";
+// an invite link opened Relay; "shared-invite-entra": its server asks Microsoft Entra ID (PR Entra ID) instead of Google
+const invite = fixture === "shared-invite" || fixture === "shared-invite-entra";
 const shared =
   fixture === "shared" ||
+  org ||
+  noHistory ||
   fixture === "kb-shared" ||
-  fixture === "shared-invite" ||
+  invite ||
   fixture === "shared-rekey" ||
   fixture === "shared-unlisted" ||
   fixture === "shared-windows" ||
+  people ||
+  reader ||
   member ||
   live;
 if (shared)
   settings = {
     ...settings,
     extraVaults: [vault.TEAM_VAULT],
-    machines: member ? [] : structuredClone(vault.hubMachines),
-    sharedVaults: structuredClone(member ? vault.memberVaults : vault.sharedVaults),
+    machines:
+      member || reader
+        ? []
+        : org
+          ? vault.hubMachines.map(m => ({ ...m, sharedOnly: false }))
+          : structuredClone(vault.hubMachines),
+    sharedVaults: structuredClone(reader ? vault.readerVaults : member ? vault.memberVaults : vault.sharedVaults),
   };
 // buddy: Buddy switched on, the first project linked to a Buddy project (fixtures/integrations buddy)
 if (fixture === "buddy")
@@ -139,11 +161,44 @@ for (const s of Object.values(sharedStatus).slice(0, 1)) {
   s.listed = vault.sharedMembers
     .map(m => m.fp)
     .filter(fp => fixture !== "shared-unlisted" || fp !== vault.sharedMembers[2].fp);
+  s.readers = fixture === "shared-readers" ? [vault.sharedMembers[2].fp] : reader ? [vault.SHARED_ME] : [];
+  if (reader)
+    Object.assign(s, {
+      admin: false,
+      admins: s.admins.filter((fp: string) => fp !== vault.SHARED_ME),
+      reader: true,
+      unsent: 2,
+      pushed: 0,
+      conflicts: [],
+      held: [],
+    });
 }
 // shared-windows: a round on Windows left out two files Windows cannot name and a pair that differs in case only
 if (fixture === "shared-windows")
   for (const s of Object.values(sharedStatus))
     Object.assign(s, { names: ["Notes/Q&A: pricing.md", "Notes/aux.md", "Notes/Plan.md", "Notes/plan.md"], held: [] });
+if (org) for (const s of Object.values(sharedStatus)) s.policy = { providers: ["claude"], capture: false };
+let orgState = structuredClone(vault.organisation);
+// the server's SSO (src-tauri organisation.rs org_sso): none until Turn on
+let orgSso: unknown = null;
+// what an invite link's server asks to sign in with (src-tauri sso.rs): Google, required, on "shared-invite", an
+// Entra ID tenant without domains on "shared-invite-entra"
+const inviteSso =
+  fixture === "shared-invite-entra"
+    ? {
+        issuer: "https://login.microsoftonline.com/11111111-2222-3333-4444-555555555555/v2.0",
+        client: "00000000-aaaa-bbbb-cccc-111111111111",
+        domains: [],
+        required: true,
+      }
+    : fixture === "shared-invite"
+      ? {
+          issuer: "https://accounts.google.com",
+          client: "123-example.apps.googleusercontent.com",
+          domains: ["example.com"],
+          required: true,
+        }
+      : null;
 if (fixture === "shared-rekey")
   for (const s of Object.values(sharedStatus))
     Object.assign(s, {
@@ -153,9 +208,26 @@ if (fixture === "shared-rekey")
       held: [],
       conflicts: [],
     });
-let sharedMembers = structuredClone(vault.sharedMembers);
+let sharedMembers = structuredClone(vault.sharedMembers).map(m => ({
+  ...m,
+  role:
+    (fixture === "shared-readers" && m.fp === vault.sharedMembers[2].fp) || (reader && m.fp === vault.SHARED_ME)
+      ? "reader"
+      : m.role,
+}));
+// the member list's people, as the server reads it and this Mac's round checked it (one list here)
+let sharedPeople: { who: string; name: string; email: string; devices: string[] }[] = people
+  ? structuredClone(vault.sharedPeople)
+  : [];
+for (const s of Object.values(sharedStatus).slice(0, 1)) s.people = sharedPeople;
+if (noHistory)
+  for (const s of Object.values(sharedStatus).slice(0, 1))
+    Object.assign(s, {
+      nohistory: true,
+      conflicts: s.conflicts.map((c: string) => c.replace(/\(conflict [^)]*? (\d{4}-)/, "(conflict $1")),
+    });
 let sharedInvites = [{ id: "4d2e8a1b6c3f9e70", role: "member", expires: Math.floor(Date.now() / 1000) + 20 * 3600 }];
-let pendingInvite: string | null = fixture === "shared-invite" ? vault.inviteLink("b81c0e5f2a7d3946") : null;
+let pendingInvite: string | null = invite ? vault.inviteLink("b81c0e5f2a7d3946") : null;
 const hex = (n: number, seed: number) =>
   Array.from({ length: n }, (_, i) => ((i * 7 + seed) % 16).toString(16)).join("");
 // the orchestrator's workers (fixture "orch"), changed by orch_stop
@@ -428,6 +500,18 @@ function handle(cmd: string, a: Args): unknown {
         ...(settings.sharedVaults ?? []),
         { id, name: a.name.trim(), host, port, fp, folder: a.folder, role: "admin" },
       ];
+      if (a.noHistory)
+        sharedStatus[id] = {
+          at: Math.floor(Date.now() / 1000),
+          pushed: 0,
+          pulled: 0,
+          conflicts: [],
+          errors: [],
+          held: [],
+          bad: 0,
+          admin: true,
+          nohistory: true,
+        };
       return { id, recovery: hex(64, 5) };
     }
     // the key this Mac holds, the same one `shared_vault_create` gave
@@ -467,10 +551,86 @@ function handle(cmd: string, a: Args): unknown {
       }
       const invites = v.role === "admin" ? structuredClone(sharedInvites) : [];
       return {
-        vault: { id: v.id, name: v.name, role: v.role, members: structuredClone(sharedMembers), invites },
+        vault: {
+          id: v.id,
+          name: v.name,
+          role: v.role,
+          members: structuredClone(sharedMembers),
+          people: structuredClone(sharedPeople),
+          invites,
+        },
         me: vault.SHARED_ME,
       };
     }
+    // the organisation of a machine's server (src-tauri/src/organisation.rs), fixture "shared-org"
+    case "org_status":
+      return org
+        ? {
+            exists: true,
+            me: true,
+            owner: true,
+            code: vault.ORG_CODE,
+            admins: orgState.admins.map((x: { fp: string }) => x.fp),
+            sso: orgSso,
+          }
+        : { exists: false, me: false, owner: true, code: vault.ORG_CODE, admins: [] };
+    case "org_overview":
+      return structuredClone(orgState);
+    case "org_add_admin": {
+      const c = orgState.candidates.find((x: { fp: string }) => x.fp === a.fp);
+      if (!c || c.code !== a.code) return Promise.reject("the device's keys changed since you compared the code");
+      orgState.candidates = orgState.candidates.filter((x: { fp: string }) => x.fp !== a.fp);
+      orgState.admins = [...orgState.admins, { fp: c.fp, name: c.name }];
+      return null;
+    }
+    case "org_remove_admin":
+      orgState.admins = orgState.admins.filter((x: { fp: string }) => x.fp !== a.fp);
+      return null;
+    case "org_start":
+      return null;
+    case "org_sso":
+      orgSso = a.sso;
+      return null;
+    case "sso_check":
+      return { sso: inviteSso };
+    // the browser's sign-in, as if it came back after a moment
+    case "sso_login":
+      return new Promise(r => setTimeout(r, 300)).then(() => ({
+        id_token: "eyJ.harness.token",
+        salt: hex(64, 7),
+        email: "sofie.claes@example.com",
+        name: "Sofie Claes",
+      }));
+    case "sso_cancel":
+      return null;
+    case "org_offboard": {
+      const hit = (w: { members: { fp: string }[] }) => w.members.some(m => a.fps.includes(m.fp));
+      const removed = orgState.workspaces.filter((w: any) => hit(w) && w.admin).map((w: any) => w.name);
+      const skipped = orgState.workspaces.filter((w: any) => hit(w) && !w.admin).map((w: any) => w.name);
+      for (const w of orgState.workspaces)
+        if (w.admin) w.members = w.members.filter((m: { fp: string }) => !a.fps.includes(m.fp));
+      orgState.people = orgState.people
+        .map((p: any) => ({
+          ...p,
+          workspaces: p.workspaces.filter(
+            (w: any) => !removed.includes(w.name) || !p.devices.some((d: any) => a.fps.includes(d.fp)),
+          ),
+        }))
+        .filter((p: any) => !p.devices.every((d: any) => a.fps.includes(d.fp)) || p.workspaces.length);
+      // a fully paired device: the server refuses the revoke (org.rs), the workspaces are done
+      const full = a.fps.some((f: string) => vault.ORG_FULL.includes(f));
+      const unrevoked = full
+        ? "a fully paired device, not one that came in through a workspace: only the server's owner revokes it (relay-server revoke)"
+        : null;
+      return { removed, skipped, failed: [], revoked: full ? 0 : a.fps.length, unrevoked };
+    }
+    case "shared_vault_policy": {
+      const s = sharedStatus[a.id];
+      if (s) s.policy = { providers: a.providers, capture: a.capture };
+      return null;
+    }
+    case "shared_vault_add_org":
+      return 0;
     case "shared_vault_invite_revoke":
       sharedInvites = sharedInvites.filter(i => i.id !== a.invite);
       return null;
@@ -744,11 +904,12 @@ function handle(cmd: string, a: Args): unknown {
       const at = Date.now();
       return {
         kind: "doc",
+        ...(anonymousDocs ? { anonymous: true } : {}),
         versions: [
           { key: "9", author: "Ana Vos", by: ["claude"], at: at - 20 * 60_000, text: now, added: 3, removed: 0 },
           { key: "6", author: "Ben Lauwers", by: [""], at: at - 3 * 3600_000, text: cut(3), added: 4, removed: 1 },
           { key: "2", author: "Ana Vos", by: ["disk"], at: at - 2 * 86_400_000, text: cut(7), added: 12, removed: 0 },
-        ],
+        ].map(v => (anonymousDocs ? { ...v, author: "" } : v)),
       };
     }
     case "page_comments": {
@@ -791,6 +952,14 @@ function handle(cmd: string, a: Args): unknown {
         ]);
       }
       const threads = threadsOf(comments.get(path)!);
+      if (anonymousDocs)
+        return {
+          kind: "doc",
+          doc: "d1",
+          anonymous: true,
+          members: [],
+          threads: threads.map(t => ({ ...unnamed(t), replies: t.replies.map(unnamed) })),
+        };
       return teamComments ? { kind: "doc", doc: "d1", members: MEMBERS, threads } : { kind: "file", threads };
     }
     case "workspace_inbox":
@@ -831,12 +1000,42 @@ function handle(cmd: string, a: Args): unknown {
       lastSaved = String(a.target);
       return { hash };
     }
-    case "shared_vault_admin": {
-      // an admin's Make admin / Make member: the member list, and the server's role that follows it
+    case "shared_vault_role": {
+      // an admin picks a member's role: the member list, and the server's role that follows it
       const s = sharedStatus[a.id];
-      if (s?.admins) s.admins = a.on ? [...s.admins, a.fp] : s.admins.filter((fp: string) => fp !== a.fp);
-      sharedMembers = sharedMembers.map(m => (m.fp === a.fp ? { ...m, role: a.on ? "admin" : "member" } : m));
+      if (s?.admins)
+        s.admins = [...s.admins.filter((fp: string) => fp !== a.fp), ...(a.role === "admin" ? [a.fp] : [])];
+      if (s?.readers)
+        s.readers = [...s.readers.filter((fp: string) => fp !== a.fp), ...(a.role === "reader" ? [a.fp] : [])];
+      sharedMembers = sharedMembers.map(m => (m.fp === a.fp ? { ...m, role: a.role } : m));
       return null;
+    }
+    case "shared_vault_person": {
+      // a person named or renamed (who "" a new one), and the device fp put under it
+      const who = a.who || hex(64, sharedPeople.length + 1);
+      const rest = sharedPeople
+        .filter(p => p.who !== who)
+        .map(p => ({ ...p, devices: p.devices.filter(fp => fp !== a.fp) }));
+      const was = sharedPeople.find(p => p.who === who);
+      const devices = [...(was?.devices ?? []), ...(a.fp && !was?.devices.includes(a.fp) ? [a.fp] : [])];
+      sharedPeople = [...rest, { who, name: a.name, email: a.email, devices }];
+      const s = sharedStatus[a.id];
+      if (s) s.people = sharedPeople;
+      return structuredClone(sharedPeople);
+    }
+    case "shared_vault_remove_person": {
+      // the person with every device under it, null when this Mac was one of them (it left)
+      const gone = sharedPeople.find(p => p.who === a.who)?.devices ?? [];
+      sharedPeople = sharedPeople.filter(p => p.who !== a.who);
+      if (gone.includes(vault.SHARED_ME)) {
+        settings.sharedVaults = (settings.sharedVaults ?? []).filter((x: { id: string }) => x.id !== a.id);
+        delete sharedStatus[a.id];
+        return null;
+      }
+      sharedMembers = sharedMembers.filter(m => !gone.includes(m.fp));
+      const s = sharedStatus[a.id];
+      if (s) s.people = sharedPeople;
+      return structuredClone(sharedPeople);
     }
     case "shared_vault_add": {
       // an admin's Add to list: the member is on the member list now, as member
@@ -854,7 +1053,9 @@ function handle(cmd: string, a: Args): unknown {
       // shared-live: an absolute page (another workspace's note) is a document, seeded once from the note's text
       if (!live || !String(a.path).startsWith("/")) return null;
       if (!liveDoc.getText("md").length) liveDoc.getText("md").insert(0, vault.noteText(String(a.path)).text);
-      return { vault: "v1", doc: "d1", state: b64(Y.encodeStateAsUpdate(liveDoc)), me: "me", name: "Alex" };
+      const state = b64(Y.encodeStateAsUpdate(liveDoc));
+      if (anonymousDocs) return { vault: "v1", doc: "d1", state, me: "5e55105e55105e55", name: "", anonymous: true };
+      return { vault: "v1", doc: "d1", state, me: "me", name: "Alex" };
     }
     case "shared_doc_edit":
       Y.applyUpdate(liveDoc, unb64(String(a.update)), "editor");
@@ -2092,6 +2293,10 @@ type Comment = {
 const comments = new Map<string, Comment[]>(); // a page's comment entries (ticket 11), by its path
 // ticket 12: pages read as a team workspace's documents (members to mention, an Inbox), set with __harness.teamComments
 let teamComments = false;
+// a workspace without history (K1b): its documents' history, comments and cursors name no one, set with
+// __harness.anonymousDocs
+let anonymousDocs = false;
+const unnamed = <T extends { by: string }>(c: T) => ({ ...c, by: "" });
 const ME = "aaaaaaaaaaaaaaaa";
 const MEMBERS = [
   { fp: "bbbbbbbbbbbbbbbb", name: "Ben Lauwers" },
@@ -2314,6 +2519,7 @@ const harness = {
   /** someone changed a note on disk: the next save without force is refused */
   changeOnDisk: () => void (diskChanged = true),
   teamComments: () => void (teamComments = true),
+  anonymousDocs: () => void (anonymousDocs = true),
   // the page last read changed outside Relay: its text through `edit`, then the file watcher's event (watch.rs)
   editOutside: (find: string, put: string) => {
     const now = written.get(lastPage)?.text ?? vault.noteText(lastPage).text;

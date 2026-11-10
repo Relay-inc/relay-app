@@ -27,6 +27,7 @@ import {
   machineChoice,
   machineRepo,
   sharedVault,
+  sharedPolicy,
   vaultChoice,
 } from "../../../application/conversations/selectors";
 import {
@@ -224,6 +225,7 @@ export function Composer({ className }: { className: string }) {
   const hasChat = useConversationsStore(s => !!s.chats[selected]);
   const where = useDerived(() => machineChoice(selected));
   const inShared = useDerived(() => sharedVault(selected));
+  const policy = useDerived(() => sharedPolicy(selected));
   // which vault a new conversation runs in: its project's, else the one picked
   const vaults = useDerived(() => vaultChoice(selected));
   // the repo the agent gets on that machine, next to the pick
@@ -488,7 +490,8 @@ export function Composer({ className }: { className: string }) {
                 options={view.agents.map(option => ({
                   ...option,
                   icon: glyphOf(option.id),
-                  disabled: !!inShared && option.id !== "claude",
+                  // and its signed policy's agents only (docs/workspaces.md, Policy)
+                  disabled: (!!inShared && option.id !== "claude") || (!!policy && !policy.includes(option.id)),
                 }))}
                 value={view.agentId}
                 label={t("composer.agent")}

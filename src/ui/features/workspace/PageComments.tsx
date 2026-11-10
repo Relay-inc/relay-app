@@ -210,7 +210,7 @@ function Thread({
       {[thread, ...thread.replies].map(c => (
         <div key={c.id} className="flex flex-col gap-0.5">
           <div className="flex items-center gap-2 text-xs">
-            <span className="font-medium text-label truncate">{c.by}</span>
+            <span className="font-medium text-label truncate">{c.by || t("page.anonymous")}</span>
             <span className="flex-1 text-tertiary">{agoOf(c.at, t)}</span>
             {c.mine ? (
               <button className="text-tertiary hover:text-late cursor-default" onClick={() => void act("delete", c.id)}>

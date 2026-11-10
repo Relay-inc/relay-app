@@ -20,6 +20,7 @@ export function PageTop({
   project,
   title,
   yaml,
+  readOnly,
   onChange,
   children,
 }: {
@@ -27,6 +28,8 @@ export function PageTop({
   project?: ProjectIcon;
   title: string;
   yaml: string;
+  /** A reader's page: no Add icon, Add cover or Change cover. */
+  readOnly?: boolean;
   onChange: (yaml: string) => void;
   children?: ReactNode;
 }) {
@@ -53,17 +56,19 @@ export function PageTop({
     <div className="group/top relative flex flex-col gap-3">
       {src ? (
         <Cover src={src}>
-          <button
-            className="h-6.5 px-2.5 rounded-md bg-raised text-xs text-label shadow-sm"
-            aria-expanded={open === "cover"}
-            onClick={() => setOpen(open === "cover" ? null : "cover")}
-          >
-            {t("header.changeCover")}
-          </button>
+          {readOnly ? null : (
+            <button
+              className="h-6.5 px-2.5 rounded-md bg-raised text-xs text-label shadow-sm"
+              aria-expanded={open === "cover"}
+              onClick={() => setOpen(open === "cover" ? null : "cover")}
+            >
+              {t("header.changeCover")}
+            </button>
+          )}
           {coverPopover("right-0")}
         </Cover>
       ) : null}
-      {!own || !src ? (
+      {!readOnly && (!own || !src) ? (
         <div
           className={`absolute left-0 -top-8 h-6 flex items-center gap-1 text-xs text-tertiary transition-opacity ${
             open ? "opacity-100" : "opacity-0 group-hover/top:opacity-100 focus-within:opacity-100"

@@ -15,6 +15,8 @@ cd "$(dirname "$0")/.."
 version=$(node -p 'require("./package.json").version')
 cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 [ "$version" = "$cargo" ] || { echo "package.json is $version, Cargo.toml is $cargo" >&2; exit 1; }
+# the install recipe (docs/relay-server.md) pins the image of this release
+grep -q "ghcr.io/relay-inc/relay-server:$version}" deploy/relay-server/compose.yml || { echo "set the image tag in deploy/relay-server/compose.yml to $version" >&2; exit 1; }
 # the release must be main as it is on GitHub, nothing more and nothing less
 [ "$(git rev-parse --abbrev-ref HEAD)" = main ] || { echo "release from main (git checkout main)" >&2; exit 1; }
 [ -z "$(git status --porcelain)" ] || { echo "the checkout has changes" >&2; exit 1; }

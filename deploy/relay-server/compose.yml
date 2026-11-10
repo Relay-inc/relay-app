@@ -1,0 +1,34 @@
+# relay-server on a Linux box with Docker: docs/relay-server.md. Settings go in .env next to this file (.env.example).
+# Everything the server keeps (its certificate, the paired devices, the workspaces, Claude's login, the repos) lives in
+# the one volume `relay`, so a backup is that volume (backup.sh) and a new image keeps it.
+name: relay-server
+services:
+  relay-server:
+    # the same version as the Relay apps that use it, never `latest`: scripts/release.sh checks this tag
+    image: ${RELAY_SERVER_IMAGE:-ghcr.io/relay-inc/relay-server:0.0.49}
+    # the name Relay shows for this machine
+    hostname: ${RELAY_HOST:-relay-server}
+    ports:
+      - "${RELAY_PORT:-47800}:47800"
+    volumes:
+      - relay:/home/relay
+    # the mirror's working copy (plain text while a laptop has it unlocked) in RAM, never on the volume
+    tmpfs:
+      - /home/relay/work:uid=1000,gid=1000,mode=0700,size=${RELAY_WORK_SIZE:-2g}
+    restart: unless-stopped
+    healthcheck:
+      # a TLS handshake with the server's own certificate and one request (relay-server health)
+      test: ["CMD", "relay-server", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # the first start installs Claude Code before the server listens
+      start_period: 3m
+      start_interval: 2s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+volumes:
+  relay:

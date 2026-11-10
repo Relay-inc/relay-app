@@ -77,6 +77,9 @@ the repos in another folder (for example `~/repos`), or give `relay-server` Full
 
 ## In Docker (a Linux server, Unraid, or a Mac with Docker Desktop)
 
+For a server others rely on (a team's workspaces), the compose recipe with healthcheck, backup and restore is in
+[docs/relay-server.md](../../docs/relay-server.md).
+
 Every Relay release also gets `ghcr.io/relay-inc/relay-server` for amd64 and arm64 (`scripts/push-server-image.sh`,
 run on a Mac after the release), tagged with the same version (`:latest` is the newest), so a server and an app of the same version speak the same protocol. Claude Code is not in the
 image: the first start installs it with Anthropic's installer into the `.local` volume, where its own updates stay.

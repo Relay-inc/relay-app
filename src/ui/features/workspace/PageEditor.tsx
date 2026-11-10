@@ -216,6 +216,7 @@ function Editor(props: {
     void loadRows();
   }, []);
   const label = t("page.editor");
+  const anonymous = t("page.anonymous"); // a cursor on a workspace without history
   const [by] = useState(() => ({
     relay: t("page.updatedLinks"),
     claude: t("page.updatedByClaude"),
@@ -540,7 +541,8 @@ function Editor(props: {
           }
         });
         hooks.current?.onEdited(); // anchors on the document can be found now
-        sp.peers(peers => {
+        sp.peers(found => {
+          const peers = found.map(p => (p.name ? p : { ...p, name: anonymous }));
           onPeers?.(peers);
           const end = view.state.doc.length;
           const marks = peers.flatMap(p => {
@@ -570,6 +572,6 @@ function Editor(props: {
       void write(); // leaving the page saves what was typed
       view.destroy();
     };
-  }, [first, label, words, by, format]);
+  }, [first, label, anonymous, words, by, format]);
   return <div ref={host} className="page-editor" />;
 }
