@@ -492,7 +492,8 @@ export function Composer({ className }: { className: string }) {
                   ...option,
                   icon: glyphOf(option.id),
                   // and its signed policy's agents only (docs/workspaces.md, Policy)
-                  disabled: (!!inShared && !FENCED_AGENTS.includes(option.id)) || (!!policy && !policy.includes(option.id)),
+                  disabled:
+                    (!!inShared && !FENCED_AGENTS.includes(option.id)) || (!!policy && !policy.includes(option.id)),
                 }))}
                 value={view.agentId}
                 label={t("composer.agent")}

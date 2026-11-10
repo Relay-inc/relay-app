@@ -1,4 +1,4 @@
-import { FENCED_AGENTS } from "../agents/rules";
+import { FENCED_AGENTS } from "../agents/rules.ts";
 import type { BoardRef } from "../board/types";
 import type { BuddyRef } from "../buddy/rules";
 import type { VoiceCfg } from "./voice";
