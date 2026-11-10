@@ -1071,6 +1071,18 @@ const VIEWS = {
     await click("Current cycle");
     await waitText("Cycle 42");
   },
+  // an organization's GitHub project as a board, its Status options as columns, and its Integrations page (PR github-projects)
+  "board-github-projects": async () => {
+    await open(page, server.url, { fixture: "ghprojects" });
+    await click("GitHub Projects");
+    await waitText("GitHub Projects as board");
+  },
+  "board-github-projects-picker": async () => {
+    await VIEWS["board-github-projects"]();
+    await click("Billing roadmap");
+    await waitText("Website");
+  },
+  "settings-integration-github-projects": () => settingsPage("Integrations", "GitHub Projects", "ghprojects"),
   // a project's Buddy pipelines in its title bar, the menu open: failed, running and passed, each with its last run (PR buddy)
   "buddy-menu": async () => {
     await open(page, server.url, { fixture: "buddy", sel: keys.switchTo });

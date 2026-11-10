@@ -1,0 +1,5 @@
+{ "data": { "node": { "items": { "nodes": [
+  { "id": "PVTI_4", "isArchived": false, "fieldValueByName": { "optionId": "aa03" },
+    "content": { "__typename": "PullRequest", "number": 490, "title": "Add the board", "url": "https://github.com/acme/app/pull/490", "state": "MERGED",
+      "assignees": { "nodes": [{ "login": "jdoe", "name": null }] }, "labels": { "nodes": [] } } }
+], "pageInfo": { "hasNextPage": false, "endCursor": null } } } } }

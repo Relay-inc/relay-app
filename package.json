@@ -28,6 +28,7 @@
     "@relay/agent-opencode": "workspace:*",
     "@relay/agent-pi": "workspace:*",
     "@relay/board-core": "workspace:*",
+    "@relay/integration-github-projects": "workspace:*",
     "@relay/integration-linear": "workspace:*",
     "@relay/integration-productive": "workspace:*",
     "@relay/integration-trello": "workspace:*",
