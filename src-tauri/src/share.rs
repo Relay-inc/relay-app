@@ -30,7 +30,7 @@ fn with<T>(app: &AppHandle, f: impl FnOnce(&mut File) -> T) -> T {
 fn update<T>(app: &AppHandle, f: impl FnOnce(&mut File) -> T) -> T {
     with(app, |file| {
         let out = f(file);
-        use std::os::unix::fs::OpenOptionsExt;
+        use crate::platform::OpenOptionsExt;
         let (p, tmp) = (path(app), path(app).with_extension("tmp"));
         let ok = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp)
             .and_then(|mut w| std::io::Write::write_all(&mut w, serde_json::to_string_pretty(file).unwrap_or_default().as_bytes()))

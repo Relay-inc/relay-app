@@ -364,7 +364,49 @@ pnpm check:compiler           # the React Compiler compiles every component and 
 pnpm format:check             # Prettier
 ```
 
-CI (`.github/workflows/frontend.yml`) runs all but cargo, plus `vite build`.
+CI (`.github/workflows/checks.yml`) runs the TypeScript checks plus `vite build` on macOS and Windows, then
+`cargo check`: on macOS with the tests, on Windows without `relay-server` (a Linux and Mac server) and without tests.
+The app builds for Windows but does little there yet: Unix-only calls (local sockets, process groups, file modes,
+symlinks, this Mac as a work machine) sit behind `cfg` gates with stand-ins (`src-tauri/src/platform.rs`,
+`packages/relay-remote/src/sock.rs`), each with a `ponytail:` comment naming the Windows PR (W2 to W4) that fills it
+in.
+The window on Windows comes from `src-tauri/tauri.windows.conf.json` (merged over `tauri.conf.json`): the native title
+bar, opaque, no sidebar material, so the css paints the sidebar (`:root[data-os="windows"]`). It has no menu bar: the
+main window takes the menu's keys itself (`menuKey` in `src/application/boot.ts`). A default shortcut says `mod` for
+the command key, ⌘ on macOS and Ctrl on Windows, and `bindingLabel` writes it the platform's way
+(`src/domain/settings/shortcuts.ts`, the platform from `src/shared/platform.ts`). Banners are toasts through
+`tauri-plugin-notification`, a second start and a `relay://` link reach the running window through
+`tauri-plugin-single-instance`, both Windows-only dependencies. The harness runs the Windows side with
+`?platform=windows`.
+A meeting on Windows records the microphone and the default output device, which cpal opens as WASAPI loopback, then
+reads and resamples the tracks in-process at Stop (`read_16k` in `src-tauri/src/meeting.rs`) instead of `afconvert`,
+and keeps the 16 kHz WAV mix (~115 MB an hour) where the Mac keeps m4a. Whether the microphone is switched off comes
+from the privacy settings in the registry (`src-tauri/src/permissions.rs`), checked before the recording starts.
+Whisper (dictation and meetings, `src-tauri/src/dictation.rs`) runs on whisper.cpp through transcribe-rs: on Metal on a
+Mac, on the CPU on Windows. whisper-rs-sys builds whisper.cpp with cmake and MSVC and generates its bindings with
+bindgen, which needs libclang: the `windows-latest` runner has cmake, MSVC and LLVM, so `cargo check` there compiles
+whisper.cpp for real. A build on another Windows machine needs the Visual Studio C++ tools, cmake and LLVM (or
+`LIBCLANG_PATH`). ggml optimises for the CPU it is built on: a Windows release build sets `GGML_NATIVE=OFF` in its
+environment (whisper-rs-sys passes `GGML_*` to cmake), which builds for AVX2, or the app may not start on an older CPU.
+Vulkan (transcribe-rs's `whisper-vulkan`) is not in: it needs the Vulkan SDK and `VULKAN_SDK` on the build machine,
+which the runner does not have. The model download checks its SHA-256 with `sha2`, curl and tar come with Windows 10
+and later.
+Dictation from any app (`src-tauri/src/anywhere.rs`) registers its shortcuts through tauri-plugin-global-shortcut on
+Windows too (global-hotkey's `RegisterHotKey`, a release is polled). Pasting there needs no permission: the window in
+front when the shortcut went down (`GetForegroundWindow`) gets the focus back if it lost it, the clipboard's formats
+that are plain memory are kept aside (GDI handles such as `CF_BITMAP` are not, Windows makes them again from
+`CF_DIB`), the text goes on it, Ctrl+V goes out through `SendInput` once the shortcut's modifiers are up, and the
+clipboard comes back 400 ms later unless something else was copied. The defaults there use Ctrl instead of the Win key,
+Alt+Space and Alt+Shift (`keys` in `anywhere.rs`, `defaultShortcuts` in `src/domain/settings/voice.ts`).
+The Design drawer (`src-tauri/src/design.rs`) is the same Tauri child webview on Windows, a WebView2. Its sign-in
+popup needs no code there: wry answers an allowed `NewWindowRequested` with `SetHandled(false)`, so WebView2 opens its
+own popup window with the opener's profile, and handles that window's `window.close()` (the macOS side needs a
+WKUIDelegate for that). The picture for `design_snapshot` is `ICoreWebView2::CapturePreview` as PNG into a memory
+stream, through `with_webview`.
+`cargo check --target x86_64-pc-windows-msvc` from a Mac stops at the C build scripts (ring, SQLite, the Windows
+resource file), which need the Windows SDK: CI is the check. With fake C tools for those (`DOCS_RS=1` skips the cmake
+builds), add `--no-default-features`: whisper-rs-sys cannot generate its bindings without Windows' C headers, and the
+bindings it ships are laid out for another platform, so the cross-check leaves the `whisper` feature out.
 
 The frontend has a harness (`harness/`, see its README) that runs the real webview against a mocked Tauri backend,
 on the dev server (`pnpm exec vite --config harness/vite.config.ts`, http://127.0.0.1:1430):

@@ -12,7 +12,7 @@ import {
   bindingOf,
   bindingsOf,
   PICK_ID,
-  PICK_MODS,
+  pickMods as pickModChoices,
   pickLabel,
   pickModOf,
   WORKSPACE_KEYS,
@@ -106,7 +106,7 @@ export function ShortcutsPage() {
       </Field>
     ));
   const send = bindingsOf(settings, "chat.send")[0];
-  const pickMods = PICK_MODS.map(mod => [mod || "none", pickLabel(mod)] as const);
+  const pickMods = pickModChoices().map(mod => [mod || "none", pickLabel(mod)] as const);
   const dictation = DICTATION.filter(([, on]) => voice[on]);
   return (
     <div className="grid gap-7">

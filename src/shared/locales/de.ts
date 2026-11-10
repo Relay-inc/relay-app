@@ -604,7 +604,7 @@ export default {
   "page.latest": "{n} · zuletzt {time}",
   "page.comments": "Kommentare",
   "page.comment": "Kommentieren",
-  "page.commentHint": "Wähle Text auf der Seite, um ihn zu kommentieren (⌥⌘M).",
+  "page.commentHint": "Wähle Text auf der Seite, um ihn zu kommentieren ({key}).",
   "page.commentPlaceholderTeam": "Kommentar schreiben… @ erwähnt ein Mitglied",
   "page.commentPlaceholder": "Kommentar schreiben…",
   "page.replyPlaceholder": "Antworten…",
@@ -666,6 +666,7 @@ export default {
   "header.addCover": "Titelbild hinzufügen",
   "header.icon": "Seitensymbol",
   "header.iconHint": "Ein Emoji (⌃⌘Leertaste)",
+  "header.iconHintWin": "Ein Emoji (Win+.)",
   "header.iconRefused": "Nur ein Emoji",
   "header.remove": "Entfernen",
   "header.cover": "Titelbild",
@@ -1457,6 +1458,8 @@ export default {
   "set.sec.sidebar": "Seitenleiste",
   "perm.title": "Berechtigungen",
   "perm.help": "Was macOS Relay erlaubt. Ein nicht von Apple signierter Build verliert sie bei jedem Update.",
+  "perm.helpWin":
+    "Was Windows Relay erlaubt. Für die Aufnahme dessen, was dieser Computer abspielt, ist keine Berechtigung nötig.",
   "perm.fullDisk": "Festplattenvollzugriff",
   "perm.fullDiskHelp": "Agents lesen deine Dateien, ohne dass macOS pro Ordner fragt (Dokumente, Fotos, Musik, …).",
   "perm.microphone": "Mikrofon",
@@ -1473,6 +1476,7 @@ export default {
   "perm.state.missing": "Nicht erlaubt",
   "perm.state.ask": "Wird beim ersten Mal gefragt",
   "perm.open": "Systemeinstellungen öffnen",
+  "perm.openWin": "Einstellungen öffnen",
   "set.sidebarLayout": "Obere Einträge",
   "set.sidebarLayoutHelp": "Eine Liste mit Namen oder eine kompakte Symbolleiste.",
   "set.sidebarList": "Liste",
@@ -1912,7 +1916,9 @@ export default {
   "keys.reset": "Zurück zum Standard",
   "keys.resetAll": "Alle zurücksetzen",
   "keys.typing": "{key} würde hier in ein Feld tippen. Nimm ⌘, ⌥ oder ⌃ dazu.",
+  "keys.typingWin": "{key} würde hier in ein Feld tippen. Nimm Ctrl oder Alt dazu.",
   "keys.reserved": "{key} gehört zu macOS oder zum Menü Bearbeiten.",
+  "keys.reservedWin": "{key} gehört zu Windows oder zur Textbearbeitung.",
   "keys.taken": "{key} wird schon für „{name}“ verwendet.",
   "keys.takenVoice": "{key} ist schon ein Diktier-Kürzel.",
   "keys.app.quickAsk": "Schnelle Frage, beantwortet in einem neuen allgemeinen Gespräch",
@@ -1986,6 +1992,7 @@ export default {
   "pill.copied": "Kopiert, mit ⌘V einfügen",
   "pill.noModel": "Kein Sprachmodell: siehe Einstellungen › Sprache",
   "pill.silent": "Kein Ton vom Mikrofon",
+  "pill.micOff": "Mikrofon in den Windows-Einstellungen aus",
   "pill.failed": "Diktieren fehlgeschlagen",
   "voice.chat": "Neue Unterhaltung aus jeder App",
   "voice.chatHelp": "Sag von überall, was du willst: Relay kommt nach vorne und startet damit eine neue Unterhaltung.",
@@ -1996,6 +2003,7 @@ export default {
   "voice.anyAppShortcutHelp": "Wirkt in jeder App, auch mit Relay im Hintergrund.",
   "voice.shortcutPress": "Tasten drücken…",
   "voice.shortcutRecordHelp": "Klicken, dann die Tasten drücken (mit ⌘, ⌥, ⌃ oder ⇧). Escape bricht ab.",
+  "voice.shortcutRecordHelpWin": "Klicken, dann die Tasten drücken (mit Ctrl, Alt oder Shift). Escape bricht ab.",
   "voice.shortcutTaken": "{key} nutzt schon eine andere Art zu diktieren.",
   "voice.shortcut": "Tastenkürzel",
   "voice.sec.model": "Sprachmodell",
@@ -2008,6 +2016,8 @@ export default {
   "voice.desc.cohere": "Das genaueste und langsamste, 14 Sprachen inklusive Niederländisch.",
   "voice.desc.whisper-turbo":
     "Whisper von OpenAI, etwa 100 Sprachen inklusive Niederländisch. Läuft auf der GPU des Mac.",
+  "voice.desc.whisper-turboWin":
+    "Whisper von OpenAI, etwa 100 Sprachen inklusive Niederländisch. Läuft auf dem Prozessor.",
   "voice.desc.moonshine-base": "Klein und sehr schnell, nur Englisch.",
   "voice.size": "{mb} MB",
   "voice.langs_one": "{n} Sprache",
@@ -2031,6 +2041,8 @@ export default {
   "voice.sameModel": "Wie beim Diktieren",
   "voice.keepAudio": "Audio behalten",
   "voice.keepAudioHelp": "Speichert die Aufnahme als .m4a neben dem Transkript, im Anhangordner von Obsidian.",
+  "voice.keepAudioHelpWin":
+    "Speichert die Aufnahme als .wav neben dem Transkript, im Anhangordner von Obsidian (etwa 115 MB pro Stunde).",
   "voice.summarize": "Zusammenfassung schreiben",
   "voice.summarizeHelp":
     "Nach dem Transkript schreibt Claude im Abschluss des Meetings einen Entwurf aus deinen Notizen und dem Transkript. In die Notiz kommt nichts, bevor du ihn übernimmst.",
@@ -2192,6 +2204,9 @@ export default {
     "Nur dein Mikrofon wird aufgenommen, der Ton des Mac nicht: {why}. Erlaube Relay in Systemeinstellungen › Datenschutz & Sicherheit › Bildschirm- & Systemaudioaufnahme.",
   "rec.silentMac":
     "Noch kein Ton vom Mac. Läuft der Call schon, erlaube Relay in Systemeinstellungen › Datenschutz & Sicherheit › Bildschirm- & Systemaudioaufnahme.",
+  "rec.noSystemWin": "Nur dein Mikrofon wird aufgenommen, nicht was dieser Computer abspielt: {why}.",
+  "rec.silentWin":
+    "Noch kein Ton von diesem Computer. Er erscheint, sobald der Anruf über das Standard-Ausgabegerät läuft.",
   "rec.dictatingIn": "Diktieren · {name}",
   "rec.dictatingElsewhere": "Diktieren in einer anderen App",
   "rec.transcribingPct": "transkribiert {pct} %",
@@ -2202,6 +2217,8 @@ export default {
   "rec.noModel":
     "Das Sprachmodell für Meetings ist noch nicht geladen. Lade es in Einstellungen › Sprache; die Aufnahme bleibt erhalten.",
   "rec.noModelStart": "Lade zuerst das Sprachmodell für Meetings in Einstellungen › Sprache, dann kannst du aufnehmen.",
+  "rec.micOff":
+    "Relay darf das Mikrofon nicht verwenden. Schalte Mikrofonzugriff und Desktop-Apps den Zugriff auf das Mikrofon erlauben in Einstellungen › Datenschutz und Sicherheit › Mikrofon ein und nimm erneut auf.",
   "rec.retry": "Erneut versuchen",
   "rec.keepOpen": "Lass den Laptop geöffnet, bis das Transkript fertig ist: im Ruhezustand stoppt die Transkription.",
   "rec.kept": "Eine Aufnahme von {time} wurde nie transkribiert.",

@@ -10,6 +10,7 @@ import { Icon } from "../../components/Icon";
 import { ProjectImg } from "../../components/ProjectImg";
 import { isFinderPaste } from "./embeds";
 import { PageHeader } from "./PageHeader";
+import { isMac } from "../../../shared/platform";
 
 /** The page header (PageHeader) with the page's icon and cover (issue 424): the cover's banner above it, the icon the
  *  note's `icon:` emoji, else its project's icon, else the file glyph (`pageIcon`); hovering offers Add icon and Add cover
@@ -195,7 +196,7 @@ function IconPopover({
         onKeyDown={e => e.key === "Enter" && apply()}
       />
       <span className={refused ? "text-bad" : "text-tertiary"}>
-        {t(refused ? "header.iconRefused" : "header.iconHint")}
+        {t(refused ? "header.iconRefused" : isMac() ? "header.iconHint" : "header.iconHintWin")}
       </span>
       {has ? (
         <button

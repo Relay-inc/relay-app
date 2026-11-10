@@ -10,6 +10,7 @@ pub mod docs;
 pub mod members;
 pub mod proto;
 pub mod share;
+pub mod sock;
 pub mod sync;
 pub mod tls;
 pub mod vault;

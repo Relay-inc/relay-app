@@ -83,7 +83,7 @@ fn key_path(data: &Path, id: &str) -> PathBuf { data.join(format!("shared-{id}.k
 /// The vault's keys (relay_remote::vault::Keys: every epoch's, this member's secret, its pins), written whole: a temp
 /// file 0600 renamed over the old one, so a crash never leaves half a key file.
 pub fn save_key(data: &Path, id: &str, keys: &Keys) -> Result<(), String> {
-    use std::os::unix::fs::OpenOptionsExt;
+    use crate::platform::OpenOptionsExt;
     let (p, tmp) = (key_path(data, id), data.join(format!(".shared-{id}.key.tmp")));
     std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp)
         .and_then(|mut f| std::io::Write::write_all(&mut f, keys.format().as_bytes()).and_then(|_| f.sync_all()))
@@ -693,7 +693,7 @@ pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, fold
     on_hub(&app, move |hub, data| hub.forget(data, &vid)).await?;
     save_key(&crate::data_dir(&app), &joined.id, &key)?;
     // `.claude -> System` as in a vault Relay makes, before the first round: the rules load from the synced System/
-    std::os::unix::fs::symlink("System", Path::new(&folder).join(".claude")).ok();
+    crate::platform::symlink("System", Path::new(&folder).join(".claude")).ok();
     let v = Shared { id: joined.id.clone(), name: joined.name.clone(), host: line.host, port: line.port, fp: line.fp, folder, role: joined.role };
     add(&app, &state, &v)?;
     Ok(serde_json::json!({"id": joined.id, "name": joined.name}))

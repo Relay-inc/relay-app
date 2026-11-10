@@ -207,7 +207,6 @@ pub const TEAM_DROP: [&str; 3] = ["System/rules/core/user-profile.md", "System/r
 /// copied over it. Otherwise as `create_default`.
 pub fn create_team(template: &Path, overlay: &Path, dest: &Path) -> Result<(), String> { create(template, Some(overlay), dest) }
 fn create(template: &Path, overlay: Option<&Path>, dest: &Path) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
     if dest.join("System/rules/core/work-state.md").is_file() { return Ok(()); }
     // hidden files (.DS_Store) do not count, someone else's notes do
     if fs::read_dir(dest).is_ok_and(|d| d.flatten().any(|e| !e.file_name().to_string_lossy().starts_with('.'))) { return Err("err.vault_dest_used".into()); }
@@ -221,11 +220,11 @@ fn create(template: &Path, overlay: Option<&Path>, dest: &Path) -> Result<(), St
     }
     for sub in ["System/hooks", "System/scripts"] {
         for e in fs::read_dir(dest.join(sub)).map_err(|e| e.to_string())?.flatten() {
-            fs::set_permissions(e.path(), fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+            crate::platform::set_mode(&e.path(), 0o755).map_err(|e| e.to_string())?;
         }
     }
     let link = dest.join(".claude");
-    if fs::symlink_metadata(&link).is_err() { std::os::unix::fs::symlink("System", &link).map_err(|e| e.to_string())?; }
+    if fs::symlink_metadata(&link).is_err() { crate::platform::symlink("System", &link).map_err(|e| e.to_string())?; }
     Ok(())
 }
 

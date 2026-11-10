@@ -29,7 +29,18 @@ mod design;
 mod commits;
 mod dictation;
 mod files;
+mod platform;
+#[cfg(target_os = "macos")]
 mod host;
+// this Mac as a work machine runs relay-server under launchd, so it is macOS only
+#[cfg(not(target_os = "macos"))]
+mod host {
+    pub fn status() -> serde_json::Value { serde_json::json!({"supported": false, "on": false, "running": false, "ram": false, "fingerprint": "", "clients": []}) }
+    pub fn set(_on: bool) -> Result<serde_json::Value, String> { Err("A work machine needs macOS.".into()) }
+    pub fn pair() -> Result<String, String> { Err("A work machine needs macOS.".into()) }
+    pub fn refresh() {}
+    pub fn work_dir() -> Option<std::path::PathBuf> { None }
+}
 mod machine_git;
 mod machines;
 mod mirror;
@@ -412,8 +423,10 @@ fn build_menu(h: &AppHandle, lang: &str, keys: Option<&Value>) -> tauri::Result<
         &P::minimize(h, Some(&t("minimize")))?, &P::maximize(h, Some(&t("zoom")))?, &P::fullscreen(h, Some(&t("fullscreen")))?])?;
     Menu::with_items(h, &[&app, &chat, &edit, &window])
 }
-/// The menu bar again, with the settings' language and shortcuts (none while Settings records one).
+/// The menu bar again, with the settings' language and shortcuts (none while Settings records one). macOS only:
+/// a Windows window has no menu bar, the webview takes those keys (src/ui/app/App.tsx onKey).
 pub(crate) fn refresh_menu(app: &AppHandle) {
+    if !cfg!(target_os = "macos") { return; }
     let settings = app.state::<App>().settings.lock().unwrap().clone();
     let keys = (!anywhere::paused()).then_some(&settings["shortcuts"]);
     if let Ok(m) = build_menu(app, ui_lang_of(&settings), keys) { app.set_menu(m).ok(); }
@@ -457,6 +470,8 @@ fn save_worktrees(app: &AppHandle, w: &HashMap<String, Vec<String>>) {
 
 /// The user's own login shell, not zsh: a fish or bash user's PATH (npm, Homebrew) lives in that shell's config.
 /// The last line, in case the rc files print something first.
+// ponytail: on Windows there is no $SHELL or /bin/zsh, so this gives the macOS fallback and agents find no CLI. W3
+// reads the PATH there
 fn login_path() -> String {
     let sh = std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/zsh".into());
     Command::new(sh).args(["-lic", "printf '\\n%s' \"$PATH\""]).stdin(Stdio::null()).output()
@@ -2284,13 +2299,13 @@ fn ttl_cached(slot: &Mutex<Option<(std::time::Instant, Value)>>, ttl: std::time:
 }
 fn agents_now(app: &AppHandle, state: &App) -> Value {
     let on = agents::enabled(&state.settings.lock().unwrap());
-    let server_work = relay_server::data_dir().join("work");
+    let server_work = host::work_dir();
     let ps = Command::new("/bin/ps").args(["-axo", "pid=,ppid=,command="]).output().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
     let ours = under_broker(&ps);
     let mut out = vec![];
     for p in on.into_iter().filter(|p| p.caps().background) {
         for mut a in p.sessions(&env_of(app, state, p).env()) {
-            if runs_for_server(&a, &server_work) { continue; }
+            if server_work.as_deref().is_some_and(|w| runs_for_server(&a, w)) { continue; }
             a["provider"] = json!(p.id());
             // the app's own process is listed before its session id reaches app_sids: marked, so the sidebar does not
             // show it as a terminal session meanwhile. It stays in the list, syncBusy reads its busy state after a restart.
@@ -3380,7 +3395,14 @@ fn nav_internal(url: &tauri::Url) -> bool {
 pub fn cli(args: &[String]) -> i32 { actions::cli(args) }
 
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Windows: a second start, or a relay:// link (the deep-link feature hands it to on_open_url below), brings the
+    // running window up instead of a second Relay. macOS does both itself. Must be the first plugin
+    #[cfg(windows)]
+    let builder = builder
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| { windows::show_active(app); }))
+        .plugin(tauri_plugin_notification::init());
+    builder
         // settings live in their own small window, the Mac way: open it, or bring it forward when it is open
         .on_menu_event(|app, event| {
             let settings = app.get_webview_window("settings");
@@ -3441,7 +3463,7 @@ pub fn run() {
             let settings = norm(fs::read_to_string(data_dir(app.handle()).join("settings.json")).ok()
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default());
             set_cur_lang(ui_lang_of(&settings));
-            app.set_menu(build_menu(app.handle(), ui_lang_of(&settings), Some(&settings["shortcuts"]))?)?;
+            if cfg!(target_os = "macos") { app.set_menu(build_menu(app.handle(), ui_lang_of(&settings), Some(&settings["shortcuts"]))?)?; }
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
             let machines = machines::Machines::load(&data_dir(app.handle()))?;
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default(), orch: Mutex::new(()), proj_vault: Default::default(), extra: Mutex::new(json!([])), shared: Default::default(), tidied: Default::default(), vault_gate: Mutex::new(()) });
@@ -3536,6 +3558,9 @@ pub fn run() {
                 }
             });
             tray::init(app.handle())?;
+            // the installer registers relay:// (bundle config), a `tauri dev` build registers itself
+            #[cfg(all(windows, debug_assertions))]
+            app.deep_link().register_all().ok();
             let handle = app.handle().clone();
             // an invite to a shared vault (relay://…&vault=…) opens Settings › Machines with the link filled in
             app.deep_link().on_open_url(move |e| {
@@ -3549,11 +3574,12 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![shared_doc_absorb, shared_doc_open, page_history, page_restore, page_comments, page_comment, workspace_inbox, shared_doc_edit, shared_awareness, shared_vaults::shared_vault_docs, snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, page_action, change_record, changes_list, change_keep, change_undo, change_resolve, project_repos, set_project_repos, migrate_project, move_chat_workspace, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, note_by_event, note_home, write_note, property_values, create_note, create_context, create_project, project_kinds, set_project_state, project_row, vault_check, vault_garden, garden_ask, garden_about, vault_repair, tidy_preview, tidy_apply, tidy_undo, free_page_name, attach_copy, attach_save, attach_dest, embed_info, duplicate_note, move_path, trash_path, restore_path, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, quick_capture_save, inbox_list, inbox_home, note_types, inbox_propose, inbox_accept, anywhere::quick_capture_hide, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_trust, shared_vaults::shared_vault_admin, shared_vaults::shared_vault_add, shared_vaults::shared_vault_pending_invite, notes_graph, notes_linked, notes_collection, views_list, view_save, view_delete, note_rail, find_notes, note_times, note_icons, note_templates, new_from_template, daily_note, favourites, set_favourites, note_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_kept, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
+        .invoke_handler(tauri::generate_handler![shared_doc_absorb, shared_doc_open, page_history, page_restore, page_comments, page_comment, workspace_inbox, shared_doc_edit, shared_awareness, shared_vaults::shared_vault_docs, snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, page_action, change_record, changes_list, change_keep, change_undo, change_resolve, project_repos, set_project_repos, migrate_project, move_chat_workspace, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, note_by_event, note_home, write_note, property_values, create_note, create_context, create_project, project_kinds, set_project_state, project_row, vault_check, vault_garden, garden_ask, garden_about, vault_repair, tidy_preview, tidy_apply, tidy_undo, free_page_name, attach_copy, attach_save, attach_dest, embed_info, duplicate_note, move_path, trash_path, restore_path, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, quick_capture_save, inbox_list, inbox_home, note_types, inbox_propose, inbox_accept, anywhere::quick_capture_hide, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_trust, shared_vaults::shared_vault_admin, shared_vaults::shared_vault_add, shared_vaults::shared_vault_pending_invite, notes_graph, notes_linked, notes_collection, views_list, view_save, view_delete, note_rail, find_notes, note_times, note_icons, note_templates, new_from_template, daily_note, favourites, set_favourites, note_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_kept, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window, windows::new_window])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the window used last back (the main one may be hidden)
         .run(|app, e| match e {
+            #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen { .. } => { windows::show_active(app); }
             tauri::RunEvent::Exit => { quit(app); pty::kill_all(app); plugins::kill_all(app); }
             _ => {}

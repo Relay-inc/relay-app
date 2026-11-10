@@ -13,6 +13,7 @@ fn main() {
     // `relay --cli …`: an agent's `relay` command (src/actions.rs), answered by the running app
     if a.get(1).map(String::as_str) == Some("--cli") { std::process::exit(relay_lib::cli(&a[2..])); }
     // `relay --relay-server <command>`: relay-server itself, this Mac as a work machine (src/host.rs)
+    #[cfg(target_os = "macos")]
     if a.get(1).map(String::as_str) == Some("--relay-server") { return relay_server::cli::run(&a[1..]); }
     relay_lib::run()
 }

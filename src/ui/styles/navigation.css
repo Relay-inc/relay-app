@@ -9,6 +9,10 @@
   -webkit-user-select: none;
   user-select: none;
 }
+/* Windows has no sidebar material: the theme's sidebar colour, light or dark as the theme is */
+:root[data-os="windows"] .relay-sidebar {
+  background: var(--sidebar);
+}
 /* the rows were custom elements in Lit, whose hosts never shrank in the nav's flex column */
 .relay-sidebar nav > * {
   flex-shrink: 0;

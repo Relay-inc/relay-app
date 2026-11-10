@@ -612,7 +612,7 @@ export default {
   "page.latest": "{n} · dernière {time}",
   "page.comments": "Commentaires",
   "page.comment": "Commenter",
-  "page.commentHint": "Sélectionnez du texte de la page pour le commenter (⌥⌘M).",
+  "page.commentHint": "Sélectionnez du texte de la page pour le commenter ({key}).",
   "page.commentPlaceholderTeam": "Ajouter un commentaire… @ mentionne un membre",
   "page.commentPlaceholder": "Ajouter un commentaire…",
   "page.replyPlaceholder": "Répondre…",
@@ -674,6 +674,7 @@ export default {
   "header.addCover": "Ajouter une couverture",
   "header.icon": "Icône de la page",
   "header.iconHint": "Un emoji (⌃⌘Espace)",
+  "header.iconHintWin": "Un emoji (Win+.)",
   "header.iconRefused": "Un seul emoji",
   "header.remove": "Supprimer",
   "header.cover": "Couverture",
@@ -1462,6 +1463,8 @@ export default {
   "set.sec.sidebar": "Barre latérale",
   "perm.title": "Autorisations",
   "perm.help": "Ce que macOS permet à Relay. Une version non signée par Apple les perd à chaque mise à jour.",
+  "perm.helpWin":
+    "Ce que Windows permet à Relay. Enregistrer ce que joue cet ordinateur ne demande aucune autorisation.",
   "perm.fullDisk": "Accès complet au disque",
   "perm.fullDiskHelp":
     "Les agents lisent vos fichiers sans que macOS demande pour chaque dossier (Documents, Photos, Musique, …).",
@@ -1479,6 +1482,7 @@ export default {
   "perm.state.missing": "Non autorisé",
   "perm.state.ask": "Demandé à la première utilisation",
   "perm.open": "Ouvrir les Réglages Système",
+  "perm.openWin": "Ouvrir les Paramètres",
   "set.sidebarLayout": "Éléments du haut",
   "set.sidebarLayoutHelp": "Une liste avec les noms, ou une rangée compacte d'icônes.",
   "set.sidebarList": "Liste",
@@ -1920,7 +1924,9 @@ export default {
   "keys.reset": "Revenir au réglage par défaut",
   "keys.resetAll": "Tout réinitialiser",
   "keys.typing": "{key} taperait ici dans un champ. Ajoutez ⌘, ⌥ ou ⌃.",
+  "keys.typingWin": "{key} taperait ici dans un champ. Ajoutez Ctrl ou Alt.",
   "keys.reserved": "{key} appartient à macOS ou au menu Édition.",
+  "keys.reservedWin": "{key} appartient à Windows ou à l'édition de texte.",
   "keys.taken": "{key} sert déjà pour « {name} ».",
   "keys.takenVoice": "{key} est déjà un raccourci de dictée.",
   "keys.app.quickAsk": "Question rapide, traitée dans une nouvelle conversation générale",
@@ -1994,6 +2000,7 @@ export default {
   "pill.copied": "Copié, collez avec ⌘V",
   "pill.noModel": "Pas de modèle vocal : voir Réglages › Voix",
   "pill.silent": "Aucun son du micro",
+  "pill.micOff": "Micro désactivé dans les paramètres Windows",
   "pill.failed": "La dictée a échoué",
   "voice.chat": "Nouvelle conversation depuis toute app",
   "voice.chatHelp":
@@ -2005,6 +2012,7 @@ export default {
   "voice.anyAppShortcutHelp": "Marche dans toutes les apps, aussi avec Relay en arrière-plan.",
   "voice.shortcutPress": "Appuyez sur les touches…",
   "voice.shortcutRecordHelp": "Cliquez, puis appuyez sur les touches (avec ⌘, ⌥, ⌃ ou ⇧). Échap annule.",
+  "voice.shortcutRecordHelpWin": "Cliquez, puis appuyez sur les touches (avec Ctrl, Alt ou Shift). Échap annule.",
   "voice.shortcutTaken": "{key} sert déjà à une autre façon de dicter.",
   "voice.shortcut": "Raccourci",
   "voice.sec.model": "Modèle vocal",
@@ -2017,6 +2025,8 @@ export default {
   "voice.desc.cohere": "Le plus précis et le plus lent, 14 langues dont le néerlandais.",
   "voice.desc.whisper-turbo":
     "Whisper d'OpenAI, une centaine de langues dont le néerlandais. Tourne sur le GPU du Mac.",
+  "voice.desc.whisper-turboWin":
+    "Whisper d'OpenAI, une centaine de langues dont le néerlandais. Tourne sur le processeur.",
   "voice.desc.moonshine-base": "Petit et très rapide, anglais seulement.",
   "voice.size": "{mb} Mo",
   "voice.langs_one": "{n} langue",
@@ -2041,6 +2051,8 @@ export default {
   "voice.keepAudio": "Garder l'audio",
   "voice.keepAudioHelp":
     "Enregistre l'audio en .m4a à côté de la transcription, dans le dossier des pièces jointes d'Obsidian.",
+  "voice.keepAudioHelpWin":
+    "Enregistre l'audio en .wav à côté de la transcription, dans le dossier des pièces jointes d'Obsidian (environ 115 Mo par heure).",
   "voice.summarize": "Rédiger le résumé",
   "voice.summarizeHelp":
     "Après la transcription, Claude rédige un brouillon de résumé dans la clôture de la réunion, à partir de vos notes et de la transcription. Rien n'entre dans la note avant que vous l'acceptiez.",
@@ -2202,6 +2214,9 @@ export default {
     "Seul votre micro est enregistré, pas le son du Mac : {why}. Autorisez Relay dans Réglages Système › Confidentialité et sécurité › Enregistrement de l'écran et de l'audio système.",
   "rec.silentMac":
     "Pas encore de son du Mac. Si l'appel joue déjà, autorisez Relay dans Réglages Système › Confidentialité et sécurité › Enregistrement de l'écran et de l'audio système.",
+  "rec.noSystemWin": "Seul votre micro est enregistré, pas ce que joue cet ordinateur : {why}.",
+  "rec.silentWin":
+    "Aucun son de cet ordinateur pour l'instant. Il apparaît dès que l'appel joue sur la sortie audio par défaut.",
   "rec.dictatingIn": "Dictée · {name}",
   "rec.dictatingElsewhere": "Dictée dans une autre app",
   "rec.transcribingPct": "transcription {pct} %",
@@ -2212,6 +2227,8 @@ export default {
   "rec.noModel":
     "Le modèle vocal pour les réunions n'est pas encore téléchargé. Téléchargez-le dans Réglages › Voix ; l'enregistrement est gardé.",
   "rec.noModelStart": "Téléchargez d'abord le modèle vocal pour les réunions dans Réglages › Voix, puis enregistrez.",
+  "rec.micOff":
+    "Relay ne peut pas utiliser le micro. Activez Accès au microphone et Autoriser les applications de bureau à accéder à votre microphone dans Paramètres › Confidentialité et sécurité › Microphone, puis enregistrez à nouveau.",
   "rec.retry": "Réessayer",
   "rec.keepOpen": "Laissez l'ordinateur ouvert jusqu'à la fin de la transcription : en veille, elle s'arrête.",
   "rec.kept": "Un enregistrement de {time} n'a jamais été transcrit.",

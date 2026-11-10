@@ -32,12 +32,35 @@ pub async fn read_image(path: String) -> Result<(String, String), String> {
     }).await.map_err(|e| e.to_string())?
 }
 
-// what macOS would run instead of show: an app, a script, an installer, any file with an execute bit
+// what the system would run instead of show: an app, a script, an installer, any file with an execute bit (macOS),
+// anything Windows runs by its extension (no execute bit there)
 fn runs(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    const RUN: [&str; 9] = ["app", "command", "tool", "terminal", "workflow", "scpt", "pkg", "mpkg", "sh"];
-    let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
-    RUN.contains(&ext.as_str()) || std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    #[cfg(not(windows))]
+    const RUN: &[&str] = &["app", "command", "tool", "terminal", "workflow", "scpt", "pkg", "mpkg", "sh"];
+    #[cfg(not(windows))]
+    let by_name = {
+        let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
+        RUN.contains(&ext.as_str())
+    };
+    #[cfg(windows)]
+    let by_name = win_runs(&path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+        &std::env::var("PATHEXT").unwrap_or_default());
+    by_name || std::fs::metadata(path).is_ok_and(|m| m.is_file() && crate::platform::executable(&m))
+}
+/// Whether Windows would run the file `name` instead of opening it: by its extension (the list plus `PATHEXT`), read
+/// the way Windows reads a name (trailing dots and spaces dropped). A `:` (an alternate data stream) counts as running.
+// ponytail: a denylist, a file type registered later as runnable gets past it. AssocQueryString per file if it matters
+#[cfg(any(windows, test))]
+fn win_runs(name: &str, pathext: &str) -> bool {
+    const RUN: &[&str] = &["exe", "com", "bat", "cmd", "ps1", "psm1", "psc1", "ps1xml", "vbs", "vbe", "vb", "js", "jse",
+        "wsf", "wsh", "ws", "wsc", "msi", "msp", "msix", "appx", "scr", "hta", "cpl", "msc", "chm", "inf", "scf", "lnk",
+        "url", "website", "pif", "reg", "jar", "py", "pyw", "mde", "mda", "gadget", "xbap", "diagcab", "appref-ms",
+        "application", "library-ms", "settingcontent-ms", "sh"];
+    let name = name.trim_end_matches(['.', ' ']);
+    if name.contains(':') { return true; }
+    let Some((_, ext)) = name.rsplit_once('.') else { return false };
+    let ext = ext.to_ascii_lowercase();
+    RUN.contains(&ext.as_str()) || pathext.split(';').any(|p| p.trim_start_matches('.').eq_ignore_ascii_case(&ext))
 }
 /// An attached file in its default app, or shown in Finder (`reveal`). Something that would run (an app, a script)
 /// is only ever shown in Finder: a click on a chip opens a document, it never starts a program.
@@ -88,6 +111,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn windows_reads_the_name_as_it_runs_it() {
+        let pe = ".COM;.EXE;.BAT;.CMD;.XYZ";
+        for n in ["a.exe", "A.EXE", "a.exe.", "a.exe . ", "a.txt:evil.exe", "a.msc", "a.xyz", "setup.py"] { assert!(win_runs(n, pe), "{n}"); }
+        for n in ["a.pdf", "notes.md", "README", "a.exe.pdf"] { assert!(!win_runs(n, pe), "{n}"); }
+    }
+
+    #[test]
     fn pictures_by_extension() {
         assert_eq!(image_type("/a/b.PNG"), Some("image/png"));
         assert_eq!(image_type("/a/b.jpeg"), Some("image/jpeg"));
@@ -103,8 +133,7 @@ mod tests {
         let script = dir.join("run");
         std::fs::write(&doc, "x").unwrap();
         std::fs::write(&script, "#!/bin/sh").unwrap();
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+            crate::platform::set_mode(&script, 0o755).unwrap();
         assert!(!runs(&doc));
         assert!(runs(&script));
         assert!(runs(Path::new("/Applications/Safari.app")));
@@ -112,3 +141,4 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
+

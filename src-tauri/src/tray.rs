@@ -17,7 +17,12 @@ const ID: &str = "reminders";
 static SHOWN: Mutex<String> = Mutex::new(String::new());
 
 pub fn init(app: &AppHandle) -> tauri::Result<()> {
-    TrayIconBuilder::with_id(ID).icon(tauri::include_image!("icons/tray-template.png")).icon_as_template(true)
+    // the black template icon macOS tints, the app icon elsewhere (a black one vanishes on a dark Windows taskbar)
+    #[cfg(target_os = "macos")]
+    let icon = tauri::include_image!("icons/tray-template.png");
+    #[cfg(not(target_os = "macos"))]
+    let icon = app.default_window_icon().cloned().unwrap_or(tauri::include_image!("icons/32x32.png"));
+    TrayIconBuilder::with_id(ID).icon(icon).icon_as_template(true)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, e| { on_menu(app, e.id().as_ref()); }).build(app)?;
     refresh(app);
@@ -57,6 +62,9 @@ pub fn refresh(app: &AppHandle) {
     let (late, now) = (n(|d| d < 0), n(|d| d == 0));
     let title = if late + now > 0 { (late + now).to_string() } else { String::new() };
     tray.set_title(Some(&title)).ok();
+    // Windows has no title next to a tray icon: the count goes in its tooltip
+    #[cfg(not(target_os = "macos"))]
+    tray.set_tooltip(Some(if title.is_empty() { "Relay".to_string() } else { format!("Relay ({title})") })).ok();
     #[cfg(target_os = "macos")]
     if late > 0 { tray.with_inner_tray_icon(move |t| red_title(t.ns_status_item(), &title)).ok(); }
     // muda builds on the main thread, which with_inner_tray_icon runs on

@@ -1,5 +1,7 @@
 /** Settings › Voice: three ways to dictate, each switched on with its own shortcut (in the composer; from any app into a
  *  new conversation; from any app pasted where the cursor is), the speech model and language, and meetings. */
+import { isMac } from "../../shared/platform.ts";
+import { bindingLabel } from "./shortcuts.ts";
 export type VoiceMode = "both" | "hold" | "tap"; // both: held records until release, tapped until the next tap
 export type VoiceCfg = {
   on?: boolean; // dictation in the composer, on unless false
@@ -26,44 +28,45 @@ export type SpeechModelInfo = {
 };
 
 export const DEFAULT_MODEL = "parakeet-v3";
-/** Each way's shortcut until one is set. ⌃Space is left out: macOS switches the input source with it. */
-export const DEFAULT_SHORTCUTS = {
+/** Each way's shortcut until one is set, as `keys` in src-tauri/src/anywhere.rs. ⌃Space is left out on the Mac: macOS
+ *  switches the input source with it. Windows opens the window menu with Alt+Space and switches the keyboard with
+ *  Alt+Shift, so Ctrl takes their place there (Ctrl+Space only while Relay is in front, the composer's). */
+const MAC_SHORTCUTS = {
   shortcut: "alt+Space",
   chatShortcut: "alt+shift+Space",
   pasteShortcut: "ctrl+alt+Space",
 } as const;
-export type ShortcutKey = keyof typeof DEFAULT_SHORTCUTS;
+const WIN_SHORTCUTS = {
+  shortcut: "ctrl+Space",
+  chatShortcut: "ctrl+shift+Space",
+  pasteShortcut: "ctrl+alt+Space",
+} as const;
+export const defaultShortcuts = (): Record<ShortcutKey, string> => (isMac() ? MAC_SHORTCUTS : WIN_SHORTCUTS);
+export type ShortcutKey = keyof typeof MAC_SHORTCUTS;
 const MODS = ["ctrl", "alt", "shift", "meta"] as const;
-const SYMBOLS: Record<(typeof MODS)[number], string> = { ctrl: "⌃", alt: "⌥", shift: "⇧", meta: "⌘" };
 const valid = (id: string | undefined): id is string => !!id && /^((ctrl|alt|shift|meta)\+)*[A-Za-z0-9]+$/.test(id);
 
 /** The voice settings with their defaults filled in. */
-export const voiceOf = (cfg: VoiceCfg | undefined) => ({
-  on: cfg?.on !== false,
-  shortcut: valid(cfg?.shortcut) ? cfg!.shortcut! : DEFAULT_SHORTCUTS.shortcut,
-  chatOn: cfg?.chatOn === true,
-  chatShortcut: valid(cfg?.chatShortcut) ? cfg!.chatShortcut! : DEFAULT_SHORTCUTS.chatShortcut,
-  pasteOn: cfg?.pasteOn === true,
-  pasteShortcut: valid(cfg?.pasteShortcut) ? cfg!.pasteShortcut! : DEFAULT_SHORTCUTS.pasteShortcut,
-  model: cfg?.model || DEFAULT_MODEL,
-  language: cfg?.language || "auto",
-  mode: cfg?.mode || "both",
-  meetingModel: cfg?.meetingModel || "",
-  keepAudio: cfg?.keepAudio !== false,
-  summarize: cfg?.summarize !== false,
-});
+export const voiceOf = (cfg: VoiceCfg | undefined) => {
+  const defaults = defaultShortcuts();
+  return {
+    on: cfg?.on !== false,
+    shortcut: valid(cfg?.shortcut) ? cfg!.shortcut! : defaults.shortcut,
+    chatOn: cfg?.chatOn === true,
+    chatShortcut: valid(cfg?.chatShortcut) ? cfg!.chatShortcut! : defaults.chatShortcut,
+    pasteOn: cfg?.pasteOn === true,
+    pasteShortcut: valid(cfg?.pasteShortcut) ? cfg!.pasteShortcut! : defaults.pasteShortcut,
+    model: cfg?.model || DEFAULT_MODEL,
+    language: cfg?.language || "auto",
+    mode: cfg?.mode || "both",
+    meetingModel: cfg?.meetingModel || "",
+    keepAudio: cfg?.keepAudio !== false,
+    summarize: cfg?.summarize !== false,
+  };
+};
 
-/** A shortcut as the Mac writes it: ⌃⌥⇧⌘ in that order, then the key ("KeyD" as D, "Digit1" as 1). */
-export function shortcutLabel(id: string) {
-  const parts = id.split("+");
-  const code = parts.pop() ?? "";
-  const key = code.replace(/^Key(?=[A-Z]$)/, "").replace(/^Digit(?=\d$)/, "");
-  return (
-    MODS.filter(mod => parts.includes(mod))
-      .map(mod => SYMBOLS[mod])
-      .join("") + key
-  );
-}
+/** A shortcut as the platform writes it: ⌃⌥⇧⌘ then the key on the Mac ("KeyD" as D), Ctrl+Alt+D on Windows. */
+export const shortcutLabel = (id: string) => bindingLabel(id);
 /** The shortcut a key press makes, or null while only modifiers are down or none is (a plain letter would type).
  *  Function keys may go alone. */
 export function shortcutOf(e: Pick<KeyboardEvent, "code" | "altKey" | "shiftKey" | "ctrlKey" | "metaKey">) {

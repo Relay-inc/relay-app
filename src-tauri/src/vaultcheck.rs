@@ -267,7 +267,7 @@ pub fn repair(side: &Side, starter: &Starter, ids: &[String], today: &str) -> Re
     for f in check(side, starter).into_iter().filter(|f| f.fix && ids.contains(&f.id())) {
         let at = vault.join(&f.path);
         match f.kind {
-            "claude_link" => std::os::unix::fs::symlink("System", &at).map_err(|e| e.to_string())?,
+            "claude_link" => crate::platform::symlink("System", &at).map_err(|e| e.to_string())?,
             "missing_file" => {
                 let src = starter.file(&f.path).ok_or_else(|| format!("no starter copy of {}", f.path))?;
                 projects::write_new(&at, &fs::read_to_string(src).map_err(|e| e.to_string())?)?;

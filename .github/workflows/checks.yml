@@ -1,0 +1,39 @@
+# The gates on every PR and on main, on macOS and on Windows: the frontend's types, tests, lint (layer boundaries
+# included), the React Compiler compiling every component and formatting, then the Rust side building.
+name: checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  checks:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # Windows would check out with CRLF line endings, which Prettier refuses
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm test
+      - run: pnpm lint
+      - run: pnpm check:compiler
+      - run: pnpm format:check
+      - run: pnpm exec vite build
+      - run: rustup update stable --no-self-update
+      - uses: Swatinem/rust-cache@v2
+      # relay-mobile is the phone app. relay-server runs on Linux and on a Mac as a work machine, never on Windows.
+      - if: runner.os == 'macOS'
+        run: cargo check --workspace --exclude relay-mobile --all-targets
+      - if: runner.os == 'Windows'
+        run: cargo check --workspace --exclude relay-mobile --exclude relay-server

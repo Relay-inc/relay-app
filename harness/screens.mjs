@@ -308,9 +308,9 @@ const todayDay = async (variant, dark) => {
   await page.mouse.move(900, 800);
   await settle(page);
 };
-const settingsPage = async (tab, sub, fixture = "default") => {
+const settingsPage = async (tab, sub, fixture = "default", platform = "") => {
   await page.setViewportSize({ width: 900, height: 700 });
-  await open(page, server.url, { path: "/settings.html", fixture });
+  await open(page, server.url, { path: "/settings.html", fixture, platform });
   await click(tab);
   if (sub) await click(sub);
 };
@@ -2819,6 +2819,29 @@ const VIEWS = {
   "settings-time": async () => {
     await settingsPage("General");
     await intoView("Propose the day's time from conversations");
+  },
+  // Windows (W10): dictation from any app switched on, its keys with Ctrl, no Accessibility to allow
+  "settings-voice-windows": async () => {
+    await settingsPage("Voice", undefined, "default", "windows");
+    for (const id of ["#voicechat", "#voicepaste"]) await page.locator(id).click();
+    await settle(page);
+  },
+  // the same keys in Settings › Shortcuts, with quick capture's Ctrl+Alt+N (W10)
+  "settings-shortcuts-windows": async () => {
+    await settingsPage("Voice", undefined, "default", "windows");
+    for (const id of ["#voicechat", "#voicepaste"]) await page.locator(id).click();
+    await click("Shortcuts");
+    await intoView("Paste in any app");
+  },
+  "settings-shortcuts-capture-windows": async () => {
+    await settingsPage("Shortcuts", undefined, "default", "windows");
+    await intoView("Quick capture");
+  },
+  // Settings › General › Permissions on Windows: the microphone only, no Accessibility (W7, W10)
+  "settings-permissions-windows": async () => {
+    await settingsPage("General", undefined, "default", "windows");
+    await scrollMain("bottom");
+    await settle(page);
   },
   // Settings › General › Permissions: the mock has Full Disk Access missing (PR permissions-check)
   "settings-permissions": async () => {

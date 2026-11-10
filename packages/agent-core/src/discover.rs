@@ -6,6 +6,7 @@ use base64::Engine;
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -19,13 +20,20 @@ struct Session { child: Child, stdin: ChildStdin, stdout: Option<BufReader<Child
 /// The children of one discovery, addressed by the index [`Probe::start`] returns.
 pub struct Probe<'a> { env: &'a Env<'a>, sessions: Vec<Session>, pids: Arc<Mutex<Vec<i32>>> }
 
+#[cfg(unix)]
 fn kill_group(pid: i32) { unsafe { libc::killpg(pid, libc::SIGKILL); } }
+// ponytail: no process groups on Windows, so the watchdog cannot end a hung provider and the provider outlives the
+// probe. W3 kills it through a Job Object
+#[cfg(not(unix))]
+fn kill_group(_pid: i32) {}
 
 impl Probe<'_> {
     /// Spawns `cmd` in its own process group, with the login PATH and without stdin/stdout of ours.
     pub fn start(&mut self, mut cmd: Command) -> R<usize> {
-        let mut child = cmd.env("PATH", self.env.path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
-            .process_group(0).spawn().map_err(|e| e.to_string())?;
+        cmd.env("PATH", self.env.path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+        #[cfg(unix)]
+        cmd.process_group(0);
+        let mut child = cmd.spawn().map_err(|e| e.to_string())?;
         self.pids.lock().unwrap().push(child.id() as i32);
         let (stdin, stdout) = (child.stdin.take().unwrap(), BufReader::new(child.stdout.take().unwrap()));
         self.sessions.push(Session { child, stdin, stdout: Some(stdout) });
