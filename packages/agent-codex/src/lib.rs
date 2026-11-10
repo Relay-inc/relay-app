@@ -102,7 +102,7 @@ impl AgentProvider for Codex {
         let fenced = env.grants.fenced;
         let sandbox = match pick(env, "sandbox", &SANDBOX) { "danger-full-access" if fenced => "workspace-write", s => s };
         let approval = match pick(env, "approval", &APPROVAL) { "never" if fenced => "on-request", a => a };
-        let cfg = json!({"cwd": env.vault, "model": l.model, "effort": l.effort, "resume": l.resume,
+        let cfg = json!({"cwd": env.vault, "home": env.home, "model": l.model, "effort": l.effort, "resume": l.resume,
             "sandbox": sandbox, "approval": approval, "fenced": fenced, "instructions": agent_core::envelope::HINT});
         let mut cmd = Command::new(std::env::current_exe().map_err(|e| e.to_string())?);
         cmd.arg("--codex-bridge").arg(env.bin).arg(cfg.to_string());
@@ -231,7 +231,7 @@ mod tests {
         let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args[0] == "--codex-bridge" && args[1] == "/opt/codex");
         let cfg: Value = serde_json::from_str(&args[2]).unwrap();
-        assert_eq!(cfg, json!({"cwd": "/Users/me/my vault", "model": "gpt-6.1-sol", "effort": "high", "resume": "019a-1", "sandbox": "workspace-write", "approval": "on-request", "fenced": false, "instructions": agent_core::envelope::HINT}));
+        assert_eq!(cfg, json!({"cwd": "/Users/me/my vault", "home": "/Users/me", "model": "gpt-6.1-sol", "effort": "high", "resume": "019a-1", "sandbox": "workspace-write", "approval": "on-request", "fenced": false, "instructions": agent_core::envelope::HINT}));
         assert!(cmd.get_envs().any(|(k, v)| k == "OPENAI_API_KEY" && v.is_none()));
         // the settings' choices, an unknown one is the default
         let o = json!({"sandbox": "read-only", "approval": "sometimes", "auth": "api-key"});

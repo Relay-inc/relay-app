@@ -33,6 +33,23 @@ fn text(v: &Value, k: &str) -> Option<String> { v[k].as_str().filter(|s| !s.is_e
 // Nested instruction files are not listed: they are notes that sync, which any member can write anyway.
 const READ_ONLY: [&str; 8] = [".claude", "CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", "AGENTS.override.md", ".codex", ".agents", ".git"];
 const PROFILE: &str = "relay-workspace";
+/// What a fenced conversation's commands may still read outside the workspace: everything else is `none` (`:root`),
+/// so a note cannot have Codex read a file of yours and write it into a note that syncs. Measured with codex-cli 0.163
+/// (`codex sandbox`, then a real thread): without one of these `zsh -lc`, git or a here-document fails.
+/// - `:minimal`: macOS's own system folders (dyld, /bin, /usr, /System, /dev, /etc and the like), without which no
+///   program starts.
+/// - `/opt/homebrew`: the Homebrew programs, as Relay's guard lets them through (policy.rs, `SYSTEM`).
+/// - `~/.gitconfig` and `~/.config/git`: git stops with "unable to access" when it cannot read its global config.
+/// `:tmpdir` (the user's `$TMPDIR`) stays writable as in `:workspace`: here-documents and xcrun need it. `/tmp` does not.
+/// The workspace itself is the project root. Codex itself is not in the sandbox: it reads `~/.codex` (login, sessions)
+/// as before, its commands do not. A workspace conversation gets no project repos, so none are listed.
+fn readable(home: &str) -> Map<String, Value> {
+    let home = home.trim_end_matches('/');
+    let mut fs = Map::new();
+    for (p, a) in [(":root", "none"), (":slash_tmp", "none"), (":minimal", "read"), ("/opt/homebrew", "read")] { fs.insert(p.into(), a.into()); }
+    if home.starts_with('/') { for x in [".gitconfig", ".config/git"] { fs.insert(format!("{home}/{x}"), "read".into()); } }
+    fs
+}
 // the first codex-cli this ran against with permission profiles (docs/workspaces.md › Trust)
 const MIN_FENCED: (u32, u32) = (0, 163);
 
@@ -48,8 +65,9 @@ fn has_profiles(user_agent: &str) -> bool {
 
 /// thread/start (and thread/resume) params. Fenced (a workspace): approvals to the app (Relay's guard and the cards),
 /// never to codex's own auto review. Its MCP servers (`mcp`, from config/read), plugins and apps are off, as Claude
-/// Code runs there with `--strict-mcp-config`. And `workspace-write` becomes Relay's permission profile: the same
-/// sandbox with READ_ONLY kept, and none of the user's own extra writable roots.
+/// Code runs there with `--strict-mcp-config`. And the sandbox becomes Relay's permission profile: `workspace-write` the
+/// same sandbox with READ_ONLY kept and none of the user's own extra writable roots, `read-only` the same read-only one,
+/// both reading only the workspace and `readable` outside it.
 fn thread_params(cfg: &Value, mcp: &[String]) -> Value {
     let sandbox = text(cfg, "sandbox").unwrap_or("workspace-write".into());
     let mut opts = json!({"cwd": cfg["cwd"], "approvalPolicy": text(cfg, "approval").unwrap_or("on-request".into()), "sandbox": sandbox});
@@ -61,12 +79,18 @@ fn thread_params(cfg: &Value, mcp: &[String]) -> Value {
         opts["approvalsReviewer"] = "user".into();
         config.insert("features".into(), json!({"plugins": false, "apps": false}));
         config.insert("mcp_servers".into(), mcp.iter().map(|n| (n.clone(), json!({"enabled": false}))).collect::<Map<_, _>>().into());
-        if sandbox == "workspace-write" {
-            opts.as_object_mut().unwrap().remove("sandbox"); // codex takes a sandbox or a profile, not both
-            let keep: Map<_, _> = READ_ONLY.iter().map(|p| (p.to_string(), json!("read"))).collect();
-            config.insert("default_permissions".into(), PROFILE.into());
-            config.insert("permissions".into(), json!({PROFILE: {"extends": ":workspace", "filesystem": {":project_roots": keep}}}));
-        }
+        // codex takes a sandbox or a profile, not both: both modes a workspace allows become Relay's profile
+        let mut fs = readable(cfg["home"].as_str().unwrap_or(""));
+        let base = if sandbox == "workspace-write" {
+            fs.insert(":project_roots".into(), READ_ONLY.iter().map(|p| (p.to_string(), json!("read"))).collect::<Map<_, _>>().into());
+            ":workspace"
+        } else {
+            fs.insert(":project_roots".into(), "read".into());
+            ":read-only"
+        };
+        opts.as_object_mut().unwrap().remove("sandbox");
+        config.insert("default_permissions".into(), PROFILE.into());
+        config.insert("permissions".into(), json!({PROFILE: {"extends": base, "filesystem": fs}}));
     }
     if !config.is_empty() { opts["config"] = config.into(); }
     opts
@@ -279,18 +303,28 @@ mod tests {
 
     #[test]
     fn a_workspace_thread_gets_relays_profile_and_no_mcp_servers() {
-        let cfg = json!({"cwd": "/w", "sandbox": "workspace-write", "approval": "on-request", "fenced": true});
+        let cfg = json!({"cwd": "/w", "home": "/me/", "sandbox": "workspace-write", "approval": "on-request", "fenced": true});
         let p = thread_params(&cfg, &["node_repl".into(), "fake".into()]);
         assert!(p.get("sandbox").is_none()); // a profile, not a sandbox mode: codex refuses both
         assert_eq!(p["approvalsReviewer"], "user");
         assert_eq!(p["config"]["default_permissions"], PROFILE);
-        assert_eq!(p["config"]["permissions"], json!({"relay-workspace": {"extends": ":workspace", "filesystem": {":project_roots": {".claude": "read", "CLAUDE.md": "read", "CLAUDE.local.md": "read", "AGENTS.md": "read", "AGENTS.override.md": "read", ".codex": "read", ".agents": "read", ".git": "read"}}}}));
+        // nothing outside the workspace to read but the system's programs and git's config, the agents' files kept
+        let outside = json!({":root": "none", ":slash_tmp": "none", ":minimal": "read", "/opt/homebrew": "read", "/me/.gitconfig": "read", "/me/.config/git": "read"});
+        let mut fs = outside.clone();
+        fs[":project_roots"] = json!({".claude": "read", "CLAUDE.md": "read", "CLAUDE.local.md": "read", "AGENTS.md": "read", "AGENTS.override.md": "read", ".codex": "read", ".agents": "read", ".git": "read"});
+        assert_eq!(p["config"]["permissions"], json!({"relay-workspace": {"extends": ":workspace", "filesystem": fs}}));
         assert_eq!(p["config"]["mcp_servers"], json!({"node_repl": {"enabled": false}, "fake": {"enabled": false}}));
         assert_eq!(p["config"]["features"], json!({"plugins": false, "apps": false}));
-        // read-only stays read-only (nothing to keep), still without MCP servers
-        let p = thread_params(&json!({"cwd": "/w", "sandbox": "read-only", "fenced": true}), &[]);
-        assert_eq!((p["sandbox"].as_str(), p["config"].get("permissions")), (Some("read-only"), None));
+        // read-only stays read-only, with the same reads, still without MCP servers
+        let p = thread_params(&json!({"cwd": "/w", "home": "/me", "sandbox": "read-only", "fenced": true}), &[]);
+        let mut fs = outside;
+        fs[":project_roots"] = json!("read");
+        assert!(p.get("sandbox").is_none());
+        assert_eq!(p["config"]["permissions"], json!({"relay-workspace": {"extends": ":read-only", "filesystem": fs}}));
         assert_eq!(p["config"]["mcp_servers"], json!({}));
+        // no home known: no home path at all, rather than one at the disk's root
+        let p = thread_params(&json!({"cwd": "/w", "fenced": true}), &[]);
+        assert!(p["config"]["permissions"][PROFILE]["filesystem"].get("/.gitconfig").is_none());
     }
 
     #[test]
