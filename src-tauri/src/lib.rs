@@ -32,12 +32,16 @@ mod files;
 mod platform;
 #[cfg(target_os = "macos")]
 mod host;
-// this Mac as a work machine runs relay-server under launchd, so it is macOS only
-#[cfg(not(target_os = "macos"))]
+// this PC as a work machine: relay-server under Task Scheduler
+#[cfg(windows)]
+#[path = "host_windows.rs"]
+mod host;
+// relay-server runs on Linux on its own (Docker), the app is not its host there
+#[cfg(not(any(target_os = "macos", windows)))]
 mod host {
     pub fn status() -> serde_json::Value { serde_json::json!({"supported": false, "on": false, "running": false, "ram": false, "fingerprint": "", "clients": []}) }
-    pub fn set(_on: bool) -> Result<serde_json::Value, String> { Err("A work machine needs macOS.".into()) }
-    pub fn pair() -> Result<String, String> { Err("A work machine needs macOS.".into()) }
+    pub fn set(_on: bool) -> Result<serde_json::Value, String> { Err("A work machine needs macOS or Windows.".into()) }
+    pub fn pair() -> Result<String, String> { Err("A work machine needs macOS or Windows.".into()) }
     pub fn refresh() {}
     pub fn work_dir() -> Option<std::path::PathBuf> { None }
 }
@@ -470,8 +474,7 @@ fn save_worktrees(app: &AppHandle, w: &HashMap<String, Vec<String>>) {
 
 /// The user's own login shell, not zsh: a fish or bash user's PATH (npm, Homebrew) lives in that shell's config.
 /// The last line, in case the rc files print something first.
-// ponytail: on Windows there is no $SHELL or /bin/zsh, so this gives the macOS fallback and agents find no CLI. W3
-// reads the PATH there
+#[cfg(unix)]
 fn login_path() -> String {
     let sh = std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/zsh".into());
     Command::new(sh).args(["-lic", "printf '\\n%s' \"$PATH\""]).stdin(Stdio::null()).output()
@@ -479,6 +482,9 @@ fn login_path() -> String {
         .filter(|p| !p.is_empty())
         .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin".into())
 }
+/// Windows: the stored PATH of this machine and user (agent_core::stored_path), the app's own PATH when that fails.
+#[cfg(windows)]
+fn login_path() -> String { agent_core::stored_path().unwrap_or_else(|| std::env::var("PATH").unwrap_or_default()) }
 
 /// A mapped path of a vault status as an absolute one, "" when it is not there.
 fn mapped(st: &Value, k: &str) -> String {
@@ -2730,9 +2736,7 @@ fn integration_import(state: State<App>, provider: String) -> Result<Value, Stri
 // Read-only. The search queries are built here from the settings, the webview only asks for the list.
 
 /// A binary from the login-shell PATH: an app started from the Finder does not have /opt/homebrew/bin.
-fn in_path(state: &App, name: &str) -> Option<String> {
-    state.path.split(':').map(|d| format!("{d}/{name}")).find(|p| PathBuf::from(p).is_file())
-}
+fn in_path(state: &App, name: &str) -> Option<String> { agent_core::which(name, &state.path) }
 /// gh from the login-shell PATH: an app started from the Finder does not have /opt/homebrew/bin.
 fn gh(state: &App, args: &[&str]) -> Result<String, String> {
     let bin = in_path(state, "gh").ok_or_else(|| trc("err.no_gh"))?;

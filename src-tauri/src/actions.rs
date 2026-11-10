@@ -133,6 +133,9 @@ pub fn start(app: &AppHandle) {
         let script = format!("#!/bin/sh\nexec '{}' --cli \"$@\"\n", exe.replace('\'', "'\\''"));
         let f = bin.join("relay");
         if std::fs::write(&f, script).is_ok() { set_mode(&f, 0o755); }
+        // Windows: `relay` above serves a POSIX shell (Git Bash), `relay.cmd` serves cmd and PowerShell
+        #[cfg(windows)]
+        std::fs::write(bin.join("relay.cmd"), format!("@\"{}\" --cli %*\r\n", exe.replace('%', "%%"))).ok();
     }
     let path = sock();
     std::fs::create_dir_all(path.parent().unwrap()).ok();
@@ -166,6 +169,13 @@ fn serve(app: &AppHandle, c: UnixStream) {
     (&c).write_all(format!("{out}\n").as_bytes()).ok();
 }
 
+/// Whether tracing proves which conversation calls. Not on Windows: any process of the user may start a child with
+/// another process named as its parent (PROC_THREAD_ATTRIBUTE_PARENT_PROCESS), or run code inside another process,
+/// so an agent of a shared vault could pass for one of the main vault. There a traced call still picks its
+/// conversation, but personal reads are refused for every caller.
+// ponytail: refuses personal reads through `relay` on Windows (Claude Code's mail tools over the control pipe are not
+// affected). A per-conversation pipe the app hands only to that agent would prove it, if Windows users need the reads
+const TRACE_PROVES: bool = cfg!(not(windows));
 /// The app conversation a request on the socket comes from: up from the calling process to an agent the app runs.
 /// None when it descends from none (a terminal of the user's own) or the platform cannot tell.
 fn caller(app: &AppHandle, c: &UnixStream) -> Option<String> {
@@ -174,8 +184,9 @@ fn caller(app: &AppHandle, c: &UnixStream) -> Option<String> {
         .filter(|(_, p)| !p.remote).map(|(k, p)| (p.child.id(), k.clone())).collect();
     #[cfg(unix)]
     let mut pid = agent_core::peer::peer_pid(std::os::fd::AsRawFd::as_raw_fd(c))?;
-    #[cfg(not(unix))]
-    let mut pid: u32 = { let _ = c; None? }; // the stand-in socket has no peer, W3 reads it from the named pipe
+    // the pid Windows recorded when the CLI opened the pipe
+    #[cfg(windows)]
+    let mut pid = agent_core::peer::peer_pid(std::os::windows::io::AsRawHandle::as_raw_handle(c))?;
     for _ in 0..64 {
         if let Some(k) = agents.get(&pid) { return Some(k.clone()); }
         pid = agent_core::peer::parent(pid).filter(|p| *p > 1)?;
@@ -207,6 +218,7 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, known: bool, action: &str, a
     check_args(it.args, args)?;
     // a shared vault's conversation reads none of the user's own mail, reminders or calendar (it may still write to them)
     let personal = matches!(it.ext, "mail" | "reminders" | "calendar");
+    if personal && !it.write && !TRACE_PROVES { return Err("on Windows, `relay` does not read the user's own mail, reminders or calendar: Relay cannot tell which conversation asks. Writing to the user (a reminder, a mail draft) still works.".into()); }
     if personal && !it.write && (!known || crate::in_shared_vault(&app.state::<crate::App>(), key)) { return Err(crate::SHARED_NO_READ.into()); }
     let s = acts(app);
     if !access(&s, it.ext) { return Err(format!("the user switched off agent access to {}", it.ext)); }

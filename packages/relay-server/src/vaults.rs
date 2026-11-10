@@ -14,10 +14,23 @@ use relay_remote::vault::{epoch, split, MAX_EPOCH, MAX_RECORD};
 use relay_remote::{sync, tls};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::{fs, io};
+
+/// What tells a record file's version apart without reading it: inode, size and modification time.
+#[cfg(unix)]
+fn stamp(m: &fs::Metadata) -> (u64, u64, i64, i64) {
+    use std::os::unix::fs::MetadataExt;
+    (m.ino(), m.len(), m.mtime(), m.mtime_nsec())
+}
+// ponytail: no inode on Windows (std's file index is unstable), so a record replaced by one of the same size within
+// NTFS's 100 ns clock tick lists from the cache. Every write renames a new file in, which gets its own time
+#[cfg(not(unix))]
+fn stamp(m: &fs::Metadata) -> (u64, u64, i64, i64) {
+    let t = m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).unwrap_or_default();
+    (0, m.len(), t.as_secs() as i64, t.subsec_nanos() as i64)
+}
 
 /// How long an invite link works, and how many wrong proofs drop it.
 const INVITE_SECS: u64 = 24 * 3600;
@@ -388,7 +401,7 @@ impl Vaults {
             // a write's temp file is no record
             let Some(name) = e.file_name().to_str().filter(|n| hex(n, 64)).map(String::from) else { continue };
             let (p, Ok(m)) = (e.path(), e.metadata()) else { continue };
-            let stamp = (m.ino(), m.len(), m.mtime(), m.mtime_nsec());
+            let stamp = stamp(&m);
             if let Some((s, v)) = seen.get(&name).filter(|(s, _)| *s == stamp) { out.push(v.clone()); listed.insert(name, (*s, v.clone())); continue; }
             let v = match fs::read(&p) {
                 Ok(b) => json!({"name": name, "etag": sync::sha256_hex(&b), "size": b.len(), "meta": split(&b).map(|(m, _)| tls::hex(m)).unwrap_or_default(), "e": split(&b).and(epoch(&b)).unwrap_or(0)}),

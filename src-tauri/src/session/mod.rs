@@ -150,7 +150,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         crate::fence_in(app, state, &mut eb);
         let mut cmd = p.command(&eb.env(), &l)?;
         // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
-        let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();
+        let bin = actions::bin_dir(app).map(|b| format!("{}{}", b.display(), agent_core::PATH_SEP)).unwrap_or_default();
         cmd.current_dir(&dir).env("PATH", format!("{bin}{}", state.path)).env(actions::CONVERSATION, project);
         (broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?, eb.grants.mail, false)
     };

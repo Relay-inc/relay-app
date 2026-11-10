@@ -16,6 +16,8 @@ a PR. Versions follow
 ### Added
 
 - Relay compiles for Windows, and every PR is checked on macOS and Windows. It does not work on Windows yet: conversations and the `relay` command report that local sockets are not supported, and secrets, the login PATH, the `.claude` link of a vault, Whisper and this computer as a work machine are missing there (#451)
+- Conversations and the `relay` command run on Windows: local sockets are named pipes open to the user only, `relay` from an agent is traced to its conversation as on macOS, agents, plugins and their children run in a Job Object that ends them together, and the PATH is read from Windows' stored PATH (#454)
+- A Windows PC can be a work machine: Settings › Machines › This Mac as a machine registers a scheduled task that runs Relay's server at logon, and relay-server itself builds and runs on Windows, updates by starting the new version (one server at a time) and keeps its working copy on disk in a folder only the user may open, since Windows has no RAM disk (#474)
 - On Windows, Relay has the normal title bar, a sidebar in the theme's colour that follows light and dark, Ctrl where macOS has ⌘ in every shortcut and its label (Settings › Shortcuts included), toasts for a finished turn or a waiting card, and a `relay://` link or a second start goes to the window that is already open (#459)
 - On Windows, recording a meeting takes the microphone and what the computer plays, transcribes it with the ONNX models and keeps the audio as .wav. A microphone switched off in Windows' privacy settings is said before the recording starts, and Settings › Permissions shows it (#470)
 - On Windows, Whisper works for dictation and meetings, on the processor: download it in Settings › Voice like on the Mac (#471)

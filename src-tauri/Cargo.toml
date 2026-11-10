@@ -116,5 +116,8 @@ objc2-core-foundation = "0.3"
 mac-notification-sys = "0.6"
 # Whisper on the Mac's GPU: whisper.cpp on Metal (src/dictation.rs)
 transcribe-rs = { version = "0.3.12", features = ["whisper-metal"] }
-# this Mac as a work machine: the app runs relay-server itself (src/host.rs, `relay --relay-server`)
+
+# this computer as a work machine: the app runs relay-server itself (`relay --relay-server`), under a LaunchAgent on a
+# Mac (src/host.rs) and a scheduled task on Windows (src/host_windows.rs)
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
 relay-server = { path = "../packages/relay-server" }

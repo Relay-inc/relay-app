@@ -365,11 +365,11 @@ pnpm format:check             # Prettier
 ```
 
 CI (`.github/workflows/checks.yml`) runs the TypeScript checks plus `vite build` on macOS and Windows, then
-`cargo check`: on macOS with the tests, on Windows without `relay-server` (a Linux and Mac server) and without tests.
-The app builds for Windows but does little there yet: Unix-only calls (local sockets, process groups, file modes,
-symlinks, this Mac as a work machine) sit behind `cfg` gates with stand-ins (`src-tauri/src/platform.rs`,
-`packages/relay-remote/src/sock.rs`), each with a `ponytail:` comment naming the Windows PR (W2 to W4) that fills it
-in.
+`cargo check`: on macOS with the tests, on Windows without the app's tests (they still call Unix-only APIs). On Windows
+relay-server's unit tests run, its e2e tests build, and its update test runs.
+The app builds for Windows but does not all work there yet: Unix-only calls (file modes, symlinks) sit behind `cfg`
+gates with stand-ins (`src-tauri/src/platform.rs`), each with a `ponytail:` comment naming the Windows PR that fills
+it in.
 The window on Windows comes from `src-tauri/tauri.windows.conf.json` (merged over `tauri.conf.json`): the native title
 bar, opaque, no sidebar material, so the css paints the sidebar (`:root[data-os="windows"]`). It has no menu bar: the
 main window takes the menu's keys itself (`menuKey` in `src/application/boot.ts`). A default shortcut says `mod` for
@@ -403,10 +403,55 @@ popup needs no code there: wry answers an allowed `NewWindowRequested` with `Set
 own popup window with the opener's profile, and handles that window's `window.close()` (the macOS side needs a
 WKUIDelegate for that). The picture for `design_snapshot` is `ICoreWebView2::CapturePreview` as PNG into a memory
 stream, through `with_webview`.
-`cargo check --target x86_64-pc-windows-msvc` from a Mac stops at the C build scripts (ring, SQLite, the Windows
-resource file), which need the Windows SDK: CI is the check. With fake C tools for those (`DOCS_RS=1` skips the cmake
-builds), add `--no-default-features`: whisper-rs-sys cannot generate its bindings without Windows' C headers, and the
-bindings it ships are laid out for another platform, so the cross-check leaves the `whisper` feature out.
+
+Processes and local sockets work on Windows:
+
+- **Local sockets** (`packages/relay-remote/src/sock.rs`): named pipes behind the same calls as a Unix socket, for
+  the broker, the `relay` CLI and relay-server's attach. The socket's path stays the address: `bind` makes a pipe
+  `\\.\pipe\relay-<pid>-<n>` and writes its name into the file at the path, `connect` reads it there, so removing the
+  file closes the address as unlinking a socket does. The pipe's DACL allows only the user, remote clients are
+  refused, a client connects at identification level and only to a pipe served by a process of the same user (a
+  dead broker's address file could otherwise lead to a pipe another user made under that name). Timeouts and non-blocking reads are overlapped I/O.
+- **Caller tracing** (`agent_core::peer`): the pid Windows recorded when the CLI opened the pipe
+  (`GetNamedPipeClientProcessId`), then up through the parents. Windows keeps a parent's pid, not the parent, so a
+  parent that started after its child (a reused pid) or one the user may not inspect ends the walk: the call then
+  counts as untraced, as a terminal of the user's own does on macOS. The walk picks the conversation but proves
+  nothing: any process of the user may start a child with another process named as its parent, or run code inside
+  another process. So `relay` reads none of the user's own mail, reminders or calendar on Windows, for any caller
+  (`TRACE_PROVES` in `src-tauri/src/actions.rs`).
+- **Process groups** (`agent_core::job`): a Job Object that ends everything in it when it is killed or its last
+  handle closes. Discovery runs its probes in one, a plugin and the codex and OpenCode bridges' CLI in one each, the
+  broker its agent (and ends the job once the agent exits, so nothing that holds the agent's pipes outlives it).
+  Every child starts without a console window. Windows has no SIGTERM for these processes, so `agent_core::terminate`
+  is a hard stop there.
+- **This PC as a work machine** (`src-tauri/src/host_windows.rs`, relay-server): a scheduled task at logon instead of
+  a LaunchAgent, registered from XML through `schtasks` (`relay_server::task_xml`: as the user, no elevation, no time
+  limit, restarted a minute after a failure). relay-server keeps its data in `%LOCALAPPDATA%\Relay\server`, sets a
+  DACL for the user alone on it and on the working copy (`private_dir`, there is no RAM disk), links the transcripts
+  with a junction, and updates by starting the new binary and exiting: the new one waits for the old one's lock on
+  `serve.lock`. Only `relay-server.exe` takes an update, the Relay app as server updates with Relay, as on a Mac.
+- **PATH**: `login_path` reads the stored PATH (machine, then user) through PowerShell instead of a login shell, PATH
+  folders are split on `;` (`agent_core::PATH_SEP`), and `agent_core::which` also tries `.exe`, `.cmd`, `.bat` and
+  `.com`. The app writes `relay.cmd` next to the `relay` script.
+
+Type-checking the Windows side from a Mac needs a stand-in C toolchain, the build scripts of ring, SQLite and the
+Windows resource file otherwise want the Windows SDK. With `rustup target add x86_64-pc-windows-msvc` and a folder
+first on the PATH that holds `fakecc` (touches the file after `-o` or in `-Fo`), `fakear` (touches the `-out:` file)
+and `llvm-rc` (touches the `/fo` file):
+
+```sh
+CC_x86_64_pc_windows_msvc=fakecc CXX_x86_64_pc_windows_msvc=fakecc AR_x86_64_pc_windows_msvc=fakear \
+  DOCS_RS=1 WHISPER_DONT_GENERATE_BINDINGS=1 \
+  cargo check --workspace --exclude relay-mobile --target x86_64-pc-windows-msvc --no-default-features
+# relay-server with its tests
+CC_x86_64_pc_windows_msvc=fakecc CXX_x86_64_pc_windows_msvc=fakecc AR_x86_64_pc_windows_msvc=fakear \
+  DOCS_RS=1 WHISPER_DONT_GENERATE_BINDINGS=1 \
+  cargo check -p relay-server --all-targets --target x86_64-pc-windows-msvc
+```
+
+`--no-default-features` leaves the `whisper` feature out: whisper-rs-sys cannot generate its bindings without Windows'
+C headers, and the bindings it ships are laid out for another platform. Only Rust is checked, nothing is compiled or
+linked for Windows: CI on `windows-latest` is the real check.
 
 The frontend has a harness (`harness/`, see its README) that runs the real webview against a mocked Tauri backend,
 on the dev server (`pnpm exec vite --config harness/vite.config.ts`, http://127.0.0.1:1430):

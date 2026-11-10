@@ -36,6 +36,29 @@ closed and a new Relay restarts it on its own version. Make a pairing line on th
 Relay. `--ram-disk` keeps the mirror's working copy on a RAM disk that is hidden from Finder and ejected when the server
 stops, as a tmpfs does on Linux.
 
+## On Windows, with the Relay app
+
+The same switch on a Windows PC: Settings › Machines › This Mac as a machine (the label says Mac on every system for
+now). Relay registers a scheduled task, **Relay server** in Task Scheduler, that runs `relay.exe --relay-server serve`
+when you log on: as you, without admin rights, with no time limit, restarted a minute after it fails. Switching it off
+stops the server and removes the task. A new Relay registers the task again on its own binary. A Windows service, which
+would also run before anyone logs on, is not used.
+
+What differs from a Mac:
+
+- The data folder is `%LOCALAPPDATA%\Relay\server`, the repos `%USERPROFILE%\repos`. The server gives the data folder
+  and the working copy a DACL for your user alone at every start, and does not serve without it.
+- There is no RAM disk: the working copy is on disk, in that folder. Turn on BitLocker first (see Trust in
+  `docs/workspaces.md`). Settings › Machines says the working copy is on disk.
+- GitHub needs Git for Windows. The server gives git its own binary, by full path, as the credential helper.
+- Windows Firewall may ask, at the first start, whether the server may listen on the network. Allow it on private
+  networks, or the other computer cannot connect.
+
+On its own, without the app: `relay-server.exe serve`, and `relay-server service` prints the task with the `schtasks`
+steps. Only `relay-server.exe` takes an update from a device: it starts the new binary and exits, and the new one waits
+until the old one has let go of the data folder's lock (`serve.lock`), so two servers never run at once. The Relay app
+as server updates with Relay, as on a Mac.
+
 ## Set up from the source
 
 1. Install Claude Code on this machine and log in with your own account: `claude`, then `/login`. Relay never sends
@@ -44,7 +67,8 @@ stops, as a tmpfs does on Linux.
    there once the machine is connected to GitHub.
 3. Build and run: `cargo build --release -p relay-server`, then `target/release/relay-server serve` (on a Mac with
    `--ram-disk`).
-4. Keep it running: `relay-server service` prints a LaunchAgent (Mac) or a systemd user unit (Linux) with the steps.
+4. Keep it running: `relay-server service` prints a LaunchAgent (Mac), a systemd user unit (Linux) or a scheduled task
+   (Windows) with the steps.
 5. Pair: `relay-server pair` on this machine, paste the line in Relay › Settings › Machines. Pick the machine next to
    the model in a new conversation, or make it the default on that settings page.
 
