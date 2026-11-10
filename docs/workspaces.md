@@ -81,9 +81,9 @@ does:
   workspace Codex also keeps its sandbox (`danger-full-access` becomes `workspace-write`), asks (`never` becomes
   `on-request`), and asks the user, not its own auto review. Its `workspace-write` runs as Relay's own Codex
   permission profile (`relay-workspace`, which extends Codex's `:workspace`): it writes inside the workspace without
-  asking, except in `.claude` (and the folder it links to), `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.codex`,
+  asking, except in `.claude` (and the folder it links to), `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `AGENTS.override.md`, `.codex`,
   `.agents` and `.git`, which its sandbox keeps read-only, so a write there fails or comes as a request the guard
-  declines. Extra writable roots in the user's own Codex config do not apply there. Codex starts there without the
+  declines (instruction files in subfolders are notes that sync, which any member can write anyway). Extra writable roots in the user's own Codex config do not apply there. Codex starts there without the
   MCP servers of its config, its plugins and its apps, as Claude Code runs with `--strict-mcp-config`. This needs
   codex-cli 0.163 or newer, an older Codex is refused in a workspace (it would ignore the profile). What this is not:
   the guard sees only what Codex asks for. Codex's sandbox lets it read anywhere, and a path a command builds at run

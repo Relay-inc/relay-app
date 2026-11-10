@@ -28,7 +28,7 @@ Then Settings › Agents › Codex › Use. The program defaults to the first of
   outside the fence before it is a card (`docs/workspaces.md` › Trust). The fileChange approval carries every changed
   path (`input.paths`) for that check. Fenced, `workspace-write` becomes the permission profile `relay-workspace`
   (`default_permissions` and `permissions` in the thread's `config`, no `sandbox`: codex takes one or the other): it
-  extends `:workspace` and keeps `.claude`, `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.codex`, `.agents` and `.git`
+  extends `:workspace` and keeps `.claude`, `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `AGENTS.override.md`, `.codex`, `.agents` and `.git`
   read-only. The bridge reads `config/read` for the folder first and sets each MCP server in it `enabled = false`,
   with `features.plugins` and `features.apps` off. It refuses a codex older than 0.163 (from initialize's `userAgent`),
   which would ignore the profile. Checked against codex-cli 0.163.0.
