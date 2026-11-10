@@ -1,12 +1,12 @@
 // Recording a meeting (Waiting for you › Record, src/ui/features/conversations/WaitingView.tsx): two tracks streamed to
 // disk, the microphone ("me") and what the Mac plays ("others", through a Core Audio process tap, macOS 14.2+, which
-// asks for the System Audio Recording permission once). Two tracks name the speakers without a diarization model.
-// Stopping converts them (afconvert, on every Mac), transcribes each on its silences with the meeting model
-// (dictation.rs), and writes the mixed audio (.m4a) and the transcript (.md) into Obsidian's attachment folder; an agent
-// then makes the meeting note around them (src/application/calendar/recording.ts). Until that worked the recording stays
-// in the app data dir, so a failure loses nothing.
+// asks for the System Audio Recording permission once). On Windows "others" is WASAPI loopback on the default output
+// device, which asks for nothing. Two tracks name the speakers without a diarization model.
+// Stopping converts them (afconvert on the Mac, in-process on Windows), transcribes each on its silences with the meeting
+// model (dictation.rs), and writes the mixed audio (.m4a, .wav on Windows) and the transcript (.md) into Obsidian's
+// attachment folder. An agent then makes the meeting note around them (src/application/calendar/recording.ts). Until
+// that worked the recording stays in the app data dir, so a failure loses nothing.
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering::Relaxed};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
@@ -67,14 +67,15 @@ struct Session {
 pub struct MeetingRec { session: Mutex<Option<Session>> }
 
 /// Records `device` into a mono float WAV at its own rate, on a thread that owns the stream (it may not move threads).
-/// The callback only hands the samples over; the thread writes them and keeps the loudest one for the meter.
+/// The callback only hands the samples over, the thread writes them and keeps the loudest one for the meter. An output
+/// device records what it plays: cpal opens WASAPI loopback for it on Windows.
 fn track(device: cpal::Device, path: PathBuf) -> Result<Track, String> {
     let (stop, level, heard) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicU32::new(0)), Heard::default());
     let (stopped, loudest, hearing) = (stop.clone(), level.clone(), heard.clone());
     let (ready, started) = mpsc::channel();
     let done = std::thread::spawn(move || {
         let opened = (|| {
-            let config = device.default_input_config().map_err(|e| e.to_string())?;
+            let config = device.default_input_config().or_else(|e| device.default_output_config().map_err(|_| e)).map_err(|e| denied(e.to_string()))?;
             if config.sample_format() != cpal::SampleFormat::F32 { return Err(format!("unsupported audio format {}", config.sample_format())); }
             let channels = config.channels() as usize;
             let spec = hound::WavSpec { channels: 1, sample_rate: config.sample_rate(), bits_per_sample: 32, sample_format: hound::SampleFormat::Float };
@@ -83,12 +84,12 @@ fn track(device: cpal::Device, path: PathBuf) -> Result<Track, String> {
             let stream = device.build_input_stream(
                 config.config(),
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                    tx.send(data.chunks(channels).map(|f| f.iter().sum::<f32>() / channels as f32).collect()).ok();
+                    tx.send(mono(data, channels)).ok();
                 },
                 |e| eprintln!("meeting: {e}"),
                 None,
-            ).map_err(|e| e.to_string())?;
-            stream.play().map_err(|e| e.to_string())?;
+            ).map_err(|e| denied(e.to_string()))?;
+            stream.play().map_err(|e| denied(e.to_string()))?;
             Ok((stream, writer, rx, Down::new(config.sample_rate())))
         })();
         let (stream, mut writer, rx, mut down) = match opened {
@@ -110,6 +111,18 @@ fn track(device: cpal::Device, path: PathBuf) -> Result<Track, String> {
     });
     started.recv().map_err(|e| e.to_string())??;
     Ok(Track { stop, level, heard, done })
+}
+
+/// Interleaved frames as one channel, their average.
+fn mono(data: &[f32], channels: usize) -> Vec<f32> {
+    data.chunks(channels).map(|f| f.iter().sum::<f32>() / channels as f32).collect()
+}
+
+/// What the webview shows as the microphone being switched off for Relay (recording.ts): Windows answers an audio
+/// client it refuses with E_ACCESSDENIED, which cpal passes on as "Access is denied. (os error 5)".
+const MIC_OFF: &str = "microphone";
+fn denied(e: String) -> String {
+    if cfg!(windows) && e.contains("(os error 5)") { MIC_OFF.into() } else { e }
 }
 
 /// Linear interpolation down to 16 kHz as the samples arrive; the position carries over between chunks, so an hour
@@ -194,6 +207,7 @@ pub fn meeting_record_start(app: AppHandle, state: State<MeetingRec>, language: 
     let dir = recordings(&app)?.join(chrono::Local::now().format("%Y%m%d-%H%M%S").to_string());
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     if let Some(m) = &meeting { write_meta(&dir, m, language.as_deref())?; }
+    if super::permissions::microphone_off() { return Err(MIC_OFF.into()); }
     let mic = cpal::default_host().default_input_device().ok_or("no microphone")?;
     let mut tracks = vec![("me", track(mic, dir.join("me.wav"))?)];
     let (system, why) = match tap::Tap::create() {
@@ -323,8 +337,9 @@ async fn save(app: AppHandle, dir: PathBuf, title: String, note: Option<String>,
     }).await.map_err(|e| e.to_string())?
 }
 
+#[cfg(target_os = "macos")]
 fn afconvert(args: &[&str], from: &Path, to: &Path) -> Result<(), String> {
-    let ok = Command::new("afconvert").args(args).arg(from).arg(to).status().map_err(|e| e.to_string())?.success();
+    let ok = std::process::Command::new("afconvert").args(args).arg(from).arg(to).status().map_err(|e| e.to_string())?.success();
     if ok { Ok(()) } else { Err(format!("afconvert could not convert {}", from.display())) }
 }
 
@@ -370,9 +385,7 @@ fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, note: Optio
     for (i, name) in ["me", "others"].iter().enumerate() {
         let raw = dir.join(format!("{name}.wav"));
         if !raw.is_file() { continue; }
-        let wav = dir.join(format!("{name}-16k.wav"));
-        afconvert(&["-f", "WAVE", "-d", "LEI16@16000", "-c", "1"], &raw, &wav)?;
-        tracks.push((speakers[i], transcribe_rs::audio::read_wav_samples(&wav).map_err(|e| e.to_string())?));
+        tracks.push((speakers[i], at_16k(dir, name, &raw)?));
     }
     // named by when the recording started (its folder's name), so a retry later in the day keeps the meeting's time
     let started = started(dir).unwrap_or_else(|| chrono::Local::now().naive_local());
@@ -415,9 +428,13 @@ fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, note: Optio
         // all of them when none said anything, so the audio is still there to listen to
         let heard: Vec<&[f32]> = tracks.iter().zip(&used).filter(|(_, u)| **u || !used.contains(&true)).map(|((_, s), _)| s.as_slice()).collect();
         write_mix(&mixed, &heard)?;
-        let m4a = files.join(format!("{stem}.m4a"));
-        afconvert(&["-f", "m4af", "-d", "aac", "-b", "48000"], &mixed, &m4a)?;
-        Some(m4a)
+        let kept = files.join(format!("{stem}.{AUDIO}"));
+        #[cfg(target_os = "macos")]
+        afconvert(&["-f", "m4af", "-d", "aac", "-b", "48000"], &mixed, &kept)?;
+        // ponytail: no AAC encoder without Media Foundation's COM sink writer, so the 16 kHz mix as it is, ~115 MB an hour
+        #[cfg(not(target_os = "macos"))]
+        std::fs::copy(&mixed, &kept).map_err(|e| e.to_string())?;
+        Some(kept)
     } else { None };
     let md = notes.join(format!("{stem}.transcript.md"));
     std::fs::write(&md, format!("{}# {title}\n\n{}", transcript_front(note), transcript(drop_echo(lines)))).map_err(|e| e.to_string())?;
@@ -438,8 +455,37 @@ fn safe_name(title: &str) -> String {
     if name.is_empty() { "Meeting".into() } else { name.chars().take(80).collect() }
 }
 fn free_stem(notes: &Path, files: &Path, stem: &str) -> String {
-    let taken = |s: &str| notes.join(format!("{s}.transcript.md")).exists() || files.join(format!("{s}.m4a")).exists();
+    let taken = |s: &str| notes.join(format!("{s}.transcript.md")).exists() || files.join(format!("{s}.{AUDIO}")).exists();
     (1..).map(|n| if n == 1 { stem.to_string() } else { format!("{stem} ({n})") }).find(|s| !taken(s)).unwrap()
+}
+
+/// The kept audio's extension: AAC on the Mac (afconvert), the WAV itself elsewhere.
+const AUDIO: &str = if cfg!(target_os = "macos") { "m4a" } else { "wav" };
+
+/// A track as the models take it, 16 kHz mono: afconvert on the Mac, which every Mac has.
+#[cfg(target_os = "macos")]
+fn at_16k(dir: &Path, name: &str, raw: &Path) -> Result<Vec<f32>, String> {
+    let wav = dir.join(format!("{name}-16k.wav"));
+    afconvert(&["-f", "WAVE", "-d", "LEI16@16000", "-c", "1"], raw, &wav)?;
+    transcribe_rs::audio::read_wav_samples(&wav).map_err(|e| e.to_string())
+}
+/// A track as the models take it, 16 kHz mono: read and resampled here, Windows has no afconvert.
+#[cfg(not(target_os = "macos"))]
+fn at_16k(_: &Path, _: &str, raw: &Path) -> Result<Vec<f32>, String> { read_16k(raw) }
+
+/// A WAV that `track` wrote (mono float at the device's rate, any channels taken as their average) at 16 kHz.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+fn read_16k(path: &Path) -> Result<Vec<f32>, String> {
+    let mut r = hound::WavReader::open(path).map_err(|e| e.to_string())?;
+    let spec = r.spec();
+    let samples: Vec<f32> = match spec.sample_format {
+        hound::SampleFormat::Float => r.samples::<f32>().collect::<Result<_, _>>(),
+        hound::SampleFormat::Int => {
+            let full = (1i64 << (spec.bits_per_sample - 1)) as f32;
+            r.samples::<i32>().map(|s| s.map(|s| s as f32 / full)).collect::<Result<_, _>>()
+        }
+    }.map_err(|e| e.to_string())?;
+    Ok(super::dictation::resample(&mono(&samples, spec.channels.max(1) as usize), spec.sample_rate, RATE as u32))
 }
 
 fn write_mix(path: &Path, tracks: &[&[f32]]) -> Result<(), String> {
@@ -635,11 +681,24 @@ mod tap {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+/// What Windows plays: its default output device, which cpal records through WASAPI loopback. A device opened as the
+/// default follows Windows to another output during the recording. Nothing to undo, and no permission to ask.
+#[cfg(windows)]
+mod tap {
+    use cpal::traits::HostTrait;
+    pub struct Tap;
+    impl Tap {
+        pub fn create() -> Result<(Tap, cpal::Device), String> {
+            cpal::default_host().default_output_device().map(|d| (Tap, d)).ok_or_else(|| "no output device".into())
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 mod tap {
     pub struct Tap;
     impl Tap {
-        pub fn create() -> Result<(Tap, cpal::Device), String> { Err("only on macOS".into()) }
+        pub fn create() -> Result<(Tap, cpal::Device), String> { Err("only on macOS and Windows".into()) }
     }
 }
 
@@ -687,6 +746,82 @@ mod tests {
         assert!((total as i64 - (600 * 44_100 / 512 * 512) as i64 * 16_000 / 44_100).abs() <= 1, "{total}");
         let whole = super::super::dictation::resample(&second, 48_000, 16_000);
         assert!(out.iter().zip(&whole).all(|(a, b)| (a - b).abs() < 1e-4));
+    }
+
+    #[test]
+    fn interleaved_frames_average_to_one_channel() {
+        let got = mono(&[0.2, 0.4, -1.0, 1.0, 0.5, 0.25], 2);
+        assert!(got.iter().zip([0.3, 0.0, 0.375]).all(|(a, b)| (a - b).abs() < 1e-6), "{got:?}");
+        assert_eq!(mono(&[0.1, -0.2], 1), vec![0.1, -0.2]);
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("relay-audio-{}-{name}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+    fn sine(rate: u32, secs: f32, at: f32) -> Vec<f32> {
+        (0..(rate as f32 * secs) as usize).map(|i| (std::f32::consts::TAU * 440.0 * i as f32 / rate as f32).sin() * at).collect()
+    }
+    fn wav(path: &Path, rate: u32, channels: u16, float: bool, frames: &[f32]) {
+        let spec = if float { hound::WavSpec { channels, sample_rate: rate, bits_per_sample: 32, sample_format: hound::SampleFormat::Float } }
+            else { hound::WavSpec { channels, sample_rate: rate, bits_per_sample: 16, sample_format: hound::SampleFormat::Int } };
+        let mut w = hound::WavWriter::create(path, spec).unwrap();
+        for s in frames {
+            for _ in 0..channels { if float { w.write_sample(*s).unwrap() } else { w.write_sample((s * i16::MAX as f32) as i16).unwrap() } }
+        }
+        w.finalize().unwrap();
+    }
+    /// Within `tol` of a 440 Hz sine of amplitude `at` at 16 kHz, but for the last samples, which have no next one to
+    /// interpolate towards.
+    fn is_sine(got: &[f32], at: f32, tol: f32) -> bool {
+        got.iter().enumerate().take(got.len().saturating_sub(16))
+            .all(|(i, s)| (s - (std::f32::consts::TAU * 440.0 * i as f32 / 16_000.0).sin() * at).abs() < tol)
+    }
+
+    #[test]
+    fn a_track_at_any_rate_reads_back_at_16k_with_its_pitch() {
+        let dir = scratch("rates");
+        // what track() writes: mono float, at rates that do not divide 16 kHz, at 48 kHz, and below 16 kHz
+        for rate in [44_100, 22_050, 11_025, 48_000, 8_000] {
+            let path = dir.join(format!("{rate}.wav"));
+            wav(&path, rate, 1, true, &sine(rate, 1.0, 0.5));
+            let got = read_16k(&path).unwrap();
+            assert!((got.len() as i64 - 16_000).abs() <= 1, "{rate}: {}", got.len());
+            assert!(is_sine(&got, 0.5, 0.02), "{rate}");
+        }
+        // a stereo 16-bit file averages its channels
+        let path = dir.join("stereo.wav");
+        wav(&path, 44_100, 2, false, &sine(44_100, 0.5, 0.5));
+        let got = read_16k(&path).unwrap();
+        assert!((got.len() as i64 - 8_000).abs() <= 1, "{}", got.len());
+        assert!(is_sine(&got, 0.5, 0.02));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn two_tracks_at_their_own_rates_mix_into_one_16k_wav() {
+        let dir = scratch("mix");
+        // the microphone at 44.1 kHz for a second, the loopback at 48 kHz for half of one
+        let (mic, out) = (dir.join("me.wav"), dir.join("others.wav"));
+        wav(&mic, 44_100, 1, true, &sine(44_100, 1.0, 0.25));
+        wav(&out, 48_000, 2, true, &sine(48_000, 0.5, 0.25));
+        let (me, others) = (read_16k(&mic).unwrap(), read_16k(&out).unwrap());
+        let mixed = dir.join("mixed.wav");
+        write_mix(&mixed, &[&me, &others]).unwrap();
+        let mut r = hound::WavReader::open(&mixed).unwrap();
+        assert_eq!(r.spec(), hound::WavSpec { channels: 1, sample_rate: 16_000, bits_per_sample: 16, sample_format: hound::SampleFormat::Int });
+        let got: Vec<f32> = r.samples::<i16>().map(|s| s.unwrap() as f32 / i16::MAX as f32).collect();
+        assert_eq!(got.len(), me.len().max(others.len()));
+        // the sum while both play, the microphone alone after: in tune, so twice as loud
+        let want = |i: usize| me[i] + others.get(i).copied().unwrap_or(0.0);
+        assert!(got.iter().enumerate().all(|(i, s)| (s - want(i)).abs() < 1e-3));
+        assert!(is_sine(&got[..7_900], 0.5, 0.02));
+        // louder than full scale is clipped, not wrapped
+        write_mix(&mixed, &[&[0.8, -0.8], &[0.8, -0.8]]).unwrap();
+        let loud: Vec<i16> = hound::WavReader::open(&mixed).unwrap().samples::<i16>().map(|s| s.unwrap()).collect();
+        assert_eq!(loud, vec![i16::MAX, -i16::MAX]);
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

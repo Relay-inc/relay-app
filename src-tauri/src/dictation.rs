@@ -132,7 +132,10 @@ pub(crate) fn with_meeting_model<T>(app: &AppHandle, language: Option<String>, f
 
 /// Err("model") when the model a meeting uses is not downloaded, so no recording starts that cannot be transcribed.
 pub(crate) fn meeting_model_ready(app: &AppHandle) -> Result<(), String> {
-    if installed(&models_dir(app)?.join(picked(app, true)?.0.id)) { Ok(()) } else { Err("model".into()) }
+    let m = picked(app, true)?.0;
+    // said before the recording, not after it when the transcript fails
+    if cfg!(not(target_os = "macos")) && m.id == "whisper-turbo" { return Err("Whisper transcribes meetings on macOS only for now, pick another meeting model in Settings › Voice".into()); }
+    if installed(&models_dir(app)?.join(m.id)) { Ok(()) } else { Err("model".into()) }
 }
 
 #[derive(Serialize)]
