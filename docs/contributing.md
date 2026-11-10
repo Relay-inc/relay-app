@@ -46,7 +46,8 @@ The version lives in `package.json` and the root `Cargo.toml`, and the image tag
 follows it. Only bump it when cutting a release: move Unreleased
 under a new version heading in `CHANGELOG.md`, set the version, merge, then run `scripts/release.sh` on a Mac, on an
 up-to-date `main`. The top of `CHANGELOG.md` has the details. Run it from your own terminal: its dmg step needs
-Finder permission that an agent session doesn't have.
+Finder permission that an agent session doesn't have. It also waits for the Windows installer, which GitHub Actions
+builds for the release, and adds it ([development.md › Releasing for Windows](development.md#releasing-for-windows)).
 
 ## Adding things
 

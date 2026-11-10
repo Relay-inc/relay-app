@@ -485,3 +485,91 @@ node harness/perf.mjs --label mine                                    # streamin
 
 The transcript and vault tests read the vault in `$VAULT` (`VAULT=/path/to/vault cargo test`) and
 skip themselves without it.
+
+## Releasing for Windows
+
+Relay for Windows x64 is an NSIS installer, `Relay_<version>_x64-setup.exe`, built by `.github/workflows/windows.yml`
+on `windows-latest` (`pnpm tauri build --bundles nsis`, with `GGML_NATIVE=OFF` for whisper.cpp, see Tests above). The
+workflow runs by hand (Actions › windows › Run workflow, once the workflow is on `main`), for every published release,
+and on a PR that changes the installer or the workflow. It installs the build silently on the runner, checks it and
+uninstalls it, then keeps the installer as the run's artifact `relay-windows-x64` (about 13 MB). The first two runs,
+without a Rust cache, took 17 and 21 minutes, 14.5 and 18 of them in `tauri build`, well inside the runner's limits.
+With `Swatinem/rust-cache` holding the dependencies a run takes about 11 minutes (9.5 in `tauri build`, most of it
+the app's own release build with LTO).
+
+What the installer does (`src-tauri/tauri.windows.conf.json` › `bundle.windows.nsis`, Tauri's NSIS template and
+`src-tauri/windows/hooks.nsh`):
+
+- It installs for the current user only (`installMode: currentUser`), into `%LOCALAPPDATA%\Relay`, without admin
+  rights, with its Apps entry under `HKCU`.
+- WebView2: Tauri's default (`downloadBootstrapper`), the Evergreen bootstrapper is downloaded and run when the PC
+  has no WebView2 runtime. Windows 11 has one.
+- `relay://` is registered under `HKCU\Software\Classes\relay` (from `plugins.deep-link` in `tauri.conf.json`).
+- `bin\relay.cmd` in the install folder runs `relay.exe --cli`, and that folder goes on the user's Path, so `relay`
+  works in cmd and PowerShell (a new terminal, an open one keeps its Path). On a Mac `relay` is only on the PATH of
+  the agents Relay starts. The hook writes the Path raw (`DoNotExpandEnvironmentNames`), so `%USERPROFILE%`-style
+  entries stay as they are.
+- Uninstalling removes the files, the `relay://` key, the Path entry and Task Scheduler's `Relay server` task (This PC
+  as a work machine). relay-server's data, `%LOCALAPPDATA%\Relay\server` (its identity and pairings), stays, and with
+  it the install folder. An update (`/UPDATE`) leaves all of it in place.
+
+**Updates.** `scripts/release.sh` publishes the release, which starts the workflow, waits for that run, downloads the
+installer, signs it for the updater on the Mac with `tauri signer sign` (the updater key never goes to GitHub, so the
+workflow builds with `createUpdaterArtifacts` off), uploads it to the release and writes `windows-x86_64` into
+`latest.json` next to `darwin-aarch64`: the setup.exe's API url and its signature. `RELAY_SKIP_WINDOWS=1` releases
+without it. The app checks the minisign signature against the `pubkey` in `tauri.conf.json` after the download, on
+Windows as on macOS (tauri-plugin-updater's `download`), then starts the installer with `/P /UPDATE /R` (passive: a
+progress bar only, no questions) and ends Relay with `process::exit`. That skips `RunEvent::Exit`, so `updater.rs`
+does what quitting does in its `on_before_exit`. The installer closes every process that still runs the installed
+`relay.exe` through the Restart Manager (without asking, in passive mode), replaces the files and starts the new
+Relay.
+
+That reaches two kinds of processes that run `relay.exe` in the background, which a Mac update leaves running (macOS
+replaces the .app while they keep the old binary open, Windows cannot replace a running .exe):
+
+- The brokers (`relay.exe --broker`): a turn that is running when the update installs stops. The conversation's
+  session resumes with the next message, as after a crash.
+- relay-server for This PC as a work machine (`relay.exe --relay-server serve`, `host_windows.rs`): the conversations
+  other devices run here stop. The new Relay registers the task again at start (`host_windows::refresh`, its XML holds
+  the version) and that starts the server. A `relay-server.exe` installed on its own is another file and updates
+  itself.
+
+**Signing (off).** The installer and `relay.exe` are not Authenticode-signed until there is a certificate. Until then
+Windows shows SmartScreen's "Windows protected your PC" when the downloaded installer is opened: More info, then Run
+anyway. Microsoft's comparison gives unsigned code a strong SmartScreen block, which enterprises may make a full block, and
+says a new signature builds reputation over time, EV included since 2024
+(learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options, dated 2026-08-29). Not verified:
+whether an update through the updater shows SmartScreen too (it downloads the file itself, not through a browser).
+
+The switch is the repository variable `WINDOWS_SIGN` (Settings › Secrets and variables › Actions). The workflow's
+Signing step writes the build's config from it, Tauri then signs `relay.exe`, the installer and its uninstaller:
+
+| `WINDOWS_SIGN` | Variables | Secrets |
+|---|---|---|
+| unset | | |
+| `azure` | `AZURE_SIGNING_ENDPOINT`, `AZURE_SIGNING_ACCOUNT`, `AZURE_SIGNING_PROFILE` | `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID` |
+| `pfx` | `WINDOWS_TIMESTAMP_URL` (the certificate issuer's) | `WINDOWS_CERTIFICATE` (the .pfx, base64), `WINDOWS_CERTIFICATE_PASSWORD` |
+
+`azure` is Azure Artifact Signing (formerly Trusted Signing) through `artifact-signing-cli`, as Tauri documents it
+(v2.tauri.app/distribute/sign/windows, updated 2026-10-27): `signCommand` is
+`artifact-signing-cli -e <endpoint> -a <account> -c <profile> -d Relay %1` with the three `AZURE_*` variables in the
+environment. Setting it up (learn.microsoft.com/en-us/azure/artifact-signing/quickstart, updated 2026-10-08):
+
+1. Register the resource provider (`az provider register --namespace "Microsoft.CodeSigning"`) and create an Artifact
+   Signing account (`az artifact-signing create -n <account> -l <region> -g <group> --sku Basic`).
+2. Request identity validation in the Azure portal (it cannot be done from the CLI), which needs the Artifact Signing
+   Identity Verifier role. For an organisation it takes 1 to 20 business days. Public-trust certificates go to
+   organisations in, among others, the EU, and to individual developers only in the US and Canada.
+3. Create a certificate profile (`az artifact-signing certificate-profile create ... --profile-type PublicTrust
+   --identity-validation-id <id>`).
+4. Give an app registration the right to sign with that profile and put its client id, secret and tenant in the
+   secrets. Which role that is: Microsoft's "Assign roles in Artifact Signing" tutorial, not checked for this page.
+5. Set the variables: the endpoint of the account's region (West Europe is `https://weu.codesigning.azure.net`, the
+   quickstart lists them all), the account and the profile name, then `WINDOWS_SIGN=azure`.
+
+`pfx` imports the certificate into the runner's store and signs by thumbprint. Tauri's page says that route only
+applies to OV certificates acquired before June 1st 2023: a newer certificate's key is on a hardware token or in a
+cloud HSM, and then the issuer's signing tool goes into `signCommand` (the `azure` branch of the Signing step shows
+where). `scripts/release.sh` itself needs nothing for Authenticode: it signs on the runner, before the Mac adds the
+updater's signature, which covers the signed file. Once signing is on, drop the SmartScreen line from the release
+notes in `release.sh`.
