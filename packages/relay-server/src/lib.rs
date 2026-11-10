@@ -182,7 +182,7 @@ pub fn private_dir(dir: &Path) -> io::Result<()> {
     let sddl: Vec<u16> = dacl_sddl(&relay_remote::sock::user_sid()?).encode_utf16().chain(Some(0)).collect();
     let path: Vec<u16> = dir.as_os_str().encode_wide().chain(Some(0)).collect();
     let mut sd: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
-    // SAFETY: plain Win32 calls; `sd` is freed below, `acl` points into it and is used before that
+    // SAFETY: plain Win32 calls, `sd` is freed below, `acl` points into it and is used before that
     unsafe {
         if ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.as_ptr(), SDDL_REVISION_1, &mut sd, std::ptr::null_mut()) == 0 { return Err(io::Error::last_os_error()); }
         let (mut present, mut acl, mut defaulted) = (0, std::ptr::null_mut::<ACL>(), 0);

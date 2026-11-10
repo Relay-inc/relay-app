@@ -46,6 +46,15 @@ a removal counts at once. In Relay the server then shows under Settings › Mach
 `auto` in the settings (`shared_vaults::keepers`), with no Forget and no New workspace: it goes again when this Mac is
 admin of no workspace there. A machine the user paired is never touched.
 
+**A Windows PC as a work machine keeps the working copy on disk.** On a Mac and in Docker the plaintext a work machine
+opens (the device's mirrored vault and memory, its GitHub token, the transcripts) lives on a RAM disk or a tmpfs and is
+gone when the server stops. Windows has no RAM disk without a third-party driver, so there it is a folder in
+`%LOCALAPPDATA%\Relay\server` with a DACL for the user alone (no other user, no Administrators or SYSTEM entry), and it
+stays there when the server stops, until the device is forgotten in Relay or revoked on the server. Whoever can read that disk outside Windows (a stolen
+laptop, a disk image, a backup of the profile) reads the vault's plain text. Turn on BitLocker (device encryption)
+before making a Windows PC a work machine. An administrator of that PC can still take the folder over, as root can on
+any server. Workspaces are not affected: the server keeps those as ciphertext only, on every system.
+
 **The live channel** passes frames, not files: sealed under the workspace key on the sender's Mac, passed to the
 other members, never written to disk. The server sees which workspace and which record name (an HMAC) a frame is for,
 its size, its kind (`update` or `awareness`) and who sent it, as with records. It could drop or delay one, not read,

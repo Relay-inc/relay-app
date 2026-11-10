@@ -365,7 +365,8 @@ pnpm format:check             # Prettier
 ```
 
 CI (`.github/workflows/checks.yml`) runs the TypeScript checks plus `vite build` on macOS and Windows, then
-`cargo check`: on macOS with the tests, on Windows without `relay-server` (a Linux and Mac server) and without tests.
+`cargo check`: on macOS with the tests, on Windows without the app's tests (they still call Unix-only APIs). On Windows
+relay-server's unit tests run, its e2e tests build, and its update test runs.
 The app builds for Windows but does not all work there yet: Unix-only calls (file modes, symlinks, this Mac as a
 work machine, Whisper) sit behind `cfg` gates with stand-ins (`src-tauri/src/platform.rs`), each with a `ponytail:`
 comment naming the Windows PR that fills it in.
@@ -390,6 +391,12 @@ Processes and local sockets work on Windows:
   broker its agent (and ends the job once the agent exits, so nothing that holds the agent's pipes outlives it).
   Every child starts without a console window. Windows has no SIGTERM for these processes, so `agent_core::terminate`
   is a hard stop there.
+- **This PC as a work machine** (`src-tauri/src/host_windows.rs`, relay-server): a scheduled task at logon instead of
+  a LaunchAgent, registered from XML through `schtasks` (`relay_server::task_xml`: as the user, no elevation, no time
+  limit, restarted a minute after a failure). relay-server keeps its data in `%LOCALAPPDATA%\Relay\server`, sets a
+  DACL for the user alone on it and on the working copy (`private_dir`, there is no RAM disk), links the transcripts
+  with a junction, and updates by starting the new binary and exiting: the new one waits for the old one's lock on
+  `serve.lock`. Only `relay-server.exe` takes an update, the Relay app as server updates with Relay, as on a Mac.
 - **PATH**: `login_path` reads the stored PATH (machine, then user) through PowerShell instead of a login shell, PATH
   folders are split on `;` (`agent_core::PATH_SEP`), and `agent_core::which` also tries `.exe`, `.cmd`, `.bat` and
   `.com`. The app writes `relay.cmd` next to the `relay` script.
@@ -402,7 +409,11 @@ and `llvm-rc` (touches the `/fo` file):
 ```sh
 CC_x86_64_pc_windows_msvc=fakecc CXX_x86_64_pc_windows_msvc=fakecc AR_x86_64_pc_windows_msvc=fakear \
   DOCS_RS=1 WHISPER_DONT_GENERATE_BINDINGS=1 \
-  cargo check --workspace --exclude relay-mobile --exclude relay-server --target x86_64-pc-windows-msvc
+  cargo check --workspace --exclude relay-mobile --target x86_64-pc-windows-msvc
+# relay-server with its tests
+CC_x86_64_pc_windows_msvc=fakecc CXX_x86_64_pc_windows_msvc=fakecc AR_x86_64_pc_windows_msvc=fakear \
+  DOCS_RS=1 WHISPER_DONT_GENERATE_BINDINGS=1 \
+  cargo check -p relay-server --all-targets --target x86_64-pc-windows-msvc
 ```
 
 Only Rust is checked, nothing is compiled or linked for Windows: CI on `windows-latest` is the real check.

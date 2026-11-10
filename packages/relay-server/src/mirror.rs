@@ -217,7 +217,7 @@ impl Mirror {
     /// Forget everything of a device here: store, working copy, key.
     pub fn wipe(&self, ns: &str) {
         self.open.lock().unwrap().remove(ns);
-        fs::remove_file(self.sessions_link(ns)).ok();
+        fs::remove_file(self.sessions_link(ns)).or_else(|_| fs::remove_dir(self.sessions_link(ns))).ok(); // a junction on Windows
         fs::remove_dir_all(self.store(ns)).ok();
         fs::remove_dir_all(self.work_of(ns)).ok();
     }
