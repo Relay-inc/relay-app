@@ -10,7 +10,7 @@
 #[cfg(unix)]
 pub use std::os::unix::net::{UnixListener, UnixStream};
 #[cfg(windows)]
-pub use pipe::{UnixListener, UnixStream};
+pub use pipe::{user_sid, UnixListener, UnixStream};
 
 /// Every pipe Relay makes starts with this.
 #[cfg(any(windows, test))]
@@ -179,6 +179,9 @@ mod pipe {
         unsafe { LocalFree(s.cast()) };
         Ok(sid)
     }
+
+    /// The SID of the user this process runs as (relay-server's private folders use it too).
+    pub fn user_sid() -> io::Result<String> { sid_of(unsafe { GetCurrentProcess() }) }
 
     /// A new instance of the pipe `name`: the first one (refused when the name is taken) or another.
     fn instance(name: &[u16], first: bool) -> io::Result<OwnedHandle> {

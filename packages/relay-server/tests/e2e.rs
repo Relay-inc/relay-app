@@ -177,16 +177,18 @@ fn update_goes_on_in_the_binary_sent() {
     let me = env!("CARGO_PKG_VERSION");
     // a stand-in that is relay-server of this version: it answers `version` and runs the real binary for the rest
     let real = env!("CARGO_BIN_EXE_relay-server");
-    let script = format!("#!/bin/sh\nif [ \"$1\" = version ]; then echo {me}; exit 0; fi\nexec {real} \"$@\"\n");
+    // on Windows, which runs no script, the real binary itself: the new process takes over the old one's lock
+    let script = if cfg!(windows) { std::fs::read(real).unwrap() } else { format!("#!/bin/sh\nif [ \"$1\" = version ]; then echo {me}; exit 0; fi\nexec {real} \"$@\"\n").into_bytes() };
     if cfg!(target_os = "macos") {
-        assert!(c.update(me, script.as_bytes(), None).unwrap_err().contains("Relay on a Mac"));
+        assert!(c.update(me, &script, None).unwrap_err().contains("Relay on a Mac"));
         return;
     }
-    assert!(c.update("9.9.9", script.as_bytes(), None).unwrap_err().contains("not relay-server 9.9.9"), "a binary of another version is refused");
-    assert!(!s.data.join("bin/relay-server").exists());
+    let kept = relay_server::upgrade::path(&s.data);
+    assert!(c.update("9.9.9", &script, None).unwrap_err().contains("not relay-server 9.9.9"), "a binary of another version is refused");
+    assert!(!kept.exists());
     std::fs::remove_file(s.data.join("serve.json")).unwrap();
-    c.update(me, script.as_bytes(), None).unwrap();
-    assert!(s.data.join("bin/relay-server").exists());
+    c.update(me, &script, None).unwrap();
+    assert!(kept.exists());
     // it restarted: serve writes serve.json again at its start, and answers on the same connection details
     let t = Instant::now();
     while !s.data.join("serve.json").exists() { assert!(t.elapsed() < Duration::from_secs(10), "no restart"); std::thread::sleep(Duration::from_millis(50)); }
@@ -205,6 +207,8 @@ fn linked(parent: &Client, tag: &str) -> Client {
     Client::new(&l.host, l.port, &l.fp, id)
 }
 
+// the stand-in claude is a shell script
+#[cfg(unix)]
 #[test]
 fn start_builds_claude_from_the_laptops_profile() {
     let s = start("start");
@@ -251,6 +255,7 @@ fn read_http(c: &mut std::net::TcpStream) -> (String, String) {
     }
 }
 /// A stand-in ntfy server: the headers and the body of each POST it gets.
+#[cfg(unix)]
 fn fake_ntfy() -> (String, std::sync::mpsc::Receiver<(String, String)>) {
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}/relay-topic", l.local_addr().unwrap());
@@ -263,6 +268,7 @@ fn fake_ntfy() -> (String, std::sync::mpsc::Receiver<(String, String)>) {
     (url, rx)
 }
 
+#[cfg(unix)]
 #[test]
 fn a_waiting_conversation_nobody_follows_goes_to_ntfy() {
     let s = start("notify");
@@ -373,13 +379,23 @@ fn a_linked_device_shares_its_devices_conversations_and_nothing_more() {
     assert!(other.info().is_ok());
 }
 
+/// Two connected ends: a socket pair, on Windows (no socket pairs there) a loopback TCP connection.
+#[cfg(unix)]
+fn pair() -> std::io::Result<(std::os::unix::net::UnixStream, std::os::unix::net::UnixStream)> { std::os::unix::net::UnixStream::pair() }
+#[cfg(windows)]
+fn pair() -> std::io::Result<(std::net::TcpStream, std::net::TcpStream)> {
+    let l = std::net::TcpListener::bind("127.0.0.1:0")?;
+    let a = std::net::TcpStream::connect(l.local_addr()?)?;
+    Ok((a, l.accept()?.0))
+}
+
 /// The laptop's own Mac in the share tests: one stand-in agent per attach that answers `got <line>`, the phones it
 /// trusts, and what was stopped.
 struct Mac { shared: Vec<String>, phones: std::sync::Mutex<relay_remote::share::Phones>, killed: std::sync::Mutex<Vec<String>> }
 impl relay_remote::share::Local for Mac {
     fn shared(&self, key: &str) -> bool { self.shared.iter().any(|k| k == key) }
     fn attach(&self, _key: &str) -> Result<relay_remote::broker::Conn, String> {
-        let (a, b) = std::os::unix::net::UnixStream::pair().map_err(|e| e.to_string())?;
+        let (a, b) = pair().map_err(|e| e.to_string())?;
         std::thread::spawn(move || {
             let mut out = b.try_clone().unwrap();
             for l in std::io::BufReader::new(b).lines().map_while(Result::ok) { if writeln!(out, "o got {l}").is_err() { break; } }

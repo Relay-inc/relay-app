@@ -6,7 +6,8 @@ use std::process::exit;
 const USAGE: &str = "relay-server: runs Relay conversations on this machine
 
   relay-server serve [--port 47800] [--bind 0.0.0.0] [--ram-disk]
-                                                        run (a launchd or systemd service, see `service`)
+                                                        run (a launchd or systemd service, a scheduled task on
+                                                        Windows, see `service`)
   relay-server pair [--host <ip>] [--port <port>]      a one-time line to paste in Relay › Settings › Machines
   relay-server clients                                  the paired devices
   relay-server revoke <name | fingerprint>              unpair a device, at once (and take it out of its shared vaults)
@@ -18,7 +19,8 @@ const USAGE: &str = "relay-server: runs Relay conversations on this machine
                                                         git's credential helper for github.com, set by the server
 
 The data folder is RELAY_SERVER_DATA, else the platform's application data folder. --ram-disk (Mac) keeps the
-mirror's working copy on a RAM disk, as a tmpfs does on Linux.";
+mirror's working copy on a RAM disk, as a tmpfs does on Linux. Windows has neither: the working copy is on disk there,
+in a folder only this user may open.";
 
 fn flag(args: &[String], name: &str) -> Option<String> { args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned() }
 fn fail(e: impl std::fmt::Display) -> ! { eprintln!("relay-server: {e}"); exit(1) }
@@ -30,6 +32,8 @@ pub fn run(a: &[String]) {
     match a.get(1).map(String::as_str) {
         Some("serve") => {
             crate::upgrade::adopt(&data);
+            #[cfg(windows)]
+            let _lock = windows_serve(&data);
             // before Server::new starts any thread, see ramdisk::eject_on_stop
             if a.iter().any(|x| x == "--ram-disk") { ram_disk(&data); }
             set_broker_env();
@@ -95,3 +99,14 @@ fn ram_disk(data: &std::path::Path) {
 }
 #[cfg(not(target_os = "macos"))]
 fn ram_disk(_: &std::path::Path) { eprintln!("relay-server: --ram-disk is for a Mac, mount a tmpfs here (RELAY_SERVER_WORKDIR)"); }
+
+/// Windows, before `serve` starts: the data folder's lock (one server at a time, also across an update, upgrade::lock)
+/// and the data folder and working copy for this user only. Without a RAM disk the working copy's plaintext is on
+/// disk, so that DACL is the wall: no serving without it.
+// ponytail: the working copy on disk behind a user-only DACL, a RAM disk driver if plaintext may not touch the disk
+#[cfg(windows)]
+fn windows_serve(data: &std::path::Path) -> std::fs::File {
+    let lock = crate::upgrade::lock(data).unwrap_or_else(|e| fail(e));
+    for d in [data.to_path_buf(), crate::mirror::work_dir(data)] { crate::private_dir(&d).unwrap_or_else(|e| fail(format!("{}: {e}", d.display()))); }
+    lock
+}

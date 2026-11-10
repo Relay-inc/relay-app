@@ -476,21 +476,9 @@ fn login_path() -> String {
         .filter(|p| !p.is_empty())
         .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin".into())
 }
-/// Windows: the PATH as it stands now for this machine and user (where npm, winget and the CLIs' installers add
-/// themselves), not the one the app inherited at its start, so a CLI installed while Relay runs is found. Read
-/// through PowerShell, UTF-8 so a folder with an accent survives. The app's own PATH when that fails.
-// ponytail: PowerShell over cmd, which has no way to read the stored PATH but `reg query` output to parse. A folder
-// added only in a PowerShell profile is missed (-NoProfile keeps it fast and quiet), load the profile if users ask
+/// Windows: the stored PATH of this machine and user (agent_core::stored_path), the app's own PATH when that fails.
 #[cfg(windows)]
-fn login_path() -> String {
-    use std::os::windows::process::CommandExt;
-    const READ: &str = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')";
-    Command::new("powershell.exe").args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", READ]).creation_flags(agent_core::job::NO_WINDOW)
-        .stdin(Stdio::null()).output().ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().trim_matches(';').to_string())
-        .filter(|p| !p.is_empty())
-        .unwrap_or_else(|| std::env::var("PATH").unwrap_or_default())
-}
+fn login_path() -> String { agent_core::stored_path().unwrap_or_else(|| std::env::var("PATH").unwrap_or_default()) }
 
 /// A mapped path of a vault status as an absolute one, "" when it is not there.
 fn mapped(st: &Value, k: &str) -> String {
