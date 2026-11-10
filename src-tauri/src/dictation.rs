@@ -20,7 +20,6 @@ use transcribe_rs::onnx::cohere::CohereModel;
 use transcribe_rs::onnx::moonshine::{MoonshineModel, MoonshineVariant};
 use transcribe_rs::onnx::parakeet::ParakeetModel;
 use transcribe_rs::onnx::Quantization;
-#[cfg(target_os = "macos")]
 use transcribe_rs::whisper_cpp::WhisperEngine;
 use transcribe_rs::{SpeechModel, TranscribeOptions};
 
@@ -51,11 +50,7 @@ fn load(m: &Model, dir: &Path) -> Result<Box<dyn SpeechModel>, String> {
         "parakeet-v3" | "parakeet-v2" => Box::new(ParakeetModel::load(dir, int8).map_err(e)?),
         "canary-1b-v2" => Box::new(CanaryModel::load(dir, int8).map_err(e)?),
         "cohere" => Box::new(CohereModel::load(dir, int8).map_err(e)?),
-        #[cfg(target_os = "macos")]
-        "whisper-turbo" => Box::new(WhisperEngine::load(&dir.join(m.file)).map_err(e)?), // whisper.cpp on Metal
-        // ponytail: no Whisper on Windows, the ONNX models cover dictation there. whisper.cpp on CPU or Vulkan once asked for
-        #[cfg(not(target_os = "macos"))]
-        "whisper-turbo" => return Err("Whisper runs on macOS only for now, pick another model".into()),
+        "whisper-turbo" => Box::new(WhisperEngine::load(&dir.join(m.file)).map_err(e)?), // whisper.cpp, Metal on a Mac, the CPU on Windows
         _ => Box::new(MoonshineModel::load(dir, MoonshineVariant::Base, &Quantization::default()).map_err(e)?),
     })
 }
@@ -133,8 +128,6 @@ pub(crate) fn with_meeting_model<T>(app: &AppHandle, language: Option<String>, f
 /// Err("model") when the model a meeting uses is not downloaded, so no recording starts that cannot be transcribed.
 pub(crate) fn meeting_model_ready(app: &AppHandle) -> Result<(), String> {
     let m = picked(app, true)?.0;
-    // said before the recording, not after it when the transcript fails
-    if cfg!(not(target_os = "macos")) && m.id == "whisper-turbo" { return Err("Whisper transcribes meetings on macOS only for now, pick another meeting model in Settings › Voice".into()); }
     if installed(&models_dir(app)?.join(m.id)) { Ok(()) } else { Err("model".into()) }
 }
 
@@ -153,8 +146,8 @@ pub fn dictation_models(app: AppHandle, state: State<Dictation>) -> Result<Vec<M
 #[tauri::command]
 pub fn dictation_model(app: AppHandle) -> Result<bool, String> { Ok(installed(&models_dir(&app)?.join(picked(&app, false)?.0.id))) }
 
-/// Downloads a model (`id`, or the picked one), checks and unpacks it, reporting 0..1 on `on_progress`. curl, shasum
-/// and tar are on every Mac.
+/// Downloads a model (`id`, or the picked one), checks and unpacks it, reporting 0..1 on `on_progress`. curl and tar
+/// are on every Mac and in Windows 10 and later.
 #[tauri::command]
 pub async fn dictation_download(app: AppHandle, state: State<'_, Dictation>, id: Option<String>, on_progress: Channel<f64>) -> Result<(), String> {
     let m = match id { Some(id) => model(&id)?, None => picked(&app, false)?.0 };
@@ -181,8 +174,7 @@ fn download(m: &Model, models: &Path, progress: &Channel<f64>) -> Result<(), Str
     };
     let result = (|| {
         if !ok { return Err("download failed".to_string()); }
-        let sum = run(Command::new("shasum").args(["-a", "256"]).arg(&part))?;
-        if !String::from_utf8_lossy(&sum.stdout).starts_with(m.sha256) { return Err("the download is damaged (checksum differs)".into()); }
+        if sha256(&part)? != m.sha256 { return Err("the download is damaged (checksum differs)".into()); }
         // the archive holds one folder, named as Handy names it: unpacked aside, then moved under the model's id
         std::fs::remove_dir_all(&unpack).ok();
         std::fs::create_dir_all(&unpack).map_err(|e| e.to_string())?;
@@ -203,6 +195,14 @@ fn download(m: &Model, models: &Path, progress: &Channel<f64>) -> Result<(), Str
     std::fs::remove_dir_all(&unpack).ok();
     if result.is_ok() { progress.send(1.0).ok(); }
     result
+}
+
+/// The file's SHA-256 as lowercase hex, read in chunks (a model is up to 1.7 GB).
+fn sha256(path: &Path) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut std::fs::File::open(path).map_err(|e| e.to_string())?, &mut hasher).map_err(|e| e.to_string())?;
+    Ok(hasher.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }
 
 /// Removes a downloaded model, unloading it when it is the one in use.
@@ -332,7 +332,17 @@ pub fn dictation_cancel(state: State<Dictation>) {
 
 #[cfg(test)]
 mod tests {
-    use super::resample;
+    use super::{resample, sha256};
+    #[test]
+    fn sha256_of_a_known_file() {
+        let path = std::env::temp_dir().join(format!("relay-sha256-{}", std::process::id()));
+        std::fs::write(&path, b"abc").unwrap();
+        let sum = sha256(&path);
+        std::fs::remove_file(&path).ok();
+        // FIPS 180-2's example for "abc"
+        assert_eq!(sum.unwrap(), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+        assert!(sha256(std::path::Path::new("/no/such/file")).is_err());
+    }
     #[test]
     fn resample_keeps_duration_and_shape() {
         let second: Vec<f32> = (0..48_000).map(|i| (i as f32 / 48_000.0 * 440.0 * std::f32::consts::TAU).sin()).collect();

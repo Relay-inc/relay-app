@@ -4400,6 +4400,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha1_smol",
+ "sha2",
  "sys-locale",
  "tauri",
  "tauri-build",

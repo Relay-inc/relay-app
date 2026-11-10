@@ -58,10 +58,13 @@ rrule = "0.14"
 chrono-tz = "0.10"
 # the shells of the embedded terminals (src/pty.rs)
 portable-pty = "0.9"
-# dictation in the composer (src/dictation.rs): the microphone, and Parakeet speech to text on ONNX Runtime
+# dictation in the composer (src/dictation.rs): the microphone, Parakeet speech to text on ONNX Runtime, and Whisper on
+# whisper.cpp (on the CPU, Metal is added for macOS below). whisper.cpp is C++ built by cmake: MSVC and cmake on Windows.
+# ponytail: CPU only on Windows. Vulkan (`whisper-vulkan`) needs the Vulkan SDK and VULKAN_SDK on the build machine
 cpal = "0.18"
-# (Whisper on whisper.cpp is added for macOS only, on Metal, below)
-transcribe-rs = { version = "0.3.12", features = ["onnx"] }
+transcribe-rs = { version = "0.3.12", features = ["onnx", "whisper-cpp"] }
+# the downloaded speech model's SHA-256 (src/dictation.rs)
+sha2 = "0.10"
 # the meeting recordings (src/meeting.rs): their tracks on disk
 hound = "3"
 
@@ -102,7 +105,7 @@ objc2-core-audio = "0.3"
 objc2-core-foundation = "0.3"
 # banners for a finished turn or a waiting card (src/notify.rs), with the click coming back to the app
 mac-notification-sys = "0.6"
-# Whisper models for dictation and meetings, whisper.cpp on Metal (src/dictation.rs)
+# Whisper on the Mac's GPU: whisper.cpp on Metal (src/dictation.rs)
 transcribe-rs = { version = "0.3.12", features = ["whisper-metal"] }
 # this Mac as a work machine: the app runs relay-server itself (src/host.rs, `relay --relay-server`)
 relay-server = { path = "../packages/relay-server" }

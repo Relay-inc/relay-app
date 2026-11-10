@@ -130,7 +130,13 @@ export function VoicePage({ active }: { active: boolean }) {
                     <span className={`ml-2 ${OK_MESSAGE}`}>{t("voice.inUse")}</span>
                   ) : null}
                 </span>
-                <span className={HINT_IN_ROW}>{t(`voice.desc.${model.id}` as Key)}</span>
+                <span className={HINT_IN_ROW}>
+                  {t(
+                    model.id === "whisper-turbo" && !isMac()
+                      ? "voice.desc.whisper-turboWin"
+                      : (`voice.desc.${model.id}` as Key),
+                  )}
+                </span>
                 <span className={HINT_IN_ROW}>
                   {t("voice.size", { mb: model.mb })} · {tn("voice.langs", model.langs.length)}
                 </span>

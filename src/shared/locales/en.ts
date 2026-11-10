@@ -1989,6 +1989,7 @@ const en = {
     "More accurate and slower, 25 European languages. It is told the language instead of hearing it.",
   "voice.desc.cohere": "The most accurate and the slowest, 14 languages including Dutch.",
   "voice.desc.whisper-turbo": "OpenAI's Whisper, about 100 languages including Dutch. Runs on the Mac's GPU.",
+  "voice.desc.whisper-turboWin": "OpenAI's Whisper, about 100 languages including Dutch. Runs on the processor.",
   "voice.desc.moonshine-base": "Tiny and very fast, English only.",
   "voice.size": "{mb} MB",
   "voice.langs_one": "{n} language",

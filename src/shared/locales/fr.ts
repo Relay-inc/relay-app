@@ -2024,6 +2024,8 @@ export default {
   "voice.desc.cohere": "Le plus précis et le plus lent, 14 langues dont le néerlandais.",
   "voice.desc.whisper-turbo":
     "Whisper d'OpenAI, une centaine de langues dont le néerlandais. Tourne sur le GPU du Mac.",
+  "voice.desc.whisper-turboWin":
+    "Whisper d'OpenAI, une centaine de langues dont le néerlandais. Tourne sur le processeur.",
   "voice.desc.moonshine-base": "Petit et très rapide, anglais seulement.",
   "voice.size": "{mb} Mo",
   "voice.langs_one": "{n} langue",
