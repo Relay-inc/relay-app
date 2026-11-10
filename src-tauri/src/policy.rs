@@ -200,10 +200,12 @@ fn blocked(g: &Guard, r: &agent_core::pending::Request) -> Option<String> {
     let cwd = r.input["cwd"].as_str().filter(|c| is_abs(c, w)).unwrap_or(&g.dir);
     let at = |t: &str| -> Option<String> {
         let t = expand_home(t, &g.home, w, |k| std::env::var(k).ok());
-        // a variable still in it (`$PWD\..\x`) moves where `..` leads, and `..` would drop a segment with braces or `**`
-        // (which may span a `/`) before `murky` sees it: refused as written
+        // refused as written: a variable still in it (`$PWD\..\x`) moves where `..` leads, braces with a path in them
+        // expand to paths of their own (`{/me/vault/x,y}`, and `..` would drop a segment with them before `murky` sees
+        // it), and so does `**`
         let path = is_abs(&t, w) || t.contains("..");
-        if t.contains("..") && t.contains(['$', '%']) || path && (t.contains(['{', '}']) || t.contains("**")) { return Some(format!("?{t}")); }
+        let braces = t.contains(['{', '}']) && t.contains(['/', '\\', '~']);
+        if t.contains("..") && t.contains(['$', '%']) || braces || path && (t.contains(['{', '}']) || t.contains("**")) { return Some(format!("?{t}")); }
         path.then(|| norm_path(&t, cwd, w))
     };
     let system = |p: &str| g.system.iter().any(|s| p.starts_with(s.as_str()));
@@ -483,7 +485,7 @@ mod tests {
         for out in ["cat /team/sh*/x.md", "cat /team/{shared,y}/x", "cat /{team/shared,x}/y", "cat /{me/vault,x}/y", "cat /te?m/shared/x", "cat /team/[s]hared/x", "cat /me/data/*.key", "cat /me/$V/x", "cat /me/**/x.md"] {
             assert!(ask(&main, &cmd(out, "/me/vault")).is_some(), "{out}");
         }
-        for out in ["cat /me/{a,b}/../vault/x", "cat /x/**/../../me/vault/s", "cat ../{a,b/../vault}/x"] { assert!(ask(&main, &cmd(out, "/me/vault")).is_some(), "{out}"); }
+        for out in ["cat /me/{a,b}/../vault/x", "cat /x/**/../../me/vault/s", "cat ../{a,b/../vault}/x", "cat {/team/shared/x,y}", "cat ~{,/x}"] { assert!(ask(&main, &cmd(out, "/me/vault")).is_some(), "{out}"); }
         // braces that are no path (awk, a PowerShell block) are words like any other
         for ok in ["awk '{print $1}' notes.md", "Get-ChildItem | ForEach-Object { $_.Name }"] { assert_eq!(ask(&main, &cmd(ok, "/me/vault")), None, "{ok}"); }
         for ok in ["ls /usr/lib/*.dylib", "cat /me/code/*.md", "cat /me/data/shared-0a/*.md"] { assert_eq!(ask(&main, &cmd(ok, "/me/vault")), None, "{ok}"); }
