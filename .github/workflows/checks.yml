@@ -32,13 +32,16 @@ jobs:
       - run: pnpm exec vite build
       - run: rustup update stable --no-self-update
       - uses: Swatinem/rust-cache@v2
-      # relay-mobile is the phone app. On Windows the app's own tests do not build yet (Unix calls in them), relay-server's
-      # do: its unit tests run, its e2e tests build, and the update test runs (spawn-and-exit and the data folder's lock).
-      # The other e2e tests need a shell, sh stand-ins for claude or git, so they are only built there.
+      # relay-mobile is the phone app. On Windows the app's unit tests build but do not run yet (the ones that make a
+      # symlink or read a Unix file mode are cfg(unix)), relay-server's unit tests run, its e2e tests build, and the update
+      # test runs (spawn-and-exit and the data folder's lock). The other e2e tests need a shell, sh stand-ins for claude or
+      # git, so they are only built there.
       - if: runner.os == 'macOS'
         run: cargo check --workspace --exclude relay-mobile --all-targets
       - if: runner.os == 'Windows'
         run: cargo check --workspace --exclude relay-mobile
+      - if: runner.os == 'Windows'
+        run: cargo test -p relay --lib --no-run
       - if: runner.os == 'Windows'
         run: cargo test -p relay-server --lib
       - if: runner.os == 'Windows'

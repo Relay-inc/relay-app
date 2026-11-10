@@ -367,8 +367,9 @@ pnpm format:check             # Prettier
 ```
 
 CI (`.github/workflows/checks.yml`) runs the TypeScript checks plus `vite build` on macOS and Windows, then
-`cargo check`: on macOS with the tests, on Windows without the app's tests (they still call Unix-only APIs). On Windows
-relay-server's unit tests run, its e2e tests build, and its update test runs.
+`cargo check`: on macOS with the tests. On Windows the app's unit tests build but do not run yet (a test that makes a
+symlink or reads a Unix file mode is `#[cfg(unix)]`), relay-server's unit tests run, its e2e tests build, and its update
+test runs.
 Unix-only calls that remain sit behind `cfg` gates with stand-ins (`src-tauri/src/platform.rs`), each with a
 `ponytail:` comment. A vault works there: `.claude` is a directory junction, sync leaves out names NTFS refuses, and
 the vault check lists Git Bash, jq and Python 3 when they are missing (docs/workspaces.md, Members on Windows).
@@ -449,6 +450,10 @@ CC_x86_64_pc_windows_msvc=fakecc CXX_x86_64_pc_windows_msvc=fakecc AR_x86_64_pc_
 CC_x86_64_pc_windows_msvc=fakecc CXX_x86_64_pc_windows_msvc=fakecc AR_x86_64_pc_windows_msvc=fakear \
   DOCS_RS=1 WHISPER_DONT_GENERATE_BINDINGS=1 \
   cargo check -p relay-server --all-targets --target x86_64-pc-windows-msvc
+# the app's unit tests
+CC_x86_64_pc_windows_msvc=fakecc CXX_x86_64_pc_windows_msvc=fakecc AR_x86_64_pc_windows_msvc=fakear \
+  DOCS_RS=1 WHISPER_DONT_GENERATE_BINDINGS=1 \
+  cargo check -p relay --lib --tests --target x86_64-pc-windows-msvc --no-default-features
 ```
 
 `--no-default-features` leaves the `whisper` feature out: whisper-rs-sys cannot generate its bindings without Windows'

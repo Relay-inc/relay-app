@@ -404,6 +404,7 @@ mod tests {
         assert!(!v.join("System/rules/core/user-profile.md").exists());
     }
 
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn a_vault_relay_did_not_make_is_checked_for_its_contexts_only() {
         let root = tmp("own");

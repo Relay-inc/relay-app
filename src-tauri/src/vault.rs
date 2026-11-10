@@ -312,6 +312,7 @@ pub(crate) fn unquote(v: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::os::unix::fs::symlink;
 
     fn tmp(name: &str) -> PathBuf {
@@ -368,6 +369,7 @@ mod tests {
         assert_eq!(s["ok"], true);
     }
 
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn scanned_layout_with_symlinks() {
         // work-state outside the brain, reminders.md in the brain a symlink to the real file
@@ -428,6 +430,7 @@ mod tests {
         assert_eq!(m["reminders"], "Contexts/Personal/State/reminders.md");
         assert_eq!(status(&v, &m)["ok"], true);
     }
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn note_stays_in_the_vault() {
         let d = tmp("note");
@@ -451,12 +454,12 @@ mod tests {
 
     #[test]
     fn default_vault_is_copied_once_and_works() {
-        use std::os::unix::fs::PermissionsExt;
         let tpl = tmp("tpl");
         for f in ["System/rules/core/work-state.md", "System/hooks/check.sh", "System/scripts/index.py", ".relay/config.json"] { touch(&tpl, f); }
         let dest = tmp("dest").join("Relay");
         create_default(&tpl, &dest).unwrap();
-        assert_eq!(fs::metadata(dest.join("System/hooks/check.sh")).unwrap().permissions().mode() & 0o777, 0o755);
+        #[cfg(unix)]
+        assert_eq!(std::os::unix::fs::PermissionsExt::mode(&fs::metadata(dest.join("System/hooks/check.sh")).unwrap().permissions()) & 0o777, 0o755);
         assert_eq!(fs::read_link(dest.join(".claude")).unwrap(), PathBuf::from("System"));
         assert!(dest.join(".relay/config.json").is_file());
         assert_eq!(det(&dest)["ok"], true);
@@ -512,6 +515,7 @@ mod tests {
         assert!(own.join("System/rules/core/user-profile.md").is_file() && !own.join("System/rules/core/team.md").exists());
     }
 
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn relays_skills_go_into_a_shared_vault_and_the_users_stay() {
         let (tpl, team) = (shipped("default-vault"), shipped("team-vault"));
@@ -563,6 +567,7 @@ mod tests {
         fs::remove_dir_all(&d).ok();
     }
 
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn write_note_writes_only_its_own_unchanged_notes() {
         let v = tmp("write");

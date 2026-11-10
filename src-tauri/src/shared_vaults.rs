@@ -1001,6 +1001,7 @@ mod tests {
         assert!(keepers(&mut s));
         assert_eq!(s["machines"], json!([mine]));
     }
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn a_members_settings_and_hooks_never_sync() {
         let tmp = std::env::temp_dir().join(format!("relay-shared-filter-{}", std::process::id()));
@@ -1056,6 +1057,7 @@ mod tests {
         assert!(f.skips(".claude/settings.json", false) && f.skips("System/settings.json", false));
         std::fs::remove_dir_all(&tmp).ok();
     }
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn a_new_folder_by_its_real_path() {
         let tmp = std::fs::canonicalize(std::env::temp_dir()).unwrap().join(format!("relay-shared-real-{}", std::process::id()));

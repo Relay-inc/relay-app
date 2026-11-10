@@ -184,8 +184,8 @@ mod tests {
         let back = load(&d, &s1);
         assert_eq!((back.identity(), back.head.clone()), (k.identity(), k.head.clone()));
         assert_ne!(load(&d, &s2).identity(), k.identity(), "another server, other keys");
-        use std::os::unix::fs::PermissionsExt;
-        assert_eq!(std::fs::metadata(key_path(&d, &s1)).unwrap().permissions().mode() & 0o777, 0o600);
+        #[cfg(unix)]
+        assert_eq!(std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(key_path(&d, &s1)).unwrap().permissions()) & 0o777, 0o600);
         std::fs::remove_dir_all(&d).ok();
     }
 }
