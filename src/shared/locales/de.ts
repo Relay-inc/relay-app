@@ -1295,7 +1295,7 @@ export default {
   "set.extraVaultRemove": "{name} entfernen",
   "set.extraVaultsTitle": "Andere Workspace-Ordner",
   "set.sharedHelp":
-    "Workspaces, die ein Team mit dir auf einem relay-server teilt, der keine deiner Maschinen ist. Der Server speichert nur verschlüsselte Dateien. Jeder Mac synchronisiert den Workspace in einen eigenen Ordner. Ein Workspace auf einer deiner Maschinen steht unter dieser Maschine.",
+    "Workspaces, die ein Team mit dir auf einem relay-server teilt, der keine deiner Maschinen ist. Der Server speichert nur verschlüsselte Dateien. Jeder Mac synchronisiert den Workspace in einen eigenen Ordner. Workspaces auf deinen Maschinen folgen darunter, pro Maschine.",
   "set.sharedAdmin": "Admin",
   "set.sharedMember": "Mitglied",
   "set.sharedReader": "Leser",

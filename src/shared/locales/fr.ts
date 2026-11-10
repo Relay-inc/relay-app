@@ -1302,7 +1302,7 @@ export default {
   "set.extraVaultRemove": "Retirer {name}",
   "set.extraVaultsTitle": "Autres dossiers d'espace de travail",
   "set.sharedHelp":
-    "Les espaces de travail qu'une équipe partage avec vous sur un relay-server qui n'est pas une de vos machines. Le serveur ne garde que des fichiers chiffrés. Chaque Mac synchronise l'espace de travail dans son propre dossier. Un espace de travail sur une de vos machines s'affiche sous cette machine.",
+    "Les espaces de travail qu'une équipe partage avec vous sur un relay-server qui n'est pas une de vos machines. Le serveur ne garde que des fichiers chiffrés. Chaque Mac synchronise l'espace de travail dans son propre dossier. Les espaces de travail sur vos machines suivent, par machine.",
   "set.sharedAdmin": "Admin",
   "set.sharedMember": "Membre",
   "set.sharedReader": "Lecteur",

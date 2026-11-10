@@ -1281,7 +1281,7 @@ const en = {
   "set.extraVaultRemove": "Remove {name}",
   "set.extraVaultsTitle": "Other workspace folders",
   "set.sharedHelp":
-    "Workspaces a team shares with you on a relay-server that is not one of your machines. The server only keeps encrypted files. Each Mac syncs the workspace into a folder of its own. A workspace on one of your machines shows under that machine.",
+    "Workspaces a team shares with you on a relay-server that is not one of your machines. The server only keeps encrypted files. Each Mac syncs the workspace into a folder of its own. Workspaces on one of your machines follow, per machine.",
   "set.sharedAdmin": "Admin",
   "set.sharedMember": "Member",
   "set.sharedReader": "Reader",

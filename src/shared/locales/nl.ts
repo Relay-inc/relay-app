@@ -1289,7 +1289,7 @@ export default {
   "set.extraVaultRemove": "{name} verwijderen",
   "set.extraVaultsTitle": "Andere workspacemappen",
   "set.sharedHelp":
-    "Workspaces die een team met je deelt op een relay-server die niet een van je machines is. De server bewaart enkel versleutelde bestanden. Elke Mac synchroniseert de workspace naar een eigen map. Een workspace op een van je machines staat onder die machine.",
+    "Workspaces die een team met je deelt op een relay-server die niet een van je machines is. De server bewaart enkel versleutelde bestanden. Elke Mac synchroniseert de workspace naar een eigen map. Workspaces op een van je machines volgen hieronder, per machine.",
   "set.sharedAdmin": "Beheerder",
   "set.sharedMember": "Lid",
   "set.sharedReader": "Lezer",
