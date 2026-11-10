@@ -99,8 +99,9 @@ pub fn norm_path(p: &str, base: &str, windows: bool) -> String {
         return lexical(&if p.is_absolute() { p.to_path_buf() } else { Path::new(base).join(p) });
     }
     let s = p.replace('\\', "/");
-    let s = s.strip_prefix("//?/UNC/").map(|r| format!("//{r}")).or_else(|| s.strip_prefix("//?/").map(String::from)).unwrap_or(s);
     let drive = |x: &str| x.len() >= 2 && x.as_bytes()[0].is_ascii_alphabetic() && x.as_bytes()[1] == b':';
+    // `\\?\` and `\\.\` before a drive or `UNC\` are that drive or share. Any other device path stays one (`murky`)
+    let s = ["//?/", "//./"].iter().find_map(|d| s.strip_prefix(d)).and_then(|r| r.strip_prefix("UNC/").map(|u| format!("//{u}")).or_else(|| drive(r).then(|| r.to_string()))).unwrap_or(s);
     let (root, rest) = if drive(&s) {
         (s[..2].to_lowercase(), s[2..].to_string())
     } else if let Some(r) = s.strip_prefix("//") {
@@ -115,7 +116,8 @@ pub fn norm_path(p: &str, base: &str, windows: bool) -> String {
     };
     let mut segs: Vec<String> = vec![];
     for c in rest.split('/') {
-        match c { "" | "." => {} ".." => { segs.pop(); } x => segs.push(x.to_lowercase()) }
+        // Windows drops a name's trailing dots and spaces (`vault.` and `vault ` are `vault`)
+        match c { "" | "." => {} ".." => { segs.pop(); } x => { let x = x.trim_end_matches(['.', ' ']); if !x.is_empty() { segs.push(x.to_lowercase()) } } }
     }
     if segs.is_empty() { root } else { format!("{root}/{}", segs.join("/")) }
 }
@@ -127,12 +129,25 @@ fn lexical(p: &Path) -> String {
     }
     out.to_string_lossy().into_owned()
 }
-/// Whether a word is an absolute path. On Windows a drive (`C:\`, `c:/`, also `C:x`), a share or `\\?\` path, or `\a`
-/// on the current drive. Not `/a`: that is a switch there (`cmd /c`, `dir /b`, `findstr /i`).
+/// Whether a word is an absolute path. On Windows a drive (`C:\`, `c:/`, also `C:x`), a share or `\\?\` path, `\a`
+/// on the current drive, and `/a/b` there too (PowerShell reads it so). Not a switch: `/` with up to three letters or
+/// digits, or with `:` or `?` (`cmd /c`, `dir /b`, `/all`, `/o:n`, `/?`).
 pub fn is_abs(p: &str, windows: bool) -> bool {
     if !windows { return p.starts_with('/'); }
     let b = p.as_bytes();
+    if let Some(r) = p.strip_prefix('/').filter(|r| !r.starts_with('/')) {
+        let switch = !r.is_empty() && !r.contains(['/', '\\', '.']) && (r.len() <= 3 && r.chars().all(|c| c.is_ascii_alphanumeric()) || r.contains([':', '?']));
+        return !switch;
+    }
     (b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':') || p.starts_with('\\') || p.starts_with("//")
+}
+/// Whether a normalized Windows path is one the guard cannot place, so it refuses it: a device path (`\\?\GLOBALROOT`,
+/// `\\.\PhysicalDrive0`), a drive's admin share (`\\host\c$`, the same disk by another name), or an 8.3 short name
+/// (`VAULT~1`, which Windows may open as `vault`).
+pub fn murky(p: &str) -> bool {
+    let share = p.strip_prefix("//").and_then(|r| r.split('/').nth(1)).unwrap_or("");
+    p.starts_with("//?/") || p.starts_with("//./") || (share.len() == 2 && share.ends_with('$'))
+        || p.split('/').any(|c| c.split_once('~').is_some_and(|(_, d)| d.starts_with(|x: char| x.is_ascii_digit())))
 }
 /// A word with the user's home folder written out: `~`, `$HOME`, `${HOME}`. On Windows also, in any case,
 /// `$env:NAME`, `${env:NAME}` (PowerShell, which Codex runs commands in there) and `%NAME%` (cmd) at its start, with
@@ -212,6 +227,10 @@ mod tests {
         assert_eq!(norm_path("b", "/me/Vault", false), "/me/Vault/b", "case kept on macOS");
         assert!(is_abs(r"C:\a", true) && is_abs("c:/a", true) && is_abs(r"\\s\x", true) && is_abs(r"\a", true));
         assert!(!is_abs("/c", true) && !is_abs("a", true) && !is_abs(r"C:\a", false) && is_abs("/a", false));
+        assert!(is_abs("/users/me", true) && is_abs("/", true) && is_abs("/a.md", true) && !is_abs("/all", true) && !is_abs("/o:n", true) && !is_abs("/?", true));
+        assert_eq!((w(r"\\.\C:\a"), w(r"\\.\UNC\s\x\a"), w(r"\\.\pipe\x"), w(r"C:\a.\b \c. .")), ("c:/a".into(), "//s/x/a".into(), "//./pipe/x".into(), "c:/a/b/c".into()));
+        for m in ["//./pipe/x", "//?/globalroot/device/x", "//localhost/c$/users", "//pc1/d$", "c:/users/me/vault~1/x"] { assert!(murky(m), "{m}"); }
+        for m in ["c:/users/me/vault", "//server/share/x", "//server/c$$/x", "c:/a~b/x"] { assert!(!murky(m), "{m}"); }
     }
     #[test]
     fn home_and_variables_are_written_out() {

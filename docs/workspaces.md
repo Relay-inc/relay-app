@@ -118,8 +118,12 @@ does:
   conversation opened in a terminal asks there, past the guard and without
   the profile, so a workspace's terminal stays Claude Code's.
   **Codex on Windows.** The guard compares paths the Windows way there (`platform::norm_path`): `\` and `/`, any case,
-  the drive letter, `\\?\` and shares are one path, and `~`, `$HOME`, `$env:NAME` and `%NAME%` are written out. A word
-  starting with a single `/` is a switch there (`cmd /c`), not a path. Codex runs every command in PowerShell (`pwsh`,
+  the drive letter, `\\?\`, `\\.\` and shares are one path, a name's trailing dots and spaces drop as Windows drops them,
+  and `~`, `$HOME`, `$env:NAME` and `%NAME%` are written out. `/a/b` is a path on the current drive (PowerShell reads it
+  so), a short switch is not (`cmd /c`, `/all`, `/o:n`). A device path, a drive's admin share (`\\host\c$`) and an 8.3
+  short name (`VAULT~1`) are declined, the guard cannot tell where they lead. On both systems a word with `..` and a
+  variable still in it (`$PWD/../x`) is declined, and the command's first word is dropped only when it is one word
+  that names a system program. Codex runs every command in PowerShell (`pwsh`,
   else Windows PowerShell, `cmd.exe` as the last fallback, codex-cli 0.163's `shell_detect.rs`), never `/bin/zsh -lc`,
   so the system's programs there are `%SystemRoot%`, `%ProgramFiles%` and `%ProgramFiles(x86)%` (PowerShell and Git for
   Windows): the program folders of Codex's own `:minimal` on Windows, without `C:\ProgramData`. The shell's own path

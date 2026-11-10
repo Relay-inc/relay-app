@@ -190,6 +190,8 @@ pub fn screen(g: &Guard, p: &dyn agent_core::AgentProvider, r: &agent_core::pend
     p.respond(r, &json!({"behavior": "deny", "message": format!("{path} is outside this conversation's fence")}))
 }
 
+/// What splits a command into words besides whitespace: the shell's quotes and operators.
+const SPLIT: &str = "'\"`=;|&<>()";
 /// The first path a request names that the guard keeps the agent from: a file it changes, or of a command its folder
 /// and every word that reads as a path (absolute, `~`, `$HOME`, or with `..`, against the command's folder).
 fn blocked(g: &Guard, r: &agent_core::pending::Request) -> Option<String> {
@@ -198,6 +200,8 @@ fn blocked(g: &Guard, r: &agent_core::pending::Request) -> Option<String> {
     let cwd = r.input["cwd"].as_str().filter(|c| is_abs(c, w)).unwrap_or(&g.dir);
     let at = |t: &str| -> Option<String> {
         let t = expand_home(t, &g.home, w, |k| std::env::var(k).ok());
+        // a variable still in it (`$PWD\..\x`) moves where `..` leads: refused as written
+        if t.contains("..") && t.contains(['$', '%']) { return Some(format!("?{t}")); }
         (is_abs(&t, w) || t.contains("..")).then(|| norm_path(&t, cwd, w))
     };
     let system = |p: &str| g.system.iter().any(|s| p.starts_with(s.as_str()));
@@ -206,15 +210,16 @@ fn blocked(g: &Guard, r: &agent_core::pending::Request) -> Option<String> {
         let cmd = r.input["command"].as_str().unwrap_or("");
         // the shell codex runs the command in, quoted when its path has a space (`'C:\Program Files\PowerShell\7\pwsh.exe'
         // -Command '…'` on Windows): dropped whole when it is a system program, so its words are no paths of their own
-        let first = match cmd.chars().next() { Some(q @ ('\'' | '"')) => cmd[1..].find(q).map(|e| (&cmd[1..=e], &cmd[e + 2..])), _ => cmd.split_once(char::is_whitespace) };
+        let first = match cmd.chars().next() { Some(q @ ('\'' | '"')) => cmd[1..].find(q).map(|e| (&cmd[1..=e], &cmd[e + 2..])), _ => cmd.split_once(char::is_whitespace).filter(|(p, _)| !p.contains(|c| SPLIT.contains(c))) };
         let cmd = first.filter(|(p, _)| at(p).is_some_and(|p| system(&format!("{p}/")))).map_or(cmd, |(_, rest)| rest);
-        paths.extend(cmd.split(|c: char| c.is_whitespace() || "'\"`=;|&<>()".contains(c)).filter_map(at));
+        paths.extend(cmd.split(|c: char| c.is_whitespace() || SPLIT.contains(c)).filter_map(at));
     } else {
         let named = r.input["paths"].as_array().into_iter().flatten().chain(std::iter::once(&r.input["file_path"]));
         paths.extend(named.filter_map(|p| p.as_str()).filter_map(|p| if is_abs(p, w) { at(p) } else { Some(norm_path(p, cwd, w)) }));
     }
     let inside = |p: &str| p == g.dir || p.starts_with(&format!("{}/", g.dir)) || system(p);
-    paths.into_iter().find(|p| (g.shared && !inside(p)) || g.rules.iter().any(|r| hits(r, p, w)))
+    let murky = |p: &str| p.starts_with('?') || (w && crate::platform::murky(p));
+    paths.into_iter().find(|p| murky(p) || (g.shared && !inside(p)) || g.rules.iter().any(|r| hits(r, p, w)))
 }
 /// Whether a rule of `fence` or `shared_copies` (`Read(//a/b/**)`, `Edit(//a/x.json)`, `Read(//d/shared-*.key)`)
 /// covers a path, whatever its tool: a guarded agent's command may read or write.
@@ -408,6 +413,21 @@ mod tests {
                    ps("git status"), ps(r"C:\Windows\System32\where.exe git"), ps(r"Get-Content .\a.md")] {
             assert_eq!(ask(&g, &cmd(&ok, r"C:\Users\me\Team")), None, "{ok}");
         }
+        // a root path PowerShell reads on the current drive, device paths, admin shares, short names, `..` after a variable
+        for out in [r"Get-Content /Users/me/vault/x.md", r"Get-Content \\.\C:\Users\me\vault\x", r"Get-Content \\?\GLOBALROOT\Device\HarddiskVolume3\x",
+                    r"Get-Content \\localhost\c$\Users\me\Team\a.md", r"Get-Content \\PC1\C$\x", r"Get-Content C:\Users\me\TEAM~1\a.md", r"Get-Content $PWD\..\vault\x",
+                    r"Get-Content %CD%\..\vault\x", r"Get-Content C:\Users\me\vault.\x", r"cmd.exe /c type /Users/me/vault/x.md"] {
+            assert_eq!(ask(&g, &cmd(&ps(out), r"C:\Users\me\Team")), Some(deny.clone()), "{out}");
+        }
+        for ok in [r"cmd.exe /c dir /b /o:n /?", r"ipconfig /all"] { assert_eq!(ask(&g, &cmd(ok, r"C:\Users\me\Team")), None, "{ok}"); }
+        // a main-vault conversation: the other vault's rules hold in each spelling Windows opens as that folder
+        let mut rules = fence(r"C:\Users\me\vault", &all, &configs, None);
+        rules.extend(shared_copies(data));
+        let main = Guard::new(rules, r"C:\Users\me\vault", false, r"C:\Users\me", true, |_| None);
+        for out in [r"type C:\Users\me\team\x.md", r"type C:\Users\me\Team.\x.md", r"type C:\Users\me\Team. .\x.md", r"type \\.\c:\users\me\team\x", r"type C:\Users\me\TEAM~1\x"] {
+            assert!(ask(&main, &cmd(out, r"C:\Users\me\vault")).is_some(), "{out}");
+        }
+        assert_eq!(ask(&main, &cmd(r"type C:\Users\me\code\README.md", r"C:\Users\me\vault")), None);
         // a path with a space inside the command splits as on macOS: its first part counts, so this is a deny
         assert!(ask(&g, &cmd(&ps(r"& 'C:\Program Files\Git\cmd\git.exe' status"), r"C:\Users\me\Team")).is_some());
         // a patch: any of its files outside, or the workspace's .claude in another case
@@ -418,6 +438,16 @@ mod tests {
         let d = Guard::new(vec![], r"D:\Team", true, r"D:\me", true, |k| (k == "ProgramFiles").then(|| r"D:\Apps".to_string()));
         assert_eq!(ask(&d, &cmd(r"'D:\Apps\PowerShell\7\pwsh.exe' -Command dir", r"D:\Team")), None);
         assert!(ask(&d, &cmd(r"'C:\Program Files\PowerShell\7\pwsh.exe' -Command dir", r"D:\Team")).is_some());
+    }
+    #[test]
+    fn codex_cannot_hide_a_path_behind_the_shell_or_a_variable() {
+        let all = ["/me/vault".to_string(), "/team/shared".to_string()];
+        let g = Guard::new(fence("/team/shared", &all, &[], Some("/me/data")), "/team/shared", true, "/me", false, |_| None);
+        // the first word drops only as one word of a system program, not with an operator glued on
+        for out in ["/bin/true;cat</me/vault/x", "/bin/true&&cat /me/vault/x", "'/bin/zsh' -lc 'cat /me/vault/x'", "cat $PWD/../vault/x", "cat ${D}/../../me/vault/x"] {
+            assert!(ask(&g, &cmd(out, "/team/shared")).is_some(), "{out}");
+        }
+        assert_eq!(ask(&g, &cmd("'/bin/zsh' -lc 'cat notes/a.md'", "/team/shared")), None);
     }
     #[test]
     fn workspaces_run_claude_code_and_codex_only() {
