@@ -368,9 +368,9 @@ pnpm format:check             # Prettier
 CI (`.github/workflows/checks.yml`) runs the TypeScript checks plus `vite build` on macOS and Windows, then
 `cargo check`: on macOS with the tests, on Windows without the app's tests (they still call Unix-only APIs). On Windows
 relay-server's unit tests run, its e2e tests build, and its update test runs.
-The app builds for Windows but does not all work there yet: Unix-only calls (symlinks) sit behind `cfg`
-gates with stand-ins (`src-tauri/src/platform.rs`), each with a `ponytail:` comment naming the Windows PR that fills
-it in.
+Unix-only calls that remain sit behind `cfg` gates with stand-ins (`src-tauri/src/platform.rs`), each with a
+`ponytail:` comment. A vault works there: `.claude` is a directory junction, sync leaves out names NTFS refuses, and
+the vault check lists Git Bash, jq and Python 3 when they are missing (docs/workspaces.md, Members on Windows).
 The window on Windows comes from `src-tauri/tauri.windows.conf.json` (merged over `tauri.conf.json`): the native title
 bar, opaque, no sidebar material, so the css paints the sidebar (`:root[data-os="windows"]`). It has no menu bar: the
 main window takes the menu's keys itself (`menuKey` in `src/application/boot.ts`). A default shortcut says `mod` for

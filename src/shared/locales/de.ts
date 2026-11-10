@@ -92,6 +92,9 @@ export default {
   "vc.contextMismatchTitle": "Notizen, die einen anderen Kontext nennen",
   "vc.cardFields": "Projektkarten mit fehlenden Feldern",
   "vc.rowWithoutNote": "work-state-Zeilen ohne Projektnotiz",
+  "vc.missingTool": "Fehlt auf diesem Computer",
+  "vc.missingToolSub":
+    "Die Hooks des Vaults brauchen Git Bash (Git for Windows) und jq, sein Projektindex Python 3. Installieren Sie, was fehlt, und starten Sie Relay neu.",
   "vc.manual": "Braucht dich",
   "vc.repair": "Reparieren",
   "vc.repairAll": "Alle reparieren ({n})",
@@ -1323,6 +1326,10 @@ export default {
   "set.sharedTrust": "Neuem Schlüssel vertrauen",
   "set.sharedConflicts_one": "{n} Konflikt. Beide Versionen wurden behalten:",
   "set.sharedConflicts_other": "{n} Konflikte. Beide Versionen wurden behalten:",
+  "set.sharedNames_one":
+    "{n} Datei hier nicht synchronisiert: Ihr Name kann auf diesem Computer nicht existieren (unter Windows, oder bis auf Groß- und Kleinschreibung gleich wie eine andere Datei). Benennen Sie sie dort um, wo sie erstellt wurde:",
+  "set.sharedNames_other":
+    "{n} Dateien hier nicht synchronisiert: Ihre Namen können auf diesem Computer nicht existieren (unter Windows, oder bis auf Groß- und Kleinschreibung gleich wie eine andere Datei). Benennen Sie sie dort um, wo sie erstellt wurden:",
   "set.sharedHeld_one":
     "{n} Löschung zurückgehalten: viele Dateien würden auf einmal verschwinden. Nichts wird gelöscht, bis du wählst:",
   "set.sharedHeld_other":

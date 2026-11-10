@@ -91,6 +91,9 @@ const en = {
   "vc.contextMismatchTitle": "Notes naming another context",
   "vc.cardFields": "Project cards missing fields",
   "vc.rowWithoutNote": "work-state rows without a project note",
+  "vc.missingTool": "Missing on this computer",
+  "vc.missingToolSub":
+    "The vault's hooks need Git Bash (Git for Windows) and jq, its project index needs Python 3. Install what is missing, then restart Relay.",
   "vc.manual": "Needs you",
   "vc.repair": "Repair",
   "vc.repairAll": "Repair all ({n})",
@@ -1308,6 +1311,10 @@ const en = {
   "set.sharedTrust": "Trust the new key",
   "set.sharedConflicts_one": "{n} conflict. Both versions were kept:",
   "set.sharedConflicts_other": "{n} conflicts. Both versions were kept:",
+  "set.sharedNames_one":
+    "{n} file not synced here: its name cannot exist on this computer (on Windows, or the same name as another file but for case). Rename it where it was made:",
+  "set.sharedNames_other":
+    "{n} files not synced here: their names cannot exist on this computer (on Windows, or the same name as another file but for case). Rename them where they were made:",
   "set.sharedHeld_one": "{n} deletion held: many files would go at once. Nothing is deleted until you choose:",
   "set.sharedHeld_other": "{n} deletions held: many files would go at once. Nothing is deleted until you choose:",
   "set.sharedHeldRestore": "Put them back",

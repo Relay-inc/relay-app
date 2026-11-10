@@ -236,6 +236,18 @@ function SharedRow({ vault }: { vault: SharedVault }) {
                 ))}
               </div>
             ) : null}
+            {status.names?.length ? (
+              <div className="grid gap-0.5">
+                <StatusLine level="warn">{tn("set.sharedNames", status.names.length)}</StatusLine>
+                <div className="grid max-h-40 gap-0.5 overflow-y-auto">
+                  {status.names.map(path => (
+                    <span key={path} className="truncate font-mono text-xs text-s-fg" title={path}>
+                      {path}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {/* more deletes at once than a round lets through on its own: nothing goes until a choice */}
             {status.held.length ? (
               <div className="grid gap-1">

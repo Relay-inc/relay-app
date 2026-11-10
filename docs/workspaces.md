@@ -103,6 +103,28 @@ does:
 - **A project's key never moves.** It is its name in the main vault, else its name and its workspace's id. The sidebar
   shows a label, with the folder only when two of them have the name.
 
+## Members on Windows
+
+**File names.** NTFS refuses names a Mac takes: `< > : " | ? *` and control characters, a name ending in a dot or a
+space, and the device names CON, PRN, AUX, NUL, COM0-9 and LPT0-9 (with ¹²³, and also with an extension, so `nul.txt`).
+A name with `~` and a digit is left out too: Windows may open `GIT~1` as `.git` (an 8.3 short name), past the filter.
+Written there anyway, such a name lands as another file (`a:b.md` as a stream of `a`, `notes.` as `notes`, `CON` as the
+console). A round on Windows leaves such a file out on both sides (`sync::windows_name`) and lists it under the workspace in Settings ›
+Machines, as it does on every computer with two names that differ in case only (`a.md` and
+`A.md`, one file on APFS and NTFS). Relay never renames a member's file. The team agreement: in a workspace with a
+Windows member, name files so Windows can hold them, and whoever made a listed file renames it on their Mac. The Mac
+syncs these files as before.
+
+**The `.claude` link** is a directory junction on Windows (`platform::dir_link`), which needs no admin rights or
+Developer Mode. A junction holds an absolute path: when the folder moves, the vault check finds the link broken and
+Repair makes it again.
+
+**What the starter's files run.** The hooks in `System/hooks` are bash scripts that read their input with `jq`. Claude
+Code on Windows runs hooks in Git Bash, or in PowerShell without Git for Windows, where these fail. The project index
+(`System/scripts/build-index.py`) needs Python 3, which Relay looks for as `py -3`, `python` or `python3`. Windows has
+none of the three, so Git for Windows, jq and Python 3 are prerequisites there: the vault check lists what is missing
+("Missing on this computer"), and without Python the index is not rebuilt at start (the log says so).
+
 ## What a new workspace starts as
 
 A workspace made in an empty folder starts as the team starter (`vault::create_team`): the starter vault

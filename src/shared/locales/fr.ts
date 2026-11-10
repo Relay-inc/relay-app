@@ -92,6 +92,9 @@ export default {
   "vc.contextMismatchTitle": "Notes qui nomment un autre contexte",
   "vc.cardFields": "Fiches de projet incomplètes",
   "vc.rowWithoutNote": "Lignes de work-state sans note de projet",
+  "vc.missingTool": "Manquant sur cet ordinateur",
+  "vc.missingToolSub":
+    "Les hooks du coffre ont besoin de Git Bash (Git for Windows) et de jq, son index des projets de Python 3. Installez ce qui manque, puis redémarrez Relay.",
   "vc.manual": "À vous de voir",
   "vc.repair": "Réparer",
   "vc.repairAll": "Tout réparer ({n})",
@@ -1329,6 +1332,10 @@ export default {
   "set.sharedTrust": "Faire confiance à la nouvelle clé",
   "set.sharedConflicts_one": "{n} conflit. Les deux versions sont gardées :",
   "set.sharedConflicts_other": "{n} conflits. Les deux versions sont gardées :",
+  "set.sharedNames_one":
+    "{n} fichier non synchronisé ici : son nom ne peut pas exister sur cet ordinateur (sous Windows, ou le même nom qu'un autre fichier à la casse près). Renommez-le là où il a été créé :",
+  "set.sharedNames_other":
+    "{n} fichiers non synchronisés ici : leurs noms ne peuvent pas exister sur cet ordinateur (sous Windows, ou le même nom qu'un autre fichier à la casse près). Renommez-les là où ils ont été créés :",
   "set.sharedHeld_one":
     "{n} suppression retenue : beaucoup de fichiers partiraient d'un coup. Rien n'est supprimé avant votre choix :",
   "set.sharedHeld_other":

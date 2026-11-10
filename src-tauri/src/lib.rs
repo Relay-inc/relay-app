@@ -872,8 +872,9 @@ fn refresh_index(app: &AppHandle) {
 fn rebuild_index(app: &AppHandle, vault: &str) {
     let bundled = app.path().resolve("default-vault/System/scripts/build-index.py", tauri::path::BaseDirectory::Resource).ok();
     let Some(script) = index_script(PathBuf::from(vault).join("System/scripts/build-index.py"), bundled) else { return };
-    let path = app.state::<App>().path.clone();
-    match Command::new("python3").arg(&script).env("VAULT", vault).env("PATH", &path).output() {
+    // without Python (Windows has none of its own) the index stays as it was: the vault check says so
+    let Some(mut python) = platform::python(&app.state::<App>().path) else { return eprintln!("build-index: no Python 3 on this computer") };
+    match python.arg(&script).env("VAULT", vault).output() {
         Ok(o) if o.status.success() => {}
         Ok(o) => eprintln!("build-index: {}", String::from_utf8_lossy(&o.stderr).trim()),
         Err(e) => eprintln!("build-index: {e}"),

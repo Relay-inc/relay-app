@@ -66,7 +66,9 @@ pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter()
 /// `docs`: an admin turned on making the workspace's notes documents (the member list says so); `admin`: this Mac is
 /// an admin of the list (it may turn that on or off, and make members admins); `admins`: the list's admins and `listed`
 /// all its members, None when the workspace has no list yet.
+/// `names`: files the last round left out for their name (sync::Report::names), to rename where they were made.
 pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub bad: usize, pub live: bool,
+    pub names: Vec<String>,
     pub warnings: Vec<String>, pub changed: Vec<Changed>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>> }
 #[derive(Clone, serde::Serialize)]
 pub struct Changed { pub fp: String, pub name: String }
@@ -124,8 +126,11 @@ pub fn filter(folder: &Path) -> Result<Filter, String> {
         real.strip_prefix(&root).ok().map(|r| r.to_string_lossy().into_owned())
     });
     // a link that does not resolve guards nothing it points at: only `System` (a join's first round) is guarded anyway
+    // (on Windows the link is a junction, which holds the absolute path of this folder's System)
+    let own_system = |l: &Path| l.as_os_str() == "System"
+        || (cfg!(windows) && l.file_name().is_some_and(|n| n == "System") && l.parent().and_then(|p| std::fs::canonicalize(p).ok()) == std::fs::canonicalize(folder).ok());
     if let (Some(l), None) = (&link, &target) {
-        if l.as_os_str() != "System" { return Err(format!(".claude links to {:?}, which is not in the workspace: fix the link to sync this workspace", l)); }
+        if !own_system(l) { return Err(format!(".claude links to {:?}, which is not in the workspace: fix the link to sync this workspace", l)); }
     }
     if let Some(t) = target.as_deref().filter(|t| !t.chars().all(|c| c.is_ascii_alphanumeric() || " ._-/".contains(c))) {
         return Err(format!(".claude links to {t:?}: give that folder a name of plain letters and digits to sync this workspace"));
@@ -173,8 +178,8 @@ pub fn index_shared(app: &AppHandle, folder: &str) {
     if crate::index_script(own.clone(), Some(script.clone())).is_some_and(|s| s == own) { return; }
     let Ok(code) = std::fs::read(&script) else { return };
     if std::fs::read(&own).ok().as_deref() != Some(&code[..]) { let _ = sync::write_atomic(&own, &code, None); }
-    let path = app.state::<crate::App>().path.clone();
-    match std::process::Command::new("python3").arg(&script).env("VAULT", folder).env("PATH", path).output() {
+    let Some(mut python) = crate::platform::python(&app.state::<crate::App>().path) else { return eprintln!("build-index {folder}: no Python 3 on this computer") };
+    match python.arg(&script).env("VAULT", folder).output() {
         Ok(o) if o.status.success() => {}
         Ok(o) => eprintln!("build-index {folder}: {}", String::from_utf8_lossy(&o.stderr).trim()),
         Err(e) => eprintln!("build-index {folder}: {e}"),
@@ -320,7 +325,7 @@ impl Hub {
                 // the next round plans against this base: one not written is an error, not a quiet success
                 if next != base { if let Err(e) = write_base(data, &v.id, &next) { st.errors.push(format!("base: {e}")); } }
                 st = Status { pushed: r.pushed.len() + r.deleted_remote.len(), pulled: r.pulled.len() + r.deleted_local.len(),
-                    conflicts: r.conflicts, errors: [r.errors, st.errors].concat(), held: r.held, bad: remote.bad().len(), ..st };
+                    conflicts: r.conflicts, errors: [r.errors, st.errors].concat(), held: r.held, names: r.names, bad: remote.bad().len(), ..st };
             }
         }
         // still under the vault's lock: a leave waiting for this round removes the status after it
@@ -693,7 +698,7 @@ pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, fold
     on_hub(&app, move |hub, data| hub.forget(data, &vid)).await?;
     save_key(&crate::data_dir(&app), &joined.id, &key)?;
     // `.claude -> System` as in a vault Relay makes, before the first round: the rules load from the synced System/
-    crate::platform::symlink("System", Path::new(&folder).join(".claude")).ok();
+    crate::platform::dir_link("System", Path::new(&folder).join(".claude")).ok();
     let v = Shared { id: joined.id.clone(), name: joined.name.clone(), host: line.host, port: line.port, fp: line.fp, folder, role: joined.role };
     add(&app, &state, &v)?;
     Ok(serde_json::json!({"id": joined.id, "name": joined.name}))

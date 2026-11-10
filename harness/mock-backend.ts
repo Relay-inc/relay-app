@@ -84,6 +84,7 @@ const shared =
   fixture === "shared-invite" ||
   fixture === "shared-rekey" ||
   fixture === "shared-unlisted" ||
+  fixture === "shared-windows" ||
   member ||
   live;
 if (shared)
@@ -139,6 +140,10 @@ for (const s of Object.values(sharedStatus).slice(0, 1)) {
     .map(m => m.fp)
     .filter(fp => fixture !== "shared-unlisted" || fp !== vault.sharedMembers[2].fp);
 }
+// shared-windows: a round on Windows left out two files Windows cannot name and a pair that differs in case only
+if (fixture === "shared-windows")
+  for (const s of Object.values(sharedStatus))
+    Object.assign(s, { names: ["Notes/Q&A: pricing.md", "Notes/aux.md", "Notes/Plan.md", "Notes/plan.md"], held: [] });
 if (fixture === "shared-rekey")
   for (const s of Object.values(sharedStatus))
     Object.assign(s, {
@@ -622,7 +627,15 @@ function handle(cmd: string, a: Args): unknown {
       return null;
     // the workspace check: a few of each kind, gone once repaired
     case "vault_check":
-      return VAULT_FINDINGS.filter(f => !repaired.has(f.id));
+      // fixture windows: a Windows computer without Git Bash, jq and Python (vaultcheck.rs missing_tools)
+      return [
+        ...VAULT_FINDINGS,
+        ...(fixture === "windows"
+          ? ["python", "bash", "jq"].map(t =>
+              finding("missing_tool", t === "python" ? "System/scripts/build-index.py" : "System/hooks", t, [], false),
+            )
+          : []),
+      ].filter(f => !repaired.has(f.id));
     case "vault_garden":
       return gardenFindings();
     case "garden_about":
