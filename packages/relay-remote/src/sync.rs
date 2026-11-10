@@ -674,6 +674,24 @@ mod tests {
         assert!(remote.get("linked/a.md").is_ok() && next.contains_key("linked/a.md"), "left alone on both sides");
     }
 
+    #[test] fn a_name_the_filter_gains_stays_where_it_synced_before() {
+        // .codex synced before the filter kept it out: from then on neither sent, fetched nor deleted on either side
+        let t = Tmp::new("filter-gains");
+        t.put("ok.md", "x");
+        t.put(".codex/config.toml", "a");
+        let remote = Mem::default();
+        let (base, _) = run(Mode::TwoWay, &t.0, &Manifest::new(), &mut Walker::default(), &Filter::default(), &remote, &|p| p.into(), &|_| false, OPEN, &|_, _| {});
+        assert!(base.contains_key(".codex/config.toml") && remote.get(".codex/config.toml").is_ok());
+        let f = Filter { names: vec![".codex".into()], ..Default::default() };
+        t.put(".codex/config.toml", "changed here");
+        remote.put(".codex/hooks.json", b"a member's", 1, "").unwrap();
+        let (next, r) = run(Mode::TwoWay, &t.0, &base, &mut Walker::default(), &f, &remote, &|p| p.into(), &|_| false, OPEN, &|_, _| {});
+        assert!(r.errors.is_empty() && r.deleted_remote.is_empty() && r.deleted_local.is_empty() && r.pushed.is_empty() && r.pulled.is_empty(), "{r:?}");
+        assert_eq!(remote.get(".codex/config.toml").unwrap(), b"a");
+        assert_eq!(fs::read_to_string(t.0.join(".codex/config.toml")).unwrap(), "changed here");
+        assert!(!t.0.join(".codex/hooks.json").exists() && !next.contains_key(".codex/config.toml") && next.contains_key("ok.md"));
+    }
+
     // ---------- run
 
     #[derive(Default)]

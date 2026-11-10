@@ -2163,6 +2163,7 @@ const gardenFindings = () => {
 // one of every health kind (issue 425)
 const VAULT_FINDINGS = [
   finding("claude_link", "", ".claude"),
+  finding("missing_file", "", "AGENTS.md"),
   finding("missing_file", "", "System/rules/core/team.md"),
   finding("context_note", "Studio", "Contexts/Studio/Studio.md"),
   finding("context_heading", "Studio", "Contexts/Personal/State/work-state.md"),

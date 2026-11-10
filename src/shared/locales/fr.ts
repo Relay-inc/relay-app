@@ -310,7 +310,7 @@ export default {
   "usage.limitTop": "{name} : {label}",
   "composer.agent": "Agent",
   "composer.agentSharedVault":
-    "Une conversation dans un autre espace de travail que Personnel tourne avec Claude Code : ses limites y reposent sur les règles d'autorisation de Claude Code.",
+    "Une conversation dans un autre espace de travail que Personnel tourne avec Claude Code ou Codex : Claude Code y suit ses règles d'autorisation, Relay vérifie ce que Codex demande.",
   "set.tab.agents": "Agents",
   "ag.default": "Agent par défaut",
   "ag.defaultHelp":

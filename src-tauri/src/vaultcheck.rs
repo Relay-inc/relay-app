@@ -1,5 +1,5 @@
 // The workspace check: what a vault needs so every member's Claude works in it, and the repair of what is missing.
-// A vault Relay made (its config folder is System/) has the starter's files: CLAUDE.md, the core and vault rules,
+// A vault Relay made (its config folder is System/) has the starter's files: CLAUDE.md, AGENTS.md (the same rules for Codex and OpenCode), the core and vault rules,
 // reminders, templates; a team workspace the team starter's (vault::create_team), a personal one the personal one.
 // Every vault, made by Relay or not, is checked for its contexts: each has its note and its rule, a table in a
 // hand-kept work-state, and its notes name it in `context:`. A card has its fields, a row its note. A repair writes
@@ -44,7 +44,7 @@ impl Starter {
     }
 }
 /// What of the starter a vault can't do without; the rest (skills, hooks, scripts) Relay places itself or ships.
-const REQUIRED: [&str; 5] = ["CLAUDE.md", "System/rules/core/", "System/rules/vault/", "System/reminders.md", "Resources/Templates/"];
+const REQUIRED: [&str; 6] = ["CLAUDE.md", "AGENTS.md", "System/rules/core/", "System/rules/vault/", "System/reminders.md", "Resources/Templates/"];
 
 fn files(root: &Path, dir: &Path, out: &mut Vec<String>) {
     for e in fs::read_dir(dir).into_iter().flatten().flatten() {
@@ -347,6 +347,7 @@ mod tests {
     fn starter(root: &Path) -> Starter {
         let (t, o) = (root.join("starter"), root.join("overlay"));
         w(&t, "CLAUDE.md", "personal\n");
+        w(&t, "AGENTS.md", "agents\n");
         w(&t, "System/rules/core/memory.md", "m\n");
         w(&t, "System/rules/core/user-profile.md", "me\n");
         w(&t, "System/rules/core/work-state.md", "generated\n");
@@ -375,6 +376,7 @@ mod tests {
         let found = check(&side, &s);
         assert_eq!(kinds(&found), vec![
             "claude_link  .claude",
+            "missing_file  AGENTS.md",
             "missing_file  CLAUDE.md",
             "missing_file  Resources/Templates/Context.md",
             "missing_file  System/rules/core/team.md",
@@ -384,13 +386,14 @@ mod tests {
             "card_fields Work Contexts/Work/Projects/B/B.md",
             "orphan_rule  System/rules/gone/context.md",
         ]);
-        assert_eq!(found[6].paths, vec!["Contexts/Work/Projects/B/Documents/Spec.md"]);
-        assert_eq!(found[7].paths, vec!["type", "status", "last"]);
+        assert_eq!(found[7].paths, vec!["Contexts/Work/Projects/B/Documents/Spec.md"]);
+        assert_eq!(found[8].paths, vec!["type", "status", "last"]);
 
         let ids: Vec<String> = found.iter().map(|f| f.id()).collect();
-        assert_eq!(repair(&side, &s, &ids, "2026-10-29").unwrap(), 8);
+        assert_eq!(repair(&side, &s, &ids, "2026-10-29").unwrap(), 9);
         assert_eq!(kinds(&check(&side, &s)), vec!["orphan_rule  System/rules/gone/context.md"]);
         assert_eq!(r(&v, "CLAUDE.md"), "team\n");
+        assert_eq!(r(&v, "AGENTS.md"), "agents\n");
         assert_eq!(r(&v, "System/rules/core/memory.md"), "kept\n");
         assert_eq!(fs::read_link(v.join(".claude")).unwrap(), PathBuf::from("System"));
         assert!(r(&v, "System/rules/sales/context.md").starts_with("---\npaths:\n  - \"Contexts/Sales/**\"\n---\n\n# Sales Context"));

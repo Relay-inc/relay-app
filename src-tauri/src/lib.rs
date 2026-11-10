@@ -336,8 +336,10 @@ const TEXT: &[(&str, [&str; 4])] = &[
         "Ajoutez d'abord un téléphone : Réglages › Machines › Ajouter un téléphone (un téléphone ajouté avant cette version : ajoutez-le à nouveau)", "Füge zuerst ein Telefon hinzu: Einstellungen › Maschinen › Telefon hinzufügen (ein Telefon von vor dieser Version: füge es erneut hinzu)"]),
     ("err.machine_shared_vault", ["A conversation in a workspace or another vault folder runs on this Mac: a work machine has the main vault only", "Een gesprek in een workspace of een andere vaultmap loopt op deze Mac: een werkmachine heeft enkel de hoofdvault",
         "Une conversation dans un espace de travail ou un autre dossier de coffre tourne sur ce Mac : une machine de travail n'a que le coffre principal", "Ein Gespräch in einem Workspace oder einem anderen Vault-Ordner läuft auf diesem Mac: Eine Arbeitsmaschine hat nur den Haupt-Vault"]),
-    ("err.vault_only_claude", ["A conversation in a workspace or another vault folder runs with Claude Code only: only it keeps the conversation inside that folder", "Een gesprek in een workspace of een andere vaultmap loopt enkel met Claude Code: enkel dat houdt het gesprek binnen die map",
-        "Une conversation dans un espace de travail ou un autre dossier de coffre tourne uniquement avec Claude Code : lui seul la garde dans ce dossier", "Ein Gespräch in einem Workspace oder einem anderen Vault-Ordner läuft nur mit Claude Code: Nur es hält das Gespräch in diesem Ordner"]),
+    ("err.vault_agents", ["A conversation in a workspace or another vault folder runs in Relay with Claude Code or Codex: only those keep the conversation inside that folder", "Een gesprek in een workspace of een andere vaultmap loopt in Relay met Claude Code of Codex: enkel die houden het gesprek binnen die map",
+        "Une conversation dans un espace de travail ou un autre dossier de coffre tourne dans Relay avec Claude Code ou Codex : eux seuls la gardent dans ce dossier", "Ein Gespräch in einem Workspace oder einem anderen Vault-Ordner läuft in Relay mit Claude Code oder Codex: Nur sie halten das Gespräch in diesem Ordner"]),
+    ("err.mig_provider", ["Only a Claude Code conversation moves to another workspace or vault folder with its history", "Enkel een gesprek met Claude Code verhuist met zijn geschiedenis naar een andere workspace of vaultmap",
+        "Seule une conversation avec Claude Code déménage avec son historique vers un autre espace de travail ou dossier de coffre", "Nur ein Gespräch mit Claude Code zieht mit seinem Verlauf in einen anderen Workspace oder Vault-Ordner um"]),
     ("err.workspace_policy", ["This workspace's policy does not allow this agent: an admin of the workspace chooses the agents in its settings", "Het beleid van deze workspace laat deze agent niet toe: een admin van de workspace kiest de agents in de instellingen ervan",
         "La politique de cet espace de travail n'autorise pas cet agent : un admin de l'espace choisit les agents dans ses réglages", "Die Richtlinie dieses Workspace erlaubt diesen Agenten nicht: Ein Admin des Workspace wählt die Agenten in seinen Einstellungen"]),
     ("err.machine_mail", ["A conversation about a mail runs on this Mac, not on a work machine", "Een gesprek over een mail loopt op deze Mac, niet op een werkmachine",
@@ -922,7 +924,7 @@ async fn migrate_project(app: AppHandle, project: String, to: String, context: S
 }
 /// On a move, which of the project's conversations go along to `to`, and their transcripts' folders: a Claude Code one
 /// that ran in the project's vault, except one that read mail when `to` is a team workspace (the mail would reach the
-/// team's notes). Codex and OpenCode run in the main vault only (err.vault_only_claude), so theirs stay. The whole move
+/// team's notes). Only Claude Code's transcripts move (err.mig_provider), so the others stay. The whole move
 /// is refused while one of them runs a turn, waits on a card, runs on a work machine or is shared with the phone: its
 /// session would change folders under it.
 fn migrate_chats(app: &AppHandle, from_vault: &str, to: &str, team: bool, chats: &[Value]) -> Result<(Vec<Value>, Vec<(String, migrate::Carry)>), String> {
@@ -1021,7 +1023,7 @@ async fn move_chat_workspace(app: AppHandle, key: String, title: String, mail: b
         let team = shared_vaults::list(&s).iter().any(|v| v.folder == to);
         let (out, carries) = migrate_chats(&app, &from, &to, team, &[json!({"key": key, "title": title, "mail": mail})])?;
         match out.first().and_then(|c| c["why"].as_str()) {
-            Some("provider") => return Err(trc("err.vault_only_claude")),
+            Some("provider") => return Err(trc("err.mig_provider")),
             Some("mail") => return Err(trc("err.mig_mail")),
             _ => {}
         }
@@ -2375,8 +2377,9 @@ fn terminal_cmd(app: &AppHandle, state: &App, project: &str, session: Option<Str
         (false, None, Some(v)) => eb.vault = v,
         _ => {}
     }
-    // the terminal's claude gets the same fence as the conversation in Relay, and a shared vault Claude Code only
-    if eb.vault != need_vault(state)? && p.id() != "claude" { return Err(trc("err.vault_only_claude")); }
+    // the terminal's claude gets the same fence as the conversation in Relay, and a shared vault Claude Code only: a
+    // terminal's codex asks in the terminal, past Relay's guard (policy::guard)
+    if eb.vault != need_vault(state)? && p.id() != "claude" { return Err(trc("err.vault_agents")); }
     if eb.vault != need_vault(state)? { policy::check_workspace_policy(app, state, &eb.vault, p.id())?; }
     if policy::adding() { return Err(trc("err.vault_adding")); }
     fence_in(app, state, &mut eb);

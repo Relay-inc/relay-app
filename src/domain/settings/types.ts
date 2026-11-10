@@ -1,3 +1,4 @@
+import { FENCED_AGENTS } from "../agents/rules";
 import type { BoardRef } from "../board/types";
 import type { BuddyRef } from "../buddy/rules";
 import type { VoiceCfg } from "./voice";
@@ -152,8 +153,9 @@ export type SharedStatus = {
 };
 /** A workspace's signed policy: the agent providers it allows (claude, codex) and whether capture is on. */
 export type SharedPolicy = { providers: string[]; capture: boolean };
-/** The agent providers a workspace policy may allow (relay-remote members.rs POLICY_PROVIDERS). */
-export const POLICY_PROVIDERS = ["claude", "codex"];
+/** The agent providers a workspace policy may allow: the agents Relay fences inside a workspace (relay-remote members.rs
+ *  POLICY_PROVIDERS, src-tauri policy::FENCED_AGENTS). */
+export const POLICY_PROVIDERS = FENCED_AGENTS;
 /** A server's organisation as this Mac sees it (src-tauri/src/organisation.rs `org_status`): `me` an organisation
  *  admin, `owner` the device that may start it, `code` this Mac's keys' code (to compare), `admins` fingerprints. */
 export type OrgStatus = {

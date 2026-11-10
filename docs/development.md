@@ -208,6 +208,7 @@ own transcripts and logs, and reports its limits and tokens.
 | Session list, terminal | `claude agents`, attach / stop | `state_5.sqlite` threads, `codex resume` | `opencode.db` sessions, `opencode --session` | session files, `pi --session` |
 | Tokens | `~/.claude/projects/**/*.jsonl`, priced at API list prices | rollout `token_count` events, unpriced | `opencode.db` assistant messages, with the cost OpenCode recorded | session files, with the cost pi computed from its prices |
 | Limits | plan limits (`api.anthropic.com/api/oauth/usage`) | rate-limit windows from the rollouts and the app-server | none (OpenCode has none) | none (pi has none) |
+| Workspaces | yes: the fence's deny rules, strict MCP, auto mode (`policy::fence_in`) | yes: Relay's guard declines a request outside the fence before it is a card, sandbox and approvals kept (`policy::guard`), a permission profile keeps `.claude` and the agents' files read-only and closes reads outside the workspace, no MCP servers, plugins or apps (`bridge::thread_params`, codex-cli 0.163 or newer) | no, main vault only | no, main vault only |
 | Known gaps | see its README | no questions, fork, subagents or titles; no accept-for-session; tokens unpriced | no limits, subagents or titles; no "always"; cost 0 where OpenCode has no price | no permissions or questions; extension dialogs unanswered; no limits, subagents or titles |
 
 **Backend**, `agent_core::AgentProvider` (`packages/agent-core/src/lib.rs`), a `pub static PROVIDER` in the package,

@@ -427,7 +427,7 @@ const VIEWS = {
     await page.getByRole("button", { name: "Runs in", exact: true }).locator("visible=true").first().click();
     await waitText("Northwind");
   },
-  // the workspace Northwind picked there: no Runs on, and Claude Code is the only agent to pick
+  // the workspace Northwind picked there: no Runs on, and Claude Code and Codex are the agents to pick
   "composer-vault-picked": async () => {
     await open(page, server.url, { fixture: "shared" });
     await page.evaluate(() => window.__harness.emit("menu", "new-general"));
@@ -2261,7 +2261,7 @@ const VIEWS = {
     await open(page, server.url);
     await page.getByRole("button", { name: /^Switch workspace/ }).click();
     await page.getByRole("button", { name: "Check workspace…" }).click();
-    await waitText("Repair all (7)");
+    await waitText("Repair all (8)");
     await page.locator("[data-kind=context_mismatch] summary").click();
     await settle(page);
   },
@@ -2278,7 +2278,7 @@ const VIEWS = {
     await open(page, server.url, { fixture: "dark" });
     await page.getByRole("button", { name: /^Switch workspace/ }).click();
     await page.getByRole("button", { name: "Check workspace…" }).click();
-    await waitText("Repair all (7)");
+    await waitText("Repair all (8)");
     await settle(page);
   },
   // Tidy structure (PR 365): the notes outside their home, and the dry run sheet over the check
@@ -2333,8 +2333,8 @@ const VIEWS = {
   // after Repair all: what needs a person stays
   "vault-check-repaired": async () => {
     await VIEWS["vault-check"]();
-    await page.getByRole("button", { name: "Repair all (7)" }).click();
-    await waitText("Repaired 7 findings");
+    await page.getByRole("button", { name: "Repair all (8)" }).click();
+    await waitText("Repaired 8 findings");
     await settle(page);
   },
   // a member of a shared workspace sees the findings, not Repair, Tidy structure or Move to trash

@@ -482,6 +482,9 @@ mod tests {
         create_default(&tpl, &dest).unwrap();
         let s = det(&dest);
         assert_eq!(s["ok"], true, "{s}");
+        // Codex and OpenCode read AGENTS.md: it points at the shared rules, it does not copy them
+        let agents = fs::read_to_string(dest.join("AGENTS.md")).unwrap();
+        assert!(agents.contains("CLAUDE.md") && agents.contains("System/rules/core/"));
         assert_eq!(s["map"], json!({"workState": "System/rules/core/work-state.md", "reminders": "System/reminders.md", "notes": "Contexts"}));
     }
 
@@ -492,6 +495,7 @@ mod tests {
         let dest = tmp("team").join("Team");
         create_team(&shipped("default-vault"), &shipped("team-vault"), &dest).unwrap();
         assert_eq!(det(&dest)["ok"], true);
+        assert!(dest.join("AGENTS.md").is_file());
         assert!(dest.join("System/rules/core/team.md").is_file() && dest.join("System/rules/core/hard-walls.md").is_file());
         for d in TEAM_DROP { assert!(!dest.join(d).exists(), "{d}"); }
         assert!(fs::read_to_string(dest.join("System/skills/setup/SKILL.md")).unwrap().contains("team.md"));

@@ -306,7 +306,7 @@ const en = {
   "usage.limitTop": "{name}: {label}",
   "composer.agent": "Agent",
   "composer.agentSharedVault":
-    "A conversation in another workspace than Personal runs on Claude Code: its limits there are built from Claude Code's permission rules.",
+    "A conversation in another workspace than Personal runs on Claude Code or Codex: Claude Code keeps to its permission rules there, Relay checks what Codex asks for.",
   "set.tab.agents": "Agents",
   "ag.default": "Default agent",
   "ag.defaultHelp":

@@ -71,7 +71,7 @@ members a key of its own, add a member, make one admin or hide a removal without
 **The fence is a guard, not a sandbox.** It keeps a conversation in its workspace and Claude Code's file tools and file
 commands out of your vault and the other workspaces. It is not a boundary against a member who sets out to reach your
 Mac through a note that steers your agent: a script in Bash or a local socket can still get out, and only the
-auto-mode classifier judges those. Share a workspace with people you would let read what your agent can read. What it
+auto-mode classifier judges those (for Codex, its sandbox and Relay's guard, below). Share a workspace with people you would let read what your agent can read. What it
 does:
 
 - **A conversation stays where it runs.** It runs in its project's vault or workspace, a general one in the one picked
@@ -80,9 +80,47 @@ does:
   of that vault or workspace, and once it started it moves only to its projects. Anywhere but the main vault it also
   may not touch Relay's data folder or Claude's config folders (with their `.claude.json`), and runs with no own MCP
   servers or connectors, no hooks, no auto memory, in auto mode. A main-vault conversation may not read the workspaces'
-  trash, bases and keys. Codex and OpenCode run in the main vault only.
+  trash, bases and keys. Claude Code and Codex run in a workspace, OpenCode and Pi in the main vault only.
+- **Codex has Relay's guard, not Claude Code's rules.** Codex reads no deny rules, so Relay checks every permission
+  request Codex raises before it becomes a card (`policy::guard`, `session/tauri_sink.rs`): a request that names a
+  path outside the workspace (a file it changes, the folder a command runs in, a word of the command that reads as a
+  path: absolute, `~`, `$HOME`, or with `..`) is declined at once, as is one on what the rules above keep (another
+  vault, Relay's data, Claude's config folders, the workspace's `.claude`). The system's programs and devices (`/bin`,
+  `/usr`, `/opt/homebrew`, `/dev`) are not outside. In the main vault the same check runs on those rules only. In a
+  workspace Codex also keeps its sandbox (`danger-full-access` becomes `workspace-write`), asks (`never` becomes
+  `on-request`), and asks the user, not its own auto review. Its `workspace-write` runs as Relay's own Codex
+  permission profile (`relay-workspace`, which extends Codex's `:workspace`): it writes inside the workspace without
+  asking, except in `.claude` (and the folder it links to), `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `AGENTS.override.md`, `.codex`,
+  `.agents` and `.git`, which its sandbox keeps read-only, so a write there fails or comes as a request the guard
+  declines (instruction files in subfolders are notes that sync, which any member can write anyway). Extra writable roots in the user's own Codex config do not apply there. Codex starts there without the
+  MCP servers of its config, its plugins and its apps, as Claude Code runs with `--strict-mcp-config`. This needs
+  codex-cli 0.163 or newer, an older Codex is refused in a workspace (it would ignore the profile).
+  **What Codex reads in a workspace.** The same profile (and, for the `read-only` sandbox, one that extends Codex's
+  `:read-only`) sets everything outside the workspace to `none`, so a note cannot have Codex read a file of yours and
+  write it into a note that syncs. Its commands, `apply_patch` and its own `view_image` then read only this
+  (`bridge::readable`):
+  - the workspace itself.
+  - Codex's `:minimal`: macOS's system folders, without which no program starts.
+  - `/opt/homebrew` but not its `var`: the Homebrew programs, as the guard lets them through, not the databases and
+    logs of Homebrew services.
+  - `~/.gitconfig` and the files `config`, `ignore` and `attributes` of `~/.config/git`: git stops without its global
+    config. Not that folder whole, it can hold git's credential store.
+  - the user's `$TMPDIR`, which stays writable as in `:workspace`: here-documents and xcrun need it.
+
+  Not `/tmp`, not the rest of your home, not `/Library`, `/Users` or `/Volumes`. Codex itself is not in the sandbox: it reads its own `~/.codex` (login, sessions)
+  as before, its commands do not. A workspace conversation gets no project repos, so none are listed. Programs in your
+  home (`~/.local/bin`, a node version manager) do not run there, and a login shell starts without your own
+  `~/.zshrc`. Checked against codex-cli 0.163.0 with a shell `cat`, `apply_patch` and `view_image` on a file in `/tmp`
+  and a shell `wc` of `~/.ssh/known_hosts`: each "Operation not permitted", while notes, `apply_patch` in the workspace and
+  `git status` work. What this is not: the guard sees only what Codex asks for and a path a command builds at run time
+  is not seen by it, and `$TMPDIR` is shared with the user's other programs, so what they leave there is readable and a
+  command can write there without asking. A workspace's `.codex` and `.agents` do not sync (below). A Codex
+  conversation opened in a terminal asks there, past the guard and without
+  the profile, so a workspace's terminal stays Claude Code's.
 - **Nothing a member writes runs on your Mac.** `.claude` never syncs, and of the folder it links to (`System/`) only
-  the notes go (`rules/`, `reference/`, `archive/`, `reminders.md`). Names compare as APFS and HFS+ do, a round
+  the notes go (`rules/`, `reference/`, `archive/`, `reminders.md`). Codex's `.codex` (config, rules, hooks) and
+  `.agents` (skills) never sync either, at any depth. One that synced before this stays as it is on every Mac and on
+  the server, only no longer sent or fetched: a member's later change to it reaches nobody, and nothing is deleted. Names compare as APFS and HFS+ do, a round
   follows no symlink, and a `.claude` linking somewhere the filter cannot guard is refused.
 - **The project index is each Mac's own.** `work-state.md` and `System/index/` are generated from the project cards,
   so they do not sync: Relay rebuilds them after every round that moved a file. `System/scripts/` does not sync either,
@@ -136,7 +174,7 @@ personal things in each member's own vault), `System/rules/core/team.md` in plac
 interviews whoever runs it about the team: what the workspace is for, who works in it, the contexts, conventions,
 external people and organizations, projects, and what never goes in. On a workspace that started as a personal vault
 it offers to move what is the team's into `team.md` and asks before it removes a personal file. A folder with notes is
-uploaded as it is. The first start of Relay still makes the personal starter vault. `scripts/check-default-vault.py`
+uploaded as it is. Both starters carry an `AGENTS.md` (from the default vault, the overlay does not replace it) that points Codex and OpenCode at `CLAUDE.md` and `System/rules/`, so the one set of rules serves every agent. The first start of Relay still makes the personal starter vault. `scripts/check-default-vault.py`
 checks the team starter too.
 
 **Skills are placed on each Mac.** `System/skills/` never syncs, so after a round that moved a file Relay writes its
