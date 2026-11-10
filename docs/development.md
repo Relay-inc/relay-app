@@ -492,8 +492,9 @@ Relay for Windows x64 is an NSIS installer, `Relay_<version>_x64-setup.exe`, bui
 on `windows-latest` (`pnpm tauri build --bundles nsis`, with `GGML_NATIVE=OFF` for whisper.cpp, see Tests above). The
 workflow runs by hand (Actions › windows › Run workflow, once the workflow is on `main`), for every published release,
 and on a PR that changes the installer or the workflow. It installs the build silently on the runner, checks it and
-uninstalls it, then keeps the installer as the run's artifact `relay-windows-x64`. A run without a cache took
-<!-- build time --> on the runner.
+uninstalls it, then keeps the installer as the run's artifact `relay-windows-x64` (about 13 MB). The first two runs,
+without a Rust cache, took 17 and 21 minutes, 14.5 and 18 of them in `tauri build`, well inside the runner's limits.
+`Swatinem/rust-cache` keeps the build's dependencies for the next run.
 
 What the installer does (`src-tauri/tauri.windows.conf.json` › `bundle.windows.nsis`, Tauri's NSIS template and
 `src-tauri/windows/hooks.nsh`):
