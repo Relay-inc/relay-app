@@ -2,8 +2,8 @@
 // wherever the cursor is, held or tapped as the mode says. One starts a new conversation in Relay with what was said (the
 // main window comes forward, src/application/boot.ts sends it); the other pastes the text (dictation.rs) into the app in
 // front: the clipboard is kept aside, the text put on it, ⌘V (Ctrl+V on Windows) sent, and the clipboard put back.
-// Sending ⌘V needs Accessibility on the Mac; without it the text stays on the clipboard to paste by hand. Windows asks
-// for nothing. A small pill at the bottom of the screen (overlay.html) shows the level and the transcribing; it never
+// Sending ⌘V needs Accessibility on the Mac, without it the text stays on the clipboard to paste by hand. Windows asks
+// for nothing. A small pill at the bottom of the screen (overlay.html) shows the level and the transcribing. It never
 // takes the focus, so the app in front keeps it.
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -19,7 +19,7 @@ const CAPTURE: &str = "capture";
 /// browser's private window, so a key registered for the whole Mac must not be it: ⌃⌥⌘N is nobody's. Windows keeps
 /// every Win key for itself, opens the window menu with Alt+Space and switches the keyboard with Alt+Shift, so Ctrl
 /// takes their place there.
-/// ponytail: Ctrl+Alt is AltGr on many European layouts, so Ctrl+Alt+N or Ctrl+Alt+Space may be a character there;
+/// ponytail: Ctrl+Alt is AltGr on many European layouts, so Ctrl+Alt+N or Ctrl+Alt+Space may be a character there.
 /// Settings › Shortcuts changes the key, a layout check would pick another default.
 #[derive(Debug, PartialEq)]
 struct Keys { chat: &'static str, paste: &'static str, capture: &'static str }
@@ -331,7 +331,7 @@ mod os {
             let front = front as HWND;
             if !front.is_null() && unsafe { IsWindow(front) != 0 && GetForegroundWindow() != front } {
                 // ponytail: Windows refuses this unless Relay may take the foreground (it got the last input, the
-                // hotkey); then the text goes where the focus is now. AttachThreadInput is the next step if that bites.
+                // hotkey), else the text goes where the focus is now. AttachThreadInput is the next step if that bites.
                 unsafe { SetForegroundWindow(front) };
                 std::thread::sleep(Duration::from_millis(50));
             }
