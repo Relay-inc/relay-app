@@ -14,6 +14,7 @@ import {
 } from "../../../application/settings/voice-page";
 import { MODEL_NAMES, voiceOf, type ShortcutKey, type VoiceMode } from "../../../domain/settings/voice";
 import type { Key } from "../../../shared/i18n";
+import { isMac } from "../../../shared/platform";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
 import { buttonClass, ERROR_MESSAGE, HINT_IN_ROW, OK_MESSAGE, SELECT } from "./blocks";
@@ -176,7 +177,11 @@ export function VoicePage({ active }: { active: boolean }) {
             onChange={meetingModel => saveVoice({ meetingModel })}
           />
         </Field>
-        <Field label={t("voice.keepAudio")} id="voiceaudio" hint={t("voice.keepAudioHelp")}>
+        <Field
+          label={t("voice.keepAudio")}
+          id="voiceaudio"
+          hint={t(isMac() ? "voice.keepAudioHelp" : "voice.keepAudioHelpWin")}
+        >
           <Switch id="voiceaudio" on={voice.keepAudio} onToggle={keepAudio => saveVoice({ keepAudio })} />
         </Field>
         <Field label={t("voice.summarize")} id="voicesum" hint={t("voice.summarizeHelp")}>

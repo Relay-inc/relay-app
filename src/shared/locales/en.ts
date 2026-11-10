@@ -1439,6 +1439,7 @@ const en = {
   "set.sec.sidebar": "Sidebar",
   "perm.title": "Permissions",
   "perm.help": "What macOS lets Relay do. A build that is not signed by Apple loses these with every update.",
+  "perm.helpWin": "What Windows lets Relay do. Recording what this computer plays needs no permission.",
   "perm.fullDisk": "Full Disk Access",
   "perm.fullDiskHelp": "Agents read your files without macOS asking per folder (Documents, Photos, Music, …).",
   "perm.microphone": "Microphone",
@@ -1454,6 +1455,7 @@ const en = {
   "perm.state.missing": "Not allowed",
   "perm.state.ask": "Asked on first use",
   "perm.open": "Open System Settings",
+  "perm.openWin": "Open Settings",
   "set.sidebarLayout": "Top items",
   "set.sidebarLayoutHelp": "A list with names, or a compact row of icons.",
   "set.sidebarList": "List",
@@ -2010,6 +2012,8 @@ const en = {
   "voice.sameModel": "Same as dictation",
   "voice.keepAudio": "Keep the audio",
   "voice.keepAudioHelp": "Saves the recording as .m4a next to the transcript, in Obsidian's attachment folder.",
+  "voice.keepAudioHelpWin":
+    "Saves the recording as .wav next to the transcript, in Obsidian's attachment folder (about 115 MB an hour).",
   "voice.summarize": "Write the summary",
   "voice.summarizeHelp":
     "After the transcript, Claude writes a draft summary in the meeting's Wrap-up, from your notes and the transcript. Nothing goes into the note until you accept it.",
@@ -2170,6 +2174,8 @@ const en = {
     "Only your microphone is recorded, the Mac's audio is not: {why}. Allow Relay in System Settings › Privacy & Security › Screen & System Audio Recording.",
   "rec.silentMac":
     "No sound from the Mac yet. If the call is already playing, allow Relay in System Settings › Privacy & Security › Screen & System Audio Recording.",
+  "rec.noSystemWin": "Only your microphone is recorded, not what this computer plays: {why}.",
+  "rec.silentWin": "No sound from this computer yet. It shows once the call plays on the default output device.",
   "rec.dictatingIn": "Dictating · {name}",
   "rec.dictatingElsewhere": "Dictating in another app",
   "rec.transcribingPct": "transcribing {pct}%",
@@ -2180,6 +2186,8 @@ const en = {
   "rec.noModel":
     "The speech model for meetings is not downloaded yet. Download it in Settings › Voice; the recording is kept.",
   "rec.noModelStart": "Download the speech model for meetings in Settings › Voice before you record.",
+  "rec.micOff":
+    "Relay may not use the microphone. Switch on Microphone access and Let desktop apps access your microphone in Settings › Privacy & security › Microphone, then record again.",
   "rec.retry": "Try again",
   "rec.keepOpen": "Keep the laptop open until the transcript is done: when it sleeps, transcribing stops.",
   "rec.kept": "A recording from {time} was never transcribed.",

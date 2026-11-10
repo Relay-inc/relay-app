@@ -1458,6 +1458,8 @@ export default {
   "set.sec.sidebar": "Seitenleiste",
   "perm.title": "Berechtigungen",
   "perm.help": "Was macOS Relay erlaubt. Ein nicht von Apple signierter Build verliert sie bei jedem Update.",
+  "perm.helpWin":
+    "Was Windows Relay erlaubt. Für die Aufnahme dessen, was dieser Computer abspielt, ist keine Berechtigung nötig.",
   "perm.fullDisk": "Festplattenvollzugriff",
   "perm.fullDiskHelp": "Agents lesen deine Dateien, ohne dass macOS pro Ordner fragt (Dokumente, Fotos, Musik, …).",
   "perm.microphone": "Mikrofon",
@@ -1474,6 +1476,7 @@ export default {
   "perm.state.missing": "Nicht erlaubt",
   "perm.state.ask": "Wird beim ersten Mal gefragt",
   "perm.open": "Systemeinstellungen öffnen",
+  "perm.openWin": "Einstellungen öffnen",
   "set.sidebarLayout": "Obere Einträge",
   "set.sidebarLayoutHelp": "Eine Liste mit Namen oder eine kompakte Symbolleiste.",
   "set.sidebarList": "Liste",
@@ -2035,6 +2038,8 @@ export default {
   "voice.sameModel": "Wie beim Diktieren",
   "voice.keepAudio": "Audio behalten",
   "voice.keepAudioHelp": "Speichert die Aufnahme als .m4a neben dem Transkript, im Anhangordner von Obsidian.",
+  "voice.keepAudioHelpWin":
+    "Speichert die Aufnahme als .wav neben dem Transkript, im Anhangordner von Obsidian (etwa 115 MB pro Stunde).",
   "voice.summarize": "Zusammenfassung schreiben",
   "voice.summarizeHelp":
     "Nach dem Transkript schreibt Claude im Abschluss des Meetings einen Entwurf aus deinen Notizen und dem Transkript. In die Notiz kommt nichts, bevor du ihn übernimmst.",
@@ -2196,6 +2201,9 @@ export default {
     "Nur dein Mikrofon wird aufgenommen, der Ton des Mac nicht: {why}. Erlaube Relay in Systemeinstellungen › Datenschutz & Sicherheit › Bildschirm- & Systemaudioaufnahme.",
   "rec.silentMac":
     "Noch kein Ton vom Mac. Läuft der Call schon, erlaube Relay in Systemeinstellungen › Datenschutz & Sicherheit › Bildschirm- & Systemaudioaufnahme.",
+  "rec.noSystemWin": "Nur dein Mikrofon wird aufgenommen, nicht was dieser Computer abspielt: {why}.",
+  "rec.silentWin":
+    "Noch kein Ton von diesem Computer. Er erscheint, sobald der Anruf über das Standard-Ausgabegerät läuft.",
   "rec.dictatingIn": "Diktieren · {name}",
   "rec.dictatingElsewhere": "Diktieren in einer anderen App",
   "rec.transcribingPct": "transkribiert {pct} %",
@@ -2206,6 +2214,8 @@ export default {
   "rec.noModel":
     "Das Sprachmodell für Meetings ist noch nicht geladen. Lade es in Einstellungen › Sprache; die Aufnahme bleibt erhalten.",
   "rec.noModelStart": "Lade zuerst das Sprachmodell für Meetings in Einstellungen › Sprache, dann kannst du aufnehmen.",
+  "rec.micOff":
+    "Relay darf das Mikrofon nicht verwenden. Schalte Mikrofonzugriff und Desktop-Apps den Zugriff auf das Mikrofon erlauben in Einstellungen › Datenschutz und Sicherheit › Mikrofon ein und nimm erneut auf.",
   "rec.retry": "Erneut versuchen",
   "rec.keepOpen": "Lass den Laptop geöffnet, bis das Transkript fertig ist: im Ruhezustand stoppt die Transkription.",
   "rec.kept": "Eine Aufnahme von {time} wurde nie transkribiert.",

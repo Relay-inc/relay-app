@@ -1463,6 +1463,8 @@ export default {
   "set.sec.sidebar": "Barre latérale",
   "perm.title": "Autorisations",
   "perm.help": "Ce que macOS permet à Relay. Une version non signée par Apple les perd à chaque mise à jour.",
+  "perm.helpWin":
+    "Ce que Windows permet à Relay. Enregistrer ce que joue cet ordinateur ne demande aucune autorisation.",
   "perm.fullDisk": "Accès complet au disque",
   "perm.fullDiskHelp":
     "Les agents lisent vos fichiers sans que macOS demande pour chaque dossier (Documents, Photos, Musique, …).",
@@ -1480,6 +1482,7 @@ export default {
   "perm.state.missing": "Non autorisé",
   "perm.state.ask": "Demandé à la première utilisation",
   "perm.open": "Ouvrir les Réglages Système",
+  "perm.openWin": "Ouvrir les Paramètres",
   "set.sidebarLayout": "Éléments du haut",
   "set.sidebarLayoutHelp": "Une liste avec les noms, ou une rangée compacte d'icônes.",
   "set.sidebarList": "Liste",
@@ -2045,6 +2048,8 @@ export default {
   "voice.keepAudio": "Garder l'audio",
   "voice.keepAudioHelp":
     "Enregistre l'audio en .m4a à côté de la transcription, dans le dossier des pièces jointes d'Obsidian.",
+  "voice.keepAudioHelpWin":
+    "Enregistre l'audio en .wav à côté de la transcription, dans le dossier des pièces jointes d'Obsidian (environ 115 Mo par heure).",
   "voice.summarize": "Rédiger le résumé",
   "voice.summarizeHelp":
     "Après la transcription, Claude rédige un brouillon de résumé dans la clôture de la réunion, à partir de vos notes et de la transcription. Rien n'entre dans la note avant que vous l'acceptiez.",
@@ -2206,6 +2211,9 @@ export default {
     "Seul votre micro est enregistré, pas le son du Mac : {why}. Autorisez Relay dans Réglages Système › Confidentialité et sécurité › Enregistrement de l'écran et de l'audio système.",
   "rec.silentMac":
     "Pas encore de son du Mac. Si l'appel joue déjà, autorisez Relay dans Réglages Système › Confidentialité et sécurité › Enregistrement de l'écran et de l'audio système.",
+  "rec.noSystemWin": "Seul votre micro est enregistré, pas ce que joue cet ordinateur : {why}.",
+  "rec.silentWin":
+    "Aucun son de cet ordinateur pour l'instant. Il apparaît dès que l'appel joue sur la sortie audio par défaut.",
   "rec.dictatingIn": "Dictée · {name}",
   "rec.dictatingElsewhere": "Dictée dans une autre app",
   "rec.transcribingPct": "transcription {pct} %",
@@ -2216,6 +2224,8 @@ export default {
   "rec.noModel":
     "Le modèle vocal pour les réunions n'est pas encore téléchargé. Téléchargez-le dans Réglages › Voix ; l'enregistrement est gardé.",
   "rec.noModelStart": "Téléchargez d'abord le modèle vocal pour les réunions dans Réglages › Voix, puis enregistrez.",
+  "rec.micOff":
+    "Relay ne peut pas utiliser le micro. Activez Accès au microphone et Autoriser les applications de bureau à accéder à votre microphone dans Paramètres › Confidentialité et sécurité › Microphone, puis enregistrez à nouveau.",
   "rec.retry": "Réessayer",
   "rec.keepOpen": "Laissez l'ordinateur ouvert jusqu'à la fin de la transcription : en veille, elle s'arrête.",
   "rec.kept": "Un enregistrement de {time} n'a jamais été transcrit.",

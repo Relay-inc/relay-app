@@ -1450,6 +1450,7 @@ export default {
   "perm.title": "Toestemmingen",
   "perm.help":
     "Wat macOS Relay laat doen. Een build die niet door Apple ondertekend is, verliest deze bij elke update.",
+  "perm.helpWin": "Wat Windows Relay laat doen. Opnemen wat deze computer afspeelt vraagt geen toestemming.",
   "perm.fullDisk": "Volledige schijftoegang",
   "perm.fullDiskHelp": "Agents lezen je bestanden zonder dat macOS per map vraagt (Documenten, Foto's, Muziek, …).",
   "perm.microphone": "Microfoon",
@@ -1465,6 +1466,7 @@ export default {
   "perm.state.missing": "Niet toegestaan",
   "perm.state.ask": "Gevraagd bij eerste gebruik",
   "perm.open": "Systeeminstellingen openen",
+  "perm.openWin": "Instellingen openen",
   "set.sidebarLayout": "Bovenste items",
   "set.sidebarLayoutHelp": "Een lijst met namen, of een compacte rij iconen.",
   "set.sidebarList": "Lijst",
@@ -2019,6 +2021,8 @@ export default {
   "voice.sameModel": "Hetzelfde als dicteren",
   "voice.keepAudio": "Audio bewaren",
   "voice.keepAudioHelp": "Bewaart de opname als .m4a naast de transcriptie, in de bijlagenmap van Obsidian.",
+  "voice.keepAudioHelpWin":
+    "Bewaart de opname als .wav naast de transcriptie, in de bijlagenmap van Obsidian (ongeveer 115 MB per uur).",
   "voice.summarize": "Samenvatting schrijven",
   "voice.summarizeHelp":
     "Na de transcriptie schrijft Claude in de Wrap-up van de meeting een conceptsamenvatting uit je notities en de transcriptie. Er komt niets in de note tot je het accepteert.",
@@ -2180,6 +2184,9 @@ export default {
     "Enkel je microfoon wordt opgenomen, het geluid van de Mac niet: {why}. Sta Relay toe in Systeeminstellingen › Privacy en beveiliging › Scherm- en systeemaudio-opname.",
   "rec.silentMac":
     "Nog geen geluid van de Mac. Speelt de call al, sta Relay dan toe in Systeeminstellingen › Privacy en beveiliging › Scherm- en systeemaudio-opname.",
+  "rec.noSystemWin": "Enkel je microfoon wordt opgenomen, niet wat deze computer afspeelt: {why}.",
+  "rec.silentWin":
+    "Nog geen geluid van deze computer. Het verschijnt zodra de call speelt op het standaard uitvoerapparaat.",
   "rec.dictatingIn": "Dicteren · {name}",
   "rec.dictatingElsewhere": "Dicteren in een andere app",
   "rec.transcribingPct": "uitschrijven {pct}%",
@@ -2190,6 +2197,8 @@ export default {
   "rec.noModel":
     "Het spraakmodel voor meetings is nog niet gedownload. Download het in Instellingen › Spraak; de opname blijft bewaard.",
   "rec.noModelStart": "Download eerst het spraakmodel voor meetings in Instellingen › Spraak, dan kan je opnemen.",
+  "rec.micOff":
+    "Relay mag de microfoon niet gebruiken. Zet Toegang tot microfoon en Desktop-apps toegang geven tot je microfoon aan in Instellingen › Privacy en beveiliging › Microfoon, en neem opnieuw op.",
   "rec.retry": "Opnieuw proberen",
   "rec.keepOpen": "Laat de laptop open tot het transcript klaar is: als hij in slaap valt, stopt het transcriberen.",
   "rec.kept": "Een opname van {time} is nooit getranscribeerd.",
