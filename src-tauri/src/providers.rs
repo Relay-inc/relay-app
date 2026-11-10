@@ -21,6 +21,7 @@ pub const PROVIDERS: &[&Provider] = &[
     &integration_productive::PROVIDER,
     &integration_trello::PROVIDER,
     &integration_linear::PROVIDER,
+    &integration_github_projects::PROVIDER,
     &integration_buddy::PROVIDER,
 ];
 

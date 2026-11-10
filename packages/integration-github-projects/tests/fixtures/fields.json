@@ -1,0 +1,4 @@
+{ "data": { "node": { "url": "https://github.com/orgs/acme/projects/3", "fields": { "nodes": [
+  {}, { "id": "PVTSSF_pri", "name": "Priority", "options": [{ "id": "p1", "name": "P1" }] },
+  { "id": "PVTSSF_st", "name": "Status", "options": [{ "id": "aa01", "name": "Todo" }, { "id": "aa02", "name": "In Progress" }, { "id": "aa03", "name": "Done" }] }
+] } } } }

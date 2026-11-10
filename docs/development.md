@@ -74,6 +74,7 @@ key and what the backend lets through is in each package's README.
 | Productive | project › board | [`packages/integration-productive`](../packages/integration-productive/README.md) |
 | Trello | workspace › board | [`packages/integration-trello`](../packages/integration-trello/README.md) |
 | Linear | team › all issues or a Linear project | [`packages/integration-linear`](../packages/integration-linear/README.md) |
+| GitHub Projects | user or organization › project | [`packages/integration-github-projects`](../packages/integration-github-projects/README.md) |
 
 ### Layout
 

@@ -2529,6 +2529,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "integration-github-projects"
+version = "0.1.0"
+dependencies = [
+ "board-core",
+ "serde_json",
+]
+
+[[package]]
 name = "integration-linear"
 version = "0.1.0"
 dependencies = [
@@ -4324,6 +4332,7 @@ dependencies = [
  "futures",
  "hound",
  "integration-buddy",
+ "integration-github-projects",
  "integration-linear",
  "integration-productive",
  "integration-trello",
