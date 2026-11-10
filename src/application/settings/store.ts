@@ -34,7 +34,17 @@ import type { ExtraVault, ProjectIcon, Project, VaultStatus } from "../../domain
 import { makeStore } from "../make-store";
 
 export type SettingsTab =
-  "general" | "projects" | "agents" | "integrations" | "plugins" | "machines" | "voice" | "shortcuts" | "updates";
+  | "general"
+  | "projects"
+  | "agents"
+  | "integrations"
+  | "plugins"
+  | "workspaces"
+  | "organisation"
+  | "machines"
+  | "voice"
+  | "shortcuts"
+  | "updates";
 
 /** The settings as the backend keeps them and the UI language (both windows), plus what the settings window shows.
  *  Every save result is a `Message | null` (null: nothing to say). */
@@ -107,6 +117,7 @@ export type SettingsState = {
     keys: Record<string, string>;
     messages: Record<string, Message | null>; // per vault, "form" for the new and join forms
     busy: Record<string, boolean>; // what runs: a vault's id (one action per row at a time), or "form"
+    open: string; // the workspace whose page shows on Settings › Workspaces, "" for the list
     // the one form, a new vault on `machine` or joining one (machine ""): where it and the "form" message show
     // noHistory: a new workspace made without history (docs/workspaces.md), for good
     form: {
@@ -209,6 +220,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     keys: {},
     messages: {},
     busy: {},
+    open: "",
     form: { mode: "", machine: "", name: "", folder: "", link: "", noHistory: false },
   },
   pluginsPage: { loaded: false, secrets: {}, imports: [], messages: {}, tests: {} },

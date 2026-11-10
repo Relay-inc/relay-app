@@ -100,7 +100,7 @@ From then on Relay updates itself, no GitHub account needed. The pull requests v
 [GitHub CLI](https://cli.github.com) signed in (`gh auth login`).
 
 **Next:** connect a board in Settings › Integrations, add a mail account in the Mail view, open the Orchestrator and
-give it a task, or invite your team to a workspace in Settings › Machines.
+give it a task, or invite your team to a workspace in Settings › Workspaces.
 
 ## Build from source
 

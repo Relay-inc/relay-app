@@ -160,5 +160,5 @@ export async function openFolderAsWorkspace() {
   await loadSnapshot();
 }
 /** New workspace from template… and Workspace settings: the settings window, where workspaces are made and kept. A
- *  shared one is under Machines, the main vault and the folders added under General. */
-export const openWorkspaceSettings = (page: "general" | "machines") => backend.openSettingsWindow(page);
+ *  shared one is under Workspaces, the main vault and the folders added under General. */
+export const openWorkspaceSettings = (page: "general" | "workspaces") => backend.openSettingsWindow(page);

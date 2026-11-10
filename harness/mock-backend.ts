@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-member-dark|shared-keeper|shared-people|shared-readers|shared-reader|shared-live|shared-live-dark|shared-nohistory|shared-org|shared-windows, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-member-dark|shared-keeper|shared-people|shared-readers|shared-reader|shared-live|shared-live-dark|shared-nohistory|shared-org|shared-org-dark|shared-dark|shared-windows, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened),
 // ?platform=windows (the app as it runs on Windows).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
@@ -87,12 +87,14 @@ const live = fixture === "shared-live" || fixture === "shared-live-dark";
 // conflict copy names no Mac
 const noHistory = fixture === "shared-nohistory";
 // shared-org: "shared" on a full machine (not for workspaces only) whose server has an organisation, this Mac one of
-// its admins: Organisation under the machine (docs/workspaces.md, Organisation), Northwind's policy Claude Code only
-const org = fixture === "shared-org";
+// its admins: its Organisation (docs/workspaces.md, Organisation), Northwind's policy Claude Code only. shared-dark and
+// shared-org-dark: the same in the dark theme
+const org = fixture === "shared-org" || fixture === "shared-org-dark";
 // an invite link opened Relay; "shared-invite-entra": its server asks Microsoft Entra ID (PR Entra ID) instead of Google
 const invite = fixture === "shared-invite" || fixture === "shared-invite-entra";
 const shared =
   fixture === "shared" ||
+  fixture === "shared-dark" ||
   org ||
   noHistory ||
   fixture === "kb-shared" ||

@@ -1,7 +1,7 @@
 import type { OrgOffboard, OrgOverview, OrgStatus, Sso } from "../../domain/settings/types";
 import * as backend from "../../infrastructure/backend";
 
-// Settings › Machines › Organisation (docs/workspaces.md, Organisation): a server's organisation admins, its workspaces
+// Settings › Organisation (docs/workspaces.md, Organisation): a server's organisation admins, its workspaces
 // and people, and offboarding a person in one step. Each change is an entry this Mac signs (src-tauri organisation.rs);
 // the section keeps what it shows itself, read again after each step.
 

@@ -314,6 +314,18 @@ const settingsPage = async (tab, sub, fixture = "default", platform = "") => {
   await click(tab);
   if (sub) await click(sub);
 };
+/** Settings › Workspaces of `fixture`, `height` tall, on the page of the workspace `name` (its members read there) */
+const workspacePage = async (fixture, height = 1200, name = "Northwind") => {
+  await settingsPage("Workspaces", undefined, fixture);
+  await page.setViewportSize({ width: 900, height });
+  await page
+    .getByRole("button", { name: new RegExp(`^${name}`) })
+    .locator("visible=true")
+    .first()
+    .click();
+  await waitText(`Leave ${name}`);
+  await settle(page);
+};
 
 const VIEWS = {
   // the phone (mobile.html) at an iPhone's width: the conversation list, and one with a permission card
@@ -1707,13 +1719,12 @@ const VIEWS = {
     await settingsPage("Voice");
     await intoView("Whisper Large v3 Turbo");
   },
-  // Settings › Machines of the workspace's admin: Team server, paired for workspaces only, with the workspace under it: its
-  // last round (a conflict copy, two deletes held), the members open (this Mac, an admin, a member, an open invite), a
-  // new invite link made and the recovery key shown again
+  // a workspace's page on Settings › Workspaces for its admin (PR Settings Workspaces and Organisation): Northwind on Team
+  // server, its last round (a conflict copy, two deletes held), its people (this Mac, an admin, a member, an open
+  // invite), a new invite link made and the recovery key shown again
   // a member left: the workspace's key changes once the remaining members' Relay can receive it (PR key rotation)
   "settings-shared-rekey": async () => {
-    await settingsPage("Machines", undefined, "shared-rekey");
-    await page.setViewportSize({ width: 900, height: 1000 });
+    await workspacePage("shared-rekey", 1000);
     await waitText("the key has not changed since");
     await page.getByText("the key has not changed since").scrollIntoViewIfNeeded();
     await settle(page);
@@ -1728,8 +1739,7 @@ const VIEWS = {
   },
   // an admin turns making the notes documents on (ticket 8b, opt-in per workspace)
   "settings-shared-docs": async () => {
-    await settingsPage("Machines", undefined, "shared");
-    await page.setViewportSize({ width: 900, height: 1000 });
+    await workspacePage("shared", 1000);
     await waitText("Notes as shared documents");
     await page.getByRole("switch").first().click();
     await page.getByText("Notes as shared documents").first().scrollIntoViewIfNeeded();
@@ -1738,7 +1748,7 @@ const VIEWS = {
   // the organisation of a full machine's server (PR organisation admin): this Mac an organisation admin, its code, the
   // admins and Ops Mac to add, Northwind managed and Acme Retail not, the people across both
   "settings-org": async () => {
-    await settingsPage("Machines", undefined, "shared-org");
+    await settingsPage("Organisation", undefined, "shared-org");
     await page.setViewportSize({ width: 900, height: 1500 });
     await button("Show…").first().click();
     await waitText("Organisation admins");
@@ -1818,17 +1828,14 @@ const VIEWS = {
   },
   // a workspace's policy for its admin: Claude Code allowed, Codex not, capture off, and Add organisation admins
   "settings-shared-policy": async () => {
-    await settingsPage("Machines", undefined, "shared-org");
-    await page.setViewportSize({ width: 900, height: 1500 });
+    await workspacePage("shared-org", 1500);
     await waitText("Agents in this workspace");
     await page.getByText("Agents in this workspace").scrollIntoViewIfNeeded();
     await settle(page);
   },
   // the member list's roles in Members, with Make admin / Make member for a list admin (PR member roles)
   "settings-shared-members": async () => {
-    await settingsPage("Machines", undefined, "shared");
-    await page.setViewportSize({ width: 900, height: 1200 });
-    await button("Members").first().click();
+    await workspacePage("shared");
     await waitText("Design laptop");
     await page.getByText("Design laptop").scrollIntoViewIfNeeded();
     await settle(page);
@@ -1843,9 +1850,7 @@ const VIEWS = {
   },
   // a member the server has and the list lacks: Not on the list, Add to list and why, no Make admin or Remove
   "settings-shared-unlisted": async () => {
-    await settingsPage("Machines", undefined, "shared-unlisted");
-    await page.setViewportSize({ width: 900, height: 1200 });
-    await button("Members").first().click();
+    await workspacePage("shared-unlisted");
     await waitText("Not on the list");
     await page.getByText("Design laptop").scrollIntoViewIfNeeded();
     await settle(page);
@@ -1860,8 +1865,7 @@ const VIEWS = {
   },
   // a round on Windows left out files Windows cannot name, and a case clash: listed under the workspace (PR W4)
   "settings-shared-names": async () => {
-    await settingsPage("Machines", undefined, "shared-windows");
-    await page.setViewportSize({ width: 900, height: 1000 });
+    await workspacePage("shared-windows", 1000);
     await waitText("not synced here");
     await page.getByText("not synced here").scrollIntoViewIfNeeded();
     await settle(page);
@@ -1869,9 +1873,7 @@ const VIEWS = {
   // people on the member list (PR people): Alex Moreau with this MacBook and the Studio Mac under them, Add a device…,
   // Rename… and Remove on the person, the Design laptop under no person with Name person…
   "settings-shared-people": async () => {
-    await settingsPage("Machines", undefined, "shared-people");
-    await page.setViewportSize({ width: 900, height: 1200 });
-    await button("Members").first().click();
+    await workspacePage("shared-people");
     await waitText("Alex Moreau");
     await page.getByText("Design laptop").scrollIntoViewIfNeeded();
     await settle(page);
@@ -1894,17 +1896,14 @@ const VIEWS = {
   },
   // the reader role (PR reader): an admin's Members with a role picker per device, the Design laptop a reader
   "settings-shared-readers": async () => {
-    await settingsPage("Machines", undefined, "shared-readers");
-    await page.setViewportSize({ width: 900, height: 1200 });
-    await button("Members").first().click();
+    await workspacePage("shared-readers");
     await waitText("Alex Moreau");
     await page.getByText("Design laptop").scrollIntoViewIfNeeded();
     await settle(page);
   },
   // Invite…: Reader next to Member and Admin
   "settings-shared-invite-reader": async () => {
-    await settingsPage("Machines", undefined, "shared");
-    await page.setViewportSize({ width: 900, height: 1200 });
+    await workspacePage("shared");
     await button("Invite…").click();
     await page.getByRole("radio", { name: "Reader" }).click();
     await page.getByRole("radio", { name: "Reader" }).scrollIntoViewIfNeeded();
@@ -1912,9 +1911,7 @@ const VIEWS = {
   },
   // a Mac that only reads the workspace: its role, its two changes left out of the rounds, no Invite…
   "settings-shared-reader": async () => {
-    await settingsPage("Machines", undefined, "shared-reader");
-    await page.setViewportSize({ width: 900, height: 1200 });
-    await button("Members").first().click();
+    await workspacePage("shared-reader");
     await waitText("Studio Mac");
     await settle(page);
   },
@@ -1930,22 +1927,20 @@ const VIEWS = {
     await settle(page);
   },
   "settings-shared-vaults": async () => {
-    await settingsPage("Machines", undefined, "shared");
-    await page.setViewportSize({ width: 900, height: 1600 });
+    await workspacePage("shared", 1600);
     await waitText("Put them back");
-    await button("Members").click();
     await waitText("Design laptop");
     await button("Invite…").click();
     await button("Create link").click();
     await waitText("Single use, valid until");
     await button("Show recovery key").click();
     await waitText("Keep this key in your password manager");
-    await intoView("Team server");
+    await intoView("Folder");
   },
-  // New workspace on this machine… under Team server, filled in and created: the form closes, the new workspace's row
-  // under the machine shows its recovery key
+  // New workspace on this machine… under Team server, filled in and created: the form closes, the new workspace's page
+  // opens on its recovery key
   "settings-shared-new": async () => {
-    await settingsPage("Machines", undefined, "shared");
+    await settingsPage("Workspaces", undefined, "shared");
     await page.evaluate(() => (window.__harness.pickFolder = "/Users/me/Shared/Launch"));
     await button("New workspace on this machine…").click();
     await page.locator("#shared-name").fill("Launch");
@@ -1957,26 +1952,25 @@ const VIEWS = {
     await waitText("Keep this key in your password manager");
     await intoView("Keep this key in your password manager");
   },
-  // a member's Settings › Machines: no machine, the workspace they joined with a link under Workspaces
+  // a member's Settings › Workspaces: no machine, the workspace they joined with a link under Workspaces
   "settings-shared-member": async () => {
-    await settingsPage("Machines", undefined, "shared-member");
-    await waitText("Put them back");
-    await intoView("Workspaces");
+    await settingsPage("Workspaces", undefined, "shared-member");
+    await waitText("Join a workspace with a link…");
+    await settle(page);
   },
-  // fixture shared-keeper: that member, made admin on the server, opens Members: the server shows under Machines,
-  // for workspaces only, with its workspace under it, an Update button and no Forget or New workspace
+  // fixture shared-keeper: that member, made admin on the server, opens the workspace's page: the server shows under
+  // Machines, for workspaces only, with an Update button and no Forget, and on Workspaces with no New workspace
   "settings-shared-keeper": async () => {
-    await settingsPage("Machines", undefined, "shared-keeper");
-    await page.setViewportSize({ width: 900, height: 1300 });
+    await workspacePage("shared-keeper", 1300);
     await waitText("Put them back");
-    await button("Members").click();
+    await click("Machines");
     await waitText("You keep this server");
     await waitText("Update to");
     await intoView("You keep this server");
   },
-  // Relay opened by an invite link: Machines with the join form under Workspaces, the link in it
+  // Relay opened by an invite link: Settings › Workspaces with the join form, the link in it
   "settings-shared-join": async () => {
-    await settingsPage("Machines", undefined, "shared-invite");
+    await settingsPage("Workspaces", undefined, "shared-invite");
     await page.setViewportSize({ width: 900, height: 1000 });
     await waitText("Join a workspace");
     await intoView("Join a workspace");
@@ -1989,7 +1983,7 @@ const VIEWS = {
   },
   // the invite's server asks an Entra ID tenant (PR Entra ID): Sign in with Microsoft, no domain in the hint
   "settings-shared-join-entra": async () => {
-    await settingsPage("Machines", undefined, "shared-invite-entra");
+    await settingsPage("Workspaces", undefined, "shared-invite-entra");
     await page.setViewportSize({ width: 900, height: 1000 });
     await waitText("Sign in with Microsoft");
     await waitText("a Microsoft account of its organisation");
@@ -2001,6 +1995,43 @@ const VIEWS = {
     await button("Sign in with Google").click();
     await waitText("Signed in as sofie.claes@example.com");
     await intoView("Join a workspace");
+  },
+  // Settings › Workspaces and Settings › Organisation (PR Settings Workspaces and Organisation): the list of the
+  // workspaces with their server, role and Without history, a workspace's page, a server's organisation opened, and
+  // Machines with only the machines, each light and dark
+  "settings-workspaces": async (dark = false) => {
+    await settingsPage("Workspaces", undefined, dark ? "shared-org-dark" : "shared-org");
+    await page.setViewportSize({ width: 900, height: 900 });
+    await waitText("knowledge.search");
+    await settle(page);
+  },
+  "settings-workspaces-dark": async () => VIEWS["settings-workspaces"](true),
+  "settings-workspace": async (dark = false) => {
+    await workspacePage(dark ? "shared-dark" : "shared", 1250);
+    await waitText("Design laptop");
+  },
+  "settings-workspace-dark": async () => VIEWS["settings-workspace"](true),
+  "settings-organisation": async (dark = false) => {
+    await settingsPage("Organisation", undefined, dark ? "shared-org-dark" : "shared-org");
+    await page.setViewportSize({ width: 900, height: 1350 });
+    await button("Show…").first().click();
+    await waitText("Organisation admins");
+    await settle(page);
+  },
+  "settings-organisation-dark": async () => VIEWS["settings-organisation"](true),
+  "settings-machines-only": async (dark = false) => {
+    await settingsPage("Machines", undefined, dark ? "shared-org-dark" : "shared-org");
+    await page.setViewportSize({ width: 900, height: 1150 });
+    await waitText("Online");
+    await settle(page);
+  },
+  "settings-machines-only-dark": async () => VIEWS["settings-machines-only"](true),
+  // no machine paired in full (a member who joined with a link): no Organisation tab
+  "settings-no-organisation": async () => {
+    await settingsPage("Workspaces", undefined, "shared-member");
+    if (await page.getByRole("button", { name: "Organisation", exact: true }).count())
+      throw new Error("Organisation shown without a fully paired machine");
+    await settle(page);
   },
   // the other vault folders under General: a path, Remove, and the project shown under another name (the main vault
   // has one)
@@ -2020,7 +2051,7 @@ const VIEWS = {
   // New workspace on this machine…: the name, the folder, and Workspace without history with what it hides and what not
   // (PR workspace without history)
   "settings-shared-new": async () => {
-    await settingsPage("Machines", undefined, "shared");
+    await settingsPage("Workspaces", undefined, "shared");
     await page.setViewportSize({ width: 900, height: 1000 });
     await button("New workspace on this machine…").click();
     await page.locator("#shared-name").fill("Knowledge");
@@ -2028,11 +2059,10 @@ const VIEWS = {
     await button("Create").scrollIntoViewIfNeeded();
     await settle(page);
   },
-  // a workspace made without history: its row in Settings › Machines says so next to the role, its conflict copy
+  // a workspace made without history: its page on Settings › Workspaces says so next to the role, its conflict copy
   // names no Mac, and it offers no shared documents yet
   "settings-shared-nohistory": async () => {
-    await settingsPage("Machines", undefined, "shared-nohistory");
-    await page.setViewportSize({ width: 900, height: 1000 });
+    await workspacePage("shared-nohistory", 1000);
     await waitText("Show recovery key");
     await page
       .getByText("Show recovery key")
@@ -2087,7 +2117,7 @@ const VIEWS = {
   // Settings › General, the Experimental section at the bottom with the Files switch off
   "settings-experimental": async () => {
     await settingsPage("General", undefined, "files-off");
-    await page.setViewportSize({ width: 900, height: 2400 });
+    await page.setViewportSize({ width: 900, height: 1350 });
     await page.getByText("Experimental", { exact: true }).scrollIntoViewIfNeeded();
     await settle(page);
   },
@@ -3221,9 +3251,9 @@ const VIEWS = {
     await settingsPage("General");
     await intoView("reminders.push");
   },
-  // relay knowledge.search's agent access under Machines, below the workspaces
+  // relay knowledge.search's agent access on Settings › Workspaces, below the workspaces
   "settings-knowledge-access": async () => {
-    await settingsPage("Machines", undefined, "shared");
+    await settingsPage("Workspaces", undefined, "shared");
     await intoView("knowledge.search");
   },
   // the vault's git backup under General, after a round that pushed

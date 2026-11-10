@@ -4,8 +4,9 @@ import * as backend from "../../infrastructure/backend";
 import { checkMachine } from "./machines-page";
 import { useSettingsStore, type SettingsState } from "./store";
 
-// Settings › Machines: workspaces a team shares on a relay-server, each synced into a folder here
-// (src-tauri/src/shared_vaults.rs), under the machine that keeps it or, joined with a link, in Workspaces. The backend keeps the list in the settings and runs the rounds; a round's result
+// Settings › Workspaces: workspaces a team shares on a relay-server, each synced into a folder here
+// (src-tauri/src/shared_vaults.rs), listed under the machine that keeps it or, joined with a link, under Workspaces,
+// each with a page of its own. The backend keeps the list in the settings and runs the rounds; a round's result
 // comes in as an event. Invites, members and leaving go to the server through the backend.
 type Shared = SettingsState["shared"];
 const st = () => useSettingsStore.getState().shared;
@@ -43,7 +44,8 @@ async function reload() {
 }
 
 /** The invite link the backend keeps (the one that opened Relay, or came since) into the join form. While a create or
- *  join runs it stays there: their end takes it, or the next Settings window. `open_settings` shows Machines. */
+ *  join runs it stays there: their end takes it, or the next Settings window. `open_settings` shows Workspaces, on its
+ *  list, where the join form is. */
 export async function takeInvite() {
   if (st().busy.form) return;
   const link = await backend.sharedVaultPendingInvite().catch(() => null);
@@ -51,6 +53,7 @@ export async function takeInvite() {
   change(draft => {
     draft.form = { ...draft.form, mode: "join", machine: "", link, sso: undefined, login: null };
     draft.messages.form = null;
+    draft.open = "";
   });
   void checkSso();
 }
@@ -123,7 +126,7 @@ export async function pickSharedFolder() {
   if (folder) change(draft => void (draft.form.folder = folder));
 }
 
-/** Make the vault on the form's machine: the form closes and its row shows the recovery key (a failed reload leaves
+/** Make the vault on the form's machine: the form closes and its page opens on the recovery key (a failed reload leaves
  *  it to Show recovery key). */
 export async function createSharedVault() {
   const { machine, name, folder, noHistory } = st().form;
@@ -134,6 +137,7 @@ export async function createSharedVault() {
       // made, but the organisation admins are not on it yet: said under the new workspace
       if (orgError) draft.messages[id] = { text: t("set.orgCreateFailed", { error: orgError }), ok: false };
       draft.form = { ...CLOSED, machine }; // what the reload says shows under that machine
+      draft.open = id;
     });
     await reload();
   });
@@ -158,6 +162,11 @@ async function loadInfo(id: string) {
   // a role that changed there: the backend saved it, with the server under Machines for an admin (or gone again)
   const saved = useSettingsStore.getState().settings.sharedVaults?.find(vault => vault.id === id)?.role;
   if (info.vault.role && info.vault.role !== saved) await reload();
+}
+/** A workspace's page on Settings › Workspaces, its members read the first time; "" back to the list. */
+export function openWorkspace(id: string) {
+  change(draft => void (draft.open = id));
+  if (id && !(id in st().info)) void toggleMembers(id);
 }
 /** The members shown or folded away. */
 export async function toggleMembers(id: string) {

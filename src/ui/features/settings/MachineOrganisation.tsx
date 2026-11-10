@@ -19,8 +19,8 @@ const LIST = "grid min-w-0 grid-cols-1 rounded-lg border border-s-border";
 const ROW = "grid gap-1 border-b border-s-border px-3 py-2 last:border-b-0";
 const LINE = "flex flex-wrap items-center gap-x-3 gap-y-1";
 
-/** Settings › Machines › Organisation of a machine's server (docs/workspaces.md, Organisation): closed until asked, as
- *  opening it publishes this Mac's organisation keys there. For an organisation admin: the admins, devices to add (after
+/** Settings › Organisation, per machine: the organisation of its server (docs/workspaces.md, Organisation), closed
+ *  until asked, as opening it publishes this Mac's organisation keys there. For an organisation admin: the admins, devices to add (after
  *  comparing their code), every workspace with whether the organisation manages it, and every person with Offboard. */
 export function MachineOrganisation({ machine }: { machine: Machine }) {
   const { t, tn } = useT();
