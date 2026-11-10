@@ -141,13 +141,17 @@ pub fn is_abs(p: &str, windows: bool) -> bool {
     }
     (b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':') || p.starts_with('\\') || p.starts_with("//")
 }
-/// Whether a normalized Windows path is one the guard cannot place, so it refuses it: a device path (`\\?\GLOBALROOT`,
-/// `\\.\PhysicalDrive0`), a drive's admin share (`\\host\c$`, the same disk by another name), or an 8.3 short name
-/// (`VAULT~1`, which Windows may open as `vault`).
-pub fn murky(p: &str) -> bool {
+/// Whether a normalized path is one the guard cannot place, so it refuses it. Everywhere: a variable left in it
+/// (`/me/$V/x`, which may stand for several folders) or `**`. On Windows also a device path (`\\?\GLOBALROOT`,
+/// `\\.\PhysicalDrive0`), a drive's admin share (`\\host\c$`, the same disk by another name), an 8.3 short name
+/// (`VAULT~1`, which Windows may open as `vault`), `%`, and a `:` past the drive (an NTFS stream: `vault::$INDEX_ALLOCATION`
+/// opens the folder `vault`).
+pub fn murky(p: &str, windows: bool) -> bool {
+    if p.contains('$') || p.contains("**") { return true; }
+    if !windows { return false; }
     let share = p.strip_prefix("//").and_then(|r| r.split('/').nth(1)).unwrap_or("");
-    p.starts_with("//?/") || p.starts_with("//./") || (share.len() == 2 && share.ends_with('$'))
-        || p.split('/').any(|c| c.split_once('~').is_some_and(|(_, d)| d.starts_with(|x: char| x.is_ascii_digit())))
+    p.starts_with("//?/") || p.starts_with("//./") || (share.len() == 2 && share.ends_with('$')) || p.contains('%')
+        || p.split('/').skip(1).any(|c| c.contains(':') || c.split_once('~').is_some_and(|(_, d)| d.starts_with(|x: char| x.is_ascii_digit())))
 }
 /// A word with the user's home folder written out: `~`, `$HOME`, `${HOME}`. On Windows also, in any case,
 /// `$env:NAME`, `${env:NAME}` (PowerShell, which Codex runs commands in there) and `%NAME%` (cmd) at its start, with
@@ -229,8 +233,10 @@ mod tests {
         assert!(!is_abs("/c", true) && !is_abs("a", true) && !is_abs(r"C:\a", false) && is_abs("/a", false));
         assert!(is_abs("/users/me", true) && is_abs("/", true) && is_abs("/a.md", true) && !is_abs("/all", true) && !is_abs("/o:n", true) && !is_abs("/?", true));
         assert_eq!((w(r"\\.\C:\a"), w(r"\\.\UNC\s\x\a"), w(r"\\.\pipe\x"), w(r"C:\a.\b \c. .")), ("c:/a".into(), "//s/x/a".into(), "//./pipe/x".into(), "c:/a/b/c".into()));
-        for m in ["//./pipe/x", "//?/globalroot/device/x", "//localhost/c$/users", "//pc1/d$", "c:/users/me/vault~1/x"] { assert!(murky(m), "{m}"); }
-        for m in ["c:/users/me/vault", "//server/share/x", "//server/c$$/x", "c:/a~b/x"] { assert!(!murky(m), "{m}"); }
+        for m in ["//./pipe/x", "//?/globalroot/device/x", "//localhost/c$/users", "//pc1/d$", "c:/users/me/vault~1/x", "c:/users/me/vault::$index_allocation/x",
+                  "c:/a/x.md:s", "c:/a/%v%/x", "c:/a/**/x"] { assert!(murky(m, true), "{m}"); }
+        for m in ["c:/users/me/vault", "//server/share/x", "//server/cc/x", "c:/a~b/x", "c:"] { assert!(!murky(m, true), "{m}"); }
+        assert!(murky("/me/$v/x", false) && murky("/me/**/x", false) && !murky("/me/a~1/%x:y", false));
     }
     #[test]
     fn home_and_variables_are_written_out() {

@@ -210,7 +210,12 @@ fn blocked(g: &Guard, r: &agent_core::pending::Request) -> Option<String> {
         let cmd = r.input["command"].as_str().unwrap_or("");
         // the shell codex runs the command in, quoted when its path has a space (`'C:\Program Files\PowerShell\7\pwsh.exe'
         // -Command '…'` on Windows): dropped whole when it is a system program, so its words are no paths of their own
-        let first = match cmd.chars().next() { Some(q @ ('\'' | '"')) => cmd[1..].find(q).map(|e| (&cmd[1..=e], &cmd[e + 2..])), _ => cmd.split_once(char::is_whitespace).filter(|(p, _)| !p.contains(|c| SPLIT.contains(c))) };
+        // single quotes only (nothing expands in them, as shlex_join writes it) and a whole word, or a plain word
+        let plain = |p: &str| !p.contains(|c| SPLIT.contains(c) || "${}*?[~".contains(c));
+        let first = match cmd.strip_prefix('\'') {
+            Some(q) => q.find('\'').filter(|&e| q[e + 1..].chars().next().is_none_or(char::is_whitespace)).map(|e| (&q[..e], &q[e + 1..])),
+            None => cmd.split_once(char::is_whitespace).filter(|(p, _)| plain(p)),
+        };
         let cmd = first.filter(|(p, _)| at(p).is_some_and(|p| system(&format!("{p}/")))).map_or(cmd, |(_, rest)| rest);
         paths.extend(cmd.split(|c: char| c.is_whitespace() || SPLIT.contains(c)).filter_map(at));
     } else {
@@ -218,7 +223,7 @@ fn blocked(g: &Guard, r: &agent_core::pending::Request) -> Option<String> {
         paths.extend(named.filter_map(|p| p.as_str()).filter_map(|p| if is_abs(p, w) { at(p) } else { Some(norm_path(p, cwd, w)) }));
     }
     let inside = |p: &str| p == g.dir || p.starts_with(&format!("{}/", g.dir)) || system(p);
-    let murky = |p: &str| p.starts_with('?') || (w && crate::platform::murky(p));
+    let murky = |p: &str| p.starts_with('?') || crate::platform::murky(p, w);
     paths.into_iter().find(|p| murky(p) || (g.shared && !inside(p)) || g.rules.iter().any(|r| hits(r, p, w)))
 }
 /// Whether a rule of `fence` or `shared_copies` (`Read(//a/b/**)`, `Edit(//a/x.json)`, `Read(//d/shared-*.key)`)
@@ -228,10 +233,29 @@ fn hits(rule: &str, path: &str, windows: bool) -> bool {
     let Some(pat) = rule.split_once('(').and_then(|(_, r)| r.strip_suffix(')')).and_then(|r| r.strip_prefix('/')) else { return false };
     // the rule's path as `blocked` has the paths it checks (`*` is a plain character there)
     let pat = &crate::platform::norm_path(pat, pat, windows);
+    // a path with a wildcard (`/me/va*/x`, `{a,b}`, which the shell expands): whether one of the paths it may stand for is covered
+    if path.contains(['*', '?', '[', '{']) {
+        let (p, d): (Vec<&str>, Vec<&str>) = (path.split('/').collect(), pat.trim_end_matches("/**").split('/').collect());
+        let fits = |n: usize| d.iter().zip(&p).take(n).all(|(d, p)| seg_match(p.as_bytes(), d.as_bytes()));
+        return if pat.ends_with("/**") { p.len() >= d.len() && fits(d.len()) } else { p.len() == d.len() && fits(d.len()) };
+    }
     if let Some(dir) = pat.strip_suffix("/**") { return path == dir || path.starts_with(&format!("{dir}/")); }
     match pat.split_once('*') {
         Some((a, b)) => path.len() >= a.len() + b.len() && path.starts_with(a) && path.ends_with(b) && !path[a.len()..path.len() - b.len()].contains('/'),
         None => path == pat,
+    }
+}
+/// Whether the shell may expand the path segment `p` (`*`, `?`, `[…]` as one character, `{…}` as anything) to `t`.
+// ponytail: backtracking on `*`, fine for one path segment of a command
+fn seg_match(p: &[u8], t: &[u8]) -> bool {
+    let after = |end: u8| p.iter().position(|&c| c == end).map_or(&p[p.len()..], |i| &p[i + 1..]);
+    match p.first() {
+        None => t.is_empty(),
+        Some(b'*') => (0..=t.len()).any(|i| seg_match(&p[1..], &t[i..])),
+        Some(b'{') => (0..=t.len()).any(|i| seg_match(after(b'}'), &t[i..])),
+        Some(b'?') => !t.is_empty() && seg_match(&p[1..], &t[1..]),
+        Some(b'[') => !t.is_empty() && seg_match(after(b']'), &t[1..]),
+        Some(c) => t.first() == Some(c) && seg_match(&p[1..], &t[1..]),
     }
 }
 
@@ -448,6 +472,28 @@ mod tests {
             assert!(ask(&g, &cmd(out, "/team/shared")).is_some(), "{out}");
         }
         assert_eq!(ask(&g, &cmd("'/bin/zsh' -lc 'cat notes/a.md'", "/team/shared")), None);
+    }
+    #[test]
+    fn codex_cannot_reach_a_fenced_path_through_a_wildcard_or_a_variable() {
+        let all = ["/me/vault".to_string(), "/team/shared".to_string()];
+        let mut rules = fence("/me/vault", &all, &[], None);
+        rules.extend(shared_copies("/me/data"));
+        let main = Guard::new(rules, "/me/vault", false, "/me", false, |_| None);
+        for out in ["cat /team/sh*/x.md", "cat /team/{shared,y}/x", "cat /te?m/shared/x", "cat /team/[s]hared/x", "cat /me/data/*.key", "cat /me/$V/x", "cat /me/**/x.md"] {
+            assert!(ask(&main, &cmd(out, "/me/vault")).is_some(), "{out}");
+        }
+        for ok in ["ls /usr/lib/*.dylib", "cat /me/code/*.md", "cat /me/data/shared-0a/*.md"] { assert_eq!(ask(&main, &cmd(ok, "/me/vault")), None, "{ok}"); }
+        let g = Guard::new(fence("/team/shared", &all, &[], Some("/me/data")), "/team/shared", true, "/me", false, |_| None);
+        for out in [r#""/bin/zsh$(cat /me/vault/x>o)" -c x"#, "'/bin/zsh'$(cat</me/vault/x) -c x", "/bin/zsh$(cat</me/vault/x) -c x", "/bin/z*</me/vault/x"] {
+            assert!(ask(&g, &cmd(out, "/team/shared")).is_some(), "{out}");
+        }
+        // on Windows: an NTFS stream of the other vault's folder, a wildcard in it
+        let all = [r"C:\Users\me\vault".to_string(), r"C:\Users\me\Team".to_string()];
+        let w = Guard::new(fence(r"C:\Users\me\vault", &all, &[], None), r"C:\Users\me\vault", false, r"C:\Users\me", true, |_| None);
+        for out in [r"type C:\Users\me\Team::$INDEX_ALLOCATION\x.md", r"type C:\Users\me\Team\x.md:s", r"type C:\Users\me\te*\x.md", r"type C:\Users\me\T?am\x"] {
+            assert!(ask(&w, &cmd(out, r"C:\Users\me\vault")).is_some(), "{out}");
+        }
+        assert_eq!(ask(&w, &cmd(r"type C:\Users\me\code\*.md", r"C:\Users\me\vault")), None);
     }
     #[test]
     fn workspaces_run_claude_code_and_codex_only() {
