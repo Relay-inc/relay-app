@@ -142,12 +142,12 @@ pub fn is_abs(p: &str, windows: bool) -> bool {
     (b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':') || p.starts_with('\\') || p.starts_with("//")
 }
 /// Whether a normalized path is one the guard cannot place, so it refuses it. Everywhere: a variable left in it
-/// (`/me/$V/x`, which may stand for several folders) or `**`. On Windows also a device path (`\\?\GLOBALROOT`,
+/// (`/me/$V/x`, which may stand for several folders), `**`, or braces (`/{me/vault,x}/y`, which may span a `/`). On Windows also a device path (`\\?\GLOBALROOT`,
 /// `\\.\PhysicalDrive0`), a drive's admin share (`\\host\c$`, the same disk by another name), an 8.3 short name
 /// (`VAULT~1`, which Windows may open as `vault`), `%`, and a `:` past the drive (an NTFS stream: `vault::$INDEX_ALLOCATION`
 /// opens the folder `vault`).
 pub fn murky(p: &str, windows: bool) -> bool {
-    if p.contains('$') || p.contains("**") { return true; }
+    if p.contains(['$', '{', '}']) || p.contains("**") { return true; }
     if !windows { return false; }
     let share = p.strip_prefix("//").and_then(|r| r.split('/').nth(1)).unwrap_or("");
     p.starts_with("//?/") || p.starts_with("//./") || (share.len() == 2 && share.ends_with('$')) || p.contains('%')
@@ -236,7 +236,7 @@ mod tests {
         for m in ["//./pipe/x", "//?/globalroot/device/x", "//localhost/c$/users", "//pc1/d$", "c:/users/me/vault~1/x", "c:/users/me/vault::$index_allocation/x",
                   "c:/a/x.md:s", "c:/a/%v%/x", "c:/a/**/x"] { assert!(murky(m, true), "{m}"); }
         for m in ["c:/users/me/vault", "//server/share/x", "//server/cc/x", "c:/a~b/x", "c:"] { assert!(!murky(m, true), "{m}"); }
-        assert!(murky("/me/$v/x", false) && murky("/me/**/x", false) && !murky("/me/a~1/%x:y", false));
+        assert!(murky("/me/$v/x", false) && murky("/me/**/x", false) && murky("/{me/vault,x}/y", false) && !murky("/me/a~1/%x:y", false));
     }
     #[test]
     fn home_and_variables_are_written_out() {

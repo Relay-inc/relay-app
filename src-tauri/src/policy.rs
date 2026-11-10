@@ -233,8 +233,8 @@ fn hits(rule: &str, path: &str, windows: bool) -> bool {
     let Some(pat) = rule.split_once('(').and_then(|(_, r)| r.strip_suffix(')')).and_then(|r| r.strip_prefix('/')) else { return false };
     // the rule's path as `blocked` has the paths it checks (`*` is a plain character there)
     let pat = &crate::platform::norm_path(pat, pat, windows);
-    // a path with a wildcard (`/me/va*/x`, `{a,b}`, which the shell expands): whether one of the paths it may stand for is covered
-    if path.contains(['*', '?', '[', '{']) {
+    // a path with a wildcard (`/me/va*/x`, which the shell expands): whether one of the paths it may stand for is covered
+    if path.contains(['*', '?', '[']) {
         let (p, d): (Vec<&str>, Vec<&str>) = (path.split('/').collect(), pat.trim_end_matches("/**").split('/').collect());
         let fits = |n: usize| d.iter().zip(&p).take(n).all(|(d, p)| seg_match(p.as_bytes(), d.as_bytes()));
         return if pat.ends_with("/**") { p.len() >= d.len() && fits(d.len()) } else { p.len() == d.len() && fits(d.len()) };
@@ -245,14 +245,13 @@ fn hits(rule: &str, path: &str, windows: bool) -> bool {
         None => path == pat,
     }
 }
-/// Whether the shell may expand the path segment `p` (`*`, `?`, `[…]` as one character, `{…}` as anything) to `t`.
+/// Whether the shell may expand the path segment `p` (`*`, `?`, `[…]` as one character) to `t`.
 // ponytail: backtracking on `*`, fine for one path segment of a command
 fn seg_match(p: &[u8], t: &[u8]) -> bool {
     let after = |end: u8| p.iter().position(|&c| c == end).map_or(&p[p.len()..], |i| &p[i + 1..]);
     match p.first() {
         None => t.is_empty(),
         Some(b'*') => (0..=t.len()).any(|i| seg_match(&p[1..], &t[i..])),
-        Some(b'{') => (0..=t.len()).any(|i| seg_match(after(b'}'), &t[i..])),
         Some(b'?') => !t.is_empty() && seg_match(&p[1..], &t[1..]),
         Some(b'[') => !t.is_empty() && seg_match(after(b']'), &t[1..]),
         Some(c) => t.first() == Some(c) && seg_match(&p[1..], &t[1..]),
@@ -479,7 +478,7 @@ mod tests {
         let mut rules = fence("/me/vault", &all, &[], None);
         rules.extend(shared_copies("/me/data"));
         let main = Guard::new(rules, "/me/vault", false, "/me", false, |_| None);
-        for out in ["cat /team/sh*/x.md", "cat /team/{shared,y}/x", "cat /te?m/shared/x", "cat /team/[s]hared/x", "cat /me/data/*.key", "cat /me/$V/x", "cat /me/**/x.md"] {
+        for out in ["cat /team/sh*/x.md", "cat /team/{shared,y}/x", "cat /{team/shared,x}/y", "cat /{me/vault,x}/y", "cat /te?m/shared/x", "cat /team/[s]hared/x", "cat /me/data/*.key", "cat /me/$V/x", "cat /me/**/x.md"] {
             assert!(ask(&main, &cmd(out, "/me/vault")).is_some(), "{out}");
         }
         for ok in ["ls /usr/lib/*.dylib", "cat /me/code/*.md", "cat /me/data/shared-0a/*.md"] { assert_eq!(ask(&main, &cmd(ok, "/me/vault")), None, "{ok}"); }

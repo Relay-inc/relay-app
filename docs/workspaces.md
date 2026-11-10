@@ -122,9 +122,9 @@ does:
   and `~`, `$HOME`, `$env:NAME` and `%NAME%` are written out. `/a/b` is a path on the current drive (PowerShell reads it
   so), a short switch is not (`cmd /c`, `/all`, `/o:n`). A device path, a drive's admin share (`\\host\c$`) and an 8.3
   short name (`VAULT~1`) are declined, the guard cannot tell where they lead. An NTFS stream (`vault::$INDEX_ALLOCATION`, `x.md:s`) and `%`
-  in a path are declined too. On both systems a path with a variable left in it (`/me/$V/x`, `$PWD/../x`) or `**` is
-  declined, a path with a wildcard or braces (`/me/va*/x`, `{a,b}`) is declined when one of the paths it may stand for
-  is fenced, and the command's first word is dropped only as a plain or single-quoted word that names a system program. Codex runs every command in PowerShell (`pwsh`,
+  in a path are declined too. On both systems a path with a variable left in it (`/me/$V/x`, `$PWD/../x`), `**` or braces
+  (`{a,b}`) is declined, a path with a wildcard (`/me/va*/x`) is declined when one of the paths it may stand for is
+  fenced, and the command's first word is dropped only as a plain or single-quoted word that names a system program. Codex runs every command in PowerShell (`pwsh`,
   else Windows PowerShell, `cmd.exe` as the last fallback, codex-cli 0.163's `shell_detect.rs`), never `/bin/zsh -lc`,
   so the system's programs there are `%SystemRoot%`, `%ProgramFiles%` and `%ProgramFiles(x86)%` (PowerShell and Git for
   Windows): the program folders of Codex's own `:minimal` on Windows, without `C:\ProgramData`. The shell's own path
