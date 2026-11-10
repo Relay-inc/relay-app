@@ -1,5 +1,6 @@
 //! The app's stdin/stdout to `codex app-server` (JSON-RPC 2.0, one JSON object per line), for one conversation.
 //! Run as `relay --codex-bridge <codex-bin> '<config json>'`; config: {cwd, model, effort, sandbox, approval, fenced, resume, instructions}.
+//! Fenced (a workspace) it also reads codex's config for the folder first, to switch off its MCP servers (`thread_params`).
 //!
 //! It does the handshake the app cannot (initialize, initialized, thread/start or thread/resume, which gives the thread id)
 //! and then passes lines both ways: every line codex writes goes to stdout unchanged, every line the app writes goes to
@@ -25,6 +26,50 @@ pub fn main(bin: &str, cfg: &str) -> i32 {
 const EOF: i32 = i32::MIN; // codex ended during the handshake
 
 fn text(v: &Value, k: &str) -> Option<String> { v[k].as_str().filter(|s| !s.is_empty()).map(String::from) }
+
+// what a fenced conversation's profile keeps read-only in the workspace. `.claude` covers the folder it links to
+// (codex resolves the link). `.codex`, `.agents` and `.git` are what `:workspace` itself keeps, which a profile's own
+// `:project_roots` table replaces, so they are listed again.
+const READ_ONLY: [&str; 5] = [".claude", "AGENTS.md", ".codex", ".agents", ".git"];
+const PROFILE: &str = "relay-workspace";
+// the first codex-cli this ran against with permission profiles (docs/workspaces.md › Trust)
+const MIN_FENCED: (u32, u32) = (0, 163);
+
+/// From initialize's `userAgent` ("relay/0.163.0 (Mac OS ...) ..."): a codex with permission profiles.
+fn has_profiles(user_agent: &str) -> bool {
+    let v = user_agent.split_once('/').map(|(_, r)| r).unwrap_or("").split([' ', '-', '+']).next().unwrap_or("");
+    let mut n = v.split('.').map(|p| p.parse::<u32>().ok());
+    match (n.next().flatten(), n.next().flatten()) {
+        (Some(major), Some(minor)) => (major, minor) >= MIN_FENCED,
+        _ => false,
+    }
+}
+
+/// thread/start (and thread/resume) params. Fenced (a workspace): approvals to the app (Relay's guard and the cards),
+/// never to codex's own auto review. Its MCP servers (`mcp`, from config/read), plugins and apps are off, as Claude
+/// Code runs there with `--strict-mcp-config`. And `workspace-write` becomes Relay's permission profile: the same
+/// sandbox with READ_ONLY kept, and none of the user's own extra writable roots.
+fn thread_params(cfg: &Value, mcp: &[String]) -> Value {
+    let sandbox = text(cfg, "sandbox").unwrap_or("workspace-write".into());
+    let mut opts = json!({"cwd": cfg["cwd"], "approvalPolicy": text(cfg, "approval").unwrap_or("on-request".into()), "sandbox": sandbox});
+    let mut config = Map::new();
+    if let Some(m) = text(cfg, "model") { opts["model"] = m.into(); }
+    if let Some(e) = text(cfg, "effort") { config.insert("model_reasoning_effort".into(), e.into()); }
+    if let Some(i) = text(cfg, "instructions") { opts["developerInstructions"] = i.into(); }
+    if cfg["fenced"] == true {
+        opts["approvalsReviewer"] = "user".into();
+        config.insert("features".into(), json!({"plugins": false, "apps": false}));
+        config.insert("mcp_servers".into(), mcp.iter().map(|n| (n.clone(), json!({"enabled": false}))).collect::<Map<_, _>>().into());
+        if sandbox == "workspace-write" {
+            opts.as_object_mut().unwrap().remove("sandbox"); // codex takes a sandbox or a profile, not both
+            let keep: Map<_, _> = READ_ONLY.iter().map(|p| (p.to_string(), json!("read"))).collect();
+            config.insert("default_permissions".into(), PROFILE.into());
+            config.insert("permissions".into(), json!({PROFILE: {"extends": ":workspace", "filesystem": {":project_roots": keep}}}));
+        }
+    }
+    if !config.is_empty() { opts["config"] = config.into(); }
+    opts
+}
 
 /// Slash UI commands become protocol operations, skills become explicit skill input items.
 fn prepare_turn(message: &Value, skills: &HashMap<String, Value>) -> Result<Value, String> {
@@ -92,14 +137,23 @@ pub fn run<W: Write + Send + 'static>(bin: &str, cfg: &Value, input: impl BufRea
     let hs = (|| -> Result<(String, HashMap<String, Value>), i32> {
         let io = |_| 0;
         send(&cin, &json!({"id": 0, "method": "initialize", "params": {"clientInfo": {"name": "relay", "title": "Relay", "version": "0.1.0"}, "capabilities": null}})).map_err(io)?;
-        until(&mut cout, 0)?;
+        let init = until(&mut cout, 0)?;
         send(&cin, &json!({"method": "initialized"})).map_err(io)?;
-        let mut opts = json!({"cwd": cfg["cwd"], "approvalPolicy": text(cfg, "approval").unwrap_or("on-request".into()), "sandbox": text(cfg, "sandbox").unwrap_or("workspace-write".into())});
-        if let Some(m) = text(cfg, "model") { opts["model"] = m.into(); }
-        if let Some(e) = text(cfg, "effort") { opts["config"] = json!({"model_reasoning_effort": e}); }
-        if let Some(i) = text(cfg, "instructions") { opts["developerInstructions"] = i.into(); }
-        // a fenced conversation: approvals to the app (Relay's guard and the cards), never to codex's own auto review
-        if cfg["fenced"] == true { opts["approvalsReviewer"] = "user".into(); }
+        let mut mcp = vec![];
+        if cfg["fenced"] == true {
+            // an older codex ignores the profile and would fall back to the user's own sandbox_mode: refuse instead
+            if !has_profiles(init["result"]["userAgent"].as_str().unwrap_or("")) {
+                emit(&out, &json!({"id": 2, "error": {"message": format!("Codex {}.{} or newer is needed in a workspace", MIN_FENCED.0, MIN_FENCED.1)}}).to_string());
+                agent_core::terminate(pid);
+                return Err(1);
+            }
+            // the MCP servers its config gives this folder, to switch off (the user's, and a project layer's)
+            send(&cin, &json!({"id": 4, "method": "config/read", "params": {"cwd": cfg["cwd"]}})).map_err(io)?;
+            let c = until(&mut cout, 4)?;
+            if c.get("error").is_some() { emit(&out, &json!({"id": 2, "error": c["error"]}).to_string()); agent_core::terminate(pid); return Err(1); }
+            mcp = c["result"]["config"]["mcp_servers"].as_object().map(|o| o.keys().cloned().collect()).unwrap_or_default();
+        }
+        let opts = thread_params(cfg, &mcp);
         let mut r = None;
         if let Some(id) = text(cfg, "resume") {
             let mut p = opts.clone();
@@ -213,5 +267,36 @@ mod tests {
         assert_eq!(r["params"]["model"], "m");
         assert!(prepare("/skill:removed", vec![]).is_err());
         assert_eq!(prepare("ordinary /text", vec![]).unwrap()["params"]["input"][0]["text"], "ordinary /text");
+    }
+
+    #[test]
+    fn main_vault_threads_keep_the_chosen_sandbox_and_codexs_own_mcp() {
+        let cfg = json!({"cwd": "/v", "model": "m", "effort": "high", "sandbox": "workspace-write", "approval": "on-request", "fenced": false, "instructions": "i"});
+        assert_eq!(thread_params(&cfg, &["mine".into()]), json!({"cwd": "/v", "approvalPolicy": "on-request", "sandbox": "workspace-write", "model": "m", "developerInstructions": "i", "config": {"model_reasoning_effort": "high"}}));
+        assert!(thread_params(&json!({"cwd": "/v"}), &[]).get("config").is_none());
+    }
+
+    #[test]
+    fn a_workspace_thread_gets_relays_profile_and_no_mcp_servers() {
+        let cfg = json!({"cwd": "/w", "sandbox": "workspace-write", "approval": "on-request", "fenced": true});
+        let p = thread_params(&cfg, &["node_repl".into(), "fake".into()]);
+        assert!(p.get("sandbox").is_none()); // a profile, not a sandbox mode: codex refuses both
+        assert_eq!(p["approvalsReviewer"], "user");
+        assert_eq!(p["config"]["default_permissions"], PROFILE);
+        assert_eq!(p["config"]["permissions"], json!({"relay-workspace": {"extends": ":workspace", "filesystem": {":project_roots": {".claude": "read", "AGENTS.md": "read", ".codex": "read", ".agents": "read", ".git": "read"}}}}));
+        assert_eq!(p["config"]["mcp_servers"], json!({"node_repl": {"enabled": false}, "fake": {"enabled": false}}));
+        assert_eq!(p["config"]["features"], json!({"plugins": false, "apps": false}));
+        // read-only stays read-only (nothing to keep), still without MCP servers
+        let p = thread_params(&json!({"cwd": "/w", "sandbox": "read-only", "fenced": true}), &[]);
+        assert_eq!((p["sandbox"].as_str(), p["config"].get("permissions")), (Some("read-only"), None));
+        assert_eq!(p["config"]["mcp_servers"], json!({}));
+    }
+
+    #[test]
+    fn only_a_codex_with_permission_profiles_runs_fenced() {
+        assert!(has_profiles("relay/0.163.0 (Mac OS 26.4.1; arm64) unknown (relay; 0.1.0)"));
+        assert!(has_profiles("relay/0.170.2-alpha.1 (Linux)") && has_profiles("relay/1.0.0"));
+        assert!(!has_profiles("relay/0.159.2 (Mac OS 26.1; arm64)"));
+        assert!(!has_profiles("") && !has_profiles("relay") && !has_profiles("relay/x.y"));
     }
 }
