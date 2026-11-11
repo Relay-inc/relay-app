@@ -347,7 +347,7 @@ export default {
   "ag.accountActive": "Les nouvelles conversations utilisent",
   "ag.accountAuto": "Changer de compte automatiquement",
   "ag.accountAutoHelp":
-    "Quand la limite du forfait d’un compte est atteinte, le message suivant déplace la conversation vers le compte suivant qui a de la marge.",
+    "Quand la limite du forfait d’un compte est atteinte, la conversation passe au compte suivant qui a de la marge et continue aussitôt.",
   "ag.empty": "Aucun agent pour l'instant. Ajoutez-en un pour démarrer des conversations.",
   "ag.listHelp":
     "Seuls les agents activés apparaissent dans le compositeur. Cliquez sur l'un d'eux pour modifier ses réglages.",
@@ -490,6 +490,7 @@ export default {
   "bar.prsNone": "Rien à relire",
   "bar.mailRead": "Tout est lu",
   "usage.limits": "Limites de l’abonnement",
+  "usage.inUse": "en cours",
   "usage.resets": "Réinitialisation {when}",
   "usage.summary": "{label} {pct} %",
   "usage.summaryResets": "{label} {pct} %, réinitialisation {when}",
@@ -1568,6 +1569,7 @@ export default {
   "retry.check": "Limite d'utilisation atteinte. Nouvelle vérification à {time}.",
   "retry.cancel": "Annuler",
   "retry.started": "Limite d'utilisation réinitialisée, la conversation continue.",
+  "retry.switched": "Limite d'utilisation atteinte, la conversation continue sur un autre compte.",
   "set.system": "Système (par défaut)",
   "set.themeSystem": "Système",
   "set.sec.folders": "Dossiers",

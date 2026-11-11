@@ -5,6 +5,8 @@ import type { Limits, Tally, Tokens } from "../agents/types";
 export type ProvLimits = {
   provider: string;
   limits: Limits;
+  /** the account a new conversation gets now (auto-switch), "" the CLI's own */
+  active?: string;
   /** every account's limits, when the provider has more than one */
   accounts?: { dir: string; name?: string | null; limits: Limits }[] | null;
 };

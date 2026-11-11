@@ -642,6 +642,35 @@ export const usageLimits = [
   },
   { provider: "codex", limits: { ok: false, reason: "unavailable" }, accounts: null },
 ];
+// fixture accounts: Claude Code with a second account, the first one used up and auto-switch on the second
+const fullFirst = {
+  ok: true,
+  plan: "Max",
+  windows: [
+    { id: "five_hour", label: "limit.session", name: null, pct: 100, resets: iso(NOW + 3 * HOUR) },
+    { id: "seven_day", label: "limit.weekly", name: null, pct: 64, resets: iso(NOW + 3 * DAY) },
+  ],
+};
+const roomySecond = {
+  ok: true,
+  plan: "Max",
+  windows: [
+    { id: "five_hour", label: "limit.session", name: null, pct: 17, resets: iso(NOW + 5 * HOUR) },
+    { id: "seven_day", label: "limit.weekly", name: null, pct: 15, resets: iso(NOW + 5 * DAY) },
+  ],
+};
+export const usageLimitsAccounts = [
+  {
+    provider: "claude",
+    limits: roomySecond,
+    active: "/Users/ann/.claude-work",
+    accounts: [
+      { dir: "", name: null, limits: fullFirst },
+      { dir: "/Users/ann/.claude-work", name: "Work", limits: roomySecond },
+    ],
+  },
+  usageLimits[1],
+];
 export function usageTokens() {
   const today = tally(182_000, 64_000, 4_100_000, 310_000, 18.4);
   const week = tally(1_240_000, 402_000, 31_800_000, 2_050_000, 131.7);

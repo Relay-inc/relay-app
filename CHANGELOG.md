@@ -47,13 +47,24 @@ its Linux binaries (`scripts/push-server-image.sh`). The Windows installer is th
 
 ### Fixed
 
-- A subagent that ran in the foreground no longer shows as running, with its clock ticking, for 15 minutes after it handed back (#486).
 - Vaults and workspaces on Windows: Claude Code's fence was written in a path form Claude Code never matches there, and a vault folder with `\` in its path (every Windows path) was refused on save. The fence now uses the `/c/Users/...` form Claude Code compares against, a vault on a drive letter is accepted, and one on a network share is refused (#478)
 - Workspaces on Windows: Relay's guard for Codex read paths the macOS way, so a path with `\`, a drive letter, another case or `%USERPROFILE%` got past it or a workspace's own files were refused, and its system programs were the Mac's. A workspace's policy is now found however its folder is written, and Codex's permission profile there reads Windows' folders and git's config under the profile folder (#476, #477)
 - The Pi agent was only declared as a dependency of the macOS build, so a build for any other system failed on it (#451)
 - Organisation › People grouped devices of different people when one of them signed another's email address for itself: an address now groups people only when an admin set it or an SSO login proved it at the join, and a self-signed one shows as Email not verified (#465)
 - An organisation admin's offboarding could revoke fully paired devices on the server, also the owner's: the server now revokes only devices that came in through a workspace, refuses the rest, and Organisation › People says the devices were not revoked and why (#465)
 - `relay knowledge.search` ran for any process that named a running conversation, not only for one the Relay app runs: it now needs the same trace to the app's agent as the user's own reads (#465)
+
+## [0.0.52] - 2026-11-11
+
+### Changed
+
+- With **Switch accounts automatically** on, a conversation refused for its usage limit now moves to the next account with room and goes on right away, instead of waiting for the next message (#487). The orchestrator and its workers move too: a worker no longer reports as ended without a report.
+- Usage shows the limits of every account of an agent, with the one in use marked, instead of only that one (#487).
+
+### Fixed
+
+- The first message after a conversation moved to another account (or restarted for an effort switch) no longer fails with "broker: no socket": the old process's broker removed the new one's socket on its way out (#487).
+- A subagent that ran in the foreground no longer shows as running, with its clock ticking, for 15 minutes after it handed back (#486).
 
 ## [0.0.51] - 2026-11-11
 

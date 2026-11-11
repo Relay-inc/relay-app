@@ -343,7 +343,7 @@ export default {
   "ag.accountActive": "Neue Unterhaltungen nutzen",
   "ag.accountAuto": "Konten automatisch wechseln",
   "ag.accountAutoHelp":
-    "Ist das Planlimit eines Kontos aufgebraucht, verschiebt die nächste Nachricht die Unterhaltung zum nächsten Konto mit Luft.",
+    "Ist das Planlimit eines Kontos aufgebraucht, zieht die Unterhaltung zum nächsten Konto mit Luft um und geht sofort weiter.",
   "ag.empty": "Noch keine Agents. Füge einen hinzu, um Gespräche damit zu starten.",
   "ag.listHelp":
     "Nur eingeschaltete Agents erscheinen im Composer. Klicke auf einen, um seine Einstellungen zu ändern.",
@@ -481,6 +481,7 @@ export default {
   "bar.prsNone": "Nichts zu prüfen",
   "bar.mailRead": "Alles gelesen",
   "usage.limits": "Limits des Abos",
+  "usage.inUse": "in Benutzung",
   "usage.resets": "Zurückgesetzt {when}",
   "usage.summary": "{label} {pct} %",
   "usage.summaryResets": "{label} {pct} %, zurückgesetzt {when}",
@@ -1565,6 +1566,7 @@ export default {
   "retry.check": "Nutzungslimit erreicht. Erneute Prüfung um {time}.",
   "retry.cancel": "Abbrechen",
   "retry.started": "Nutzungslimit zurückgesetzt, es geht weiter.",
+  "retry.switched": "Nutzungslimit erreicht, es geht mit einem anderen Konto weiter.",
   "set.system": "System (Standard)",
   "set.themeSystem": "System",
   "set.sec.folders": "Ordner",
