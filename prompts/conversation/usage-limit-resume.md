@@ -1,1 +1,1 @@
-The usage limit has reset. Continue where you left off.
+The usage limit no longer blocks this conversation. Continue where you left off.

@@ -13,8 +13,14 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- With **Switch accounts automatically** on, a conversation refused for its usage limit now moves to the next account with room and goes on right away, instead of waiting for the next message (#487). The orchestrator and its workers move too: a worker no longer reports as ended without a report.
+- Usage shows the limits of every account of an agent, with the one in use marked, instead of only that one (#487).
+
 ### Fixed
 
+- The first message after a conversation moved to another account (or restarted for an effort switch) no longer fails with "broker: no socket": the old process's broker removed the new one's socket on its way out (#487).
 - A subagent that ran in the foreground no longer shows as running, with its clock ticking, for 15 minutes after it handed back (#486).
 
 ## [0.0.51] - 2026-11-11

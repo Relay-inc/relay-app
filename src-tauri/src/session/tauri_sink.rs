@@ -47,8 +47,10 @@ impl Sink for TauriSink {
     }
     fn after_turn(&self, end: &TurnEnd) {
         let (model, limited, hint, fresh) = retry_args(end);
+        // refused for its limit with another account free: it goes on there, a worker has not ended
+        let moved = limited && !end.replay && retry::switched(&self.app, &self.key, self.p, &self.account, model, fresh);
         retry::turn_end(&self.app, &self.key, self.p, &self.account, model, limited, hint, fresh);
-        if orch::is_worker(&self.key) { orch::turn_end(&self.app, &self.key, end.last); }
+        if orch::is_worker(&self.key) && !moved { orch::turn_end(&self.app, &self.key, end.last); }
         if !end.replay && orch::is_orch(&self.key) { orch::flush(&self.app, &self.key); } // what Relay queued while the turn ran
     }
     fn closed(&self, exited: bool) {

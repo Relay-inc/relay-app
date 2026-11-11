@@ -207,15 +207,25 @@ impl State {
     }
 }
 
+/// Removes the socket at `sock` when it is still the one this broker bound (`ino`). A conversation restarted on another
+/// account or effort gets a new broker on the same path before the old one has seen its agent die: the old broker's
+/// cleanup must not take the new socket with it ("broker: no socket" on the first message after an account switch).
+fn remove_own(sock: &str, ino: u64) {
+    use std::os::unix::fs::MetadataExt;
+    if fs::metadata(sock).is_ok_and(|m| m.ino() == ino) { fs::remove_file(sock).ok(); }
+}
+
 pub fn main(sock: &str, spec: &str) {
+    use std::os::unix::fs::MetadataExt;
     let listener = UnixListener::bind(sock).unwrap_or_else(|_| std::process::exit(1));
+    let ino = fs::metadata(sock).map_or(0, |m| m.ino());
     let child = serde_json::from_str::<Spec>(spec).map_err(|e| e.to_string())
         .and_then(|s| s.command().stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string()));
     let mut child = match child {
         Ok(c) => c,
         Err(e) => { // tell the app why, then go
             if let Ok((mut c, _)) = listener.accept() { writeln!(c, "! {e}").ok(); }
-            fs::remove_file(sock).ok(); return;
+            remove_own(sock, ino); return;
         }
     };
     let pid = child.id();
@@ -234,7 +244,7 @@ pub fn main(sock: &str, spec: &str) {
         out.join().ok(); err.join().ok();
         let code = child.wait().ok().and_then(|s| s.code()).unwrap_or(-1);
         st2.lock().unwrap().send(format!("x {code}"));
-        fs::remove_file(&sock2).ok();
+        remove_own(&sock2, ino);
         std::process::exit(0);
     });
     // the app away longer than GRACE: close the agent's stdin and the socket, the agent winds down on its own
@@ -242,7 +252,7 @@ pub fn main(sock: &str, spec: &str) {
     spawn(move || loop {
         thread::sleep(Duration::from_secs(30));
         let mut s = st3.lock().unwrap();
-        if s.clients.is_empty() && s.away.is_some_and(|t| t.elapsed() > grace()) { s.winding = true; *in3.lock().unwrap() = None; fs::remove_file(&sock3).ok(); return; }
+        if s.clients.is_empty() && s.away.is_some_and(|t| t.elapsed() > grace()) { s.winding = true; *in3.lock().unwrap() = None; remove_own(&sock3, ino); return; }
     });
     for conn in listener.incoming() {
         let Ok(c) = conn else { continue };
@@ -295,6 +305,23 @@ pub fn main(sock: &str, spec: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // the first message after an account switch said "broker: no socket": the old broker's exit removed the new socket
+    #[test]
+    fn an_old_broker_leaves_the_new_socket_alone() {
+        use std::os::unix::fs::MetadataExt;
+        let sock = std::env::temp_dir().join(format!("relay-broker-test-{}.sock", std::process::id()));
+        let sock = sock.to_str().unwrap();
+        fs::remove_file(sock).ok();
+        let _old = UnixListener::bind(sock).unwrap();
+        let old = fs::metadata(sock).unwrap().ino();
+        fs::remove_file(sock).unwrap(); // launch_as clears the path for the new broker
+        let _new = UnixListener::bind(sock).unwrap();
+        remove_own(sock, old); // the old broker's agent dies after the restart
+        assert!(Path::new(sock).exists());
+        remove_own(sock, fs::metadata(sock).unwrap().ino());
+        assert!(!Path::new(sock).exists());
+    }
+
     #[test]
     fn turns_survive_a_restart() {
         // a file from before turns were kept: one running, as before

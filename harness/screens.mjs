@@ -1162,6 +1162,15 @@ const VIEWS = {
     await waitText("All of Claude Code", 10000);
     await settle(page);
   },
+  // two Claude accounts, the first used up: each account's limits, the one in use marked
+  "usage-accounts": async () => {
+    await open(page, server.url, { fixture: "accounts" });
+    await page.getByRole("button", { name: /^Usage/ }).click();
+    await waitText("View details");
+    await page.getByRole("button", { name: "View details" }).click();
+    await waitText("All of Claude Code", 10000);
+    await settle(page);
+  },
   // the usage redesign: Claude Code's Details folded open, per model and per conversation (#105)
   "usage-details": async () => {
     await VIEWS.usage();
