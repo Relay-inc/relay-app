@@ -315,7 +315,7 @@ the socket the app listens on and the CLI side.
   services, time entries; Trello boards, lists, card search and read, cards, comments; Linear teams, issue search
   and read, issues), mail (`search`, `read`, `thread`,
   `attachment`, `save_draft`, the relay-mail tools) the vault's reminders (`list`, `add`, `done`, `push`) and
-  `knowledge.search` (docs/workspaces.md, Without history). Only set-up extensions are listed.
+  `knowledge.search` (docs/workspaces.md, Teams). Only set-up extensions are listed.
 - Per extension, **agent access** on or off (off: not listed, every call refused), and per action a policy:
   `auto` runs, `ask` shows a card in the conversation (the pending folder, like a permission; the command waits for
   it), `deny` refuses. Reads default to `auto`, writes to `ask`, a mail draft and the reminders to `auto`. Both are set in each

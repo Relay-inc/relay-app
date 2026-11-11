@@ -1,7 +1,9 @@
 # Running a relay-server
 
-A relay-server keeps your team's workspaces in sync and can run Relay conversations while laptops are closed. This
-guide sets one up on a Linux box with Docker in about fifteen minutes, with one compose file
+A relay-server keeps your team's workspaces in sync and can run Relay conversations while laptops are closed. It runs
+in one of two roles, chosen when it is set up: personal (your own devices, the workspaces end-to-end encrypted, the
+server reads nothing) or team (accounts by email, the server keeps the workspaces readable, see
+[workspaces.md › Two roles](workspaces.md#two-roles)). This guide sets one up on a Linux box with Docker in about fifteen minutes, with one compose file
 ([`deploy/relay-server/compose.yml`](../deploy/relay-server/compose.yml)). How the server works and what it can and
 cannot see: [packages/relay-server/README.md](../packages/relay-server/README.md) and [workspaces.md](workspaces.md).
 
@@ -64,21 +66,37 @@ docker compose exec relay-server relay-server pair --host relay.example.com
 It prints a `relay://` line that works once, for 10 minutes. Paste it in Relay › Settings › Machines on your own Mac.
 Tick Only for workspaces when this Mac should use the server for workspaces and nothing else.
 
-The first device paired with a code is the server's owner. Under Settings › Machines › Organisation the owner starts
-the organisation and becomes its first organisation admin: they see every workspace on the server, add other
-organisation admins after comparing a code on both Macs, and offboard people
-([workspaces.md › Organisation](workspaces.md#organisation)). Everyone else joins through a workspace's invite link
-and needs no pairing line.
+Everyone else joins through a workspace's invite link and needs no pairing line.
 
 Conversations on this machine need a Claude login, a server for workspaces only does not:
 `docker compose exec -it relay-server claude`, then `/login`. The login stays in the volume.
 
-## SSO
+## A team server
 
-Joining a workspace can go through Google or Microsoft Entra ID. An organisation admin sets it in Relay under
-Settings › Machines › Organisation › SSO for joining. Nothing is configured on the server: the setting is signed by
-the admin's Mac and the server only checks the ID token at the join. The steps and the app registration:
-[workspaces.md › SSO](workspaces.md#sso).
+Instead of a first pairing, on a fresh volume:
+
+```sh
+docker compose exec relay-server relay-server team you@example.com --host relay.example.com
+```
+
+The server is a team server from then on and pairs no devices. The line it prints is an invite link for one device of
+that address, which is an organisation admin. In Relay: Settings › Workspaces › Log in to a team server, paste it, Log
+in. Run the command again for a new link (a second Mac, or to get back in).
+
+Then, in Relay:
+
+- **Settings › Workspaces**, under the server: New workspace… (Without history is chosen here and stays), and on a
+  workspace's page Invite: an address and a role (admin, member or reader). A new address gets a link for one of its
+  devices, which you send yourself. The server sends no mail.
+- **Settings › Organisation**: the accounts (turn off, make organisation admin), open invites, every workspace, and
+  the sign-in. With Google or Microsoft Entra ID set there, anyone with an account logs in with the server's link
+  (Show the server's link) and their organisation account, without an invite.
+
+For Google, make an OAuth client of type Desktop app in the Google Cloud console and give the client ID and your
+Google Workspace domains. For Entra, register an app with a Mobile and desktop redirect URI `http://localhost`, and
+give its application (client) ID and your tenant ID. Neither needs a client secret. The server checks every ID token
+itself (issuer, audience, expiry, the nonce bound to the device, the tenant or the domain), so it needs outbound HTTPS
+to the provider for its keys.
 
 ## Update
 
@@ -101,7 +119,7 @@ Everything is in the one volume `relay`, mounted at `/home/relay`:
 |---|---|
 | `data/identity.crt.der`, `data/identity.key.der` | The server's certificate and private key. Every paired Mac pins this certificate. |
 | `data/clients.json` | The paired devices: name, certificate fingerprint, date, whether it came in through an invite |
-| `data/org.json` | The organisation's signed list of admins and its SSO setting |
+| `data/team.json` | A team server's accounts, sessions (device to account), invites, the sign-in setting, and per workspace its key, members and roles |
 | `data/vaults/<id>/` | A workspace: `vault.json` (members, roles, open invites and the signed member list), `blobs/` (one sealed record per file), `docs/` (sealed document updates) |
 | `data/mirror/<device>/` | A laptop's sealed mirror and GitHub token, when it uses the machine for conversations |
 | `data/pending/`, `data/profiles/`, `data/sids.json` | Open permission cards, each laptop's agent settings, which conversation runs which Claude session |
@@ -110,10 +128,11 @@ Everything is in the one volume `relay`, mounted at `/home/relay`:
 | `.claude/` | Claude Code's login and transcripts |
 | `repos/` | The repos conversations work in |
 
-What it does not keep: the workspace keys, file names or paths, or a readable byte of a workspace. Records are sealed
+What a personal server does not keep: the workspace keys, file names or paths, or a readable byte of a workspace. Records are sealed
 on the Macs. The server sees how many files there are, their sizes, when they change and who the members are
 ([workspaces.md › Trust](workspaces.md#trust)). The mirror's plain-text working copy is a RAM disk (`work`) that is
-gone at every stop.
+gone at every stop. A team server keeps each workspace's key in `team.json`, so it and whoever runs it can read the
+workspaces.
 
 ## Backup and restore
 
@@ -146,9 +165,9 @@ workspace file.
 
 **Without the certificate** there is no way back to the same server. Every Mac refuses it during the handshake,
 because it no longer is the server they paired with, and nothing on the server can change that. Treat it as a new
-server: each Mac forgets the machine and pairs again (or joins through a new invite), the owner starts a new
-organisation (its list is bound to the server's certificate), and admins make the workspaces again and invite their
-members. The members' folders on their Macs are untouched.
+server: each Mac forgets the machine and pairs again (or joins through a new invite), and admins make the workspaces
+again and invite their members. A team server is set up again with `relay-server team`, a workspace filled from one
+member's folder. The members' folders on their Macs are untouched.
 
 ## The image
 

@@ -235,6 +235,10 @@ needs Add phone again to sign. The laptop must have Relay open; when it does not
 
 ## Workspaces
 
+A server is personal or a team server, set when it is set up (`relay-server team <email>` makes a team server,
+`team.rs`). This section is the personal role. A team server has accounts by email and keeps each workspace's key, so
+it reads the workspaces: docs/workspaces.md, Teams.
+
 A workspace is a team space several people keep in sync through this server, each in a plain folder on their own Mac
 (the protocol and the crypto: `docs/workspaces.md`). The protocol and the server call it a vault, hence the `vault_*`
 ops and `relay-server vaults`. The server stores each one in `data/vaults/<id>/`: `vault.json` (its name, the members'
