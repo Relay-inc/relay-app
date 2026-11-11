@@ -2619,6 +2619,7 @@ const en = {
   "set.teamLogin": "Log in",
   "set.teamSigningIn": "Finish signing in in your browser…",
   "set.teamServer": "{host} · {email}",
+  "set.teamNew": "New workspace…",
   "set.teamLogout": "Log out",
   "set.teamSyncHere": "Sync here…",
   "set.teamReadsAlong": "Server reads along",

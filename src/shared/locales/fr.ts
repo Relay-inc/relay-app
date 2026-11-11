@@ -2667,6 +2667,7 @@ export default {
   "set.teamLogin": "Se connecter",
   "set.teamSigningIn": "Terminez la connexion dans votre navigateur…",
   "set.teamServer": "{host} · {email}",
+  "set.teamNew": "Nouvel espace de travail…",
   "set.teamLogout": "Se déconnecter",
   "set.teamSyncHere": "Synchroniser ici…",
   "set.teamReadsAlong": "Le serveur lit",

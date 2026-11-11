@@ -916,7 +916,7 @@ export const actions = [
   act(
     "knowledge",
     "search",
-    "Search the knowledge workspaces (shared workspaces without history) for passages, read-only: path, workspace, the matching line, score.",
+    "Search the knowledge workspaces (team workspaces without history) for passages, read-only: path, workspace, the matching line, score.",
     false,
     "auto",
   ),

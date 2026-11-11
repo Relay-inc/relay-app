@@ -2635,6 +2635,7 @@ export default {
   "set.teamLogin": "Inloggen",
   "set.teamSigningIn": "Rond het aanmelden af in je browser…",
   "set.teamServer": "{host} · {email}",
+  "set.teamNew": "Nieuwe workspace…",
   "set.teamLogout": "Uitloggen",
   "set.teamSyncHere": "Hier syncen…",
   "set.teamReadsAlong": "Server leest mee",

@@ -197,9 +197,6 @@ export const sharedVaults = [
 /** shared-member: the same vault on a Mac that joined it with a link, a member there. Its server is not one of this
  *  Mac's machines, so the workspace shows in Settings › Machines › Workspaces. */
 export const memberVaults = [{ ...sharedVaults[0], role: "member", folder: "/Users/me/Shared/Northwind" }];
-/** shared-reader: the same vault on a Mac that only reads it (docs/workspaces.md, Roles), synced into the side vault's
- *  folder so its notes are there to open as pages. */
-export const readerVaults = [{ ...sharedVaults[0], role: "reader", folder: TEAM_VAULT }];
 /** shared-keeper: the server that member keeps once made admin there, as the backend adds it (shared_vaults::keepers). */
 export const keeperMachine = {
   id: HUB_FP.slice(0, 12),
@@ -229,82 +226,6 @@ export const sharedMembers = [
   { name: "Studio Mac", fp: "7c2b".padEnd(64, "b"), role: "admin", added: 1790100000 },
   { name: "Design laptop", fp: "9a4f".padEnd(64, "c"), role: "member", added: 1790200000 },
 ];
-/** shared-people: the member list's people (docs/workspaces.md, People): this MacBook and the Studio Mac are one
- *  person's, the Design laptop is under none yet. */
-export const sharedPeople = [
-  { who: "a1".repeat(32), name: "Alex Moreau", email: "alex@example.com", devices: [SHARED_ME, sharedMembers[1].fp] },
-];
-/** shared-org: the server's organisation as its overview shows it to this Mac, one of its admins (Alex Moreau's two
- *  Macs). Northwind is managed, Acme Retail is not (Alex is no admin there). Sam Lee works in both, the front desk Mac
- *  only in Acme Retail. One more Mac published its keys, to be added after comparing its code. All fictional. */
-export const ORG_CODE = "5e1d-a07c-33b9";
-const SAM = "9a4f".padEnd(64, "c");
-const DESK = "2b7e".padEnd(64, "e");
-const JONAS = "6c1f".padEnd(64, "a");
-/** The fully paired devices among the people: the server revokes none of them through an offboarding. */
-export const ORG_FULL = [DESK];
-export const organisation = {
-  admins: [
-    { fp: SHARED_ME, name: "This MacBook" },
-    { fp: sharedMembers[1].fp, name: "Studio Mac" },
-  ],
-  candidates: [{ fp: "3d8e".padEnd(64, "d"), name: "Ops Mac", code: "4f1a-92c7-0b3e" }],
-  workspaces: [
-    {
-      id: SHARED_ID,
-      name: "Northwind",
-      list: true,
-      managed: true,
-      admin: true,
-      nohistory: false,
-      members: sharedMembers.map(m => ({ fp: m.fp, name: m.name, role: m.role, person: m.fp === SAM ? "s1".repeat(32) : "a1".repeat(32), listed: true })),
-      people: [],
-    },
-    {
-      id: "fedcba9876543210",
-      name: "Acme Retail",
-      list: true,
-      managed: false,
-      admin: false,
-      nohistory: false,
-      members: [
-        { fp: DESK, name: "Front desk Mac", role: "admin", person: "", listed: true },
-        { fp: SAM, name: "Design laptop", role: "member", person: "s2".repeat(32), listed: true },
-        { fp: JONAS, name: "Jonas's laptop", role: "member", person: "r1".repeat(32), listed: true },
-      ],
-      people: [],
-    },
-  ],
-  people: [
-    {
-      name: "Alex Moreau",
-      email: "alex@example.com",
-      devices: [
-        { fp: SHARED_ME, name: "This MacBook" },
-        { fp: sharedMembers[1].fp, name: "Studio Mac" },
-      ],
-      workspaces: [{ id: SHARED_ID, name: "Northwind", role: "admin" }],
-    },
-    { name: "Front desk Mac", email: "", devices: [{ fp: DESK, name: "Front desk Mac" }], workspaces: [{ id: "fedcba9876543210", name: "Acme Retail", role: "admin" }] },
-    // named by its own device, without SSO or an admin: the email shows marked and groups nobody
-    {
-      name: "Jonas Peeters",
-      email: "jonas@example.com",
-      unverified: true,
-      devices: [{ fp: JONAS, name: "Jonas's laptop" }],
-      workspaces: [{ id: "fedcba9876543210", name: "Acme Retail", role: "member" }],
-    },
-    {
-      name: "Sam Lee",
-      email: "sam@example.com",
-      devices: [{ fp: SAM, name: "Design laptop" }],
-      workspaces: [
-        { id: SHARED_ID, name: "Northwind", role: "member" },
-        { id: "fedcba9876543210", name: "Acme Retail", role: "member" },
-      ],
-    },
-  ],
-};
 /** An invite link as the backend makes one: the pairing line with vault, invite and secret (dummy hex). */
 export const inviteLink = (invite: string) =>
   `relay://192.168.1.2:47800#fp=${HUB_FP}&code=${"3c".repeat(16)}&vault=${SHARED_ID}&invite=${invite}&secret=${"9e".repeat(32)}`;
@@ -757,3 +678,51 @@ export const FLAT_NOTE = "Contexts/Agency/Projects/Delmas Bakery.md";
 /** For collections.ts: the fixture's projects and linked notes, as the notes they are. */
 export const projectsList = P;
 export const linkedEntries = linkedList;
+
+/** team: a team server this Mac is logged in to as an organisation admin (src-tauri/src/team.rs). Handbook syncs here,
+ *  Sales notes and Research (without history) are the account's other workspaces there. */
+export const TEAM_FP = "7ea3".padEnd(64, "b");
+export const team = { host: "relay.example.com", port: 47800, fp: TEAM_FP, email: "alex@example.com", admin: true };
+export const teamVaults = [
+  {
+    id: "1123456789abcdef",
+    name: "Handbook",
+    host: "relay.example.com",
+    port: 47800,
+    fp: TEAM_FP,
+    folder: "/Users/me/Team/Handbook",
+    role: "admin",
+    team: true,
+  },
+];
+export const teamMe = {
+  email: "alex@example.com",
+  admin: true,
+  workspaces: [
+    { id: "1123456789abcdef", name: "Handbook", role: "admin", nohistory: false, here: "/Users/me/Team/Handbook" },
+    { id: "2123456789abcdef", name: "Sales notes", role: "member", nohistory: false, here: null },
+    { id: "3123456789abcdef", name: "Research", role: "reader", nohistory: true, here: null },
+  ],
+};
+export const teamAccounts = [
+  { email: "alex@example.com", role: "admin" },
+  { email: "sam@example.com", role: "member" },
+  { email: "jo@example.com", role: "reader" },
+];
+export const teamOverview = {
+  accounts: [
+    { email: "alex@example.com", admin: true, off: false, devices: 2 },
+    { email: "sam@example.com", admin: false, off: false, devices: 1 },
+    { email: "jo@example.com", admin: false, off: false, devices: 1 },
+    { email: "kim@example.com", admin: false, off: true, devices: 0 },
+  ],
+  workspaces: [
+    { id: "1123456789abcdef", name: "Handbook", nohistory: false, members: { "alex@example.com": "admin", "sam@example.com": "member", "jo@example.com": "reader" } },
+    { id: "2123456789abcdef", name: "Sales notes", nohistory: false, members: { "alex@example.com": "member", "sam@example.com": "admin" } },
+    { id: "3123456789abcdef", name: "Research", nohistory: true, members: { "alex@example.com": "reader", "jo@example.com": "admin" } },
+  ],
+  invites: [{ id: "a1b2c3d4e5f60718", email: "lee@example.com", expires: 0 }],
+  sso: null as null | { issuer: string; client: string; domains: string[] },
+};
+export const teamLink = (invite = "") =>
+  `relay://relay.example.com:47800#team&fp=${TEAM_FP}${invite ? `&invite=${invite}&code=${"c".repeat(64)}` : ""}`;

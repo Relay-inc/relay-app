@@ -695,19 +695,8 @@ function TeamMembers({ vault, info }: { vault: SharedVault; info: SharedInfo | n
           </div>
         </div>
       ) : manages ? (
-        <form
-          className="flex min-w-0 flex-wrap items-center gap-2"
-          onSubmit={async e => {
-            e.preventDefault();
-            const who = email.trim();
-            const made = await inviteTeam(vault.fp, who, vault.id, role);
-            if (made !== null) {
-              setEmail("");
-              if (made) setLink({ email: who, link: made });
-              reread();
-            }
-          }}
-        >
+        // a row, not a form: the role's buttons would submit it
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <input
             className={`${FIELD} min-w-0 flex-1 basis-48`}
             type="email"
@@ -717,10 +706,22 @@ function TeamMembers({ vault, info }: { vault: SharedVault; info: SharedInfo | n
             onChange={e => setEmail(e.target.value)}
           />
           <Segmented label={t("set.sharedInviteAs")} options={roles} value={role} onPick={setRole} />
-          <button type="submit" className={buttonClass("primary")} disabled={busy || !email.includes("@")}>
+          <button
+            className={buttonClass("primary")}
+            disabled={busy || !email.includes("@")}
+            onClick={async () => {
+              const who = email.trim();
+              const made = await inviteTeam(vault.fp, who, vault.id, role);
+              if (made !== null) {
+                setEmail("");
+                if (made) setLink({ email: who, link: made });
+                reread();
+              }
+            }}
+          >
             {t("set.sharedInvite")}
           </button>
-        </form>
+        </div>
       ) : null}
       {manages && !link.link ? <span className="text-xs text-s-muted">{t("set.teamInviteHelp")}</span> : null}
     </Section>
@@ -809,7 +810,7 @@ function SharedForm({ machine }: { machine: string }) {
   return (
     <div className={`flex flex-wrap items-center gap-2 ${EDGE}`}>
       <button className={buttonClass()} disabled={busy} onClick={() => openForm(machine ? "new" : "join", machine)}>
-        {t(machine ? "set.sharedNew" : "set.sharedJoin")}
+        {t(team ? "set.teamNew" : machine ? "set.sharedNew" : "set.sharedJoin")}
       </button>
       {message ? <span className={message.ok ? HINT_IN_ROW : ERROR_MESSAGE}>{message.text}</span> : null}
     </div>

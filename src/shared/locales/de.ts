@@ -2659,6 +2659,7 @@ export default {
   "set.teamLogin": "Anmelden",
   "set.teamSigningIn": "Schließe die Anmeldung im Browser ab…",
   "set.teamServer": "{host} · {email}",
+  "set.teamNew": "Neuer Workspace…",
   "set.teamLogout": "Abmelden",
   "set.teamSyncHere": "Hier synchronisieren…",
   "set.teamReadsAlong": "Server liest mit",
