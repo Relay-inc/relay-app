@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Fixed
 
-- A subagent that ran in the foreground no longer shows as running, with its clock ticking, for 15 minutes after it handed back.
+- A subagent that ran in the foreground no longer shows as running, with its clock ticking, for 15 minutes after it handed back (#486).
 
 ## [0.0.51] - 2026-11-11
 
