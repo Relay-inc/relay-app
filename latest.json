@@ -1,11 +1,11 @@
 {
-  "version": "0.0.51",
-  "notes": "### Fixed\n\n- A conversation no longer loses its transcript when two Claude accounts share one transcript folder (a symlinked `projects` in the account's config folder): continuing it emptied the file, and the next message answered \"No conversation found\". A transcript that moves between accounts is now written through a temp file, so it is the old one or the new one, never a half.",
-  "pub_date": "2026-11-11T11:17:20.410Z",
+  "version": "0.0.52",
+  "notes": "### Changed\n\n- With **Switch accounts automatically** on, a conversation refused for its usage limit now moves to the next account with room and goes on right away, instead of waiting for the next message (#487). The orchestrator and its workers move too: a worker no longer reports as ended without a report.\n- Usage shows the limits of every account of an agent, with the one in use marked, instead of only that one (#487).\n\n### Fixed\n\n- The first message after a conversation moved to another account (or restarted for an effort switch) no longer fails with \"broker: no socket\": the old process's broker removed the new one's socket on its way out (#487).\n- A subagent that ran in the foreground no longer shows as running, with its clock ticking, for 15 minutes after it handed back (#486).",
+  "pub_date": "2026-11-11T17:57:55.701Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnFTcGZieWNZaEhocnMxdTV3NVQwS2hGcXZwOTFMQzNmMUFJcWltYTFjditkR29pNUVqZ1VxSHB3ZW9iRkJsMlArQjZPMmZnNS9JeTJMd3VuZ2JWb3dzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0Mzk1NzU2CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC41MQo2UkE1OG9SaFBKV3JzbnJkaUxRYTUvejI1Y2hpVnRrdTFUb2JsbXFiRE5DTXRIdTNTMWkySmZDWDFMYmJLcktUN2ZJNXNXay8wRCtRdVRkZkRYR0dDQT09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/735242619"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnBucjJ6WERBTk9oeldzNENuUGxTb3djOVN6NlNiT0h3TUhwb0dOYnhUSERMbkUwTUlmK0h3YnV0OUlVSUhNSVdDNThFWXorZTJjS2pVSEpPU0YwL0E4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NDE5NzgwCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC41MgpZVUF1QVg2bUFtZ3VWcGxsczR5bjBMdU9zN0JtaHBTeEd6cG5vb0RBS0hEUElkYmJlRUhyYjFISmxzNk9hbHFSUW9ZSUMrRlpMVGhkdFhXT3JiTzNBUT09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/736415948"
     }
   }
 }
