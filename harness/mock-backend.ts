@@ -55,6 +55,10 @@ function seedStorage() {
     localStorage.setItem("linearProject", integ.LINEAR_TEAM);
     localStorage.setItem("linearBoard", `cycle_${integ.LINEAR_TEAM}`);
   }
+  if (fixture === "ghprojects") {
+    localStorage.setItem("github-projectsProject", "beacon");
+    localStorage.setItem("github-projectsBoard", integ.GH_PROJECT);
+  }
 }
 seedStorage();
 
@@ -1958,6 +1962,7 @@ function handle(cmd: string, a: Args): unknown {
       return (
         a.provider === "productive" ||
         (fixture === "linear" && a.provider === "linear") ||
+        (fixture === "ghprojects" && a.provider === "github-projects") ||
         (fixture === "buddy" && a.provider === "buddy")
       );
     case "integration_mcp":
@@ -1966,6 +1971,7 @@ function handle(cmd: string, a: Args): unknown {
       return null;
     case "integration_call":
       if (fixture === "linear" && a.provider === "linear") return integ.linear(a.body);
+      if (fixture === "ghprojects" && a.provider === "github-projects") return integ.githubProjects(a.body);
       if (fixture === "buddy" && a.provider === "buddy") return integ.buddy(a.path);
       if (a.provider !== "productive") throw new Error(`${a.provider} is not set up in the harness`);
       return integ.productive(a.method, a.path, a.body);

@@ -507,15 +507,20 @@ export function settings(fixture: string) {
     vaults: {},
     projects: { "Beacon Billing": { label: "Beacon" } },
     overrides: {},
-    // linear: a Linear team with cycles next to Productive, Beacon Billing on its current cycle
+    // linear: a Linear team with cycles next to Productive, Beacon Billing on its current cycle; ghprojects: the same
+    // with an organization's GitHub project
     integrations: {
       productive: { on: true, org: "40001", user: "70001" },
       ...(fixture === "linear" ? { linear: { on: true, done: false } } : {}),
+      ...(fixture === "ghprojects" ? { "github-projects": { on: true } } : {}),
     },
     boards: {
       "Northwind Portal": { provider: "productive", project: "p1", board: "f1" },
       ...(fixture === "linear"
         ? { "Beacon Billing": { provider: "linear", project: LINEAR_TEAM, board: `cycle_${LINEAR_TEAM}` } }
+        : {}),
+      ...(fixture === "ghprojects"
+        ? { "Beacon Billing": { provider: "github-projects", project: "beacon", board: "PVT_kwDOBeacon01" } }
         : {}),
     },
     // off: a running pipeline would move the board's cards in every view

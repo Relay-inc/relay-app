@@ -47,12 +47,25 @@ its Linux binaries (`scripts/push-server-image.sh`). The Windows installer is th
 
 ### Fixed
 
+- A subagent that ran in the foreground no longer shows as running, with its clock ticking, for 15 minutes after it handed back (#486).
 - Vaults and workspaces on Windows: Claude Code's fence was written in a path form Claude Code never matches there, and a vault folder with `\` in its path (every Windows path) was refused on save. The fence now uses the `/c/Users/...` form Claude Code compares against, a vault on a drive letter is accepted, and one on a network share is refused (#478)
 - Workspaces on Windows: Relay's guard for Codex read paths the macOS way, so a path with `\`, a drive letter, another case or `%USERPROFILE%` got past it or a workspace's own files were refused, and its system programs were the Mac's. A workspace's policy is now found however its folder is written, and Codex's permission profile there reads Windows' folders and git's config under the profile folder (#476, #477)
 - The Pi agent was only declared as a dependency of the macOS build, so a build for any other system failed on it (#451)
 - Organisation › People grouped devices of different people when one of them signed another's email address for itself: an address now groups people only when an admin set it or an SSO login proved it at the join, and a self-signed one shows as Email not verified (#465)
 - An organisation admin's offboarding could revoke fully paired devices on the server, also the owner's: the server now revokes only devices that came in through a workspace, refuses the rest, and Organisation › People says the devices were not revoked and why (#465)
 - `relay knowledge.search` ran for any process that named a running conversation, not only for one the Relay app runs: it now needs the same trace to the app's agent as the user's own reads (#465)
+
+## [0.0.51] - 2026-11-11
+
+### Fixed
+
+- A conversation no longer loses its transcript when two Claude accounts share one transcript folder (a symlinked `projects` in the account's config folder): continuing it emptied the file, and the next message answered "No conversation found". A transcript that moves between accounts is now written through a temp file, so it is the old one or the new one, never a half.
+
+## [0.0.50] - 2026-11-10
+
+### Added
+
+- GitHub Projects as a board: pick one of your own or your organizations' projects per vault project, its Status field makes the columns. Drag a card to change its status, New task adds a draft item, a click opens the issue or pull request on GitHub. Set it up with a token under Settings › Integrations › GitHub Projects (#483).
 
 ## [0.0.49] - 2026-11-08
 

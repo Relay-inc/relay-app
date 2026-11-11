@@ -1060,6 +1060,69 @@ export function linear(body: unknown): unknown {
   throw new Error(`Linear query ${op} is not set up in the harness`);
 }
 
+// ---------- GitHub Projects (fixture "ghprojects"): the user and one organization, its roadmap project with a Status
+// field, and the items on it (issues, a pull request, a draft). `githubProjects` answers by the query's operation name.
+export const GH_PROJECT = "PVT_kwDOBeacon01";
+const GH_OPTIONS = ["Todo", "In Progress", "In Review", "Done"].map((name, i) => ({ id: `0a0b0c0${i + 1}`, name }));
+const GH_ITEMS = [
+  ["Issue", 482, "GitHub Projects as board", "In Progress", "Jana Vos", ["enhancement"]],
+  ["Issue", 471, "Export invoices as UBL", "Todo", "Tom Peeters", []],
+  ["PullRequest", 488, "Retry failed Peppol deliveries", "In Review", "Jana Vos", ["backend"]],
+  ["Issue", 465, "Show the VAT number on the credit note", "Done", null, []],
+  ["DraftIssue", 0, "Payment reminder after 14 days", null, null, []],
+  ["Issue", 479, "Archive paid invoices after a year", "Todo", null, ["idea"]],
+].map(([type, number, title, status, who, labels], i) => ({
+  id: `PVTI_lADOBeacon0${i + 1}`,
+  isArchived: false,
+  updatedAt: "2026-11-09T09:00:00Z",
+  fieldValueByName: status ? { optionId: GH_OPTIONS.find(o => o.name === status)!.id } : null,
+  content: {
+    __typename: type,
+    title,
+    ...(type === "DraftIssue"
+      ? {}
+      : {
+          number,
+          url: `https://github.com/beacon/billing/${type === "PullRequest" ? "pull" : "issues"}/${number}`,
+          state: "OPEN",
+          labels: { nodes: (labels as string[]).map(name => ({ name })) },
+        }),
+    assignees: { nodes: who ? [{ login: String(who).split(" ")[0].toLowerCase(), name: who }] : [] },
+  },
+}));
+export function githubProjects(body: unknown): unknown {
+  const q = String((body as { query?: string })?.query ?? "");
+  const op = q.match(/^\s*(?:query|mutation)\s+(\w+)/)?.[1];
+  const projects = (nodes: [string, string][]) => ({ nodes: nodes.map(([id, title]) => ({ id, title, closed: false })) });
+  if (op === "Boards")
+    return {
+      data: {
+        viewer: {
+          login: "demo",
+          name: "Demo User",
+          projectsV2: projects([["PVT_kwDOPersonal1", "Side projects"]]),
+          organizations: {
+            nodes: [{ login: "beacon", name: "Beacon", projectsV2: projects([[GH_PROJECT, "Billing roadmap"], ["PVT_kwDOBeacon02", "Website"]]) }],
+          },
+        },
+      },
+    };
+  if (op === "Fields")
+    return {
+      data: {
+        node: {
+          url: "https://github.com/orgs/beacon/projects/1",
+          fields: { nodes: [{}, { id: "PVTSSF_lADOBeaconSt", name: "Status", options: GH_OPTIONS }] },
+        },
+      },
+    };
+  if (op === "Items") return { data: { node: { items: { nodes: GH_ITEMS, pageInfo: { hasNextPage: false, endCursor: null } } } } };
+  if (op === "Move") return { data: { updateProjectV2ItemFieldValue: { projectV2Item: { id: "x" } } } };
+  if (op === "Clear") return { data: { clearProjectV2ItemFieldValue: { projectV2Item: { id: "x" } } } };
+  if (op === "Create") return { data: { addProjectV2DraftIssue: { projectItem: { id: "PVTI_lADOBeaconNew" } } } };
+  throw new Error(`GitHub Projects query ${op} is not set up in the harness`);
+}
+
 // ---------- Buddy (fixture "buddy"): one linked project, three pipelines, read-only GETs as packages/integration-buddy allows them
 const BUDDY = "https://eu.buddy.works/acme/web-shop/pipelines/pipeline";
 export function buddy(path: string): unknown {

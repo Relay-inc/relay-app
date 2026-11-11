@@ -99,13 +99,18 @@ fn session_dir(env: &Env, sid: &str) -> String {
 }
 pub fn transcripts_of(env: &Env, sid: &str) -> String { transcripts_in(&session_dir(env, sid), env.vault) }
 /// A session continued on another account: its latest transcript goes along (over an older copy from an earlier
-/// move), so `--resume` finds it there. The copy in the old account stays as it was.
+/// move), so `--resume` finds it there. The copy in the old account stays as it was. Accounts that share one
+/// transcript folder (a symlinked `projects`) have nothing to carry: copying a file onto itself would empty it.
 fn carry(env: &Env, sid: &str) -> Result<(), String> {
     let to = transcripts(env);
     let from = transcripts_of(env, sid);
     if to.is_empty() || from == to || !Path::new(&format!("{from}/{sid}.jsonl")).is_file() { return Ok(()); }
-    std::fs::create_dir_all(&to).and_then(|_| std::fs::copy(format!("{from}/{sid}.jsonl"), format!("{to}/{sid}.jsonl")))
-        .map(|_| ()).map_err(|e| format!("claude: moving the conversation to the other account: {e}"))
+    let err = |e: std::io::Error| format!("claude: moving the conversation to the other account: {e}");
+    std::fs::create_dir_all(&to).map_err(err)?;
+    if std::fs::canonicalize(&from).map_err(err)? == std::fs::canonicalize(&to).map_err(err)? { return Ok(()); }
+    // through a temp file and a rename: the transcript there is the old one or the new one, never a half
+    let tmp = format!("{to}/{sid}.jsonl.carry");
+    std::fs::copy(format!("{from}/{sid}.jsonl"), &tmp).and_then(|_| std::fs::rename(&tmp, format!("{to}/{sid}.jsonl"))).map_err(err)
 }
 
 /// One `claude -p` call that answers once, no conversation: the title, a review, a text, a page's website, a capture.
@@ -530,6 +535,27 @@ mod tests {
         let opts = json!({"account": "/Users/me/.claude-work"});
         let work = Env { opts: &opts, ..env(&p) };
         assert_eq!(PROVIDER.terminal(&work, Terminal::New("x")).unwrap(), "cd '/Users/me/my vault' && CLAUDE_CONFIG_DIR='/Users/me/.claude-work' claude -n 'x'");
+    }
+    #[cfg(unix)]
+    #[test]
+    fn accounts_sharing_one_transcript_folder_keep_the_transcript() {
+        let root = std::env::temp_dir().join(format!("relay-acct-link-{}", std::process::id()));
+        let (own, work) = (root.join("own"), root.join("work"));
+        let (home, vault) = (root.to_string_lossy().to_string(), "/v".to_string());
+        std::fs::create_dir_all(root.join(".claude/projects/-v")).unwrap();
+        std::fs::create_dir_all(&work).unwrap();
+        std::os::unix::fs::symlink(root.join(".claude/projects"), work.join("projects")).unwrap();
+        std::fs::write(root.join(".claude/projects/-v/ab-1.jsonl"), "{}\n").unwrap();
+        let accounts = json!([{"name": "Work", "dir": work.to_string_lossy()}]);
+        // on either account, whichever folder the session is found in
+        for account in [json!(""), json!(work.to_string_lossy())] {
+            let opts = json!({"account": account, "accounts": accounts});
+            let env = Env { home: &home, vault: &vault, path: "/usr/bin", bin: "/bin/claude", pending: &own, grants: &NO_GRANTS, opts: &opts };
+            let l = Launch { key: "c:1", name: "x", model: "", effort: "", resume: Some("ab-1"), fork: None, turn: None };
+            PROVIDER.command(&env, &l).unwrap();
+            assert_eq!(std::fs::read_to_string(root.join(".claude/projects/-v/ab-1.jsonl")).unwrap(), "{}\n");
+        }
+        let _ = std::fs::remove_dir_all(&root);
     }
     #[test]
     fn a_conversation_moves_to_another_account() {
