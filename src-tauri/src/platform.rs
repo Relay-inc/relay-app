@@ -182,19 +182,6 @@ pub fn system_dirs(windows: bool, env: impl Fn(&str) -> Option<String>) -> Vec<S
     [("SystemRoot", r"C:\Windows"), ("ProgramFiles", r"C:\Program Files"), ("ProgramFiles(x86)", r"C:\Program Files (x86)")]
         .iter().map(|(k, d)| format!("{}/", norm_path(&env(k).filter(|v| !v.is_empty()).unwrap_or(d.to_string()), d, true))).collect()
 }
-/// Whether two folder paths are the same folder: by their real paths when they exist (links, and on Windows
-/// without the `\\?\` that std's canonicalize adds), then as `norm_path` has them (case and separators on Windows).
-pub fn same_dir(a: &str, b: &str) -> bool {
-    let real = |p: &str| {
-        #[cfg(windows)]
-        let r = dunce::canonicalize(p);
-        #[cfg(not(windows))]
-        let r = std::fs::canonicalize(p);
-        let p = r.map(|r| r.to_string_lossy().into_owned()).unwrap_or_else(|_| p.to_string());
-        norm_path(&p, &p, cfg!(windows))
-    };
-    real(a) == real(b)
-}
 
 /// An absolute path as a Claude Code permission rule writes it, without the rule's own leading `/`: `Read(/` + this +
 /// `/**)` is `Read(//Users/me/vault/**)`. macOS: the path itself. Windows: Claude Code matches its rules against the
@@ -275,20 +262,5 @@ mod tests {
         assert_eq!((m("~/a"), m("$HOME/a"), m("${HOME}/a"), m("$home/a"), m("%USERPROFILE%")), ("/me/a".into(), "/me/a".into(), "/me/a".into(), "$home/a".into(), "%USERPROFILE%".into()));
         assert_eq!(system_dirs(true, |_| None), ["c:/windows/", "c:/program files/", "c:/program files (x86)/"]);
         assert_eq!(system_dirs(false, |_| None)[0], "/bin/");
-    }
-    // a workspace folder is found however the folder is written: a link to it, a trailing `/`, `..` (macOS: a
-    // symlink, and a case that differs is another folder there)
-    #[cfg(unix)]
-    #[test]
-    fn same_dir_by_real_path() {
-        let v = std::env::temp_dir().join(format!("relay-same-dir-{}", std::process::id()));
-        std::fs::create_dir_all(v.join("Team/sub")).unwrap();
-        let (team, link) = (v.join("Team"), v.join("link"));
-        symlink(&team, &link).unwrap();
-        let t = team.to_string_lossy().into_owned();
-        for other in [format!("{t}/"), format!("{t}/sub/.."), link.to_string_lossy().into_owned()] { assert!(same_dir(&t, &other), "{other}"); }
-        assert!(!same_dir(&t, &v.join("Team/sub").to_string_lossy()));
-        assert!(same_dir("/no/such/x/", "/no/such/x") && !same_dir("/no/such/x", "/no/such/X"));
-        std::fs::remove_dir_all(&v).unwrap();
     }
 }

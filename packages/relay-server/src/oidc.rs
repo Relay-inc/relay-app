@@ -1,25 +1,22 @@
-//! SSO at a join (docs/workspaces.md, SSO): when the organisation list carries an `sso` entry, a device that joins a
-//! workspace here brings an OIDC ID token it got in the browser, and this server checks it: the signature against the
-//! issuer's published keys (JWKS, found through its discovery document), `iss`, `aud` (the client id), `exp`, the
-//! `nonce` (bound to both certificates, relay_remote::org::sso_nonce), `email_verified`, and the email's domain. The
-//! token is never kept: only the verified email and name go on the joiner's record, for the admin who adds it.
+//! Logging in to a team server with the organisation's provider (team.rs, docs/workspaces.md, Teams): the device brings
+//! an OIDC ID token it got in the browser, and this server checks it: the signature against the issuer's published
+//! keys (JWKS, found through its discovery document), `iss`, `aud` (the client id), `exp`, the `nonce` (bound to both
+//! certificates, relay_remote::team::sso_nonce), `email_verified`, and the email's domain. The token is never kept:
+//! the verified email names the account the device logs in to.
 //!
 //! RS256 only, the algorithm Google and Microsoft Entra ID sign ID tokens with. The issuer is the entry's, so another
-//! OIDC provider is the same check. Entra ID (an issuer of one tenant, members::entra_tenant) differs in what names the
+//! OIDC provider is the same check. Entra ID (an issuer of one tenant, relay_remote::team::entra_tenant) differs in what names the
 //! person: `tid` must be that tenant, `oid` is who signed in, and there is no verified email to check a domain on.
 
 use base64::Engine;
-use relay_remote::members::Sso;
-use serde_json::{json, Value};
+use relay_remote::team::{self, Sso};
+use serde_json::Value;
 use std::collections::BTreeMap;
-use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
 
 /// Google's issuer. Google's ID tokens carry it with or without the scheme.
 pub const GOOGLE: &str = "https://accounts.google.com";
-/// What a join answers when the server requires SSO and the device brought no token.
-pub const REQUIRED: &str = "this server requires signing in with SSO to join a workspace";
 /// An ID token at most, in bytes.
 const MAX_TOKEN: usize = 16 << 10;
 /// Clock skew allowed on `exp` and `iat`, in seconds.
@@ -65,15 +62,15 @@ pub fn verify(token: &str, jwks: &Value, sso: &Sso, nonce: &str, now: u64) -> Re
     if body["exp"].as_u64().is_none_or(|exp| exp + SKEW <= now) { return bad("the ID token expired: sign in again"); }
     if body["iat"].as_u64().is_some_and(|iat| iat > now + SKEW) { return bad("the ID token is from the future"); }
     if nonce.is_empty() || str_("nonce") != nonce { return bad("the ID token was not asked for this device"); }
-    let name: String = str_("name").trim().chars().filter(|c| !c.is_control()).take(relay_remote::members::MAX_PERSON_NAME).collect();
+    let name: String = str_("name").trim().chars().filter(|c| !c.is_control()).take(100).collect();
     // Entra ID: the tenant. Its keys sign for every tenant, so a good signature says nothing of which one: `tid` must be
     // the entry's, as `iss` already is (Microsoft: "Always check that the tid in a token matches the tenant ID").
-    if let Some(tenant) = relay_remote::members::entra_tenant(&sso.issuer) {
+    if let Some(tenant) = team::entra_tenant(&sso.issuer) {
         if str_("tid") != tenant { return bad("the account is not one of the organisation's Microsoft Entra tenant"); }
         // who signed in is `oid`, immutable in the tenant. `email` is optional and "isn't guaranteed to be correct", so
         // no domain is checked on it: what shows is `preferred_username`, which Microsoft calls fit for display only.
         let oid = str_("oid").to_lowercase();
-        if !relay_remote::members::guid(&oid) { return bad("the ID token names no user (oid)"); }
+        if !team::guid(&oid) { return bad("the ID token names no user (oid)"); }
         let email = str_("preferred_username").trim().to_lowercase().chars().filter(|c| !c.is_control()).take(254).collect();
         return Ok(Signed { email, name, oid });
     }
@@ -112,7 +109,7 @@ fn jwks(issuer: &str, fresh: bool) -> Result<Value, String> {
         had
     };
     let fetched = (|| {
-        let conf = get(&relay_remote::members::discovery(issuer))?;
+        let conf = get(&team::discovery(issuer))?;
         // the discovery document must name the issuer it was fetched for (OIDC Discovery 4.3)
         if conf["issuer"] != issuer { return Err("its discovery document names another issuer".to_string()); }
         get(conf["jwks_uri"].as_str().filter(|u| u.starts_with("https://")).ok_or("it publishes no keys over https")?)
@@ -131,30 +128,23 @@ fn get(url: &str) -> Result<Value, String> {
     serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())
 }
 
-/// The server's SSO for a device that wants to join (`sso_info`): what to sign in with, none when there is none.
-pub fn info(data: &Path, server: &str) -> Value {
-    json!({"sso": crate::org::list(data, server).and_then(|l| l.sso)})
-}
-
-/// A join's SSO, as the request `req` of `device` brings it: checked when the organisation list has SSO. None when it
-/// has none, or when the device brought no token and SSO is not required.
-pub fn gate(data: &Path, server: &str, device: &str, req: &Value) -> Result<Option<Signed>, String> {
-    let Some(sso) = crate::org::list(data, server).and_then(|l| l.sso) else { return Ok(None) };
-    let token = req["sso"]["id_token"].as_str().unwrap_or_default();
-    if token.is_empty() { return if sso.required { Err(REQUIRED.into()) } else { Ok(None) }; }
-    let salt = req["sso"]["salt"].as_str().unwrap_or_default();
+/// A login's ID token `token` from device `device`, with the `salt` its nonce was made with, checked against `sso`:
+/// who signed in.
+pub fn check(sso: &Sso, server: &str, device: &str, token: &str, salt: &str) -> Result<Signed, String> {
+    if token.is_empty() { return Err("SSO: no ID token".into()); }
     if !crate::vaults::hex(salt, 64) { return Err("SSO: bad salt".into()); }
-    let nonce = relay_remote::org::sso_nonce(server, device, salt);
-    match verify(token, &jwks(&sso.issuer, false)?, &sso, &nonce, crate::now()) {
-        Err(e) if e == UNKNOWN_KEY => verify(token, &jwks(&sso.issuer, true)?, &sso, &nonce, crate::now()),
+    let nonce = team::sso_nonce(server, device, salt);
+    match verify(token, &jwks(&sso.issuer, false)?, sso, &nonce, crate::now()) {
+        Err(e) if e == UNKNOWN_KEY => verify(token, &jwks(&sso.issuer, true)?, sso, &nonce, crate::now()),
         r => r,
-    }.map(Some)
+    }
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
     use ring::signature::RsaKeyPair;
+    use serde_json::json;
 
     /// A fake OIDC provider: an RSA key made for these tests only (`testdata/`), its JWKS, and tokens it signs.
     pub(crate) struct Idp { key: RsaKeyPair, pub issuer: String }
@@ -182,12 +172,12 @@ pub(crate) mod tests {
         pub(crate) fn publish(&self) { KEYS.lock().unwrap().insert(self.issuer.clone(), (crate::now(), crate::now(), self.jwks())); }
     }
     pub(crate) const CLIENT: &str = "123-abc.apps.googleusercontent.com";
-    pub(crate) fn sso(issuer: &str, required: bool) -> Sso { Sso { issuer: issuer.into(), client: CLIENT.into(), domains: vec!["example.com".into()], required } }
+    pub(crate) fn sso(issuer: &str) -> Sso { Sso { issuer: issuer.into(), client: CLIENT.into(), domains: vec!["example.com".into()] } }
 
     #[test]
     fn an_id_token_checks_only_when_every_claim_does() {
         let (idp, now, n) = (Idp::new(GOOGLE), 1_800_000_000, "n".repeat(64));
-        let (jwks, s) = (idp.jwks(), sso(GOOGLE, true));
+        let (jwks, s) = (idp.jwks(), sso(GOOGLE));
         let check = |t: String| verify(&t, &jwks, &s, &n, now);
         let ok = check(idp.token("Ann@Example.com", &n, now, |_| {})).unwrap();
         assert_eq!(ok, Signed { email: "ann@example.com".into(), name: "Ann Example".into(), oid: String::new() });
@@ -226,7 +216,7 @@ pub(crate) mod tests {
         assert!(check("not.a.jwt.at-all".into()).unwrap_err().contains("not an ID token"));
         // another issuer than Google: `hd` only when the token carries one
         let idp2 = Idp::new("https://idp.example");
-        let s2 = sso("https://idp.example", true);
+        let s2 = sso("https://idp.example");
         let t2 = idp2.token("ann@example.com", &n, now, |c| { c.as_object_mut().unwrap().remove("hd"); });
         assert!(verify(&t2, &idp2.jwks(), &s2, &n, now).is_ok());
     }
@@ -248,10 +238,10 @@ pub(crate) mod tests {
     #[test]
     fn an_entra_token_checks_only_for_the_organisations_tenant() {
         let (idp, now, n) = (Idp::new(&entra(TENANT)), 1_800_000_000, "n".repeat(64));
-        let s = Sso { issuer: idp.issuer.clone(), client: CLIENT.into(), domains: vec![], required: true };
+        let s = Sso { issuer: idp.issuer.clone(), client: CLIENT.into(), domains: vec![] };
         let (jwks, check) = (idp.jwks(), |t: String| verify(&t, &idp.jwks(), &s, &n, now));
         // the tenant's discovery document, under the tenant's issuer
-        assert_eq!(relay_remote::members::discovery(&s.issuer), format!("https://login.microsoftonline.com/{TENANT}/v2.0/.well-known/openid-configuration"));
+        assert_eq!(team::discovery(&s.issuer), format!("https://login.microsoftonline.com/{TENANT}/v2.0/.well-known/openid-configuration"));
         // no email at all: `oid` names who signed in, `preferred_username` shows
         let ok = check(idp.token("", &n, now, |c| entra_claims(c, TENANT))).unwrap();
         assert_eq!(ok, Signed { email: "ann@example.com".into(), name: "Ann Example".into(), oid: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".into() });
@@ -282,54 +272,18 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_join_needs_a_valid_token_where_the_organisation_requires_one() {
-        use relay_remote::members::{org_name, sign, Entry};
-        use relay_remote::tls::{hex, proof};
-        use ring::signature::KeyPair;
+    fn a_login_takes_a_token_asked_for_this_device_and_this_server() {
         const SERVER: &str = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
-        let (admin, joiner) = ("a".repeat(64), "b".repeat(64));
-        let d = std::env::temp_dir().join(format!("relay-oidc-gate-{}", std::process::id()));
-        std::fs::remove_dir_all(&d).ok();
-        std::fs::create_dir_all(&d).unwrap();
-        crate::save_clients(&d, &[crate::Client { name: "laptop".into(), fp: admin.clone(), added: 1, parent: None, vaults_only: false }]).unwrap();
-        // the organisation: its owner signs it, then SSO on (a fake issuer, whose keys this server has)
-        let seed = [b'a'; 32];
-        let id = hex(ring::signature::Ed25519KeyPair::from_seed_unchecked(&seed).unwrap().public_key().as_ref());
-        let entry = |e: Entry| {
-            let l = crate::org::list(&d, SERVER).unwrap_or_default();
-            serde_json::to_value(sign(&org_name(SERVER), &l, &admin, &seed, e)).unwrap()
-        };
-        let no = json!({"op": "vault_join"});
-        assert_eq!(gate(&d, SERVER, &joiner, &no).unwrap(), None, "no organisation, no SSO");
-        crate::org::append(&d, SERVER, &admin, &entry(Entry { kind: "create".into(), fp: admin.clone(), id, pk: "1".repeat(64), role: "admin".into(), mac: relay_remote::sync::sha256_hex(org_name(SERVER).as_bytes()), ..Default::default() })).unwrap();
+        let (me, salt) = ("b".repeat(64), "5".repeat(64));
         let idp = Idp::new("https://idp.test");
         idp.publish();
-        let on = |required: bool| { let s = sso(&idp.issuer, required); entry(Entry { kind: "sso".into(), issuer: s.issuer, client: s.client, domains: s.domains, required, ..Default::default() }) };
-        crate::org::append(&d, SERVER, &admin, &on(true)).unwrap();
-        assert_eq!(info(&d, SERVER)["sso"]["required"], true);
-        // required: without a token, with one for another device (its nonce), or a bad salt
-        assert_eq!(gate(&d, SERVER, &joiner, &no).unwrap_err(), REQUIRED);
-        let salt = "5".repeat(64);
-        let token = idp.token("ann@example.com", &relay_remote::org::sso_nonce(SERVER, &joiner, &salt), crate::now(), |_| {});
-        let req = |t: &str, salt: &str| json!({"op": "vault_join", "sso": {"id_token": t, "salt": salt}});
-        assert!(gate(&d, SERVER, &"e".repeat(64), &req(&token, &salt)).unwrap_err().contains("not asked for this device"));
-        assert!(gate(&d, SERVER, &joiner, &req(&token, "x")).unwrap_err().contains("bad salt"));
-        let signed = gate(&d, SERVER, &joiner, &req(&token, &salt)).unwrap().unwrap();
-        assert_eq!(signed.email, "ann@example.com");
-        // the join keeps what was verified on the joiner's record, never the token
-        let v = crate::vaults::Vaults::new(&d, SERVER);
-        let ws = v.create(&admin, "laptop", "Team").unwrap()["vault"]["id"].as_str().unwrap().to_string();
-        let inv = v.invite(&admin, &ws, "member", &"ab".repeat(32), 0).unwrap();
-        let (inv, code) = (inv["invite"]["id"].as_str().unwrap().to_string(), inv["invite"]["code"].as_str().unwrap().to_string());
-        v.join(&joiner, &ws, &inv, "ann-mac", &proof(&code, &joiner, SERVER), Some(&signed)).unwrap();
-        let m = v.info(&admin, &ws).unwrap()["vault"]["members"].as_array().unwrap().iter().find(|m| m["fp"] == joiner.as_str()).unwrap().clone();
-        assert_eq!((m["sso"]["email"].as_str(), m["sso"]["name"].as_str()), (Some("ann@example.com"), Some("Ann Example")));
-        assert!(!std::fs::read_to_string(d.join("vaults").join(&ws).join("vault.json")).unwrap().contains(&token[..40]), "no token on disk");
-        // not required: a join without a token passes, one with a bad token does not
-        crate::org::append(&d, SERVER, &admin, &on(false)).unwrap();
-        assert_eq!(gate(&d, SERVER, &joiner, &no).unwrap(), None);
-        assert!(gate(&d, SERVER, &joiner, &req(&idp.token("ann@evil.example", "x", crate::now(), |_| {}), &salt)).is_err());
-        std::fs::remove_dir_all(&d).ok();
+        let s = sso(&idp.issuer);
+        let token = idp.token("Ann@Example.com", &team::sso_nonce(SERVER, &me, &salt), crate::now(), |_| {});
+        assert_eq!(check(&s, SERVER, &me, &token, &salt).unwrap().email, "ann@example.com");
+        assert!(check(&s, SERVER, &"e".repeat(64), &token, &salt).unwrap_err().contains("not asked for this device"));
+        assert!(check(&s, &"d".repeat(64), &me, &token, &salt).unwrap_err().contains("not asked for this device"));
+        assert!(check(&s, SERVER, &me, &token, "x").unwrap_err().contains("bad salt"));
+        assert!(check(&s, SERVER, &me, "", &salt).is_err());
     }
 
     #[test]

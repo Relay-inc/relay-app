@@ -58,7 +58,7 @@ fn items() -> Vec<Item> {
     out.push(Item { ext: "comments", id: "reply", about: "Reply to a comment thread on a page of this conversation's workspace, as the user.", args: &[("path", "the note's path in the workspace"), ("id", "the thread's id from comments.list"), ("text", "the reply")], write: true, default: Policy::Ask, run: Run::Comments });
     // the knowledge workspaces, read-only from any conversation: a conversation is fenced to its own workspace, so this
     // is the one way in, and it only gives passages (no author, session or time)
-    out.push(Item { ext: "knowledge", id: "search", about: "Search the knowledge workspaces (shared workspaces without history) for passages, read-only: path, workspace, the matching line, score.", args: &[("query", "words to find, as word prefixes"), ("workspace?", "one knowledge workspace by name"), ("limit?", "1 to 20, default 10")], write: false, default: Policy::Auto, run: Run::Knowledge });
+    out.push(Item { ext: "knowledge", id: "search", about: "Search the knowledge workspaces (team workspaces without history) for passages, read-only: path, workspace, the matching line, score.", args: &[("query", "words to find, as word prefixes"), ("workspace?", "one knowledge workspace by name"), ("limit?", "1 to 20, default 10")], write: false, default: Policy::Auto, run: Run::Knowledge });
     out.push(Item { ext: "calendar", id: "meetings", about: "Meetings on the user's calendars from an hour ago to 12 hours ahead, or of one whole day, with errors per calendar.", args: &[("date?", "YYYY-MM-DD, a whole local day")], write: false, default: Policy::Auto, run: Run::Calendar });
     out
 }
@@ -107,7 +107,7 @@ fn ready(app: &AppHandle, ext: &str) -> bool {
         "reminders" => crate::vault_of(&s)["ok"] == true,
         "calendar" => !crate::calendar::feeds(&s).is_empty(),
         "comments" => crate::files_on(&s),
-        "knowledge" => !crate::shared_vaults::knowledge(&s, &crate::data_dir(app)).is_empty(),
+        "knowledge" => !crate::shared_vaults::knowledge(&s).is_empty(),
         id => providers::get(id).is_ok_and(|p| (p.ready)(&s["integrations"][p.id]) && providers::token(p).is_some()),
     }
 }
@@ -241,7 +241,7 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, known: bool, action: &str, a
         Run::Reminders => reminder(app, it.id, args),
         Run::Comments => comments(app, key, it.id, args),
         Run::Knowledge => {
-            let spaces = crate::shared_vaults::knowledge(&app.state::<crate::App>().settings.lock().unwrap(), &crate::data_dir(app));
+            let spaces = crate::shared_vaults::knowledge(&app.state::<crate::App>().settings.lock().unwrap());
             knowledge(&crate::index_dir(app), &spaces, args)
         }
         Run::Calendar => {
@@ -461,25 +461,19 @@ mod tests {
     }
     #[test]
     fn knowledge_search_gives_passages_only_of_the_flagged_workspaces() {
-        use relay_remote::vault::{Keys, VaultKey};
         let d = std::env::temp_dir().join(format!("relay-knowledge-{}", std::process::id()));
         std::fs::remove_dir_all(&d).ok();
         let (data, dir) = (d.join("data"), d.join("data/index"));
         std::fs::create_dir_all(&data).unwrap();
-        let space = |id: &str, name: &str| json!({"id": id, "name": name, "host": "h", "port": 1, "fp": "f", "folder": d.join(name).to_string_lossy()});
-        let s = json!({"vault": d.join("Own").to_string_lossy(), "sharedVaults": [space("0000000000000001", "Know"), space("0000000000000002", "Client"), space("0000000000000003", "Nokey")]});
-        for (id, flag) in [("0000000000000001", true), ("0000000000000002", false)] {
-            let mut k = Keys::from(VaultKey::generate());
-            k.nohistory = flag;
-            crate::shared_vaults::save_key(&data, id, &k).unwrap();
-        }
+        let space = |id: &str, name: &str, team: bool, nohistory: bool| json!({"id": id, "name": name, "host": "h", "port": 1, "fp": "f", "folder": d.join(name).to_string_lossy(), "team": team, "nohistory": nohistory});
+        let s = json!({"vault": d.join("Own").to_string_lossy(), "sharedVaults": [space("0000000000000001", "Know", true, true), space("0000000000000002", "Client", true, false), space("0000000000000003", "Nokey", false, false)]});
         for w in ["Own", "Know", "Client", "Nokey"] {
             std::fs::create_dir_all(d.join(w).join("Notes")).unwrap();
             std::fs::write(d.join(w).join("Notes/Rates.md"), format!("---\ntype: Document\nauthor: someone\n---\nIntro.\nThe zebracache rate limit in {w} is 60 per minute\n")).unwrap();
         }
         for i in 0..25 { std::fs::write(d.join(format!("Know/Notes/More {i}.md")), format!("zebracache note {i}\n")).unwrap(); }
-        // only the flagged workspace, never the own vault, the unflagged one or one without a key here
-        let spaces = crate::shared_vaults::knowledge(&s, &data);
+        // only the team workspace without history, never the own vault, one with history or a personal shared one
+        let spaces = crate::shared_vaults::knowledge(&s);
         assert_eq!(spaces.iter().map(|v| v.name.as_str()).collect::<Vec<_>>(), vec!["Know"]);
         let run = |a: Value| knowledge(&dir, &spaces, &a);
         let hits = run(json!({"query": "zebracache rate"})).unwrap();

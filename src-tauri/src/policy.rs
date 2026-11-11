@@ -151,23 +151,9 @@ pub fn fence_in(app: &AppHandle, st: &App, eb: &mut EnvBuf) {
     if shared { eb.grants.fenced = true; }
 }
 
-/// A workspace's signed policy (docs/workspaces.md, Policy) at the start of a conversation in folder `dir`: a provider it
-/// does not allow is refused. The policy as the member list last said it, kept in the workspace's key file; no shared
-/// workspace at `dir`, or no policy, refuses nothing.
-pub fn check_workspace_policy(app: &AppHandle, st: &App, dir: &str, provider: &str) -> Result<(), String> {
-    let s = st.settings.lock().unwrap().clone();
-    // the same folder however it is written (links, and on Windows `\\?\`, case and separators)
-    let Some(v) = crate::shared_vaults::list(&s).into_iter().find(|v| crate::platform::same_dir(&v.folder, dir)) else { return Ok(()) };
-    match crate::shared_vaults::load_key(&data_dir(app), &v.id).ok().and_then(|k| k.policy) {
-        Some(p) if !p.providers.iter().any(|x| x == provider) => Err(crate::trc("err.workspace_policy")),
-        _ => Ok(()),
-    }
-}
-
 /// The agents a conversation in a workspace or another vault folder may run with: Claude Code applies the fence's
 /// rules itself, Relay guards Codex (`guard`). OpenCode and Pi get no fence, they run in the main vault only.
-/// One list with the providers a workspace policy may allow (relay-remote, which the server checks a policy against).
-pub const FENCED_AGENTS: [&str; 2] = relay_remote::members::POLICY_PROVIDERS;
+pub const FENCED_AGENTS: [&str; 2] = ["claude", "codex"];
 /// The agents whose CLI does not read the fence's rules: Relay checks each permission request they raise.
 const GUARDED: [&str; 1] = ["codex"];
 

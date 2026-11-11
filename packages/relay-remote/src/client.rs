@@ -26,14 +26,13 @@ pub struct Client { pub addr: String, pub fp: String, id: Identity, link: Option
 
 /// Join a shared vault with an invite link (docs/workspaces.md): connect pinned to the link's server with this
 /// device's identity, prove the link's code, and unwrap the vault key the server kept for the invite with the link's
-/// secret, which never went to the server. `sso`: the ID token and salt of an SSO login (docs/workspaces.md, SSO), which
-/// the server checks before the invite. Returns the line, the vault and the role, and the keys.
-pub fn vault_join(line: &str, id: &Identity, name: &str, sso: Option<&Value>) -> Result<(PairLine, Joined, Keys), String> {
+/// secret, which never went to the server. Returns the line, the vault and the role, and the keys.
+pub fn vault_join(line: &str, id: &Identity, name: &str) -> Result<(PairLine, Joined, Keys), String> {
     let l = PairLine::parse(line).filter(PairLine::is_invite).ok_or("not an invite link (relay://host:port#fp=…&vault=…&invite=…&secret=…)")?;
     let (vault, invite, secret) = (l.vault.clone().unwrap_or_default(), l.invite.clone().unwrap_or_default(), l.secret.clone().unwrap_or_default());
     let c = Client { addr: l.addr(), fp: l.fp.clone(), id: id.clone(), link: None };
     let proof = tls::proof(&l.code, &id.fingerprint(), &l.fp);
-    let v = c.call(json!({"op": "vault_join", "vault": vault, "invite": invite, "name": name, "proof": proof, "sso": sso}))?;
+    let v = c.call(json!({"op": "vault_join", "vault": vault, "invite": invite, "name": name, "proof": proof}))?;
     let r: VaultRef = field(v.clone(), "vault")?;
     if r.id != vault { return Err("the server answered for another vault".into()); }
     let mut key = vault::unwrap(v["wrapped"].as_str().unwrap_or_default(), &secret, &vault)?;
@@ -43,25 +42,20 @@ pub fn vault_join(line: &str, id: &Identity, name: &str, sso: Option<&Value>) ->
     Ok((l, Joined { id: r.id, name: r.name, role: v["role"].as_str().unwrap_or_default().into() }, key))
 }
 
-/// What an invite link's server asks a device to sign in with before it joins (docs/workspaces.md, SSO): none when it
-/// has no SSO. Asked on the link's pinned certificate, before the invite is spent, with a certificate made for this
-/// one question: a server not trusted yet never sees this device's own.
-pub fn sso_info(line: &str) -> Result<Option<crate::members::Sso>, String> {
-    let l = PairLine::parse(line).filter(PairLine::is_invite).ok_or("not an invite link (relay://host:port#fp=…&vault=…&invite=…&secret=…)")?;
-    let c = Client { addr: l.addr(), fp: l.fp.clone(), id: Identity::generate().map_err(|e| e.to_string())?, link: None };
-    let v = c.call(json!({"op": "sso_info"}))?;
-    serde_json::from_value(v["sso"].clone()).map_err(|e| format!("SSO: {e}"))
-}
-
 /// A shared vault: its id (16 hex) and name.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
 pub struct VaultRef { pub id: String, pub name: String }
-/// A shared vault in full: its members (devices), the people on its member list with their devices, and the invites
-/// still open (an admin's: all, a member's: its own).
+/// A shared vault in full: its members and, for an admin, the invites still open.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
-pub struct VaultInfo { pub id: String, pub name: String, pub role: String, pub members: Vec<Member>, pub people: Vec<crate::members::Person>, pub invites: Vec<Invite> }
+/// On a team server (docs/workspaces.md, Teams) also `team`, `nohistory` and its members by email (`accounts`).
+pub struct VaultInfo { pub id: String, pub name: String, pub role: String, pub members: Vec<Member>, pub invites: Vec<Invite>,
+    pub team: bool, pub nohistory: bool, pub accounts: Vec<Account> }
+/// A member of a team workspace: its account's email and its role there.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Account { pub email: String, pub role: String }
 /// A device in a shared vault: its name, its certificate's fingerprint, its role and when it was added (unix seconds).
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]

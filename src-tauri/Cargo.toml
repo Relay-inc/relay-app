@@ -103,8 +103,6 @@ webview2-com = "0.39"
 windows = { version = "0.62", features = ["Win32_System_Com_StructuredStorage"] }
 # a vault's `.claude -> System` link as a directory junction, which needs no admin rights (src/platform.rs)
 junction = "2"
-# a folder's real path without the `\\?\` std adds (src/platform.rs same_dir)
-dunce = "1"
 # secrets in Credential Manager on Windows (src/secrets.rs). The Mac keeps /usr/bin/security, which made its entries
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 keyring = { version = "3.6.3", features = ["windows-native"] }

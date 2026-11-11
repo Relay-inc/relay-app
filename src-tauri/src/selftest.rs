@@ -466,7 +466,7 @@ fn vaults_run(app: &AppHandle, ev: &Events, r: &mut Report) {
     r.step("a main-vault conversation runs before the vault is made", early.map(|t| t.concat()));
 
     let team = dir.join("team");
-    let made = tauri::async_runtime::block_on(shared_vaults::shared_vault_create(app.clone(), app.state::<App>(), mid, "Team".into(), team.to_string_lossy().into(), None));
+    let made = tauri::async_runtime::block_on(shared_vaults::shared_vault_create(app.clone(), app.state::<App>(), mid, "Team".into(), team.to_string_lossy().into()));
     r.step("make a shared vault", made.clone().map(|v| format!("id {}", v["id"])));
     let Ok(made) = made else { return };
     let id = made["id"].as_str().unwrap_or("").to_string();

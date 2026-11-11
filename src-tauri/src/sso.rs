@@ -1,19 +1,17 @@
-// SSO before a join (docs/workspaces.md, SSO): when an invite's server has an SSO entry on its organisation list,
-// this Mac signs in in the system browser (OpenID Connect, authorisation code with PKCE, a loopback redirect on
-// 127.0.0.1, no client secret) and hands the ID token to the join, where the server checks it. The token never goes
-// anywhere else and is not kept: the join uses it once.
+// Logging in to a team server with the organisation's provider (docs/workspaces.md, Teams): this Mac signs in in the
+// system browser (OpenID Connect, authorisation code with PKCE, a loopback redirect on 127.0.0.1, no client secret) and
+// hands the ID token to the server, which checks it (relay-server oidc.rs). The token is not kept: one login uses it.
 
 use base64::Engine;
-use relay_remote::members::Sso;
+use relay_remote::team::{Link, Sso};
 use relay_remote::tls::random_secret;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-type St<'a> = tauri::State<'a, crate::App>;
 /// How long the browser has for the sign-in.
 const WAIT: Duration = Duration::from_secs(300);
 /// Bumped by `sso_cancel`: a login that started before it stops waiting.
@@ -22,45 +20,28 @@ static LOGIN: AtomicU64 = AtomicU64::new(0);
 fn b64(b: &[u8]) -> String { base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b) }
 fn sha256(b: &[u8]) -> Vec<u8> { relay_remote::tls::unhex(&relay_remote::sync::sha256_hex(b)).unwrap_or_default() }
 
-/// What the invite link's server asks to sign in with before a join: {sso: {issuer, client, domains, required} | null}.
-#[tauri::command]
-pub async fn sso_check(link: String) -> Result<Value, String> {
-    let sso = tauri::async_runtime::spawn_blocking(move || relay_remote::client::sso_info(&link)).await.map_err(|e| e.to_string())??;
-    Ok(json!({"sso": sso}))
-}
-
-/// Sign in for a join with the invite link `link`: the browser opens on the issuer's sign-in, the redirect comes back
-/// to this Mac. {id_token, salt, email, name}: the join sends the first two, the rest is for the confirmation (read
-/// from the token without checking it: the server checks it).
-#[tauri::command]
-pub async fn sso_login(state: St<'_>, link: String) -> Result<Value, String> {
-    let me = state.machines.id.clone();
-    let line = relay_remote::proto::PairLine::parse(&link).filter(relay_remote::proto::PairLine::is_invite).ok_or("not an invite link")?;
+/// Sign in for a login to the team server `link` as device `me`: the browser opens on the issuer's sign-in, the
+/// redirect comes back to this Mac. (id_token, salt): the login sends both. Blocking.
+pub fn sign_in(link: &Link, me: &str, sso: &Sso) -> Result<(String, String), String> {
     let gen = LOGIN.fetch_add(1, Ordering::SeqCst) + 1;
-    tauri::async_runtime::spawn_blocking(move || {
-        let sso = relay_remote::client::sso_info(&link)?.ok_or("this server has no SSO")?;
-        // what a server not trusted yet says: only what an organisation list would take, before a browser opens on it
-        if !sso.valid() { return Err("SSO: the server's sign-in settings are not valid".into()); }
-        let conf = get(&relay_remote::members::discovery(&sso.issuer))?;
-        let https = |k: &str| conf[k].as_str().filter(|u| u.starts_with("https://")).map(String::from).ok_or(format!("SSO: the issuer has no {k}"));
-        let (auth, token_url) = (https("authorization_endpoint")?, https("token_endpoint")?);
-        let salt = relay_remote::sync::sha256_hex(random_secret().as_bytes());
-        let nonce = relay_remote::org::sso_nonce(&line.fp, &me.fingerprint(), &salt);
-        let (verifier, state) = (format!("{}{}", random_secret(), random_secret()), random_secret());
-        let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
-        let redirect = format!("http://{}:{}", loopback(&sso), listener.local_addr().map_err(|e| e.to_string())?.port());
-        let url = auth_url(&auth, &sso, &redirect, &b64(&sha256(verifier.as_bytes())), &state, &nonce)?;
-        tauri_plugin_opener::open_url(&url, None::<&str>).map_err(|e| e.to_string())?;
-        let code = catch(&listener, &state, || LOGIN.load(Ordering::SeqCst) != gen)?;
-        let form = [("grant_type", "authorization_code"), ("code", &code), ("redirect_uri", &redirect), ("client_id", &sso.client), ("code_verifier", &verifier)];
-        let body = url::form_urlencoded::Serializer::new(String::new()).extend_pairs(form).finish();
-        let t = post(&token_url, &body)?;
-        let id_token = t["id_token"].as_str().ok_or_else(|| format!("SSO: no ID token: {}", t["error_description"].as_str().or(t["error"].as_str()).unwrap_or("the issuer sent none")))?.to_string();
-        let claims = id_token.split('.').nth(1).and_then(|p| base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(p).ok()).and_then(|b| serde_json::from_slice::<Value>(&b).ok()).unwrap_or_default();
-        // Entra: the sign-in name, as the server keeps it (oidc.rs): its `email` is optional and not checked
-        let email = if relay_remote::members::entra_tenant(&sso.issuer).is_some() { &claims["preferred_username"] } else { &claims["email"] };
-        Ok(json!({"id_token": id_token, "salt": salt, "email": email, "name": claims["name"]}))
-    }).await.map_err(|e| e.to_string())?
+    // what a server not trusted yet says: only a setting it would take, before a browser opens on it
+    if !sso.valid() { return Err("SSO: the server's sign-in settings are not valid".into()); }
+    let conf = get(&relay_remote::team::discovery(&sso.issuer))?;
+    let https = |k: &str| conf[k].as_str().filter(|u| u.starts_with("https://")).map(String::from).ok_or(format!("SSO: the issuer has no {k}"));
+    let (auth, token_url) = (https("authorization_endpoint")?, https("token_endpoint")?);
+    let salt = relay_remote::sync::sha256_hex(random_secret().as_bytes());
+    let nonce = relay_remote::team::sso_nonce(&link.fp, me, &salt);
+    let (verifier, state) = (format!("{}{}", random_secret(), random_secret()), random_secret());
+    let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
+    let redirect = format!("http://{}:{}", loopback(sso), listener.local_addr().map_err(|e| e.to_string())?.port());
+    let url = auth_url(&auth, sso, &redirect, &b64(&sha256(verifier.as_bytes())), &state, &nonce)?;
+    tauri_plugin_opener::open_url(&url, None::<&str>).map_err(|e| e.to_string())?;
+    let code = catch(&listener, &state, || LOGIN.load(Ordering::SeqCst) != gen)?;
+    let form = [("grant_type", "authorization_code"), ("code", &code), ("redirect_uri", &redirect), ("client_id", &sso.client), ("code_verifier", &verifier)];
+    let body = url::form_urlencoded::Serializer::new(String::new()).extend_pairs(form).finish();
+    let t = post(&token_url, &body)?;
+    let id_token = t["id_token"].as_str().ok_or_else(|| format!("SSO: no ID token: {}", t["error_description"].as_str().or(t["error"].as_str()).unwrap_or("the issuer sent none")))?;
+    Ok((id_token.to_string(), salt))
 }
 /// Stop waiting for the browser.
 #[tauri::command]
@@ -69,7 +50,7 @@ pub fn sso_cancel() { LOGIN.fetch_add(1, Ordering::SeqCst); }
 /// The redirect's host. Entra matches `http://localhost` whatever the port and does not say so of `127.0.0.1`, which its
 /// portal only takes through the manifest: `localhost` there. The listener stays on 127.0.0.1, which the system resolves
 /// localhost to (a browser that tries ::1 first goes on to it).
-fn loopback(sso: &Sso) -> &'static str { if relay_remote::members::entra_tenant(&sso.issuer).is_some() { "localhost" } else { "127.0.0.1" } }
+fn loopback(sso: &Sso) -> &'static str { if relay_remote::team::entra_tenant(&sso.issuer).is_some() { "localhost" } else { "127.0.0.1" } }
 
 /// The sign-in URL: authorisation code with PKCE (S256), the nonce, and the domain as a hint when there is one.
 fn auth_url(auth: &str, sso: &Sso, redirect: &str, challenge: &str, state: &str, nonce: &str) -> Result<String, String> {
@@ -125,7 +106,7 @@ fn post(url: &str, form: &str) -> Result<Value, String> { curl(url, &["-H", "Con
 mod tests {
     use super::*;
     use std::io::Read;
-    fn sso() -> Sso { Sso { issuer: "https://accounts.google.com".into(), client: "c1".into(), domains: vec!["example.com".into()], required: true } }
+    fn sso() -> Sso { Sso { issuer: "https://accounts.google.com".into(), client: "c1".into(), domains: vec!["example.com".into()] } }
 
     #[test]
     fn the_sign_in_url_asks_a_code_with_pkce_and_the_nonce() {

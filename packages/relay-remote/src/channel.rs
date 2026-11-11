@@ -60,16 +60,10 @@ struct Inner {
 pub struct Channel(Arc<Inner>);
 
 impl Channel {
-    /// Who this Mac's frames are from: its device, or on a workspace without history this run's session id (the
-    /// documents' own, docs::session), which the line says and the server passes on instead of the device.
-    fn me_for(client: &Client, vault: &str, key: &Keys) -> String {
-        let fp = &client.me()[..16];
-        if key.nohistory { crate::docs::session(vault, fp) } else { fp.to_string() }
-    }
     /// Start keeping vault `vault`'s stream open on `client`'s server, on a thread of its own, until `stop`.
     pub fn start(client: Client, vault: &str, key: impl Into<Keys>, on: impl Fn(Event) + Send + Sync + 'static) -> Channel {
         let key = key.into();
-        let me = Channel::me_for(&client, vault, &key);
+        let me = client.me()[..16].to_string();
         // the counter starts at the time, so frames of a restarted app never repeat an `n` of before
         let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_micros() as u64);
         Channel::spawn(Inner { client, vault: vault.into(), key, me, on: Arc::new(on), n: AtomicU64::new(n), w: Mutex::default(), live: AtomicBool::new(false), stop: AtomicBool::new(false), last: Mutex::default() })
@@ -85,8 +79,7 @@ impl Channel {
     pub fn renew(&self, key: impl Into<Keys>) -> Channel {
         let i = &self.0;
         self.stop();
-        let key = key.into();
-        Channel::spawn(Inner { client: i.client.clone(), vault: i.vault.clone(), me: Channel::me_for(&i.client, &i.vault, &key), key, on: i.on.clone(), n: AtomicU64::new(i.n.load(Ordering::SeqCst)),
+        Channel::spawn(Inner { client: i.client.clone(), vault: i.vault.clone(), key: key.into(), me: i.me.clone(), on: i.on.clone(), n: AtomicU64::new(i.n.load(Ordering::SeqCst)),
             w: Mutex::default(), live: AtomicBool::new(false), stop: AtomicBool::new(false), last: Mutex::new(i.last.lock().unwrap().clone()) })
     }
     pub fn live(&self) -> bool { self.0.live.load(Ordering::SeqCst) }
@@ -105,9 +98,7 @@ impl Channel {
         // under the newest key here; its epoch goes along so the others open it with the same one
         let (e, l, body) = i.key.seal_frame(&i.vault, kind, doc, &i.me, n, plain)?;
         if body.len() > MAX_BODY { return Err("frame too big".into()); }
-        let mut line = json!({"t": "frame", "e": e, "l": l, "kind": kind, "doc": doc, "n": n, "body": hex(&body)});
-        if i.key.nohistory { line["from"] = json!(i.me); }
-        let line = line.to_string() + "\n";
+        let line = json!({"t": "frame", "e": e, "l": l, "kind": kind, "doc": doc, "n": n, "body": hex(&body)}).to_string() + "\n";
         let mut w = i.w.lock().unwrap().clone().ok_or("not connected")?;
         w.write_all(line.as_bytes()).map_err(|e| e.to_string())
     }
