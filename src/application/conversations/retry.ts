@@ -21,7 +21,8 @@ function adopt(retries: Retry[]) {
 export const loadRetries = async () => adopt((await backend.retries().catch(() => null)) ?? []);
 export const cancelRetry = (key: string) => backend.retryCancel(key);
 
-/** The backend's `retry` event. A refused turn that did nothing yet sends its message again, else the agent goes on. */
+/** The backend's `retry` event: a limit reset, or `switched` to another account. A refused turn that did nothing yet
+ *  sends its message again, else the agent goes on. */
 export async function onRetryEvent(event: RetryEvent) {
   if (event.type === "list") return adopt(event.retries);
   if (!isPrimary()) return; // sent once, by the main window
@@ -29,6 +30,6 @@ export async function onRetryEvent(event: RetryEvent) {
   if (!useConversationsStore.getState().chats[key]) return; // closed meanwhile
   if (!useConversationsStore.getState().messages[key]) await ensureHistory(key).catch(() => {});
   const mine = (useConversationsStore.getState().messages[key] || []).filter(item => item.kind === "me").pop()?.text;
-  notify(key, t("retry.started"));
+  notify(key, t(event.switched ? "retry.switched" : "retry.started"));
   await sendMsg(event.fresh && mine ? mine : RESUME, key);
 }

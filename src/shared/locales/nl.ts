@@ -340,7 +340,7 @@ export default {
   "ag.accountActive": "Nieuwe gesprekken gebruiken",
   "ag.accountAuto": "Automatisch van account wisselen",
   "ag.accountAutoHelp":
-    "Is de planlimiet van een account op, dan verhuist het volgende bericht het gesprek naar het volgende account met ruimte.",
+    "Is de planlimiet van een account op, dan verhuist het gesprek naar het volgende account met ruimte en gaat het meteen verder.",
   "ag.empty": "Nog geen agents. Voeg er een toe om er gesprekken mee te starten.",
   "ag.listHelp":
     "Enkel agents die aanstaan verschijnen in de composer. Klik er een aan om de instellingen te wijzigen.",
@@ -478,6 +478,7 @@ export default {
   "bar.prsNone": "Niets te reviewen",
   "bar.mailRead": "Alles gelezen",
   "usage.limits": "Limieten van het abonnement",
+  "usage.inUse": "in gebruik",
   "usage.resets": "Reset {when}",
   "usage.summary": "{label} {pct}%",
   "usage.summaryResets": "{label} {pct}%, reset {when}",
@@ -1424,6 +1425,7 @@ export default {
   "retry.check": "Gebruikslimiet bereikt. Opnieuw kijken om {time}.",
   "retry.cancel": "Annuleren",
   "retry.started": "Gebruikslimiet vrijgekomen, gaat verder.",
+  "retry.switched": "Gebruikslimiet bereikt, gaat verder op een ander account.",
   "set.system": "Systeem (standaard)",
   "set.themeSystem": "Systeem",
   "set.sec.folders": "Mappen",

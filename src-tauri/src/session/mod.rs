@@ -261,8 +261,13 @@ pub(crate) fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, 
     let _gate = state.vault_gate.lock().unwrap();
     let mut procs = state.procs.lock().unwrap();
     if crate::policy::adding() || procs.get(key).is_some_and(|x| x.turns.busy()) { return Ok(false); }
+    // its account used up and auto-switch picked another: the account is a start flag, so a new process (as in send)
+    let mut was_tainted = false;
+    if procs.get(key).is_some_and(|x| !x.remote && x.account != account) {
+        if let Some(mut x) = procs.remove(key) { x.child.kill().ok(); was_tainted = x.tainted; }
+    }
     if !procs.contains_key(key) {
-        let x = spawn(app, &state, p, Start { project: key, name, fork: None, opts: (model, String::new()), turn: None, from_mail: taint, account: &account, machine: Some(""), about: None, vault: None })?;
+        let x = spawn(app, &state, p, Start { project: key, name, fork: None, opts: (model, String::new()), turn: None, from_mail: taint || was_tainted, account: &account, machine: Some(""), about: None, vault: None })?;
         procs.insert(key.to_string(), x);
     }
     let x = procs.get_mut(key).unwrap();

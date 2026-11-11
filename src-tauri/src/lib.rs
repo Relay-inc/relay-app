@@ -2455,7 +2455,7 @@ async fn usage_limits(app: AppHandle, state: State<'_, App>) -> Result<Value, St
         }
         let now = account_of(&state, p, "", "");
         let shown = accounts.iter().find(|a| a["dir"] == now.as_str()).unwrap_or(&accounts[0])["limits"].clone();
-        out.push(json!({"provider": p.id(), "limits": shown, "accounts": if list.len() > 1 { json!(accounts) } else { json!(null) }}));
+        out.push(json!({"provider": p.id(), "limits": shown, "active": now, "accounts": if list.len() > 1 { json!(accounts) } else { json!(null) }}));
     }
     Ok(json!(out))
 }
