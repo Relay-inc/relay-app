@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.52] - 2026-11-11
+
 ### Changed
 
 - With **Switch accounts automatically** on, a conversation refused for its usage limit now moves to the next account with room and goes on right away, instead of waiting for the next message (#487). The orchestrator and its workers move too: a worker no longer reports as ended without a report.
