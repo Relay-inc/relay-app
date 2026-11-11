@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.51] - 2026-11-11
+
 ### Fixed
 
 - A conversation no longer loses its transcript when two Claude accounts share one transcript folder (a symlinked `projects` in the account's config folder): continuing it emptied the file, and the next message answered "No conversation found". A transcript that moves between accounts is now written through a temp file, so it is the old one or the new one, never a half.
