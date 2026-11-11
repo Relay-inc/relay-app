@@ -1,11 +1,11 @@
 {
-  "version": "0.0.50",
-  "notes": "### Added\n\n- GitHub Projects as a board: pick one of your own or your organizations' projects per vault project, its Status field makes the columns. Drag a card to change its status, New task adds a draft item, a click opens the issue or pull request on GitHub. Set it up with a token under Settings › Integrations › GitHub Projects (#483).",
-  "pub_date": "2026-11-10T21:29:56.518Z",
+  "version": "0.0.51",
+  "notes": "### Fixed\n\n- A conversation no longer loses its transcript when two Claude accounts share one transcript folder (a symlinked `projects` in the account's config folder): continuing it emptied the file, and the next message answered \"No conversation found\". A transcript that moves between accounts is now written through a temp file, so it is the old one or the new one, never a half.",
+  "pub_date": "2026-11-11T11:17:20.410Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWmwrSGdnZ1M3YnlkL1hqb2ZWR0JFMmdaZmlVaHNTVVhHRDdjSlhMWFJTR1BERDRweWp1L1BveDBuL1lLU2FBVVBFa0xRaU8xazdjVHFuT3k3RHNzNVFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0MzQ2MDYyCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC41MApjMXhCTkYwT1JGTmZEWkZBbXVQeEJia3FiT0t3TjAxK1NDcnlzUERqN1FtUUt4anVmZ2NVV0YwOXFpVTFmeUJXWGRraEh1Y25hWUtEUlVjcE1pWU1DZz09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/733016375"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnFTcGZieWNZaEhocnMxdTV3NVQwS2hGcXZwOTFMQzNmMUFJcWltYTFjditkR29pNUVqZ1VxSHB3ZW9iRkJsMlArQjZPMmZnNS9JeTJMd3VuZ2JWb3dzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0Mzk1NzU2CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC41MQo2UkE1OG9SaFBKV3JzbnJkaUxRYTUvejI1Y2hpVnRrdTFUb2JsbXFiRE5DTXRIdTNTMWkySmZDWDFMYmJLcktUN2ZJNXNXay8wRCtRdVRkZkRYR0dDQT09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/735242619"
     }
   }
 }
