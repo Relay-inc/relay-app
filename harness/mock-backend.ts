@@ -1345,7 +1345,7 @@ function handle(cmd: string, a: Args): unknown {
     case "open_settings_window":
       return null;
     case "usage_limits":
-      return integ.usageLimits;
+      return fixture.startsWith("accounts") ? integ.usageLimitsAccounts : integ.usageLimits;
     case "usage_tokens":
       return integ.usageTokens();
 
