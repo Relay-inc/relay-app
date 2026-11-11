@@ -38,9 +38,11 @@ pub const NOT_HERE: &[&str] = &["pair", "pair_device", "vault_create", "vault_in
 #[derive(serde::Serialize, serde::Deserialize, Default)]
 pub struct Team { #[serde(default)] pub sso: Option<Sso>, #[serde(default)] pub accounts: Vec<Account>, #[serde(default)] pub sessions: Vec<Session>,
     #[serde(default)] pub invites: Vec<Invite>, #[serde(default)] pub workspaces: BTreeMap<String, Space> }
-/// `admin`: an organisation admin, who sees and manages every workspace and account here. `off`: turned off.
+/// `admin`: an organisation admin, who sees and manages every workspace and account here. `off`: turned off. `oid`:
+/// the Entra user its first Entra login came from: a sign-in name moved to another user does not log in to it.
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct Account { pub email: String, #[serde(default)] pub admin: bool, #[serde(default)] pub off: bool, pub added: u64 }
+pub struct Account { pub email: String, #[serde(default)] pub admin: bool, #[serde(default)] pub off: bool, pub added: u64,
+    #[serde(default, skip_serializing_if = "String::is_empty")] pub oid: String }
 /// A device logged in to an account.
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct Session { pub fp: String, pub email: String, pub added: u64 }
@@ -79,7 +81,7 @@ impl Team {
         self.account(&s.email).filter(|a| !a.off).cloned().ok_or_else(|| "this account is turned off".into())
     }
     fn ensure(&mut self, email: &str) {
-        if self.account(email).is_none() { self.accounts.push(Account { email: email.into(), admin: false, off: false, added: now() }); }
+        if self.account(email).is_none() { self.accounts.push(Account { email: email.into(), admin: false, off: false, added: now(), oid: String::new() }); }
     }
     fn invite(&mut self, email: &str) -> Value {
         let i = Invite { id: tls::random_secret()[..16].into(), code: tls::random_key(), email: email.into(), expires: now() + INVITE_SECS, fails: 0 };
@@ -132,8 +134,9 @@ pub fn op(vaults: &Vaults, server: &str, fp: &str, op: &str, req: &Value) -> Res
             json!({"id": id, "name": made["vault"]["name"], "key": key, "nohistory": req["nohistory"] == true, "role": "admin"})
         }
         // an account (made when there is none) and a link for one of its devices; with `vault` and `role` also a
-        // member there. An organisation admin may invite anyone, also as organisation admin; a workspace admin only
-        // into that workspace
+        // member there. An organisation admin may invite anyone, also as organisation admin. A workspace admin only
+        // into that workspace, and gets a link only for an account it made now: one that is there already logs in on
+        // its own devices, a link would let the admin in as that person
         "team_invite" => {
             let who = email(s("email"))?;
             let (vault, role) = (s("vault"), s("role"));
@@ -142,13 +145,14 @@ pub fn op(vaults: &Vaults, server: &str, fp: &str, op: &str, req: &Value) -> Res
                 if !t.workspaces.contains_key(vault) || !t.manages(&me, vault) { return Err("only an admin of this workspace invites to it".into()); }
                 if !ROLES.contains(&role) { return Err("role is admin, member or reader".into()); }
             }
+            let new = t.account(&who).is_none();
             t.ensure(&who);
             if req["admin"] == true {
                 if !me.admin { return Err("only an organisation admin makes one".into()); }
                 t.accounts.iter_mut().filter(|a| a.email == who).for_each(|a| a.admin = true);
             }
             if let Some(w) = t.workspaces.get_mut(vault) { w.members.insert(who.clone(), role.into()); }
-            t.invite(&who)
+            if me.admin || new { t.invite(&who) } else { json!({"email": who, "added": true}) }
         }
         "team_invite_revoke" => {
             if !me.admin { return Err("only an organisation admin withdraws an invite".into()); }
@@ -225,7 +229,14 @@ fn login(vaults: &Vaults, t: &mut Team, server: &str, fp: &str, req: &Value) -> 
         t.invites.remove(i).email
     } else {
         let sso = t.sso.clone().ok_or("this server takes invite links only")?;
-        crate::oidc::check(&sso, server, fp, req["id_token"].as_str().unwrap_or(""), req["salt"].as_str().unwrap_or(""))?.email
+        let signed = crate::oidc::check(&sso, server, fp, req["id_token"].as_str().unwrap_or(""), req["salt"].as_str().unwrap_or(""))?;
+        // Entra: the sign-in name is the address, the user is `oid`, bound to the account at its first Entra login
+        if !signed.oid.is_empty() {
+            let a = t.accounts.iter_mut().find(|a| a.email == signed.email).ok_or_else(|| format!("{} has no account on this server: ask an admin to invite you", signed.email))?;
+            if a.oid.is_empty() { a.oid = signed.oid.clone(); }
+            if a.oid != signed.oid { return Err("this sign-in name belongs to another Microsoft account now: ask an admin".into()); }
+        }
+        signed.email
     };
     let a = t.account(&who).cloned().ok_or_else(|| format!("{who} has no account on this server: ask an admin to invite you"))?;
     if a.off { save(data, t).ok(); return Err("this account is turned off".into()); }
@@ -268,8 +279,7 @@ pub fn apply(vaults: &Vaults, t: &Team) -> Result<(), String> {
 }
 
 /// What `vault_info` adds for a team workspace: `team`, `nohistory`, `docs` (always on), the members by email with
-/// their role (`accounts`), and no key epoch (there is no member list to check). Without history the devices' names
-/// are blank: nobody learns from the server which account wrote what.
+/// their role (`accounts`), and no key epoch (there is no member list to check).
 pub fn annotate(data: &Path, v: &mut Value) {
     let Some(w) = v["id"].as_str().and_then(|id| load(data).workspaces.get(id).cloned()) else { return };
     if let Some(o) = v.as_object_mut() { o.remove("epoch"); o.remove("keys"); }
@@ -277,7 +287,8 @@ pub fn annotate(data: &Path, v: &mut Value) {
     v["docs"] = json!(true);
     v["nohistory"] = json!(w.nohistory);
     v["accounts"] = json!(w.members.iter().map(|(e, r)| json!({"email": e, "role": r})).collect::<Vec<_>>());
-    if w.nohistory { for m in v["members"].as_array_mut().into_iter().flatten() { m["name"] = json!(""); } }
+    // without history: no device list, so nothing here ties a device (the author of a document's update) to an account
+    if w.nohistory { v["members"] = json!([]); }
 }
 
 /// Whether device `fp` is an organisation admin here: it keeps the server (lib.rs KEEPER_OPS).

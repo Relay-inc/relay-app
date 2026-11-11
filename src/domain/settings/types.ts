@@ -1,4 +1,3 @@
-import { FENCED_AGENTS } from "../agents/rules.ts";
 import type { BoardRef } from "../board/types";
 import type { BuddyRef } from "../buddy/rules";
 import type { VoiceCfg } from "./voice";
@@ -109,7 +108,8 @@ export type HostStatus = {
   fingerprint: string;
   clients: string[]; // names of the paired devices
 };
-/** What a member may do in a shared vault: an admin also invites and removes members, a reader only reads. */
+/** What a member may do in a shared vault: an admin also invites and removes members, a reader (team workspaces only)
+ *  only reads. */
 export type SharedRole = "admin" | "member" | "reader";
 /** A shared vault on a relay-server (src-tauri/src/shared_vaults.rs): the server it lives on (pinned by `fp`), its
  *  folder on this Mac and this Mac's role there. Only the backend writes the list. */
@@ -121,6 +121,8 @@ export type SharedVault = {
   fp: string;
   folder: string;
   role: SharedRole;
+  team?: boolean; // on a team server, which keeps its key and reads along (docs/workspaces.md, Teams)
+  nohistory?: boolean; // a team workspace made without history
 };
 /** The last sync round of a shared vault (`shared_vaults_status`): `at` in epoch seconds, the counts since the app
  *  started, the conflict copies made, the deletes held for the user, and `bad` files that do not open with the key. */
@@ -144,81 +146,9 @@ export type SharedStatus = {
   admin?: boolean; // this Mac is an admin of the member list: it may turn that on or off, and make members admins
   admins?: string[] | null; // the member list's admins (fingerprints); null while the workspace has no list
   listed?: string[] | null; // every member on the member list (fingerprints); null while the workspace has no list
-  people?: SharedPerson[] | null; // the member list's people with their devices; null while the workspace has no list
   reader?: boolean; // this Mac only reads the workspace: its rounds only pull
-  readers?: string[] | null; // the member list's readers (fingerprints), null while the workspace has no list
   unsent?: number; // a reader's changes in the folder that its rounds leave out
-  nohistory?: boolean; // made without history (the member list's `nohistory`): its conflict copies name no Mac
-  policy?: SharedPolicy | null; // the workspace's signed policy (docs/workspaces.md, Policy), null or missing: none
 };
-/** A workspace's signed policy: the agent providers it allows (claude, codex) and whether capture is on. */
-export type SharedPolicy = { providers: string[]; capture: boolean };
-/** The agent providers a workspace policy may allow: the agents Relay fences inside a workspace (relay-remote members.rs
- *  POLICY_PROVIDERS, src-tauri policy::FENCED_AGENTS). */
-export const POLICY_PROVIDERS = FENCED_AGENTS;
-/** A server's organisation as this Mac sees it (src-tauri/src/organisation.rs `org_status`): `me` an organisation
- *  admin, `owner` the device that may start it, `code` this Mac's keys' code (to compare), `admins` fingerprints. */
-export type OrgStatus = {
-  exists: boolean;
-  me: boolean;
-  owner: boolean;
-  code: string;
-  admins: string[];
-  sso?: Sso | null;
-};
-/** A server's SSO (docs/workspaces.md, SSO), signed on its organisation list: the OIDC issuer, the client id, the email
- *  domains allowed, and whether a device must sign in to join a workspace there. */
-export type Sso = { issuer: string; client: string; domains: string[]; required: boolean };
-/** Google's issuer: the provider U4 names. Another one is an issuer URL. */
-export const GOOGLE_ISSUER = "https://accounts.google.com";
-/** Microsoft Entra ID: the issuer of one tenant (relay_remote members::entra_tenant), and the tenant of an issuer. */
-export const entraIssuer = (tenant: string) => `https://login.microsoftonline.com/${tenant}/v2.0`;
-export const entraTenant = (issuer: string) =>
-  /^https:\/\/login\.microsoftonline\.com\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/v2\.0$/.exec(
-    issuer,
-  )?.[1] ?? null;
-/** An SSO login for a join (src-tauri sso.rs): the join sends the token and salt, the email and name show. */
-export type SsoLogin = { id_token: string; salt: string; email: string | null; name: string | null };
-/** A workspace in the organisation's overview: what its member list says, nothing of its notes. `managed`: every
- *  organisation admin is an admin of it, `admin`: this Mac is one. */
-export type OrgWorkspace = {
-  id: string;
-  name: string;
-  list: boolean;
-  managed: boolean;
-  admin: boolean;
-  nohistory: boolean;
-  members: { fp: string; name: string; role: SharedRole | ""; person: string; listed: boolean }[];
-  people: SharedPerson[];
-};
-/** A person across the server's workspaces, grouped by a device or a verified email they share. `unverified`: the
- *  email is only what their own device signed (no SSO login the server saw, no admin), it groups nobody. */
-export type OrgPerson = {
-  name: string;
-  email: string;
-  unverified?: boolean;
-  devices: { fp: string; name: string }[];
-  workspaces: { id: string; name: string; role: SharedRole | "" }[];
-};
-/** The overview (`org_overview`): workspaces, people, admins, and devices that published keys to be added (`code`
- *  null when what they published is not signed by them). */
-export type OrgOverview = {
-  workspaces: OrgWorkspace[];
-  people: OrgPerson[];
-  admins: { fp: string; name: string }[];
-  candidates: { fp: string; name: string; code: string | null }[];
-};
-/** What an offboarding did: the workspaces it took the person off, the ones this Mac is no admin of, the failures and
- *  how many devices the server revoked. `unrevoked`: why the server revoked none (a fully paired device), else null. */
-export type OrgOffboard = {
-  removed: string[];
-  skipped: string[];
-  failed: { name: string; error: string }[];
-  revoked: number;
-  unrevoked: string | null;
-};
-/** A person on a shared vault's member list (docs/workspaces.md, People): `who` its id, `devices` fingerprints. */
-export type SharedPerson = { who: string; name: string; email: string; devices: string[] };
 /** An open invite of a shared vault: single use, `expires` in epoch seconds. */
 export type SharedInvite = { id: string; role: SharedRole; expires: number };
 /** A shared vault's members and open invites (`shared_vault_info`), and `me`: this Mac's fingerprint. */
@@ -228,16 +158,40 @@ export type SharedInfo = {
     name: string;
     role: SharedRole;
     members: { name: string; fp: string; role: SharedRole; added: number }[];
-    people?: SharedPerson[]; // as the server reads the member list (a member's Mac checks it itself: `SharedStatus`)
     invites: SharedInvite[];
+    team?: boolean;
+    nohistory?: boolean;
+    accounts?: { email: string; role: SharedRole }[]; // a team workspace's members by email
   };
   me: string;
 };
+/** A team server this Mac is logged in to (src-tauri/src/team.rs): `email` its account there, `admin` an organisation
+ *  admin. Only the backend writes the list. */
+export type TeamServer = { host: string; port: number; fp: string; email: string; admin: boolean };
+/** The sign-in a team server takes besides invite links: Google (with its email domains) or one Entra tenant. */
+export type TeamSso = { issuer: string; client: string; domains: string[] };
+/** This Mac's account on a team server (`team_me`) and its workspaces there, `here` the folder one syncs into. */
+export type TeamMe = {
+  email: string;
+  admin: boolean;
+  workspaces: { id: string; name: string; role: SharedRole; nohistory: boolean; here: string | null }[];
+};
+/** A team server as its organisation admins see it (`team_overview`). */
+export type TeamOverview = {
+  accounts: { email: string; admin: boolean; off: boolean; devices: number }[];
+  workspaces: { id: string; name: string; nohistory: boolean; members: Record<string, SharedRole> }[];
+  invites: { id: string; email: string; expires: number }[];
+  sso: TeamSso | null;
+};
+/** Google's issuer, and an Entra tenant's (`ENTRA` + tenant id + `/v2.0`). */
+export const GOOGLE_ISSUER = "https://accounts.google.com";
+export const ENTRA = "https://login.microsoftonline.com/";
 export type Settings = {
   vault: string;
   vaults?: Record<string, VaultMap>; // the mapping per vault folder
   extraVaults?: string[]; // other vault folders whose projects show next to the main vault's
   sharedVaults?: SharedVault[]; // the vaults shared on a relay-server, kept by the backend (set_settings ignores them)
+  teams?: TeamServer[]; // the team servers this Mac is logged in to, kept by the backend
   projects: Record<string, { icon?: string; img?: string; label?: string }>;
   overrides: Record<string, string | null>; // a terminal session's project, by session id
   integrations: Record<string, IntegrationConfig>;

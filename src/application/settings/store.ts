@@ -21,8 +21,8 @@ import {
   type SharedInfo,
   type SharedInvite,
   type SharedStatus,
-  type Sso,
-  type SsoLogin,
+  type TeamMe,
+  type TeamOverview,
   type VaultSync,
 } from "../../domain/settings/types";
 import { SETUP_FOLDERS, type SetupPlatform } from "../../domain/settings/machines";
@@ -118,8 +118,8 @@ export type SettingsState = {
     messages: Record<string, Message | null>; // per vault, "form" for the new and join forms
     busy: Record<string, boolean>; // what runs: a vault's id (one action per row at a time), or "form"
     open: string; // the workspace whose page shows on Settings › Workspaces, "" for the list
-    // the one form, a new vault on `machine` or joining one (machine ""): where it and the "form" message show
-    // noHistory: a new workspace made without history (docs/workspaces.md), for good
+    // the one form, a new vault on `machine` (a team server: "team:<fp>") or joining one (machine ""): where it and
+    // the "form" message show. `noHistory`: a new team workspace without history
     form: {
       mode: "" | "new" | "join";
       machine: string;
@@ -127,11 +127,11 @@ export type SettingsState = {
       folder: string;
       link: string;
       noHistory: boolean;
-      // joining: what the link's server asks to sign in with (null nothing, undefined not asked yet), and the login
-      sso?: Sso | null;
-      login?: SsoLogin | null;
     };
   };
+  // the team servers (application/settings/teams.ts): per server (fp) its account and workspaces, what its organisation
+  // admins see, and the link to log in with as typed
+  team: { me: Record<string, TeamMe | null>; overview: Record<string, TeamOverview | null>; link: string };
   pluginsPage: {
     loaded: boolean; // the secrets are known
     secrets: Record<string, Record<string, boolean>>; // per plugin: which of its secrets sit in the keychain
@@ -223,6 +223,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     open: "",
     form: { mode: "", machine: "", name: "", folder: "", link: "", noHistory: false },
   },
+  team: { me: {}, overview: {}, link: "" },
   pluginsPage: { loaded: false, secrets: {}, imports: [], messages: {}, tests: {} },
   integrations: {
     loaded: false,

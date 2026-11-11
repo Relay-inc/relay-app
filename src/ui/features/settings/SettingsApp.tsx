@@ -1,5 +1,3 @@
-import type { Machine } from "../../../domain/settings/types";
-import { orgMachines } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
 import { go, TABS } from "../../../application/settings/window";
 import { Icon } from "../../components/Icon";
@@ -16,17 +14,15 @@ import { UpdatesPage } from "./UpdatesPage";
 import { VoicePage } from "./VoicePage";
 import { WorkspacesPage } from "./WorkspacesPage";
 
-const NO_MACHINES: Machine[] = [];
-
 /** The settings window, laid out like bb's: the pages in a sidebar on the left, the shown page on the right. Every
  *  page stays mounted and only the shown one takes part in the column, so what is typed survives switching pages, and
- *  Agents and Integrations check their state once, when the window opens. Organisation shows only with a machine whose
- *  server can have one (orgMachines), else General stands in for it. Mounted once the settings are read. */
+ *  Agents and Integrations check their state once, when the window opens. Organisation shows only for an organisation admin
+ *  of a team server, else General stands in for it. Mounted once the settings are read. */
 export function SettingsApp() {
   const { t } = useT();
   const picked = useSettingsStore(s => s.tab);
   const vaultStatus = useSettingsStore(s => s.vaultStatus);
-  const org = useSettingsStore(s => orgMachines(s.settings.machines ?? NO_MACHINES).length > 0);
+  const org = useSettingsStore(s => !!s.settings.teams?.some(team => team.admin));
   if (!vaultStatus) return null;
   const tabs = org ? TABS : TABS.filter(x => x[0] !== "organisation");
   const tab = org || picked !== "organisation" ? picked : "general";

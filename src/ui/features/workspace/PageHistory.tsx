@@ -83,9 +83,7 @@ export function PageHistory({
                   onClick={() => onPick(picked?.key === v.key ? null : v, history.kind)}
                 >
                   <span className="flex items-center gap-2 text-[13px] text-label">
-                    <span className="flex-1 min-w-0 truncate font-medium">
-                      {history.anonymous ? t("page.anonymousSession") : v.author}
-                    </span>
+                    <span className="flex-1 min-w-0 truncate font-medium">{v.author}</span>
                     <span className="flex-none text-xs tabular-nums">
                       <span className="text-ok">+{n.added}</span> <span className="text-late">−{n.removed}</span>
                     </span>

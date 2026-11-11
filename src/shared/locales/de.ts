@@ -220,7 +220,6 @@ export default {
   "mig.teamChats":
     "Diese Gespräche laufen in {target} weiter. Ihre Transkripte bleiben auf diesem Mac, aber was sie schon enthalten (alles Gesagte und jede gelesene Datei) kann in Notizen landen, die jedes Mitglied sieht:",
   "ws.team": "Team",
-  "ws.noHistory": "ohne Verlauf",
   "ws.live": "live",
   "ws.rounds": "synchronisiert alle 10 s",
   "ws.openFolder": "Ordner als Workspace öffnen…",
@@ -596,8 +595,6 @@ export default {
   "page.askAbout": "Zu dieser Seite fragen",
   "page.ask": "Claude fragen",
   "page.peers": "Auf dieser Seite: {names}",
-  "page.anonymous": "Anonym",
-  "page.anonymousSession": "Anonyme Sitzung",
   "page.editor": "Text der Seite",
   "page.updatedLinks": "Links aktualisiert",
   "page.updatedByClaude": "Von Claude geändert",
@@ -1352,17 +1349,6 @@ export default {
   "set.sharedLink": "Einladungslink · {role}",
   "set.sharedLinkHelp": "Einmalig, gültig bis {time}. Schick ihn in einer privaten Nachricht.",
   "set.sharedDone": "Fertig",
-  "set.sharedNamePerson": "Person benennen…",
-  "set.sharedRename": "Umbenennen…",
-  "set.sharedAddDevice": "Gerät hinzufügen…",
-  "set.sharedPerson": "Person",
-  "set.sharedPersonNew": "Neue Person",
-  "set.sharedPersonName": "Name",
-  "set.sharedPersonEmail": "E-Mail (optional)",
-  "set.sharedNoPerson": "Geräte ohne Person",
-  "set.sharedRemovePersonSure":
-    "{name} mit allen Geräten entfernen? Ihre Macs behalten die Dateien, die sie schon haben.",
-  "set.sharedRemoveSelfSure": "Dich selbst mit allen Geräten entfernen? Dieser Mac verlässt den Workspace dann auch.",
   "set.sharedThisMac": "dieser Mac",
   "set.sharedInvites": "Offene Einladungen",
   "set.sharedInviteOpen": "{role}, gültig bis {time}",
@@ -1378,11 +1364,7 @@ export default {
     "Ein leerer Ordner startet als neuer Workspace. Ein Ordner mit Notizen wird so hochgeladen, wie er ist.",
   "set.sharedJoinFolderHelp": "Ein leerer Ordner auf diesem Mac. Der Workspace kommt dort hinein.",
   "set.sharedNoHistory": "Workspace ohne Verlauf",
-  "set.sharedNoHistoryHelp":
-    "Relay hält nicht fest, wer was geändert hat: Konfliktkopien nennen keinen Computer, und Seitenverlauf, Kommentare und Cursor zeigen anonyme Sitzungen. Mitglieder und ihre Rollen bleiben sichtbar, ein kleines Team ist nicht anonym, und ein Mitglied kann außerhalb von Relay weiterhin eine eigene Kopie behalten. Das lässt sich später nicht mehr ausschalten.",
   "set.sharedNoHistoryLabel": "Ohne Verlauf",
-  "set.sharedNoHistoryTip":
-    "Ohne Verlauf erstellt: Relay hält hier nicht fest, wer was geändert hat. Mitglieder und ihre Rollen bleiben sichtbar.",
   "set.sharedCreate": "Erstellen",
   "set.sharedRecovery": "Wiederherstellungsschlüssel",
   "set.sharedRecoveryHelp":
@@ -1392,104 +1374,21 @@ export default {
   "set.sharedLinkLabel": "Einladungslink",
   "set.sharedLinkLabelHelp": "Der relay://-Link, den dir ein Admin geschickt hat.",
   "set.sharedJoinButton": "Beitreten",
-  "set.ssoTitle": "SSO zum Beitreten",
-  "set.ssoOnRequired": "An: Ein Gerät meldet sich an, bevor es hier einem Workspace beitritt",
-  "set.ssoOnOptional": "An: Ein Gerät kann sich beim Beitreten anmelden",
-  "set.ssoOff": "Aus: Ein Einladungslink allein genügt zum Beitreten",
   "set.ssoProvider": "Anbieter",
-  "set.ssoOther": "Anderer OpenID-Connect-Anbieter",
   "set.ssoEntra": "Microsoft Entra ID",
   "set.ssoTenant": "Mandanten-ID",
-  "set.ssoTenantHelp":
-    "Die ID deines Entra-Mandanten, eine GUID. Jedes Konto dieses Mandanten darf beitreten: Entra liefert keine verifizierte E-Mail-Adresse, an der sich eine Domain prüfen ließe.",
   "set.ssoClientHelpEntra":
     "Die Anwendungs-ID (Client-ID) der App-Registrierung, die du für Relay angelegt hast. Ein Client-Secret ist nicht nötig.",
-  "set.ssoJoinRequiredTenant":
-    "Dieser Server bittet dich, dich vor dem Beitritt mit einem Microsoft-Konto seiner Organisation anzumelden.",
-  "set.ssoJoinOptionalTenant": "Dieser Server lässt dich mit einem Microsoft-Konto seiner Organisation anmelden.",
-  "set.ssoIssuer": "Issuer",
-  "set.ssoIssuerHelp": "Die Issuer-URL des Anbieters, wie seine ID-Tokens sie nennen.",
   "set.ssoClient": "Client-ID",
   "set.ssoClientHelp":
     "Der OAuth-Client, den du für Relay angelegt hast (ein Desktop-App-Client). Ein Client-Secret ist nicht nötig.",
   "set.ssoDomains": "E-Mail-Domains",
-  "set.ssoDomainsHelp": "Wer beitreten darf: Adressen in diesen Domains, durch Kommas getrennt.",
-  "set.ssoRequired": "Zum Beitreten nötig",
-  "set.ssoRequiredHelp": "Aus: Die Anmeldung wird angeboten, und ein Link allein genügt weiterhin.",
-  "set.ssoTurnOn": "Einschalten",
   "set.ssoSave": "Speichern",
-  "set.ssoTurnOff": "Ausschalten",
-  "set.ssoSaved": "SSO in der Organisationsliste gespeichert.",
-  "set.ssoTurnedOff": "SSO ausgeschaltet.",
-  "set.ssoHelp":
-    "Beim Beitreten prüft der Server das ID-Token der Anmeldung und behält nur die E-Mail-Adresse darin, nie das Token. Jemanden entfernen läuft weiter über Offboarden: Der Anbieter teilt diesem Server nicht mit, wenn ein Konto geschlossen wird.",
-  "set.ssoJoinLabel": "Anmelden",
-  "set.ssoJoinRequired":
-    "Dieser Server bittet dich, dich vor dem Beitreten anzumelden, mit einer Adresse in {domains}.",
-  "set.ssoJoinOptional": "Dieser Server lässt dich mit einer Adresse in {domains} anmelden.",
-  "set.ssoSignIn": "Mit {provider} anmelden",
-  "set.ssoSignInAgain": "Erneut anmelden",
-  "set.ssoWaiting": "Warte auf den Browser…",
-  "set.ssoSignedInAs": "Angemeldet als {email}",
-  "set.org": "Organisation",
-  "set.orgShow": "Anzeigen…",
-  "set.orgHide": "Ausblenden",
   "set.orgAdmin": "Organisations-Admin",
-  "set.orgNone":
-    "Dieser Server hat noch keine Organisation. Sein Besitzer, der erste damit gekoppelte Mac, kann eine starten.",
-  "set.orgNoneOwner":
-    "Dieser Server hat noch keine Organisation. Als Besitzer kannst du eine starten: Dieser Mac wird ihr erster Organisations-Admin.",
-  "set.orgStart": "Organisation starten",
-  "set.orgNotAdmin":
-    "Dieser Server hat eine Organisation. Um Organisations-Admin zu werden, fügt ein Admin diesen Mac hinzu, nachdem er seinen Code verglichen hat: {code}",
-  "set.orgReads":
-    "Organisations-Admins sind Admin jedes Workspace, den sie auf diesem Server verwalten, und können ihn lesen. Neue Workspaces fügen sie von Anfang an hinzu.",
-  "set.orgYourCode": "Code dieses Mac: {code}",
-  "set.orgAdmins": "Organisations-Admins",
-  "set.orgRemoveAdmin": "Entfernen",
-  "set.orgCodeBad": "nicht vom Gerät signiert",
-  "set.orgAddAdmin": "Als Admin hinzufügen…",
-  "set.orgAddSure":
-    "Füge {name} nur hinzu, wenn sein Bildschirm denselben Code zeigt: {code}. Ein anderer Code bedeutet die Schlüssel von jemand anderem.",
-  "set.orgCodesMatch": "Codes stimmen, hinzufügen",
-  "set.orgAddHelp":
-    "Ein gekoppelter Mac erscheint hier, sobald sein Bereich Organisation geöffnet wurde. Sein Code steht in diesem Bereich.",
   "set.orgWorkspaces": "Workspaces",
-  "set.orgManaged": "Verwaltet",
-  "set.orgUnmanaged": "Nicht verwaltet",
   "set.orgDevices_one": "{n} Gerät",
   "set.orgDevices_other": "{n} Geräte",
-  "set.orgUnmanagedHelp":
-    "Nicht jeder Organisations-Admin ist hier Admin. Ein Admin dieses Workspace fügt sie in seinen Einstellungen hinzu (Organisations-Admins hinzufügen).",
   "set.orgNoWorkspaces": "Noch keine Workspaces auf diesem Server.",
-  "set.orgPeople": "Personen",
-  "set.orgEmailUnverified":
-    "E-Mail nicht bestätigt: ihr eigenes Gerät hat sie signiert, ohne SSO oder Admin, daher gruppiert sie keine Geräte mit denen einer anderen Person.",
-  "set.orgOffboardConfirm": "Offboarden",
-  "set.orgOffboard": "Offboarden…",
-  "set.orgOffboardSure":
-    "{name} offboarden: Die Person verlässt {workspaces}, jeder Workspace bekommt einen neuen Schlüssel, und ihre {devices} Gerät(e) können sich nicht mehr mit diesem Server verbinden. Ihre Macs behalten die Dateien, die sie schon haben.",
-  "set.orgNoneOfThem": "keinen Workspace, dessen Admin du bist",
-  "set.orgOffboardSkipped":
-    "Nicht aus {workspaces}: Dort bist du kein Admin. Bitte einen Admin dieses Workspace, die Person zu entfernen oder die Organisations-Admins hinzuzufügen.",
-  "set.orgOffboardNotRevoked":
-    "Ihre Geräte sind nicht widerrufen und können sich weiter mit diesem Server verbinden: {error}",
-  "set.orgOffboarded": "{name} ist aus {n} Workspace(s) entfernt, {revoked} Gerät(e) widerrufen.",
-  "set.orgAdded": "Organisations-Admins hinzugefügt: {n}.",
-  "set.orgAddedNone":
-    "Nichts hinzuzufügen: Dieser Server hat keine Organisation, oder ihre Admins sind hier schon Admin.",
-  "set.orgCreateFailed": "Erstellt, aber die Organisations-Admins sind noch nicht darauf: {error}",
-  "set.orgAddToWorkspace": "Organisations-Admins hinzufügen",
-  "set.orgAddToWorkspaceHelp":
-    "Macht die Organisations-Admins dieses Servers zu Admins dieses Workspace. Sie können ihn dann lesen.",
-  "set.policyAgents": "Agenten in diesem Workspace",
-  "set.policyAgentsHelp":
-    "Ein Gespräch hier startet nur mit einem Agenten, den du erlaubst. In die Mitgliederliste signiert, folgt ihm das Relay jedes Mitglieds.",
-  "set.policyCapture": "Capture",
-  "set.policyCaptureHelp": "Ob Capture in diesem Workspace an ist.",
-  "set.policyIs": "Richtlinie: {agents}, Capture {capture}",
-  "set.policyCaptureOn": "an",
-  "set.policyCaptureOff": "aus",
   "set.title": "Einstellungen",
   "set.vaultHelp":
     "Der Ordner deines Workspaces Persönlich, dein Obsidian-Vault. Gespräche starten darin, und die Seitenleiste liest daraus work-state und Erinnerungen.",
@@ -2027,7 +1926,6 @@ export default {
   "set.tab.workspaces": "Workspaces",
   "set.tab.organisation": "Organisation",
   "set.wsInvites": "Einladungen",
-  "set.wsPolicy": "Richtlinie",
   "set.wsSync": "Synchronisierung",
   "set.wsLeaveTitle": "{name} verlassen",
   "set.tab.voice": "Sprache",
@@ -2752,4 +2650,45 @@ export default {
   "coll.col.linked": "hier verknüpft",
   "coll.col.followed-up": "Nachgefasst",
   "coll.followed": "✓ Mail entworfen",
+  "set.sharedMakeAdmin": "Zum Admin machen",
+  "set.sharedMakeMember": "Zum Mitglied machen",
+  "set.teamLoginTitle": "Bei einem Teamserver anmelden",
+  "set.teamLoginHelp":
+    "Ein Teamserver bewahrt die Workspaces deines Teams und kann sie lesen. Füge den Link ein, den dir ein Admin geschickt hat: Eine Einladung meldet diesen Mac sofort an, der eigene Link des Servers öffnet die Anmeldung deiner Organisation im Browser.",
+  "set.teamLink": "Link zum Teamserver",
+  "set.teamLogin": "Anmelden",
+  "set.teamSigningIn": "Schließe die Anmeldung im Browser ab…",
+  "set.teamServer": "{host} · {email}",
+  "set.teamLogout": "Abmelden",
+  "set.teamSyncHere": "Hier synchronisieren…",
+  "set.teamReadsAlong": "Server liest mit",
+  "set.teamReadsAlongTip":
+    "Ein Teamserver hält diese Workspaces lesbar: Der Server und wer ihn betreibt, können alles darin lesen.",
+  "set.teamYou": "du",
+  "set.teamInviteEmail": "E-Mail-Adresse",
+  "set.teamInviteHelp":
+    "Eine neue Adresse bekommt einen Link für eines ihrer Geräte: Schick ihn selbst weiter. Wer hier schon ein Konto hat, wird hinzugefügt und meldet sich an wie bisher.",
+  "set.teamInviteLink": "Einladungslink für {email}",
+  "set.teamInviteLinkHelp": "Funktioniert einmal, auf einem Gerät, 7 Tage lang.",
+  "set.sharedNoHistoryHelp":
+    "Der Server nennt niemandem den Autor einer Änderung: Konfliktkopien nennen keinen Computer, Seitenverlauf und Cursor zeigen keine Namen. Mitglieder und ihre Rollen bleiben sichtbar, und in einem kleinen Team lässt sich erraten, wer was schrieb. Das lässt sich nicht abschalten.",
+  "set.sharedNoHistoryTip":
+    "Ohne Verlauf erstellt: keine Namen bei Änderungen. Mitglieder und ihre Rollen bleiben sichtbar.",
+  "set.orgServerLink": "Link des Servers zeigen",
+  "set.orgServerLinkHelp":
+    "Wer hier ein Konto hat, meldet sich mit diesem Link und der Anmeldung unten an. Er enthält keine Einladung.",
+  "set.orgAccounts": "Konten",
+  "set.orgMakeAdmin": "Zum Organisations-Admin machen",
+  "set.orgUnmakeAdmin": "Kein Organisations-Admin",
+  "set.orgTurnOff": "Abschalten",
+  "set.orgTurnOn": "Einschalten",
+  "set.orgInviteOpen": "Einladung für {email}, bis {time}",
+  "set.orgMembers_one": "{n} Mitglied",
+  "set.orgMembers_other": "{n} Mitglieder",
+  "set.orgSso": "Anmeldung",
+  "set.orgSsoHelp":
+    "Neben Einladungslinks können Konten sich mit dem Google- oder Microsoft-Konto der Organisation anmelden. Die Adresse muss hier ein Konto haben.",
+  "set.orgSsoNone": "Nur Einladungslinks",
+  "set.orgSsoDomainsHelp": "Die Google-Workspace-Domains der Organisation, durch Kommas getrennt.",
+  "set.ssoTenantHelp": "Die ID deines Entra-Tenants, eine GUID. Seine Anmeldenamen sind hier die Adressen der Konten.",
 } satisfies Record<Key, string>;

@@ -8,7 +8,6 @@ import {
   setupCommands,
   SETUP_FOLDERS,
   newerVersion,
-  orgMachines,
   repoState,
   repoWorkOf,
   snapshotBranch,
@@ -132,12 +131,4 @@ test("shared vaults go under the machine whose fingerprint pins their server, th
   // a member with no machines sees every vault in the section, and an empty fingerprint never matches
   assert.deepEqual(vaultsByMachine([], [made]), { on: {}, elsewhere: [made] });
   assert.equal(vaultsByMachine([{ ...server, fp: "" }], [vault("v5", "")]).elsewhere.length, 1);
-});
-
-test("orgMachines: only the fully paired machines, so no Organisation tab with servers for workspaces only", () => {
-  const full = { id: "m1", name: "Studio Mac", host: "192.168.1.2", port: 47800, fp: "a" };
-  const only = { ...full, id: "m2", sharedOnly: true };
-  const kept = { ...full, id: "m3", sharedOnly: true, auto: true };
-  assert.deepEqual(orgMachines([full, only, kept]), [full]);
-  assert.deepEqual(orgMachines([only, kept]), []);
 });

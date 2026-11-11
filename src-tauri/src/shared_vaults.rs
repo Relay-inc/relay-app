@@ -588,9 +588,11 @@ pub fn member_names_now(state: &crate::App, id: &str) -> std::collections::BTree
     client(&v, &state.machines.id).vault_info(&v.id).map(|i| i.members.into_iter().map(|m| (m.fp, m.name)).collect()).unwrap_or_default()
 }
 /// A member's name from `names` (member_names) for a fingerprint in full or its first 16 hex (how an author and a
-/// mention name one); the first 8 hex when the member list has nobody of that fingerprint.
+/// mention name one); the first 8 hex when the member list has nobody of that fingerprint. No names at all (a team
+/// workspace without history lists no devices): no name either.
 pub fn name_of(names: &std::collections::BTreeMap<String, String>, fp: &str) -> String {
     let short = |x: &str| x.chars().take(16).collect::<String>();
+    if names.is_empty() { return String::new(); }
     names.iter().find(|(f, _)| !fp.is_empty() && short(f) == short(fp)).map(|(_, n)| n.clone()).unwrap_or_else(|| fp.chars().take(8).collect())
 }
 /// Vault `id`'s members as the server lists them: fingerprint → name (who an update in a document's history is by).

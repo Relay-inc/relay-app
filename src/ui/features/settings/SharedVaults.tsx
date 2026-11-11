@@ -1,16 +1,8 @@
 import { Fragment, useState } from "react";
-import type {
-  Machine,
-  SharedInfo,
-  SharedRole,
-  SharedStatus,
-  SharedVault,
-  Sso,
-  SsoLogin,
-} from "../../../domain/settings/types";
+import type { Machine, SharedInfo, SharedRole, SharedVault, TeamServer } from "../../../domain/settings/types";
 import { agoParts } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
-import { entraTenant, filesOn, GOOGLE_ISSUER, POLICY_PROVIDERS } from "../../../domain/settings/types";
+import { filesOn } from "../../../domain/settings/types";
 import {
   closeInvite,
   createSharedVault,
@@ -24,19 +16,22 @@ import {
   openForm,
   pickSharedFolder,
   removeMember,
-  removePerson,
-  setPerson,
   addToList,
-  setMemberRole,
+  setMemberAdmin,
   setSharedDocs,
-  setSharedPolicy,
-  addOrgAdmins,
   settleShared,
   showRecovery,
   withdrawInvite,
-  ssoCancel,
-  ssoSignIn,
 } from "../../../application/settings/shared-vaults";
+import {
+  cancelSignIn,
+  editTeamLink,
+  inviteTeam,
+  loginTeam,
+  logoutTeam,
+  setTeamMember,
+  syncTeamWorkspace,
+} from "../../../application/settings/teams";
 import { relativeFormat, sentAt } from "../../../shared/format";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
@@ -66,8 +61,11 @@ const EDGE = "border-t border-s-border px-3.5 py-3 first:border-t-0";
 const ROW = `grid min-w-0 grid-cols-1 gap-2.5 ${EDGE}`;
 const LABEL = "text-xs font-medium text-s-fg";
 
-/** Settings › Workspaces › Workspaces: the workspaces on a server that is not one of this Mac's machines (joined with a
- *  link), a row each that opens its page, then Join a workspace with a link… or its form. */
+const roleKey = (role: string) =>
+  role === "admin" ? "set.sharedAdmin" : role === "reader" ? "set.sharedReader" : "set.sharedMember";
+
+/** Settings › Workspaces › Workspaces: the personal workspaces on a server that is not one of this Mac's machines
+ *  (joined with a link), a row each that opens its page, then Join a workspace with a link… or its form. */
 export function SharedVaults({ vaults }: { vaults: SharedVault[] }) {
   const { t } = useT();
   return (
@@ -96,27 +94,105 @@ export function MachineVaults({ machine, vaults = [] }: { machine: Machine; vaul
   );
 }
 
-/** The agents a workspace policy names, as Relay calls them. */
-const PROVIDER_NAMES: Record<string, string> = { claude: "Claude Code", codex: "Codex" };
-
-/** This Mac's role in a workspace: the member list decides once there is one, before it the server's word once read
- *  (the settings can be older). */
-function roleIn(vault: SharedVault, status: SharedStatus | undefined, info: SharedInfo | null | undefined): SharedRole {
-  return status?.admins
-    ? status.admin
-      ? "admin"
-      : status.reader
-        ? "reader"
-        : "member"
-    : (info?.vault.role ?? vault.role);
+/** Settings › Workspaces, Log in to a team server: the link an admin sent (an invite, or the server's own link for the
+ *  organisation's sign-in in the browser). */
+export function TeamLogin() {
+  const { t } = useT();
+  const link = useSettingsStore(s => s.team.link);
+  const busy = useSettingsStore(s => !!s.shared.busy.team);
+  const message = useSettingsStore(s => s.shared.messages.team);
+  return (
+    <Section title={t("set.teamLoginTitle")} desc={t("set.teamLoginHelp")}>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <input
+          className={`${FIELD} min-w-0 flex-1 basis-64 font-mono`}
+          aria-label={t("set.teamLink")}
+          placeholder="relay://…#team…"
+          spellCheck={false}
+          value={link}
+          onChange={e => editTeamLink(e.target.value)}
+        />
+        {busy ? (
+          <>
+            <span className="text-xs text-s-muted">{t("set.teamSigningIn")}</span>
+            <button className={buttonClass("ghost")} onClick={cancelSignIn}>
+              {t("mc.cancel")}
+            </button>
+          </>
+        ) : (
+          <button className={buttonClass("primary")} disabled={!link.trim()} onClick={() => void loginTeam()}>
+            {t("set.teamLogin")}
+          </button>
+        )}
+      </div>
+      {message ? <span className={message.ok ? HINT_IN_ROW : ERROR_MESSAGE}>{message.text}</span> : null}
+    </Section>
+  );
 }
-const roleKey = (role: string) =>
-  role === "admin" ? "set.sharedAdmin" : role === "reader" ? "set.sharedReader" : "set.sharedMember";
 
-/** A workspace in a list: its name, server, this Mac's role in it and Without history, opening its page. */
+/** Settings › Workspaces, per team server: this account's workspaces there, a synced one opening its page and the
+ *  others with Sync here…, New workspace…, and Log out. */
+export function TeamVaults({ team, vaults }: { team: TeamServer; vaults: SharedVault[] }) {
+  const { t } = useT();
+  const me = useSettingsStore(s => s.team.me[team.fp]);
+  const busy = useSettingsStore(s => !!s.shared.busy[`team:${team.fp}`]);
+  const message = useSettingsStore(s => s.shared.messages[`team:${team.fp}`]);
+  const elsewhere = (me?.workspaces ?? []).filter(w => !vaults.some(v => v.id === w.id));
+  return (
+    <Section
+      title={t("set.teamServer", { host: team.host, email: team.email })}
+      desc={t("set.teamReadsAlongTip")}
+      list
+      action={
+        <button className={buttonClass("ghost")} disabled={busy} onClick={() => void logoutTeam(team.fp)}>
+          {t("set.teamLogout")}
+        </button>
+      }
+    >
+      {vaults.map(vault => (
+        <SharedRow key={vault.id} vault={vault} />
+      ))}
+      {elsewhere.map(w => (
+        <div key={w.id} className={`flex min-w-0 items-center gap-2 ${EDGE}`}>
+          <Icon name="folderLinked" className={TILE} />
+          <span className="min-w-0 flex-1 truncate text-[13px] text-s-fg">{w.name}</span>
+          <span className={PILL}>{t(roleKey(w.role))}</span>
+          <button className={buttonClass()} disabled={busy} onClick={() => void syncTeamWorkspace(team.fp, w.id)}>
+            {t("set.teamSyncHere")}
+          </button>
+        </div>
+      ))}
+      {message ? (
+        <div className={EDGE}>
+          <span className={message.ok ? HINT_IN_ROW : ERROR_MESSAGE}>{message.text}</span>
+        </div>
+      ) : null}
+      <SharedForm machine={`team:${team.fp}`} />
+    </Section>
+  );
+}
+
+/** The pills of a team workspace: the server reads along, and without history. */
+function TeamPills({ vault }: { vault: SharedVault }) {
+  const { t } = useT();
+  if (!vault.team) return null;
+  return (
+    <>
+      <span className={PILL} title={t("set.teamReadsAlongTip")}>
+        {t("set.teamReadsAlong")}
+      </span>
+      {vault.nohistory ? (
+        <span className={PILL} title={t("set.sharedNoHistoryTip")}>
+          {t("set.sharedNoHistoryLabel")}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+/** A workspace in a list: its name, server and this Mac's role in it, opening its page. */
 function SharedRow({ vault }: { vault: SharedVault }) {
   const { t } = useT();
-  const status = useSettingsStore(s => s.shared.status[vault.id]);
   const info = useSettingsStore(s => s.shared.info[vault.id]);
   return (
     <SettingsFold
@@ -127,12 +203,8 @@ function SharedRow({ vault }: { vault: SharedVault }) {
       status={
         <span className={STATUS_TEXT}>
           <span className="font-mono">{vault.host}</span>
-          <span className={PILL}>{t(roleKey(roleIn(vault, status, info)))}</span>
-          {status?.nohistory ? (
-            <span className={PILL} title={t("set.sharedNoHistoryTip")}>
-              {t("set.sharedNoHistoryLabel")}
-            </span>
-          ) : null}
+          <span className={PILL}>{t(roleKey(info?.vault.role ?? vault.role))}</span>
+          <TeamPills vault={vault} />
         </span>
       }
       onToggle={() => openWorkspace(vault.id)}
@@ -140,309 +212,32 @@ function SharedRow({ vault }: { vault: SharedVault }) {
   );
 }
 
-/** A workspace's page on Settings › Workspaces: its folder and recovery key, People (persons with their devices and
- *  roles), Invites, Policy, Sync (the last round and what waits for a choice) and Leave. */
+/** A workspace's page on Settings › Workspaces: its folder (and for a personal one its recovery key), Members with
+ *  their invites, Documents, Sync (the last round and what waits for a choice) and Leave. */
 export function WorkspacePage({ vault }: { vault: SharedVault }) {
   const { t, tn, locale } = useT();
   const status = useSettingsStore(s => s.shared.status[vault.id]);
   const files = useSettingsStore(s => filesOn(s.settings));
   const info = useSettingsStore(s => s.shared.info[vault.id]);
-  const link = useSettingsStore(s => s.shared.links[vault.id]);
   const recovery = useSettingsStore(s => s.shared.keys[vault.id]);
   const message = useSettingsStore(s => s.shared.messages[vault.id]);
   const busy = useSettingsStore(s => !!s.shared.busy[vault.id]);
-  const [inviting, setInviting] = useState(false);
-  const [role, setRole] = useState<SharedRole>("member");
   const [leaving, setLeaving] = useState(false);
-  const [trusting, setTrusting] = useState<string | null>(null);
-  const [removing, setRemoving] = useState(""); // the member whose Remove asks first, by fingerprint
-  const [removingPerson, setRemovingPerson] = useState(""); // the person whose Remove asks first, by id
-  const [naming, setNaming] = useState<{ who: string; fp: string } | null>(null); // the person form open: who, device
-  const [personForm, setPersonForm] = useState({ pick: "", name: "", email: "" });
-  // the member list decides once there is one; before it, the server's word once read (the settings can be older)
-  const admins = status?.admins;
-  const roleOf = (fp: string, server: SharedRole): SharedRole =>
-    admins ? (admins.includes(fp) ? "admin" : status?.readers?.includes(fp) ? "reader" : "member") : server;
-  // on the server but not on the member list (its Relay published keys after the list was made): no role, no remove
-  const unlisted = (fp: string) => !!status?.listed && !status.listed.includes(fp);
-  const mine = roleIn(vault, status, info);
-  const admin = mine === "admin";
-  // a reader signs nothing on the member list but its leave: no naming, adding or removing of its own person
-  const own = mine !== "reader";
+  const mine: SharedRole = info?.vault.role ?? vault.role;
   const ago = status ? agoParts(status.at) : null;
-  const roleName = (role: string) => t(roleKey(role));
-  const roles: [SharedRole, string][] = [
-    ["member", t("set.sharedMember")],
-    ["reader", t("set.sharedReader")],
-    ["admin", t("set.sharedAdmin")],
-  ];
-  const until = (expires: number) => sentAt(expires * 1000, locale);
-  // people (docs/workspaces.md, People): the member list as this Mac checked it, before its first round the server's
-  const people = status?.people ?? info?.vault.people ?? [];
-  const myself = info ? people.find(p => p.devices.includes(info.me)) : undefined;
-  const loose = info ? info.vault.members.filter(m => !people.some(p => p.devices.includes(m.fp))) : [];
-  const startNaming = (who: string, fp: string, name = "", email = "") => {
-    setNaming({ who, fp });
-    setPersonForm({ pick: "", name, email });
-  };
-  // a person named or renamed, or a device put under one: new (`pick` "") with the name typed, or one there is
-  const nameForm = naming ? (
-    <form
-      className="flex min-w-0 flex-wrap items-center gap-2 ps-4"
-      onSubmit={async e => {
-        e.preventDefault();
-        const picked = people.find(p => p.who === personForm.pick);
-        const done = picked
-          ? await setPerson(vault.id, picked.who, picked.name, picked.email, naming.fp)
-          : await setPerson(vault.id, naming.who, personForm.name, personForm.email, naming.fp);
-        if (done) setNaming(null);
-      }}
-    >
-      {naming.fp && status?.admin && people.length ? (
-        <select
-          className={SELECT}
-          aria-label={t("set.sharedPerson")}
-          value={personForm.pick}
-          onChange={e => setPersonForm({ ...personForm, pick: e.target.value })}
-        >
-          <option value="">{t("set.sharedPersonNew")}</option>
-          {people.map(p => (
-            <option key={p.who} value={p.who}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      ) : null}
-      {personForm.pick ? null : (
-        <>
-          <input
-            className={`${FIELD} min-w-0 flex-1 basis-40`}
-            aria-label={t("set.sharedPersonName")}
-            placeholder={t("set.sharedPersonName")}
-            maxLength={100}
-            autoFocus
-            value={personForm.name}
-            onChange={e => setPersonForm({ ...personForm, name: e.target.value })}
-          />
-          <input
-            className={`${FIELD} min-w-0 flex-1 basis-40`}
-            type="email"
-            aria-label={t("set.sharedPersonEmail")}
-            placeholder={t("set.sharedPersonEmail")}
-            value={personForm.email}
-            onChange={e => setPersonForm({ ...personForm, email: e.target.value })}
-          />
-        </>
-      )}
-      <span className="flex-1"></span>
-      <button type="button" className={buttonClass("ghost")} onClick={() => setNaming(null)}>
-        {t("mc.cancel")}
-      </button>
-      <button
-        type="submit"
-        className={buttonClass("primary")}
-        disabled={busy || (!personForm.pick && !personForm.name.trim())}
-      >
-        {t("set.save")}
-      </button>
-    </form>
-  ) : null;
-  // one device: its name, role and the admin's buttons; `nested` under its person
-  const device = (member: SharedInfo["vault"]["members"][number], nested: boolean) =>
-    info ? (
-      <Fragment key={member.fp}>
-        <div className={`flex min-h-7 items-center gap-2 ${nested ? "ps-4" : ""}`}>
-          <span className="min-w-0 truncate text-xs text-s-fg">
-            {member.name}
-            {member.fp === info.me ? <span className="text-s-muted"> · {t("set.sharedThisMac")}</span> : null}
-          </span>
-          {/* an admin picks another member's role here, everyone else sees it */}
-          {status?.admin && admins && !unlisted(member.fp) && member.fp !== info.me && removing !== member.fp ? (
-            <select
-              className={SELECT}
-              aria-label={t("set.sharedRoleOf", { name: member.name })}
-              disabled={busy}
-              value={roleOf(member.fp, member.role)}
-              onChange={e => setMemberRole(vault.id, member.fp, e.target.value as SharedRole)}
-            >
-              {roles.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <span className={PILL}>
-              {unlisted(member.fp) ? t("set.sharedNotListed") : roleName(roleOf(member.fp, member.role))}
-            </span>
-          )}
-          <span className="flex-1"></span>
-          {status?.admin && unlisted(member.fp) ? (
-            <button className={buttonClass("ghost")} disabled={busy} onClick={() => addToList(vault.id, member.fp)}>
-              {t("set.sharedAddToList")}
-            </button>
-          ) : null}
-          {status?.people && !nested && !unlisted(member.fp) && (status.admin || (own && member.fp === info.me)) ? (
-            <button className={buttonClass("ghost")} disabled={busy} onClick={() => startNaming("", member.fp)}>
-              {t("set.sharedNamePerson")}
-            </button>
-          ) : null}
-          {!admin || member.fp === info.me || unlisted(member.fp) ? null : removing === member.fp ? (
-            <>
-              <span className="text-xs text-s-muted">{t("set.sharedRemoveSure")}</span>
-              <button
-                className={buttonClass("dangerSolid")}
-                disabled={busy}
-                aria-label={t("set.extraVaultRemove", { name: member.name })}
-                onClick={async () => {
-                  await removeMember(vault.id, member.fp);
-                  setRemoving("");
-                }}
-              >
-                {t("ag.remove")}
-              </button>
-              <button className={buttonClass("ghost")} onClick={() => setRemoving("")}>
-                {t("mc.cancel")}
-              </button>
-            </>
-          ) : (
-            <button
-              className={buttonClass("ghost")}
-              aria-label={t("set.extraVaultRemove", { name: member.name })}
-              onClick={() => setRemoving(member.fp)}
-            >
-              {t("ag.remove")}
-            </button>
-          )}
-        </div>
-        {status?.admin && unlisted(member.fp) ? (
-          <span className="text-xs text-s-muted">{t("set.sharedNotListedHint")}</span>
-        ) : null}
-        {naming?.fp === member.fp ? nameForm : null}
-      </Fragment>
-    ) : null;
-  const goBack = () => openWorkspace("");
-  // the member list's state and changed keys, said above the people
-  const listWarnings = status ? (
-    <>
-      {status.rekeying ? <StatusLine level="warn">{t("set.sharedRekeying")}</StatusLine> : null}
-      {/* the member list: held back, forked, or a removal still waiting for its key change */}
-      {status.warnings?.map(w => (
-        <StatusLine key={w} level="warn">
-          {w}
-        </StatusLine>
-      ))}
-      {/* a member's Relay publishes other keys than the member list has: they set it up again, or someone is in between */}
-      {status.changed?.map(c => (
-        <div key={c.fp} className="grid gap-1">
-          <StatusLine level="warn">{t("set.sharedKeyChanged", { name: c.name })}</StatusLine>
-          {vault.role === "admin" ? (
-            trusting === c.fp ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-s-muted">{t("set.sharedTrustSure", { name: c.name })}</span>
-                <button
-                  className={buttonClass("dangerSolid")}
-                  disabled={busy}
-                  onClick={async () => {
-                    await trustMember(vault.id, c.fp);
-                    setTrusting(null);
-                  }}
-                >
-                  {t("set.sharedTrust")}
-                </button>
-                <button className={buttonClass("ghost")} onClick={() => setTrusting(null)}>
-                  {t("mc.cancel")}
-                </button>
-              </div>
-            ) : (
-              <div>
-                <button className={buttonClass("ghost")} disabled={busy} onClick={() => setTrusting(c.fp)}>
-                  {t("set.sharedTrustAsk", { name: c.name })}
-                </button>
-              </div>
-            )
-          ) : null}
-        </div>
-      ))}
-    </>
-  ) : null;
-  // making the notes documents (off until an admin turns it on, every member sees which) and the signed policy
-  // (docs/workspaces.md, Policy): an admin picks the agents and capture, a member sees it
-  const docs = !!status && files && (status.admin || !!status.docs);
-  const policy = status ? (
-    status.admin ? (
-      <div className="grid gap-1.5">
-        <span className="text-xs text-s-fg">{t("set.policyAgents")}</span>
-        <span className="text-xs text-s-muted">{t("set.policyAgentsHelp")}</span>
-        <div className="flex flex-wrap items-center gap-4">
-          {POLICY_PROVIDERS.map(p => {
-            const allowed = status.policy?.providers ?? POLICY_PROVIDERS;
-            const on = allowed.includes(p);
-            return (
-              <label key={p} className="flex items-center gap-1.5 text-xs text-s-fg">
-                <input
-                  type="checkbox"
-                  checked={on}
-                  // at least one agent: an empty policy is refused by every member's Mac
-                  disabled={busy || (on && allowed.length === 1)}
-                  onChange={() =>
-                    setSharedPolicy(
-                      vault.id,
-                      POLICY_PROVIDERS.filter(x => (x === p ? !on : allowed.includes(x))),
-                      !!status.policy?.capture,
-                    )
-                  }
-                />
-                {PROVIDER_NAMES[p] ?? p}
-              </label>
-            );
-          })}
-        </div>
-        <div className="flex items-start gap-3">
-          <div className="grid flex-1 gap-0.5">
-            <label htmlFor={`capture-${vault.id}`} className="text-xs text-s-fg">
-              {t("set.policyCapture")}
-            </label>
-            <span className="text-xs text-s-muted">{t("set.policyCaptureHelp")}</span>
-          </div>
-          <Switch
-            id={`capture-${vault.id}`}
-            on={!!status.policy?.capture}
-            onToggle={on => setSharedPolicy(vault.id, status.policy?.providers ?? POLICY_PROVIDERS, on)}
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="flex-1 text-xs text-s-muted">{t("set.orgAddToWorkspaceHelp")}</span>
-          <button className={buttonClass()} disabled={busy} onClick={() => addOrgAdmins(vault.id)}>
-            {t("set.orgAddToWorkspace")}
-          </button>
-        </div>
-      </div>
-    ) : status.policy ? (
-      <span className="text-xs text-s-muted">
-        {t("set.policyIs", {
-          agents: status.policy.providers.map(p => PROVIDER_NAMES[p] ?? p).join(", "),
-          capture: t(status.policy.capture ? "set.policyCaptureOn" : "set.policyCaptureOff"),
-        })}
-      </span>
-    ) : null
-  ) : null;
-  const invites = info?.vault.invites ?? [];
+  // making the notes documents: a personal workspace's admin turns it on (every member sees which), a team one has it
+  const docs = !vault.team && !!status && files && (status.admin || !!status.docs);
   return (
     <>
       <header className="grid gap-3">
-        <button className={`${buttonClass("ghost")} -ml-2 justify-self-start`} onClick={goBack}>
+        <button className={`${buttonClass("ghost")} -ml-2 justify-self-start`} onClick={() => openWorkspace("")}>
           <Icon name="left" className={BUTTON_GLYPH} />
           {t("set.tab.workspaces")}
         </button>
         <div className={ROW_DETAILS}>
           <h1 className="text-base font-semibold text-s-fg">{vault.name}</h1>
-          <span className={PILL}>{roleName(mine)}</span>
-          {status?.nohistory ? (
-            <span className={PILL} title={t("set.sharedNoHistoryTip")}>
-              {t("set.sharedNoHistoryLabel")}
-            </span>
-          ) : null}
+          <span className={PILL}>{t(roleKey(mine))}</span>
+          <TeamPills vault={vault} />
           <span className="font-mono text-xs text-s-muted">{vault.host}</span>
         </div>
         {message ? <span className={message.ok ? HINT_IN_ROW : ERROR_MESSAGE}>{message.text}</span> : null}
@@ -453,7 +248,8 @@ export function WorkspacePage({ vault }: { vault: SharedVault }) {
           <code className="min-w-0 flex-1 truncate font-mono text-xs text-s-fg" title={vault.folder}>
             {vault.folder}
           </code>
-          {recovery ? null : (
+          {/* a team workspace's key is the server's: there is nothing to recover from here */}
+          {recovery || vault.team ? null : (
             <button className={buttonClass("ghost")} disabled={busy} onClick={() => showRecovery(vault.id)}>
               {t("set.sharedShowRecovery")}
             </button>
@@ -472,175 +268,18 @@ export function WorkspacePage({ vault }: { vault: SharedVault }) {
         ) : null}
       </Section>
 
-      <Section title={t("set.orgPeople")}>
-        {listWarnings}
-        {info ? (
-          <div className="grid min-w-0 gap-1.5">
-            {people.map(person => (
-              <div key={person.who} className="grid min-w-0 grid-cols-1 gap-0.5">
-                <div className="flex min-h-7 items-center gap-2">
-                  <span
-                    className="min-w-0 truncate text-xs font-medium text-s-fg"
-                    title={person.email ? `${person.name} · ${person.email}` : person.name}
-                  >
-                    {person.name}
-                    {person.email ? <span className="font-normal text-s-muted"> · {person.email}</span> : null}
-                  </span>
-                  <span className="flex-1"></span>
-                  {removingPerson === person.who ? (
-                    <>
-                      <span className="text-xs text-s-muted">
-                        {person.who === myself?.who
-                          ? t("set.sharedRemoveSelfSure")
-                          : t("set.sharedRemovePersonSure", { name: person.name })}
-                      </span>
-                      <button
-                        className={buttonClass("dangerSolid")}
-                        disabled={busy}
-                        aria-label={t("set.extraVaultRemove", { name: person.name })}
-                        onClick={async () => {
-                          await removePerson(vault.id, person.who);
-                          setRemovingPerson("");
-                        }}
-                      >
-                        {t("ag.remove")}
-                      </button>
-                      <button className={buttonClass("ghost")} onClick={() => setRemovingPerson("")}>
-                        {t("mc.cancel")}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      {own && person.who === myself?.who && !link ? (
-                        <button
-                          className={buttonClass("ghost")}
-                          disabled={busy}
-                          onClick={() => inviteToShared(vault.id, "member", person.who)}
-                        >
-                          {t("set.sharedAddDevice")}
-                        </button>
-                      ) : null}
-                      {status?.admin ? (
-                        <button
-                          className={buttonClass("ghost")}
-                          disabled={busy}
-                          onClick={() => startNaming(person.who, "", person.name, person.email)}
-                        >
-                          {t("set.sharedRename")}
-                        </button>
-                      ) : null}
-                      {status?.admin || (own && person.who === myself?.who) ? (
-                        <button
-                          className={buttonClass("ghost")}
-                          aria-label={t("set.extraVaultRemove", { name: person.name })}
-                          onClick={() => setRemovingPerson(person.who)}
-                        >
-                          {t("ag.remove")}
-                        </button>
-                      ) : null}
-                    </>
-                  )}
-                </div>
-                {naming?.who === person.who && !naming.fp ? nameForm : null}
-                {person.devices.flatMap(fp => info.vault.members.filter(m => m.fp === fp)).map(m => device(m, true))}
-              </div>
-            ))}
-            {people.length && loose.length ? <span className={LABEL}>{t("set.sharedNoPerson")}</span> : null}
-            {loose.map(m => device(m, false))}
+      {vault.team ? <TeamMembers vault={vault} info={info} /> : <Members vault={vault} info={info} />}
+
+      {docs && status ? (
+        <Section title={t("set.sharedDocs")}>
+          <div className="flex items-start gap-3">
+            <span className="flex-1 text-xs text-s-muted">{t("set.sharedDocsHelp")}</span>
+            {status.admin ? (
+              <Switch id={`docs-${vault.id}`} on={!!status.docs} onToggle={on => setSharedDocs(vault.id, on)} />
+            ) : (
+              <span className={PILL}>{t("set.sharedDocsOn")}</span>
+            )}
           </div>
-        ) : (
-          <span className="text-xs text-s-muted">{t("set.sharedAsking")}</span>
-        )}
-      </Section>
-
-      <Section
-        title={t("set.wsInvites")}
-        action={
-          admin && !inviting && !link ? (
-            <button className={buttonClass()} onClick={() => setInviting(true)}>
-              {t("set.sharedInvite")}
-            </button>
-          ) : null
-        }
-      >
-        {link || inviting || invites.length ? (
-          <>
-            {link ? (
-              <div className="grid gap-1.5">
-                <span className={LABEL}>{t("set.sharedLink", { role: roleName(link.invite.role) })}</span>
-                <CommandBlock
-                  hint={t("set.sharedLinkHelp", { time: until(link.invite.expires) })}
-                  command={link.link}
-                  wrap
-                />
-                <div>
-                  <button className={`${buttonClass("ghost")} -ml-3`} onClick={() => closeInvite(vault.id)}>
-                    {t("set.sharedDone")}
-                  </button>
-                </div>
-              </div>
-            ) : inviting ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={LABEL}>{t("set.sharedInviteAs")}</span>
-                <Segmented label={t("set.sharedInviteAs")} options={roles} value={role} onPick={setRole} />
-                <span className="flex-1"></span>
-                <button className={buttonClass("ghost")} onClick={() => setInviting(false)}>
-                  {t("mc.cancel")}
-                </button>
-                <button
-                  className={buttonClass("primary")}
-                  disabled={busy}
-                  onClick={async () => {
-                    await inviteToShared(vault.id, role);
-                    setInviting(false);
-                  }}
-                >
-                  {t("set.sharedMakeLink")}
-                </button>
-              </div>
-            ) : null}
-            {/* an admin's every open invite, a member's its own (for its devices) */}
-            {invites.length ? (
-              <div className="grid min-w-0 gap-1.5">
-                <span className={LABEL}>{t("set.sharedInvites")}</span>
-                {invites.map(invite => (
-                  <div key={invite.id} className="flex min-h-7 items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate text-xs text-s-muted">
-                      {t("set.sharedInviteOpen", { role: roleName(invite.role), time: until(invite.expires) })}
-                    </span>
-                    <button
-                      className={buttonClass("ghost")}
-                      disabled={busy}
-                      onClick={() => withdrawInvite(vault.id, invite.id)}
-                    >
-                      {t("set.sharedWithdraw")}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </>
-        ) : null}
-      </Section>
-
-      {docs || policy ? (
-        <Section title={t("set.wsPolicy")}>
-          {docs ? (
-            <div className="flex items-start gap-3">
-              <div className="grid flex-1 gap-0.5">
-                <label htmlFor={`docs-${vault.id}`} className="text-xs text-s-fg">
-                  {t("set.sharedDocs")}
-                </label>
-                <span className="text-xs text-s-muted">{t("set.sharedDocsHelp")}</span>
-              </div>
-              {status?.admin ? (
-                <Switch id={`docs-${vault.id}`} on={!!status.docs} onToggle={on => setSharedDocs(vault.id, on)} />
-              ) : (
-                <span className={PILL}>{t("set.sharedDocsOn")}</span>
-              )}
-            </div>
-          ) : null}
-          {policy}
         </Section>
       ) : null}
 
@@ -752,13 +391,350 @@ export function WorkspacePage({ vault }: { vault: SharedVault }) {
   );
 }
 
-/** Under a machine (`machine` its id) New workspace on this machine…, in Workspaces ("") Join a workspace with a link…, or
- *  the form it opened. The one form and its message show where `form.machine` says. */
+/** A personal workspace's members (as on main): its devices with their role, the member list's warnings and changed
+ *  keys, and an admin's invite links. */
+function Members({ vault, info }: { vault: SharedVault; info: SharedInfo | null | undefined }) {
+  const { t, locale } = useT();
+  const status = useSettingsStore(s => s.shared.status[vault.id]);
+  const link = useSettingsStore(s => s.shared.links[vault.id]);
+  const busy = useSettingsStore(s => !!s.shared.busy[vault.id]);
+  const [inviting, setInviting] = useState(false);
+  const [role, setRole] = useState<SharedRole>("member");
+  const [trusting, setTrusting] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(""); // the member whose Remove asks first, by fingerprint
+  // the member list decides once there is one; before it, the server's word once read (the settings can be older)
+  const admins = status?.admins;
+  const roleOf = (fp: string, server: SharedRole): SharedRole =>
+    admins ? (admins.includes(fp) ? "admin" : "member") : server;
+  // on the server but not on the member list (its Relay published keys after the list was made): no role, no remove
+  const unlisted = (fp: string) => !!status?.listed && !status.listed.includes(fp);
+  const admin = (info?.vault.role ?? vault.role) === "admin";
+  const until = (expires: number) => sentAt(expires * 1000, locale);
+  const invites = info?.vault.invites ?? [];
+  return (
+    <>
+      <Section title={t("set.sharedMembers")}>
+        {status?.rekeying ? <StatusLine level="warn">{t("set.sharedRekeying")}</StatusLine> : null}
+        {/* the member list: held back, forked, or a removal still waiting for its key change */}
+        {status?.warnings?.map(w => (
+          <StatusLine key={w} level="warn">
+            {w}
+          </StatusLine>
+        ))}
+        {/* a member's Relay publishes other keys than the member list has: they set it up again, or someone is in between */}
+        {status?.changed?.map(c => (
+          <div key={c.fp} className="grid gap-1">
+            <StatusLine level="warn">{t("set.sharedKeyChanged", { name: c.name })}</StatusLine>
+            {admin ? (
+              trusting === c.fp ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-s-muted">{t("set.sharedTrustSure", { name: c.name })}</span>
+                  <button
+                    className={buttonClass("dangerSolid")}
+                    disabled={busy}
+                    onClick={async () => {
+                      await trustMember(vault.id, c.fp);
+                      setTrusting(null);
+                    }}
+                  >
+                    {t("set.sharedTrust")}
+                  </button>
+                  <button className={buttonClass("ghost")} onClick={() => setTrusting(null)}>
+                    {t("mc.cancel")}
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <button className={buttonClass("ghost")} disabled={busy} onClick={() => setTrusting(c.fp)}>
+                    {t("set.sharedTrustAsk", { name: c.name })}
+                  </button>
+                </div>
+              )
+            ) : null}
+          </div>
+        ))}
+        {info ? (
+          <div className="grid min-w-0 gap-1.5">
+            {info.vault.members.map(member => (
+              <Fragment key={member.fp}>
+                <div className="flex min-h-7 items-center gap-2">
+                  <span className="min-w-0 truncate text-xs text-s-fg">
+                    {member.name}
+                    {member.fp === info.me ? <span className="text-s-muted"> · {t("set.sharedThisMac")}</span> : null}
+                  </span>
+                  <span className={PILL}>
+                    {unlisted(member.fp) ? t("set.sharedNotListed") : t(roleKey(roleOf(member.fp, member.role)))}
+                  </span>
+                  <span className="flex-1"></span>
+                  {status?.admin && unlisted(member.fp) ? (
+                    <button
+                      className={buttonClass("ghost")}
+                      disabled={busy}
+                      onClick={() => addToList(vault.id, member.fp)}
+                    >
+                      {t("set.sharedAddToList")}
+                    </button>
+                  ) : null}
+                  {status?.admin &&
+                  admins &&
+                  !unlisted(member.fp) &&
+                  member.fp !== info.me &&
+                  removing !== member.fp ? (
+                    <button
+                      className={buttonClass("ghost")}
+                      disabled={busy}
+                      onClick={() => setMemberAdmin(vault.id, member.fp, !admins.includes(member.fp))}
+                    >
+                      {t(admins.includes(member.fp) ? "set.sharedMakeMember" : "set.sharedMakeAdmin")}
+                    </button>
+                  ) : null}
+                  {!admin || member.fp === info.me || unlisted(member.fp) ? null : removing === member.fp ? (
+                    <>
+                      <span className="text-xs text-s-muted">{t("set.sharedRemoveSure")}</span>
+                      <button
+                        className={buttonClass("dangerSolid")}
+                        disabled={busy}
+                        aria-label={t("set.extraVaultRemove", { name: member.name })}
+                        onClick={async () => {
+                          await removeMember(vault.id, member.fp);
+                          setRemoving("");
+                        }}
+                      >
+                        {t("ag.remove")}
+                      </button>
+                      <button className={buttonClass("ghost")} onClick={() => setRemoving("")}>
+                        {t("mc.cancel")}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className={buttonClass("ghost")}
+                      aria-label={t("set.extraVaultRemove", { name: member.name })}
+                      onClick={() => setRemoving(member.fp)}
+                    >
+                      {t("ag.remove")}
+                    </button>
+                  )}
+                </div>
+                {status?.admin && unlisted(member.fp) ? (
+                  <span className="text-xs text-s-muted">{t("set.sharedNotListedHint")}</span>
+                ) : null}
+              </Fragment>
+            ))}
+          </div>
+        ) : (
+          <span className="text-xs text-s-muted">{t("set.sharedAsking")}</span>
+        )}
+      </Section>
+
+      <Section
+        title={t("set.wsInvites")}
+        action={
+          admin && !inviting && !link ? (
+            <button className={buttonClass()} onClick={() => setInviting(true)}>
+              {t("set.sharedInvite")}
+            </button>
+          ) : null
+        }
+      >
+        {link ? (
+          <div className="grid gap-1.5">
+            <span className={LABEL}>{t("set.sharedLink", { role: t(roleKey(link.invite.role)) })}</span>
+            <CommandBlock
+              hint={t("set.sharedLinkHelp", { time: until(link.invite.expires) })}
+              command={link.link}
+              wrap
+            />
+            <div>
+              <button className={`${buttonClass("ghost")} -ml-3`} onClick={() => closeInvite(vault.id)}>
+                {t("set.sharedDone")}
+              </button>
+            </div>
+          </div>
+        ) : inviting ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={LABEL}>{t("set.sharedInviteAs")}</span>
+            <Segmented
+              label={t("set.sharedInviteAs")}
+              options={[
+                ["member", t("set.sharedMember")],
+                ["admin", t("set.sharedAdmin")],
+              ]}
+              value={role}
+              onPick={setRole}
+            />
+            <span className="flex-1"></span>
+            <button className={buttonClass("ghost")} onClick={() => setInviting(false)}>
+              {t("mc.cancel")}
+            </button>
+            <button
+              className={buttonClass("primary")}
+              disabled={busy}
+              onClick={async () => {
+                await inviteToShared(vault.id, role);
+                setInviting(false);
+              }}
+            >
+              {t("set.sharedMakeLink")}
+            </button>
+          </div>
+        ) : null}
+        {admin && invites.length ? (
+          <div className="grid min-w-0 gap-1.5">
+            <span className={LABEL}>{t("set.sharedInvites")}</span>
+            {invites.map(invite => (
+              <div key={invite.id} className="flex min-h-7 items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-xs text-s-muted">
+                  {t("set.sharedInviteOpen", { role: t(roleKey(invite.role)), time: until(invite.expires) })}
+                </span>
+                <button
+                  className={buttonClass("ghost")}
+                  disabled={busy}
+                  onClick={() => withdrawInvite(vault.id, invite.id)}
+                >
+                  {t("set.sharedWithdraw")}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </Section>
+    </>
+  );
+}
+
+/** A team workspace's members by email with their role. Its admin (or an organisation admin) changes a role, takes
+ *  someone out, and invites an address with a role: a new account gets a link for one of its devices. */
+function TeamMembers({ vault, info }: { vault: SharedVault; info: SharedInfo | null | undefined }) {
+  const { t } = useT();
+  const team = useSettingsStore(s => s.settings.teams?.find(x => x.fp === vault.fp));
+  const busy = useSettingsStore(s => !!s.shared.busy[vault.id]);
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<SharedRole>("member");
+  const [link, setLink] = useState({ email: "", link: "" });
+  const [removing, setRemoving] = useState("");
+  const manages = (info?.vault.role ?? vault.role) === "admin" || !!team?.admin;
+  const roles: [SharedRole, string][] = [
+    ["member", t("set.sharedMember")],
+    ["reader", t("set.sharedReader")],
+    ["admin", t("set.sharedAdmin")],
+  ];
+  const reread = () => openWorkspace(vault.id, true);
+  return (
+    <Section title={t("set.sharedMembers")}>
+      {info ? (
+        <div className="grid min-w-0 gap-1.5">
+          {(info.vault.accounts ?? []).map(a => (
+            <div key={a.email} className="flex min-h-7 items-center gap-2">
+              <span className="min-w-0 truncate text-xs text-s-fg">
+                {a.email}
+                {a.email === team?.email ? <span className="text-s-muted"> · {t("set.teamYou")}</span> : null}
+              </span>
+              <span className="flex-1"></span>
+              {manages && removing !== a.email ? (
+                <select
+                  className={SELECT}
+                  aria-label={t("set.sharedRoleOf", { name: a.email })}
+                  disabled={busy}
+                  value={a.role}
+                  onChange={async e => {
+                    await setTeamMember(vault.fp, vault.id, a.email, e.target.value as SharedRole);
+                    reread();
+                  }}
+                >
+                  {roles.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className={PILL}>{t(roleKey(a.role))}</span>
+              )}
+              {!manages || a.email === team?.email ? null : removing === a.email ? (
+                <>
+                  <span className="text-xs text-s-muted">{t("set.sharedRemoveSure")}</span>
+                  <button
+                    className={buttonClass("dangerSolid")}
+                    disabled={busy}
+                    onClick={async () => {
+                      await setTeamMember(vault.fp, vault.id, a.email, "");
+                      setRemoving("");
+                      reread();
+                    }}
+                  >
+                    {t("ag.remove")}
+                  </button>
+                  <button className={buttonClass("ghost")} onClick={() => setRemoving("")}>
+                    {t("mc.cancel")}
+                  </button>
+                </>
+              ) : (
+                <button
+                  className={buttonClass("ghost")}
+                  aria-label={t("set.extraVaultRemove", { name: a.email })}
+                  onClick={() => setRemoving(a.email)}
+                >
+                  {t("ag.remove")}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <span className="text-xs text-s-muted">{t("set.sharedAsking")}</span>
+      )}
+      {link.link ? (
+        <div className="grid gap-1.5">
+          <span className={LABEL}>{t("set.teamInviteLink", { email: link.email })}</span>
+          <CommandBlock hint={t("set.teamInviteLinkHelp")} command={link.link} wrap />
+          <div>
+            <button className={`${buttonClass("ghost")} -ml-3`} onClick={() => setLink({ email: "", link: "" })}>
+              {t("set.sharedDone")}
+            </button>
+          </div>
+        </div>
+      ) : manages ? (
+        <form
+          className="flex min-w-0 flex-wrap items-center gap-2"
+          onSubmit={async e => {
+            e.preventDefault();
+            const who = email.trim();
+            const made = await inviteTeam(vault.fp, who, vault.id, role);
+            if (made !== null) {
+              setEmail("");
+              if (made) setLink({ email: who, link: made });
+              reread();
+            }
+          }}
+        >
+          <input
+            className={`${FIELD} min-w-0 flex-1 basis-48`}
+            type="email"
+            aria-label={t("set.teamInviteEmail")}
+            placeholder={t("set.teamInviteEmail")}
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+          />
+          <Segmented label={t("set.sharedInviteAs")} options={roles} value={role} onPick={setRole} />
+          <button type="submit" className={buttonClass("primary")} disabled={busy || !email.includes("@")}>
+            {t("set.sharedInvite")}
+          </button>
+        </form>
+      ) : null}
+      {manages && !link.link ? <span className="text-xs text-s-muted">{t("set.teamInviteHelp")}</span> : null}
+    </Section>
+  );
+}
+
+/** Under a machine (`machine` its id, a team server's `team:<fp>`) New workspace…, in Workspaces ("") Join a workspace
+ *  with a link…, or the form it opened. The one form and its message show where `form.machine` says. */
 function SharedForm({ machine }: { machine: string }) {
   const { t } = useT();
   const form = useSettingsStore(s => (s.shared.form.machine === machine ? s.shared.form : null));
   const message = useSettingsStore(s => (s.shared.form.machine === machine ? s.shared.messages.form : null));
   const busy = useSettingsStore(s => !!s.shared.busy.form);
+  const team = machine.startsWith("team:");
   const folder = (
     <Field label={t("set.sharedFolder")} hint={machine ? t("set.sharedNewFolderHelp") : t("set.sharedJoinFolderHelp")}>
       <PathField
@@ -798,19 +774,20 @@ function SharedForm({ machine }: { machine: string }) {
           />
         </Field>
         {folder}
-        <Field label={t("set.sharedNoHistory")} hint={t("set.sharedNoHistoryHelp")} id="shared-nohistory">
-          <input
-            id="shared-nohistory"
-            type="checkbox"
-            checked={form.noHistory}
-            onChange={e => editForm({ noHistory: e.target.checked })}
-          />
-        </Field>
+        {team ? (
+          <Field label={t("set.sharedNoHistory")} hint={t("set.sharedNoHistoryHelp")} id="shared-nohistory">
+            <input
+              id="shared-nohistory"
+              type="checkbox"
+              checked={form.noHistory}
+              onChange={e => editForm({ noHistory: e.target.checked })}
+            />
+          </Field>
+        ) : null}
         {footer(t("set.sharedCreate"), busy || !form.name.trim() || !form.folder, createSharedVault)}
       </div>
     );
-  if (form?.mode === "join") {
-    const { sso, login } = form;
+  if (form?.mode === "join")
     return (
       <div className={ROW}>
         <span className={LABEL}>{t("set.sharedJoinTitle")}</span>
@@ -824,16 +801,10 @@ function SharedForm({ machine }: { machine: string }) {
             onChange={e => editForm({ link: e.target.value })}
           />
         </Field>
-        {sso ? <SsoSignIn sso={sso} login={login ?? null} /> : null}
         {folder}
-        {footer(
-          t("set.sharedJoinButton"),
-          busy || !form.link.trim() || !form.folder || (!!sso?.required && !login),
-          joinSharedVault,
-        )}
+        {footer(t("set.sharedJoinButton"), busy || !form.link.trim() || !form.folder, joinSharedVault)}
       </div>
     );
-  }
   // a create or join that ends closes the form: what its reload said shows here
   return (
     <div className={`flex flex-wrap items-center gap-2 ${EDGE}`}>
@@ -842,37 +813,5 @@ function SharedForm({ machine }: { machine: string }) {
       </button>
       {message ? <span className={message.ok ? HINT_IN_ROW : ERROR_MESSAGE}>{message.text}</span> : null}
     </div>
-  );
-}
-
-/** The join form's sign-in (docs/workspaces.md, SSO): the server of the link asks devices to sign in with its provider
- *  before they join. "Sign in with Google" (or Microsoft) opens the browser, then who signed in shows above the usual Join. */
-function SsoSignIn({ sso, login }: { sso: Sso; login: SsoLogin | null }) {
-  const { t } = useT();
-  const signing = useSettingsStore(s => !!s.shared.busy.sso);
-  const entra = !!entraTenant(sso.issuer);
-  const provider =
-    sso.issuer === GOOGLE_ISSUER ? "Google" : entra ? "Microsoft" : sso.issuer.replace(/^https:\/\//, "");
-  const hint = entra
-    ? t(sso.required ? "set.ssoJoinRequiredTenant" : "set.ssoJoinOptionalTenant")
-    : t(sso.required ? "set.ssoJoinRequired" : "set.ssoJoinOptional", { domains: sso.domains.join(", ") });
-  return (
-    <Field label={t("set.ssoJoinLabel")} hint={hint}>
-      {login ? (
-        <span className="text-xs text-s-fg">{t("set.ssoSignedInAs", { email: login.email ?? "?" })}</span>
-      ) : null}
-      {signing ? (
-        <>
-          <span className="text-xs text-s-muted">{t("set.ssoWaiting")}</span>
-          <button className={buttonClass("ghost")} onClick={ssoCancel}>
-            {t("mc.cancel")}
-          </button>
-        </>
-      ) : (
-        <button className={buttonClass(login ? "ghost" : "primary")} onClick={() => void ssoSignIn()}>
-          {t(login ? "set.ssoSignInAgain" : "set.ssoSignIn", { provider })}
-        </button>
-      )}
-    </Field>
   );
 }

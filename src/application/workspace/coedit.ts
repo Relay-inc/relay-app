@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import * as backend from "../../infrastructure/backend";
 
-/** Who else is on a page: their name ("" without history), a colour of their own and their cursor (anchor, head). */
+/** Who else is on a page: their name, a colour of their own and their cursor (anchor, head) in the note's text. */
 export type Peer = { from: string; name: string; color: string; anchor: number; head: number };
 /** A shared document's page as its editor holds it while open: the note's whole text as a Y.Text ("md", as the Mac's
  *  documents have it), edits made with `LOCAL` sent, and the other members' cursors. */
@@ -31,8 +31,7 @@ export const colorOf = (from: string) =>
 export async function openSharedPage(path: string): Promise<SharedPage | null> {
   const opened = await backend.sharedDocOpen(path).catch(() => null);
   if (!opened) return null;
-  // without history a cursor carries no name, sent or shown (docs/workspaces.md)
-  const { vault, doc: id, name, anonymous = false } = opened;
+  const { vault, doc: id, name } = opened;
   const doc = new Y.Doc();
   Y.applyUpdate(doc, bytes(opened.state), "remote");
   const text = doc.getText("md");
@@ -92,7 +91,7 @@ export async function openSharedPage(path: string): Promise<SharedPage | null> {
       if (body.gone) seen.delete(cursor.from);
       else
         seen.set(cursor.from, {
-          name: anonymous ? "" : String(body.name ?? "?").slice(0, 60),
+          name: String(body.name ?? "?").slice(0, 60),
           anchor: body.anchor,
           head: body.head,
           at: Date.now(),
@@ -111,7 +110,7 @@ export async function openSharedPage(path: string): Promise<SharedPage | null> {
   const send = (body: string) => void backend.sharedAwareness(path, id, body).catch(() => {});
   const cursor = (anchor: number, head: number) => {
     mine = JSON.stringify({
-      ...(anonymous ? {} : { name }),
+      name,
       anchor: Y.relativePositionToJSON(Y.createRelativePositionFromTypeIndex(text, anchor)),
       head: Y.relativePositionToJSON(Y.createRelativePositionFromTypeIndex(text, head)),
     });

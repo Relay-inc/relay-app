@@ -25,11 +25,6 @@ export function vaultsByMachine(machines: Machine[], vaults: SharedVault[]) {
   return { on, elsewhere };
 }
 
-/** The machines whose server can have an organisation this Mac takes part in: the fully paired ones, where it can be
- *  the owner (the first full device) or an organisation admin (docs/workspaces.md, Organisation). Settings shows its
- *  Organisation tab only when there is one: asking the server would publish this Mac's organisation keys there. */
-export const orgMachines = (machines: Machine[]) => machines.filter(machine => !machine.sharedOnly);
-
 /** An excluded vault folder as it is saved: trimmed, slashes at the ends dropped. Null when it is empty, absolute or
  *  climbs out of the vault with "..". */
 export function excludePath(input: string): string | null {
