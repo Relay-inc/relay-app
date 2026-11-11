@@ -1905,3 +1905,105 @@ fn health_answers_with_the_servers_own_certificate_only_that() {
     assert!(!bin().arg("health").env("RELAY_SERVER_DATA", &gone).output().unwrap().status.success());
     std::fs::remove_dir_all(&gone).ok();
 }
+
+// ---------- the team role (docs/workspaces.md, Teams)
+
+/// `relay-server team <email>` on `s`: its invite link.
+fn team_link(s: &Server, email: &str) -> relay_remote::team::Link {
+    let out = bin().args(["team", email, "--host", "127.0.0.1"]).env("RELAY_SERVER_DATA", &s.data).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    relay_remote::team::Link::parse(String::from_utf8_lossy(&out.stdout).lines().find(|l| l.starts_with("relay://")).unwrap()).unwrap()
+}
+/// A device that logs in with the invite in `l`, as the app does.
+fn team_login(l: &relay_remote::team::Link, tag: &str) -> Result<Client, String> {
+    let id = device(tag);
+    let c = Client::new(&l.host, l.port, &l.fp, id.clone());
+    let (inv, code) = l.invite.clone().unwrap();
+    c.call(serde_json::json!({"op": "team_login", "invite": inv, "proof": relay_remote::tls::proof(&code, &id.fingerprint(), &l.fp), "name": tag}))?;
+    Ok(c)
+}
+/// The link for an invite `team_invite` answered.
+fn invited(l: &relay_remote::team::Link, v: &serde_json::Value) -> relay_remote::team::Link {
+    relay_remote::team::Link { invite: Some((v["invite"].as_str().unwrap().into(), v["code"].as_str().unwrap().into())), ..l.clone() }
+}
+
+/// A team server: the owner logs in with the link `relay-server team` printed (once), makes a workspace and invites a
+/// member and a reader by email; the member gets the key from the server and writes, the reader reads and is refused
+/// every write. A workspace admin gets no link for an account that is there already. Turned off, an account's device
+/// connects no more. The end-to-end ops of a personal server are refused here.
+#[test]
+fn a_team_server_logs_in_with_invites_and_keeps_roles() {
+    use relay_remote::sync::Remote;
+    use relay_remote::vault::{Keys, VaultKey};
+    use serde_json::json;
+    let s = start("team");
+    let link = team_link(&s, "Owner@Example.com");
+    let owner = team_login(&link, "team-owner").unwrap();
+    assert!(team_login(&link, "team-again").is_err(), "an invite works once");
+    let me = owner.call(json!({"op": "team_me"})).unwrap();
+    assert_eq!((me["email"].as_str(), me["admin"].as_bool()), (Some("owner@example.com"), Some(true)));
+    // a team server is no personal one: no pairing, no end-to-end workspace
+    for op in ["vault_create", "vault_invite", "pair"] { assert!(owner.call(json!({"op": op, "name": "x"})).unwrap_err().contains("not for a team server"), "{op}"); }
+    assert!(owner.call(json!({"op": "list"})).unwrap_err().contains("not allowed"), "no conversations");
+
+    let ws = owner.call(json!({"op": "team_create", "name": "Notes"})).unwrap();
+    let (id, key) = (ws["id"].as_str().unwrap().to_string(), ws["key"].as_str().unwrap().to_string());
+    let ann = team_login(&invited(&link, &owner.call(json!({"op": "team_invite", "email": "ann@example.com", "vault": id, "role": "member"})).unwrap()), "team-ann").unwrap();
+    let bob = team_login(&invited(&link, &owner.call(json!({"op": "team_invite", "email": "bob@example.com", "vault": id, "role": "reader"})).unwrap()), "team-bob").unwrap();
+    // each gets the key from the server, and the server says who is in by email
+    let theirs = ann.call(json!({"op": "team_me"})).unwrap()["workspaces"][0].clone();
+    assert_eq!((theirs["id"].as_str(), theirs["key"].as_str(), theirs["role"].as_str()), (Some(id.as_str()), Some(key.as_str()), Some("member")));
+    let info = bob.vault_info(&id).unwrap();
+    assert_eq!((info.role.as_str(), info.team, info.accounts.len()), ("reader", true, 3));
+    let keys = || Keys::from(VaultKey::from_hex(&key).unwrap());
+    ann.sealed(&id, keys()).put("Notes/a.md", b"hello", 1, "").unwrap();
+    let theirs = bob.sealed(&id, keys());
+    assert!(theirs.manifest().unwrap().contains_key("Notes/a.md"));
+    assert_eq!(theirs.get("Notes/a.md").unwrap(), b"hello");
+    assert_eq!(bob.sealed(&id, keys()).put("Notes/b.md", b"mine", 1, "").unwrap_err(), relay_remote::docs::READ_ONLY);
+    assert!(bob.call(json!({"op": "team_overview"})).unwrap_err().contains("organisation admin"));
+    // made a member, the reader writes
+    owner.call(json!({"op": "team_member", "vault": id, "email": "bob@example.com", "role": "member"})).unwrap();
+    bob.sealed(&id, keys()).put("Notes/b.md", b"mine", 1, "").unwrap();
+    // a workspace admin: a link for an address it adds now, none for an account that is there (it would log in as them)
+    let w2 = ann.call(json!({"op": "team_create", "name": "Ann's"})).unwrap()["id"].as_str().unwrap().to_string();
+    let added = ann.call(json!({"op": "team_invite", "email": "owner@example.com", "vault": w2, "role": "member"})).unwrap();
+    assert!(added["code"].is_null() && added["added"] == true, "{added}");
+    assert!(ann.call(json!({"op": "team_invite", "email": "cy@example.com", "vault": w2, "role": "reader"})).unwrap()["code"].is_string());
+    assert!(ann.call(json!({"op": "team_invite", "email": "cy@example.com"})).unwrap_err().contains("organisation admin"));
+    // the last admin stays
+    assert!(ann.call(json!({"op": "team_member", "vault": w2, "email": "ann@example.com", "role": "member"})).unwrap_err().contains("without an admin"));
+    // turned off: every device of the account is out at once
+    owner.call(json!({"op": "team_account", "email": "ann@example.com", "off": true})).unwrap();
+    assert!(ann.call(json!({"op": "team_me"})).is_err());
+    assert!(owner.call(json!({"op": "team_account", "email": "owner@example.com", "off": true})).unwrap_err().contains("without an organisation admin"));
+    let o = owner.call(json!({"op": "team_overview"})).unwrap();
+    let a = o["accounts"].as_array().unwrap().iter().find(|a| a["email"] == "ann@example.com").unwrap().clone();
+    assert_eq!((a["off"].as_bool(), a["devices"].as_u64()), (Some(true), Some(0)));
+    // the data is plain files in the data folder, so the backup recipe covers it
+    assert!(s.data.join("team.json").is_file());
+}
+
+/// A team workspace without history: the server lists no devices to its members, so no author gets a name.
+#[test]
+fn without_history_a_team_workspace_lists_no_devices() {
+    use serde_json::json;
+    let s = start("team-nohist");
+    let owner = team_login(&team_link(&s, "owner@example.com"), "nohist-owner").unwrap();
+    let plain = owner.call(json!({"op": "team_create", "name": "Plain"})).unwrap()["id"].as_str().unwrap().to_string();
+    let quiet = owner.call(json!({"op": "team_create", "name": "Quiet", "nohistory": true})).unwrap()["id"].as_str().unwrap().to_string();
+    let (p, q) = (owner.vault_info(&plain).unwrap(), owner.vault_info(&quiet).unwrap());
+    assert_eq!((p.members.len(), p.members[0].name.as_str(), p.nohistory), (1, "owner@example.com", false));
+    assert!(q.members.is_empty() && q.nohistory && q.accounts.len() == 1);
+}
+
+/// A personal server stays as on main: no team ops, and it does not become a team server once devices are paired.
+#[test]
+fn a_personal_server_takes_no_team_ops() {
+    let s = start("personal");
+    let laptop = paired(&s, "personal-laptop");
+    assert!(laptop.call(serde_json::json!({"op": "team_me"})).unwrap_err().contains("not a team server"));
+    let out = bin().args(["team", "owner@example.com", "--host", "127.0.0.1"]).env("RELAY_SERVER_DATA", &s.data).output().unwrap();
+    assert!(!out.status.success() && String::from_utf8_lossy(&out.stderr).contains("paired devices"));
+    assert!(laptop.vault_create("Mine").is_ok(), "its shared vaults as before");
+}

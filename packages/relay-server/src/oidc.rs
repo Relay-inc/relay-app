@@ -223,9 +223,9 @@ pub(crate) mod tests {
 
     /// An Entra ID tenant's issuer, and a token as Entra's v2.0 endpoint gives one for `tenant`: `tid`, `oid` and
     /// `preferred_username`, no `email_verified` and no `hd`.
-    const TENANT: &str = "11111111-2222-3333-4444-555555555555";
-    fn entra(tenant: &str) -> String { format!("https://login.microsoftonline.com/{tenant}/v2.0") }
-    fn entra_claims(c: &mut Value, tenant: &str) {
+    pub(crate) const TENANT: &str = "11111111-2222-3333-4444-555555555555";
+    pub(crate) fn entra(tenant: &str) -> String { format!("https://login.microsoftonline.com/{tenant}/v2.0") }
+    pub(crate) fn entra_claims(c: &mut Value, tenant: &str) {
         let o = c.as_object_mut().unwrap();
         for k in ["email", "email_verified", "hd"] { o.remove(k); }
         o.insert("iss".into(), json!(entra(tenant)));

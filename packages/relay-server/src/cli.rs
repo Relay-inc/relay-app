@@ -9,6 +9,10 @@ const USAGE: &str = "relay-server: runs Relay conversations on this machine
                                                         run (a launchd or systemd service, a scheduled task on
                                                         Windows, see `service`)
   relay-server pair [--host <ip>] [--port <port>]      a one-time line to paste in Relay › Settings › Machines
+  relay-server team <email> [--host <host>] [--port <port>]
+                                                        make this a team server (once, on an empty data folder)
+                                                        with <email> an organisation admin, and print an invite
+                                                        link for one of its devices (again: a new link)
   relay-server clients                                  the paired devices
   relay-server revoke <name | fingerprint>              unpair a device, at once (and take it out of its shared vaults)
   relay-server vaults                                   the shared vaults: members and open invites
@@ -49,6 +53,12 @@ pub fn run(a: &[String]) {
             let port = flag(a, "--port").map(|p| p.parse().unwrap_or_else(|_| fail("bad --port")));
             let line = pair_line(&data, flag(a, "--host"), port).unwrap_or_else(|e| fail(e));
             println!("Paste this line in Relay › Settings › Machines. It works once, for 10 minutes:\n\n{line}\n");
+        }
+        Some("team") => {
+            let email = a.get(2).filter(|e| !e.starts_with("--")).unwrap_or_else(|| fail("team <email> [--host <host>] [--port <port>]"));
+            let inv = crate::team::init(&data, email).unwrap_or_else(|e| fail(e));
+            let link = crate::team_link(&data, flag(a, "--host"), flag(a, "--port").map(|p| p.parse().unwrap_or_else(|_| fail("bad --port"))), &inv).unwrap_or_else(|e| fail(e));
+            println!("This is a team server. Open this link in Relay on a device of {} (Settings › Workspaces › Log in to a team server). It works once, for 7 days:\n\n{link}\n", inv["email"].as_str().unwrap_or(email));
         }
         Some("clients") => {
             let list = clients(&data);

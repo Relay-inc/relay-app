@@ -853,6 +853,14 @@ pub fn lan_ip() -> Option<String> {
 }
 
 /// For `relay-server pair`: open a code and the line to paste in Relay.
+/// A team server's link for the invite `inv` (team::init): this machine's address as `pair_line` finds it.
+pub fn team_link(data: &Path, host: Option<String>, port: Option<u16>, inv: &Value) -> io::Result<String> {
+    let port = port.or_else(|| fs::read_to_string(data.join("serve.json")).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok())
+        .and_then(|v| v["port"].as_u64()).map(|p| p as u16)).unwrap_or(proto::PORT);
+    let host = host.or_else(lan_ip).ok_or_else(|| io::Error::other("no LAN address found, pass --host"))?;
+    let s = |k: &str| inv[k].as_str().unwrap_or_default().to_string();
+    Ok(relay_remote::team::Link { host, port, fp: identity(data)?.fingerprint(), invite: Some((s("invite"), s("code"))) }.format())
+}
 pub fn pair_line(data: &Path, host: Option<String>, port: Option<u16>) -> io::Result<String> {
     let port = port.or_else(|| fs::read_to_string(data.join("serve.json")).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok())
         .and_then(|v| v["port"].as_u64()).map(|p| p as u16)).unwrap_or(proto::PORT);

@@ -297,6 +297,45 @@ pub fn keeps(data: &Path, fp: &str) -> bool { load(data).who(fp).is_ok_and(|a| a
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::oidc::tests::{entra, entra_claims, sso, Idp, TENANT};
+    const SERVER: &str = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+
+    /// A login with the provider: the token must be for this device, its address must have an account that is on, and
+    /// an Entra login binds the account to the user it came from.
+    #[test]
+    fn a_login_with_the_provider_takes_an_account_that_is_there_and_on() {
+        let d = std::env::temp_dir().join(format!("relay-team-sso-{}", std::process::id()));
+        std::fs::remove_dir_all(&d).ok();
+        std::fs::create_dir_all(&d).unwrap();
+        let v = Vaults::new(&d, SERVER);
+        init(&d, "owner@example.com").unwrap();
+        let (dev, salt) = ("b".repeat(64), "5".repeat(64));
+        let login = |issuer: &Idp, email: &str, edit: &dyn Fn(&mut Value)| {
+            let token = issuer.token(email, &relay_remote::team::sso_nonce(SERVER, &dev, &salt), now(), edit);
+            op(&v, SERVER, &dev, "team_login", &json!({"id_token": token, "salt": salt}))
+        };
+        let set = |sso: Sso, f: &dyn Fn(&mut Team)| { let mut t = load(&d); t.sso = Some(sso); f(&mut t); save(&d, &t).unwrap(); };
+        let google = Idp::new("https://idp.team.test");
+        google.publish();
+        // no provider set: invite links only
+        assert!(login(&google, "ann@example.com", &|_| {}).unwrap_err().contains("invite links only"));
+        set(sso(&google.issuer), &|_| {});
+        assert!(login(&google, "ann@example.com", &|_| {}).unwrap_err().contains("no account"));
+        set(sso(&google.issuer), &|t| t.ensure("ann@example.com"));
+        assert_eq!(login(&google, "Ann@Example.com", &|_| {}).unwrap()["email"], "ann@example.com");
+        assert!(clients(&d).iter().any(|c| c.fp == dev && c.vaults_only), "a session is a vault-only device");
+        set(sso(&google.issuer), &|t| t.accounts.iter_mut().filter(|a| a.email == "ann@example.com").for_each(|a| a.off = true));
+        assert!(login(&google, "ann@example.com", &|_| {}).unwrap_err().contains("turned off"));
+        // Entra: the sign-in name is the address, the first login binds the account to its user
+        let ms = Idp::new(&entra(TENANT));
+        ms.publish();
+        set(Sso { issuer: ms.issuer.clone(), client: crate::oidc::tests::CLIENT.into(), domains: vec![] }, &|t| t.ensure("ann@example.com"));
+        set(Sso { issuer: ms.issuer.clone(), client: crate::oidc::tests::CLIENT.into(), domains: vec![] }, &|t| t.accounts.iter_mut().for_each(|a| a.off = false));
+        assert!(login(&ms, "", &|c| entra_claims(c, TENANT)).is_ok());
+        let other = |c: &mut Value| { entra_claims(c, TENANT); c["oid"] = json!("ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee"); };
+        assert!(login(&ms, "", &other).unwrap_err().contains("another Microsoft account"));
+        std::fs::remove_dir_all(&d).ok();
+    }
     #[test]
     fn an_email_is_one_address_in_lower_case() {
         assert_eq!(email(" Ann@Example.com ").unwrap(), "ann@example.com");
