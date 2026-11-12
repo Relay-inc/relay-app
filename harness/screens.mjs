@@ -1803,57 +1803,104 @@ const VIEWS = {
     await page.getByText("not synced here").scrollIntoViewIfNeeded();
     await settle(page);
   },
-  // a team server (PR teams on a trusted server): Handbook synced, Sales notes and Research with Sync here…, New
-  // workspace…, Log out, and Log in to a team server below
-  "settings-team-workspaces": async () => {
-    await settingsPage("Workspaces", undefined, "team");
-    await page.setViewportSize({ width: 900, height: 1100 });
-    await waitText("Sales notes");
+  // Servers and organisations (PR servers-page), a page in the main window, fixture team: an organisation admin of
+  // relay.example.com. The Overview: counts, the server, the sign-in link, you, and what is still to set up
+  "servers-overview": async () => {
+    await open(page, server.url, { fixture: "team", sel: "__servers" });
+    await waitText("Sign-in link");
     await settle(page);
   },
-  // a team workspace's page for its admin: Server reads along, its members by email with a role picker, the invite form
-  "settings-team-workspace": async () => {
-    await workspacePage("team", 1100, "Handbook");
-    await waitText("sam@example.com");
+  // the footer's workspace menu, with Servers and organisations… and Add a server… at the bottom
+  "servers-menu": async () => {
+    await open(page, server.url, { fixture: "team" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await waitText("Add a server…");
     await settle(page);
   },
-  // Invite on that page: a new address as reader, the link for one of its devices
-  "settings-team-invite": async () => {
-    await VIEWS["settings-team-workspace"]();
-    await page.getByPlaceholder("Email address").locator("visible=true").first().fill("lee@example.com");
-    await page.getByRole("radio", { name: "Reader" }).locator("visible=true").first().click();
-    await button("Invite…").click();
-    await waitText("Invite link for lee@example.com");
-    await intoView("Invite link for lee@example.com");
-  },
-  // New workspace… under the team server, Without history ticked
-  "settings-team-new": async () => {
-    await VIEWS["settings-team-workspaces"]();
-    await button("New workspace…").first().click();
-    await page.locator("#shared-name").fill("Interviews");
-    await page.locator("#shared-nohistory").check();
-    await intoView("Workspace without history");
-  },
-  // Log in to a team server with a link pasted
-  "settings-team-login": async () => {
-    await settingsPage("Workspaces");
-    await page.getByLabel("Link to the team server").fill("relay://relay.example.com:47800#team&fp=7ea3bbbb…");
-    await intoView("Log in to a team server");
-  },
-  // Organisation for an organisation admin: accounts (one turned off), an open invite, the workspaces, the sign-in
-  "settings-team-org": async () => {
-    await settingsPage("Organisation", undefined, "team");
-    await page.setViewportSize({ width: 900, height: 1400 });
+  // People: an open invite, the accounts (one turned off) with their workspaces as squares
+  "servers-people": async () => {
+    await VIEWS["servers-overview"]();
+    await page.getByRole("tab", { name: /^People/ }).click();
     await waitText("kim@example.com");
     await settle(page);
   },
-  // the sign-in with Microsoft Entra ID picked: the tenant and the client id
-  "settings-team-org-sso": async () => {
-    await VIEWS["settings-team-org"]();
-    await page.getByLabel("Provider").selectOption("entra");
+  // Invite people: a new address and an existing account, two workspaces
+  "servers-invite": async () => {
+    await VIEWS["servers-people"]();
+    await button("Invite people").click();
+    await page.getByLabel("Email addresses").fill("nina@example.com, sam@example.com");
+    await page.getByRole("checkbox", { name: "Handbook", exact: true }).check();
+    await page.getByRole("checkbox", { name: "Research", exact: true }).check();
+    await waitText("What they get");
+    await settle(page);
+  },
+  // and created: the link for the new address, the existing account added
+  "servers-invited": async () => {
+    await VIEWS["servers-invite"]();
+    await button("Create 1 invite link").click();
+    await waitText("Existing account: added");
+    await settle(page);
+  },
+  // Workspaces: every workspace with members, admins, your role and whether it syncs here, New workspace… open
+  "servers-workspaces": async () => {
+    await VIEWS["servers-overview"]();
+    await page.getByRole("tab", { name: /^Workspaces/ }).click();
+    await button("New workspace…").click();
+    await page.getByRole("textbox", { name: "Name", exact: true }).fill("Proposals");
+    await page.getByRole("radio", { name: /Without history/ }).click();
+    await intoView("Create workspace");
+  },
+  // a workspace synced here: its page (members, history, sync, leave)
+  "servers-workspace": async () => {
+    await VIEWS["servers-overview"]();
+    await page.getByRole("tab", { name: /^Workspaces/ }).click();
+    await button("Open Handbook").click();
+    await waitText("sam@example.com");
+    await settle(page);
+  },
+  // a workspace the organisation admin is not in: its members, add an address
+  "servers-org-workspace": async () => {
+    await VIEWS["servers-overview"]();
+    await page.getByRole("tab", { name: /^Workspaces/ }).click();
+    await button("Open Finance").click();
+    await waitText("You see it as organisation admin");
+    await settle(page);
+  },
+  // Sign-in with Microsoft Entra picked: the steps in the admin center, the fields, what the server needs
+  "servers-signin": async () => {
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await open(page, server.url, { fixture: "team", sel: "__servers" });
+    await page.getByRole("tab", { name: /^Sign-in/ }).click();
+    await page.getByRole("radio", { name: /Microsoft Entra/ }).click();
     await page.getByLabel("Tenant ID").fill("11111111-2222-3333-4444-555555555555");
-    await page.getByLabel("Client ID").fill("00000000-aaaa-bbbb-cccc-111111111111");
-    await intoView("Sign-in");
+    await waitText("Each account is tied to one person");
+    await settle(page);
+  },
+  // Server: what Relay knows, and what whoever runs the box does there (update, move, back up, restore)
+  "servers-server": async () => {
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await open(page, server.url, { fixture: "team", sel: "__servers" });
+    await page.getByRole("tab", { name: /^Server/ }).click();
+    await waitText("What the server keeps");
+    await settle(page);
+  },
+  // fixture team-member: a member's Overview, two tabs, their own workspaces and who can read
+  "servers-member": async () => {
+    await open(page, server.url, { fixture: "team-member", sel: "__servers" });
+    await waitText("Your workspaces");
+    await settle(page);
+  },
+  // Add a server: Log in to a team server with a link pasted, and a machine of your own
+  "servers-add": async () => {
+    await open(page, server.url, { sel: "__servers" });
+    await page.getByLabel("Link to the team server").fill("relay://relay.example.com:47800#team&fp=7ea3bbbb…");
+    await settle(page);
+  },
+  // Settings: Servers and organisations is a row under the pages, Workspaces points there for organisations
+  "settings-servers-row": async () => {
+    await settingsPage("Workspaces", undefined, "team");
+    await waitText("Organisations");
+    await settle(page);
   },
   "settings-shared-vaults": async () => {
     await workspacePage("shared", 1600);

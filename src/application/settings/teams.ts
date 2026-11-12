@@ -3,7 +3,7 @@ import * as backend from "../../infrastructure/backend";
 import { reload, run } from "./shared-vaults";
 import { useSettingsStore, type SettingsState } from "./store";
 
-// Settings › Workspaces and Organisation for team servers (src-tauri/src/team.rs, docs/workspaces.md, Teams): log in,
+// Team servers, on Servers and organisations (servers.ts), (src-tauri/src/team.rs, docs/workspaces.md, Teams): log in,
 // an account's workspaces with Sync here…, members and invites by email, and for an organisation admin the accounts,
 // workspaces and sign-in of the server. Busy and messages go under "team:<fp>" (shared-vaults.ts `run`).
 type Team = SettingsState["team"];
@@ -19,7 +19,14 @@ export async function loginTeam() {
     await backend.teamLogin(link);
     await reload();
   });
-  if (ok) change(draft => void (draft.link = ""));
+  if (ok) {
+    change(draft => void (draft.link = ""));
+    // Servers and organisations on Add a server: the organisation just logged in to shows (its link names its fp)
+    const fp = useSettingsStore.getState().settings.teams?.find(x => link.includes(`fp=${x.fp}`))?.fp;
+    useSettingsStore.setState(draft => {
+      if (fp && draft.serversPage.item === "add") draft.serversPage.item = `org:${fp}`;
+    });
+  }
   for (const t of useSettingsStore.getState().settings.teams ?? []) void loadTeam(t.fp);
 }
 export const cancelSignIn = () => void backend.ssoCancel();

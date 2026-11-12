@@ -22,7 +22,8 @@ A relay-server runs in one of two roles, set when it is set up and fixed after:
 | What the server reads | Nothing | Everything |
 
 Records, the sync, documents, the fence and Codex's guard are the same in both. One Relay can use both at once:
-Settings › Workspaces shows each team server with its workspaces, and a team workspace carries "Server reads along".
+Servers and organisations (a page in the main window) shows each team server with its workspaces, and a team workspace
+carries "<server> can read".
 
 ## Deletes
 
@@ -607,7 +608,7 @@ no devices, runs no conversations, keeps no mirror or GitHub token, and refuses 
   vault. A reader's writes are refused (`READ_ONLY`), its rounds only pull and its pages open read-only.
 - **Who manages what.** A workspace's admin changes roles there and invites an address with a role: a new account gets
   an invite link, an existing one is only added (a link would let the admin in as that person). Any account makes a
-  workspace and is its admin. An organisation admin sees every account and workspace (Settings › Organisation), turns
+  workspace and is its admin. An organisation admin sees every account and workspace (Servers and organisations), turns
   an account off (all its devices are out at once), makes organisation admins and sets the sign-in. The last admin of
   a workspace, and of the server, stays.
 - **Without history** is a flag a workspace gets when it is made, for good. Conflict copies name no computer, the

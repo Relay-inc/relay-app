@@ -717,9 +717,31 @@ export const teamOverview = {
     { email: "kim@example.com", admin: false, off: true, devices: 0 },
   ],
   workspaces: [
-    { id: "1123456789abcdef", name: "Handbook", nohistory: false, members: { "alex@example.com": "admin", "sam@example.com": "member", "jo@example.com": "reader" } },
-    { id: "2123456789abcdef", name: "Sales notes", nohistory: false, members: { "alex@example.com": "member", "sam@example.com": "admin" } },
-    { id: "3123456789abcdef", name: "Research", nohistory: true, members: { "alex@example.com": "reader", "jo@example.com": "admin" } },
+    {
+      id: "1123456789abcdef",
+      name: "Handbook",
+      nohistory: false,
+      members: { "alex@example.com": "admin", "sam@example.com": "member", "jo@example.com": "reader" },
+    },
+    {
+      id: "2123456789abcdef",
+      name: "Sales notes",
+      nohistory: false,
+      members: { "alex@example.com": "member", "sam@example.com": "admin" },
+    },
+    {
+      id: "3123456789abcdef",
+      name: "Research",
+      nohistory: true,
+      members: { "alex@example.com": "reader", "jo@example.com": "admin" },
+    },
+    // an organisation admin sees it without being in it
+    {
+      id: "4123456789abcdef",
+      name: "Finance",
+      nohistory: false,
+      members: { "sam@example.com": "admin", "jo@example.com": "member" },
+    },
   ],
   invites: [{ id: "a1b2c3d4e5f60718", email: "lee@example.com", expires: 0 }],
   sso: null as null | { issuer: string; client: string; domains: string[] },

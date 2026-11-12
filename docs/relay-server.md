@@ -80,17 +80,21 @@ docker compose exec relay-server relay-server team you@example.com --host relay.
 ```
 
 The server is a team server from then on and pairs no devices. The line it prints is an invite link for one device of
-that address, which is an organisation admin. In Relay: Settings › Workspaces › Log in to a team server, paste it, Log
-in. Run the command again for a new link (a second Mac, or to get back in).
+that address, which is an organisation admin. In Relay: the workspace menu at the bottom left › Add a server…, Log in to
+a team server, paste it, Log in. Run the command again for a new link (a second Mac, or to get back in).
 
-Then, in Relay:
+Then, in Relay, on Servers and organisations (the workspace menu, or the row under the pages in Settings), the
+organisation's tabs:
 
-- **Settings › Workspaces**, under the server: New workspace… (Without history is chosen here and stays), and on a
-  workspace's page Invite: an address and a role (admin, member or reader). A new address gets a link for one of its
-  devices, which you send yourself. The server sends no mail.
-- **Settings › Organisation**: the accounts (turn off, make organisation admin), open invites, every workspace, and
-  the sign-in. With Google or Microsoft Entra ID set there, anyone with an account logs in with the server's link
-  (Show the server's link) and their organisation account, without an invite.
+- **People**: the accounts (turn off, make organisation admin), open invites, and Invite people: addresses, an
+  organisation role and a role per workspace. A new address gets a link for one of its devices, which you send
+  yourself. The server sends no mail. An address that has an account is only added.
+- **Workspaces**: every workspace, New workspace… (with or without history, chosen here and for good), and on a
+  workspace's page its members and their roles.
+- **Sign-in**: invite links only, Google or Microsoft Entra ID, with the steps in the provider's console. With one set,
+  anyone with an account logs in with the server's sign-in link (Copy sign-in link) and their organisation account,
+  without an invite.
+- **Server**: the commands to update, back up and restore it, run on the box.
 
 For Google, make an OAuth client of type Desktop app in the Google Cloud console and give the client ID and your
 Google Workspace domains. For Entra, register an app with a Mobile and desktop redirect URI `http://localhost`, and

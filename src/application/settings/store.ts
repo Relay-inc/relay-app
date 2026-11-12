@@ -26,12 +26,16 @@ import {
   type VaultSync,
 } from "../../domain/settings/types";
 import { SETUP_FOLDERS, type SetupPlatform } from "../../domain/settings/machines";
+import type { ORG_TABS } from "../../domain/settings/servers";
 import type { AgentsStatus } from "../../domain/agents/types";
 import type { AgentUpdate, UpdateProgress, UpdatesStatus } from "../../domain/settings/updates";
 import type { BoardOpt } from "../../domain/board/types";
 import type { PluginTest } from "../../domain/plugins/types";
 import type { ExtraVault, ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
 import { makeStore } from "../make-store";
+
+/** An organisation's tabs on Servers and organisations; a member sees Overview and Workspaces. */
+export type OrgTab = (typeof ORG_TABS)[number];
 
 export type SettingsTab =
   | "general"
@@ -40,7 +44,6 @@ export type SettingsTab =
   | "integrations"
   | "plugins"
   | "workspaces"
-  | "organisation"
   | "machines"
   | "voice"
   | "shortcuts"
@@ -132,6 +135,10 @@ export type SettingsState = {
   // the team servers (application/settings/teams.ts): per server (fp) its account and workspaces, what its organisation
   // admins see, and the link to log in with as typed
   team: { me: Record<string, TeamMe | null>; overview: Record<string, TeamOverview | null>; link: string };
+  // Servers and organisations, the page in the main window (application/settings/servers.ts): the item picked in its
+  // list ("org:<fp>", "add"), the organisation's tab, the workspace open on its Workspaces tab that is not synced here
+  // ("" none), and whether Invite people shows
+  serversPage: { item: string; tab: OrgTab; workspace: string; inviting: boolean };
   pluginsPage: {
     loaded: boolean; // the secrets are known
     secrets: Record<string, Record<string, boolean>>; // per plugin: which of its secrets sit in the keychain
@@ -224,6 +231,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     form: { mode: "", machine: "", name: "", folder: "", link: "", noHistory: false },
   },
   team: { me: {}, overview: {}, link: "" },
+  serversPage: { item: "", tab: "overview", workspace: "", inviting: false },
   pluginsPage: { loaded: false, secrets: {}, imports: [], messages: {}, tests: {} },
   integrations: {
     loaded: false,

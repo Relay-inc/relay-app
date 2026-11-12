@@ -16,6 +16,7 @@ import { WORKSPACE_KEYS, workspaceKeyLabel } from "../../../domain/settings/shor
 import { Icon } from "../../components/Icon";
 import { loadInbox, onAnyComments, openPageThread, type InboxItem } from "../../../application/navigation/pages";
 import { noteName } from "../../../domain/navigation/pages";
+import { openServers, openTeamWorkspace } from "../../../application/settings/servers";
 import { VaultCheckDialog } from "./VaultCheckDialog";
 
 // a workspace's square in the context tints, by its place in the list
@@ -37,7 +38,8 @@ function Square({ workspace, index, size }: { workspace: Workspace; index: numbe
 
 /** The footer's workspace: its square, name and note count; a click opens the menu above it with every workspace
  *  (⌃1 to ⌃9, a tick on the one shown), Open a folder as workspace…, New workspace from template… and Workspace
- *  settings, then the app's own items: light/dark and settings (with a dot when there is a Relay update). An update
+ *  settings, then the app's own items: light/dark and settings (with a dot when there is a Relay update), and last
+ *  Servers and organisations… and Add a server…, which open that page in the middle column. An update
  *  also puts a dot on the square, so it shows with the menu closed. Usage has its own button next to it. */
 export function WorkspaceSwitcher({
   dark,
@@ -178,7 +180,9 @@ export function WorkspaceSwitcher({
           </button>
           <button
             className={`${ACTION} text-secondary`}
-            onClick={() => run(() => openWorkspaceSettings(active.team ? "workspaces" : "general"))}
+            onClick={() =>
+              run(() => (active.team ? openTeamWorkspace(active.folder) : openWorkspaceSettings("general")))
+            }
           >
             {t("ws.settings")}
           </button>
@@ -200,6 +204,15 @@ export function WorkspaceSwitcher({
             ) : (
               <span className="flex-none text-xs opacity-60">{settingsKey}</span>
             )}
+          </button>
+          <div className="my-1.5 mx-2 border-t border-separator" />
+          <button className={APP_ACTION} onClick={() => run(() => openServers())}>
+            <Icon name="server" className={GLYPH} />
+            <span className="flex-1">{t("ws.servers")}</span>
+          </button>
+          <button className={APP_ACTION} onClick={() => run(() => openServers("add"))}>
+            <Icon name="plus" className={GLYPH} />
+            <span className="flex-1">{t("ws.addServer")}</span>
           </button>
         </div>
       ) : null}

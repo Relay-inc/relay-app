@@ -8,6 +8,10 @@ import {
   LockIcon,
   LayoutTwoColumnIcon,
   ServerStack01Icon,
+  ViewIcon,
+  Building03Icon,
+  LaptopIcon,
+  UserGroupIcon,
   ChartRelationshipIcon,
   LeftToRightListBulletIcon,
   Message01Icon,
@@ -146,6 +150,11 @@ const ICONS: Record<string, Icon> = {
   video: Video01Icon,
   alert: Alert02Icon,
   link: Link01Icon,
+  // Servers and organisations: who can read (the eye), an organisation, this Mac, people
+  eye: ViewIcon,
+  building: Building03Icon,
+  laptop: LaptopIcon,
+  users: UserGroupIcon,
 };
 // the attributes without React's key and the stroke settings the CSS owns
 const own = ([tag, attrs]: Shape): Shape => [

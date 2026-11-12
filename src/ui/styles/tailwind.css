@@ -36,6 +36,8 @@
   --color-ctx-m: var(--ctx-m);
   --color-ctx-p: var(--ctx-p);
   --color-ok: var(--ok);
+  --color-trust-org: var(--trust-org);
+  --color-trust-e2e: var(--trust-e2e);
   --color-viz-1: var(--viz-1);
   --color-viz-2: var(--viz-2);
   --color-viz-3: var(--viz-3);
