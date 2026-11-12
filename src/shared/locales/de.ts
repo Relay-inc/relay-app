@@ -1915,7 +1915,6 @@ export default {
   "notes.related": "Verwandte Notizen",
   "notes.noRelated": "Noch keine verwandten Notizen: das Gespräch gibt zu wenig her.",
   "notes.noChat": "Öffne ein Gespräch, um die Notizen dazu zu sehen.",
-  "set.tab.machines": "Maschinen",
   "set.tab.workspaces": "Workspaces",
   "set.wsInvites": "Einladungen",
   "set.wsSync": "Synchronisierung",
@@ -2279,12 +2278,9 @@ export default {
   "composer.machineNoMail": "Ein Gespräch über eine Mail bleibt auf diesem Mac: Die Mail-Werkzeuge laufen hier.",
   "composer.machineSharedVault":
     "Ein Gespräch in einem anderen Workspace als Persönlich bleibt auf diesem Mac: Eine Arbeitsmaschine hat nur deinen Workspace Persönlich.",
-  "mc.intro":
-    "Ein Gespräch kann auf einer Maschine laufen und läuft weiter, wenn dieser Mac zu ist: Wähle die Maschine neben dem Modell vor der ersten Nachricht, oder mache sie unten zum Standard. Mail bleibt auf diesem Mac. Jede Maschine bekommt einen Spiegel deines Workspaces Persönlich, damit Gespräche dort wissen, was Claude hier weiß, außer einer, die nur für Workspaces gekoppelt ist.",
   "mc.runDefaultTitle": "Wo Gespräche laufen",
   "mc.runDefault": "Neue Gespräche laufen auf",
   "mc.runDefaultHelp": "Jedes neue Gespräch kann neben dem Modell noch einen anderen Ort wählen.",
-  "mc.pairTitle": "Maschine koppeln",
   "mc.line": "Kopplungszeile",
   "mc.lineHelp":
     "Führe <code>relay-server pair</code> auf der Maschine aus und füge die Zeile hier ein. Der Code funktioniert einmal, 10 Minuten lang.",
@@ -2317,7 +2313,7 @@ export default {
   "mc.setupInstall": "Ordner anlegen und relay-server starten. Der erste Start installiert Claude Code.",
   "mc.setupClaude": "Einmal bei Claude anmelden. Es erscheint ein Link zum Öffnen auf diesem Mac.",
   "mc.setupPair":
-    "Erstelle eine Kopplungszeile, der Befehl setzt die LAN-Adresse der Maschine selbst ein. Füge die Zeile unter Maschine koppeln ein.",
+    "Erstelle eine Kopplungszeile, der Befehl setzt die LAN-Adresse der Maschine selbst ein. Füge die Zeile im nächsten Schritt ein, Koppeln.",
   "mc.setupWay": "Weg",
   "mc.setupWayApp": "Mit der Relay-App (empfohlen)",
   "mc.setupWayDocker": "Mit Docker",
@@ -2329,8 +2325,8 @@ export default {
   "mc.setupAppSleep":
     "Verhindere unter Systemeinstellungen › Energie, dass dieser Mac in den Ruhezustand geht: Gespräche stoppen, wenn er schläft.",
   "mc.setupAppSwitch":
-    "Öffne in Relay auf diesem Mac Einstellungen › Maschinen › Dieser Mac als Maschine. Schalte es ein und erstelle dann eine Kopplungszeile.",
-  "mc.setupAppPair": "Füge die Zeile hier unter Maschine koppeln ein.",
+    "Öffne in Relay auf diesem Mac Server und Organisationen › Dieser Mac (das Arbeitsbereichsmenü). Schalte Dieser Mac als Maschine ein und erstelle dann eine Kopplungszeile.",
+  "mc.setupAppPair": "Füge die Zeile im nächsten Schritt ein, Koppeln.",
   "mc.hostTitle": "Dieser Mac als Maschine",
   "mc.hostHelp":
     "Ein anderer Mac kann hier Gespräche laufen lassen. Relay selbst ist der Server und läuft weiter, wenn du es beendest.",
@@ -2345,7 +2341,7 @@ export default {
     "Claude Code ist nicht angemeldet. Melde dich einmal im Terminal an: führe claude aus und tippe /login.",
   "mc.hostPair": "Kopplungszeile erstellen",
   "mc.hostPairHelp":
-    "Füge sie in Relay auf dem anderen Mac unter Einstellungen › Maschinen › Maschine koppeln ein. Gilt einmal, 10 Minuten.",
+    "Füge sie in Relay auf dem anderen Mac unter Server hinzufügen (das Arbeitsbereichsmenü) ein. Gilt einmal, 10 Minuten.",
   "mc.phoneAdd": "Telefon hinzufügen",
   "mc.phoneClose": "Schließen",
   "mc.phoneHelp":
@@ -2356,7 +2352,7 @@ export default {
     "Benachrichtigungen, während dieser Mac zu ist: abonniere dieses Thema in der ntfy-App auf dem Telefon. Sie sagen nur, dass Claude wartet oder fertig ist, nichts aus dem Gespräch.",
   "phone.pairTitle": "Mit deinem Mac koppeln",
   "phone.pairHelp": "Verfolge, was deine Agents auf deiner Maschine tun, und antworte ihnen, wenn sie dich brauchen.",
-  "phone.step1": "Öffne auf deinem Mac Einstellungen › Maschinen.",
+  "phone.step1": "Öffne auf deinem Mac Server und Organisationen und wähle deine Maschine.",
   "phone.step2": "Wähle Telefon hinzufügen. Relay zeigt einen Code und seine Zeile.",
   "phone.step3": "Scanne den Code oder füge die Zeile unten ein.",
   "phone.line": "Kopplungszeile",
@@ -2440,7 +2436,6 @@ export default {
   "mc.updating": "Aktualisiere…",
   "mc.updated": "Auf {version} aktualisiert",
   "mc.updateHelp": "Auf der Maschine ausführen. Die Ordner bewahren die Kopplung, den Login und die Gespräche.",
-  "mc.empty": "Noch keine Maschinen. Koppel eine, um Gespräche darauf laufen zu lassen.",
   "mc.refresh": "Aktualisieren",
   "mc.checking": "Prüfen…",
   "mc.online": "Online",
@@ -2644,9 +2639,6 @@ export default {
   "coll.followed": "✓ Mail entworfen",
   "set.sharedMakeAdmin": "Zum Admin machen",
   "set.sharedMakeMember": "Zum Mitglied machen",
-  "set.teamLoginTitle": "Bei einem Teamserver anmelden",
-  "set.teamLoginHelp":
-    "Ein Teamserver bewahrt die Workspaces deines Teams und kann sie lesen. Füge den Link ein, den dir ein Admin geschickt hat: Eine Einladung meldet diesen Mac sofort an, der eigene Link des Servers öffnet die Anmeldung deiner Organisation im Browser.",
   "set.teamLink": "Link zum Teamserver",
   "set.teamLogin": "Anmelden",
   "set.teamSigningIn": "Schließe die Anmeldung im Browser ab…",
@@ -2683,12 +2675,7 @@ export default {
   "srv.organisations": "Organisationen",
   "srv.noOrgs": "Noch keine.",
   "srv.add": "Server hinzufügen",
-  "srv.addHelp":
-    "Melde dich mit dem Link, den du bekommen hast, am Server einer Organisation an, oder richte eine eigene Maschine ein.",
   "srv.ownMachine": "Eine eigene Maschine",
-  "srv.ownMachineHelp":
-    "Ein Mac, ein Linux-Rechner oder ein Unraid-Server, der an bleibt: Er führt Unterhaltungen aus, während dieser Mac schläft, und hält eine verschlüsselte Kopie deiner Notizen. Richte ihn ein und koppele ihn unter Einstellungen › Maschinen.",
-  "srv.openMachines": "Maschinen öffnen",
   "srv.online": "Online",
   "srv.offline": "Offline",
   "srv.checking": "Wird geprüft…",
@@ -2929,9 +2916,211 @@ export default {
   "srv.restoreDns": "Lass danach DNS auf den Server zeigen, wenn er neu ist.",
   "srv.restoreNoWayBack":
     "Ohne das Zertifikat gibt es keinen Weg zurück zum selben Server: Jedes Konto, jede Einladung und jeder Mac finge von vorn an.",
-  "srv.orgsInSettings": "Organisationen",
-  "srv.orgsInSettingsHelp":
-    "Team-Server mit ihren Workspaces, Personen und der Anmeldung findest du unter Server und Organisationen im Hauptfenster.",
-  "srv.open": "Öffnen",
   "srv.addMember": "Hinzufügen",
+  "srv.thisMacHelp":
+    "Deine Notizen, Mails, dein Kalender und deine Erinnerungen liegen hier. Dieser Mac kann auch eine Maschine für einen anderen Mac sein und hält die verschlüsselten Arbeitsbereiche, denen du beigetreten bist.",
+  "srv.machineOwn": "Eine eigene Maschine: führt Gespräche aus und hält einen verschlüsselten Spiegel dieses Macs",
+  "srv.machineSharedOnly": "Eine eigene Maschine nur für Arbeitsbereiche: kein Spiegel und keine Gespräche",
+  "srv.kindOrgServer": "Ein Server für eine Organisation",
+  "srv.settingUp": "Einrichtung, Schritt {step} von 4",
+  "srv.addIntro":
+    "Ein Server ist ein Computer, der eingeschaltet bleibt und relay-server ausführt. Wähle zuerst, wofür er gedacht ist. Die nächsten Schritte hängen davon ab.",
+  "srv.stepFor": "Wofür er gedacht ist",
+  "srv.stepNext": "Die passenden Schritte",
+  "srv.stepWhere": "Wo er läuft",
+  "srv.stepPair": "Koppeln",
+  "srv.stepNeeds": "Voraussetzungen",
+  "srv.stepInstall": "Installieren und starten",
+  "srv.stepConnect": "Verbinden",
+  "srv.stepPaste": "Füge die Zeile ein",
+  "srv.youGet": "Du bekommst",
+  "srv.whoCanReadIt": "Wer es lesen kann",
+  "srv.setupCol": "Einrichtung",
+  "srv.ownAbout":
+    "Ein Mac mini, eine Linux-Box oder ein Unraid-Server, zu Hause oder bei der Arbeit, der eingeschaltet bleibt.",
+  "srv.ownGet1": "Gespräche laufen weiter, während dieser Mac schläft",
+  "srv.ownGet2": "Eine verschlüsselte Kopie deines Vaults (der Spiegel)",
+  "srv.ownGet3": "Dein Telefon und GitHub",
+  "srv.ownGet4": "Arbeitsbereiche, die du verschlüsselt mit eingeladenen Personen teilst",
+  "srv.ownReads":
+    "Nur deine Geräte und die Personen, die du hinzufügst. Die Maschine hält versiegelte Dateien und liest nichts.",
+  "srv.ownSetup": "Du, in einem Terminal. Etwa 15 Minuten.",
+  "srv.orgAbout": "Ein Server für ein Team, auf einer Linux-Box, die die Organisation selbst betreibt.",
+  "srv.orgGet1": "Konten per E-Mail, jedes Gerät ist eine Sitzung eines Kontos",
+  "srv.orgGet2": "Arbeitsbereiche mit Admin, Mitglied und Leser",
+  "srv.orgGet3": "Anmeldung per Einladungslink, Google oder Microsoft Entra",
+  "srv.orgGet4": "Organisations-Admins, die ein Konto abschalten können",
+  "srv.orgNot": "Führt keine Gespräche aus, hält keinen Spiegel, verbindet weder Telefon noch GitHub.",
+  "srv.theOrg": "Die Organisation",
+  "srv.orgReads": "Der Server und wer ihn betreibt können jeden Arbeitsbereich darauf lesen.",
+  "srv.orgSetup": "Eine technische Person an der Box, etwa 15 Minuten. Danach du, in Relay.",
+  "srv.joinTitle": "Einem Server beitreten, den jemand anderes betreibt",
+  "srv.joinAbout":
+    "Jemand hat dir eine Einladung oder eine Kopplungszeile geschickt, oder deine Organisation meldet sich mit Google oder Microsoft an.",
+  "srv.joinGet1": "Arbeitsbereiche in einer Organisation, ein verschlüsselter Arbeitsbereich oder eine Maschine",
+  "srv.joinGet2": "Relay zeigt dir, welches davon es ist, bevor du bestätigst",
+  "srv.joinReads": "Hängt vom Server ab. Relay sagt es dir nach dem Einfügen.",
+  "srv.joinSetup": "Du, eine Minute.",
+  "srv.fixedTitle": "Die Art steht fest, sobald der Server eingerichtet ist.",
+  "srv.fixedHelp":
+    "Eine eigene Maschine wird nie ein Organisationsserver und umgekehrt. Willst du das ändern, richte relay-server in einem neuen Ordner neu ein und kopple oder lade alle erneut ein.",
+  "srv.agentsLogin":
+    "Agents laufen mit deinem eigenen Login, wo auch immer sie laufen, auch auf einer Maschine. Ein Relay kann in mehreren Organisationen sein und gleichzeitig eigene Maschinen haben.",
+  "srv.continue": "Weiter",
+  "srv.back": "Zurück",
+  "srv.youNeed": "Du brauchst",
+  "srv.needBox":
+    "Eine Linux-Box (amd64 oder arm64) oder einen Mac, der eingeschaltet bleibt, mit 1 GB freiem RAM und Speicherplatz für die Arbeitsbereiche",
+  "srv.needDocker": "Docker Engine 25 oder neuer mit dem compose-Plugin, oder die Relay-App auf einem Mac",
+  "srv.needPort": "Port 47800 erreichbar von dort, wo deine Macs stehen",
+  "srv.needHttpsOwn": "Ausgehendes HTTPS beim ersten Start, um Claude Code zu installieren",
+  "srv.needHttpsOrg": "Ausgehendes HTTPS für die Anmeldung mit Google oder Entra. Ein Teamserver startet auch ohne.",
+  "srv.needDns": "Einen DNS-Namen, den du kontrollierst, für die Box",
+  "srv.needVersion": "Dieselbe Version wie Relay auf jedem Mac: {version}",
+  "srv.haveLine": "Ich habe die Zeile",
+  "srv.seenPairing":
+    "Eine Kopplungszeile für eine eigene Maschine unter {host}. Das Koppeln macht diesen Mac zu einem ihrer Geräte.",
+  "srv.seenNotPairing": "Das ist keine Kopplungszeile. Eine Einladung gehört unter Beitreten.",
+  "srv.sharedOnlyHelp":
+    "Setze hier ein Häkchen, wenn die Maschine nur geteilte Arbeitsbereiche halten soll. Dein persönlicher Arbeitsbereich, der Claude-Kontext und das Gedächtnis gehen nicht dorthin, und dort läuft kein Gespräch. Willst du das später ändern, vergiss die Maschine und kopple sie neu.",
+  "srv.afterPairing": "Nach dem Koppeln",
+  "srv.afterShared":
+    "Die Maschine hält die verschlüsselten Arbeitsbereiche, die du darauf erstellst oder dort teilst. Nichts von diesem Mac geht dorthin.",
+  "srv.afterMirror": "Spiegel dieses Macs",
+  "srv.afterMirrorHelp":
+    "Dein Claude-Kontext, deine Plugins, dein Vault und sein Gedächtnis, synchronisiert und verschlüsselt auf der Maschine. Ausgeschlossene Ordner bleiben auf diesem Mac.",
+  "srv.afterConversations": "Gespräche",
+  "srv.afterConversationsHelp":
+    "Wähle die Maschine neben dem Modell vor der ersten Nachricht. Mail bleibt auf diesem Mac.",
+  "srv.afterLogin": "Claude-Login auf der Maschine",
+  "srv.afterLoginHelp": "Nötig für Gespräche dort. Starte claude auf der Maschine und tippe dann /login.",
+  "srv.afterLater": "Später, auf der Seite der Maschine",
+  "srv.afterLaterHelp": "Telefon hinzufügen, GitHub verbinden, Auf eine neue Version aktualisieren, Vergessen.",
+  "srv.stopSetup": "Einrichtung abbrechen",
+  "srv.saveClose": "Speichern und schließen",
+  "srv.aboutServer": "Über den Server",
+  "srv.fieldHost": "Adresse, die die Macs benutzen",
+  "srv.fieldHostHelp":
+    "Ein DNS-Name, den du kontrollierst. Der Umzug auf eine andere Box ist dann eine DNS-Änderung, niemand koppelt neu.",
+  "srv.fieldAdmin": "Erster Organisations-Admin",
+  "srv.fieldAdminHelp": "Deine Adresse. Der Server macht daraus ein Konto und einen Organisations-Admin.",
+  "srv.fieldFolder": "Ordner auf der Box",
+  "srv.fieldFolderHelp": "Enthält compose.yml, .env und backup.sh.",
+  "srv.fieldNetwork": "Wo die Macs stehen",
+  "srv.fieldNetworkHelp": "Büronetz, VPN oder Heimadressen. Nur diese erreichen Port 47800.",
+  "srv.whoWhat": "Wer macht was",
+  "srv.whoWhatTime": "Etwa 15 Minuten an der Box, danach ein paar Minuten in Relay",
+  "srv.techPerson": "Technische Person",
+  "srv.techStart": "relay-server in {folder} installieren und starten",
+  "srv.techPort": "Port 47800 für {network} öffnen",
+  "srv.techTeam": "Ihn zum Teamserver für {admin} machen, das gibt einen Link aus",
+  "srv.techLater": "Später: aktualisieren, wenn die Relay-Apps aktualisieren",
+  "srv.youPaste": "Füge den ausgegebenen Link ein, Anmelden",
+  "srv.youSignIn": "Wähle die Anmeldung: Einladungslinks, Google oder Microsoft Entra",
+  "srv.youWorkspace": "Erstelle den ersten Arbeitsbereich",
+  "srv.youInvite": "Lade Personen mit einer Rolle ein",
+  "srv.youSecondAdmin": "Mache einen zweiten Organisations-Admin",
+  "srv.trustBefore":
+    "Der Server hält den Schlüssel jedes Arbeitsbereichs, also können er und wer die Box betreibt jeden Arbeitsbereich darauf lesen. Wähle jemanden, dem die Organisation das alles anvertraut. Die eigenen Notizen der Mitglieder bleiben auf ihren Macs.",
+  "srv.forSomeoneElse": "Richtet jemand anderes die Box ein?",
+  "srv.forSomeoneElseHelp":
+    "Kopiere die Schritte mit deinen Werten als reinen Text, für eine Mail oder ein Ticket. Relay verschickt keine Mails.",
+  "srv.copyInstructions": "Anleitung als Text kopieren",
+  "srv.fillFirst": "Fülle Adresse und ersten Organisations-Admin aus, um fortzufahren.",
+  "srv.textTitle": "Relay-Server für {host}",
+  "srv.valuesLine": "Alle Schritte: technische Person, an der Box. {host} · {admin} · {folder} · Macs aus {network}",
+  "srv.edit": "Bearbeiten",
+  "srv.installDocker": "Installiere Docker Engine 25 oder neuer mit compose",
+  "srv.installDockerHelp": "Prüfe es hiermit. Bist du nicht in der docker-Gruppe, setze sudo vor jeden docker-Befehl.",
+  "srv.installLogin": "Melde dich bei der Image-Registry an",
+  "srv.installLoginHelp": "Solange das Image privat ist: einmalig, mit einem GitHub-Token mit read:packages.",
+  "srv.installStart": "Installiere und starte relay-server",
+  "srv.installStartHelp":
+    "Lädt compose.yml, backup.sh und .env herunter und startet dann den Server. --wait kehrt zurück, sobald er gesund ist.",
+  "srv.installHealthy":
+    "Gesund, wenn <code>docker compose ps</code> healthy zeigt und <code>docker compose logs</code> <code>listening on 0.0.0.0:47800</code> zeigt.",
+  "srv.installFails":
+    'Wenn es fehlschlägt: "denied" beim Download bedeutet, dass Schritt 2 fehlt. Nicht gesund: lies <code>docker compose logs</code>, oft ist der Port belegt (ändere RELAY_PORT in .env).',
+  "srv.installPort": "Öffne den Port, nur für die Macs",
+  "srv.installPortHelp":
+    "Mit ufw auf der Box. Bei einem Cloud-Anbieter: eine Ingress-Regel für TCP 47800 aus dem Büro- oder VPN-Bereich.",
+  "srv.installDns": "Lass {host} auf die Box zeigen",
+  "srv.installDnsHelp":
+    "Ein DNS-Eintrag beim Anbieter der Domain. Die Macs verbinden sich mit diesem Namen, also ist der Umzug auf eine andere Box eine DNS-Änderung.",
+  "srv.installTeam": "Mache ihn zum Teamserver",
+  "srv.installTeamHelp":
+    "Nur in einem neuen Ordner, anstelle einer ersten Kopplung. Es gibt einen relay://-Link für ein Gerät von {admin}, einem Organisations-Admin, aus. Schicke diese Zeile weiter. Starte es erneut für einen neuen Link.",
+  "srv.installTeamRefuses":
+    "Wenn es sich weigert: Der Ordner hat schon ein gekoppeltes Gerät oder einen geteilten Arbeitsbereich. Nimm einen neuen Ordner.",
+  "srv.installBackup": "Jede Nacht sichern (empfohlen)",
+  "srv.installBackupHelp":
+    "Eine Cron-Zeile, füge sie mit crontab -e hinzu. Der Server hält ein paar Sekunden an. Das Backup enthält den privaten Schlüssel des Servers: Bewahre es so sicher auf wie die Box.",
+  "srv.waitingLink": "Warte auf den Link aus Schritt 6",
+  "srv.haveLink": "Ich habe den Link",
+  "srv.connectHelp":
+    "Füge den relay://-Link ein, den der Team-Befehl ausgegeben hat. Er meldet diesen Mac als ersten Organisations-Admin an.",
+  "srv.seenTeam": "Der Link einer Organisation unter {host}",
+  "srv.seenNotTeam": "Das ist nicht der Link eines Teamservers. Der Link eines Teamservers enthält #team.",
+  "srv.afterConnect": "Danach",
+  "srv.afterConnectHelp":
+    "Die Seite der Organisation öffnet sich mit dem, was noch einzurichten ist: Anmeldung, erster Arbeitsbereich, Personen, ein zweiter Organisations-Admin. Solange es keinen Namen gibt, zeigt Relay überall die Adresse.",
+  "srv.joinHelp": "Füge die Zeile ein, die du bekommen hast. Relay prüft, was es ist, bevor etwas passiert.",
+  "srv.joinLine": "Einladung oder Kopplungszeile",
+  "srv.notALine":
+    "Relay erkennt diese Zeile nicht. Sie beginnt mit relay:// und wurde von einem Admin geschickt oder von relay-server ausgegeben.",
+  "srv.threeKinds": "Relay erkennt diese",
+  "srv.kindTeamInvite": "Einladung in eine Organisation",
+  "srv.kindTeamInviteHelp": "Ein Gerät, 7 Tage gültig. Meldet dich an einem Konto an.",
+  "srv.kindTeamSignIn": "Der Anmeldelink einer Organisation",
+  "srv.kindWorkspace": "Einladung in einen verschlüsselten Arbeitsbereich",
+  "srv.kindWorkspaceHelp": "Ein Gerät, 24 Stunden gültig. Nur die hinzugefügten Personen können ihn lesen.",
+  "srv.kindPairing": "Kopplungszeile für eine eigene Maschine",
+  "srv.kindPairingHelp": "Gilt einmal, 10 Minuten. Dieser Mac wird eines der Geräte der Maschine.",
+  "srv.getTeamInvite":
+    "Ein Konto unter {host}. Die Arbeitsbereiche, zu denen du hinzugefügt wurdest, erscheinen im Arbeitsbereichsmenü, jeweils in einem eigenen Ordner.",
+  "srv.getTeamSignIn":
+    "Dieser Mac meldet dich im Browser mit der Google- oder Microsoft-Anmeldung der Organisation an deinem Konto unter {host} an. Die Adresse muss dort schon ein Konto haben.",
+  "srv.getWorkspace":
+    "Ein verschlüsselter Arbeitsbereich, der in einen Ordner synchronisiert, den du auf diesem Mac wählst.",
+  "srv.getPairing": "Eine eigene Maschine: Dieser Mac wird eines ihrer Geräte.",
+  "srv.readsTeam": "Der Server und wer ihn betreibt, und die Mitglieder nach Rolle.",
+  "srv.readsWorkspace": "Nur die Personen, die hinzugefügt wurden. Der Server hält versiegelte Dateien.",
+  "srv.readsPairing": "Nur deine Geräte. Die Maschine hält versiegelte Dateien.",
+  "srv.staysHere": "Was hier bleibt",
+  "srv.staysHereHelp":
+    "Dein eigener Arbeitsbereich bleibt auf diesem Mac und geht nie an diesen Server. Organisations-Admins können deine Geräte abmelden.",
+  "srv.signInOrg": "Mit deiner Organisation anmelden",
+  "srv.errTitle": "Wenn die Verbindung nicht klappt",
+  "srv.errSee": "Was du siehst",
+  "srv.errCause": "Wahrscheinliche Ursache",
+  "srv.errFix": "Lösung",
+  "srv.errReach": "Server nicht erreichbar",
+  "srv.errReachCause":
+    "Der Port ist zu oder aus dem Netz dieses Macs nicht erlaubt. Oder der DNS-Name zeigt woandershin.",
+  "srv.errReachFix":
+    "An der Box: Öffne Port 47800 für dieses Netz (ufw, oder eine Ingress-Regel beim Cloud-Anbieter). Prüfe, dass docker compose ps healthy zeigt.",
+  "srv.errOlder": "relay-server dort spricht ein älteres Protokoll als dieses Relay",
+  "srv.errOlderCause": "Die Box läuft mit einer älteren Version als dieses Relay.",
+  "srv.errOlderFix":
+    "Deine Maschine: Aktualisieren auf ihrer Seite. Organisation: setze den neuen Tag in RELAY_SERVER_IMAGE in .env und führe dann docker compose pull && docker compose up -d --wait aus.",
+  "srv.errNewer": "relay-server dort spricht ein neueres Protokoll als dieses Relay",
+  "srv.errNewerCause": "Die Box wurde vor diesem Mac aktualisiert.",
+  "srv.errNewerFix": "Aktualisiere Relay auf diesem Mac (Einstellungen › Updates).",
+  "srv.errPairing": "Kopplungszeile abgelaufen oder benutzt",
+  "srv.errPairingCause": "Eine Kopplungszeile gilt einmal, 10 Minuten.",
+  "srv.errPairingFix": "Führe relay-server pair auf der Maschine erneut aus und füge die neue Zeile ein.",
+  "srv.errInvite": "Einladung abgelaufen oder benutzt",
+  "srv.errInviteCause": "Eine Einladung meldet ein Gerät an und gilt 7 Tage.",
+  "srv.errInviteFix":
+    "Bitte einen Organisations-Admin um eine neue Einladung. Dein eigener Link für den ersten Admin: Führe den Team-Befehl erneut aus.",
+  "srv.errWorkspace": "Arbeitsbereichslink abgelaufen",
+  "srv.errWorkspaceCause": "Ein Link zu einem verschlüsselten Arbeitsbereich gilt 24 Stunden.",
+  "srv.errWorkspaceFix": "Bitte den Admin des Arbeitsbereichs um einen neuen Link.",
+  "srv.errSignIn": "Anmeldung abgelehnt",
+  "srv.errSignInCause": "Die Adresse hat auf diesem Server noch kein Konto, oder das Konto ist abgeschaltet.",
+  "srv.errSignInFix": "Bitte einen Organisations-Admin, die Adresse einzuladen oder das Konto einzuschalten.",
+  "srv.errCert": "Zertifikat passt nicht",
+  "srv.errCertCause": "Der Server wurde ohne sein Backup neu eingerichtet. Jeder Mac lehnt ihn ab.",
+  "srv.errCertFix":
+    "Stelle das Backup mit ./backup.sh restore wieder her. Ohne: Vergiss den Server und kopple oder tritt erneut bei.",
 } satisfies Record<Key, string>;

@@ -314,15 +314,34 @@ const settingsPage = async (tab, sub, fixture = "default", platform = "") => {
   await click(tab);
   if (sub) await click(sub);
 };
-/** Settings › Workspaces of `fixture`, `height` tall, on the page of the workspace `name` (its members read there) */
-const workspacePage = async (fixture, height = 1200, name = "Northwind") => {
-  await settingsPage("Workspaces", undefined, fixture);
-  await page.setViewportSize({ width: 900, height });
+/** Servers and organisations (main window) of `fixture`, `height` tall, on the list's item `name` (This Mac, a machine) */
+const serversItem = async (fixture, name, height = 1100) => {
+  await page.setViewportSize({ width: 1440, height });
+  await open(page, server.url, { fixture, sel: "__servers" });
   await page
+    .getByRole("navigation", { name: "Servers and organisations" })
     .getByRole("button", { name: new RegExp(`^${name}`) })
-    .locator("visible=true")
     .first()
     .click();
+  await settle(page);
+};
+/** the page of the fixture's machine "Server" (what Settings › Machines had for it) */
+const machinePage = (fixture, height = 1100) => serversItem(fixture, "Server", height);
+/** a workspace's page on Servers and organisations, `height` tall: found on This Mac or on one of the machines */
+const workspacePage = async (fixture, height = 1200, name = "Northwind") => {
+  await page.setViewportSize({ width: 1440, height });
+  await open(page, server.url, { fixture, sel: "__servers" });
+  const rows = page.getByRole("navigation", { name: "Servers and organisations" }).getByRole("button");
+  const pane = page.locator(".s-palette > section");
+  for (let i = 0; i < (await rows.count()); i++) {
+    await rows.nth(i).click();
+    await settle(page);
+    const row = pane.getByRole("button", { name: new RegExp(`^${name}`) }).locator("visible=true");
+    if (await row.count()) {
+      await row.first().click();
+      break;
+    }
+  }
   await waitText(`Leave ${name}`);
   await settle(page);
 };
@@ -368,47 +387,52 @@ const VIEWS = {
     await click("Install and restart");
     await waitText("55%");
   },
-  // Settings › Machines, a machine online, Add phone pressed: the QR and the line for the phone
+  // a machine's page on Servers and organisations, online, Add phone pressed: the QR and the line for the phone
   "settings-machines-phone": async () => {
-    await settingsPage("Machines", null, "phone");
+    await machinePage("phone");
     await click("Add phone");
     await waitText("Scan this with Relay on your phone");
     await page.getByText("ntfy.sh/relay-").scrollIntoViewIfNeeded();
   },
-  // Settings › Machines, pairing a machine for workspaces only: the line pasted, the checkbox ticked
+  // Add a server › A machine of your own › Pair, for workspaces only: the line pasted and recognised, the box ticked
   "settings-machines-pair-shared": async () => {
-    await settingsPage("Machines", null, "nomirror");
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await open(page, server.url, { fixture: "nomirror", sel: "__servers" });
+    await button("Add a server").click();
+    await button("Continue").click();
+    await button("I have the line").click();
     await page
-      .locator("#mcline")
+      .locator("#own-line")
       .fill(`relay://192.168.1.3:47800#fp=${"7c2e41a09b85d3f6".padEnd(64, "0")}&code=${"c".repeat(32)}`);
-    await page.locator("#mcname").fill("Team server");
-    await page.locator("#mcshared").check();
-    await intoView("Only for workspaces: no mirror of this Mac's vault");
+    await page.locator("#own-name").fill("Team server");
+    await page.getByLabel(/^Only for workspaces/).check();
+    await waitText("A pairing line for a machine of your own");
+    await settle(page);
   },
   // the same page further down: Team server, paired for workspaces only, says so where Server shows its mirror
   "settings-machines-shared-only": async () => {
-    await settingsPage("Machines", null, "nomirror");
+    await serversItem("nomirror", "Team server");
     await waitText("For workspaces only.");
     // the intro says "for workspaces only." too (text matches ignore case): the row's own words
     await intoView("For workspaces only. This Mac's Personal workspace");
   },
-  // Settings › Machines, a machine online whose mirror holds 9 deletes back: the first 5 listed, Restore and Delete
+  // a machine's page, online, whose mirror holds 9 deletes back: the first 5 listed, Restore and Delete
   "settings-machines-mirror-held": async () => {
-    await settingsPage("Machines", null, "mirror");
+    await machinePage("mirror");
     await waitText("9 deletions held");
     await intoView("Restore them");
   },
-  // Settings › Machines, a machine online with GitHub connected and three repos: clean, 2 commits not pushed, work
+  // a machine's page, online, with GitHub connected and three repos: clean, 2 commits not pushed, work
   // not committed
   "settings-machines-github": async () => {
-    await settingsPage("Machines", null, "github");
+    await machinePage("github");
     await waitText("Connected as octo-demo");
     await waitText("2 commits not pushed");
     await intoView("Repos on Server");
   },
   // the same after Disconnect and Connect GitHub: the code to type on GitHub, waiting for it
   "settings-machines-github-code": async () => {
-    await settingsPage("Machines", null, "github");
+    await machinePage("github");
     await waitText("Connected as octo-demo");
     await button("Disconnect").click();
     await button("Disconnect").click();
@@ -1740,7 +1764,7 @@ const VIEWS = {
     await settingsPage("Voice");
     await intoView("Whisper Large v3 Turbo");
   },
-  // a workspace's page on Settings › Workspaces for its admin (PR Settings Workspaces and Organisation): Northwind on Team
+  // a workspace's page on Servers and organisations for its admin (was Settings › Workspaces): Northwind on Team
   // server, its last round (a conflict copy, two deletes held), its people (this Mac, an admin, a member, an open
   // invite), a new invite link made and the recovery key shown again
   // a member left: the workspace's key changes once the remaining members' Relay can receive it (PR key rotation)
@@ -1897,17 +1921,84 @@ const VIEWS = {
     await waitText("Your workspaces");
     await settle(page);
   },
-  // Add a server: Log in to a team server with a link pasted, and a machine of your own
+  // Add a server (PR add-server): what it is for, side by side, fixed once set up
   "servers-add": async () => {
+    await page.setViewportSize({ width: 1440, height: 1100 });
     await open(page, server.url, { sel: "__servers" });
-    await page.getByLabel("Link to the team server").fill("relay://relay.example.com:47800#team&fp=7ea3bbbb…");
+    await waitText("What it is for");
     await settle(page);
+  },
+  // A machine of your own, step 2: what it needs and the setup commands (the ones Settings › Machines had)
+  "servers-add-own": async () => {
+    await VIEWS["servers-add"]();
+    await button("Continue").click();
+    await waitText("Kind of machine");
+    await settle(page);
+  },
+  // step 3: a pairing line pasted and recognised, what happens after pairing
+  "servers-add-pair": async () => {
+    await VIEWS["servers-add-own"]();
+    await button("I have the line").click();
+    await page
+      .locator("#own-line")
+      .fill(`relay://192.168.1.3:47800#fp=${"7c2e41a09b85d3f6".padEnd(64, "0")}&code=${"c".repeat(32)}`);
+    await page.locator("#own-name").fill("Office box");
+    await waitText("A pairing line for a machine of your own");
+    await settle(page);
+  },
+  // A server for an organisation, step 2: the values, who does what, who can read, what it needs. It stays in the
+  // list as being set up
+  "servers-add-org": async () => {
+    await VIEWS["servers-add"]();
+    await page.getByRole("radio", { name: /A server for an organisation/ }).click();
+    await button("Continue").click();
+    await page.getByLabel("Address the Macs use").fill("relay.example.com");
+    await page.getByLabel("First organisation admin").fill("alex@example.com");
+    await page.getByLabel("Where the Macs are").fill("192.168.1.0/24");
+    await waitText("Setting up, step 2 of 4");
+    await settle(page);
+  },
+  // step 3: the commands for the box, filled in
+  "servers-add-org-install": async () => {
+    await page.setViewportSize({ width: 1440, height: 1500 });
+    await VIEWS["servers-add-org"]();
+    await button("Continue").click();
+    await waitText("Make it a team server");
+    await settle(page);
+  },
+  // step 4: the link it printed, and when it does not connect unfolded
+  "servers-add-org-connect": async () => {
+    await VIEWS["servers-add-org-install"]();
+    await button("I have the link").click();
+    await page.getByLabel("Link to the team server").fill(`relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`);
+    await page.getByText("When it does not connect").click();
+    await waitText("Certificate does not match");
+    await settle(page);
+  },
+  // Join: an organisation's invite pasted, what it is and who can read before Log in
+  "servers-join": async () => {
+    await VIEWS["servers-add"]();
+    await page.getByRole("radio", { name: /Join a server someone else runs/ }).click();
+    await button("Continue").click();
+    await page.getByLabel("Invite or pairing line").fill(`relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`);
+    await waitText("Invite to an organisation");
+    await settle(page);
+  },
+  // This Mac: this Mac as a machine, and the encrypted workspaces it joined with a link
+  "servers-mac": async () => {
+    await serversItem("shared-member", "This Mac");
+    await waitText("This Mac as a machine");
+  },
+  // a machine of your own: online, its mirror, GitHub and repos, the workspaces it keeps
+  "servers-machine": async () => {
+    await machinePage("github", 1300);
+    await waitText("Connected as octo-demo");
   },
   // Settings: Servers and organisations is a row under the pages, Workspaces points there for organisations
   "settings-servers-row": async () => {
-    await settingsPage("Workspaces", undefined, "team");
-    await waitText("Organisations");
-    await settle(page);
+    await settingsPage("Agents", undefined, "machines");
+    await waitText("Servers and organisations");
+    await intoView("Agent access");
   },
   "settings-shared-vaults": async () => {
     await workspacePage("shared", 1600);
@@ -1923,7 +2014,7 @@ const VIEWS = {
   // New workspace on this machine… under Team server, filled in and created: the form closes, the new workspace's page
   // opens on its recovery key
   "settings-shared-new": async () => {
-    await settingsPage("Workspaces", undefined, "shared");
+    await serversItem("shared", "Team server");
     await page.evaluate(() => (window.__harness.pickFolder = "/Users/me/Shared/Launch"));
     await button("New workspace on this machine…").click();
     await page.locator("#shared-name").fill("Launch");
@@ -1935,9 +2026,9 @@ const VIEWS = {
     await waitText("Keep this key in your password manager");
     await intoView("Keep this key in your password manager");
   },
-  // a member's Settings › Workspaces: no machine, the workspace they joined with a link under Workspaces
+  // a member's This Mac on Servers and organisations: no machine, the workspace they joined with a link
   "settings-shared-member": async () => {
-    await settingsPage("Workspaces", undefined, "shared-member");
+    await serversItem("shared-member", "This Mac");
     await waitText("Join a workspace with a link…");
     await settle(page);
   },
@@ -1946,17 +2037,20 @@ const VIEWS = {
   "settings-shared-keeper": async () => {
     await workspacePage("shared-keeper", 1300);
     await waitText("Put them back");
-    await click("Machines");
+    await page
+      .getByRole("navigation", { name: "Servers and organisations" })
+      .getByRole("button", { name: /^192\.168\.1\.2/ })
+      .click();
     await waitText("You keep this server");
     await waitText("Update to");
     await intoView("You keep this server");
   },
-  // Relay opened by an invite link: Settings › Workspaces with the join form, the link in it
+  // Relay opened by an invite link: Add a server › Join in the main window, the link in it and recognised
   "settings-shared-join": async () => {
-    await settingsPage("Workspaces", undefined, "shared-invite");
-    await page.setViewportSize({ width: 900, height: 1000 });
-    await waitText("Join a workspace");
-    await intoView("Join a workspace");
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await open(page, server.url, { fixture: "shared-invite" });
+    await waitText("Invite to an encrypted workspace");
+    await settle(page);
   },
   // the other vault folders under General: a path, Remove, and the project shown under another name (the main vault
   // has one)

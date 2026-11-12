@@ -2,10 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   invitePlan,
+  ORG_SETUP_DEFAULTS,
   orgDisplayName,
+  orgInstallCommands,
   orgServerCommands,
   orgTabs,
   parseEmails,
+  recogniseLine,
   resolveItem,
   setupChecklist,
   workspacesOf,
@@ -108,6 +111,12 @@ test("picked item: kept while there, else the first organisation, else Add a ser
   assert.equal(resolveItem("org:gone", teams), "org:f1");
   assert.equal(resolveItem("", []), "add");
   assert.equal(resolveItem("add", teams), "add");
+  const machines = [{ id: "m1" }];
+  assert.equal(resolveItem("machine:m1", teams, machines), "machine:m1");
+  assert.equal(resolveItem("machine:gone", [], machines), "machine:m1");
+  assert.equal(resolveItem("mac", [], []), "mac");
+  assert.equal(resolveItem("setup", [], [], true), "setup");
+  assert.equal(resolveItem("setup", [], [], false), "add");
 });
 test("tabs: a member sees Overview and Workspaces", () => {
   assert.deepEqual(orgTabs(false), ["overview", "workspaces"]);
@@ -120,4 +129,63 @@ test("organisation server: the image tag of this Relay, the cron line as the doc
   assert.equal(c.update, "docker compose pull && docker compose up -d --wait");
   assert.equal(c.cron, "30 3 * * * cd /opt/relay-server && ./backup.sh backup /mnt/backup/relay-$(date +\\%u).tar.gz");
   assert.match(orgServerCommands("i", "1", "/srv/relay/").cron, /cd \/srv\/relay &&/);
+});
+
+const FP = "ab".repeat(32);
+test("pasted line: an organisation's invite, its sign-in link, a workspace invite, a pairing line", () => {
+  const at = { host: "relay.example.com", port: 47800 };
+  assert.deepEqual(
+    recogniseLine(` relay://relay.example.com:47800#team&fp=${FP}&invite=${"1".repeat(16)}&code=${"c".repeat(64)} `),
+    { kind: "team-invite", ...at },
+  );
+  assert.deepEqual(recogniseLine(`relay://relay.example.com:47800#team&fp=${FP}`), { kind: "team-signin", ...at });
+  assert.deepEqual(
+    recogniseLine(
+      `relay://relay.example.com:47800#fp=${FP}&code=${"d".repeat(32)}&vault=${"2".repeat(16)}&invite=${"3".repeat(16)}&secret=${"e".repeat(64)}`,
+    ),
+    { kind: "workspace", ...at },
+  );
+  assert.deepEqual(recogniseLine(`relay://192.168.1.2:47800#fp=${FP}&code=${"d".repeat(32)}`), {
+    kind: "pairing",
+    host: "192.168.1.2",
+    port: 47800,
+  });
+  assert.deepEqual(recogniseLine(`relay://[fd00::2]:47800#fp=${FP}&code=${"d".repeat(32)}`)?.host, "fd00::2");
+});
+test("pasted line: anything else is not recognised", () => {
+  for (const bad of [
+    "",
+    "https://example.com",
+    `relay://relay.example.com#team&fp=${FP}`, // no port
+    `relay://relay.example.com:47800#team&fp=short`,
+    `relay://relay.example.com:47800#team&fp=${FP}&invite=${"1".repeat(16)}`, // an invite without its code
+    `relay://relay.example.com:47800#fp=${FP}&code=${"d".repeat(31)}`,
+    `relay://relay.example.com:47800#fp=${FP}&code=${"d".repeat(32)}&key=${"e".repeat(64)}&link=${"f".repeat(64)}`, // a phone's
+    `relay://bad host:47800#fp=${FP}&code=${"d".repeat(32)}`,
+  ])
+    assert.equal(recogniseLine(bad), null, bad);
+});
+
+test("organisation install: the docs' commands with the address, admin, folder and network filled in", () => {
+  const c = orgInstallCommands({
+    host: "relay.example.com",
+    admin: "alex@example.com",
+    folder: "/opt/relay-server/",
+    network: "192.168.1.0/24",
+  });
+  assert.match(
+    c.install,
+    /^sudo mkdir -p \/opt\/relay-server && sudo chown "\$USER" \/opt\/relay-server && cd \/opt\/relay-server\n/,
+  );
+  assert.match(c.install, /docker compose up -d --wait$/);
+  assert.equal(c.port, "ufw allow from 192.168.1.0/24 to any port 47800 proto tcp");
+  assert.equal(c.team, "docker compose exec relay-server relay-server team alex@example.com --host relay.example.com");
+  assert.match(c.cron, /cd \/opt\/relay-server &&/);
+});
+test("organisation install: odd values are quoted, empty ones fall back to examples", () => {
+  const c = orgInstallCommands({ host: "", admin: "a b@example.com", folder: "/srv/my relay", network: "" });
+  assert.match(c.install, /cd "\/srv\/my relay"/);
+  assert.equal(c.team, 'docker compose exec relay-server relay-server team "a b@example.com" --host relay.example.com');
+  assert.match(c.port, /^ufw allow from 192\.168\.1\.0\/24 /);
+  assert.match(orgInstallCommands({ ...ORG_SETUP_DEFAULTS, folder: "/x/$(rm)" }).install, /"\/x\/\\\$\(rm\)"/);
 });

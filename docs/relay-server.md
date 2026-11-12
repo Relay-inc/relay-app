@@ -63,7 +63,7 @@ not a new pairing for every Mac.
 docker compose exec relay-server relay-server pair --host relay.example.com
 ```
 
-It prints a `relay://` line that works once, for 10 minutes. Paste it in Relay › Settings › Machines on your own Mac.
+It prints a `relay://` line that works once, for 10 minutes. Paste it in Relay on your own Mac: the workspace menu › Add a server…, A machine of your own, Pair (Join takes it too).
 Tick Only for workspaces when this Mac should use the server for workspaces and nothing else.
 
 Everyone else joins through a workspace's invite link and needs no pairing line.
@@ -80,8 +80,8 @@ docker compose exec relay-server relay-server team you@example.com --host relay.
 ```
 
 The server is a team server from then on and pairs no devices. The line it prints is an invite link for one device of
-that address, which is an organisation admin. In Relay: the workspace menu at the bottom left › Add a server…, Log in to
-a team server, paste it, Log in. Run the command again for a new link (a second Mac, or to get back in).
+that address, which is an organisation admin. In Relay: the workspace menu at the bottom left › Add a server…, A server for an
+organisation walks through these steps and ends with that link: paste it, Log in. Join takes it too. Run the command again for a new link (a second Mac, or to get back in).
 
 Then, in Relay, on Servers and organisations (the workspace menu, or the row under the pages in Settings), the
 organisation's tabs:
@@ -106,7 +106,7 @@ to the provider for its keys.
 
 Keep the server at the version of the Relay apps that use it, they speak one protocol. Two ways:
 
-- **From Relay.** When Relay is newer, Settings › Machines shows Update to <version>. Relay sends the server the
+- **From Relay.** When Relay is newer, the machine's page on Servers and organisations shows Update to <version>. Relay sends the server the
   Linux binary from its GitHub release, with its signature. From a workspace admin the server takes only an
   official, signed release. The binary stays in the volume (`data/bin/relay-server`) and every start prefers it
   while it is newer than the image's, so recreating the container keeps the update.

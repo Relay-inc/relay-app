@@ -16,7 +16,7 @@ import { WORKSPACE_KEYS, workspaceKeyLabel } from "../../../domain/settings/shor
 import { Icon } from "../../components/Icon";
 import { loadInbox, onAnyComments, openPageThread, type InboxItem } from "../../../application/navigation/pages";
 import { noteName } from "../../../domain/navigation/pages";
-import { openServers, openTeamWorkspace } from "../../../application/settings/servers";
+import { openAdd, openNewWorkspace, openServers, openTeamWorkspace } from "../../../application/settings/servers";
 import { VaultCheckDialog } from "./VaultCheckDialog";
 
 // a workspace's square in the context tints, by its place in the list
@@ -175,7 +175,7 @@ export function WorkspaceSwitcher({
           <button className={ACTION} onClick={() => run(openFolderAsWorkspace)}>
             {t("ws.openFolder")}
           </button>
-          <button className={ACTION} onClick={() => run(() => openWorkspaceSettings("workspaces"))}>
+          <button className={ACTION} onClick={() => run(openNewWorkspace)}>
             {t("ws.fromTemplate")}
           </button>
           <button
@@ -210,7 +210,7 @@ export function WorkspaceSwitcher({
             <Icon name="server" className={GLYPH} />
             <span className="flex-1">{t("ws.servers")}</span>
           </button>
-          <button className={APP_ACTION} onClick={() => run(() => openServers("add"))}>
+          <button className={APP_ACTION} onClick={() => run(() => openAdd())}>
             <Icon name="plus" className={GLYPH} />
             <span className="flex-1">{t("ws.addServer")}</span>
           </button>

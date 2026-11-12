@@ -425,10 +425,8 @@ function handle(cmd: string, a: Args): unknown {
       return new Promise(resolve =>
         setTimeout(() => resolve({ branch: "relay/server", dir: `/Users/demo/Code/${a.name}` }), 600),
       );
-    case "host_status": // fixture "github": a development build, This Mac cannot be a machine
-      return fixture === "github"
-        ? { supported: false, on: false, running: false, ram: false, fingerprint: "", clients: [] }
-        : null;
+    case "host_status": // fixture "github": a development build, This Mac cannot be a machine; else switched off
+      return { supported: fixture !== "github", on: false, running: false, ram: false, fingerprint: "", clients: [] };
     // shared vaults on a relay-server (src-tauri/src/shared_vaults.rs), fixture "shared"
     case "shared_vaults_status":
       return structuredClone(sharedStatus);
