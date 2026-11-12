@@ -1,8 +1,9 @@
 import type { TeamServer } from "../../../domain/settings/types";
-import { orgDisplayName, orgTabs } from "../../../domain/settings/servers";
+import { nameClash, orgDisplayName, orgTabs } from "../../../domain/settings/servers";
 import { orgTabName, pickOrgTab } from "../../../application/settings/servers";
 import { useSettingsStore } from "../../../application/settings/store";
 import { teamLink } from "../../../application/settings/teams";
+import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
 import { ERROR_MESSAGE } from "./blocks";
 import { OrgName } from "./OrgName";
@@ -27,6 +28,8 @@ export function OrgDetail({ team }: { team: TeamServer }) {
   const tabs = orgTabs(team.admin);
   const tab = tabs.includes(picked) ? picked : "overview";
   const name = orgDisplayName(team);
+  // a server can call itself anything: one named like another organisation here says so, with that one's host
+  const clash = useSettingsStore(s => nameClash(s.settings.teams, team.fp, team.name));
   const count = (id: typeof tab) =>
     id === "people" ? overview?.accounts.length : id === "workspaces" ? overview?.workspaces.length : undefined;
   return (
@@ -45,6 +48,12 @@ export function OrgDetail({ team }: { team: TeamServer }) {
         </div>
         <CopyButton label={t("srv.copySignInLink")} get={() => teamLink(team.fp)} />
       </header>
+      {clash ? (
+        <span className="flex items-start gap-1.5 text-xs text-s-warn">
+          <Icon name="alert" className="glyph mt-px size-3.5 flex-none stroke-2" />
+          {t("srv.nameClashHere", { name, host: clash.host })}
+        </span>
+      ) : null}
       {message && !message.ok ? <span className={ERROR_MESSAGE}>{message.text}</span> : null}
       <div role="tablist" className="flex gap-5 border-b border-s-seam">
         {tabs.map(id => (

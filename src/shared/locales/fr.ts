@@ -2762,13 +2762,20 @@ export default {
   "srv.openInvite": "Invitation ouverte",
   "srv.inviteAs": "{name} comme {role}",
   "srv.until": "jusqu'à {time}",
+  "srv.nameClashHere":
+    "Une autre organisation dont vous faites partie, sur {host}, s'appelle aussi {name}. Distinguez-les par leur adresse.",
+  "srv.nameClash":
+    "Une autre organisation dont vous faites partie, sur {host}, s'appelle aussi {name}. Un serveur peut se nommer comme il veut : vérifiez l'adresse avant de vous connecter.",
+  "srv.noNameGiven": "ne se donne pas de nom",
+  "srv.callsItself": "se nomme {name}",
+  "srv.checkServer": "Vérifier ce serveur",
+  "srv.certificate": "certificat {fp}…",
   "srv.nameConnectHelp":
     "Chaque Mac de l'organisation affiche ce nom à la place de l'adresse. Vous pourrez le changer plus tard dans Aperçu.",
   "srv.nameHelp": "Chaque Mac de l'organisation affiche ce nom. Vide affiche l'adresse.",
   "srv.nameEditTip": "Le nom que chaque Mac de l'organisation affiche",
   "srv.nameAdd": "Ajouter un nom",
   "srv.name": "Nom de l'organisation",
-  "srv.invitedYou": "{name} vous a invité",
   "srv.newLinkTip": "Retire cette invitation et crée un nouveau lien pour la même adresse, avec les mêmes rôles",
   "srv.newLink": "Nouveau lien",
   "srv.person": "Personne",

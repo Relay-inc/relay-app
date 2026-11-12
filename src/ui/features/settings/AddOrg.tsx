@@ -1,8 +1,14 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { nameFromDomain, orgInstallCommands, recogniseLine, type OrgDraft } from "../../../domain/settings/servers";
+import { useState, type ReactNode } from "react";
+import {
+  cleanOrgName,
+  nameFromDomain,
+  orgInstallCommands,
+  recogniseLine,
+  type OrgDraft,
+} from "../../../domain/settings/servers";
 import { connectOrg, dropDraft, editDraft, openServers } from "../../../application/settings/servers";
 import { useSettingsStore } from "../../../application/settings/store";
-import { cancelSignIn, peekTeam } from "../../../application/settings/teams";
+import { cancelSignIn } from "../../../application/settings/teams";
 import { Html } from "../../components/Html";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
@@ -10,6 +16,7 @@ import { buttonClass, ERROR_MESSAGE, FIELD, HINT } from "./blocks";
 import { ConnectHelp } from "./ConnectHelp";
 import { CopyButton } from "./CopyButton";
 import { CommandBlock } from "./MachineSetup";
+import { ServerClaim } from "./ServerClaim";
 import { Steps } from "./Steps";
 import { TrustBadge } from "./TrustBadge";
 import { WhereTag } from "./WhereTag";
@@ -260,8 +267,9 @@ function Install({ draft }: { draft: OrgDraft }) {
   );
 }
 
-/** Step 4: the link the team command printed, the organisation's name, Log in. The name is filled in with the one the
- *  server has (`--name`), else from its sign-in's domain. The organisation's page opens with what is left to set up. */
+/** Step 4: the link the team command printed, the organisation's name, Log in. After Check this server the name is
+ *  filled in with the one the server has (`--name`), else from its sign-in's domain. The organisation's page opens
+ *  with what is left to set up. */
 function Connect() {
   const { t } = useT();
   const busy = useSettingsStore(s => !!s.shared.busy.team);
@@ -271,11 +279,9 @@ function Connect() {
   const seen = recogniseLine(line);
   const team = seen?.kind === "team-invite" || seen?.kind === "team-signin";
   const link = line.trim();
+  // filled in once Check this server asked the server: the name it has, else from its sign-in's domain
   const peek = useSettingsStore(s => (s.team.peek?.link === link ? s.team.peek : null));
-  useEffect(() => {
-    if (team) void peekTeam(link);
-  }, [team, link]);
-  const shown = name ?? (peek?.name || nameFromDomain(peek?.domain ?? ""));
+  const shown = name ?? (cleanOrgName(peek?.name) || nameFromDomain(peek?.domain ?? ""));
   return (
     <>
       <section className={CARD}>
@@ -307,10 +313,13 @@ function Connect() {
         {seen && seen.kind !== "team-invite" && seen.kind !== "team-signin" ? (
           <span className="text-xs text-s-warn">{t("srv.seenNotTeam")}</span>
         ) : seen ? (
-          <span className="flex items-center gap-1.5 text-xs text-s-ok">
-            <Icon name="check" className="glyph size-3.5 stroke-2" />
-            {t("srv.seenTeam", { host: seen.host })}
-          </span>
+          <>
+            <span className="flex items-center gap-1.5 text-xs text-s-ok">
+              <Icon name="check" className="glyph size-3.5 stroke-2" />
+              {t("srv.seenTeam", { host: seen.host })}
+            </span>
+            <ServerClaim link={link} host={seen.host} fp={seen.fp} />
+          </>
         ) : (
           <span className={HINT}>{t("srv.connectHelp")}</span>
         )}

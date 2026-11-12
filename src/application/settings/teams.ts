@@ -56,10 +56,10 @@ export const setTeamName = (fp: string, name: string) =>
     keepName(fp, out.name);
   });
 
-/** What the server of a pasted team link says before logging in: its name and the first domain of its sign-in, for
- *  Join and the connect step. A server out of reach or closed to this Mac says nothing, the host shows. */
+/** Check this server: what the server of a pasted team link says before logging in, the name it gives itself and the
+ *  first domain of its sign-in, for Join and the connect step. Only on that click, never for a link as it is pasted or
+ *  arrives (the backend asks with a throwaway certificate). A server out of reach or closed says nothing. */
 export async function peekTeam(link: string) {
-  if (useSettingsStore.getState().team.peek?.link === link) return;
   change(draft => void (draft.peek = { link, name: "", domain: "" }));
   const info = await backend.teamPeek(link).catch(() => null);
   change(draft => {

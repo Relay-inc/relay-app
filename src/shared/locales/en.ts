@@ -2714,13 +2714,20 @@ const en = {
   "srv.openInvite": "Open invite",
   "srv.inviteAs": "{name} as {role}",
   "srv.until": "until {time}",
+  "srv.nameClashHere":
+    "Another organisation you are in, at {host}, is also called {name}. Tell them apart by their address.",
+  "srv.nameClash":
+    "Another organisation you are in, at {host}, is also called {name}. A server can call itself anything: check the address before you log in.",
+  "srv.noNameGiven": "gives itself no name",
+  "srv.callsItself": "calls itself {name}",
+  "srv.checkServer": "Check this server",
+  "srv.certificate": "certificate {fp}…",
   "srv.nameConnectHelp":
     "Every Mac in the organisation shows this name in place of the address. You can change it later on Overview.",
   "srv.nameHelp": "Every Mac in the organisation shows this name. Empty shows the address.",
   "srv.nameEditTip": "The name every Mac in the organisation shows",
   "srv.nameAdd": "Add a name",
   "srv.name": "Organisation name",
-  "srv.invitedYou": "{name} invited you",
   "srv.newLinkTip": "Withdraws this invite and makes a new link for the same address, with the same roles",
   "srv.newLink": "New link",
   "srv.person": "Person",

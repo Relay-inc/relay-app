@@ -70,10 +70,16 @@ pub fn open(data: &Path) -> bool { is_team(data) && { let t = load(data); t.sso.
 
 /// The most characters an organisation's name has.
 const NAME_MAX: usize = 60;
-/// An organisation's name as it is kept: trimmed, one line, at most NAME_MAX characters. "" takes the name away.
+/// Characters that change how text around them shows without showing themselves: bidi controls (which can turn a
+/// name around), zero-width ones and the BOM (which can make two names look the same). A name has none of them.
+fn invisible(c: char) -> bool {
+    matches!(c, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{2069}' | '\u{FEFF}' | '\u{061C}' | '\u{180E}')
+}
+/// An organisation's name as it is kept: trimmed, one line of visible text, at most NAME_MAX characters. "" takes the
+/// name away. Every Mac shows it, so nothing in it may hide or reorder what it says.
 fn org_name(s: &str) -> Result<String, String> {
     let n = s.trim();
-    if n.chars().any(char::is_control) { return Err("a name is one line of text".into()); }
+    if n.chars().any(|c| c.is_control() || invisible(c)) { return Err("a name is one line of visible text".into()); }
     if n.chars().count() > NAME_MAX { return Err(format!("a name has at most {NAME_MAX} characters")); }
     Ok(n.into())
 }
@@ -375,6 +381,11 @@ mod tests {
         init(&d, "owner@example.com", None).unwrap();
         assert_eq!(load(&d).name, "Bluebird Studio", "again without --name keeps it");
         assert!(init(&d, "owner@example.com", Some("two\nlines")).is_err());
+        // bidi controls, zero-width characters and the BOM: refused, by --name and by team_name
+        for bad in ["Blue\u{202E}oiduts", "Blue\u{2066}bird", "Blue\u{200B}bird", "\u{FEFF}Bluebird", "Blue\u{200D}bird"] {
+            assert!(init(&d, "owner@example.com", Some(bad)).is_err(), "{bad:?}");
+        }
+        assert_eq!(load(&d).name, "Bluebird Studio");
         let v = Vaults::new(&d, SERVER);
         let (admin, member) = ("a".repeat(64), "b".repeat(64));
         let mut t = load(&d);
@@ -387,6 +398,9 @@ mod tests {
         assert_eq!(op(&v, SERVER, &member, "team_me", &json!({})).unwrap()["name"], "Northwind", "a member gets it");
         assert_eq!(op(&v, SERVER, "", "team_info", &json!({})).unwrap()["name"], "Northwind");
         assert!(name(&admin, &"x".repeat(NAME_MAX + 1)).is_err());
+        assert!(name(&admin, "North\u{202E}dniw").is_err());
+        assert_eq!(name(&admin, &"é".repeat(NAME_MAX)).unwrap()["name"].as_str().unwrap().chars().count(), NAME_MAX, "characters, not bytes");
+        name(&admin, "Northwind").unwrap();
         assert_eq!(load(&d).name, "Northwind", "a refused name changes nothing");
         name(&admin, "").unwrap();
         assert!(!std::fs::read_to_string(d.join("team.json")).unwrap().contains("\"name\""), "no name: not written");

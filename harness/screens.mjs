@@ -1986,6 +1986,7 @@ const VIEWS = {
     await page.getByLabel("Link to the team server").fill(`relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`);
     await page.getByText("When it does not connect").click();
     await waitText("Certificate does not match");
+    await button("Check this server").click();
     await page.getByLabel("Organisation name").and(page.locator('[value="Bluebird Studio"]')).waitFor();
     await settle(page);
   },
@@ -1995,7 +1996,26 @@ const VIEWS = {
     await page.getByRole("radio", { name: /Join a server someone else runs/ }).click();
     await button("Continue").click();
     await page.getByLabel("Invite or pairing line").fill(`relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`);
-    await waitText("Bluebird Studio invited you");
+    await waitText("Invite to an organisation");
+    await settle(page);
+  },
+  // Join after Check this server: the address and certificate first, the name the server gives itself second
+  "servers-join-checked": async () => {
+    await VIEWS["servers-join"]();
+    await button("Check this server").click();
+    await waitText("calls itself Bluebird Studio");
+    await settle(page);
+  },
+  // a server that calls itself like an organisation this Mac is in (another certificate): said before Log in
+  "servers-join-clash": async () => {
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await open(page, server.url, { fixture: "team", sel: "__servers" });
+    await button("Add a server").last().click();
+    await page.getByRole("radio", { name: /Join a server someone else runs/ }).click();
+    await button("Continue").click();
+    await page.getByLabel("Invite or pairing line").fill(`relay://relay.example.net:47800#team&fp=${"9c1d".padEnd(64, "e")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`);
+    await button("Check this server").click();
+    await waitText("is also called Bluebird Studio");
     await settle(page);
   },
   // This Mac: this Mac as a machine, and the encrypted workspaces it joined with a link

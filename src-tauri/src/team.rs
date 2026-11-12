@@ -136,11 +136,16 @@ fn open(app: &AppHandle, state: &crate::App, fp: &str, w: &Value, folder: String
     shared_vaults::add(app, state, &v)
 }
 
-/// What the server of team link `link` says before this Mac logs in: the organisation's name ("" none) and its sign-in.
+/// What the server of team link `link` says before this Mac logs in: the name it gives itself ("" none) and its sign-in.
+/// Only on the user's click (Check this server), never for a link as it arrives. It goes with a throwaway certificate,
+/// not this Mac's, so a server never learns which device asked before it logs in.
 #[tauri::command]
-pub async fn team_peek(state: St<'_>, link: String) -> Result<Value, String> {
-    let c = client(&Link::parse(&link).ok_or("not a team server's link")?, &state);
-    tauri::async_runtime::spawn_blocking(move || c.call(json!({"op": "team_info"}))).await.map_err(|e| e.to_string())?
+pub async fn team_peek(link: String) -> Result<Value, String> {
+    let l = Link::parse(&link).ok_or("not a team server's link")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let once = relay_remote::tls::Identity::generate().map_err(|e| e.to_string())?;
+        Client::new(&l.host, l.port, &l.fp, once).call(json!({"op": "team_info"}))
+    }).await.map_err(|e| e.to_string())?
 }
 
 /// One of the admin ops (PASSED) on team server `fp`: an invite comes back with its `link`, a new name is kept here.

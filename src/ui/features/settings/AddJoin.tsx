@@ -1,14 +1,15 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { recogniseLine } from "../../../domain/settings/servers";
 import { connectOrg, joinWorkspace, openAdd, pairOwnMachine } from "../../../application/settings/servers";
 import { editForm, pickSharedFolder } from "../../../application/settings/shared-vaults";
 import { useSettingsStore } from "../../../application/settings/store";
-import { cancelSignIn, peekTeam } from "../../../application/settings/teams";
+import { cancelSignIn } from "../../../application/settings/teams";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
 import { buttonClass, ERROR_MESSAGE, FIELD, HINT } from "./blocks";
 import { ConnectHelp } from "./ConnectHelp";
 import { PathField } from "./PathField";
+import { ServerClaim } from "./ServerClaim";
 import { Steps } from "./Steps";
 import { TrustBadge } from "./TrustBadge";
 
@@ -50,7 +51,7 @@ export function AddJoin() {
           onChange={e => editForm({ link: e.target.value })}
         />
         {!line.trim() ? null : seen ? (
-          <Recognised line={line.trim()} kind={seen.kind} host={seen.host} />
+          <Recognised line={line.trim()} kind={seen.kind} host={seen.host} fp={seen.fp} />
         ) : (
           <span className={ERROR_MESSAGE}>{t("srv.notALine")}</span>
         )}
@@ -83,10 +84,12 @@ function Recognised({
   line,
   kind,
   host,
+  fp,
 }: {
   line: string;
   kind: "team-invite" | "team-signin" | "workspace" | "pairing";
   host: string;
+  fp: string;
 }) {
   const { t } = useT();
   const teamBusy = useSettingsStore(s => !!s.shared.busy.team);
@@ -99,12 +102,6 @@ function Recognised({
   const [name, setName] = useState("");
   const [sharedOnly, setSharedOnly] = useState(false);
   const team = kind === "team-invite" || kind === "team-signin";
-  // an organisation's link: its server says its name before anything else happens (the host until it answers)
-  const peek = useSettingsStore(s => (s.team.peek?.link === line ? s.team.peek : null));
-  useEffect(() => {
-    if (team) void peekTeam(line);
-  }, [team, line]);
-  const org = peek?.name || host;
   const row = (key: string, value: ReactNode) => (
     <>
       <dt className={KEY}>{key}</dt>
@@ -126,12 +123,10 @@ function Recognised({
         )}
         <span className="font-mono text-xs font-normal text-s-muted">{host}</span>
       </span>
-      {kind === "team-invite" && peek?.name ? (
-        <span className="text-base font-semibold text-s-fg">{t("srv.invitedYou", { name: peek.name })}</span>
-      ) : null}
+      {team ? <ServerClaim link={line} host={host} fp={fp} /> : null}
       <dl className="grid grid-cols-[9rem_1fr] gap-x-3 gap-y-2">
         {team
-          ? row(t("srv.youGet"), t(kind === "team-invite" ? "srv.getTeamInvite" : "srv.getTeamSignIn", { host: org }))
+          ? row(t("srv.youGet"), t(kind === "team-invite" ? "srv.getTeamInvite" : "srv.getTeamSignIn", { host }))
           : kind === "workspace"
             ? row(t("srv.youGet"), t("srv.getWorkspace"))
             : row(t("srv.youGet"), t("srv.getPairing"))}
@@ -139,7 +134,7 @@ function Recognised({
           t("srv.whoCanReadIt"),
           team ? (
             <span className="grid justify-items-start gap-1">
-              <TrustBadge kind="org" name={org} />
+              <TrustBadge kind="org" name={host} />
               {t("srv.readsTeam")}
             </span>
           ) : (
