@@ -2765,6 +2765,9 @@ export default {
   "srv.openInvite": "Offene Einladung",
   "srv.inviteAs": "{name} als {role}",
   "srv.until": "bis {time}",
+  "srv.newLinkTip":
+    "Zieht diese Einladung zurück und erstellt einen neuen Link für dieselbe Adresse, mit denselben Rollen",
+  "srv.newLink": "Neuer Link",
   "srv.person": "Person",
   "srv.orgRole": "Rolle in der Organisation",
   "srv.devices": "Geräte",
@@ -2780,7 +2783,7 @@ export default {
   "srv.emailsBad": "Keine E-Mail-Adresse: {emails}",
   "srv.inOrg": "In der Organisation",
   "srv.orgAdminHelp":
-    "Organisations-Admins sehen jedes Konto und jeden Workspace, fügen überall Personen hinzu und können Konten ausschalten.",
+    "Organisations-Admins sehen und verwalten jedes Konto und jeden Workspace: Sie fügen überall Personen hinzu, ändern überall Rollen und können Konten ausschalten.",
   "srv.rolesHelp":
     "Ein Admin kann einladen und Rollen ändern. Ein Mitglied liest und bearbeitet. Ein Leser liest nur. Wer schon in einem Workspace ist, behält seine Rolle.",
   "srv.whatTheyGet": "Was sie bekommen",
@@ -2802,7 +2805,7 @@ export default {
   "srv.onTheirMacHelp":
     "Sie öffnen den Link in Relay oder fügen ihn unter Server hinzufügen › Bei einem Team-Server anmelden ein. {name} erscheint in ihrem Workspace-Menü.",
   "srv.ifExpires": "Wenn er abläuft",
-  "srv.ifExpiresHelp": "Ziehe ihn unter Personen zurück und lade erneut ein.",
+  "srv.ifExpiresHelp": "Vorher erstellt Neuer Link unter Personen einen frischen, mit denselben Rollen.",
   "srv.invitesStay": "Offene Einladungen bleiben unter Personen, bis sie benutzt sind.",
   "srv.workspacesCount": "{n} Workspaces · du bist in {in} · jedes Konto kann einen anlegen und wird dessen Admin",
   "srv.workspace": "Workspace",
@@ -2815,8 +2818,8 @@ export default {
   "srv.notMember": "Kein Mitglied",
   "srv.notHere": "Nicht auf diesem Mac",
   "srv.openWorkspace": "{name} öffnen",
-  "srv.seenAsAdmin_one": "Du siehst {n} Workspace, in dem du nicht bist, als Organisations-Admin.",
-  "srv.seenAsAdmin_other": "Du siehst {n} Workspaces, in denen du nicht bist, als Organisations-Admin.",
+  "srv.seenAsAdmin_one": "Als Organisations-Admin verwaltest du {n} Workspace, in dem du nicht bist.",
+  "srv.seenAsAdmin_other": "Als Organisations-Admin verwaltest du {n} Workspaces, in denen du nicht bist.",
   "srv.newOn": "Neuer Workspace auf {name}",
   "srv.youBecomeAdmin": "Du wirst dessen Admin",
   "srv.history": "Verlauf",
@@ -2829,7 +2832,7 @@ export default {
     "Das wählst du einmal. Es lässt sich später nicht mehr umstellen, auch nicht von einem Organisations-Admin. Um es zu ändern, lege einen neuen Workspace an und verschiebe die Notizen.",
   "srv.syncsRightAway": "Er wird sofort mit dem Ordner auf diesem Mac synchronisiert.",
   "srv.createWorkspace": "Workspace anlegen",
-  "srv.notMemberSees": "Du siehst ihn als Organisations-Admin",
+  "srv.notMemberSees": "Kein Mitglied, du verwaltest ihn als Organisations-Admin",
   "srv.membersAdminsOnly":
     "Organisations-Admins sehen hier die Mitglieder. Bitte einen Admin dieses Workspaces, jemanden hinzuzufügen.",
   "srv.historyOn": "Verlauf an",

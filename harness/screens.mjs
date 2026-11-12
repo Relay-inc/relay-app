@@ -1824,6 +1824,13 @@ const VIEWS = {
     await waitText("kim@example.com");
     await settle(page);
   },
+  // New link on the open invite: withdrawn and made again for the same address, the new link to copy on its row
+  "servers-people-new-link": async () => {
+    await VIEWS["servers-people"]();
+    await button("New link").first().click();
+    await waitText("relay://relay.example.com");
+    await settle(page);
+  },
   // Invite people: a new address and an existing account, two workspaces
   "servers-invite": async () => {
     await VIEWS["servers-people"]();
@@ -1863,7 +1870,7 @@ const VIEWS = {
     await VIEWS["servers-overview"]();
     await page.getByRole("tab", { name: /^Workspaces/ }).click();
     await button("Open Finance").click();
-    await waitText("You see it as organisation admin");
+    await waitText("you manage it as organisation admin");
     await settle(page);
   },
   // Sign-in with Microsoft Entra picked: the steps in the admin center, the fields, what the server needs

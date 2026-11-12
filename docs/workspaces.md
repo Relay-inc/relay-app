@@ -608,9 +608,11 @@ no devices, runs no conversations, keeps no mirror or GitHub token, and refuses 
   vault. A reader's writes are refused (`READ_ONLY`), its rounds only pull and its pages open read-only.
 - **Who manages what.** A workspace's admin changes roles there and invites an address with a role: a new account gets
   an invite link, an existing one is only added (a link would let the admin in as that person). Any account makes a
-  workspace and is its admin. An organisation admin sees every account and workspace (Servers and organisations), turns
-  an account off (all its devices are out at once), makes organisation admins and sets the sign-in. The last admin of
-  a workspace, and of the server, stays.
+  workspace and is its admin. An organisation admin sees and manages every account and workspace (Servers and
+  organisations): it adds people and changes roles in any workspace, also one it is not in, turns an account off (all
+  its devices are out at once), makes organisation admins and sets the sign-in. The last admin of a workspace, and of
+  the server, stays. An invite's link is shown once, the server never hands it out again: New link withdraws an open
+  invite and makes another for the same address (the roles are the account's, not the invite's, so they stay).
 - **Without history** is a flag a workspace gets when it is made, for good. Conflict copies name no computer, the
   server lists no devices in `vault_info`, so history and cursors show no names, and the starter asks for no names in
   its log. What it is not: a document's updates stay sealed to the device that wrote them (the seal is unchanged), so a

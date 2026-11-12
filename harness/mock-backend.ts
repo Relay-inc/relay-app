@@ -104,6 +104,7 @@ if (teamFixture)
 let teamMe = { ...structuredClone(vault.teamMe), admin: !teamMember };
 let teamAccounts = structuredClone(vault.teamAccounts);
 let teamOverview = structuredClone(vault.teamOverview);
+let teamInviteSeq = 20;
 teamOverview.invites[0].expires = Math.floor(Date.now() / 1000) + 6 * 86400;
 if (shared)
   settings = {
@@ -544,7 +545,7 @@ function handle(cmd: string, a: Args): unknown {
       if (r.op === "team_invite") {
         if (!teamAccounts.some(x => x.email === r.email) && r.vault)
           teamAccounts = [...teamAccounts, { email: r.email, role: r.role }];
-        const id = hex(16, teamOverview.invites.length + 20);
+        const id = hex(16, ++teamInviteSeq);
         if (!teamOverview.accounts.some(x => x.email === r.email))
           teamOverview.accounts.push({ email: r.email, admin: !!r.admin, off: false, devices: 0 });
         const w = teamOverview.workspaces.find(x => x.id === r.vault);

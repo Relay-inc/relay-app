@@ -3,11 +3,12 @@ import type { SharedRole, TeamServer } from "../../../domain/settings/types";
 import { orgDisplayName, workspacesOf } from "../../../domain/settings/servers";
 import { showInvite } from "../../../application/settings/servers";
 import { useSettingsStore } from "../../../application/settings/store";
-import { setTeamAccount, withdrawTeamInvite } from "../../../application/settings/teams";
+import { renewTeamInvite, setTeamAccount, withdrawTeamInvite } from "../../../application/settings/teams";
 import { sentAt } from "../../../shared/format";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
 import { BUTTON_GLYPH, buttonClass, FIELD, PILL } from "./blocks";
+import { CopyButton } from "./CopyButton";
 import { TrustBadge } from "./TrustBadge";
 
 const TH = "px-2 pb-2 text-left text-xs font-normal text-s-muted";
@@ -34,11 +35,13 @@ export function RoleSquare({ name, role }: { name: string; role: SharedRole | ""
 }
 
 /** People: every account with its organisation role, its devices and its workspaces, the open invites above them, and
- *  the actions the server has: make an organisation admin or not, turn off or on, withdraw an invite. */
+ *  the actions the server has: make an organisation admin or not, turn off or on, withdraw an invite or replace it with
+ *  a new link (the server never gives an open invite's link again). */
 export function OrgPeople({ team }: { team: TeamServer }) {
   const { t, tn, locale } = useT();
   const o = useSettingsStore(s => s.team.overview[team.fp]);
   const busy = useSettingsStore(s => !!s.shared.busy[`team:${team.fp}`]);
+  const links = useSettingsStore(s => s.team.links);
   const [filter, setFilter] = useState("");
   if (!o) return <span className="text-xs text-s-muted">{t("set.sharedAsking")}</span>;
   const off = o.accounts.filter(a => a.off).length;
@@ -81,7 +84,22 @@ export function OrgPeople({ team }: { team: TeamServer }) {
               <b className="font-medium">{t("srv.openInvite")}</b> · {i.email} ·{" "}
               {t(admin ? "set.orgAdmin" : "srv.member")}
               {spaces ? ` · ${spaces}` : ""} · {t("srv.until", { time: sentAt(i.expires * 1000, locale) })}
+              {links[i.id] ? (
+                <span className="block truncate font-mono text-[11px] text-s-muted">{links[i.id]}</span>
+              ) : null}
             </span>
+            {links[i.id] ? (
+              <CopyButton label={t("mc.copy")} text={links[i.id]} />
+            ) : (
+              <button
+                className={buttonClass()}
+                disabled={busy}
+                title={t("srv.newLinkTip")}
+                onClick={() => void renewTeamInvite(team.fp, i)}
+              >
+                {t("srv.newLink")}
+              </button>
+            )}
             <button className={buttonClass()} disabled={busy} onClick={() => void withdrawTeamInvite(team.fp, i.id)}>
               {t("set.sharedWithdraw")}
             </button>

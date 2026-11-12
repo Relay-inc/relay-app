@@ -2772,6 +2772,8 @@ export default {
   "srv.openInvite": "Invitation ouverte",
   "srv.inviteAs": "{name} comme {role}",
   "srv.until": "jusqu'à {time}",
+  "srv.newLinkTip": "Retire cette invitation et crée un nouveau lien pour la même adresse, avec les mêmes rôles",
+  "srv.newLink": "Nouveau lien",
   "srv.person": "Personne",
   "srv.orgRole": "Rôle dans l'organisation",
   "srv.devices": "Appareils",
@@ -2788,7 +2790,7 @@ export default {
   "srv.emailsBad": "Pas une adresse e-mail : {emails}",
   "srv.inOrg": "Dans l'organisation",
   "srv.orgAdminHelp":
-    "Les admins de l'organisation voient chaque compte et chaque espace de travail, ajoutent des personnes partout et peuvent désactiver des comptes.",
+    "Les admins de l'organisation voient et gèrent chaque compte et chaque espace de travail, ajoutent des personnes et changent les rôles partout, et peuvent désactiver des comptes.",
   "srv.rolesHelp":
     "Un admin peut inviter et changer les rôles. Un membre lit et modifie. Un lecteur ne fait que lire. Quelqu'un déjà dans un espace de travail garde son rôle.",
   "srv.whatTheyGet": "Ce qu'ils reçoivent",
@@ -2811,7 +2813,7 @@ export default {
   "srv.onTheirMacHelp":
     "Ils ouvrent le lien dans Relay, ou le collent sous Ajouter un serveur › Se connecter à un serveur d'équipe. {name} apparaît dans leur menu des espaces de travail.",
   "srv.ifExpires": "S'il expire",
-  "srv.ifExpiresHelp": "Retirez-le dans Personnes et invitez à nouveau.",
+  "srv.ifExpiresHelp": "Avant cela, Nouveau lien dans Personnes en crée un nouveau, avec les mêmes rôles.",
   "srv.invitesStay": "Les invitations ouvertes restent dans Personnes jusqu'à leur utilisation.",
   "srv.workspacesCount":
     "{n} espaces de travail · vous êtes dans {in} · tout compte peut en créer un et en devient l'admin",
@@ -2826,9 +2828,9 @@ export default {
   "srv.notHere": "Pas sur ce Mac",
   "srv.openWorkspace": "Ouvrir {name}",
   "srv.seenAsAdmin_one":
-    "Vous voyez {n} espace de travail dont vous n'êtes pas membre, en tant qu'admin de l'organisation.",
+    "En tant qu'admin de l'organisation, vous gérez {n} espace de travail dont vous n'êtes pas membre.",
   "srv.seenAsAdmin_other":
-    "Vous voyez {n} espaces de travail dont vous n'êtes pas membre, en tant qu'admin de l'organisation.",
+    "En tant qu'admin de l'organisation, vous gérez {n} espaces de travail dont vous n'êtes pas membre.",
   "srv.newOn": "Nouvel espace de travail sur {name}",
   "srv.youBecomeAdmin": "Vous en devenez l'admin",
   "srv.history": "Historique",
@@ -2841,7 +2843,7 @@ export default {
     "Vous choisissez cela une seule fois. Impossible de changer plus tard, même pour un admin de l'organisation. Pour changer, créez un nouvel espace de travail et déplacez les notes.",
   "srv.syncsRightAway": "Il se synchronise tout de suite avec le dossier sur ce Mac.",
   "srv.createWorkspace": "Créer l'espace de travail",
-  "srv.notMemberSees": "Vous le voyez en tant qu'admin de l'organisation",
+  "srv.notMemberSees": "Pas membre, vous le gérez en tant qu'admin de l'organisation",
   "srv.membersAdminsOnly":
     "Les admins de l'organisation voient ici les membres. Demandez à un admin de cet espace de travail d'ajouter quelqu'un.",
   "srv.historyOn": "Historique activé",

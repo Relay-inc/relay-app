@@ -2724,6 +2724,8 @@ const en = {
   "srv.openInvite": "Open invite",
   "srv.inviteAs": "{name} as {role}",
   "srv.until": "until {time}",
+  "srv.newLinkTip": "Withdraws this invite and makes a new link for the same address, with the same roles",
+  "srv.newLink": "New link",
   "srv.person": "Person",
   "srv.orgRole": "Organisation role",
   "srv.devices": "Devices",
@@ -2739,7 +2741,7 @@ const en = {
   "srv.emailsBad": "Not an email address: {emails}",
   "srv.inOrg": "In the organisation",
   "srv.orgAdminHelp":
-    "Organisation admins see every account and workspace, add people anywhere and can turn accounts off.",
+    "Organisation admins see and manage every account and workspace: they add people and change roles anywhere, and can turn accounts off.",
   "srv.rolesHelp":
     "Admin can invite and change roles. Member reads and edits. Reader only reads. Someone already in a workspace keeps their role.",
   "srv.whatTheyGet": "What they get",
@@ -2760,7 +2762,7 @@ const en = {
   "srv.onTheirMacHelp":
     "They open the link in Relay, or paste it under Add a server › Log in to a team server. {name} shows up in their workspace menu.",
   "srv.ifExpires": "If it expires",
-  "srv.ifExpiresHelp": "Withdraw it on People and invite again.",
+  "srv.ifExpiresHelp": "Before it does, New link on People makes a fresh one with the same roles.",
   "srv.invitesStay": "Open invites stay on People until used.",
   "srv.workspacesCount": "{n} workspaces · you are in {in} · any account can make one and becomes its admin",
   "srv.workspace": "Workspace",
@@ -2773,8 +2775,8 @@ const en = {
   "srv.notMember": "Not a member",
   "srv.notHere": "Not on this Mac",
   "srv.openWorkspace": "Open {name}",
-  "srv.seenAsAdmin_one": "You see {n} workspace you are not in as organisation admin.",
-  "srv.seenAsAdmin_other": "You see {n} workspaces you are not in as organisation admin.",
+  "srv.seenAsAdmin_one": "As organisation admin you manage {n} workspace you are not in.",
+  "srv.seenAsAdmin_other": "As organisation admin you manage {n} workspaces you are not in.",
   "srv.newOn": "New workspace on {name}",
   "srv.youBecomeAdmin": "You become its admin",
   "srv.history": "History",
@@ -2786,7 +2788,7 @@ const en = {
     "You choose this once. It cannot be switched later, also not by an organisation admin. To change it, make a new workspace and move the notes.",
   "srv.syncsRightAway": "It syncs to the folder on this Mac right away.",
   "srv.createWorkspace": "Create workspace",
-  "srv.notMemberSees": "You see it as organisation admin",
+  "srv.notMemberSees": "Not a member, you manage it as organisation admin",
   "srv.membersAdminsOnly": "Organisation admins see the members here. Ask an admin of this workspace to add someone.",
   "srv.historyOn": "History on",
   "srv.historyOnHelp":

@@ -2741,6 +2741,8 @@ export default {
   "srv.openInvite": "Open uitnodiging",
   "srv.inviteAs": "{name} als {role}",
   "srv.until": "tot {time}",
+  "srv.newLinkTip": "Trekt deze uitnodiging in en maakt een nieuwe link voor hetzelfde adres, met dezelfde rollen",
+  "srv.newLink": "Nieuwe link",
   "srv.person": "Persoon",
   "srv.orgRole": "Rol in de organisatie",
   "srv.devices": "Toestellen",
@@ -2756,7 +2758,7 @@ export default {
   "srv.emailsBad": "Geen e-mailadres: {emails}",
   "srv.inOrg": "In de organisatie",
   "srv.orgAdminHelp":
-    "Organisatie-admins zien elk account en elke workspace, voegen overal mensen toe en kunnen accounts uitzetten.",
+    "Organisatie-admins zien en beheren elk account en elke workspace: ze voegen overal mensen toe, wijzigen overal rollen en kunnen accounts uitzetten.",
   "srv.rolesHelp":
     "Een admin kan uitnodigen en rollen wijzigen. Een lid leest en bewerkt. Een lezer leest enkel. Wie al in een workspace zit, houdt zijn rol.",
   "srv.whatTheyGet": "Wat ze krijgen",
@@ -2777,7 +2779,7 @@ export default {
   "srv.onTheirMacHelp":
     "Ze openen de link in Relay, of plakken hem onder Een server toevoegen › Inloggen op een teamserver. {name} verschijnt in hun workspacemenu.",
   "srv.ifExpires": "Als hij verloopt",
-  "srv.ifExpiresHelp": "Trek hem in bij Mensen en nodig opnieuw uit.",
+  "srv.ifExpiresHelp": "Daarvoor maakt Nieuwe link bij Mensen een verse, met dezelfde rollen.",
   "srv.invitesStay": "Open uitnodigingen blijven bij Mensen staan tot ze gebruikt zijn.",
   "srv.workspacesCount": "{n} workspaces · je zit in {in} · elk account kan er een maken en wordt de admin ervan",
   "srv.workspace": "Workspace",
@@ -2790,8 +2792,8 @@ export default {
   "srv.notMember": "Geen lid",
   "srv.notHere": "Niet op deze Mac",
   "srv.openWorkspace": "{name} openen",
-  "srv.seenAsAdmin_one": "Je ziet {n} workspace waarin je niet zit als organisatie-admin.",
-  "srv.seenAsAdmin_other": "Je ziet {n} workspaces waarin je niet zit als organisatie-admin.",
+  "srv.seenAsAdmin_one": "Als organisatie-admin beheer je {n} workspace waarin je niet zit.",
+  "srv.seenAsAdmin_other": "Als organisatie-admin beheer je {n} workspaces waarin je niet zit.",
   "srv.newOn": "Nieuwe workspace op {name}",
   "srv.youBecomeAdmin": "Jij wordt de admin ervan",
   "srv.history": "Geschiedenis",
@@ -2803,7 +2805,7 @@ export default {
     "Je kiest dit één keer. Het kan later niet meer gewisseld worden, ook niet door een organisatie-admin. Om het te wijzigen maak je een nieuwe workspace en verhuis je de notities.",
   "srv.syncsRightAway": "Hij synct meteen naar de map op deze Mac.",
   "srv.createWorkspace": "Workspace maken",
-  "srv.notMemberSees": "Je ziet hem als organisatie-admin",
+  "srv.notMemberSees": "Geen lid, je beheert hem als organisatie-admin",
   "srv.membersAdminsOnly":
     "Organisatie-admins zien hier de leden. Vraag een admin van deze workspace om iemand toe te voegen.",
   "srv.historyOn": "Geschiedenis aan",

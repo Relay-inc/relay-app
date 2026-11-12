@@ -4,7 +4,7 @@ import { ENTRA } from "../../../domain/settings/types";
 import { orgDisplayName, setupChecklist, type SetupItem } from "../../../domain/settings/servers";
 import { openOrgWorkspace, pickOrgTab } from "../../../application/settings/servers";
 import { useSettingsStore } from "../../../application/settings/store";
-import { syncTeamWorkspace, teamLink, withdrawTeamInvite } from "../../../application/settings/teams";
+import { renewTeamInvite, syncTeamWorkspace, teamLink } from "../../../application/settings/teams";
 import { openForm } from "../../../application/settings/shared-vaults";
 import { sentAt } from "../../../shared/format";
 import { Icon } from "../../components/Icon";
@@ -186,6 +186,7 @@ function You({ team, o }: { team: TeamServer; o: TeamOverview | null | undefined
 function Setup({ team, o }: { team: TeamServer; o: TeamOverview }) {
   const { t, tn, locale } = useT();
   const busy = useSettingsStore(s => !!s.shared.busy[`team:${team.fp}`]);
+  const links = useSettingsStore(s => s.team.links);
   const items = setupChecklist(o);
   const done = items.filter(i => i.done).length;
   const who = (email: string) => (email === team.email ? t("srv.youLower") : email);
@@ -226,15 +227,20 @@ function Setup({ team, o }: { team: TeamServer; o: TeamOverview }) {
       case "invite":
         return [
           t("srv.setupInvite", { email: item.email }),
-          t("srv.setupInviteHelp", { time: sentAt(item.expires * 1000, locale) }),
-          <button
-            key="go"
-            className={buttonClass("ghost")}
-            disabled={busy}
-            onClick={() => void withdrawTeamInvite(team.fp, item.id)}
-          >
-            {t("set.sharedWithdraw")}
-          </button>,
+          links[item.id] ?? t("srv.setupInviteHelp", { time: sentAt(item.expires * 1000, locale) }),
+          links[item.id] ? (
+            <CopyButton key="go" label={t("mc.copy")} text={links[item.id]} />
+          ) : (
+            <button
+              key="go"
+              className={buttonClass()}
+              disabled={busy}
+              title={t("srv.newLinkTip")}
+              onClick={() => void renewTeamInvite(team.fp, item)}
+            >
+              {t("srv.newLink")}
+            </button>
+          ),
         ];
     }
   };

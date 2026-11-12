@@ -75,6 +75,18 @@ export const setTeamAccount = (fp: string, email: string, patch: { admin?: boole
     await backend.teamCall(fp, { op: "team_account", email, ...patch });
     await loadOverview(fp);
   });
+/** New link for an open invite: a new invite for the same address, then the old one withdrawn. The organisation role
+ *  and the workspace roles are the account's, not the invite's, so they carry over. The new link shows on its row. */
+export const renewTeamInvite = (fp: string, invite: { id: string; email: string }) =>
+  run(key(fp), async () => {
+    const made = await backend.teamCall<{ invite?: string; link?: string }>(fp, {
+      op: "team_invite",
+      email: invite.email,
+    });
+    if (made.invite && made.link) change(draft => void (draft.links[made.invite!] = made.link!));
+    await backend.teamCall(fp, { op: "team_invite_revoke", invite: invite.id });
+    await loadOverview(fp);
+  });
 export const withdrawTeamInvite = (fp: string, invite: string) =>
   run(key(fp), async () => {
     await backend.teamCall(fp, { op: "team_invite_revoke", invite });

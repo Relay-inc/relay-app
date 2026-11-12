@@ -133,8 +133,14 @@ export type SettingsState = {
     };
   };
   // the team servers (application/settings/teams.ts): per server (fp) its account and workspaces, what its organisation
-  // admins see, and the link to log in with as typed
-  team: { me: Record<string, TeamMe | null>; overview: Record<string, TeamOverview | null>; link: string };
+  // admins see, the link to log in with as typed, and the links New link made, per invite id (the server never gives an
+  // open invite's link again)
+  team: {
+    me: Record<string, TeamMe | null>;
+    overview: Record<string, TeamOverview | null>;
+    link: string;
+    links: Record<string, string>;
+  };
   // Servers and organisations, the page in the main window (application/settings/servers.ts): the item picked in its
   // list ("org:<fp>", "add"), the organisation's tab, the workspace open on its Workspaces tab that is not synced here
   // ("" none), and whether Invite people shows
@@ -230,7 +236,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     open: "",
     form: { mode: "", machine: "", name: "", folder: "", link: "", noHistory: false },
   },
-  team: { me: {}, overview: {}, link: "" },
+  team: { me: {}, overview: {}, link: "", links: {} },
   serversPage: { item: "", tab: "overview", workspace: "", inviting: false },
   pluginsPage: { loaded: false, secrets: {}, imports: [], messages: {}, tests: {} },
   integrations: {
