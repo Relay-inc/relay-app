@@ -1928,7 +1928,7 @@ const VIEWS = {
     await waitText("What it is for");
     await settle(page);
   },
-  // A machine of your own, step 2: what it needs and the setup commands (the ones Settings › Machines had)
+  // A machine of your own, step 2: what it needs and the setup commands, compose as for an organisation server
   "servers-add-own": async () => {
     await VIEWS["servers-add"]();
     await button("Continue").click();
@@ -1993,6 +1993,18 @@ const VIEWS = {
   "servers-machine": async () => {
     await machinePage("github", 1300);
     await waitText("Connected as octo-demo");
+  },
+  // a machine of your own that speaks an older protocol: the compose update for its folder (PR add-server, one route)
+  "servers-machine-outdated": async () => {
+    await machinePage("machines");
+    await waitText("docker compose pull");
+  },
+  // A machine of your own on Unraid: the compose commands with Unraid's folder
+  "servers-add-own-unraid": async () => {
+    await VIEWS["servers-add-own"]();
+    await page.getByRole("radio", { name: "Unraid", exact: true }).click();
+    await waitText("/mnt/user/appdata/relay-server");
+    await settle(page);
   },
   // Settings: Servers and organisations is a row under the pages, Workspaces points there for organisations
   "settings-servers-row": async () => {

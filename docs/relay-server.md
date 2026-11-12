@@ -4,13 +4,17 @@ A relay-server keeps your team's workspaces in sync and can run Relay conversati
 in one of two roles, chosen when it is set up: personal (your own devices, the workspaces end-to-end encrypted, the
 server reads nothing) or team (accounts by email, the server keeps the workspaces readable, see
 [workspaces.md › Two roles](workspaces.md#two-roles)). This guide sets one up on a Linux box with Docker in about fifteen minutes, with one compose file
-([`deploy/relay-server/compose.yml`](../deploy/relay-server/compose.yml)). How the server works and what it can and
+([`deploy/relay-server/compose.yml`](../deploy/relay-server/compose.yml)). A machine of your own with Docker (Linux,
+Unraid, or a Mac with Docker Desktop or OrbStack) takes the same route: Add a server › A machine of your own shows these
+commands with your folder and this Relay's version filled in. A second Mac can also be a machine with the Relay app
+itself, without Docker. How the server works and what it can and
 cannot see: [packages/relay-server/README.md](../packages/relay-server/README.md) and [workspaces.md](workspaces.md).
 
 ## Requirements
 
 - A Linux box (amd64 or arm64) that stays on, with 1 GB of RAM to spare and disk for the workspaces.
-- Docker Engine 25 or newer with the compose plugin (`docker compose version`).
+- Docker Engine 25 or newer with the compose plugin (`docker compose version`). On Unraid, the Docker Compose Manager
+  plugin.
 - One TCP port the Macs can reach (47800 by default).
 - Outbound HTTPS at the first start: the container installs Claude Code then. A server that only holds workspaces
   never uses it, and starts without it when the download fails.

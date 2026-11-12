@@ -12,8 +12,8 @@ import { Steps } from "./Steps";
 
 const LABEL = "text-[13px] font-medium text-s-fg";
 
-/** A machine of your own: where it runs (the setup Settings › Machines had, its `docker run` commands for the kind of
- *  machine and the folder), then pairing it with the line its relay-server printed. */
+/** A machine of your own: where it runs (the compose commands of docs/relay-server.md for the kind of machine and the
+ *  folder, or the Relay app on a second Mac), then pairing it with the line its relay-server printed. */
 export function AddOwn() {
   const { t } = useT();
   const step = useSettingsStore(s => s.serversPage.step);

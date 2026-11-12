@@ -62,10 +62,11 @@ export function newerVersion(a: string, b: string) {
 /** The kinds of machine the setup section has commands for, in the order the page shows them. */
 export const SETUP_PLATFORMS = ["mac", "linux", "unraid"] as const;
 export type SetupPlatform = (typeof SETUP_PLATFORMS)[number];
-/** Where each kind of machine keeps relay-server's folders unless the page says otherwise. */
+/** Where each kind of machine keeps relay-server's compose folder unless the page says otherwise (Linux as
+ *  docs/relay-server.md has it for an organisation server). */
 export const SETUP_FOLDERS: Record<SetupPlatform, string> = {
   mac: "~/relay-server",
-  linux: "/srv/relay-server",
+  linux: "/opt/relay-server",
   unraid: "/mnt/user/appdata/relay-server",
 };
 // the machine's own LAN address in the pairing line, so it can be copied as is: on a Mac the first network port with
@@ -75,9 +76,12 @@ const LAN_ADDRESS: Record<SetupPlatform, string> = {
   linux: "$(ip route get 1 | sed -n 's/.*src \\([0-9.]*\\).*/\\1/p')",
   unraid: "$(ip route get 1 | sed -n 's/.*src \\([0-9.]*\\).*/\\1/p')",
 };
-/** The commands that set up relay-server in Docker on a machine of `platform`, to run there in this order. `folder`
- *  keeps the pairing, Claude's login, Claude Code itself and the repos. The image of this Relay's `version` speaks its
- *  protocol. `update` replaces a running one with that version, the folders stay. */
+/** Where deploy/relay-server's files are downloaded from, as docs/relay-server.md has it. */
+export const DEPLOY_BASE = "https://raw.githubusercontent.com/Relay-inc/relay-app/main/deploy/relay-server";
+/** The commands that set up relay-server with Docker Compose on a machine of `platform` (docs/relay-server.md), to run
+ *  there in this order. `folder` holds compose.yml, .env and backup.sh: the pairing, Claude's login and the repos live
+ *  in the compose volume. `.env` pins the image of this Relay's `version`, which speaks its protocol. `update` moves a
+ *  running one to that version, the volume stays. */
 export function setupCommands(image: string, version: string, folder: string, platform: SetupPlatform) {
   const dir = folder.trim().replace(/\/+$/, "") || SETUP_FOLDERS[platform];
   // a leading ~/ stays outside the quotes, or the shell would not expand it
@@ -87,32 +91,29 @@ export function setupCommands(image: string, version: string, folder: string, pl
       : /^[\w./:~-]+$/.test(path)
         ? path
         : `"${path.replace(/(["$`\\])/g, "\\$1")}"`;
-  const volumes = [
-    "data:/home/relay/data",
-    "claude:/home/relay/.claude",
-    "repos:/home/relay/repos",
-    "local:/home/relay/.local",
-  ];
-  const run = [
-    'docker run -d --name relay-server --hostname "$(hostname)" --restart unless-stopped -p 47800:47800 \\',
-    "  --tmpfs /home/relay/work:uid=1000,gid=1000,mode=0700,size=2g \\",
-    ...volumes.map(volume => `  -v ${q(`${dir}/${volume}`)} \\`),
-    `  ${image}:${version}`,
-  ].join("\n");
-  const folders = ["data", "claude", "repos", "local"].map(name => q(`${dir}/${name}`)).join(" ");
-  // the container runs as uid 1000: Linux needs the folders to be its own (sudo for a folder like /srv, Unraid's
-  // terminal is root already), Docker Desktop on a Mac lets the container write a shared folder as it is
-  const folderSetup = {
-    mac: `mkdir -p ${folders}`,
-    linux: `sudo mkdir -p ${folders}\nsudo chown -R 1000:1000 ${q(dir)}`,
-    unraid: `mkdir -p ${folders}\nchown -R 1000:1000 ${q(dir)}`,
-  }[platform];
+  const at = q(dir);
+  const pin = `RELAY_SERVER_IMAGE=${image}:${version}`;
+  // a folder like /opt needs sudo on Linux, then belongs to the user so the rest runs without it. Unraid's terminal is
+  // root already, a Mac's home is the user's
+  const make = platform === "linux" ? `sudo mkdir -p ${at} && sudo chown "$USER" ${at}` : `mkdir -p ${at}`;
   return {
     login: "docker login ghcr.io -u <your GitHub user>",
-    install: `${folderSetup}\n${run}`,
-    claude: "docker exec -it relay-server claude",
-    pair: `docker exec relay-server relay-server pair --host "${LAN_ADDRESS[platform]}"`,
-    update: `docker pull ${image}:${version}\ndocker rm -f relay-server\n${run}`,
+    install: [
+      `${make} && cd ${at}`,
+      `base=${DEPLOY_BASE}`,
+      'curl -fsSLO "$base/compose.yml" -O "$base/backup.sh"',
+      "chmod +x backup.sh",
+      `echo "${pin}" > .env`,
+      'echo "RELAY_HOST=$(hostname)" >> .env',
+      "docker compose up -d --wait",
+    ].join("\n"),
+    claude: "docker compose exec -it relay-server claude",
+    pair: `docker compose exec relay-server relay-server pair --host "${LAN_ADDRESS[platform]}"`,
+    update: [
+      `cd ${at}`,
+      `sed -i.bak '/^RELAY_SERVER_IMAGE=/d' .env && echo "${pin}" >> .env`,
+      "docker compose pull && docker compose up -d --wait",
+    ].join("\n"),
   };
 }
 

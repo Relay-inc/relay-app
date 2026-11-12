@@ -2304,26 +2304,27 @@ export default {
   "mc.pairing": "Association…",
   "mc.setupTitle": "Configurer une machine",
   "mc.setupHelp":
-    "relay-server tourne dans Docker sur un autre ordinateur de votre réseau. Ces commandes sont pour relay-server {version}, la version de ce Relay. Lancez-les sur la machine, dans cet ordre.",
+    "relay-server tourne avec Docker Compose sur un autre ordinateur de votre réseau, comme le serveur d'une organisation. Ces commandes sont pour relay-server {version}, la version de ce Relay. Lancez-les sur la machine, dans cet ordre.",
   "mc.setupHelpDev":
-    "relay-server tourne dans Docker sur un autre ordinateur de votre réseau. Ceci est une version de développement de Relay, aucune image n'existe pour sa version : ces commandes utilisent la plus récente, relay-server:latest. Lancez-les sur la machine, dans cet ordre.",
+    "relay-server tourne avec Docker Compose sur un autre ordinateur de votre réseau, comme le serveur d'une organisation. Ceci est une version de développement de Relay, aucune image n'existe pour sa version : ces commandes utilisent la plus récente, relay-server:latest. Lancez-les sur la machine, dans cet ordre.",
   "mc.setupShow": "Afficher les commandes",
   "mc.setupKind": "Type de machine",
   "mc.setupPrep.mac":
-    "Installez Docker Desktop ou OrbStack et laissez-le démarrer à l'ouverture de session. Dans Réglages Système › Énergie, empêchez le Mac de se mettre en veille : les conversations s'arrêtent avec lui.",
+    "Installez Docker Desktop ou OrbStack (les deux incluent Compose) et laissez-le démarrer à l'ouverture de session. Dans Réglages Système › Énergie, empêchez le Mac de se mettre en veille : les conversations s'arrêtent avec lui.",
   "mc.setupPrep.linux":
-    "Installez Docker Engine (docs.docker.com/engine/install). Si votre utilisateur n'est pas dans le groupe docker, mettez sudo devant chaque commande docker ci-dessous.",
+    "Installez Docker Engine avec le plugin compose (docs.docker.com/engine/install). Si votre utilisateur n'est pas dans le groupe docker, mettez sudo devant chaque commande docker ci-dessous.",
   "mc.setupPrep.unraid":
-    "Docker doit être activé (Settings › Docker). Lancez les commandes dans le terminal d'Unraid, l'icône >_ en haut à droite.",
+    "Docker doit être activé (Settings › Docker), avec le plugin Docker Compose Manager depuis Apps. Lancez les commandes dans le terminal d'Unraid, l'icône >_ en haut à droite.",
   "mc.setupFolder": "Dossier sur la machine",
   "mc.setupFolderHelp":
-    "Garde l'appairage, la connexion de Claude, Claude Code et les dépôts. Tout dossier qui survit à un redémarrage de la machine.",
+    "Contient compose.yml, .env et backup.sh. L'appairage, la connexion de Claude et les dépôts restent dans le volume que Docker garde pour lui.",
   "mc.setupLogin":
     "Seulement tant que l'image est privée : connectez-vous une fois avec un jeton GitHub qui a read:packages.",
-  "mc.setupInstall": "Créez les dossiers et démarrez relay-server. Le premier démarrage installe Claude Code.",
-  "mc.setupClaude": "Connectez-vous une fois à Claude. Un lien s'affiche à ouvrir sur ce Mac.",
+  "mc.setupInstall":
+    "Récupérez le fichier compose, fixez cette version dans .env et démarrez relay-server. Le premier démarrage installe Claude Code.",
+  "mc.setupClaude": "Dans le même dossier, connectez-vous une fois à Claude. Un lien s'affiche à ouvrir sur ce Mac.",
   "mc.setupPair":
-    "Créez une ligne d'appairage, la commande remplit elle-même l'adresse LAN de la machine. Collez la ligne à l'étape suivante, Associer.",
+    "Dans le même dossier, créez une ligne d'appairage, la commande remplit elle-même l'adresse LAN de la machine. Collez la ligne à l'étape suivante, Associer.",
   "mc.setupWay": "Méthode",
   "mc.setupWayApp": "Avec l'app Relay (recommandé)",
   "mc.setupWayDocker": "Avec Docker",
@@ -2445,7 +2446,8 @@ export default {
   "mc.update": "Mettre à jour vers {version}",
   "mc.updating": "Mise à jour…",
   "mc.updated": "Mis à jour vers {version}",
-  "mc.updateHelp": "À lancer sur la machine. Les dossiers gardent l'appairage, la connexion et les conversations.",
+  "mc.updateHelp":
+    "À lancer sur la machine. Elle met la nouvelle version dans .env et redémarre, le volume garde l'appairage, la connexion et les conversations.",
   "mc.refresh": "Actualiser",
   "mc.checking": "Vérification…",
   "mc.online": "En ligne",

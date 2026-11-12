@@ -1,4 +1,5 @@
 import type { SharedRole, TeamOverview, TeamServer } from "./types.ts";
+import { DEPLOY_BASE } from "./machines.ts";
 
 // Servers and organisations, the page in the main window: what it shows about a team server, worked out from what the
 // server already gives (`team_me`, `team_overview`). Nothing here is a guess about what the server does not say.
@@ -178,7 +179,7 @@ export function orgInstallCommands(s: OrgSetup) {
     login: "docker login ghcr.io -u <your GitHub user>",
     install: [
       `sudo mkdir -p ${dir} && sudo chown "$USER" ${dir} && cd ${dir}`,
-      "base=https://raw.githubusercontent.com/Relay-inc/relay-app/main/deploy/relay-server",
+      `base=${DEPLOY_BASE}`,
       'curl -fsSLO "$base/compose.yml" -O "$base/backup.sh" -o .env "$base/.env.example"',
       "chmod +x backup.sh",
       "docker compose up -d --wait",

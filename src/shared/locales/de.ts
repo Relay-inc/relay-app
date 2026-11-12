@@ -2295,25 +2295,26 @@ export default {
   "mc.pairing": "Koppeln…",
   "mc.setupTitle": "Maschine einrichten",
   "mc.setupHelp":
-    "relay-server läuft in Docker auf einem anderen Computer in deinem Netzwerk. Diese Befehle sind für relay-server {version}, die Version dieses Relay. Führe sie auf der Maschine in dieser Reihenfolge aus.",
+    "relay-server läuft mit Docker Compose auf einem anderen Computer in deinem Netzwerk, wie der Server einer Organisation. Diese Befehle sind für relay-server {version}, die Version dieses Relay. Führe sie auf der Maschine in dieser Reihenfolge aus.",
   "mc.setupHelpDev":
-    "relay-server läuft in Docker auf einem anderen Computer in deinem Netzwerk. Dies ist eine Entwicklungsversion von Relay, für ihre Version gibt es kein Image: Diese Befehle nutzen das neueste, relay-server:latest. Führe sie auf der Maschine in dieser Reihenfolge aus.",
+    "relay-server läuft mit Docker Compose auf einem anderen Computer in deinem Netzwerk, wie der Server einer Organisation. Dies ist eine Entwicklungsversion von Relay, für ihre Version gibt es kein Image: Diese Befehle nutzen das neueste, relay-server:latest. Führe sie auf der Maschine in dieser Reihenfolge aus.",
   "mc.setupShow": "Befehle zeigen",
   "mc.setupKind": "Art der Maschine",
   "mc.setupPrep.mac":
-    "Installiere Docker Desktop oder OrbStack und lass es bei der Anmeldung starten. Verhindere in Systemeinstellungen › Energie den Ruhezustand: Schläft der Mac, stoppen die Unterhaltungen.",
+    "Installiere Docker Desktop oder OrbStack (beide mit Compose) und lass es bei der Anmeldung starten. Verhindere in Systemeinstellungen › Energie den Ruhezustand: Schläft der Mac, stoppen die Unterhaltungen.",
   "mc.setupPrep.linux":
-    "Installiere Docker Engine (docs.docker.com/engine/install). Ist dein Benutzer nicht in der Gruppe docker, setze sudo vor jeden docker-Befehl unten.",
+    "Installiere Docker Engine mit dem Compose-Plugin (docs.docker.com/engine/install). Ist dein Benutzer nicht in der Gruppe docker, setze sudo vor jeden docker-Befehl unten.",
   "mc.setupPrep.unraid":
-    "Docker muss an sein (Settings › Docker). Führe die Befehle im Terminal von Unraid aus, dem >_-Symbol oben rechts.",
+    "Docker muss an sein (Settings › Docker), mit dem Plugin Docker Compose Manager aus Apps. Führe die Befehle im Terminal von Unraid aus, dem >_-Symbol oben rechts.",
   "mc.setupFolder": "Ordner auf der Maschine",
   "mc.setupFolderHelp":
-    "Bewahrt die Kopplung, den Claude-Login, Claude Code und die Repos. Jeder Ordner, der einen Neustart der Maschine übersteht.",
+    "Enthält compose.yml, .env und backup.sh. Die Kopplung, der Claude-Login und die Repos liegen im Volume, das Docker dafür führt.",
   "mc.setupLogin": "Nur solange das Image privat ist: einmal mit einem GitHub-Token mit read:packages anmelden.",
-  "mc.setupInstall": "Ordner anlegen und relay-server starten. Der erste Start installiert Claude Code.",
-  "mc.setupClaude": "Einmal bei Claude anmelden. Es erscheint ein Link zum Öffnen auf diesem Mac.",
+  "mc.setupInstall":
+    "Compose-Datei holen, diese Version in .env festlegen und relay-server starten. Der erste Start installiert Claude Code.",
+  "mc.setupClaude": "Im selben Ordner einmal bei Claude anmelden. Es erscheint ein Link zum Öffnen auf diesem Mac.",
   "mc.setupPair":
-    "Erstelle eine Kopplungszeile, der Befehl setzt die LAN-Adresse der Maschine selbst ein. Füge die Zeile im nächsten Schritt ein, Koppeln.",
+    "Erstelle im selben Ordner eine Kopplungszeile, der Befehl setzt die LAN-Adresse der Maschine selbst ein. Füge die Zeile im nächsten Schritt ein, Koppeln.",
   "mc.setupWay": "Weg",
   "mc.setupWayApp": "Mit der Relay-App (empfohlen)",
   "mc.setupWayDocker": "Mit Docker",
@@ -2435,7 +2436,8 @@ export default {
   "mc.update": "Auf {version} aktualisieren",
   "mc.updating": "Aktualisiere…",
   "mc.updated": "Auf {version} aktualisiert",
-  "mc.updateHelp": "Auf der Maschine ausführen. Die Ordner bewahren die Kopplung, den Login und die Gespräche.",
+  "mc.updateHelp":
+    "Auf der Maschine ausführen. Es setzt die neue Version in .env und startet neu, das Volume bewahrt die Kopplung, den Login und die Gespräche.",
   "mc.refresh": "Aktualisieren",
   "mc.checking": "Prüfen…",
   "mc.online": "Online",

@@ -2276,25 +2276,26 @@ export default {
   "mc.pairing": "Koppelen…",
   "mc.setupTitle": "Machine opzetten",
   "mc.setupHelp":
-    "relay-server draait in Docker op een andere computer in je netwerk. Deze commando's zijn voor relay-server {version}, de versie van deze Relay. Voer ze uit op de machine, in deze volgorde.",
+    "relay-server draait met Docker Compose op een andere computer in je netwerk, net als de server van een organisatie. Deze commando's zijn voor relay-server {version}, de versie van deze Relay. Voer ze uit op de machine, in deze volgorde.",
   "mc.setupHelpDev":
-    "relay-server draait in Docker op een andere computer in je netwerk. Dit is een ontwikkelversie van Relay, voor haar eigen versie bestaat geen image: deze commando's gebruiken het nieuwste, relay-server:latest. Voer ze uit op de machine, in deze volgorde.",
+    "relay-server draait met Docker Compose op een andere computer in je netwerk, net als de server van een organisatie. Dit is een ontwikkelversie van Relay, voor haar eigen versie bestaat geen image: deze commando's gebruiken het nieuwste, relay-server:latest. Voer ze uit op de machine, in deze volgorde.",
   "mc.setupShow": "Toon de commando's",
   "mc.setupKind": "Soort machine",
   "mc.setupPrep.mac":
-    "Installeer Docker Desktop of OrbStack en laat het starten bij het inloggen. Zet in Systeeminstellingen › Energie de sluimerstand uit: als de Mac slaapt, stoppen de gesprekken.",
+    "Installeer Docker Desktop of OrbStack (allebei met Compose) en laat het starten bij het inloggen. Zet in Systeeminstellingen › Energie de sluimerstand uit: als de Mac slaapt, stoppen de gesprekken.",
   "mc.setupPrep.linux":
-    "Installeer Docker Engine (docs.docker.com/engine/install). Zit je gebruiker niet in de groep docker, zet dan sudo voor elk docker-commando hieronder.",
+    "Installeer Docker Engine met de compose-plugin (docs.docker.com/engine/install). Zit je gebruiker niet in de groep docker, zet dan sudo voor elk docker-commando hieronder.",
   "mc.setupPrep.unraid":
-    "Docker moet aan staan (Settings › Docker). Voer de commando's uit in de terminal van Unraid, het >_-icoon rechtsboven.",
+    "Docker moet aan staan (Settings › Docker), met de plugin Docker Compose Manager uit Apps. Voer de commando's uit in de terminal van Unraid, het >_-icoon rechtsboven.",
   "mc.setupFolder": "Map op de machine",
   "mc.setupFolderHelp":
-    "Bewaart de koppeling, de login van Claude, Claude Code en de repos. Elke map die een herstart van de machine overleeft.",
+    "Bevat compose.yml, .env en backup.sh. De koppeling, de login van Claude en de repos staan in het volume dat Docker ervoor bijhoudt.",
   "mc.setupLogin": "Enkel zolang het image privé is: log eenmalig in met een GitHub-token met read:packages.",
-  "mc.setupInstall": "Maak de mappen en start relay-server. De eerste start installeert Claude Code.",
-  "mc.setupClaude": "Log eenmalig in bij Claude. Je krijgt een link om op deze Mac te openen.",
+  "mc.setupInstall":
+    "Haal het compose-bestand op, leg deze versie vast in .env en start relay-server. De eerste start installeert Claude Code.",
+  "mc.setupClaude": "Log in dezelfde map eenmalig in bij Claude. Je krijgt een link om op deze Mac te openen.",
   "mc.setupPair":
-    "Maak een koppelregel, het commando vult het LAN-adres van de machine zelf in. Plak de regel in de volgende stap, Koppelen.",
+    "Maak in dezelfde map een koppelregel, het commando vult het LAN-adres van de machine zelf in. Plak de regel in de volgende stap, Koppelen.",
   "mc.setupWay": "Hoe",
   "mc.setupWayApp": "Met de Relay-app (aanbevolen)",
   "mc.setupWayDocker": "Met Docker",
@@ -2414,7 +2415,8 @@ export default {
   "mc.update": "Bijwerken naar {version}",
   "mc.updating": "Bijwerken…",
   "mc.updated": "Bijgewerkt naar {version}",
-  "mc.updateHelp": "Voer uit op de machine. De mappen bewaren de koppeling, de login en de gesprekken.",
+  "mc.updateHelp":
+    "Voer uit op de machine. Het zet de nieuwe versie in .env en herstart, het volume bewaart de koppeling, de login en de gesprekken.",
   "mc.refresh": "Vernieuwen",
   "mc.checking": "Controleren…",
   "mc.online": "Online",
