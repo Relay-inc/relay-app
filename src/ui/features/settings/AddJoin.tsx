@@ -1,9 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { recogniseLine } from "../../../domain/settings/servers";
 import { connectOrg, joinWorkspace, openAdd, pairOwnMachine } from "../../../application/settings/servers";
 import { editForm, pickSharedFolder } from "../../../application/settings/shared-vaults";
 import { useSettingsStore } from "../../../application/settings/store";
-import { cancelSignIn } from "../../../application/settings/teams";
+import { cancelSignIn, peekTeam } from "../../../application/settings/teams";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
 import { buttonClass, ERROR_MESSAGE, FIELD, HINT } from "./blocks";
@@ -98,13 +98,19 @@ function Recognised({
   const pairError = useSettingsStore(s => s.machinesPage.pairError);
   const [name, setName] = useState("");
   const [sharedOnly, setSharedOnly] = useState(false);
+  const team = kind === "team-invite" || kind === "team-signin";
+  // an organisation's link: its server says its name before anything else happens (the host until it answers)
+  const peek = useSettingsStore(s => (s.team.peek?.link === line ? s.team.peek : null));
+  useEffect(() => {
+    if (team) void peekTeam(line);
+  }, [team, line]);
+  const org = peek?.name || host;
   const row = (key: string, value: ReactNode) => (
     <>
       <dt className={KEY}>{key}</dt>
       <dd className="text-xs text-s-fg">{value}</dd>
     </>
   );
-  const team = kind === "team-invite" || kind === "team-signin";
   return (
     <div className="grid gap-3 rounded-lg bg-s-mutedbg/40 px-3.5 py-3">
       <span className="flex items-center gap-1.5 text-[13px] font-medium text-s-fg">
@@ -120,9 +126,12 @@ function Recognised({
         )}
         <span className="font-mono text-xs font-normal text-s-muted">{host}</span>
       </span>
+      {kind === "team-invite" && peek?.name ? (
+        <span className="text-base font-semibold text-s-fg">{t("srv.invitedYou", { name: peek.name })}</span>
+      ) : null}
       <dl className="grid grid-cols-[9rem_1fr] gap-x-3 gap-y-2">
         {team
-          ? row(t("srv.youGet"), t(kind === "team-invite" ? "srv.getTeamInvite" : "srv.getTeamSignIn", { host }))
+          ? row(t("srv.youGet"), t(kind === "team-invite" ? "srv.getTeamInvite" : "srv.getTeamSignIn", { host: org }))
           : kind === "workspace"
             ? row(t("srv.youGet"), t("srv.getWorkspace"))
             : row(t("srv.youGet"), t("srv.getPairing"))}
@@ -130,7 +139,7 @@ function Recognised({
           t("srv.whoCanReadIt"),
           team ? (
             <span className="grid justify-items-start gap-1">
-              <TrustBadge kind="org" name={host} />
+              <TrustBadge kind="org" name={org} />
               {t("srv.readsTeam")}
             </span>
           ) : (

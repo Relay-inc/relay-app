@@ -32,12 +32,40 @@ export async function loadTeam(fp: string) {
   await run(key(fp), async () => {
     const me = await backend.teamMe(fp);
     change(draft => void (draft.me[fp] = me));
+    // the organisation's name as the server says it now: every Mac shows the same one (an older server sends none)
+    if (me.name !== undefined) keepName(fp, me.name);
     if (me.admin) await loadOverview(fp);
   });
 }
 async function loadOverview(fp: string) {
   const overview = await backend.teamCall<TeamOverview>(fp, { op: "team_overview" });
   change(draft => void (draft.overview[fp] = overview));
+}
+
+/** The name of team server `fp` in this window's copy of the settings, as the backend keeps it there too. */
+const keepName = (fp: string, name: string) =>
+  useSettingsStore.setState(draft => {
+    const team = draft.settings.teams?.find(x => x.fp === fp);
+    if (team) team.name = name;
+  });
+
+/** An organisation admin names the organisation, or renames it ("" takes the name away: the host shows). */
+export const setTeamName = (fp: string, name: string) =>
+  run(key(fp), async () => {
+    const out = await backend.teamCall<{ name: string }>(fp, { op: "team_name", name: name.trim() });
+    keepName(fp, out.name);
+  });
+
+/** What the server of a pasted team link says before logging in: its name and the first domain of its sign-in, for
+ *  Join and the connect step. A server out of reach or closed to this Mac says nothing, the host shows. */
+export async function peekTeam(link: string) {
+  if (useSettingsStore.getState().team.peek?.link === link) return;
+  change(draft => void (draft.peek = { link, name: "", domain: "" }));
+  const info = await backend.teamPeek(link).catch(() => null);
+  change(draft => {
+    if (draft.peek?.link !== link || !info) return;
+    draft.peek = { link, name: info.name ?? "", domain: info.sso?.domains[0] ?? "" };
+  });
 }
 
 /** Sync team workspace `id` into a folder picked now (an empty one). */

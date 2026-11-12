@@ -2714,6 +2714,13 @@ const en = {
   "srv.openInvite": "Open invite",
   "srv.inviteAs": "{name} as {role}",
   "srv.until": "until {time}",
+  "srv.nameConnectHelp":
+    "Every Mac in the organisation shows this name in place of the address. You can change it later on Overview.",
+  "srv.nameHelp": "Every Mac in the organisation shows this name. Empty shows the address.",
+  "srv.nameEditTip": "The name every Mac in the organisation shows",
+  "srv.nameAdd": "Add a name",
+  "srv.name": "Organisation name",
+  "srv.invitedYou": "{name} invited you",
   "srv.newLinkTip": "Withdraws this invite and makes a new link for the same address, with the same roles",
   "srv.newLink": "New link",
   "srv.person": "Person",

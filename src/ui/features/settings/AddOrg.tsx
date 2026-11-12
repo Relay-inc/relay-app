@@ -1,8 +1,8 @@
-import { useState, type ReactNode } from "react";
-import { orgInstallCommands, recogniseLine, type OrgDraft } from "../../../domain/settings/servers";
+import { useEffect, useState, type ReactNode } from "react";
+import { nameFromDomain, orgInstallCommands, recogniseLine, type OrgDraft } from "../../../domain/settings/servers";
 import { connectOrg, dropDraft, editDraft, openServers } from "../../../application/settings/servers";
 import { useSettingsStore } from "../../../application/settings/store";
-import { cancelSignIn } from "../../../application/settings/teams";
+import { cancelSignIn, peekTeam } from "../../../application/settings/teams";
 import { Html } from "../../components/Html";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
@@ -260,13 +260,22 @@ function Install({ draft }: { draft: OrgDraft }) {
   );
 }
 
-/** Step 4: the link the team command printed, Log in. The organisation's page opens with what is left to set up. */
+/** Step 4: the link the team command printed, the organisation's name, Log in. The name is filled in with the one the
+ *  server has (`--name`), else from its sign-in's domain. The organisation's page opens with what is left to set up. */
 function Connect() {
   const { t } = useT();
   const busy = useSettingsStore(s => !!s.shared.busy.team);
   const message = useSettingsStore(s => s.shared.messages.team);
   const [line, setLine] = useState("");
+  const [name, setName] = useState<string | null>(null);
   const seen = recogniseLine(line);
+  const team = seen?.kind === "team-invite" || seen?.kind === "team-signin";
+  const link = line.trim();
+  const peek = useSettingsStore(s => (s.team.peek?.link === link ? s.team.peek : null));
+  useEffect(() => {
+    if (team) void peekTeam(link);
+  }, [team, link]);
+  const shown = name ?? (peek?.name || nameFromDomain(peek?.domain ?? ""));
   return (
     <>
       <section className={CARD}>
@@ -290,11 +299,7 @@ function Connect() {
               </button>
             </>
           ) : (
-            <button
-              className={buttonClass("primary")}
-              disabled={seen?.kind !== "team-invite" && seen?.kind !== "team-signin"}
-              onClick={() => void connectOrg(line.trim())}
-            >
+            <button className={buttonClass("primary")} disabled={!team} onClick={() => void connectOrg(link, shown)}>
               {t("set.teamLogin")}
             </button>
           )}
@@ -310,6 +315,18 @@ function Connect() {
           <span className={HINT}>{t("srv.connectHelp")}</span>
         )}
         {message && !message.ok ? <span className={ERROR_MESSAGE}>{message.text}</span> : null}
+        <label htmlFor="org-name" className={H2}>
+          {t("srv.name")}
+        </label>
+        <input
+          id="org-name"
+          className={`${FIELD} w-80`}
+          placeholder={seen?.host || "relay.example.com"}
+          maxLength={60}
+          value={shown}
+          onChange={e => setName(e.target.value)}
+        />
+        <span className={HINT}>{t("srv.nameConnectHelp")}</span>
       </section>
       <section className={CARD}>
         <h2 className={H2}>{t("srv.afterConnect")}</h2>

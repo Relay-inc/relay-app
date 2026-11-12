@@ -1834,6 +1834,19 @@ const VIEWS = {
     await waitText("Sign-in link");
     await settle(page);
   },
+  // the organisation's name edited in place by an organisation admin (PR org-name)
+  "servers-org-name-edit": async () => {
+    await VIEWS["servers-overview"]();
+    await button("Edit").first().click();
+    await page.getByLabel("Organisation name").fill("Bluebird Studio Gent");
+    await settle(page);
+  },
+  // an organisation without a name yet (an older server, or nobody named it): the host, the building, Add a name
+  "servers-org-unnamed": async () => {
+    await open(page, server.url, { fixture: "team-unnamed", sel: "__servers" });
+    await waitText("Add a name");
+    await settle(page);
+  },
   // the footer's workspace menu, with Servers and organisations… and Add a server… at the bottom
   "servers-menu": async () => {
     await open(page, server.url, { fixture: "team" });
@@ -1973,6 +1986,7 @@ const VIEWS = {
     await page.getByLabel("Link to the team server").fill(`relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`);
     await page.getByText("When it does not connect").click();
     await waitText("Certificate does not match");
+    await page.getByLabel("Organisation name").and(page.locator('[value="Bluebird Studio"]')).waitFor();
     await settle(page);
   },
   // Join: an organisation's invite pasted, what it is and who can read before Log in
@@ -1981,7 +1995,7 @@ const VIEWS = {
     await page.getByRole("radio", { name: /Join a server someone else runs/ }).click();
     await button("Continue").click();
     await page.getByLabel("Invite or pairing line").fill(`relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`);
-    await waitText("Invite to an organisation");
+    await waitText("Bluebird Studio invited you");
     await settle(page);
   },
   // This Mac: this Mac as a machine, and the encrypted workspaces it joined with a link

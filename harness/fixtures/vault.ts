@@ -682,7 +682,15 @@ export const linkedEntries = linkedList;
 /** team: a team server this Mac is logged in to as an organisation admin (src-tauri/src/team.rs). Handbook syncs here,
  *  Sales notes and Research (without history) are the account's other workspaces there. */
 export const TEAM_FP = "7ea3".padEnd(64, "b");
-export const team = { host: "relay.example.com", port: 47800, fp: TEAM_FP, email: "alex@example.com", admin: true };
+export const ORG_NAME = "Bluebird Studio";
+export const team = {
+  host: "relay.example.com",
+  port: 47800,
+  fp: TEAM_FP,
+  email: "alex@example.com",
+  admin: true,
+  name: ORG_NAME,
+};
 export const teamVaults = [
   {
     id: "1123456789abcdef",
@@ -698,6 +706,7 @@ export const teamVaults = [
 export const teamMe = {
   email: "alex@example.com",
   admin: true,
+  name: ORG_NAME,
   workspaces: [
     { id: "1123456789abcdef", name: "Handbook", role: "admin", nohistory: false, here: "/Users/me/Team/Handbook" },
     { id: "2123456789abcdef", name: "Sales notes", role: "member", nohistory: false, here: null },

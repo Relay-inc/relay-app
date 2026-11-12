@@ -127,13 +127,15 @@ export type SettingsState = {
     };
   };
   // the team servers (application/settings/teams.ts): per server (fp) its account and workspaces, what its organisation
-  // admins see, the link to log in with as typed, and the links New link made, per invite id (the server never gives an
-  // open invite's link again)
+  // admins see, the link to log in with as typed, the links New link made, per invite id (the server never gives an
+  // open invite's link again), and what the server of a pasted link said before logging in (its name, the first domain
+  // of its sign-in)
   team: {
     me: Record<string, TeamMe | null>;
     overview: Record<string, TeamOverview | null>;
     link: string;
     links: Record<string, string>;
+    peek: { link: string; name: string; domain: string } | null;
   };
   // Servers and organisations, the page in the main window (application/settings/servers.ts): the item picked in its
   // list ("mac", "machine:<id>", "org:<fp>", "setup", "add"), the organisation's tab, the workspace open on its
@@ -239,7 +241,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     open: "",
     form: { mode: "", machine: "", name: "", folder: "", link: "", noHistory: false },
   },
-  team: { me: {}, overview: {}, link: "", links: {} },
+  team: { me: {}, overview: {}, link: "", links: {}, peek: null },
   serversPage: { item: "", tab: "overview", workspace: "", inviting: false, add: "", step: 1, draft: null },
   pluginsPage: { loaded: false, secrets: {}, imports: [], messages: {}, tests: {} },
   integrations: {

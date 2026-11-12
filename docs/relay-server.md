@@ -80,8 +80,11 @@ Conversations on this machine need a Claude login, a server for workspaces only 
 Instead of a first pairing, on a fresh volume:
 
 ```sh
-docker compose exec relay-server relay-server team you@example.com --host relay.example.com
+docker compose exec relay-server relay-server team you@example.com --host relay.example.com --name "Example Studio"
 ```
+
+`--name` is the organisation's name every Mac shows (in the workspace menu, on invites, in "Example Studio can read").
+It is optional: an organisation admin sets or changes it in Relay too, and without one Relay shows the host.
 
 The server is a team server from then on and pairs no devices. The line it prints is an invite link for one device of
 that address, which is an organisation admin. In Relay: the workspace menu at the bottom left › Add a server…, A server for an

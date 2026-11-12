@@ -4,9 +4,27 @@ import { DEPLOY_BASE } from "./machines.ts";
 // Servers and organisations, the page in the main window: what it shows about a team server, worked out from what the
 // server already gives (`team_me`, `team_overview`). Nothing here is a guess about what the server does not say.
 
-/** The name an organisation shows. The server only knows its host today: when `team.json` gets a name, it comes in
- *  here and nowhere else. */
-export const orgDisplayName = (team: Pick<TeamServer, "host">) => team.host;
+/** The name an organisation shows: the one its server keeps (`team.json`, set by an organisation admin), else its host
+ *  (no name yet, or an older server). */
+export const orgDisplayName = (team: Pick<TeamServer, "host" | "name">) => team.name?.trim() || team.host;
+/** The letters of an organisation's square: the first of its first two words ("Bluebird Studio" BS), "" without a
+ *  name (the square shows a building). */
+export const orgInitials = (name: string | undefined) =>
+  (name ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(word => [...word][0].toUpperCase())
+    .join("");
+/** The team server a workspace of the organisation is on, by its fingerprint: its name comes from there. */
+export const teamOf = (teams: TeamServer[] | undefined, vault: { fp: string; host: string }) =>
+  teams?.find(team => team.fp === vault.fp) ?? { host: vault.host, name: "" };
+/** A first name for an organisation from its sign-in's email domain: "example.com" Example. */
+export function nameFromDomain(domain: string) {
+  const first = domain.trim().toLowerCase().split(".")[0] ?? "";
+  return first ? first[0].toUpperCase() + first.slice(1) : "";
+}
 
 /** What the Overview's setup list says is done or still open, only what follows from the overview:
  *  `admins` a second organisation admin, `signin` a provider besides invite links, `alone` the workspaces with one admin

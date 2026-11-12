@@ -14,7 +14,7 @@ import { select } from "../navigation/navigation";
 import { pairMachine, pollMachineGit, pollMirrors, showMachinesPage } from "./machines-page";
 import { editForm, joinSharedVault, openWorkspace, run, takeInvite, watchSharedVaults } from "./shared-vaults";
 import { useSettingsStore, type AddKind, type OrgTab, type SettingsState, type SettingsTab } from "./store";
-import { editTeamLink, loadTeam, loginTeam } from "./teams";
+import { editTeamLink, loadTeam, loginTeam, setTeamName } from "./teams";
 
 // Servers and organisations: a page in the main window's middle column (not the settings window) with this Mac, the
 // machines and the team servers in a list on the left and the picked one on the right. An organisation has the tabs
@@ -196,12 +196,16 @@ export async function pairOwnMachine(line: string, name: string, sharedOnly: boo
   openServers(made ? `machine:${made.id}` : "");
   return true;
 }
-/** Logs in to an organisation's server with `line` (its invite, or its sign-in link and the provider in the browser):
- *  the organisation's page opens, and a setup of that server on this Mac is done. */
-export async function connectOrg(line: string) {
+/** Logs in to an organisation's server with `line` (its invite, or its sign-in link and the provider in the browser),
+ *  and names the organisation `name` when given: the organisation's page opens, and a setup of that server on this Mac
+ *  is done. */
+export async function connectOrg(line: string, name = "") {
   editTeamLink(line);
   const fp = await loginTeam();
   if (!fp) return;
+  // the name typed at Connect, when it is not the one the server has: an organisation admin sets it there
+  const team = st().settings.teams?.find(x => x.fp === fp);
+  if (team?.admin && name.trim() && name.trim() !== (team.name ?? "")) await setTeamName(fp, name);
   if (st().serversPage.item === "setup") saveDraft(null);
   openServers(`org:${fp}`, "overview");
 }

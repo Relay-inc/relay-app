@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import {
   invitePlan,
   ORG_SETUP_DEFAULTS,
+  nameFromDomain,
   orgDisplayName,
+  orgInitials,
+  teamOf,
   orgInstallCommands,
   orgServerCommands,
   orgTabs,
@@ -30,8 +33,28 @@ const overview = (): TeamOverview => ({
   sso: null,
 });
 
-test("org name: the host until the server has a name", () => {
+test("org name: the server's name, the host until it has one", () => {
   assert.equal(orgDisplayName({ host: "relay.example.com" }), "relay.example.com");
+  assert.equal(orgDisplayName({ host: "relay.example.com", name: "  " }), "relay.example.com");
+  assert.equal(orgDisplayName({ host: "relay.example.com", name: "Bluebird Studio" }), "Bluebird Studio");
+});
+test("org initials: the first letters of two words, none without a name", () => {
+  assert.equal(orgInitials("Bluebird Studio"), "BS");
+  assert.equal(orgInitials(" northwind "), "N");
+  assert.equal(orgInitials("Ätna Bau und Partner"), "ÄB");
+  assert.equal(orgInitials(""), "");
+  assert.equal(orgInitials(undefined), "");
+});
+test("org of a workspace: by the server's fingerprint, else its host", () => {
+  const teams = [
+    { host: "relay.example.com", port: 47800, fp: "f1", email: "a@example.com", admin: false, name: "Northwind" },
+  ];
+  assert.equal(orgDisplayName(teamOf(teams, { fp: "f1", host: "relay.example.com" })), "Northwind");
+  assert.equal(orgDisplayName(teamOf(teams, { fp: "f2", host: "other.example.com" })), "other.example.com");
+});
+test("name from a sign-in domain: its first label, capitalised", () => {
+  assert.equal(nameFromDomain("example.com"), "Example");
+  assert.equal(nameFromDomain(""), "");
 });
 
 test("checklist: a turned-off admin does not count as the second one", () => {

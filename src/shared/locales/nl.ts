@@ -2731,6 +2731,13 @@ export default {
   "srv.openInvite": "Open uitnodiging",
   "srv.inviteAs": "{name} als {role}",
   "srv.until": "tot {time}",
+  "srv.nameConnectHelp":
+    "Elke Mac van de organisatie toont deze naam in plaats van het adres. Je wijzigt hem later bij Overzicht.",
+  "srv.nameHelp": "Elke Mac van de organisatie toont deze naam. Leeg toont het adres.",
+  "srv.nameEditTip": "De naam die elke Mac van de organisatie toont",
+  "srv.nameAdd": "Naam toevoegen",
+  "srv.name": "Naam van de organisatie",
+  "srv.invitedYou": "{name} heeft je uitgenodigd",
   "srv.newLinkTip": "Trekt deze uitnodiging in en maakt een nieuwe link voor hetzelfde adres, met dezelfde rollen",
   "srv.newLink": "Nieuwe link",
   "srv.person": "Persoon",

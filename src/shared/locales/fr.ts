@@ -2762,6 +2762,13 @@ export default {
   "srv.openInvite": "Invitation ouverte",
   "srv.inviteAs": "{name} comme {role}",
   "srv.until": "jusqu'à {time}",
+  "srv.nameConnectHelp":
+    "Chaque Mac de l'organisation affiche ce nom à la place de l'adresse. Vous pourrez le changer plus tard dans Aperçu.",
+  "srv.nameHelp": "Chaque Mac de l'organisation affiche ce nom. Vide affiche l'adresse.",
+  "srv.nameEditTip": "Le nom que chaque Mac de l'organisation affiche",
+  "srv.nameAdd": "Ajouter un nom",
+  "srv.name": "Nom de l'organisation",
+  "srv.invitedYou": "{name} vous a invité",
   "srv.newLinkTip": "Retire cette invitation et crée un nouveau lien pour la même adresse, avec les mêmes rôles",
   "srv.newLink": "Nouveau lien",
   "srv.person": "Personne",

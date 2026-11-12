@@ -2754,6 +2754,13 @@ export default {
   "srv.openInvite": "Offene Einladung",
   "srv.inviteAs": "{name} als {role}",
   "srv.until": "bis {time}",
+  "srv.nameConnectHelp":
+    "Jeder Mac der Organisation zeigt diesen Namen statt der Adresse. Du kannst ihn später unter Übersicht ändern.",
+  "srv.nameHelp": "Jeder Mac der Organisation zeigt diesen Namen. Leer zeigt die Adresse.",
+  "srv.nameEditTip": "Der Name, den jeder Mac der Organisation zeigt",
+  "srv.nameAdd": "Namen hinzufügen",
+  "srv.name": "Name der Organisation",
+  "srv.invitedYou": "{name} hat dich eingeladen",
   "srv.newLinkTip":
     "Zieht diese Einladung zurück und erstellt einen neuen Link für dieselbe Adresse, mit denselben Rollen",
   "srv.newLink": "Neuer Link",

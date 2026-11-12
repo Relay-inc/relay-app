@@ -166,14 +166,16 @@ export type SharedInfo = {
   me: string;
 };
 /** A team server this Mac is logged in to (src-tauri/src/team.rs): `email` its account there, `admin` an organisation
- *  admin. Only the backend writes the list. */
-export type TeamServer = { host: string; port: number; fp: string; email: string; admin: boolean };
+ *  admin, `name` the organisation's name as the server last said it ("" or missing: none, or a server from before
+ *  names). Only the backend writes the list. */
+export type TeamServer = { host: string; port: number; fp: string; email: string; admin: boolean; name?: string };
 /** The sign-in a team server takes besides invite links: Google (with its email domains) or one Entra tenant. */
 export type TeamSso = { issuer: string; client: string; domains: string[] };
 /** This Mac's account on a team server (`team_me`) and its workspaces there, `here` the folder one syncs into. */
 export type TeamMe = {
   email: string;
   admin: boolean;
+  name?: string; // the organisation's, "" or missing none
   workspaces: { id: string; name: string; role: SharedRole; nohistory: boolean; here: string | null }[];
 };
 /** A team server as its organisation admins see it (`team_overview`). */

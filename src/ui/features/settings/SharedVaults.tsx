@@ -1,7 +1,7 @@
 import { Fragment, useState } from "react";
 import type { Machine, SharedInfo, SharedRole, SharedVault } from "../../../domain/settings/types";
 import { agoParts } from "../../../domain/settings/machines";
-import { orgDisplayName } from "../../../domain/settings/servers";
+import { orgDisplayName, teamOf } from "../../../domain/settings/servers";
 import { useSettingsStore } from "../../../application/settings/store";
 import { filesOn } from "../../../domain/settings/types";
 import {
@@ -91,11 +91,12 @@ export function MachineVaults({ machine, vaults = [] }: { machine: Machine; vaul
 /** The pills of a team workspace: the server reads along, and without history. */
 function TeamPills({ vault }: { vault: SharedVault }) {
   const { t } = useT();
+  const teams = useSettingsStore(s => s.settings.teams);
   if (!vault.team) return null;
   return (
     <>
       <span title={t("set.teamReadsAlongTip")}>
-        <TrustBadge kind="org" name={orgDisplayName(vault)} />
+        <TrustBadge kind="org" name={orgDisplayName(teamOf(teams, vault))} />
       </span>
       {vault.nohistory ? (
         <span className={PILL} title={t("set.sharedNoHistoryTip")}>

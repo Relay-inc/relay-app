@@ -93,15 +93,17 @@ const shared =
   live;
 // team: a team server, this account an organisation admin there, Handbook synced here (fixtures/vault.ts team)
 // team-member: the same server, this account a member there and not an organisation admin (no team_overview)
-const teamFixture = fixture === "team" || fixture === "team-member";
+// team-unnamed: the team fixture on a server whose organisation has no name yet (the host shows)
+const teamFixture = fixture === "team" || fixture === "team-member" || fixture === "team-unnamed";
 const teamMember = fixture === "team-member";
+const orgName = fixture === "team-unnamed" ? "" : vault.ORG_NAME;
 if (teamFixture)
   settings = {
     ...settings,
-    teams: [{ ...structuredClone(vault.team), admin: !teamMember }],
+    teams: [{ ...structuredClone(vault.team), admin: !teamMember, name: orgName }],
     sharedVaults: structuredClone(vault.teamVaults),
   };
-let teamMe = { ...structuredClone(vault.teamMe), admin: !teamMember };
+let teamMe = { ...structuredClone(vault.teamMe), admin: !teamMember, name: orgName };
 let teamAccounts = structuredClone(vault.teamAccounts);
 let teamOverview = structuredClone(vault.teamOverview);
 let teamInviteSeq = 20;
@@ -504,7 +506,10 @@ function handle(cmd: string, a: Args): unknown {
     // team servers (src-tauri/src/team.rs)
     case "team_login":
       settings.teams = [structuredClone(vault.team)];
-      return { email: vault.team.email, admin: true };
+      return { email: vault.team.email, admin: true, name: vault.ORG_NAME };
+    // what a team server says before logging in: its organisation's name, no sign-in
+    case "team_peek":
+      return { team: true, name: vault.ORG_NAME, sso: null };
     case "team_me":
       return structuredClone(teamMe);
     case "team_link":
@@ -572,6 +577,11 @@ function handle(cmd: string, a: Args): unknown {
             : x,
         );
         return {};
+      }
+      if (r.op === "team_name") {
+        teamMe = { ...teamMe, name: r.name };
+        settings.teams = (settings.teams ?? []).map((x: { fp: string }) => (x.fp === a.fp ? { ...x, name: r.name } : x));
+        return { name: r.name };
       }
       if (r.op === "team_sso") {
         teamOverview = { ...teamOverview, sso: r.sso };
