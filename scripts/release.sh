@@ -9,9 +9,9 @@
 # (or the file RELAY_ANDROID_KEYSTORE names): lose that key and every phone has to uninstall before it can update.
 # It needs the Android SDK and NDK (ANDROID_HOME, NDK_HOME; ~/Library/Android/sdk and its newest NDK by default).
 # RELAY_SKIP_ANDROID=1 releases without it.
-# Windows goes along as Relay_<version>_x64-setup.exe: publishing the release starts .github/workflows/windows.yml, this
-# script waits for that run, signs its installer for the updater here (the key stays on this Mac) and adds it to the
-# release and to latest.json. RELAY_SKIP_WINDOWS=1 releases without it.
+# Windows goes along as Relay_<version>_x64-setup.exe when RELAY_WINDOWS_SETUP names it: build it on a Windows machine
+# with scripts/release-windows.ps1 and copy it here. This script signs it for the updater (the key stays on this Mac)
+# and adds it to the release and to latest.json. Without it the release is macOS only (and Android).
 # Usage: scripts/release.sh
 set -eu
 cd "$(dirname "$0")/.."
@@ -30,7 +30,13 @@ if gh release view "v$version" >/dev/null 2>&1; then echo "v$version is already 
 export TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 [ -n "${TAURI_SIGNING_PRIVATE_KEY##/*}" ] || [ -f "$TAURI_SIGNING_PRIVATE_KEY" ] || { echo "no updater key at $TAURI_SIGNING_PRIVATE_KEY" >&2; exit 1; }
 android=${RELAY_SKIP_ANDROID:-}
-windows=${RELAY_SKIP_WINDOWS:-}
+windows=${RELAY_WINDOWS_SETUP:-}
+if [ -n "$windows" ]; then
+  [ -f "$windows" ] || { echo "no Windows installer at $windows" >&2; exit 1; }
+  [ "$(basename "$windows")" = "Relay_${version}_x64-setup.exe" ] || { echo "$(basename "$windows") is not Relay_${version}_x64-setup.exe" >&2; exit 1; }
+else
+  echo "RELAY_WINDOWS_SETUP is not set: this release has no Windows installer"
+fi
 if [ -z "$android" ]; then
   : "${RELAY_ANDROID_KEYSTORE:=$HOME/.tauri/relay-android.properties}" "${ANDROID_HOME:=$HOME/Library/Android/sdk}"
   [ -f "$RELAY_ANDROID_KEYSTORE" ] || { echo "no Android release key at $RELAY_ANDROID_KEYSTORE (or RELAY_SKIP_ANDROID=1)" >&2; exit 1; }
@@ -49,7 +55,7 @@ notes=$(mktemp)
   echo "From then on Relay updates itself (signed in to gh with access to this repo)."
   [ -n "$android" ] || echo "On an Android phone: install the .apk, then pair it from Relay on your Mac (Settings › Machines › Add phone)."
   # ponytail: true while WINDOWS_SIGN is off (docs/development.md › Releasing for Windows), drop it once it is on
-  [ -n "$windows" ] || echo "On Windows: the installer is not signed yet, so SmartScreen says it protected your PC. Click More info, then Run anyway."
+  [ -z "$windows" ] || echo "On Windows: the installer is not signed yet, so SmartScreen says it protected your PC. Click More info, then Run anyway."
 } > "$notes"
 
 pnpm install --frozen-lockfile
@@ -78,19 +84,9 @@ gh release create "v$version" "$dmg" "$tgz" ${apk:+"$apk"} --target "$(git rev-p
 rm -f "$notes"
 
 exe=""
-if [ -z "$windows" ]; then
-  sha=$(git rev-parse HEAD) run=""
-  for _ in $(seq 30); do
-    run=$(gh run list --workflow windows.yml --event release --commit "$sha" --json databaseId -q '.[0].databaseId')
-    [ -n "$run" ] && break
-    sleep 10
-  done
-  [ -n "$run" ] || { echo "no windows run for v$version after 5 minutes (Actions › windows)" >&2; exit 1; }
-  echo "waiting for the Windows installer (gh run view $run)"
-  gh run watch "$run" --exit-status >/dev/null || { echo "the Windows build failed: gh run view $run --log-failed" >&2; exit 1; }
-  gh run download "$run" -n relay-windows-x64 -D "$(dirname "$tgz")"
-  exe="$(dirname "$tgz")/Relay_${version}_x64-setup.exe"
-  [ -f "$exe" ] || { echo "no $(basename "$exe") in the run's artifact" >&2; exit 1; }
+if [ -n "$windows" ]; then
+  exe="$(dirname "$tgz")/$(basename "$windows")"
+  cp "$windows" "$exe"
   # `signer sign` takes the key itself, not its path
   key=$TAURI_SIGNING_PRIVATE_KEY
   [ -n "${key##/*}" ] || key=$(cat "$key")

@@ -489,14 +489,13 @@ skip themselves without it.
 
 ## Releasing for Windows
 
-Relay for Windows x64 is an NSIS installer, `Relay_<version>_x64-setup.exe`, built by `.github/workflows/windows.yml`
-on `windows-latest` (`pnpm tauri build --bundles nsis`, with `GGML_NATIVE=OFF` for whisper.cpp, see Tests above). The
-workflow runs by hand (Actions › windows › Run workflow, once the workflow is on `main`), for every published release,
-and on a PR that changes the installer or the workflow. It installs the build silently on the runner, checks it and
-uninstalls it, then keeps the installer as the run's artifact `relay-windows-x64` (about 13 MB). The first two runs,
-without a Rust cache, took 17 and 21 minutes, 14.5 and 18 of them in `tauri build`, well inside the runner's limits.
-With `Swatinem/rust-cache` holding the dependencies a run takes about 11 minutes (9.5 in `tauri build`, most of it
-the app's own release build with LTO).
+Relay for Windows x64 is an NSIS installer, `Relay_<version>_x64-setup.exe`. It is not built in GitHub Actions (those
+minutes cost money): `scripts/release-windows.ps1` builds it on a Windows machine (`pnpm tauri build --bundles nsis`,
+with `GGML_NATIVE=OFF` for whisper.cpp, see Tests above) and says where it is. It needs the Visual Studio C++ build
+tools, cmake, LLVM, Node, pnpm and Rust, listed at the top of the script. A first build without a Rust cache took 17
+to 21 minutes on a CI runner, 14.5 to 18 of them in `tauri build`. The script is not tested on a Windows machine yet
+(it was written from the CI workflow it replaces), and the install-and-uninstall check that workflow ran is gone: try
+the installer by hand once per release (install, `relay` in a new terminal, `relay://`, uninstall).
 
 What the installer does (`src-tauri/tauri.windows.conf.json` › `bundle.windows.nsis`, Tauri's NSIS template and
 `src-tauri/windows/hooks.nsh`):
@@ -514,11 +513,11 @@ What the installer does (`src-tauri/tauri.windows.conf.json` › `bundle.windows
   as a work machine). relay-server's data, `%LOCALAPPDATA%\Relay\server` (its identity and pairings), stays, and with
   it the install folder. An update (`/UPDATE`) leaves all of it in place.
 
-**Updates.** `scripts/release.sh` publishes the release, which starts the workflow, waits for that run, downloads the
-installer, signs it for the updater on the Mac with `tauri signer sign` (the updater key never goes to GitHub, so the
-workflow builds with `createUpdaterArtifacts` off), uploads it to the release and writes `windows-x86_64` into
-`latest.json` next to `darwin-aarch64`: the setup.exe's API url and its signature. `RELAY_SKIP_WINDOWS=1` releases
-without it. The app checks the minisign signature against the `pubkey` in `tauri.conf.json` after the download, on
+**Updates.** Copy the setup.exe to the Mac and run `RELAY_WINDOWS_SETUP=/path/to/Relay_<version>_x64-setup.exe
+scripts/release.sh`. It checks that the file exists and that its name carries the version, signs it for the updater
+with `tauri signer sign` (the updater key stays on the Mac, so the Windows build makes no updater artifacts), uploads it
+to the release and writes `windows-x86_64` into `latest.json` next to `darwin-aarch64`: the setup.exe's API url and
+its signature. Without `RELAY_WINDOWS_SETUP` the release has no Windows installer and says so. The app checks the minisign signature against the `pubkey` in `tauri.conf.json` after the download, on
 Windows as on macOS (tauri-plugin-updater's `download`), then starts the installer with `/P /UPDATE /R` (passive: a
 progress bar only, no questions) and ends Relay with `process::exit`. That skips `RunEvent::Exit`, so `updater.rs`
 does what quitting does in its `on_before_exit`. The installer closes every process that still runs the installed
@@ -542,8 +541,8 @@ says a new signature builds reputation over time, EV included since 2024
 (learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options, dated 2026-08-29). Not verified:
 whether an update through the updater shows SmartScreen too (it downloads the file itself, not through a browser).
 
-The switch is the repository variable `WINDOWS_SIGN` (Settings › Secrets and variables › Actions). The workflow's
-Signing step writes the build's config from it, Tauri then signs `relay.exe`, the installer and its uninstaller:
+The switch is the environment variable `WINDOWS_SIGN` on the Windows machine. The Signing step of
+`scripts/release-windows.ps1` writes the build's config from it, Tauri then signs `relay.exe`, the installer and its uninstaller:
 
 | `WINDOWS_SIGN` | Variables | Secrets |
 |---|---|---|
@@ -568,9 +567,9 @@ environment. Setting it up (learn.microsoft.com/en-us/azure/artifact-signing/qui
 5. Set the variables: the endpoint of the account's region (West Europe is `https://weu.codesigning.azure.net`, the
    quickstart lists them all), the account and the profile name, then `WINDOWS_SIGN=azure`.
 
-`pfx` imports the certificate into the runner's store and signs by thumbprint. Tauri's page says that route only
+`pfx` imports the certificate into the user's store and signs by thumbprint. Tauri's page says that route only
 applies to OV certificates acquired before June 1st 2023: a newer certificate's key is on a hardware token or in a
 cloud HSM, and then the issuer's signing tool goes into `signCommand` (the `azure` branch of the Signing step shows
-where). `scripts/release.sh` itself needs nothing for Authenticode: it signs on the runner, before the Mac adds the
+where). `scripts/release.sh` itself needs nothing for Authenticode: the file is signed on the Windows machine, before the Mac adds the
 updater's signature, which covers the signed file. Once signing is on, drop the SmartScreen line from the release
 notes in `release.sh`.
