@@ -1,13 +1,20 @@
 import { t, type Key } from "../../shared/i18n";
 import { SERVERS } from "../../domain/navigation/views";
-import { invitePlan, orgDisplayName, resolveItem } from "../../domain/settings/servers";
+import {
+  invitePlan,
+  ORG_SETUP_DEFAULTS,
+  orgDisplayName,
+  resolveItem,
+  type OrgDraft,
+} from "../../domain/settings/servers";
 import type { SharedRole } from "../../domain/settings/types";
 import * as backend from "../../infrastructure/backend";
+import { storage } from "../../infrastructure/storage";
 import { select } from "../navigation/navigation";
-import { showMachinesPage } from "./machines-page";
-import { openWorkspace, run } from "./shared-vaults";
-import { useSettingsStore, type OrgTab, type SettingsState, type SettingsTab } from "./store";
-import { loadTeam } from "./teams";
+import { pairMachine, pollMachineGit, pollMirrors, showMachinesPage } from "./machines-page";
+import { editForm, joinSharedVault, openWorkspace, run, takeInvite, watchSharedVaults } from "./shared-vaults";
+import { useSettingsStore, type AddKind, type OrgTab, type SettingsState, type SettingsTab } from "./store";
+import { editTeamLink, loadTeam, loginTeam } from "./teams";
 
 // Servers and organisations: a page in the main window's middle column (not the settings window) with this Mac, the
 // machines and the team servers in a list on the left and the picked one on the right. An organisation has the tabs
@@ -38,19 +45,46 @@ export function openTeamWorkspace(folder: string) {
   else openServers();
 }
 
+/** A workspace or an organisation in "New workspace from template…": the first organisation's Workspaces with New
+ *  workspace… open, else the first machine (New workspace on this machine…), else Add a server. */
+export function openNewWorkspace() {
+  const team = st().settings.teams?.[0];
+  const machine = st().settings.machines?.find(m => !m.auto);
+  if (team) {
+    openServers(`org:${team.fp}`, "workspaces");
+    useSettingsStore.setState(draft => {
+      draft.shared.form = { ...draft.shared.form, mode: "new", machine: `team:${team.fp}` };
+    });
+  } else if (machine) openServers(`machine:${machine.id}`);
+  else openAdd();
+}
+
+/** Add a server, on what it is for (`kind`, "" to choose). An organisation server being set up opens where it was. */
+export function openAdd(kind: AddKind = "") {
+  if (kind === "org" && st().serversPage.draft) return openServers("setup");
+  change(draft => {
+    draft.add = kind;
+    draft.step = kind === "own" ? 2 : 1;
+  });
+  openServers("add");
+}
+/** An invite link that opened Relay (the backend keeps it until taken): Add a server › Join with it pasted. */
+export async function openInvite() {
+  if (await takeInvite()) openAdd("join");
+}
+
 let watching = false;
-/** When the page shows: every team server's account (and overview) read again, the machines checked once, and the
- *  shared vaults' rounds followed from here on, so a synced workspace's page has its last round. */
+/** When the page shows: every team server's account (and overview) read again, the machines checked once, the
+ *  organisation server being set up read from this Mac, and the shared vaults' rounds followed from here on, so a
+ *  workspace's page has its last round. */
 export function showServers() {
   for (const team of st().settings.teams ?? []) void loadTeam(team.fp);
   showMachinesPage();
   if (watching) return;
   watching = true;
-  void backend.onSharedVaults(status => useSettingsStore.setState(draft => void (draft.shared.status = status)));
-  backend
-    .sharedVaultsStatus()
-    .then(status => useSettingsStore.setState(draft => void (draft.shared.status = status)))
-    .catch(() => {});
+  const saved = storage.get<OrgDraft | null>(DRAFT, null);
+  if (saved) change(draft => void (draft.draft = saved));
+  void watchSharedVaults();
 }
 
 const TAB_NAMES: Record<OrgTab, Key> = {
@@ -63,10 +97,14 @@ const TAB_NAMES: Record<OrgTab, Key> = {
 export const orgTabName = (tab: OrgTab) => t(TAB_NAMES[tab]);
 /** The title bar's crumbs after the page's name: the organisation, its tab and the workspace open there. */
 export function serversCrumb() {
-  const { item, tab, workspace } = st().serversPage;
+  const { item, tab, workspace, draft } = st().serversPage;
   const teams = st().settings.teams ?? [];
-  const picked = resolveItem(item, teams);
+  const machines = st().settings.machines ?? [];
+  const picked = resolveItem(item, teams, machines, !!draft);
   if (picked === "add") return t("srv.add");
+  if (picked === "setup") return [t("srv.add"), t("srv.kindOrgServer")].join(" › ");
+  if (picked === "mac") return t("srv.thisMac");
+  if (picked.startsWith("machine:")) return machines.find(m => `machine:${m.id}` === picked)?.name ?? "";
   const team = teams.find(x => `org:${x.fp}` === picked)!;
   const open = workspace || st().shared.open;
   const name =
@@ -77,13 +115,15 @@ export function serversCrumb() {
   return [orgDisplayName(team), orgTabName(tab), name].filter(Boolean).join(" › ");
 }
 
-export const pickServer = (item: string) =>
+export function pickServer(item: string) {
   change(draft => {
     draft.item = item;
     draft.tab = "overview";
     draft.workspace = "";
     draft.inviting = false;
   });
+  openWorkspace("");
+}
 export function pickOrgTab(tab: OrgTab) {
   change(draft => {
     draft.tab = tab;
@@ -105,8 +145,76 @@ export const closeOrgWorkspace = () => {
   change(draft => void (draft.workspace = ""));
   openWorkspace("");
 };
-/** A page of the settings window (what is set up there, not here). */
+/** A page of the settings window. */
 export const openSettingsPage = (tab: SettingsTab) => void backend.openSettingsWindow(tab);
+
+/** The mirror of every machine every second while a machine's page shows (its progress bar), GitHub and the repos
+ *  there every 10 seconds. Returns the stop. */
+export function watchMachines() {
+  pollMirrors();
+  const fast = setInterval(pollMirrors, 1000);
+  const slow = setInterval(pollMachineGit, 10_000);
+  return () => {
+    clearInterval(fast);
+    clearInterval(slow);
+  };
+}
+
+// ---------- Add a server
+const DRAFT = "orgSetup";
+/** Add a server: what it is for. An organisation server starts its setup, kept on this Mac until it is connected. */
+export function chooseAdd(kind: AddKind) {
+  if (kind === "org") {
+    saveDraft(st().serversPage.draft ?? { ...ORG_SETUP_DEFAULTS, admin: "", step: 2 });
+    return openServers("setup");
+  }
+  change(draft => {
+    draft.add = kind;
+    draft.step = kind === "own" ? 2 : 1;
+  });
+}
+export const setAddStep = (step: number) => change(draft => void (draft.step = step));
+function saveDraft(next: OrgDraft | null) {
+  change(draft => void (draft.draft = next));
+  storage.set(DRAFT, next);
+}
+/** The organisation server being set up: what is typed, or its step. */
+export const editDraft = (patch: Partial<OrgDraft>) => {
+  const now = st().serversPage.draft;
+  if (now) saveDraft({ ...now, ...patch });
+};
+/** Stops setting up the organisation server: this Mac forgets what was typed. */
+export function dropDraft() {
+  saveDraft(null);
+  openAdd();
+}
+/** Pairs a machine of your own with the line its relay-server printed: its page opens. True when it worked. */
+export async function pairOwnMachine(line: string, name: string, sharedOnly: boolean) {
+  const before = new Set((st().settings.machines ?? []).map(m => m.id));
+  if (!(await pairMachine(line, name, sharedOnly))) return false;
+  const made = (st().settings.machines ?? []).find(m => !before.has(m.id));
+  openServers(made ? `machine:${made.id}` : "");
+  return true;
+}
+/** Logs in to an organisation's server with `line` (its invite, or its sign-in link and the provider in the browser):
+ *  the organisation's page opens, and a setup of that server on this Mac is done. */
+export async function connectOrg(line: string) {
+  editTeamLink(line);
+  const fp = await loginTeam();
+  if (!fp) return;
+  if (st().serversPage.item === "setup") saveDraft(null);
+  openServers(`org:${fp}`, "overview");
+}
+/** Joins an encrypted workspace with the invite pasted under Join, into the folder picked: its page opens. */
+export async function joinWorkspace(line: string) {
+  const before = new Set((st().settings.sharedVaults ?? []).map(v => v.id));
+  editForm({ link: line });
+  await joinSharedVault();
+  const made = (st().settings.sharedVaults ?? []).find(v => !before.has(v.id));
+  if (!made) return;
+  openServers("mac");
+  openWorkspace(made.id);
+}
 export const showInvite = (on: boolean) => change(draft => void (draft.inviting = on));
 
 /** What inviting one address came to: its link and when it ends (a new account), or added (an account that was there),

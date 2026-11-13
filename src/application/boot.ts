@@ -10,7 +10,7 @@ import { storage } from "../infrastructure/storage";
 import { t } from "../shared/i18n";
 import { applyTheme } from "../infrastructure/window";
 import { ghOn, initLanguage, isKey, mailOn, setSettingsState, settings } from "./settings/settings";
-import { openServers } from "./settings/servers";
+import { openInvite, openServers } from "./settings/servers";
 import { MENU_COMMANDS, type CommandId } from "../domain/settings/shortcuts";
 import { noteChanged } from "./navigation/pages";
 import { loadSnapshot, pollSnapshot, project, refreshIcons, reloadIcons, checkFavicons } from "./workspace/vault";
@@ -107,6 +107,8 @@ export async function boot() {
   loadPhoneShared();
   await pickStartView();
   listenToLinks();
+  // an invite link that launched Relay: Add a server › Join with it
+  void openInvite();
   startPolls();
   if (takeSetup()) void runSetup();
 }
@@ -119,7 +121,9 @@ function listenToBackend() {
   backend.onMailLink(mailLinkClicked);
   backend.onSettingsChanged(settingsChanged);
   // Settings › Servers and organisations: the page opens here
-  backend.onOpenServers(item => openServers(item));
+  // ("join": an invite link that opened Relay, which the backend keeps)
+  backend.onOpenServers(item => (item === "join" ? void openInvite() : openServers(item)));
+  backend.onVaultInvite(() => void openInvite());
   backend.onMenu(onMenu);
   watchUpdate();
   backend.onOrch(event => {

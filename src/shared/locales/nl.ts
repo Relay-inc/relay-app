@@ -1901,7 +1901,6 @@ export default {
   "notes.related": "Verwante notes",
   "notes.noRelated": "Nog geen verwante notes: het gesprek zegt nog te weinig.",
   "notes.noChat": "Open een gesprek om de notes te zien waarover het gaat.",
-  "set.tab.machines": "Machines",
   "set.tab.workspaces": "Workspaces",
   "set.wsInvites": "Uitnodigingen",
   "set.wsSync": "Synchronisatie",
@@ -2260,12 +2259,9 @@ export default {
   "composer.machineNoMail": "Een gesprek over een mail blijft op deze Mac, want de mailtools draaien hier.",
   "composer.machineSharedVault":
     "Een gesprek in een andere workspace dan Persoonlijk blijft op deze Mac: een werkmachine heeft enkel je workspace Persoonlijk.",
-  "mc.intro":
-    "Een gesprek kan op een machine lopen en blijft draaien als deze Mac dicht is: kies de machine naast het model vóór het eerste bericht, of maak ze hieronder de standaard. Mail blijft op deze Mac. Elke machine krijgt een spiegel van je workspace Persoonlijk, zodat gesprekken daar weten wat Claude hier weet, behalve een machine die enkel voor workspaces gekoppeld is.",
   "mc.runDefaultTitle": "Waar gesprekken draaien",
   "mc.runDefault": "Nieuwe gesprekken draaien op",
   "mc.runDefaultHelp": "Elk nieuw gesprek kan nog een andere plek kiezen naast het model.",
-  "mc.pairTitle": "Machine koppelen",
   "mc.line": "Koppelregel",
   "mc.lineHelp":
     "Draai <code>relay-server pair</code> op de machine en plak de regel hier. De code werkt één keer, 10 minuten lang.",
@@ -2280,25 +2276,26 @@ export default {
   "mc.pairing": "Koppelen…",
   "mc.setupTitle": "Machine opzetten",
   "mc.setupHelp":
-    "relay-server draait in Docker op een andere computer in je netwerk. Deze commando's zijn voor relay-server {version}, de versie van deze Relay. Voer ze uit op de machine, in deze volgorde.",
+    "relay-server draait met Docker Compose op een andere computer in je netwerk, net als de server van een organisatie. Deze commando's zijn voor relay-server {version}, de versie van deze Relay. Voer ze uit op de machine, in deze volgorde.",
   "mc.setupHelpDev":
-    "relay-server draait in Docker op een andere computer in je netwerk. Dit is een ontwikkelversie van Relay, voor haar eigen versie bestaat geen image: deze commando's gebruiken het nieuwste, relay-server:latest. Voer ze uit op de machine, in deze volgorde.",
+    "relay-server draait met Docker Compose op een andere computer in je netwerk, net als de server van een organisatie. Dit is een ontwikkelversie van Relay, voor haar eigen versie bestaat geen image: deze commando's gebruiken het nieuwste, relay-server:latest. Voer ze uit op de machine, in deze volgorde.",
   "mc.setupShow": "Toon de commando's",
   "mc.setupKind": "Soort machine",
   "mc.setupPrep.mac":
-    "Installeer Docker Desktop of OrbStack en laat het starten bij het inloggen. Zet in Systeeminstellingen › Energie de sluimerstand uit: als de Mac slaapt, stoppen de gesprekken.",
+    "Installeer Docker Desktop of OrbStack (allebei met Compose) en laat het starten bij het inloggen. Zet in Systeeminstellingen › Energie de sluimerstand uit: als de Mac slaapt, stoppen de gesprekken.",
   "mc.setupPrep.linux":
-    "Installeer Docker Engine (docs.docker.com/engine/install). Zit je gebruiker niet in de groep docker, zet dan sudo voor elk docker-commando hieronder.",
+    "Installeer Docker Engine met de compose-plugin (docs.docker.com/engine/install). Zit je gebruiker niet in de groep docker, zet dan sudo voor elk docker-commando hieronder.",
   "mc.setupPrep.unraid":
-    "Docker moet aan staan (Settings › Docker). Voer de commando's uit in de terminal van Unraid, het >_-icoon rechtsboven.",
+    "Docker moet aan staan (Settings › Docker), met de plugin Docker Compose Manager uit Apps. Voer de commando's uit in de terminal van Unraid, het >_-icoon rechtsboven.",
   "mc.setupFolder": "Map op de machine",
   "mc.setupFolderHelp":
-    "Bewaart de koppeling, de login van Claude, Claude Code en de repos. Elke map die een herstart van de machine overleeft.",
+    "Bevat compose.yml, .env en backup.sh. De koppeling, de login van Claude en de repos staan in het volume dat Docker ervoor bijhoudt.",
   "mc.setupLogin": "Enkel zolang het image privé is: log eenmalig in met een GitHub-token met read:packages.",
-  "mc.setupInstall": "Maak de mappen en start relay-server. De eerste start installeert Claude Code.",
-  "mc.setupClaude": "Log eenmalig in bij Claude. Je krijgt een link om op deze Mac te openen.",
+  "mc.setupInstall":
+    "Haal het compose-bestand op, leg deze versie vast in .env en start relay-server. De eerste start installeert Claude Code.",
+  "mc.setupClaude": "Log in dezelfde map eenmalig in bij Claude. Je krijgt een link om op deze Mac te openen.",
   "mc.setupPair":
-    "Maak een koppelregel, het commando vult het LAN-adres van de machine zelf in. Plak de regel bij Machine koppelen.",
+    "Maak in dezelfde map een koppelregel, het commando vult het LAN-adres van de machine zelf in. Plak de regel in de volgende stap, Koppelen.",
   "mc.setupWay": "Hoe",
   "mc.setupWayApp": "Met de Relay-app (aanbevolen)",
   "mc.setupWayDocker": "Met Docker",
@@ -2310,8 +2307,8 @@ export default {
   "mc.setupAppSleep":
     "Zet in Systeeminstellingen › Energie de sluimerstand van die Mac uit: als hij slaapt, stoppen de gesprekken.",
   "mc.setupAppSwitch":
-    "Open in Relay op die Mac Instellingen › Machines › Deze Mac als machine. Zet het aan en maak dan een koppelregel.",
-  "mc.setupAppPair": "Plak de regel hier onder Machine koppelen.",
+    "Open in Relay op die Mac Servers en organisaties › Deze Mac (het werkruimtemenu). Zet Deze Mac als machine aan en maak dan een koppelregel.",
+  "mc.setupAppPair": "Plak de regel in de volgende stap, Koppelen.",
   "mc.hostTitle": "Deze Mac als machine",
   "mc.hostHelp":
     "Een andere Mac kan hier gesprekken laten draaien. Relay zelf is de server en blijft draaien als je het afsluit.",
@@ -2325,7 +2322,7 @@ export default {
   "mc.hostClaudeLogin": "Claude Code is niet ingelogd. Log eenmalig in via Terminal: voer claude uit en typ /login.",
   "mc.hostPair": "Koppelregel maken",
   "mc.hostPairHelp":
-    "Plak hem in Relay op de andere Mac onder Instellingen › Machines › Machine koppelen. Werkt één keer, 10 minuten.",
+    "Plak hem in Relay op de andere Mac onder Een server toevoegen (het werkruimtemenu). Werkt één keer, 10 minuten.",
   "mc.phoneAdd": "Telefoon toevoegen",
   "mc.phoneClose": "Sluiten",
   "mc.phoneHelp":
@@ -2336,7 +2333,7 @@ export default {
     "Meldingen terwijl deze Mac dicht is: abonneer je in de ntfy-app op de telefoon op dit onderwerp. Ze zeggen alleen dat Claude wacht of klaar is, niets van het gesprek.",
   "phone.pairTitle": "Koppel met je Mac",
   "phone.pairHelp": "Volg wat je agents op je machine doen, en antwoord ze als ze je nodig hebben.",
-  "phone.step1": "Open op je Mac Instellingen › Machines.",
+  "phone.step1": "Open op je Mac Servers en organisaties en kies je machine.",
   "phone.step2": "Kies Telefoon toevoegen. Relay toont een code en de regel.",
   "phone.step3": "Scan de code, of plak de regel hieronder.",
   "phone.line": "Koppelregel",
@@ -2418,8 +2415,8 @@ export default {
   "mc.update": "Bijwerken naar {version}",
   "mc.updating": "Bijwerken…",
   "mc.updated": "Bijgewerkt naar {version}",
-  "mc.updateHelp": "Voer uit op de machine. De mappen bewaren de koppeling, de login en de gesprekken.",
-  "mc.empty": "Nog geen machines. Koppel er een om gesprekken erop te laten lopen.",
+  "mc.updateHelp":
+    "Voer uit op de machine. Het zet de nieuwe versie in .env en herstart, het volume bewaart de koppeling, de login en de gesprekken.",
   "mc.refresh": "Vernieuwen",
   "mc.checking": "Controleren…",
   "mc.online": "Online",
@@ -2621,9 +2618,6 @@ export default {
   "coll.followed": "✓ Mail klaar",
   "set.sharedMakeAdmin": "Maak beheerder",
   "set.sharedMakeMember": "Maak lid",
-  "set.teamLoginTitle": "Inloggen op een teamserver",
-  "set.teamLoginHelp":
-    "Een teamserver bewaart de workspaces van je team en kan ze lezen. Plak de link die een admin je stuurde: een uitnodiging logt deze Mac meteen in, de eigen link van de server opent de aanmelding van je organisatie in de browser.",
   "set.teamLink": "Link naar de teamserver",
   "set.teamLogin": "Inloggen",
   "set.teamSigningIn": "Rond het aanmelden af in je browser…",
@@ -2660,11 +2654,7 @@ export default {
   "srv.organisations": "Organisaties",
   "srv.noOrgs": "Nog geen.",
   "srv.add": "Een server toevoegen",
-  "srv.addHelp": "Log in op de server van een organisatie met de link die je kreeg, of zet een eigen machine op.",
   "srv.ownMachine": "Een eigen machine",
-  "srv.ownMachineHelp":
-    "Een Mac, een Linux-box of een Unraid-server die aan blijft: hij draait gesprekken terwijl deze Mac slaapt en bewaart een versleutelde kopie van je notities. Zet hem op en koppel hem onder Instellingen › Machines.",
-  "srv.openMachines": "Machines openen",
   "srv.online": "Online",
   "srv.offline": "Offline",
   "srv.checking": "Bezig met controleren…",
@@ -2900,9 +2890,209 @@ export default {
   "srv.restoreDns": "Wijs daarna DNS naar de box als het een nieuwe is.",
   "srv.restoreNoWayBack":
     "Zonder het certificaat is er geen weg terug naar dezelfde server: elk account, elke uitnodiging en elke Mac begint opnieuw.",
-  "srv.orgsInSettings": "Organisaties",
-  "srv.orgsInSettingsHelp":
-    "Teamservers, met hun workspaces, mensen en aanmelden, staan onder Servers en organisaties in het hoofdvenster.",
-  "srv.open": "Openen",
   "srv.addMember": "Toevoegen",
+  "srv.thisMacHelp":
+    "Je notities, mail, agenda en herinneringen staan hier. Deze Mac kan ook een machine zijn voor een andere Mac en bewaart de versleutelde werkruimtes waarbij je je aansloot.",
+  "srv.machineOwn": "Een eigen machine: draait gesprekken en bewaart een versleutelde spiegel van deze Mac",
+  "srv.machineSharedOnly": "Een eigen machine, enkel voor werkruimtes: geen spiegel en geen gesprekken",
+  "srv.kindOrgServer": "Een server voor een organisatie",
+  "srv.settingUp": "Instellen, stap {step} van 4",
+  "srv.addIntro":
+    "Een server is een computer die aan blijft en relay-server draait. Kies eerst waarvoor hij dient. De volgende stappen hangen daarvan af.",
+  "srv.stepFor": "Waarvoor",
+  "srv.stepNext": "De stappen ervoor",
+  "srv.stepWhere": "Waar hij draait",
+  "srv.stepPair": "Koppelen",
+  "srv.stepNeeds": "Vereisten",
+  "srv.stepInstall": "Installeren en starten",
+  "srv.stepConnect": "Verbinden",
+  "srv.stepPaste": "Plak de regel",
+  "srv.youGet": "Je krijgt",
+  "srv.whoCanReadIt": "Wie het kan lezen",
+  "srv.setupCol": "Opzet",
+  "srv.ownAbout": "Een Mac mini, een Linux-box of een Unraid-server, thuis of op het werk, die aan blijft.",
+  "srv.ownGet1": "Gesprekken blijven draaien terwijl deze Mac slaapt",
+  "srv.ownGet2": "Een versleutelde kopie van je vault (de spiegel)",
+  "srv.ownGet3": "Je telefoon en GitHub",
+  "srv.ownGet4": "Werkruimtes die je versleuteld deelt met mensen die je uitnodigt",
+  "srv.ownReads":
+    "Enkel je eigen toestellen en de mensen die je toevoegt. De machine bewaart verzegelde bestanden en leest niets.",
+  "srv.ownSetup": "Jij, in een terminal. Ongeveer 15 minuten.",
+  "srv.orgAbout": "Eén server voor een team, op een Linux-box die de organisatie zelf beheert.",
+  "srv.orgGet1": "Accounts via e-mail, elk toestel is een sessie van een account",
+  "srv.orgGet2": "Werkruimtes met beheerder, lid en lezer",
+  "srv.orgGet3": "Aanmelden met uitnodigingslinks, Google of Microsoft Entra",
+  "srv.orgGet4": "Organisatie-admins die een account kunnen uitzetten",
+  "srv.orgNot": "Draait geen gesprekken, bewaart geen spiegel, koppelt geen telefoon of GitHub.",
+  "srv.theOrg": "De organisatie",
+  "srv.orgReads": "De server en wie hem beheert kunnen elke werkruimte erop lezen.",
+  "srv.orgSetup": "Een technisch persoon op de box, ongeveer 15 minuten. Daarna jij, in Relay.",
+  "srv.joinTitle": "Aansluiten bij een server van iemand anders",
+  "srv.joinAbout":
+    "Iemand stuurde je een uitnodiging of een koppelregel, of je organisatie meldt aan met Google of Microsoft.",
+  "srv.joinGet1": "Werkruimtes in een organisatie, een versleutelde werkruimte of een machine",
+  "srv.joinGet2": "Relay toont welke van de drie, voor je bevestigt",
+  "srv.joinReads": "Hangt van de server af. Relay zegt het na het plakken.",
+  "srv.joinSetup": "Jij, een minuut.",
+  "srv.fixedTitle": "Het soort ligt vast zodra de server is ingesteld.",
+  "srv.fixedHelp":
+    "Een eigen machine wordt nooit een organisatieserver, en omgekeerd. Wil je dat veranderen, zet relay-server dan opnieuw op in een lege map en koppel of nodig iedereen opnieuw uit.",
+  "srv.agentsLogin":
+    "Agents draaien met je eigen login, waar ze ook draaien, ook op een machine. Eén Relay kan in meerdere organisaties zitten en tegelijk eigen machines hebben.",
+  "srv.continue": "Verder",
+  "srv.back": "Terug",
+  "srv.youNeed": "Je hebt nodig",
+  "srv.needBox":
+    "Een Linux-box (amd64 of arm64) of een Mac die aan blijft, met 1 GB RAM over en schijfruimte voor de werkruimtes",
+  "srv.needDocker": "Docker Engine 25 of nieuwer met de compose-plugin, of de Relay-app op een Mac",
+  "srv.needPort": "Poort 47800 bereikbaar vanaf waar je Macs staan",
+  "srv.needHttpsOwn": "Uitgaand HTTPS bij de eerste start, om Claude Code te installeren",
+  "srv.needHttpsOrg": "Uitgaand HTTPS voor aanmelden met Google of Entra. Een teamserver start ook zonder.",
+  "srv.needDns": "Een DNS-naam die je beheert voor de box",
+  "srv.needVersion": "Dezelfde versie als Relay op elke Mac: {version}",
+  "srv.haveLine": "Ik heb de regel",
+  "srv.seenPairing":
+    "Een koppelregel voor een eigen machine op {host}. Door te koppelen wordt deze Mac een van zijn toestellen.",
+  "srv.seenNotPairing": "Dit is geen koppelregel. Een uitnodiging hoort onder Aansluiten.",
+  "srv.sharedOnlyHelp":
+    "Vink dit aan als de machine enkel gedeelde werkruimtes moet bewaren. Je persoonlijke werkruimte, Claude-context en geheugen gaan er niet naartoe en er draait geen gesprek. Wil je dit later wijzigen, vergeet de machine dan en koppel opnieuw.",
+  "srv.afterPairing": "Na het koppelen",
+  "srv.afterShared":
+    "De machine bewaart de versleutelde werkruimtes die je erop maakt of deelt. Niets van deze Mac gaat erheen.",
+  "srv.afterMirror": "Spiegel van deze Mac",
+  "srv.afterMirrorHelp":
+    "Je Claude-context, plugins, vault en geheugen, gesynchroniseerd en versleuteld op de machine. Mappen die je uitsluit blijven op deze Mac.",
+  "srv.afterConversations": "Gesprekken",
+  "srv.afterConversationsHelp": "Kies de machine naast het model vóór het eerste bericht. Mail blijft op deze Mac.",
+  "srv.afterLogin": "Claude-login op de machine",
+  "srv.afterLoginHelp": "Nodig voor gesprekken daar. Draai claude op de machine en typ dan /login.",
+  "srv.afterLater": "Later, op de pagina van de machine",
+  "srv.afterLaterHelp": "Telefoon toevoegen, Verbind met GitHub, Bijwerken naar een nieuwe versie, Vergeten.",
+  "srv.stopSetup": "Stoppen met instellen",
+  "srv.saveClose": "Opslaan en sluiten",
+  "srv.aboutServer": "Over de server",
+  "srv.fieldHost": "Adres dat de Macs gebruiken",
+  "srv.fieldHostHelp":
+    "Een DNS-naam die je beheert. Verhuizen naar een andere box is dan een DNS-wijziging, niemand koppelt opnieuw.",
+  "srv.fieldAdmin": "Eerste organisatie-admin",
+  "srv.fieldAdminHelp": "Jouw adres. De server maakt er een account en een organisatie-admin van.",
+  "srv.fieldFolder": "Map op de box",
+  "srv.fieldFolderHelp": "Bevat compose.yml, .env en backup.sh.",
+  "srv.fieldNetwork": "Waar de Macs staan",
+  "srv.fieldNetworkHelp": "Kantoornetwerk, VPN of thuisadressen. Enkel die bereiken poort 47800.",
+  "srv.whoWhat": "Wie doet wat",
+  "srv.whoWhatTime": "Ongeveer 15 minuten op de box, daarna een paar minuten in Relay",
+  "srv.techPerson": "Technisch persoon",
+  "srv.techStart": "relay-server installeren en starten in {folder}",
+  "srv.techPort": "Poort 47800 openen voor {network}",
+  "srv.techTeam": "Er een teamserver van maken voor {admin}, dat drukt een link af",
+  "srv.techLater": "Later: bijwerken wanneer de Relay-apps bijwerken",
+  "srv.youPaste": "Plak de link die het afdrukte, Inloggen",
+  "srv.youSignIn": "Kies hoe er wordt aangemeld: uitnodigingslinks, Google of Microsoft Entra",
+  "srv.youWorkspace": "Maak de eerste werkruimte",
+  "srv.youInvite": "Nodig mensen uit met een rol",
+  "srv.youSecondAdmin": "Maak een tweede organisatie-admin",
+  "srv.trustBefore":
+    "De server bewaart de sleutel van elke werkruimte, dus hij en wie de box beheert kunnen elke werkruimte erop lezen. Kies iemand die de organisatie daarmee vertrouwt. De eigen notities van leden blijven op hun Macs.",
+  "srv.forSomeoneElse": "Zet iemand anders de box op?",
+  "srv.forSomeoneElseHelp":
+    "Kopieer de stappen met je waarden als gewone tekst, voor een mail of een ticket. Relay verstuurt geen mail.",
+  "srv.copyInstructions": "Kopieer instructies als tekst",
+  "srv.fillFirst": "Vul het adres en de eerste organisatie-admin in om verder te gaan.",
+  "srv.textTitle": "Relay-server voor {host}",
+  "srv.valuesLine": "Alle stappen: technisch persoon, op de box. {host} · {admin} · {folder} · Macs vanaf {network}",
+  "srv.edit": "Bewerken",
+  "srv.installDocker": "Installeer Docker Engine 25 of nieuwer met compose",
+  "srv.installDockerHelp":
+    "Controleer het hiermee. Zit je niet in de docker-groep, zet dan sudo voor elk docker-commando.",
+  "srv.installLogin": "Log in bij het image-register",
+  "srv.installLoginHelp": "Zolang het image privé is: eenmalig, met een GitHub-token met read:packages.",
+  "srv.installStart": "Installeer en start relay-server",
+  "srv.installStartHelp":
+    "Downloadt compose.yml, backup.sh en .env en start dan de server. --wait keert terug zodra hij gezond is.",
+  "srv.installHealthy":
+    "Gezond als <code>docker compose ps</code> healthy toont en <code>docker compose logs</code> <code>listening on 0.0.0.0:47800</code> toont.",
+  "srv.installFails":
+    'Als het mislukt: "denied" bij de download betekent dat stap 2 ontbreekt. Niet gezond: lees <code>docker compose logs</code>, vaak is de poort bezet (wijzig RELAY_PORT in .env).',
+  "srv.installPort": "Open de poort, enkel voor de Macs",
+  "srv.installPortHelp":
+    "Met ufw op de box. Bij een cloudprovider: een ingress-regel voor TCP 47800 vanaf het kantoor- of VPN-bereik.",
+  "srv.installDns": "Laat {host} naar de box wijzen",
+  "srv.installDnsHelp":
+    "Een DNS-record bij de provider van het domein. De Macs verbinden met deze naam, dus een verhuis naar een andere box is een DNS-wijziging.",
+  "srv.installTeam": "Maak er een teamserver van",
+  "srv.installTeamHelp":
+    "Enkel in een lege map, in plaats van een eerste koppeling. Het drukt een relay://-link af voor één toestel van {admin}, een organisatie-admin. Stuur die regel door. Draai het opnieuw voor een nieuwe link.",
+  "srv.installTeamRefuses":
+    "Weigert het: de map heeft al een gekoppeld toestel of een gedeelde werkruimte. Gebruik een lege map.",
+  "srv.installBackup": "Back-up elke nacht (aanbevolen)",
+  "srv.installBackupHelp":
+    "Een cron-regel, toevoegen met crontab -e. De server stopt een paar seconden. De back-up bevat de privésleutel van de server: bewaar hem even veilig als de box.",
+  "srv.waitingLink": "Wacht op de link uit stap 6",
+  "srv.haveLink": "Ik heb de link",
+  "srv.connectHelp":
+    "Plak de relay://-link die het teamcommando afdrukte. Daarmee log je deze Mac in als eerste organisatie-admin.",
+  "srv.seenTeam": "De link van een organisatie op {host}",
+  "srv.seenNotTeam": "Dit is niet de link van een teamserver. Die van een teamserver bevat #team.",
+  "srv.afterConnect": "Daarna",
+  "srv.afterConnectHelp":
+    "De pagina van de organisatie opent met wat nog te doen staat: aanmelden, de eerste werkruimte, mensen, een tweede organisatie-admin. Zolang er geen naam is, toont Relay overal het adres.",
+  "srv.joinHelp": "Plak de regel die je kreeg. Relay controleert wat het is voor er iets gebeurt.",
+  "srv.joinLine": "Uitnodiging of koppelregel",
+  "srv.notALine":
+    "Relay herkent deze regel niet. Hij begint met relay:// en kwam van een admin of werd afgedrukt door relay-server.",
+  "srv.threeKinds": "Relay herkent deze",
+  "srv.kindTeamInvite": "Uitnodiging voor een organisatie",
+  "srv.kindTeamInviteHelp": "Eén toestel, 7 dagen geldig. Logt je in bij een account.",
+  "srv.kindTeamSignIn": "De aanmeldlink van een organisatie",
+  "srv.kindWorkspace": "Uitnodiging voor een versleutelde werkruimte",
+  "srv.kindWorkspaceHelp": "Eén toestel, 24 uur geldig. Enkel de toegevoegde mensen kunnen hem lezen.",
+  "srv.kindPairing": "Koppelregel voor een eigen machine",
+  "srv.kindPairingHelp": "Werkt één keer, 10 minuten. Deze Mac wordt een van de toestellen van de machine.",
+  "srv.getTeamInvite":
+    "Een account op {host}. De werkruimtes waaraan je werd toegevoegd verschijnen in het werkruimtemenu, elk in een eigen map.",
+  "srv.getTeamSignIn":
+    "Deze Mac meldt je aan bij je account op {host} met de Google- of Microsoft-aanmelding van de organisatie, in de browser. Het adres moet daar al een account hebben.",
+  "srv.getWorkspace": "Een versleutelde werkruimte die synchroniseert naar een map die je op deze Mac kiest.",
+  "srv.getPairing": "Een eigen machine: deze Mac wordt een van zijn toestellen.",
+  "srv.readsTeam": "De server en wie hem beheert, en de leden volgens hun rol.",
+  "srv.readsWorkspace": "Enkel de mensen die eraan zijn toegevoegd. De server bewaart verzegelde bestanden.",
+  "srv.readsPairing": "Enkel je eigen toestellen. De machine bewaart verzegelde bestanden.",
+  "srv.staysHere": "Wat hier blijft",
+  "srv.staysHereHelp":
+    "Je eigen werkruimte blijft op deze Mac en gaat nooit naar deze server. Organisatie-admins kunnen je toestellen afmelden.",
+  "srv.signInOrg": "Meld aan met je organisatie",
+  "srv.errTitle": "Als het niet verbindt",
+  "srv.errSee": "Wat je ziet",
+  "srv.errCause": "Waarschijnlijke oorzaak",
+  "srv.errFix": "Oplossing",
+  "srv.errReach": "De server is niet bereikbaar",
+  "srv.errReachCause":
+    "De poort is dicht of niet toegelaten vanaf het netwerk van deze Mac. Of de DNS-naam wijst ergens anders naartoe.",
+  "srv.errReachFix":
+    "Op de box: open poort 47800 voor dit netwerk (ufw, of een ingress-regel bij de cloudprovider). Controleer dat docker compose ps healthy toont.",
+  "srv.errOlder": "relay-server daar spreekt een ouder protocol dan deze Relay",
+  "srv.errOlderCause": "De box draait een oudere versie dan deze Relay.",
+  "srv.errOlderFix":
+    "Je machine: Bijwerken op zijn pagina. Organisatie: zet de nieuwe tag in RELAY_SERVER_IMAGE in .env en draai dan docker compose pull && docker compose up -d --wait.",
+  "srv.errNewer": "relay-server daar spreekt een nieuwer protocol dan deze Relay",
+  "srv.errNewerCause": "De box werd bijgewerkt vóór deze Mac.",
+  "srv.errNewerFix": "Werk Relay bij op deze Mac (Instellingen › Updates).",
+  "srv.errPairing": "Koppelregel verlopen of gebruikt",
+  "srv.errPairingCause": "Een koppelregel werkt één keer, 10 minuten.",
+  "srv.errPairingFix": "Draai relay-server pair opnieuw op de machine en plak de nieuwe regel.",
+  "srv.errInvite": "Uitnodiging verlopen of gebruikt",
+  "srv.errInviteCause": "Een uitnodiging logt één toestel in en werkt 7 dagen.",
+  "srv.errInviteFix":
+    "Vraag een organisatie-admin om een nieuwe uitnodiging. Je eigen eerste adminlink: draai het teamcommando opnieuw.",
+  "srv.errWorkspace": "Werkruimtelink verlopen",
+  "srv.errWorkspaceCause": "Een link naar een versleutelde werkruimte werkt 24 uur.",
+  "srv.errWorkspaceFix": "Vraag de beheerder van de werkruimte om een nieuwe link.",
+  "srv.errSignIn": "Aanmelden geweigerd",
+  "srv.errSignInCause": "Het adres heeft nog geen account op deze server, of het account staat uit.",
+  "srv.errSignInFix": "Vraag een organisatie-admin om het adres uit te nodigen of het account aan te zetten.",
+  "srv.errCert": "Certificaat komt niet overeen",
+  "srv.errCertCause": "De server werd opnieuw opgezet zonder zijn back-up. Elke Mac weigert hem.",
+  "srv.errCertFix":
+    "Herstel de back-up met ./backup.sh restore. Zonder: vergeet de server en koppel of sluit opnieuw aan.",
 } satisfies Record<Key, string>;

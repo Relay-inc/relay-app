@@ -12,22 +12,18 @@ const key = (fp: string) => `team:${fp}`;
 
 export const editTeamLink = (link: string) => change(draft => void (draft.link = link));
 
-/** Log in with the typed link: an invite in it, or the server's provider in the browser. */
+/** Log in with the typed link: an invite in it, or the server's provider in the browser. The server's fingerprint
+ *  when it worked, else "" (the error shows under "team"). */
 export async function loginTeam() {
   const link = useSettingsStore.getState().team.link.trim();
   const ok = await run("team", async () => {
     await backend.teamLogin(link);
     await reload();
   });
-  if (ok) {
-    change(draft => void (draft.link = ""));
-    // Servers and organisations on Add a server: the organisation just logged in to shows (its link names its fp)
-    const fp = useSettingsStore.getState().settings.teams?.find(x => link.includes(`fp=${x.fp}`))?.fp;
-    useSettingsStore.setState(draft => {
-      if (fp && draft.serversPage.item === "add") draft.serversPage.item = `org:${fp}`;
-    });
-  }
+  if (ok) change(draft => void (draft.link = ""));
   for (const t of useSettingsStore.getState().settings.teams ?? []) void loadTeam(t.fp);
+  // the link names the server's fingerprint
+  return ok ? (useSettingsStore.getState().settings.teams?.find(x => link.includes(`fp=${x.fp}`))?.fp ?? "") : "";
 }
 export const cancelSignIn = () => void backend.ssoCancel();
 

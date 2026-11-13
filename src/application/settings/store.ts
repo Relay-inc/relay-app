@@ -26,7 +26,7 @@ import {
   type VaultSync,
 } from "../../domain/settings/types";
 import { SETUP_FOLDERS, type SetupPlatform } from "../../domain/settings/machines";
-import type { ORG_TABS } from "../../domain/settings/servers";
+import type { ORG_TABS, OrgDraft } from "../../domain/settings/servers";
 import type { AgentsStatus } from "../../domain/agents/types";
 import type { AgentUpdate, UpdateProgress, UpdatesStatus } from "../../domain/settings/updates";
 import type { BoardOpt } from "../../domain/board/types";
@@ -34,20 +34,14 @@ import type { PluginTest } from "../../domain/plugins/types";
 import type { ExtraVault, ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
 import { makeStore } from "../make-store";
 
+/** What a server added on Servers and organisations is for: a machine of your own, an organisation's server, or one
+ *  someone else runs (Join). */
+export type AddKind = "" | "own" | "org" | "join";
 /** An organisation's tabs on Servers and organisations; a member sees Overview and Workspaces. */
 export type OrgTab = (typeof ORG_TABS)[number];
 
 export type SettingsTab =
-  | "general"
-  | "projects"
-  | "agents"
-  | "integrations"
-  | "plugins"
-  | "workspaces"
-  | "machines"
-  | "voice"
-  | "shortcuts"
-  | "updates";
+  "general" | "projects" | "agents" | "integrations" | "plugins" | "voice" | "shortcuts" | "updates";
 
 /** The settings as the backend keeps them and the UI language (both windows), plus what the settings window shows.
  *  Every save result is a `Message | null` (null: nothing to say). */
@@ -142,9 +136,18 @@ export type SettingsState = {
     links: Record<string, string>;
   };
   // Servers and organisations, the page in the main window (application/settings/servers.ts): the item picked in its
-  // list ("org:<fp>", "add"), the organisation's tab, the workspace open on its Workspaces tab that is not synced here
-  // ("" none), and whether Invite people shows
-  serversPage: { item: string; tab: OrgTab; workspace: string; inviting: boolean };
+  // list ("mac", "machine:<id>", "org:<fp>", "setup", "add"), the organisation's tab, the workspace open on its
+  // Workspaces tab that is not synced here ("" none), whether Invite people shows, on Add a server what it is for
+  // ("" not chosen yet) and its step, and the organisation server being set up (kept on this Mac, null none)
+  serversPage: {
+    item: string;
+    tab: OrgTab;
+    workspace: string;
+    inviting: boolean;
+    add: AddKind;
+    step: number;
+    draft: OrgDraft | null;
+  };
   pluginsPage: {
     loaded: boolean; // the secrets are known
     secrets: Record<string, Record<string, boolean>>; // per plugin: which of its secrets sit in the keychain
@@ -237,7 +240,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     form: { mode: "", machine: "", name: "", folder: "", link: "", noHistory: false },
   },
   team: { me: {}, overview: {}, link: "", links: {} },
-  serversPage: { item: "", tab: "overview", workspace: "", inviting: false },
+  serversPage: { item: "", tab: "overview", workspace: "", inviting: false, add: "", step: 1, draft: null },
   pluginsPage: { loaded: false, secrets: {}, imports: [], messages: {}, tests: {} },
   integrations: {
     loaded: false,

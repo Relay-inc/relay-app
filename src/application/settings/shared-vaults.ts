@@ -48,18 +48,19 @@ export async function reload() {
  *  join runs it stays there: their end takes it, or the next Settings window. `open_settings` shows Workspaces, on its
  *  list, where the join form is. */
 export async function takeInvite() {
-  if (st().busy.form) return;
+  if (st().busy.form) return false;
   const link = await backend.sharedVaultPendingInvite().catch(() => null);
-  if (!link) return;
+  if (!link) return false;
   change(draft => {
     draft.form = { ...draft.form, mode: "join", machine: "", link };
     draft.messages.form = null;
     draft.open = "";
   });
+  return true;
 }
 
-/** The rounds so far and then each one as it ends, and the invite links (`vault-invite` is a ping: the backend has
- *  the link). Once, when the window opens. */
+/** The rounds so far and then each one as it ends. Once, when Servers and organisations first shows (invite links
+ *  are the main window's, servers.ts `openInvite`). */
 export async function watchSharedVaults() {
   void backend.onSharedVaults(status =>
     change(draft => {
@@ -69,14 +70,12 @@ export async function watchSharedVaults() {
         if (!round.held.length && draft.messages[id]?.ok) draft.messages[id] = null;
     }),
   );
-  void backend.onVaultInvite(takeInvite);
   try {
     const status = await backend.sharedVaultsStatus();
     change(draft => void (draft.status = status));
   } catch {
     // an older backend: no shared vaults
   }
-  await takeInvite();
 }
 
 /** The one form, "new", "join" or closed (""), and where it shows with its message: under the machine `machine`

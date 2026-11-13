@@ -24,7 +24,7 @@ import {
   showRecovery,
   withdrawInvite,
 } from "../../../application/settings/shared-vaults";
-import { cancelSignIn, editTeamLink, inviteTeam, loginTeam, setTeamMember } from "../../../application/settings/teams";
+import { inviteTeam, setTeamMember } from "../../../application/settings/teams";
 import { relativeFormat, sentAt } from "../../../shared/format";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
@@ -58,7 +58,7 @@ const LABEL = "text-xs font-medium text-s-fg";
 const roleKey = (role: string) =>
   role === "admin" ? "set.sharedAdmin" : role === "reader" ? "set.sharedReader" : "set.sharedMember";
 
-/** Settings › Workspaces › Workspaces: the personal workspaces on a server that is not one of this Mac's machines
+/** This Mac on Servers and organisations: the personal workspaces on a server that is not one of this Mac's machines
  *  (joined with a link), a row each that opens its page, then Join a workspace with a link… or its form. */
 export function SharedVaults({ vaults }: { vaults: SharedVault[] }) {
   const { t } = useT();
@@ -72,7 +72,7 @@ export function SharedVaults({ vaults }: { vaults: SharedVault[] }) {
   );
 }
 
-/** Settings › Workspaces, per machine: the workspaces it keeps, a row each that opens its page, and New workspace on
+/** A machine's page on Servers and organisations: the workspaces it keeps, a row each that opens its page, and New workspace on
  *  this machine… or its form. Not on a server this Mac only keeps as a vault's admin: it may not make vaults there, so
  *  without workspaces there is nothing to show. */
 export function MachineVaults({ machine, vaults = [] }: { machine: Machine; vaults?: SharedVault[] }) {
@@ -84,42 +84,6 @@ export function MachineVaults({ machine, vaults = [] }: { machine: Machine; vaul
         <SharedRow key={vault.id} vault={vault} />
       ))}
       {machine.auto ? null : <SharedForm machine={machine.id} />}
-    </Section>
-  );
-}
-
-/** Log in to a team server (Servers and organisations › Add a server): the link an admin sent (an invite, or the server's own link for the
- *  organisation's sign-in in the browser). */
-export function TeamLogin() {
-  const { t } = useT();
-  const link = useSettingsStore(s => s.team.link);
-  const busy = useSettingsStore(s => !!s.shared.busy.team);
-  const message = useSettingsStore(s => s.shared.messages.team);
-  return (
-    <Section title={t("set.teamLoginTitle")} desc={t("set.teamLoginHelp")}>
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <input
-          className={`${FIELD} min-w-0 flex-1 basis-64 font-mono`}
-          aria-label={t("set.teamLink")}
-          placeholder="relay://…#team…"
-          spellCheck={false}
-          value={link}
-          onChange={e => editTeamLink(e.target.value)}
-        />
-        {busy ? (
-          <>
-            <span className="text-xs text-s-muted">{t("set.teamSigningIn")}</span>
-            <button className={buttonClass("ghost")} onClick={cancelSignIn}>
-              {t("mc.cancel")}
-            </button>
-          </>
-        ) : (
-          <button className={buttonClass("primary")} disabled={!link.trim()} onClick={() => void loginTeam()}>
-            {t("set.teamLogin")}
-          </button>
-        )}
-      </div>
-      {message ? <span className={message.ok ? HINT_IN_ROW : ERROR_MESSAGE}>{message.text}</span> : null}
     </Section>
   );
 }
@@ -164,7 +128,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
   );
 }
 
-/** A workspace's page on Settings › Workspaces: its folder (and for a personal one its recovery key), Members with
+/** A workspace's page on Servers and organisations: its folder (and for a personal one its recovery key), Members with
  *  their invites, Documents, Sync (the last round and what waits for a choice) and Leave. */
 export function WorkspacePage({ vault }: { vault: SharedVault }) {
   const { t, tn, locale } = useT();
