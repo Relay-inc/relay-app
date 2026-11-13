@@ -25,7 +25,7 @@ export const TABS = [
   ["updates", "set.tab.updates", "refresh"],
 ] as const satisfies readonly (readonly [SettingsTab, Key, string])[];
 
-/** Pages that moved to Servers and organisations, and what opens there for them. */
+/** Pages that moved to Organisations and servers, and what opens there for them. */
 const MOVED: Record<string, string> = { workspaces: "join", machines: "mac", organisation: "" };
 
 const st = () => useSettingsStore.getState();
@@ -52,7 +52,7 @@ export async function initSettingsWindow() {
   void watchUpdates();
   void watchVaultSync();
   showTitle();
-  // machines, workspaces and organisations are on Servers and organisations in the main window: asked for here (an
+  // machines, workspaces and organisations are on Organisations and servers in the main window: asked for here (an
   // invite link that opened Relay asks for "workspaces"), the window sends it there and closes
   if (asked && asked in MOVED) return void openServersPage(MOVED[asked]);
   void backend.onSettingsGo(to => {
@@ -71,10 +71,13 @@ export function go(to: SettingsTab) {
   });
   showTitle();
 }
-/** Servers and organisations is a page in the main window: it opens there with `item` picked and this window closes. */
+/** Organisations and servers is a page in the main window: it opens there with `item` picked and this window closes. */
 export async function openServersPage(item = "") {
-  await backend.openServersInMain(item);
-  closeWindow();
+  try {
+    await backend.openServersInMain(item);
+  } finally {
+    closeWindow();
+  }
 }
 /** Escape and Cmd-W close the window. */
 export const close = closeWindow;

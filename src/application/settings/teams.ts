@@ -3,7 +3,7 @@ import * as backend from "../../infrastructure/backend";
 import { reload, run } from "./shared-vaults";
 import { useSettingsStore, type SettingsState } from "./store";
 
-// Team servers, on Servers and organisations (servers.ts), (src-tauri/src/team.rs, docs/workspaces.md, Teams): log in,
+// Team servers, on Organisations and servers (servers.ts), (src-tauri/src/team.rs, docs/workspaces.md, Teams): log in,
 // an account's workspaces with Sync here…, members and invites by email, and for an organisation admin the accounts,
 // workspaces and sign-in of the server. Busy and messages go under "team:<fp>" (shared-vaults.ts `run`).
 type Team = SettingsState["team"];

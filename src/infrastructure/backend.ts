@@ -913,7 +913,7 @@ export const onUpdateProgress = (handler: (progress: UpdateProgress) => void) =>
   listen<UpdateProgress>("update-progress", e => handler(e.payload));
 /** The open settings window is asked to show a page (Relay › Check for Updates). */
 export const onSettingsGo = (handler: (tab: string) => void) => listen<string>("settings-go", e => handler(e.payload));
-/** The settings window asks the main window to show Servers and organisations, with `item` picked ("" as it was). */
+/** The settings window asks the main window to show Organisations and servers, with `item` picked ("" as it was). */
 export const openServersInMain = (item: string) => emitTo("main", "open-servers", item);
 export const onOpenServers = (handler: (item: string) => void) =>
   listenHere<string>("open-servers", e => handler(e.payload));

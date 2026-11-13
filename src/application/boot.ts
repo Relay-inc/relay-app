@@ -120,7 +120,7 @@ function listenToBackend() {
   backend.onOpenChat(select);
   backend.onMailLink(mailLinkClicked);
   backend.onSettingsChanged(settingsChanged);
-  // Settings › Servers and organisations: the page opens here
+  // Settings › Organisations and servers: the page opens here
   // ("join": an invite link that opened Relay, which the backend keeps)
   backend.onOpenServers(item => (item === "join" ? void openInvite() : openServers(item)));
   backend.onVaultInvite(() => void openInvite());

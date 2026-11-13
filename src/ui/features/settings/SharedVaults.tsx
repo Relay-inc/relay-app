@@ -58,7 +58,7 @@ const LABEL = "text-xs font-medium text-s-fg";
 const roleKey = (role: string) =>
   role === "admin" ? "set.sharedAdmin" : role === "reader" ? "set.sharedReader" : "set.sharedMember";
 
-/** This Mac on Servers and organisations: the personal workspaces on a server that is not one of this Mac's machines
+/** This Mac on Organisations and servers: the personal workspaces on a server that is not one of this Mac's machines
  *  (joined with a link), a row each that opens its page, then Join a workspace with a link… or its form. */
 export function SharedVaults({ vaults }: { vaults: SharedVault[] }) {
   const { t } = useT();
@@ -72,7 +72,7 @@ export function SharedVaults({ vaults }: { vaults: SharedVault[] }) {
   );
 }
 
-/** A machine's page on Servers and organisations: the workspaces it keeps, a row each that opens its page, and New workspace on
+/** A machine's page on Organisations and servers: the workspaces it keeps, a row each that opens its page, and New workspace on
  *  this machine… or its form. Not on a server this Mac only keeps as a vault's admin: it may not make vaults there, so
  *  without workspaces there is nothing to show. */
 export function MachineVaults({ machine, vaults = [] }: { machine: Machine; vaults?: SharedVault[] }) {
@@ -129,7 +129,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
   );
 }
 
-/** A workspace's page on Servers and organisations: its folder (and for a personal one its recovery key), Members with
+/** A workspace's page on Organisations and servers: its folder (and for a personal one its recovery key), Members with
  *  their invites, Documents, Sync (the last round and what waits for a choice) and Leave. */
 export function WorkspacePage({ vault }: { vault: SharedVault }) {
   const { t, tn, locale } = useT();

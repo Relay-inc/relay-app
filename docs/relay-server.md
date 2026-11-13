@@ -90,7 +90,7 @@ The server is a team server from then on and pairs no devices. The line it print
 that address, which is an organisation admin. In Relay: the workspace menu at the bottom left › Add a server…, A server for an
 organisation walks through these steps and ends with that link: paste it, Log in. Join takes it too. Run the command again for a new link (a second Mac, or to get back in).
 
-Then, in Relay, on Servers and organisations (the workspace menu, or the row under the pages in Settings), the
+Then, in Relay, on Organisations and servers (the workspace menu, or the row under the pages in Settings), the
 organisation's tabs:
 
 - **People**: the accounts (turn off, make organisation admin), open invites, and Invite people: addresses, an
@@ -113,7 +113,7 @@ to the provider for its keys.
 
 Keep the server at the version of the Relay apps that use it, they speak one protocol. Two ways:
 
-- **From Relay.** When Relay is newer, the machine's page on Servers and organisations shows Update to <version>. Relay sends the server the
+- **From Relay.** When Relay is newer, the machine's page on Organisations and servers shows Update to <version>. Relay sends the server the
   Linux binary from its GitHub release, with its signature. From a workspace admin the server takes only an
   official, signed release. The binary stays in the volume (`data/bin/relay-server`) and every start prefers it
   while it is newer than the image's, so recreating the container keeps the update.

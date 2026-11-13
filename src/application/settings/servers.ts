@@ -16,7 +16,7 @@ import { editForm, joinSharedVault, openWorkspace, run, takeInvite, watchSharedV
 import { useSettingsStore, type AddKind, type OrgTab, type SettingsState, type SettingsTab } from "./store";
 import { editTeamLink, loadTeam, loginTeam, setTeamName } from "./teams";
 
-// Servers and organisations: a page in the main window's middle column (not the settings window) with this Mac, the
+// Organisations and servers: a page in the main window's middle column (not the settings window) with this Mac, the
 // machines and the team servers in a list on the left and the picked one on the right. An organisation has the tabs
 // Overview, People, Workspaces, Sign-in and Server; its use cases are the team ones (teams.ts). The settings window
 // opens the page here through `open-servers`.

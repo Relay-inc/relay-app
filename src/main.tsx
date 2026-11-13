@@ -1,5 +1,5 @@
 // The main window: <App> (src/ui/app) draws it from the stores in src/application, boot() starts the app.
-// settings-tailwind.css is the app's Tailwind plus the settings palette, which Servers and organisations uses (.s-palette)
+// settings-tailwind.css is the app's Tailwind plus the settings palette, which Organisations and servers uses (.s-palette)
 import "./ui/styles/settings-tailwind.css";
 import "./ui/styles/base.css";
 import "./ui/styles/settings-theme.css";

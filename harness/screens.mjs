@@ -314,12 +314,12 @@ const settingsPage = async (tab, sub, fixture = "default", platform = "") => {
   await click(tab);
   if (sub) await click(sub);
 };
-/** Servers and organisations (main window) of `fixture`, `height` tall, on the list's item `name` (This Mac, a machine) */
+/** Organisations and servers (main window) of `fixture`, `height` tall, on the list's item `name` (This Mac, a machine) */
 const serversItem = async (fixture, name, height = 1100) => {
   await page.setViewportSize({ width: 1440, height });
   await open(page, server.url, { fixture, sel: "__servers" });
   await page
-    .getByRole("navigation", { name: "Servers and organisations" })
+    .getByRole("navigation", { name: "Organisations and servers" })
     .getByRole("button", { name: new RegExp(`^${name}`) })
     .first()
     .click();
@@ -327,11 +327,11 @@ const serversItem = async (fixture, name, height = 1100) => {
 };
 /** the page of the fixture's machine "Server" (what Settings › Machines had for it) */
 const machinePage = (fixture, height = 1100) => serversItem(fixture, "Server", height);
-/** a workspace's page on Servers and organisations, `height` tall: found on This Mac or on one of the machines */
+/** a workspace's page on Organisations and servers, `height` tall: found on This Mac or on one of the machines */
 const workspacePage = async (fixture, height = 1200, name = "Northwind") => {
   await page.setViewportSize({ width: 1440, height });
   await open(page, server.url, { fixture, sel: "__servers" });
-  const rows = page.getByRole("navigation", { name: "Servers and organisations" }).getByRole("button");
+  const rows = page.getByRole("navigation", { name: "Organisations and servers" }).getByRole("button");
   const pane = page.locator(".s-palette > section");
   for (let i = 0; i < (await rows.count()); i++) {
     await rows.nth(i).click();
@@ -387,7 +387,7 @@ const VIEWS = {
     await click("Install and restart");
     await waitText("55%");
   },
-  // a machine's page on Servers and organisations, online, Add phone pressed: the QR and the line for the phone
+  // a machine's page on Organisations and servers, online, Add phone pressed: the QR and the line for the phone
   "settings-machines-phone": async () => {
     await machinePage("phone");
     await click("Add phone");
@@ -1764,7 +1764,7 @@ const VIEWS = {
     await settingsPage("Voice");
     await intoView("Whisper Large v3 Turbo");
   },
-  // a workspace's page on Servers and organisations for its admin (was Settings › Workspaces): Northwind on Team
+  // a workspace's page on Organisations and servers for its admin (was Settings › Workspaces): Northwind on Team
   // server, its last round (a conflict copy, two deletes held), its people (this Mac, an admin, a member, an open
   // invite), a new invite link made and the recovery key shown again
   // a member left: the workspace's key changes once the remaining members' Relay can receive it (PR key rotation)
@@ -1827,11 +1827,26 @@ const VIEWS = {
     await page.getByText("not synced here").scrollIntoViewIfNeeded();
     await settle(page);
   },
-  // Servers and organisations (PR servers-page), a page in the main window, fixture team: an organisation admin of
+  // Organisations and servers (PR servers-page), a page in the main window, fixture team: an organisation admin of
   // relay.example.com. The Overview: counts, the server, the sign-in link, you, and what is still to set up
   "servers-overview": async () => {
     await open(page, server.url, { fixture: "team", sel: "__servers" });
     await waitText("Sign-in link");
+    await settle(page);
+  },
+  // the workspace menu grouped by place: On this Mac, then the organisation by its name with who can read on its head
+  // and your role per row (PR menu-by-place)
+  "workspace-menu-places": async () => {
+    await open(page, server.url, { fixture: "team" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await waitText("On this Mac");
+    await settle(page);
+  },
+  // the same with a machine of your own keeping encrypted workspaces (fixture shared)
+  "workspace-menu-machine": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await waitText("On this Mac");
     await settle(page);
   },
   // the organisation's name edited in place by an organisation admin (PR org-name)
@@ -1847,7 +1862,7 @@ const VIEWS = {
     await waitText("Add a name");
     await settle(page);
   },
-  // the footer's workspace menu, with Servers and organisations… and Add a server… at the bottom
+  // the footer's workspace menu, with Organisations and servers… and Add a server… at the bottom
   "servers-menu": async () => {
     await open(page, server.url, { fixture: "team" });
     await page.getByRole("button", { name: /^Switch workspace/ }).click();
@@ -2040,10 +2055,10 @@ const VIEWS = {
     await waitText("/mnt/user/appdata/relay-server");
     await settle(page);
   },
-  // Settings: Servers and organisations is a row under the pages, Workspaces points there for organisations
+  // Settings: Organisations and servers is a row under the pages, Workspaces points there for organisations
   "settings-servers-row": async () => {
     await settingsPage("Agents", undefined, "machines");
-    await waitText("Servers and organisations");
+    await waitText("Organisations and servers");
     await intoView("Agent access");
   },
   "settings-shared-vaults": async () => {
@@ -2072,7 +2087,7 @@ const VIEWS = {
     await waitText("Keep this key in your password manager");
     await intoView("Keep this key in your password manager");
   },
-  // a member's This Mac on Servers and organisations: no machine, the workspace they joined with a link
+  // a member's This Mac on Organisations and servers: no machine, the workspace they joined with a link
   "settings-shared-member": async () => {
     await serversItem("shared-member", "This Mac");
     await waitText("Join a workspace with a link…");
@@ -2084,7 +2099,7 @@ const VIEWS = {
     await workspacePage("shared-keeper", 1300);
     await waitText("Put them back");
     await page
-      .getByRole("navigation", { name: "Servers and organisations" })
+      .getByRole("navigation", { name: "Organisations and servers" })
       .getByRole("button", { name: /^192\.168\.1\.2/ })
       .click();
     await waitText("You keep this server");

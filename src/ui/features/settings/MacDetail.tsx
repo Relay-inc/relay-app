@@ -10,7 +10,7 @@ import { SharedVaults } from "./SharedVaults";
 const NO_MACHINES: Machine[] = [];
 const NO_VAULTS: SharedVault[] = [];
 
-/** This Mac on Servers and organisations: this Mac as a machine for another Mac (Relay's own relay-server), and the
+/** This Mac on Organisations and servers: this Mac as a machine for another Mac (Relay's own relay-server), and the
  *  encrypted workspaces it joined with a link on a server that is not one of its machines. */
 export function MacDetail() {
   const { t } = useT();

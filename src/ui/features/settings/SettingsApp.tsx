@@ -13,7 +13,7 @@ import { VoicePage } from "./VoicePage";
 
 /** The settings window, laid out like bb's: the pages in a sidebar on the left, the shown page on the right. Every
  *  page stays mounted and only the shown one takes part in the column, so what is typed survives switching pages, and
- *  Agents and Integrations check their state once, when the window opens. Under the pages, Servers and organisations is a
+ *  Agents and Integrations check their state once, when the window opens. Under the pages, Organisations and servers is a
  *  row, not a page: it opens that page in the main window and closes this one. Mounted once the settings are read. */
 export function SettingsApp() {
   const { t } = useT();

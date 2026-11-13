@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
   openFolderAsWorkspace,
   openWorkspaceSettings,
@@ -17,6 +17,8 @@ import { Icon } from "../../components/Icon";
 import { loadInbox, onAnyComments, openPageThread, type InboxItem } from "../../../application/navigation/pages";
 import { noteName } from "../../../domain/navigation/pages";
 import { openAdd, openNewWorkspace, openServers, openTeamWorkspace } from "../../../application/settings/servers";
+import type { Place } from "../../../domain/settings/servers";
+import { TrustBadge } from "../settings/TrustBadge";
 import { VaultCheckDialog } from "./VaultCheckDialog";
 
 // a workspace's square in the context tints, by its place in the list
@@ -25,6 +27,24 @@ const ACTION =
   "w-full px-2 py-1.5 rounded-md text-left text-[13px] text-label hover:bg-accent hover:text-on-accent cursor-default";
 const APP_ACTION = `${ACTION} flex items-center gap-2.5`;
 const GLYPH = "glyph size-4 flex-none";
+const ROLE_KEYS = { admin: "set.sharedAdmin", member: "set.sharedMember", reader: "set.sharedReader" } as const;
+
+/** A group's head in the menu: where its workspaces live, and who can read them on the head, not on every row. */
+function PlaceHead({ place }: { place: Place }) {
+  const { t } = useT();
+  return (
+    <div className="flex min-w-0 items-center gap-2 px-2 pt-2 pb-1 first:pt-1">
+      <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wider text-tertiary">
+        {place.kind === "mac" ? t("ws.onThisMac") : place.name}
+      </span>
+      {place.kind === "mac" ? (
+        <span className="flex-none text-[11px] text-tertiary">{t("ws.onlyYou")}</span>
+      ) : (
+        <TrustBadge kind={place.kind === "org" ? "org" : "e2e"} name={place.name} />
+      )}
+    </div>
+  );
+}
 
 function Square({ workspace, index, size }: { workspace: Workspace; index: number; size: string }) {
   return (
@@ -36,10 +56,12 @@ function Square({ workspace, index, size }: { workspace: Workspace; index: numbe
   );
 }
 
-/** The footer's workspace: its square, name and note count; a click opens the menu above it with every workspace
- *  (⌃1 to ⌃9, a tick on the one shown), Open a folder as workspace…, New workspace from template… and Workspace
+/** The footer's workspace: its square, name and note count; a click opens the menu above it with every workspace,
+ *  grouped by place (On this Mac, each machine of your own, another server's host, each organisation) with who can
+ *  read them on the group's head and your role or the note count per row (⌃1 to ⌃9 in that order, a tick on the one
+ *  shown), Open a folder as workspace…, New workspace from template… and Workspace
  *  settings, then the app's own items: light/dark and settings (with a dot when there is a Relay update), and last
- *  Servers and organisations… and Add a server…, which open that page in the middle column. An update
+ *  Organisations and servers… and Add a server…, which open that page in the middle column. An update
  *  also puts a dot on the square, so it shows with the menu closed. Usage has its own button next to it. */
 export function WorkspaceSwitcher({
   dark,
@@ -126,41 +148,39 @@ export function WorkspaceSwitcher({
               onPick={i => run(() => openPageThread(i.page, i.thread.id))}
             />
           ) : null}
-          <div
-            className={`px-2 pt-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-tertiary ${showInbox ? "hidden" : ""}`}
-          >
-            {t("ws.title")}
-          </div>
           {(showInbox ? [] : list).map((workspace, i) => (
-            <button
-              key={workspace.folder}
-              role="menuitemradio"
-              aria-checked={workspace.active}
-              className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left cursor-default hover:bg-fill-2 ${workspace.active ? "bg-fill-2" : ""}`}
-              title={workspace.folder}
-              onClick={() => run(() => switchWorkspace(workspace.folder))}
-            >
-              <Square workspace={workspace} index={i} size="size-7" />
-              <span className="min-w-0 flex-1 grid">
-                <span className="truncate text-[13px] font-medium text-label">{workspace.name}</span>
-                <span className="truncate text-[11px] text-tertiary">
-                  {[
-                    // a team workspace says first how it syncs; the path, the longest, last where it may be cut
-                    workspace.team ? t("ws.team") : "",
-                    workspace.team ? t(workspace.live ? "ws.live" : "ws.rounds") : "",
-                    tn("ws.notes", workspace.notes),
-                    workspace.folder.replace(/^\/Users\/[^/]+/, "~"),
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
+            <Fragment key={workspace.folder}>
+              {workspace.place.key !== list[i - 1]?.place.key ? <PlaceHead place={workspace.place} /> : null}
+              <button
+                role="menuitemradio"
+                aria-checked={workspace.active}
+                className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left cursor-default hover:bg-fill-2 ${workspace.active ? "bg-fill-2" : ""}`}
+                title={workspace.folder}
+                onClick={() => run(() => switchWorkspace(workspace.folder))}
+              >
+                <Square workspace={workspace} index={i} size="size-7" />
+                <span className="min-w-0 flex-1 grid">
+                  <span className="truncate text-[13px] font-medium text-label">{workspace.name}</span>
+                  <span className="truncate text-[11px] text-tertiary">
+                    {[
+                      // a shared workspace says first your role there, one of an organisation how it syncs (the group
+                      // says where it is); the path, the longest, last where it may be cut
+                      workspace.role ? t(ROLE_KEYS[workspace.role]) : "",
+                      workspace.place.kind === "org" ? t(workspace.live ? "ws.live" : "ws.rounds") : "",
+                      tn("ws.notes", workspace.notes),
+                      workspace.folder.replace(/^\/Users\/[^/]+/, "~"),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
                 </span>
-              </span>
-              {keys[i] ? <span className="flex-none text-xs text-tertiary tabular-nums">{keys[i]}</span> : null}
-              <Icon
-                name="check"
-                className={`glyph size-3.5 flex-none stroke-2 text-accent-text ${workspace.active ? "" : "invisible"}`}
-              />
-            </button>
+                {keys[i] ? <span className="flex-none text-xs text-tertiary tabular-nums">{keys[i]}</span> : null}
+                <Icon
+                  name="check"
+                  className={`glyph size-3.5 flex-none stroke-2 text-accent-text ${workspace.active ? "" : "invisible"}`}
+                />
+              </button>
+            </Fragment>
           ))}
           {team && !showInbox ? (
             <button className={APP_ACTION} onClick={() => setShowInbox(true)}>
