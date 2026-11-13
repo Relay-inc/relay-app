@@ -174,6 +174,8 @@ export default {
   "pages.deleteProjectHere": "Seine Zeile verlässt work-state; seine Gespräche bleiben.",
   "ws.switch": "Workspace wechseln",
   "ws.title": "Workspaces",
+  "ws.onlyYou": "Nur du",
+  "ws.onThisMac": "Auf diesem Mac",
   "ws.notes_one": "{n} Notiz",
   "ws.notes_other": "{n} Notizen",
   "mig.moveTo": "In Workspace verschieben",

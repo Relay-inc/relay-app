@@ -1834,6 +1834,21 @@ const VIEWS = {
     await waitText("Sign-in link");
     await settle(page);
   },
+  // the workspace menu grouped by place: On this Mac, then the organisation by its name with who can read on its head
+  // and your role per row (PR menu-by-place)
+  "workspace-menu-places": async () => {
+    await open(page, server.url, { fixture: "team" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await waitText("On this Mac");
+    await settle(page);
+  },
+  // the same with a machine of your own keeping encrypted workspaces (fixture shared)
+  "workspace-menu-machine": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await waitText("On this Mac");
+    await settle(page);
+  },
   // the organisation's name edited in place by an organisation admin (PR org-name)
   "servers-org-name-edit": async () => {
     await VIEWS["servers-overview"]();

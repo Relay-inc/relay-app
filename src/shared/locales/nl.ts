@@ -174,6 +174,8 @@ export default {
   "pages.deleteProjectHere": "Zijn rij gaat uit work-state; zijn gesprekken blijven.",
   "ws.switch": "Workspace wisselen",
   "ws.title": "Workspaces",
+  "ws.onlyYou": "Enkel jij",
+  "ws.onThisMac": "Op deze Mac",
   "ws.notes_one": "{n} notitie",
   "ws.notes_other": "{n} notities",
   "mig.moveTo": "Verplaatsen naar workspace",

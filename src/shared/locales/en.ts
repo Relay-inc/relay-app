@@ -173,6 +173,8 @@ const en = {
   "pages.deleteProjectHere": "Its row leaves work-state; its conversations stay.",
   "ws.switch": "Switch workspace",
   "ws.title": "Workspaces",
+  "ws.onlyYou": "Only you",
+  "ws.onThisMac": "On this Mac",
   "ws.notes_one": "{n} note",
   "ws.notes_other": "{n} notes",
   "mig.moveTo": "Move to workspace",

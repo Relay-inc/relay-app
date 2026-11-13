@@ -11,13 +11,16 @@ import { useWorkspaceStore } from "../workspace/store";
 import { loadSnapshot, vaultName } from "../workspace/vault";
 import { pickVault } from "../workspace/vault-setup";
 import { useNavigationStore } from "./store";
+import { workspacePlaces, type Place } from "../../domain/settings/servers";
+import type { SharedRole } from "../../domain/settings/types";
 import { storage } from "../../infrastructure/storage";
 import { select, toast } from "./navigation";
 import { projectVault, shownUnder } from "./migrate";
 
 // The workspaces: every vault here (the main one, the folders added, the shared ones), one of them shown in the sidebar.
 /** A workspace in the footer's menu: `notes` counted from the notes index, `team` for one shared on a relay-server,
- *  `live` when that one's live channel is connected (else it syncs every 10 s), `reader` when this Mac only reads it. */
+ *  `live` when that one's live channel is connected (else it syncs every 10 s), `reader` when this Mac only reads it,
+ *  `role` this Mac's role in a shared one ("" not shared), `place` the menu's group it is in. */
 export type Workspace = {
   folder: string;
   name: string;
@@ -26,7 +29,9 @@ export type Workspace = {
   team: boolean;
   live: boolean;
   reader: boolean;
+  role: SharedRole | "";
   active: boolean;
+  place: Place;
 };
 
 export const activeFolder = () => activeWorkspace(settings(), useNavigationStore.getState().sidebar.workspace);
@@ -43,26 +48,38 @@ const notesIn = (folder: string, main: boolean) =>
       : path.startsWith(folder + "/") && !isSystemPage(path.slice(folder.length + 1)),
   ).length;
 
-/** Every workspace, the main one first, in the order ⌃1 to ⌃9 pick them. */
+// the workspaces by place (domain/settings/servers.ts), the order of the menu and of ⌃1 to ⌃9
+const places = () =>
+  workspacePlaces(
+    vaultChoices(settings()).map(choice => choice.folder),
+    settings(),
+  );
+/** Every workspace, grouped by place with the main one first, in the order ⌃1 to ⌃9 pick them. */
 export function workspaces(): Workspace[] {
   const active = activeFolder();
   const shared = settings().sharedVaults ?? [];
   const { live, readers } = useWorkspaceStore.getState();
-  return vaultChoices(settings()).map(choice => {
-    const name = vaultName(choice.folder);
-    const team = shared.find(vault => vault.folder === choice.folder);
-    return {
-      folder: choice.folder,
-      name,
-      initials: initials(name),
-      notes: notesIn(choice.folder, choice.main),
-      team: !!team,
-      live: !!team && !!live[team.id],
-      // the last round's word, before it the role the settings keep
-      reader: !!team && (readers[team.id] ?? team.role === "reader"),
-      active: choice.folder === active,
-    };
-  });
+  const main = settings().vault;
+  return places().flatMap(({ folders, ...place }) =>
+    folders.map(folder => {
+      const choice = { folder, main: folder === main };
+      const name = vaultName(choice.folder);
+      const team = shared.find(vault => vault.folder === choice.folder);
+      return {
+        folder: choice.folder,
+        name,
+        initials: initials(name),
+        notes: notesIn(choice.folder, choice.main),
+        team: !!team,
+        live: !!team && !!live[team.id],
+        // the last round's word, before it the role the settings keep
+        reader: !!team && (readers[team.id] ?? team.role === "reader"),
+        role: team?.role ?? "",
+        active: choice.folder === active,
+        place,
+      };
+    }),
+  );
 }
 /** The shared vaults' live channels, as the backend reports them: now and on every change. */
 export function watchLive() {
@@ -128,7 +145,7 @@ export function keepWorkspacesApart() {
 }
 /** ⌃1 to ⌃9: the workspace at that place, if there is one. */
 export function switchToNth(n: number) {
-  const folder = vaultChoices(settings())[n - 1]?.folder;
+  const folder = places().flatMap(place => place.folders)[n - 1];
   if (folder) switchWorkspace(folder);
 }
 /** Open a folder as workspace…: a picked vault folder is added to the other vault folders and shown. The backend keeps a

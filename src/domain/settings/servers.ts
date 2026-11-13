@@ -1,4 +1,4 @@
-import type { SharedRole, TeamOverview, TeamServer } from "./types.ts";
+import type { Machine, SharedRole, SharedVault, TeamOverview, TeamServer } from "./types.ts";
 import { DEPLOY_BASE } from "./machines.ts";
 
 // Servers and organisations, the page in the main window: what it shows about a team server, worked out from what the
@@ -32,6 +32,37 @@ export const orgInitials = (name: string | undefined) =>
 /** The team server a workspace of the organisation is on, by its fingerprint: its name comes from there. */
 export const teamOf = (teams: TeamServer[] | undefined, vault: { fp: string; host: string }) =>
   teams?.find(team => team.fp === vault.fp) ?? { host: vault.host, name: "" };
+/** A group of the footer's workspace menu: where its workspaces live, which says who can read them. `name` is the
+ *  machine's, the server's host or the organisation's ("" for this Mac). */
+export type Place = { key: string; kind: "mac" | "machine" | "host" | "org"; name: string };
+const PLACE_ORDER: Record<Place["kind"], number> = { mac: 0, machine: 1, host: 2, org: 3 };
+/** The workspace folders by place, in the menu's order (and ⌃1 to ⌃9's): On this Mac (the main vault and the folders
+ *  added), each machine of your own with the encrypted workspaces it keeps, the encrypted workspaces on someone else's
+ *  server under its host, then each organisation under its name. Within a place the folders keep their order. */
+export function workspacePlaces(
+  folders: string[],
+  s: { sharedVaults?: SharedVault[]; machines?: Machine[]; teams?: TeamServer[] },
+) {
+  const placeOf = (folder: string): Place => {
+    const vault = s.sharedVaults?.find(v => v.folder === folder);
+    if (!vault) return { key: "mac", kind: "mac", name: "" };
+    if (vault.team) return { key: `org:${vault.fp}`, kind: "org", name: orgDisplayName(teamOf(s.teams, vault)) };
+    const fp = vault.fp.toLowerCase();
+    const machine = s.machines?.find(m => m.fp?.toLowerCase() === fp);
+    if (machine) return { key: `machine:${machine.id}`, kind: "machine", name: machine.name };
+    return { key: `host:${fp}`, kind: "host", name: vault.host };
+  };
+  const places: (Place & { folders: string[] })[] = [];
+  for (const folder of folders) {
+    const place = placeOf(folder);
+    const there = places.find(p => p.key === place.key);
+    if (there) there.folders.push(folder);
+    else places.push({ ...place, folders: [folder] });
+  }
+  // a stable sort: places of one kind stay in the order their first workspace had
+  return places.sort((a, b) => PLACE_ORDER[a.kind] - PLACE_ORDER[b.kind]);
+}
+
 /** A first name for an organisation from its sign-in's email domain: "example.com" Example. */
 export function nameFromDomain(domain: string) {
   const first = domain.trim().toLowerCase().split(".")[0] ?? "";

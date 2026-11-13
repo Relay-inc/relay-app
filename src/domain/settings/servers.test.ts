@@ -10,6 +10,7 @@ import {
   cleanOrgName,
   nameClash,
   teamPortOk,
+  workspacePlaces,
   orgInstallCommands,
   orgServerCommands,
   orgTabs,
@@ -238,4 +239,39 @@ test("organisation install: odd values are quoted, empty ones fall back to examp
   assert.equal(c.team, 'docker compose exec relay-server relay-server team "a b@example.com" --host relay.example.com');
   assert.match(c.port, /^ufw allow from 192\.168\.1\.0\/24 /);
   assert.match(orgInstallCommands({ ...ORG_SETUP_DEFAULTS, folder: "/x/$(rm)" }).install, /"\/x\/\\\$\(rm\)"/);
+});
+
+test("workspace places: this Mac, machines, other servers' hosts, organisations, each in its own order", () => {
+  const shared = (folder: string, fp: string, host: string, team = false) => ({
+    id: folder,
+    name: folder,
+    host,
+    port: 47800,
+    fp,
+    folder,
+    role: "member" as const,
+    team,
+  });
+  const places = workspacePlaces(["/main", "/org1", "/home1", "/extra", "/other", "/home2", "/org2"], {
+    sharedVaults: [
+      shared("/org1", "F1", "relay.example.com", true),
+      shared("/home1", "AA", "192.168.1.2"),
+      shared("/other", "BB", "friend.example.com"),
+      shared("/home2", "aa", "192.168.1.2"),
+      shared("/org2", "F1", "relay.example.com", true),
+    ],
+    machines: [{ id: "m1", name: "Home server", host: "192.168.1.2", port: 47800, fp: "aa" }],
+    teams: [
+      { host: "relay.example.com", port: 47800, fp: "F1", email: "a@example.com", admin: false, name: "Northwind" },
+    ],
+  });
+  assert.deepEqual(
+    places.map(p => [p.kind, p.name, p.folders]),
+    [
+      ["mac", "", ["/main", "/extra"]],
+      ["machine", "Home server", ["/home1", "/home2"]],
+      ["host", "friend.example.com", ["/other"]],
+      ["org", "Northwind", ["/org1", "/org2"]],
+    ],
+  );
 });
