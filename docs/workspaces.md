@@ -22,7 +22,7 @@ A relay-server runs in one of two roles, set when it is set up and fixed after:
 | What the server reads | Nothing | Everything |
 
 Records, the sync, documents, the fence and Codex's guard are the same in both. One Relay can use both at once:
-Servers and organisations (a page in the main window) shows each team server with its workspaces, and a team workspace
+Organisations and servers (a page in the main window) shows each team server with its workspaces, and a team workspace
 carries "<server> can read".
 
 ## Deletes
@@ -58,7 +58,7 @@ release: the binary must carry the release's minisign signature (the updater's k
 run. A device the owner paired may still send an unsigned binary (a server built from source), never a badly signed
 one. The server refuses an admin everything else a paired device may do: conversations, the mirror, a phone, GitHub,
 repos, making workspaces. Whether a device is an admin is read from the workspaces at every request, so a promotion or
-a removal counts at once. In Relay the server then shows on Servers and organisations as a machine for workspaces only, marked
+a removal counts at once. In Relay the server then shows on Organisations and servers as a machine for workspaces only, marked
 `auto` in the settings (`shared_vaults::keepers`), with no Forget and no New workspace: it goes again when this Mac is
 admin of no workspace there. A machine the user paired is never touched.
 
@@ -363,7 +363,7 @@ an agent. Its edits merge; there are no conflict copies for it.
   wrote it (to the trash first otherwise), unless another note has that place now or the file rounds keep it out. A
   note that is a document, and its old path until that file is gone, stay out of the file rounds. A live update is
   taken on a thread of its own, under the same lock as the rounds.
-- **Which notes are documents.** None until an admin turns it on (Servers and organisations, the workspace's page, Documents, "Notes as
+- **Which notes are documents.** None until an admin turns it on (Organisations and servers, the workspace's page, Documents, "Notes as
   shared documents"): a `docs-on` entry in the member list, signed like any other, which every member checks; `docs-off`
   turns it off again. Then each round on an admin's Mac makes up to 50 notes documents: `.md` files the file rounds
   would sync, not through a link, no conflict copy, at most 2 MiB, and only once the last file round left the file the
@@ -484,7 +484,7 @@ manifest) and the epoch (to refuse a write under an old key), and checks it fits
   invite named, until checked once), `joined <hex>` (the invite secret, until this Mac is added), and
   `invite <id> <secret> <role> <epoch>` per open invite this Mac made. Every value is checked (64 lowercase hex where it
   is a key or hash); a duplicate or unknown line makes the file unreadable. The keys alone are the recovery key Relay
-  shows when the workspace is made, and again on its page on Servers and organisations.
+  shows when the workspace is made, and again on its page on Organisations and servers.
 
 ## Members
 
@@ -583,7 +583,7 @@ The pairing line with three more fields, and from member lists on two more:
 `relay://<host>:<port>#fp=<64 hex>&code=<32 hex>&vault=<16 hex>&invite=<16 hex>&secret=<64 hex>&creator=<64 hex>&head=<64 hex>`
 (`creator` the identity the member list starts with, `head` the list's last hash when the invite was made).
 `PairLine` parses them as optional `vault`, `invite`, `secret`. A line with all three is an invite.
-A link that opens Relay opens Servers and organisations › Add a server › Join with it pasted. That page lists a
+A link that opens Relay opens Organisations and servers › Add a server › Join with it pasted. That page lists a
 workspace on the page of the machine that keeps it (the workspace's `fp` is the machine's), and on This Mac when its
 server is not one of this Mac's machines, as for a member who joined with a link. Each row opens the workspace's page.
 

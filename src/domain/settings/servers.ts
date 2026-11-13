@@ -1,7 +1,7 @@
 import type { Machine, SharedRole, SharedVault, TeamOverview, TeamServer } from "./types.ts";
 import { DEPLOY_BASE } from "./machines.ts";
 
-// Servers and organisations, the page in the main window: what it shows about a team server, worked out from what the
+// Organisations and servers, the page in the main window: what it shows about a team server, worked out from what the
 // server already gives (`team_me`, `team_overview`). Nothing here is a guess about what the server does not say.
 
 /** The most characters an organisation's name has (relay-server's team.rs NAME_MAX). */

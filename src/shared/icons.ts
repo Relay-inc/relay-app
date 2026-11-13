@@ -150,7 +150,7 @@ const ICONS: Record<string, Icon> = {
   video: Video01Icon,
   alert: Alert02Icon,
   link: Link01Icon,
-  // Servers and organisations: who can read (the eye), an organisation, this Mac, people
+  // Organisations and servers: who can read (the eye), an organisation, this Mac, people
   eye: ViewIcon,
   building: Building03Icon,
   laptop: LaptopIcon,

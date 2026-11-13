@@ -14,7 +14,7 @@ import { TrustBadge } from "./TrustBadge";
 const NO_MACHINES: Machine[] = [];
 const NO_VAULTS: SharedVault[] = [];
 
-/** A machine of your own on Servers and organisations: what Settings › Machines had for it (online, update, phone,
+/** A machine of your own on Organisations and servers: what Settings › Machines had for it (online, update, phone,
  *  Forget, its mirror, GitHub and repos) and the encrypted workspaces it keeps, with New workspace on this machine…. */
 export function MachineDetail({ machine }: { machine: Machine }) {
   const { t } = useT();

@@ -17,7 +17,7 @@ import { OrgSquare } from "./OrgSquare";
 import { OrgWorkspaces } from "./OrgWorkspaces";
 import { TrustBadge } from "./TrustBadge";
 
-/** An organisation on Servers and organisations: its name, host, who can read and your role, then its tabs. An
+/** An organisation on Organisations and servers: its name, host, who can read and your role, then its tabs. An
  *  organisation admin has Overview, People, Workspaces, Sign-in and Server, a member Overview and Workspaces. */
 export function OrgDetail({ team }: { team: TeamServer }) {
   const { t } = useT();

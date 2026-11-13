@@ -59,7 +59,7 @@ export async function takeInvite() {
   return true;
 }
 
-/** The rounds so far and then each one as it ends. Once, when Servers and organisations first shows (invite links
+/** The rounds so far and then each one as it ends. Once, when Organisations and servers first shows (invite links
  *  are the main window's, servers.ts `openInvite`). */
 export async function watchSharedVaults() {
   void backend.onSharedVaults(status =>

@@ -34,10 +34,10 @@ import type { PluginTest } from "../../domain/plugins/types";
 import type { ExtraVault, ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
 import { makeStore } from "../make-store";
 
-/** What a server added on Servers and organisations is for: a machine of your own, an organisation's server, or one
+/** What a server added on Organisations and servers is for: a machine of your own, an organisation's server, or one
  *  someone else runs (Join). */
 export type AddKind = "" | "own" | "org" | "join";
-/** An organisation's tabs on Servers and organisations; a member sees Overview and Workspaces. */
+/** An organisation's tabs on Organisations and servers; a member sees Overview and Workspaces. */
 export type OrgTab = (typeof ORG_TABS)[number];
 
 export type SettingsTab =
@@ -137,7 +137,7 @@ export type SettingsState = {
     links: Record<string, string>;
     peek: { link: string; name: string; domain: string } | null;
   };
-  // Servers and organisations, the page in the main window (application/settings/servers.ts): the item picked in its
+  // Organisations and servers, the page in the main window (application/settings/servers.ts): the item picked in its
   // list ("mac", "machine:<id>", "org:<fp>", "setup", "add"), the organisation's tab, the workspace open on its
   // Workspaces tab that is not synced here ("" none), whether Invite people shows, on Add a server what it is for
   // ("" not chosen yet) and its step, and the organisation server being set up (kept on this Mac, null none)

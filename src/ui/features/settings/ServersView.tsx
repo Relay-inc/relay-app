@@ -14,7 +14,7 @@ const NO_TEAMS: TeamServer[] = [];
 const NO_MACHINES: Machine[] = [];
 const NO_VAULTS: SharedVault[] = [];
 
-/** Servers and organisations, in the middle column: this Mac, the machines and the organisations in a list on the
+/** Organisations and servers, in the middle column: this Mac, the machines and the organisations in a list on the
  *  left, the picked one on the right, or Add a server. An encrypted workspace's page opens over the right side (from
  *  This Mac or a machine). Built from the settings window's pieces, so it takes their palette. */
 export function ServersView({ className = "" }: { className?: string }) {

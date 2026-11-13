@@ -61,7 +61,7 @@ function Square({ workspace, index, size }: { workspace: Workspace; index: numbe
  *  read them on the group's head and your role or the note count per row (⌃1 to ⌃9 in that order, a tick on the one
  *  shown), Open a folder as workspace…, New workspace from template… and Workspace
  *  settings, then the app's own items: light/dark and settings (with a dot when there is a Relay update), and last
- *  Servers and organisations… and Add a server…, which open that page in the middle column. An update
+ *  Organisations and servers… and Add a server…, which open that page in the middle column. An update
  *  also puts a dot on the square, so it shows with the menu closed. Usage has its own button next to it. */
 export function WorkspaceSwitcher({
   dark,

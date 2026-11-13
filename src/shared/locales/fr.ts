@@ -2338,7 +2338,7 @@ export default {
   "mc.setupAppSleep":
     "Dans Réglages Système › Énergie, empêchez ce Mac de se mettre en veille : les conversations s'arrêtent pendant la veille.",
   "mc.setupAppSwitch":
-    "Dans Relay sur ce Mac, ouvrez Serveurs et organisations › Ce Mac (le menu des espaces de travail). Activez Ce Mac comme machine, puis créez une ligne d'association.",
+    "Dans Relay sur ce Mac, ouvrez Organisations et serveurs › Ce Mac (le menu des espaces de travail). Activez Ce Mac comme machine, puis créez une ligne d'association.",
   "mc.setupAppPair": "Collez la ligne à l'étape suivante, Associer.",
   "mc.hostTitle": "Ce Mac comme machine",
   "mc.hostHelp":
@@ -2365,7 +2365,7 @@ export default {
     "Notifications pendant que ce Mac est fermé : abonnez-vous à ce sujet dans l'app ntfy sur le téléphone. Elles disent seulement que Claude attend ou a fini, rien de la conversation.",
   "phone.pairTitle": "Associer à votre Mac",
   "phone.pairHelp": "Suivez ce que font vos agents sur votre machine, et répondez-leur quand ils ont besoin de vous.",
-  "phone.step1": "Sur votre Mac, ouvrez Serveurs et organisations et choisissez votre machine.",
+  "phone.step1": "Sur votre Mac, ouvrez Organisations et serveurs et choisissez votre machine.",
   "phone.step2": "Choisissez Ajouter un téléphone. Relay affiche un code et sa ligne.",
   "phone.step3": "Scannez le code, ou collez la ligne ci-dessous.",
   "phone.line": "Ligne d'association",
@@ -2674,10 +2674,10 @@ export default {
   "set.orgTurnOff": "Désactiver",
   "set.orgTurnOn": "Activer",
   "set.orgSsoNone": "Liens d'invitation seulement",
-  "nav.servers": "Serveurs et organisations",
-  "ws.servers": "Serveurs et organisations…",
+  "nav.servers": "Organisations et serveurs",
+  "ws.servers": "Organisations et serveurs…",
   "ws.addServer": "Ajouter un serveur…",
-  "srv.title": "Serveurs et organisations",
+  "srv.title": "Organisations et serveurs",
   "srv.servers": "Serveurs",
   "srv.thisMac": "Ce Mac",
   "srv.asMachineOn": "Ce Mac comme machine : activé",

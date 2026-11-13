@@ -11,7 +11,7 @@ export const VIEW = {
   usage: "__usage",
   inbox: "__inbox", // the Pages tab's Inbox: notes dropped in without a place, filed from there
   collection: "__coll", // a collection of notes as a table or a board (the view itself is in the collections store)
-  servers: "__servers", // Servers and organisations: this Mac, the machines, the team servers (the item in the settings store)
+  servers: "__servers", // Organisations and servers: this Mac, the machines, the team servers (the item in the settings store)
 } as const;
 type ViewKey = (typeof VIEW)[keyof typeof VIEW];
 const VIEWS: readonly string[] = Object.values(VIEW);

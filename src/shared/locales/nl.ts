@@ -2309,7 +2309,7 @@ export default {
   "mc.setupAppSleep":
     "Zet in Systeeminstellingen › Energie de sluimerstand van die Mac uit: als hij slaapt, stoppen de gesprekken.",
   "mc.setupAppSwitch":
-    "Open in Relay op die Mac Servers en organisaties › Deze Mac (het werkruimtemenu). Zet Deze Mac als machine aan en maak dan een koppelregel.",
+    "Open in Relay op die Mac Organisaties en servers › Deze Mac (het werkruimtemenu). Zet Deze Mac als machine aan en maak dan een koppelregel.",
   "mc.setupAppPair": "Plak de regel in de volgende stap, Koppelen.",
   "mc.hostTitle": "Deze Mac als machine",
   "mc.hostHelp":
@@ -2335,7 +2335,7 @@ export default {
     "Meldingen terwijl deze Mac dicht is: abonneer je in de ntfy-app op de telefoon op dit onderwerp. Ze zeggen alleen dat Claude wacht of klaar is, niets van het gesprek.",
   "phone.pairTitle": "Koppel met je Mac",
   "phone.pairHelp": "Volg wat je agents op je machine doen, en antwoord ze als ze je nodig hebben.",
-  "phone.step1": "Open op je Mac Servers en organisaties en kies je machine.",
+  "phone.step1": "Open op je Mac Organisaties en servers en kies je machine.",
   "phone.step2": "Kies Telefoon toevoegen. Relay toont een code en de regel.",
   "phone.step3": "Scan de code, of plak de regel hieronder.",
   "phone.line": "Koppelregel",
@@ -2643,10 +2643,10 @@ export default {
   "set.orgTurnOff": "Uitzetten",
   "set.orgTurnOn": "Aanzetten",
   "set.orgSsoNone": "Enkel uitnodigingslinks",
-  "nav.servers": "Servers en organisaties",
-  "ws.servers": "Servers en organisaties…",
+  "nav.servers": "Organisaties en servers",
+  "ws.servers": "Organisaties en servers…",
   "ws.addServer": "Een server toevoegen…",
-  "srv.title": "Servers en organisaties",
+  "srv.title": "Organisaties en servers",
   "srv.servers": "Servers",
   "srv.thisMac": "Deze Mac",
   "srv.asMachineOn": "Deze Mac als machine: aan",
