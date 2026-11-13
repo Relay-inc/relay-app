@@ -92,12 +92,19 @@ const shared =
   member ||
   live;
 // team: a team server, this account an organisation admin there, Handbook synced here (fixtures/vault.ts team)
-const teamFixture = fixture === "team";
+// team-member: the same server, this account a member there and not an organisation admin (no team_overview)
+const teamFixture = fixture === "team" || fixture === "team-member";
+const teamMember = fixture === "team-member";
 if (teamFixture)
-  settings = { ...settings, teams: [structuredClone(vault.team)], sharedVaults: structuredClone(vault.teamVaults) };
-let teamMe = structuredClone(vault.teamMe);
+  settings = {
+    ...settings,
+    teams: [{ ...structuredClone(vault.team), admin: !teamMember }],
+    sharedVaults: structuredClone(vault.teamVaults),
+  };
+let teamMe = { ...structuredClone(vault.teamMe), admin: !teamMember };
 let teamAccounts = structuredClone(vault.teamAccounts);
 let teamOverview = structuredClone(vault.teamOverview);
+let teamInviteSeq = 20;
 teamOverview.invites[0].expires = Math.floor(Date.now() / 1000) + 6 * 86400;
 if (shared)
   settings = {
@@ -475,7 +482,15 @@ function handle(cmd: string, a: Args): unknown {
       if (!v) return Promise.reject(`no workspace ${a.id}`);
       if (v.team)
         return {
-          vault: { id: v.id, name: v.name, role: v.role, members: [], invites: [], team: true, accounts: structuredClone(teamAccounts) },
+          vault: {
+            id: v.id,
+            name: v.name,
+            role: v.role,
+            members: [],
+            invites: [],
+            team: true,
+            accounts: structuredClone(teamAccounts),
+          },
           me: vault.SHARED_ME,
         };
       if (fixture === "shared-keeper" && v.role !== "admin") {
@@ -522,19 +537,42 @@ function handle(cmd: string, a: Args): unknown {
       return null;
     case "team_call": {
       const r = a.req;
-      if (r.op === "team_overview") return structuredClone(teamOverview);
+      if (r.op === "team_overview") {
+        if (teamMember) return Promise.reject("only an organisation admin sees the whole server");
+        return structuredClone(teamOverview);
+      }
+      // as relay-server's team.rs: an account made when there is none, the role in `vault`, and a link for one device
       if (r.op === "team_invite") {
-        if (!teamAccounts.some(x => x.email === r.email) && r.vault) teamAccounts = [...teamAccounts, { email: r.email, role: r.role }];
-        return { invite: "b1c2d3e4f5a60718", code: "c".repeat(64), email: r.email, link: vault.teamLink("b1c2d3e4f5a60718") };
+        if (!teamAccounts.some(x => x.email === r.email) && r.vault)
+          teamAccounts = [...teamAccounts, { email: r.email, role: r.role }];
+        const id = hex(16, ++teamInviteSeq);
+        if (!teamOverview.accounts.some(x => x.email === r.email))
+          teamOverview.accounts.push({ email: r.email, admin: !!r.admin, off: false, devices: 0 });
+        const w = teamOverview.workspaces.find(x => x.id === r.vault);
+        if (w) w.members = { ...w.members, [r.email]: r.role };
+        const expires = Math.floor(Date.now() / 1000) + 7 * 86400;
+        teamOverview.invites.push({ id, email: r.email, expires });
+        return { invite: id, code: "c".repeat(64), email: r.email, expires, link: vault.teamLink(id) };
       }
       if (r.op === "team_member") {
         teamAccounts = r.role
           ? teamAccounts.map(x => (x.email === r.email ? { ...x, role: r.role } : x))
           : teamAccounts.filter(x => x.email !== r.email);
+        const w = teamOverview.workspaces.find(x => x.id === r.vault);
+        if (w) {
+          const members: Record<string, string> = { ...w.members };
+          if (r.role) members[r.email] = r.role;
+          else delete members[r.email];
+          w.members = members;
+        }
         return {};
       }
       if (r.op === "team_account") {
-        teamOverview.accounts = teamOverview.accounts.map(x => (x.email === r.email ? { ...x, ...("admin" in r ? { admin: r.admin } : {}), ...("off" in r ? { off: r.off } : {}) } : x));
+        teamOverview.accounts = teamOverview.accounts.map(x =>
+          x.email === r.email
+            ? { ...x, ...("admin" in r ? { admin: r.admin } : {}), ...("off" in r ? { off: r.off } : {}) }
+            : x,
+        );
         return {};
       }
       if (r.op === "team_sso") {
@@ -1281,7 +1319,13 @@ function handle(cmd: string, a: Args): unknown {
     case "dictation_model":
     case "permissions":
       // mic-off: the microphone switched off in Windows' privacy settings (src-tauri/src/permissions.rs)
-      return { microphone: fixture === "mic-off" ? "missing" : "ok", accessibility: "ok", fullDisk: "missing", systemAudio: null, notifications: null };
+      return {
+        microphone: fixture === "mic-off" ? "missing" : "ok",
+        accessibility: "ok",
+        fullDisk: "missing",
+        systemAudio: null,
+        notifications: null,
+      };
     case "permissions_open":
       return null;
     case "dictation_access":

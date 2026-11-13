@@ -12,8 +12,8 @@ import { useSettingsStore, type SettingsTab } from "./store";
 // The settings window, laid out like bb's: the pages in a sidebar on the left, the window title follows the page.
 // General holds the vault folder with its mapping and the language, Projects the projects the user customised,
 // Agents the coding-agent CLIs, Integrations the external services, Plugins the MCP servers that bring views,
-// Workspaces the workspaces shared on a relay-server, Organisation the organisation of a server (shown only with a fully
-// paired machine, SettingsApp), Machines the computers running relay-server, Voice dictation, Shortcuts the keys (read
+// Workspaces the workspaces shared on a personal relay-server (team servers are on Servers and organisations, a page in
+// the main window), Machines the computers running relay-server, Voice dictation, Shortcuts the keys (read
 // only), Updates Relay itself and the agent CLIs; each
 // page's use cases are in <page>-page.ts and integrations.ts. Saving emits "settings-changed" from the backend, the main window follows it.
 export const TABS = [
@@ -23,7 +23,6 @@ export const TABS = [
   ["integrations", "set.tab.integrations", "plug"],
   ["plugins", "set.tab.plugins", "puzzle"],
   ["workspaces", "set.tab.workspaces", "folderLinked"],
-  ["organisation", "set.tab.organisation", "lock"],
   ["machines", "set.tab.machines", "server"],
   ["voice", "set.tab.voice", "mic"],
   ["shortcuts", "set.tab.shortcuts", "keyboard"],
@@ -70,6 +69,11 @@ export function go(to: SettingsTab) {
     draft.message = null;
   });
   showTitle();
+}
+/** Servers and organisations is a page in the main window: it opens there with `item` picked and this window closes. */
+export async function openServersPage(item = "") {
+  await backend.openServersInMain(item);
+  closeWindow();
 }
 /** Escape and Cmd-W close the window. */
 export const close = closeWindow;

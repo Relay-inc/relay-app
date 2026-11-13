@@ -1,8 +1,10 @@
 /* the settings window, after bb's settings: a sidebar of pages on the left, sections on the right. A section is a
    title and hint above a raised card with a hairline border; in the card a field is its label and hint on the left,
    the control on the right. Its palette is the main window's tokens (base.css), so dark mode and the accent follow;
-   settings-tailwind.css maps it to utilities (bg-s-bg …). */
-body.prefs {
+   settings-tailwind.css maps it to utilities (bg-s-bg …). The main window's Servers and organisations page, built from
+   the same pieces, takes the palette with .s-palette. */
+body.prefs,
+.s-palette {
   --s-bg: var(--bg);
   --s-fg: var(--label);
   --s-muted: var(--secondary);

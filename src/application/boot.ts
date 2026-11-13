@@ -10,6 +10,7 @@ import { storage } from "../infrastructure/storage";
 import { t } from "../shared/i18n";
 import { applyTheme } from "../infrastructure/window";
 import { ghOn, initLanguage, isKey, mailOn, setSettingsState, settings } from "./settings/settings";
+import { openServers } from "./settings/servers";
 import { MENU_COMMANDS, type CommandId } from "../domain/settings/shortcuts";
 import { noteChanged } from "./navigation/pages";
 import { loadSnapshot, pollSnapshot, project, refreshIcons, reloadIcons, checkFavicons } from "./workspace/vault";
@@ -117,6 +118,8 @@ function listenToBackend() {
   backend.onOpenChat(select);
   backend.onMailLink(mailLinkClicked);
   backend.onSettingsChanged(settingsChanged);
+  // Settings › Servers and organisations: the page opens here
+  backend.onOpenServers(item => openServers(item));
   backend.onMenu(onMenu);
   watchUpdate();
   backend.onOrch(event => {

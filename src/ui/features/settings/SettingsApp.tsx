@@ -1,12 +1,11 @@
 import { useSettingsStore } from "../../../application/settings/store";
-import { go, TABS } from "../../../application/settings/window";
+import { go, openServersPage, TABS } from "../../../application/settings/window";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
 import { AgentsPage } from "./AgentsPage";
 import { GeneralPage } from "./GeneralPage";
 import { IntegrationsPage } from "./IntegrationsPage";
 import { MachinesPage } from "./MachinesPage";
-import { OrganisationPage } from "./OrganisationPage";
 import { PluginsPage } from "./PluginsPage";
 import { ProjectsPage } from "./ProjectsPage";
 import { ShortcutsPage } from "./ShortcutsPage";
@@ -16,16 +15,14 @@ import { WorkspacesPage } from "./WorkspacesPage";
 
 /** The settings window, laid out like bb's: the pages in a sidebar on the left, the shown page on the right. Every
  *  page stays mounted and only the shown one takes part in the column, so what is typed survives switching pages, and
- *  Agents and Integrations check their state once, when the window opens. Organisation shows only for an organisation admin
- *  of a team server, else General stands in for it. Mounted once the settings are read. */
+ *  Agents and Integrations check their state once, when the window opens. Under the pages, Servers and organisations is a
+ *  row, not a page: it opens that page in the main window and closes this one. Mounted once the settings are read. */
 export function SettingsApp() {
   const { t } = useT();
   const picked = useSettingsStore(s => s.tab);
   const vaultStatus = useSettingsStore(s => s.vaultStatus);
-  const org = useSettingsStore(s => !!s.settings.teams?.some(team => team.admin));
   if (!vaultStatus) return null;
-  const tabs = org ? TABS : TABS.filter(x => x[0] !== "organisation");
-  const tab = org || picked !== "organisation" ? picked : "general";
+  const tab = picked;
   const page = (id: typeof tab) => (tab === id ? "contents" : "hidden");
   // the window's line height is 1.4 (the body's is 1.5), set as a plain property: a leading-* utility would also set
   // --tw-leading, which every text-* below would then inherit
@@ -33,7 +30,7 @@ export function SettingsApp() {
     <div className="flex h-full min-h-0 [line-height:1.4]">
       <nav className="w-52 flex-none overflow-y-auto border-r border-s-seam bg-s-side px-2 pt-12 select-none">
         <div className="grid gap-px py-1">
-          {tabs.map(([id, name, glyph]) => (
+          {TABS.map(([id, name, glyph]) => (
             <button
               key={id}
               className={`flex h-7 items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-[13px] text-s-fg focus-visible:ring-2 ring-s-ring focus-visible:outline-none ${tab === id ? "bg-s-sel font-medium" : "hover:bg-s-hover"}`}
@@ -47,6 +44,16 @@ export function SettingsApp() {
               <span className="min-w-0 flex-1 truncate text-left">{t(name)}</span>
             </button>
           ))}
+        </div>
+        <div className="mt-1 grid border-t border-s-seam pt-2">
+          <button
+            className="flex h-7 items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-[13px] text-s-fg hover:bg-s-hover focus-visible:ring-2 ring-s-ring focus-visible:outline-none"
+            onClick={() => void openServersPage()}
+          >
+            <Icon name="building" className="size-4 flex-none fill-none stroke-current stroke-2 glyph text-secondary" />
+            <span className="min-w-0 flex-1 truncate text-left">{t("srv.title")}</span>
+            <Icon name="out" className="size-3.5 flex-none fill-none stroke-current stroke-2 glyph text-secondary" />
+          </button>
         </div>
       </nav>
       <section className="min-w-0 flex-1 min-h-0 overflow-y-auto">
@@ -71,9 +78,6 @@ export function SettingsApp() {
           </div>
           <div className={page("workspaces")}>
             <WorkspacesPage active={tab === "workspaces"} />
-          </div>
-          <div className={page("organisation")}>
-            <OrganisationPage active={tab === "organisation"} />
           </div>
           <div className={page("machines")}>
             <MachinesPage active={tab === "machines"} />

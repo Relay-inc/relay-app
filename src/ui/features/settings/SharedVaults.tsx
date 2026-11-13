@@ -1,6 +1,7 @@
 import { Fragment, useState } from "react";
-import type { Machine, SharedInfo, SharedRole, SharedVault, TeamServer } from "../../../domain/settings/types";
+import type { Machine, SharedInfo, SharedRole, SharedVault } from "../../../domain/settings/types";
 import { agoParts } from "../../../domain/settings/machines";
+import { orgDisplayName } from "../../../domain/settings/servers";
 import { useSettingsStore } from "../../../application/settings/store";
 import { filesOn } from "../../../domain/settings/types";
 import {
@@ -23,15 +24,7 @@ import {
   showRecovery,
   withdrawInvite,
 } from "../../../application/settings/shared-vaults";
-import {
-  cancelSignIn,
-  editTeamLink,
-  inviteTeam,
-  loginTeam,
-  logoutTeam,
-  setTeamMember,
-  syncTeamWorkspace,
-} from "../../../application/settings/teams";
+import { cancelSignIn, editTeamLink, inviteTeam, loginTeam, setTeamMember } from "../../../application/settings/teams";
 import { relativeFormat, sentAt } from "../../../shared/format";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
@@ -55,6 +48,7 @@ import { Section } from "./Section";
 import { Segmented } from "./Segmented";
 import { SettingsFold } from "./SettingsFold";
 import { StatusLine } from "./StatusLine";
+import { TrustBadge } from "./TrustBadge";
 import { Switch } from "./Switch";
 
 const EDGE = "border-t border-s-border px-3.5 py-3 first:border-t-0";
@@ -94,7 +88,7 @@ export function MachineVaults({ machine, vaults = [] }: { machine: Machine; vaul
   );
 }
 
-/** Settings › Workspaces, Log in to a team server: the link an admin sent (an invite, or the server's own link for the
+/** Log in to a team server (Servers and organisations › Add a server): the link an admin sent (an invite, or the server's own link for the
  *  organisation's sign-in in the browser). */
 export function TeamLogin() {
   const { t } = useT();
@@ -130,56 +124,14 @@ export function TeamLogin() {
   );
 }
 
-/** Settings › Workspaces, per team server: this account's workspaces there, a synced one opening its page and the
- *  others with Sync here…, New workspace…, and Log out. */
-export function TeamVaults({ team, vaults }: { team: TeamServer; vaults: SharedVault[] }) {
-  const { t } = useT();
-  const me = useSettingsStore(s => s.team.me[team.fp]);
-  const busy = useSettingsStore(s => !!s.shared.busy[`team:${team.fp}`]);
-  const message = useSettingsStore(s => s.shared.messages[`team:${team.fp}`]);
-  const elsewhere = (me?.workspaces ?? []).filter(w => !vaults.some(v => v.id === w.id));
-  return (
-    <Section
-      title={t("set.teamServer", { host: team.host, email: team.email })}
-      desc={t("set.teamReadsAlongTip")}
-      list
-      action={
-        <button className={buttonClass("ghost")} disabled={busy} onClick={() => void logoutTeam(team.fp)}>
-          {t("set.teamLogout")}
-        </button>
-      }
-    >
-      {vaults.map(vault => (
-        <SharedRow key={vault.id} vault={vault} />
-      ))}
-      {elsewhere.map(w => (
-        <div key={w.id} className={`flex min-w-0 items-center gap-2 ${EDGE}`}>
-          <Icon name="folderLinked" className={TILE} />
-          <span className="min-w-0 flex-1 truncate text-[13px] text-s-fg">{w.name}</span>
-          <span className={PILL}>{t(roleKey(w.role))}</span>
-          <button className={buttonClass()} disabled={busy} onClick={() => void syncTeamWorkspace(team.fp, w.id)}>
-            {t("set.teamSyncHere")}
-          </button>
-        </div>
-      ))}
-      {message ? (
-        <div className={EDGE}>
-          <span className={message.ok ? HINT_IN_ROW : ERROR_MESSAGE}>{message.text}</span>
-        </div>
-      ) : null}
-      <SharedForm machine={`team:${team.fp}`} />
-    </Section>
-  );
-}
-
 /** The pills of a team workspace: the server reads along, and without history. */
 function TeamPills({ vault }: { vault: SharedVault }) {
   const { t } = useT();
   if (!vault.team) return null;
   return (
     <>
-      <span className={PILL} title={t("set.teamReadsAlongTip")}>
-        {t("set.teamReadsAlong")}
+      <span title={t("set.teamReadsAlongTip")}>
+        <TrustBadge kind="org" name={orgDisplayName(vault)} />
       </span>
       {vault.nohistory ? (
         <span className={PILL} title={t("set.sharedNoHistoryTip")}>
@@ -269,6 +221,15 @@ export function WorkspacePage({ vault }: { vault: SharedVault }) {
       </Section>
 
       {vault.team ? <TeamMembers vault={vault} info={info} /> : <Members vault={vault} info={info} />}
+
+      {/* a team workspace's history is set when it is made, for good */}
+      {vault.team ? (
+        <Section title={t(vault.nohistory ? "srv.historyOff" : "srv.historyOn")}>
+          <span className="text-xs text-s-muted">
+            {t(vault.nohistory ? "srv.historyOffHelp" : "srv.historyOnHelp")}
+          </span>
+        </Section>
+      ) : null}
 
       {docs && status ? (
         <Section title={t("set.sharedDocs")}>
@@ -608,6 +569,7 @@ function Members({ vault, info }: { vault: SharedVault; info: SharedInfo | null 
 function TeamMembers({ vault, info }: { vault: SharedVault; info: SharedInfo | null | undefined }) {
   const { t } = useT();
   const team = useSettingsStore(s => s.settings.teams?.find(x => x.fp === vault.fp));
+  const overview = useSettingsStore(s => s.team.overview[vault.fp]);
   const busy = useSettingsStore(s => !!s.shared.busy[vault.id]);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<SharedRole>("member");
@@ -710,7 +672,14 @@ function TeamMembers({ vault, info }: { vault: SharedVault; info: SharedInfo | n
             className={buttonClass("primary")}
             disabled={busy || !email.includes("@")}
             onClick={async () => {
-              const who = email.trim();
+              const who = email.trim().toLowerCase();
+              // an account the organisation has is only added: an organisation admin's invite would make it a link
+              // that logs in as that person
+              if (overview?.accounts.some(a => a.email === who)) {
+                if (await setTeamMember(vault.fp, vault.id, who, role)) setEmail("");
+                reread();
+                return;
+              }
               const made = await inviteTeam(vault.fp, who, vault.id, role);
               if (made !== null) {
                 setEmail("");

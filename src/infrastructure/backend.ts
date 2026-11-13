@@ -1,6 +1,6 @@
 import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import type { FilingItem, InboxNote } from "../domain/inbox/rules";
-import { listen } from "@tauri-apps/api/event";
+import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
@@ -909,6 +909,10 @@ export const onUpdateProgress = (handler: (progress: UpdateProgress) => void) =>
   listen<UpdateProgress>("update-progress", e => handler(e.payload));
 /** The open settings window is asked to show a page (Relay › Check for Updates). */
 export const onSettingsGo = (handler: (tab: string) => void) => listen<string>("settings-go", e => handler(e.payload));
+/** The settings window asks the main window to show Servers and organisations, with `item` picked ("" as it was). */
+export const openServersInMain = (item: string) => emitTo("main", "open-servers", item);
+export const onOpenServers = (handler: (item: string) => void) =>
+  listenHere<string>("open-servers", e => handler(e.payload));
 /** An item of the app menu (new-project, new-general, reopen-chat, close-chat). */
 export const onMenu = (handler: (item: string) => void) => listenHere<string>("menu", e => handler(e.payload));
 export const onIconsChanged = (handler: () => void) => listen("icons-changed", () => handler());

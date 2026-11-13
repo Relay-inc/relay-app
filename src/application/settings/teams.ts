@@ -3,7 +3,7 @@ import * as backend from "../../infrastructure/backend";
 import { reload, run } from "./shared-vaults";
 import { useSettingsStore, type SettingsState } from "./store";
 
-// Settings › Workspaces and Organisation for team servers (src-tauri/src/team.rs, docs/workspaces.md, Teams): log in,
+// Team servers, on Servers and organisations (servers.ts), (src-tauri/src/team.rs, docs/workspaces.md, Teams): log in,
 // an account's workspaces with Sync here…, members and invites by email, and for an organisation admin the accounts,
 // workspaces and sign-in of the server. Busy and messages go under "team:<fp>" (shared-vaults.ts `run`).
 type Team = SettingsState["team"];
@@ -19,7 +19,14 @@ export async function loginTeam() {
     await backend.teamLogin(link);
     await reload();
   });
-  if (ok) change(draft => void (draft.link = ""));
+  if (ok) {
+    change(draft => void (draft.link = ""));
+    // Servers and organisations on Add a server: the organisation just logged in to shows (its link names its fp)
+    const fp = useSettingsStore.getState().settings.teams?.find(x => link.includes(`fp=${x.fp}`))?.fp;
+    useSettingsStore.setState(draft => {
+      if (fp && draft.serversPage.item === "add") draft.serversPage.item = `org:${fp}`;
+    });
+  }
   for (const t of useSettingsStore.getState().settings.teams ?? []) void loadTeam(t.fp);
 }
 export const cancelSignIn = () => void backend.ssoCancel();
@@ -66,6 +73,18 @@ export const setTeamMember = (fp: string, vault: string, email: string, role: Sh
 export const setTeamAccount = (fp: string, email: string, patch: { admin?: boolean; off?: boolean }) =>
   run(key(fp), async () => {
     await backend.teamCall(fp, { op: "team_account", email, ...patch });
+    await loadOverview(fp);
+  });
+/** New link for an open invite: a new invite for the same address, then the old one withdrawn. The organisation role
+ *  and the workspace roles are the account's, not the invite's, so they carry over. The new link shows on its row. */
+export const renewTeamInvite = (fp: string, invite: { id: string; email: string }) =>
+  run(key(fp), async () => {
+    const made = await backend.teamCall<{ invite?: string; link?: string }>(fp, {
+      op: "team_invite",
+      email: invite.email,
+    });
+    if (made.invite && made.link) change(draft => void (draft.links[made.invite!] = made.link!));
+    await backend.teamCall(fp, { op: "team_invite_revoke", invite: invite.id });
     await loadOverview(fp);
   });
 export const withdrawTeamInvite = (fp: string, invite: string) =>
