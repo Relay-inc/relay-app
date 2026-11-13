@@ -5,7 +5,7 @@ name: relay-server
 services:
   relay-server:
     # the same version as the Relay apps that use it, never `latest`: scripts/release.sh checks this tag
-    image: ${RELAY_SERVER_IMAGE:-ghcr.io/relay-inc/relay-server:0.0.49}
+    image: ${RELAY_SERVER_IMAGE:-ghcr.io/relay-inc/relay-server:0.0.53}
     # the name Relay shows for this machine
     hostname: ${RELAY_HOST:-relay-server}
     ports:
