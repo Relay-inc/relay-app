@@ -143,7 +143,9 @@ pub fn keychain_service(account: &str) -> String {
 /// The login the claude CLI stored for an account ("" its own folder): the keychain on macOS, a file elsewhere.
 pub fn credentials(home: &str, account: &str) -> Option<Value> {
     let dir = if account.is_empty() { format!("{home}/.claude") } else { account.to_string() };
-    Command::new("/usr/bin/security").args(["find-generic-password", "-s", &keychain_service(account), "-w"]).stderr(Stdio::null()).output().ok()
+    // the CLI's own item, matched on the service alone (its account is the login name): not through Relay's secrets
+    // module, which needs both. On Windows the CLI keeps the login in the file, so only the file is read there.
+    cfg!(target_os = "macos").then(|| Command::new("/usr/bin/security").args(["find-generic-password", "-s", &keychain_service(account), "-w"]).stderr(Stdio::null()).output().ok()).flatten()
         .filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .or_else(|| fs::read_to_string(format!("{dir}/.credentials.json")).ok())
         .and_then(|s| serde_json::from_str::<Value>(&s).ok())

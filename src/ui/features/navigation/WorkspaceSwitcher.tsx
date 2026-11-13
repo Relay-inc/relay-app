@@ -173,12 +173,12 @@ export function WorkspaceSwitcher({
           <button className={ACTION} onClick={() => run(openFolderAsWorkspace)}>
             {t("ws.openFolder")}
           </button>
-          <button className={ACTION} onClick={() => run(() => openWorkspaceSettings("machines"))}>
+          <button className={ACTION} onClick={() => run(() => openWorkspaceSettings("workspaces"))}>
             {t("ws.fromTemplate")}
           </button>
           <button
             className={`${ACTION} text-secondary`}
-            onClick={() => run(() => openWorkspaceSettings(active.team ? "machines" : "general"))}
+            onClick={() => run(() => openWorkspaceSettings(active.team ? "workspaces" : "general"))}
           >
             {t("ws.settings")}
           </button>

@@ -18,7 +18,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::sync::OnceLock;
-use std::os::unix::net::{UnixListener, UnixStream};
+use crate::sock::{UnixListener, UnixStream};
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -98,12 +99,16 @@ impl Agent {
         match &self.stop {
             Some(f) => f(self.pid),
             // the system call, not /bin/kill: a minimal Linux install has no such file
+            #[cfg(unix)]
             None => if self.pid > 0 && unsafe { libc::kill(self.pid as libc::pid_t, libc::SIGKILL) } == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) },
+            // the agent itself, what it started ends with the broker's Job Object once the broker sees it exit
+            #[cfg(windows)]
+            None => if self.pid > 0 { agent_core::job::kill_pid(self.pid) } else { Err(std::io::ErrorKind::NotFound.into()) },
         }
     }
 }
 /// A connection to a broker: the agent, where its stdin goes, and the frames to read (the first `backlog` were
-/// buffered while the app was away). Local brokers are a Unix socket, a work machine's a TLS stream.
+/// buffered while the app was away). Local brokers are a Unix socket (a named pipe on Windows), a work machine's a TLS stream.
 pub struct Conn { pub agent: Agent, pub stdin: Box<dyn Write + Send>, pub frames: Box<dyn BufRead + Send>, pub backlog: usize }
 
 /// The id this Mac's app connects to its own brokers with.
@@ -120,8 +125,22 @@ fn launch_as(meta: &Meta, spec: &Spec, id: &str) -> Result<Conn, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let spec = serde_json::to_string(spec).unwrap();
     // its own process group, so a Ctrl-C on `tauri dev` does not reach it; waited for, so it leaves no zombie
-    let mut b = Command::new(exe).arg("--broker").arg(&sock).arg(spec).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
-        .process_group(0).spawn().map_err(|e| format!("broker: {e}"))?;
+    let mut b = Command::new(exe);
+    b.arg("--broker").arg(&sock).arg(spec).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    #[cfg(unix)]
+    b.process_group(0);
+    #[cfg(unix)]
+    let mut b = b.spawn().map_err(|e| format!("broker: {e}"))?;
+    // Windows: a process group of its own (no Ctrl-C from the console of `tauri dev`), no console window, and out of
+    // a Job Object the app may run in (cargo's), where the job allows that, so the broker outlives the app
+    #[cfg(windows)]
+    let mut b = {
+        use std::os::windows::process::CommandExt;
+        const NEW_GROUP: u32 = 0x200; // CREATE_NEW_PROCESS_GROUP
+        const BREAKAWAY: u32 = 0x0100_0000; // CREATE_BREAKAWAY_FROM_JOB
+        let flags = NEW_GROUP | agent_core::job::NO_WINDOW;
+        b.creation_flags(flags | BREAKAWAY).spawn().or_else(|_| b.creation_flags(flags).spawn()).map_err(|e| format!("broker: {e}"))?
+    };
     spawn(move || { b.wait().ok(); });
     for _ in 0..100 {
         if let Ok(c) = connect(&sock, id) {
@@ -211,16 +230,30 @@ impl State {
 /// account or effort gets a new broker on the same path before the old one has seen its agent die: the old broker's
 /// cleanup must not take the new socket with it ("broker: no socket" on the first message after an account switch).
 fn remove_own(sock: &str, ino: u64) {
-    use std::os::unix::fs::MetadataExt;
-    if fs::metadata(sock).is_ok_and(|m| m.ino() == ino) { fs::remove_file(sock).ok(); }
+    if fs::metadata(sock).is_ok() && self::ino(sock) == ino { fs::remove_file(sock).ok(); }
 }
+/// The socket file's inode, 0 where there is none (Windows: a named pipe, removed as before).
+#[cfg(unix)]
+fn ino(sock: &str) -> u64 { use std::os::unix::fs::MetadataExt; fs::metadata(sock).map_or(0, |m| m.ino()) }
+#[cfg(not(unix))]
+fn ino(_: &str) -> u64 { 0 }
 
 pub fn main(sock: &str, spec: &str) {
-    use std::os::unix::fs::MetadataExt;
     let listener = UnixListener::bind(sock).unwrap_or_else(|_| std::process::exit(1));
-    let ino = fs::metadata(sock).map_or(0, |m| m.ino());
+    // Windows: the agent and all it starts in a Job Object, ended when the broker goes (see the exit below)
+    #[cfg(windows)]
+    let job = agent_core::job::Job::new().unwrap_or_else(|_| std::process::exit(1));
+    let ino = ino(sock);
     let child = serde_json::from_str::<Spec>(spec).map_err(|e| e.to_string())
-        .and_then(|s| s.command().stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string()));
+        .and_then(|s| {
+            let mut c = s.command();
+            c.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+            #[cfg(unix)]
+            let child = c.spawn();
+            #[cfg(windows)]
+            let child = job.spawn(&mut c);
+            child.map_err(|e| e.to_string())
+        });
     let mut child = match child {
         Ok(c) => c,
         Err(e) => { // tell the app why, then go
@@ -241,7 +274,12 @@ pub fn main(sock: &str, spec: &str) {
     // the agent ends: the rest of its output, its exit code, then the broker goes
     let (st2, sock2) = (st.clone(), sock.to_string());
     spawn(move || {
+        // Windows: what the agent started may still hold its output pipes, so the job ends it first and the reads
+        // then see the end. The output already in the pipes is still read.
+        #[cfg(windows)]
+        let code = { let c = child.wait().ok().and_then(|s| s.code()).unwrap_or(-1); job.kill(); c };
         out.join().ok(); err.join().ok();
+        #[cfg(unix)]
         let code = child.wait().ok().and_then(|s| s.code()).unwrap_or(-1);
         st2.lock().unwrap().send(format!("x {code}"));
         remove_own(&sock2, ino);

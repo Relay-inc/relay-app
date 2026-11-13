@@ -6,6 +6,9 @@ import "./ui/styles/app.css";
 import { createRoot } from "react-dom/client";
 import { App } from "./ui/app/App";
 import { boot } from "./application/boot";
+import { isMac } from "./shared/platform";
 
+// Windows has no sidebar material behind the window: the css paints the sidebar itself (base.css, navigation.css)
+if (!isMac()) document.documentElement.dataset.os = "windows";
 createRoot(document.getElementById("root")!).render(<App />);
 await boot();

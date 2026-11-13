@@ -7,8 +7,10 @@ use std::process::Child;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-/// $HOME, "" when unset.
-pub fn home() -> String { std::env::var("HOME").unwrap_or_default() }
+/// $HOME, "" when unset. On Windows, which has no HOME, the profile folder (%USERPROFILE%).
+pub fn home() -> String {
+    if cfg!(windows) { std::env::home_dir().map(|h| h.to_string_lossy().into_owned()).unwrap_or_default() } else { std::env::var("HOME").unwrap_or_default() }
+}
 
 /// A value kept for `ttl` per key (the program it was made by): `opencode models` takes a second or two.
 pub struct Memo<T>(Mutex<Option<(String, Instant, T)>>);
@@ -47,7 +49,11 @@ pub fn command_for(env: &Env, default_bin: &str, name: &str) -> String {
 }
 
 /// SIGTERM to `pid`.
+#[cfg(unix)]
 pub fn terminate(pid: u32) { unsafe { libc::kill(pid as i32, libc::SIGTERM); } }
+/// Windows: the process ends at once, see [`crate::job::kill_pid`]. What it started ends with its Job Object.
+#[cfg(windows)]
+pub fn terminate(pid: u32) { crate::job::kill_pid(pid).ok(); }
 /// SIGTERM to `child`, SIGKILL when it is still there after `grace`; reaped either way.
 pub fn stop(child: &mut Child, grace: Duration) {
     terminate(child.id());

@@ -154,6 +154,8 @@ impl State {
                 let (_, mut input) = tool_call(&json!({"type": "fileChange", "changes": ch})).unwrap();
                 input["reason"] = p["reason"].clone();
                 input["grantRoot"] = p["grantRoot"].clone();
+                // every file it changes, for Relay's guard (the card shows the first)
+                input["paths"] = ch.as_array().into_iter().flatten().map(|c| c["path"].clone()).chain(std::iter::once(p["grantRoot"].clone())).filter(|x| x.is_string()).collect();
                 let mut r = Request::new("tool", "Edit", input);
                 r.tool_use_id = Some(ask_id(true, ask.as_ref().unwrap()));
                 out.push(Event::Permission { request: r });
@@ -168,6 +170,7 @@ impl State {
             "applyPatchApproval" if ask.is_some() => {
                 let files: Vec<&String> = p["fileChanges"].as_object().map(|o| o.keys().collect()).unwrap_or_default();
                 let mut r = Request::new("tool", "Edit", json!({"file_path": files.first(), "files": files.len(), "reason": p["reason"]}));
+                r.input["paths"] = files.iter().map(|f| json!(f)).chain(std::iter::once(p["grantRoot"].clone())).filter(|x| x.is_string()).collect();
                 r.tool_use_id = Some(ask_id(false, ask.as_ref().unwrap()));
                 out.push(Event::Permission { request: r });
             }

@@ -54,19 +54,20 @@ resolved. Only `workState` is required; a missing `reminders` file is created by
 | `src-tauri/src/calendar.rs`, `src/domain/calendar/`, `src/application/calendar/` | Google calendars, read through each one's secret iCal address (kept in the keychain, service `relay-calendar`, never in settings.json or the webview). The meetings of the next 12 hours, recurring ones expanded; the ones about to start sit at the top of Waiting with a banner 5 minutes before, and a meeting note or a briefing about one starts from its card (restricted, like a conversation about a mail). |
 | `src/application/board/`, `src/ui/features/board/` | The board in the sidebar, one per switched-on integration. Moving a card writes to the tracker right away. See [Integrations](#integrations). |
 | `src-tauri/src/providers.rs` | The backend registry of the integrations: token in the keychain, the curl call, settings migration. |
+| `src-tauri/src/secrets.rs` | Every secret of the app (integrations, plugins, mail, calendars) on one set of names: the login keychain through `/usr/bin/security` on macOS (the tool made every existing entry, so reading them from the app itself would ask for approval per entry), Credential Manager through the `keyring` crate on Windows (`<account>.<service>`). Tests use a map in memory. |
 | `packages/` | The integrations and the agent providers, one package each (TypeScript + Rust + strings + tests), and `board-core` and `agent-core`, their contracts. |
 | `src-tauri/src/vault.rs`, `src/application/workspace/vault-setup.ts`, `src/ui/features/workspace/` | The per-vault mapping: detection, found / missing, the first-launch screen and the mapping rows in Settings. |
 | `src-tauri/src/machines.rs`, `mirror.rs`, `machine_git.rs` | Work machines (relay-server in the LAN, `packages/relay-server`): pairing, where a conversation runs, the vault's mirror there. Settings › Machines connects a machine to GitHub with a code typed on github.com (the token stays on the machine, sealed like the mirror) and lists its repos with Push and To Mac (a snapshot on `relay/<machine>`, fetched into this Mac's checkout without checking it out). A conversation about a project with a repo gets that repo at its first start there, cloned or fetched, as an extra folder next to the mirrored vault it runs in. Moving it back to this Mac with work not pushed in that repo asks first. |
-| `src/settings.tsx`, `src/application/settings/`, `src/ui/features/settings/` | Settings window: vault folder, per-project icon and label, Integrations (board providers, GitHub), Agents, language. |
+| `src/settings.tsx`, `src/application/settings/`, `src/ui/features/settings/` | Settings window: vault folder, per-project icon and label, Integrations (board providers, GitHub), Agents, language, Workspaces (the shared workspaces, a page each), Organisation (a server's organisation and SSO, shown with a fully paired machine), Machines. |
 
 State lives in `~/Library/Application Support/be.laurentmeersman.relay/`: `settings.json`,
 `sessions.json` (conversation to session id, and to its provider when that is not Claude Code) and `pending/`. Board provider tokens sit
-in the macOS keychain (`vault-app.<provider>`, account `token`, so `vault-app.productive`) and never reach the webview.
+in the keychain (`vault-app.<provider>`, account `token`, so `vault-app.productive`) and never reach the webview.
 
 ## Integrations
 
 The sidebar board shows one of these per vault project. (The agents that answer in the conversations are the other kind of package: [Agent providers](#agent-providers).) Set them up under Vault › Settings… › Integrations; every
-secret goes to the macOS keychain (service `vault-app.<id>`), never to settings.json or the webview. How to get a
+secret goes to the keychain (service `vault-app.<id>`), never to settings.json or the webview. How to get a
 key and what the backend lets through is in each package's README.
 
 | Tracker | Project › board | Package |
@@ -208,6 +209,7 @@ own transcripts and logs, and reports its limits and tokens.
 | Session list, terminal | `claude agents`, attach / stop | `state_5.sqlite` threads, `codex resume` | `opencode.db` sessions, `opencode --session` | session files, `pi --session` |
 | Tokens | `~/.claude/projects/**/*.jsonl`, priced at API list prices | rollout `token_count` events, unpriced | `opencode.db` assistant messages, with the cost OpenCode recorded | session files, with the cost pi computed from its prices |
 | Limits | plan limits (`api.anthropic.com/api/oauth/usage`) | rate-limit windows from the rollouts and the app-server | none (OpenCode has none) | none (pi has none) |
+| Workspaces | yes: the fence's deny rules, strict MCP, auto mode (`policy::fence_in`) | yes: Relay's guard declines a request outside the fence before it is a card, sandbox and approvals kept (`policy::guard`), a permission profile keeps `.claude` and the agents' files read-only and closes reads outside the workspace, no MCP servers, plugins or apps (`bridge::thread_params`, codex-cli 0.163 or newer) | no, main vault only | no, main vault only |
 | Known gaps | see its README | no questions, fork, subagents or titles; no accept-for-session; tokens unpriced | no limits, subagents or titles; no "always"; cost 0 where OpenCode has no price | no permissions or questions; extension dialogs unanswered; no limits, subagents or titles |
 
 **Backend**, `agent_core::AgentProvider` (`packages/agent-core/src/lib.rs`), a `pub static PROVIDER` in the package,
@@ -312,12 +314,12 @@ the socket the app listens on and the CLI side.
 - Extensions: the board providers' `actions` (Productive projects, task lists, task search and read, comments,
   services, time entries; Trello boards, lists, card search and read, cards, comments; Linear teams, issue search
   and read, issues), mail (`search`, `read`, `thread`,
-  `attachment`, `save_draft`, the relay-mail tools) and the vault's reminders (`list`, `add`, `done`, `push`). Only
-  set-up extensions are listed.
+  `attachment`, `save_draft`, the relay-mail tools) the vault's reminders (`list`, `add`, `done`, `push`) and
+  `knowledge.search` (docs/workspaces.md, Teams). Only set-up extensions are listed.
 - Per extension, **agent access** on or off (off: not listed, every call refused), and per action a policy:
   `auto` runs, `ask` shows a card in the conversation (the pending folder, like a permission; the command waits for
   it), `deny` refuses. Reads default to `auto`, writes to `ask`, a mail draft and the reminders to `auto`. Both are set in each
-  extension's Agent access section in Settings (Integrations › the extension; reminders under General) and kept in
+  extension's Agent access section in Settings (Integrations › the extension, reminders under General, knowledge under Workspaces) and kept in
   the vault's `.relay/config.json`, read on every call, so a hand edit applies at once:
 
   ```json
@@ -365,7 +367,111 @@ pnpm check:compiler           # the React Compiler compiles every component and 
 pnpm format:check             # Prettier
 ```
 
-CI (`.github/workflows/frontend.yml`) runs all but cargo, plus `vite build`.
+CI (`.github/workflows/checks.yml`) runs the TypeScript checks plus `vite build` on macOS and Windows, then
+`cargo check`: on macOS with the tests. On Windows the app's unit tests build but do not run yet (a test that makes a
+symlink or reads a Unix file mode is `#[cfg(unix)]`), relay-server's unit tests run, its e2e tests build, and its update
+test runs.
+Unix-only calls that remain sit behind `cfg` gates with stand-ins (`src-tauri/src/platform.rs`), each with a
+`ponytail:` comment. A vault works there: `.claude` is a directory junction, sync leaves out names NTFS refuses, and
+the vault check lists Git Bash, jq and Python 3 when they are missing (docs/workspaces.md, Members on Windows).
+The window on Windows comes from `src-tauri/tauri.windows.conf.json` (merged over `tauri.conf.json`): the native title
+bar, opaque, no sidebar material, so the css paints the sidebar (`:root[data-os="windows"]`). It has no menu bar: the
+main window takes the menu's keys itself (`menuKey` in `src/application/boot.ts`). A default shortcut says `mod` for
+the command key, ⌘ on macOS and Ctrl on Windows, and `bindingLabel` writes it the platform's way
+(`src/domain/settings/shortcuts.ts`, the platform from `src/shared/platform.ts`). Banners are toasts through
+`tauri-plugin-notification`, a second start and a `relay://` link reach the running window through
+`tauri-plugin-single-instance`, both Windows-only dependencies. The harness runs the Windows side with
+`?platform=windows`.
+A meeting on Windows records the microphone and the default output device, which cpal opens as WASAPI loopback, then
+reads and resamples the tracks in-process at Stop (`read_16k` in `src-tauri/src/meeting.rs`) instead of `afconvert`,
+and keeps the 16 kHz WAV mix (~115 MB an hour) where the Mac keeps m4a. Whether the microphone is switched off comes
+from the privacy settings in the registry (`src-tauri/src/permissions.rs`), checked before the recording starts.
+Whisper (dictation and meetings, `src-tauri/src/dictation.rs`) runs on whisper.cpp through transcribe-rs: on Metal on a
+Mac, on the CPU on Windows. whisper-rs-sys builds whisper.cpp with cmake and MSVC and generates its bindings with
+bindgen, which needs libclang: the `windows-latest` runner has cmake, MSVC and LLVM, so `cargo check` there compiles
+whisper.cpp for real. A build on another Windows machine needs the Visual Studio C++ tools, cmake and LLVM (or
+`LIBCLANG_PATH`). ggml optimises for the CPU it is built on: a Windows release build sets `GGML_NATIVE=OFF` in its
+environment (whisper-rs-sys passes `GGML_*` to cmake), which builds for AVX2, or the app may not start on an older CPU.
+Vulkan (transcribe-rs's `whisper-vulkan`) is not in: it needs the Vulkan SDK and `VULKAN_SDK` on the build machine,
+which the runner does not have. The model download checks its SHA-256 with `sha2`, curl and tar come with Windows 10
+and later.
+Dictation from any app (`src-tauri/src/anywhere.rs`) registers its shortcuts through tauri-plugin-global-shortcut on
+Windows too (global-hotkey's `RegisterHotKey`, a release is polled). Pasting there needs no permission: the window in
+front when the shortcut went down (`GetForegroundWindow`) gets the focus back if it lost it, the clipboard's formats
+that are plain memory are kept aside (GDI handles such as `CF_BITMAP` are not, Windows makes them again from
+`CF_DIB`), the text goes on it, Ctrl+V goes out through `SendInput` once the shortcut's modifiers are up, and the
+clipboard comes back 400 ms later unless something else was copied. The defaults there use Ctrl instead of the Win key,
+Alt+Space and Alt+Shift (`keys` in `anywhere.rs`, `defaultShortcuts` in `src/domain/settings/voice.ts`).
+The Design drawer (`src-tauri/src/design.rs`) is the same Tauri child webview on Windows, a WebView2. Its sign-in
+popup needs no code there: wry answers an allowed `NewWindowRequested` with `SetHandled(false)`, so WebView2 opens its
+own popup window with the opener's profile, and handles that window's `window.close()` (the macOS side needs a
+WKUIDelegate for that). The picture for `design_snapshot` is `ICoreWebView2::CapturePreview` as PNG into a memory
+stream, through `with_webview`.
+
+The fence for Claude Code on Windows (`policy::fence`): Claude Code turns a Windows path into its POSIX form before it
+matches a permission rule, `C:\Users\alice` is `/c/Users/alice` (code.claude.com/docs/en/permissions, read 2026-11-10).
+`platform::claude_rule_path` writes every path of the fence that way (`Read(//c/Users/alice/Team/**)`: `/` separators,
+the drive as `/c`, `\\?\` dropped, the case of the rest kept), and Relay's guard reads a rule back through
+`platform::from_claude_rule_path` before it compares paths the Windows way (`norm_path`). A vault on Windows must be on
+a drive letter (`policy::fenceable`): those docs name no rule form for a network share and tell to map one to a drive.
+The transcript folder under `<config>/projects/` is `agent_claude::slug` of the path as on macOS, `C:\Users\me\x` is
+`C--Users-me-x` (as shown in anthropics/claude-code issues 39413 and 86685). Not verified on Windows yet: whether
+Claude Code matches rules there without regard to case, what it does with a rule for a share (`///server/share/...`, when
+Relay's data folder or a Claude config folder is on one), and whether its own slug lowercases the drive letter (those
+issues show both `C--` and `c--`).
+
+Processes and local sockets work on Windows:
+
+- **Local sockets** (`packages/relay-remote/src/sock.rs`): named pipes behind the same calls as a Unix socket, for
+  the broker, the `relay` CLI and relay-server's attach. The socket's path stays the address: `bind` makes a pipe
+  `\\.\pipe\relay-<pid>-<n>` and writes its name into the file at the path, `connect` reads it there, so removing the
+  file closes the address as unlinking a socket does. The pipe's DACL allows only the user, remote clients are
+  refused, a client connects at identification level and only to a pipe served by a process of the same user (a
+  dead broker's address file could otherwise lead to a pipe another user made under that name). Timeouts and non-blocking reads are overlapped I/O.
+- **Caller tracing** (`agent_core::peer`): the pid Windows recorded when the CLI opened the pipe
+  (`GetNamedPipeClientProcessId`), then up through the parents. Windows keeps a parent's pid, not the parent, so a
+  parent that started after its child (a reused pid) or one the user may not inspect ends the walk: the call then
+  counts as untraced, as a terminal of the user's own does on macOS. The walk picks the conversation but proves
+  nothing: any process of the user may start a child with another process named as its parent, or run code inside
+  another process. So `relay` reads none of the user's own mail, reminders or calendar on Windows, for any caller
+  (`TRACE_PROVES` in `src-tauri/src/actions.rs`).
+- **Process groups** (`agent_core::job`): a Job Object that ends everything in it when it is killed or its last
+  handle closes. Discovery runs its probes in one, a plugin and the codex and OpenCode bridges' CLI in one each, the
+  broker its agent (and ends the job once the agent exits, so nothing that holds the agent's pipes outlives it).
+  Every child starts without a console window. Windows has no SIGTERM for these processes, so `agent_core::terminate`
+  is a hard stop there.
+- **This PC as a work machine** (`src-tauri/src/host_windows.rs`, relay-server): a scheduled task at logon instead of
+  a LaunchAgent, registered from XML through `schtasks` (`relay_server::task_xml`: as the user, no elevation, no time
+  limit, restarted a minute after a failure). relay-server keeps its data in `%LOCALAPPDATA%\Relay\server`, sets a
+  DACL for the user alone on it and on the working copy (`private_dir`, there is no RAM disk), links the transcripts
+  with a junction, and updates by starting the new binary and exiting: the new one waits for the old one's lock on
+  `serve.lock`. Only `relay-server.exe` takes an update, the Relay app as server updates with Relay, as on a Mac.
+- **PATH**: `login_path` reads the stored PATH (machine, then user) through PowerShell instead of a login shell, PATH
+  folders are split on `;` (`agent_core::PATH_SEP`), and `agent_core::which` also tries `.exe`, `.cmd`, `.bat` and
+  `.com`. The app writes `relay.cmd` next to the `relay` script.
+
+Type-checking the Windows side from a Mac needs a stand-in C toolchain, the build scripts of ring, SQLite and the
+Windows resource file otherwise want the Windows SDK. With `rustup target add x86_64-pc-windows-msvc` and a folder
+first on the PATH that holds `fakecc` (touches the file after `-o` or in `-Fo`), `fakear` (touches the `-out:` file)
+and `llvm-rc` (touches the `/fo` file):
+
+```sh
+CC_x86_64_pc_windows_msvc=fakecc CXX_x86_64_pc_windows_msvc=fakecc AR_x86_64_pc_windows_msvc=fakear \
+  DOCS_RS=1 WHISPER_DONT_GENERATE_BINDINGS=1 \
+  cargo check --workspace --exclude relay-mobile --target x86_64-pc-windows-msvc --no-default-features
+# relay-server with its tests
+CC_x86_64_pc_windows_msvc=fakecc CXX_x86_64_pc_windows_msvc=fakecc AR_x86_64_pc_windows_msvc=fakear \
+  DOCS_RS=1 WHISPER_DONT_GENERATE_BINDINGS=1 \
+  cargo check -p relay-server --all-targets --target x86_64-pc-windows-msvc
+# the app's unit tests
+CC_x86_64_pc_windows_msvc=fakecc CXX_x86_64_pc_windows_msvc=fakecc AR_x86_64_pc_windows_msvc=fakear \
+  DOCS_RS=1 WHISPER_DONT_GENERATE_BINDINGS=1 \
+  cargo check -p relay --lib --tests --target x86_64-pc-windows-msvc --no-default-features
+```
+
+`--no-default-features` leaves the `whisper` feature out: whisper-rs-sys cannot generate its bindings without Windows'
+C headers, and the bindings it ships are laid out for another platform. Only Rust is checked, nothing is compiled or
+linked for Windows: CI on `windows-latest` is the real check.
 
 The frontend has a harness (`harness/`, see its README) that runs the real webview against a mocked Tauri backend,
 on the dev server (`pnpm exec vite --config harness/vite.config.ts`, http://127.0.0.1:1430):
@@ -380,3 +486,90 @@ node harness/perf.mjs --label mine                                    # streamin
 
 The transcript and vault tests read the vault in `$VAULT` (`VAULT=/path/to/vault cargo test`) and
 skip themselves without it.
+
+## Releasing for Windows
+
+Relay for Windows x64 is an NSIS installer, `Relay_<version>_x64-setup.exe`. It is not built in GitHub Actions (those
+minutes cost money): `scripts/release-windows.ps1` builds it on a Windows machine (`pnpm tauri build --bundles nsis`,
+with `GGML_NATIVE=OFF` for whisper.cpp, see Tests above) and says where it is. It needs the Visual Studio C++ build
+tools, cmake, LLVM, Node, pnpm and Rust, listed at the top of the script. A first build without a Rust cache took 17
+to 21 minutes on a CI runner, 14.5 to 18 of them in `tauri build`. The script is not tested on a Windows machine yet
+(it was written from the CI workflow it replaces), and the install-and-uninstall check that workflow ran is gone: try
+the installer by hand once per release (install, `relay` in a new terminal, `relay://`, uninstall).
+
+What the installer does (`src-tauri/tauri.windows.conf.json` › `bundle.windows.nsis`, Tauri's NSIS template and
+`src-tauri/windows/hooks.nsh`):
+
+- It installs for the current user only (`installMode: currentUser`), into `%LOCALAPPDATA%\Relay`, without admin
+  rights, with its Apps entry under `HKCU`.
+- WebView2: Tauri's default (`downloadBootstrapper`), the Evergreen bootstrapper is downloaded and run when the PC
+  has no WebView2 runtime. Windows 11 has one.
+- `relay://` is registered under `HKCU\Software\Classes\relay` (from `plugins.deep-link` in `tauri.conf.json`).
+- `bin\relay.cmd` in the install folder runs `relay.exe --cli`, and that folder goes on the user's Path, so `relay`
+  works in cmd and PowerShell (a new terminal, an open one keeps its Path). On a Mac `relay` is only on the PATH of
+  the agents Relay starts. The hook writes the Path raw (`DoNotExpandEnvironmentNames`), so `%USERPROFILE%`-style
+  entries stay as they are.
+- Uninstalling removes the files, the `relay://` key, the Path entry and Task Scheduler's `Relay server` task (This PC
+  as a work machine). relay-server's data, `%LOCALAPPDATA%\Relay\server` (its identity and pairings), stays, and with
+  it the install folder. An update (`/UPDATE`) leaves all of it in place.
+
+**Updates.** Copy the setup.exe to the Mac and run `RELAY_WINDOWS_SETUP=/path/to/Relay_<version>_x64-setup.exe
+scripts/release.sh`. It checks that the file exists and that its name carries the version, signs it for the updater
+with `tauri signer sign` (the updater key stays on the Mac, so the Windows build makes no updater artifacts), uploads it
+to the release and writes `windows-x86_64` into `latest.json` next to `darwin-aarch64`: the setup.exe's API url and
+its signature. Without `RELAY_WINDOWS_SETUP` the release has no Windows installer and says so. The app checks the minisign signature against the `pubkey` in `tauri.conf.json` after the download, on
+Windows as on macOS (tauri-plugin-updater's `download`), then starts the installer with `/P /UPDATE /R` (passive: a
+progress bar only, no questions) and ends Relay with `process::exit`. That skips `RunEvent::Exit`, so `updater.rs`
+does what quitting does in its `on_before_exit`. The installer closes every process that still runs the installed
+`relay.exe` through the Restart Manager (without asking, in passive mode), replaces the files and starts the new
+Relay.
+
+That reaches two kinds of processes that run `relay.exe` in the background, which a Mac update leaves running (macOS
+replaces the .app while they keep the old binary open, Windows cannot replace a running .exe):
+
+- The brokers (`relay.exe --broker`): a turn that is running when the update installs stops. The conversation's
+  session resumes with the next message, as after a crash.
+- relay-server for This PC as a work machine (`relay.exe --relay-server serve`, `host_windows.rs`): the conversations
+  other devices run here stop. The new Relay registers the task again at start (`host_windows::refresh`, its XML holds
+  the version) and that starts the server. A `relay-server.exe` installed on its own is another file and updates
+  itself.
+
+**Signing (off).** The installer and `relay.exe` are not Authenticode-signed until there is a certificate. Until then
+Windows shows SmartScreen's "Windows protected your PC" when the downloaded installer is opened: More info, then Run
+anyway. Microsoft's comparison gives unsigned code a strong SmartScreen block, which enterprises may make a full block, and
+says a new signature builds reputation over time, EV included since 2024
+(learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options, dated 2026-08-29). Not verified:
+whether an update through the updater shows SmartScreen too (it downloads the file itself, not through a browser).
+
+The switch is the environment variable `WINDOWS_SIGN` on the Windows machine. The Signing step of
+`scripts/release-windows.ps1` writes the build's config from it, Tauri then signs `relay.exe`, the installer and its uninstaller:
+
+| `WINDOWS_SIGN` | Variables | Secrets |
+|---|---|---|
+| unset | | |
+| `azure` | `AZURE_SIGNING_ENDPOINT`, `AZURE_SIGNING_ACCOUNT`, `AZURE_SIGNING_PROFILE` | `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID` |
+| `pfx` | `WINDOWS_TIMESTAMP_URL` (the certificate issuer's) | `WINDOWS_CERTIFICATE` (the .pfx, base64), `WINDOWS_CERTIFICATE_PASSWORD` |
+
+`azure` is Azure Artifact Signing (formerly Trusted Signing) through `artifact-signing-cli`, as Tauri documents it
+(v2.tauri.app/distribute/sign/windows, updated 2026-10-27): `signCommand` is
+`artifact-signing-cli -e <endpoint> -a <account> -c <profile> -d Relay %1` with the three `AZURE_*` variables in the
+environment. Setting it up (learn.microsoft.com/en-us/azure/artifact-signing/quickstart, updated 2026-10-08):
+
+1. Register the resource provider (`az provider register --namespace "Microsoft.CodeSigning"`) and create an Artifact
+   Signing account (`az artifact-signing create -n <account> -l <region> -g <group> --sku Basic`).
+2. Request identity validation in the Azure portal (it cannot be done from the CLI), which needs the Artifact Signing
+   Identity Verifier role. For an organisation it takes 1 to 20 business days. Public-trust certificates go to
+   organisations in, among others, the EU, and to individual developers only in the US and Canada.
+3. Create a certificate profile (`az artifact-signing certificate-profile create ... --profile-type PublicTrust
+   --identity-validation-id <id>`).
+4. Give an app registration the right to sign with that profile and put its client id, secret and tenant in the
+   secrets. Which role that is: Microsoft's "Assign roles in Artifact Signing" tutorial, not checked for this page.
+5. Set the variables: the endpoint of the account's region (West Europe is `https://weu.codesigning.azure.net`, the
+   quickstart lists them all), the account and the profile name, then `WINDOWS_SIGN=azure`.
+
+`pfx` imports the certificate into the user's store and signs by thumbprint. Tauri's page says that route only
+applies to OV certificates acquired before June 1st 2023: a newer certificate's key is on a hardware token or in a
+cloud HSM, and then the issuer's signing tool goes into `signCommand` (the `azure` branch of the Signing step shows
+where). `scripts/release.sh` itself needs nothing for Authenticode: the file is signed on the Windows machine, before the Mac adds the
+updater's signature, which covers the signed file. Once signing is on, drop the SmartScreen line from the release
+notes in `release.sh`.

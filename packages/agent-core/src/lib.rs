@@ -20,6 +20,8 @@ pub const WRITE_MAX: usize = 20_000;
 pub mod discover;
 pub use discover::{discover_commands, http_get, Probe};
 pub mod envelope;
+#[cfg(windows)]
+pub mod job;
 pub mod peer;
 pub mod pending;
 pub mod prompt;
@@ -335,9 +337,28 @@ pub fn run(bin: &str, path: &str, args: &[&str]) -> Option<String> {
     Command::new(bin).args(args).env("PATH", path).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()
         .filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
 }
-/// A program by name on the PATH.
+/// Windows: the PATH as it stands now for this machine and user (where npm, winget and the CLIs' installers add
+/// themselves), not the one this process inherited at its start, so a CLI installed meanwhile is found. Read through
+/// PowerShell, UTF-8 so a folder with an accent survives. None when that fails. The app and relay-server both use it.
+// ponytail: PowerShell over cmd, which has no way to read the stored PATH but `reg query` output to parse. A folder
+// added only in a PowerShell profile is missed (-NoProfile keeps it fast and quiet), load the profile if users ask
+#[cfg(windows)]
+pub fn stored_path() -> Option<String> {
+    use std::os::windows::process::CommandExt;
+    const READ: &str = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')";
+    Command::new("powershell.exe").args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", READ]).creation_flags(job::NO_WINDOW)
+        .stdin(Stdio::null()).output().ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().trim_matches(';').to_string())
+        .filter(|p| !p.is_empty())
+}
+/// What separates the folders of a PATH.
+pub const PATH_SEP: char = if cfg!(windows) { ';' } else { ':' };
+/// A program by name on the PATH. On Windows also with the extensions it runs a bare name with (`claude.exe`,
+/// `codex.cmd` from npm).
 pub fn which(name: &str, path: &str) -> Option<String> {
-    path.split(':').map(|d| format!("{d}/{name}")).find(|p| Path::new(p).is_file())
+    let exts: &[&str] = if cfg!(windows) { &["", ".exe", ".cmd", ".bat", ".com"] } else { &[""] };
+    path.split(PATH_SEP).flat_map(|d| exts.iter().map(move |e| format!("{d}/{name}{e}")))
+        .find(|p| Path::new(p).is_file())
 }
 /// The first line of `bin --version`, the way most CLIs answer it. Read once per binary file and modification time:
 /// a conversation start asks every time, and each ask would spawn the CLI.

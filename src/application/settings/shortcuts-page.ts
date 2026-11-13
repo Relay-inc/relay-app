@@ -12,6 +12,7 @@ import { t, type Key } from "../../shared/i18n";
 import { makeStore } from "../make-store";
 import { useSettingsStore } from "./store";
 import { save } from "./window";
+import { isMac } from "../../shared/platform";
 
 // Settings › Shortcuts: every command's keys, changed by pressing new ones (domain/settings/shortcuts.ts). A key that
 // would type, that macOS has or that another command has is refused, and the row says why.
@@ -38,7 +39,7 @@ export async function saveKey(id: CommandId, index: number, binding: string) {
       ? refused.by
         ? t("keys.taken", { key, name: t(`keys.${refused.by}` as Key) })
         : t("keys.takenVoice", { key })
-      : t(`keys.${refused.why}`, { key });
+      : t(`keys.${refused.why}${isMac() ? "" : "Win"}`, { key });
   set(draft => {
     draft.error[id] = why;
   });

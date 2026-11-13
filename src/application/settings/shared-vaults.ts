@@ -3,18 +3,20 @@ import type { SharedRole } from "../../domain/settings/types";
 import * as backend from "../../infrastructure/backend";
 import { checkMachine } from "./machines-page";
 import { useSettingsStore, type SettingsState } from "./store";
+import { loadTeam } from "./teams";
 
-// Settings › Machines: workspaces a team shares on a relay-server, each synced into a folder here
-// (src-tauri/src/shared_vaults.rs), under the machine that keeps it or, joined with a link, in Workspaces. The backend keeps the list in the settings and runs the rounds; a round's result
+// Settings › Workspaces: workspaces a team shares on a relay-server, each synced into a folder here
+// (src-tauri/src/shared_vaults.rs), listed under the machine that keeps it or, joined with a link, under Workspaces,
+// each with a page of its own. The backend keeps the list in the settings and runs the rounds; a round's result
 // comes in as an event. Invites, members and leaving go to the server through the backend.
 type Shared = SettingsState["shared"];
 const st = () => useSettingsStore.getState().shared;
 const change = (recipe: (draft: Shared) => void) => useSettingsStore.setState(draft => recipe(draft.shared));
-const CLOSED: Shared["form"] = { mode: "", machine: "", name: "", folder: "", link: "" };
+const CLOSED: Shared["form"] = { mode: "", machine: "", name: "", folder: "", link: "", noHistory: false };
 
 /** Runs `work` with `key` busy: a vault's id (its row's buttons off until it ends) or "form". Its error shows under
  *  `key`. True when it worked. */
-async function run(key: string, work: () => Promise<unknown>) {
+export async function run(key: string, work: () => Promise<unknown>) {
   change(draft => {
     draft.busy[key] = true;
     draft.messages[key] = null;
@@ -32,7 +34,7 @@ async function run(key: string, work: () => Promise<unknown>) {
 
 /** The settings and the extra vaults read again: the backend changed the list of shared vaults itself. A server it
  *  added under Machines (this Mac is admin of a vault there) is checked, for its Update. */
-async function reload() {
+export async function reload() {
   const [settings, extraVaults] = await Promise.all([backend.getSettings(), backend.extraVaultsStatus()]);
   useSettingsStore.setState(draft => {
     draft.settings = settings;
@@ -43,7 +45,8 @@ async function reload() {
 }
 
 /** The invite link the backend keeps (the one that opened Relay, or came since) into the join form. While a create or
- *  join runs it stays there: their end takes it, or the next Settings window. `open_settings` shows Machines. */
+ *  join runs it stays there: their end takes it, or the next Settings window. `open_settings` shows Workspaces, on its
+ *  list, where the join form is. */
 export async function takeInvite() {
   if (st().busy.form) return;
   const link = await backend.sharedVaultPendingInvite().catch(() => null);
@@ -51,6 +54,7 @@ export async function takeInvite() {
   change(draft => {
     draft.form = { ...draft.form, mode: "join", machine: "", link };
     draft.messages.form = null;
+    draft.open = "";
   });
 }
 
@@ -83,22 +87,34 @@ export function openForm(mode: Shared["form"]["mode"], machine = st().form.machi
     draft.messages.form = null;
   });
 }
-export const editForm = (patch: Partial<Pick<Shared["form"], "name" | "link">>) =>
+export const editForm = (patch: Partial<Pick<Shared["form"], "name" | "link" | "noHistory">>) =>
   change(draft => void Object.assign(draft.form, patch));
 export async function pickSharedFolder() {
   const folder = await backend.pickFolder();
   if (folder) change(draft => void (draft.form.folder = folder));
 }
 
-/** Make the vault on the form's machine: the form closes and its row shows the recovery key (a failed reload leaves
+/** Make the vault on the form's machine: the form closes and its page opens on the recovery key (a failed reload leaves
  *  it to Show recovery key). */
 export async function createSharedVault() {
-  const { machine, name, folder } = st().form;
+  const { machine, name, folder, noHistory } = st().form;
+  // on a team server: the server makes the key, nothing to show
+  if (machine.startsWith("team:")) {
+    const fp = machine.slice(5);
+    const made = await run("form", async () => {
+      await backend.teamCreate(fp, name, folder, noHistory);
+      change(draft => void (draft.form = { ...CLOSED, machine }));
+      await reload();
+    });
+    if (made) await loadTeam(fp);
+    return;
+  }
   await run("form", async () => {
     const { id, recovery } = await backend.sharedVaultCreate(machine, name, folder);
     change(draft => {
       draft.keys[id] = recovery;
       draft.form = { ...CLOSED, machine }; // what the reload says shows under that machine
+      draft.open = id;
     });
     await reload();
   });
@@ -123,6 +139,13 @@ async function loadInfo(id: string) {
   // a role that changed there: the backend saved it, with the server under Machines for an admin (or gone again)
   const saved = useSettingsStore.getState().settings.sharedVaults?.find(vault => vault.id === id)?.role;
   if (info.vault.role && info.vault.role !== saved) await reload();
+}
+/** A workspace's page on Settings › Workspaces, its members read the first time (or again, `fresh`); "" back to the
+ *  list. */
+export function openWorkspace(id: string, fresh = false) {
+  change(draft => void (draft.open = id));
+  if (id && fresh && st().info[id]) void run(id, () => loadInfo(id));
+  else if (id && !(id in st().info)) void toggleMembers(id);
 }
 /** The members shown or folded away. */
 export async function toggleMembers(id: string) {

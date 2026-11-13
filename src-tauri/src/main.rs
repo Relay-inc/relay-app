@@ -12,7 +12,8 @@ fn main() {
     if a.get(1).map(String::as_str) == Some("--notify") { return relay_lib::notify::banner(&a[2], &a[3]); }
     // `relay --cli …`: an agent's `relay` command (src/actions.rs), answered by the running app
     if a.get(1).map(String::as_str) == Some("--cli") { std::process::exit(relay_lib::cli(&a[2..])); }
-    // `relay --relay-server <command>`: relay-server itself, this Mac as a work machine (src/host.rs)
+    // `relay --relay-server <command>`: relay-server itself, this computer as a work machine (src/host.rs, host_windows.rs)
+    #[cfg(any(target_os = "macos", windows))]
     if a.get(1).map(String::as_str) == Some("--relay-server") { return relay_server::cli::run(&a[1..]); }
     relay_lib::run()
 }

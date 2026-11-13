@@ -63,6 +63,9 @@ pub fn set(on: bool) -> Result<Value, String> {
     Ok(status())
 }
 
+/// Where relay-server runs the conversations of other devices.
+pub fn work_dir() -> Option<std::path::PathBuf> { Some(data_dir().join("work")) }
+
 /// A one-time pairing line for the running server, with this Mac's LAN address.
 pub fn pair() -> Result<String, String> { pair_line(&data_dir(), None, None).map_err(|e| e.to_string()) }
 

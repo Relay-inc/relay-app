@@ -9,12 +9,17 @@
 # (or the file RELAY_ANDROID_KEYSTORE names): lose that key and every phone has to uninstall before it can update.
 # It needs the Android SDK and NDK (ANDROID_HOME, NDK_HOME; ~/Library/Android/sdk and its newest NDK by default).
 # RELAY_SKIP_ANDROID=1 releases without it.
+# Windows goes along as Relay_<version>_x64-setup.exe when RELAY_WINDOWS_SETUP names it: build it on a Windows machine
+# with scripts/release-windows.ps1 and copy it here. This script signs it for the updater (the key stays on this Mac)
+# and adds it to the release and to latest.json. Without it the release is macOS only (and Android).
 # Usage: scripts/release.sh
 set -eu
 cd "$(dirname "$0")/.."
 version=$(node -p 'require("./package.json").version')
 cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 [ "$version" = "$cargo" ] || { echo "package.json is $version, Cargo.toml is $cargo" >&2; exit 1; }
+# the install recipe (docs/relay-server.md) pins the image of this release
+grep -q "ghcr.io/relay-inc/relay-server:$version}" deploy/relay-server/compose.yml || { echo "set the image tag in deploy/relay-server/compose.yml to $version" >&2; exit 1; }
 # the release must be main as it is on GitHub, nothing more and nothing less
 [ "$(git rev-parse --abbrev-ref HEAD)" = main ] || { echo "release from main (git checkout main)" >&2; exit 1; }
 [ -z "$(git status --porcelain)" ] || { echo "the checkout has changes" >&2; exit 1; }
@@ -25,6 +30,13 @@ if gh release view "v$version" >/dev/null 2>&1; then echo "v$version is already 
 export TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 [ -n "${TAURI_SIGNING_PRIVATE_KEY##/*}" ] || [ -f "$TAURI_SIGNING_PRIVATE_KEY" ] || { echo "no updater key at $TAURI_SIGNING_PRIVATE_KEY" >&2; exit 1; }
 android=${RELAY_SKIP_ANDROID:-}
+windows=${RELAY_WINDOWS_SETUP:-}
+if [ -n "$windows" ]; then
+  [ -f "$windows" ] || { echo "no Windows installer at $windows" >&2; exit 1; }
+  [ "$(basename "$windows")" = "Relay_${version}_x64-setup.exe" ] || { echo "$(basename "$windows") is not Relay_${version}_x64-setup.exe" >&2; exit 1; }
+else
+  echo "RELAY_WINDOWS_SETUP is not set: this release has no Windows installer"
+fi
 if [ -z "$android" ]; then
   : "${RELAY_ANDROID_KEYSTORE:=$HOME/.tauri/relay-android.properties}" "${ANDROID_HOME:=$HOME/Library/Android/sdk}"
   [ -f "$RELAY_ANDROID_KEYSTORE" ] || { echo "no Android release key at $RELAY_ANDROID_KEYSTORE (or RELAY_SKIP_ANDROID=1)" >&2; exit 1; }
@@ -42,6 +54,8 @@ notes=$(mktemp)
   echo "Privacy & Security and click Open Anyway (or run \`xattr -dr com.apple.quarantine /Applications/Relay.app\` once)."
   echo "From then on Relay updates itself (signed in to gh with access to this repo)."
   [ -n "$android" ] || echo "On an Android phone: install the .apk, then pair it from Relay on your Mac (Settings › Machines › Add phone)."
+  # ponytail: true while WINDOWS_SIGN is off (docs/development.md › Releasing for Windows), drop it once it is on
+  [ -z "$windows" ] || echo "On Windows: the installer is not signed yet, so SmartScreen says it protected your PC. Click More info, then Run anyway."
 } > "$notes"
 
 pnpm install --frozen-lockfile
@@ -69,15 +83,31 @@ fi
 gh release create "v$version" "$dmg" "$tgz" ${apk:+"$apk"} --target "$(git rev-parse HEAD)" --title "Relay $version" --notes-file "$notes"
 rm -f "$notes"
 
+exe=""
+if [ -n "$windows" ]; then
+  exe="$(dirname "$tgz")/$(basename "$windows")"
+  cp "$windows" "$exe"
+  # `signer sign` takes the key itself, not its path
+  key=$TAURI_SIGNING_PRIVATE_KEY
+  [ -n "${key##/*}" ] || key=$(cat "$key")
+  TAURI_SIGNING_PRIVATE_KEY=$key pnpm tauri signer sign "$exe" >/dev/null
+  gh release upload "v$version" "$exe"
+fi
+
 # the update for the installed apps: latest.json on the `updates` branch, its url the API url of the .app.tar.gz
 # (the app downloads it anonymously, or with the user's gh token when there is one)
 repo=$(gh repo view --json nameWithOwner -q .nameWithOwner)
-url=$(gh release view "v$version" --json assets -q ".assets[] | select(.name == \"$(basename "$tgz")\") | .apiUrl")
+asset() { gh release view "v$version" --json assets -q ".assets[] | select(.name == \"$1\") | .apiUrl"; }
+url=$(asset "$(basename "$tgz")")
+winurl=${exe:+$(asset "$(basename "$exe")")}
 gh api "repos/$repo/git/ref/heads/updates" >/dev/null 2>&1 ||
   gh api "repos/$repo/git/refs" -f ref=refs/heads/updates -f sha="$(git rev-parse HEAD)" >/dev/null
-latest=$(VERSION="$version" URL="$url" SIG="$(cat "$bundle.sig")" NOTES="$(scripts/changelog-section.sh "$version")" node -p \
-  'JSON.stringify({ version: process.env.VERSION, notes: process.env.NOTES, pub_date: new Date().toISOString(),
-    platforms: { "darwin-aarch64": { signature: process.env.SIG, url: process.env.URL } } }, null, 2)')
+# Windows: the setup.exe itself, the updater runs it with /UPDATE (no admin, the app closes, NSIS installs, Relay restarts)
+latest=$(VERSION="$version" URL="$url" SIG="$(cat "$bundle.sig")" WINURL="$winurl" WINSIG="$([ -z "$exe" ] || cat "$exe.sig")" \
+  NOTES="$(scripts/changelog-section.sh "$version")" node -p \
+  'const e = process.env, platforms = { "darwin-aarch64": { signature: e.SIG, url: e.URL } };
+  if (e.WINURL) platforms["windows-x86_64"] = { signature: e.WINSIG, url: e.WINURL };
+  JSON.stringify({ version: e.VERSION, notes: e.NOTES, pub_date: new Date().toISOString(), platforms }, null, 2)')
 old=$(gh api "repos/$repo/contents/latest.json?ref=updates" -q .sha 2>/dev/null || true)
 gh api -X PUT "repos/$repo/contents/latest.json" -f branch=updates -f message="Relay $version" \
   -f content="$(printf %s "$latest" | base64)" ${old:+-f sha="$old"} >/dev/null

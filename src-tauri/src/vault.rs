@@ -206,8 +206,18 @@ pub const TEAM_DROP: [&str; 3] = ["System/rules/core/user-profile.md", "System/r
 /// without TEAM_DROP, with the team overlay (the app's resources/team-vault: CLAUDE.md, team.md, the team setup skill)
 /// copied over it. Otherwise as `create_default`.
 pub fn create_team(template: &Path, overlay: &Path, dest: &Path) -> Result<(), String> { create(template, Some(overlay), dest) }
+/// What the team starter's session log asks of each entry, and what it asks in a workspace made without history
+/// (docs/workspaces.md): no member's name.
+const LOG_WITH_NAME: &str = "what the member came in to do (with their name)";
+const LOG_WITHOUT_NAME: &str = "what the member came in to do (no names: this workspace keeps no record of who did what)";
+/// The team starter in `dest`, made without history: its session protocol asks for no name in `Log.md`.
+pub fn without_names(dest: &Path) -> Result<(), String> {
+    let p = dest.join("System/rules/core/session-protocol.md");
+    let s = fs::read_to_string(&p).map_err(|e| e.to_string())?;
+    if !s.contains(LOG_WITH_NAME) { return Ok(()); }
+    relay_remote::sync::write_atomic(&p, s.replace(LOG_WITH_NAME, LOG_WITHOUT_NAME).as_bytes(), None).map(|_| ()).map_err(|e| e.to_string())
+}
 fn create(template: &Path, overlay: Option<&Path>, dest: &Path) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
     if dest.join("System/rules/core/work-state.md").is_file() { return Ok(()); }
     // hidden files (.DS_Store) do not count, someone else's notes do
     if fs::read_dir(dest).is_ok_and(|d| d.flatten().any(|e| !e.file_name().to_string_lossy().starts_with('.'))) { return Err("err.vault_dest_used".into()); }
@@ -221,11 +231,11 @@ fn create(template: &Path, overlay: Option<&Path>, dest: &Path) -> Result<(), St
     }
     for sub in ["System/hooks", "System/scripts"] {
         for e in fs::read_dir(dest.join(sub)).map_err(|e| e.to_string())?.flatten() {
-            fs::set_permissions(e.path(), fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+            crate::platform::set_mode(&e.path(), 0o755).map_err(|e| e.to_string())?;
         }
     }
     let link = dest.join(".claude");
-    if fs::symlink_metadata(&link).is_err() { std::os::unix::fs::symlink("System", &link).map_err(|e| e.to_string())?; }
+    if !crate::platform::dir_link_ok(&link) { crate::platform::dir_link("System", &link).map_err(|e| e.to_string())?; }
     Ok(())
 }
 
@@ -302,6 +312,7 @@ pub(crate) fn unquote(v: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::os::unix::fs::symlink;
 
     fn tmp(name: &str) -> PathBuf {
@@ -358,6 +369,7 @@ mod tests {
         assert_eq!(s["ok"], true);
     }
 
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn scanned_layout_with_symlinks() {
         // work-state outside the brain, reminders.md in the brain a symlink to the real file
@@ -418,6 +430,7 @@ mod tests {
         assert_eq!(m["reminders"], "Contexts/Personal/State/reminders.md");
         assert_eq!(status(&v, &m)["ok"], true);
     }
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn note_stays_in_the_vault() {
         let d = tmp("note");
@@ -441,12 +454,12 @@ mod tests {
 
     #[test]
     fn default_vault_is_copied_once_and_works() {
-        use std::os::unix::fs::PermissionsExt;
         let tpl = tmp("tpl");
         for f in ["System/rules/core/work-state.md", "System/hooks/check.sh", "System/scripts/index.py", ".relay/config.json"] { touch(&tpl, f); }
         let dest = tmp("dest").join("Relay");
         create_default(&tpl, &dest).unwrap();
-        assert_eq!(fs::metadata(dest.join("System/hooks/check.sh")).unwrap().permissions().mode() & 0o777, 0o755);
+        #[cfg(unix)]
+        assert_eq!(std::os::unix::fs::PermissionsExt::mode(&fs::metadata(dest.join("System/hooks/check.sh")).unwrap().permissions()) & 0o777, 0o755);
         assert_eq!(fs::read_link(dest.join(".claude")).unwrap(), PathBuf::from("System"));
         assert!(dest.join(".relay/config.json").is_file());
         assert_eq!(det(&dest)["ok"], true);
@@ -472,6 +485,9 @@ mod tests {
         create_default(&tpl, &dest).unwrap();
         let s = det(&dest);
         assert_eq!(s["ok"], true, "{s}");
+        // Codex and OpenCode read AGENTS.md: it points at the shared rules, it does not copy them
+        let agents = fs::read_to_string(dest.join("AGENTS.md")).unwrap();
+        assert!(agents.contains("CLAUDE.md") && agents.contains("System/rules/core/"));
         assert_eq!(s["map"], json!({"workState": "System/rules/core/work-state.md", "reminders": "System/reminders.md", "notes": "Contexts"}));
     }
 
@@ -482,17 +498,24 @@ mod tests {
         let dest = tmp("team").join("Team");
         create_team(&shipped("default-vault"), &shipped("team-vault"), &dest).unwrap();
         assert_eq!(det(&dest)["ok"], true);
+        assert!(dest.join("AGENTS.md").is_file());
         assert!(dest.join("System/rules/core/team.md").is_file() && dest.join("System/rules/core/hard-walls.md").is_file());
         for d in TEAM_DROP { assert!(!dest.join(d).exists(), "{d}"); }
         assert!(fs::read_to_string(dest.join("System/skills/setup/SKILL.md")).unwrap().contains("team.md"));
         assert!(!fs::read_to_string(dest.join(".relay/config.json")).unwrap().contains("Personal"));
         assert_eq!(fs::read_link(dest.join(".claude")).unwrap(), PathBuf::from("System"));
+        // made without history: the session log asks for no member's name
+        let log = || fs::read_to_string(dest.join("System/rules/core/session-protocol.md")).unwrap();
+        assert!(log().contains(LOG_WITH_NAME), "the starter's line, or without_names changes nothing");
+        without_names(&dest).unwrap();
+        assert!(!log().contains("with their name") && log().contains(LOG_WITHOUT_NAME));
         // the personal first start is as it was
         let own = tmp("own").join("Relay");
         create_default(&shipped("default-vault"), &own).unwrap();
         assert!(own.join("System/rules/core/user-profile.md").is_file() && !own.join("System/rules/core/team.md").exists());
     }
 
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn relays_skills_go_into_a_shared_vault_and_the_users_stay() {
         let (tpl, team) = (shipped("default-vault"), shipped("team-vault"));
@@ -544,6 +567,7 @@ mod tests {
         fs::remove_dir_all(&d).ok();
     }
 
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn write_note_writes_only_its_own_unchanged_notes() {
         let v = tmp("write");

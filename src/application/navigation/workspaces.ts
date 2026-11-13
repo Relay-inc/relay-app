@@ -17,7 +17,7 @@ import { projectVault, shownUnder } from "./migrate";
 
 // The workspaces: every vault here (the main one, the folders added, the shared ones), one of them shown in the sidebar.
 /** A workspace in the footer's menu: `notes` counted from the notes index, `team` for one shared on a relay-server,
- *  `live` when that one's live channel is connected (else it syncs every 10 s). */
+ *  `live` when that one's live channel is connected (else it syncs every 10 s), `reader` when this Mac only reads it. */
 export type Workspace = {
   folder: string;
   name: string;
@@ -25,6 +25,7 @@ export type Workspace = {
   notes: number;
   team: boolean;
   live: boolean;
+  reader: boolean;
   active: boolean;
 };
 
@@ -46,7 +47,7 @@ const notesIn = (folder: string, main: boolean) =>
 export function workspaces(): Workspace[] {
   const active = activeFolder();
   const shared = settings().sharedVaults ?? [];
-  const live = useWorkspaceStore.getState().live;
+  const { live, readers } = useWorkspaceStore.getState();
   return vaultChoices(settings()).map(choice => {
     const name = vaultName(choice.folder);
     const team = shared.find(vault => vault.folder === choice.folder);
@@ -57,15 +58,18 @@ export function workspaces(): Workspace[] {
       notes: notesIn(choice.folder, choice.main),
       team: !!team,
       live: !!team && !!live[team.id],
+      // the last round's word, before it the role the settings keep
+      reader: !!team && (readers[team.id] ?? team.role === "reader"),
       active: choice.folder === active,
     };
   });
 }
 /** The shared vaults' live channels, as the backend reports them: now and on every change. */
 export function watchLive() {
-  const set = (status: Record<string, { live?: boolean }>) =>
+  const set = (status: Record<string, { live?: boolean; reader?: boolean }>) =>
     useWorkspaceStore.setState(draft => {
       draft.live = Object.fromEntries(Object.entries(status).map(([id, s]) => [id, !!s.live]));
+      draft.readers = Object.fromEntries(Object.entries(status).map(([id, s]) => [id, !!s.reader]));
     });
   void backend.sharedVaultsStatus().then(set);
   void backend.onSharedVaults(set);
@@ -144,5 +148,5 @@ export async function openFolderAsWorkspace() {
   await loadSnapshot();
 }
 /** New workspace from template… and Workspace settings: the settings window, where workspaces are made and kept. A
- *  shared one is under Machines, the main vault and the folders added under General. */
-export const openWorkspaceSettings = (page: "general" | "machines") => backend.openSettingsWindow(page);
+ *  shared one is under Workspaces, the main vault and the folders added under General. */
+export const openWorkspaceSettings = (page: "general" | "workspaces") => backend.openSettingsWindow(page);

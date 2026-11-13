@@ -22,7 +22,18 @@ Then Settings › Agents › Codex › Use. The program defaults to the first of
 - **Account**: `OPENAI_API_KEY` and `CODEX_API_KEY` are removed from the environment, so it runs on the ChatGPT login,
   unless Settings › Agents › Codex › Account is "OPENAI_API_KEY from the environment".
 - **Sandbox and approvals** (Settings › Agents › Codex, stored as `settings.agents.providers.codex.{sandbox, approval}`):
-  `workspace-write` + `on-request` by default; also `read-only` / `danger-full-access` and `untrusted` / `never`.
+  `workspace-write` + `on-request` by default; also `read-only` / `danger-full-access` and `untrusted` / `never`. In a
+  workspace or another vault folder (`grants.fenced`) `danger-full-access` runs as `workspace-write`, `never` as
+  `on-request`, and `approvalsReviewer` is `user`, so every approval reaches the app, where Relay's guard declines one
+  outside the fence before it is a card (`docs/workspaces.md` › Trust). The fileChange approval carries every changed
+  path (`input.paths`) for that check. Fenced, `workspace-write` becomes the permission profile `relay-workspace`
+  (`default_permissions` and `permissions` in the thread's `config`, no `sandbox`: codex takes one or the other): it
+  extends `:workspace` and keeps `.claude`, `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `AGENTS.override.md`, `.codex`, `.agents` and `.git`
+  read-only. Outside the workspace it reads only `:minimal`, `/opt/homebrew` (not `var`), git's global config and
+  `$TMPDIR` (`bridge::readable`, `:root` and `/tmp` are `none`), and the `read-only` sandbox gets the same as a profile
+  that extends `:read-only`. The bridge reads `config/read` for the folder first and sets each MCP server in it `enabled = false`,
+  with `features.plugins` and `features.apps` off. It refuses a codex older than 0.163 (from initialize's `userAgent`),
+  which would ignore the profile. Checked against codex-cli 0.163.0.
 - **Events** (`src/app_server.rs`): the thread/start or resume response and `thread/started` → session;
   `item/agentMessage/delta` → text (whole `agentMessage` items when not streamed); reasoning summary deltas → thinking;
   `item/started` / `item/completed` of `commandExecution` → Bash, `fileChange` → Edit (Write when it only adds files),

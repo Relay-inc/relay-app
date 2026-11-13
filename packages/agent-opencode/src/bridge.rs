@@ -63,7 +63,7 @@ impl Http {
     }
 }
 
-/// SIGTERM, then SIGKILL after 5 s.
+/// SIGTERM, then SIGKILL after 5 s (on Windows at once, see agent_core::terminate).
 fn stop_server(srv: &Mutex<Child>) { agent_core::stop(&mut srv.lock().unwrap(), Duration::from_secs(5)); }
 
 /// The bridge on `input`/`out`; `gone(code)` is called (from a thread) when the server ends by itself, the process
@@ -87,7 +87,11 @@ pub fn run<W: Write + Send + 'static>(bin: &str, cfg: &Value, input: impl BufRea
     }
     let Ok((log_r, log_w)) = std::io::pipe() else { return 1 };
     cmd.stdout(log_w.try_clone().unwrap()).stderr(log_w);
+    #[cfg(unix)]
     let Ok(child) = cmd.spawn() else { return 1 };
+    // Windows: the server and what it runs in a Job Object, ended when this bridge goes
+    #[cfg(windows)]
+    let Some((_job, child)) = agent_core::job::Job::new().ok().and_then(|j| j.spawn(&mut cmd).ok().map(|c| (j, c))) else { return 1 };
     drop(cmd); // the write ends: the log ends with the server
     let srv = Arc::new(Mutex::new(child));
     let mut log = BufReader::new(log_r);

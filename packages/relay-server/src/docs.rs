@@ -59,7 +59,7 @@ impl Vaults {
     pub fn doc_push(&self, fp: &str, id: &str, name: &str, parts: Vec<Vec<u8>>) -> Result<Vec<u64>, String> {
         if !hex(name, 64) { return Err("bad doc".into()); }
         if parts.is_empty() || parts.iter().any(|p| p.len() < MIN_PART || p.len() as u64 > MAX_UPDATE || split(p).is_none()) { return Err("not an update".into()); }
-        let seqs = self.with(id, fp, |v, _| {
+        let seqs = self.writing(id, fp, |v, _| {
             for p in &parts {
                 match epoch(p).unwrap_or(0).cmp(&v.epoch) {
                     std::cmp::Ordering::Less => return Err("key changed".into()),
@@ -113,7 +113,7 @@ impl Vaults {
     pub fn doc_snapshot(&self, fp: &str, id: &str, name: &str, upto: u64, part: &[u8]) -> Result<(), String> {
         if !hex(name, 64) { return Err("bad doc".into()); }
         if part.len() < MIN_PART || part.len() as u64 > MAX_RECORD || split(part).is_none() { return Err("not a snapshot".into()); }
-        self.with(id, fp, |v, _| {
+        self.writing(id, fp, |v, _| {
             if epoch(part) != Some(v.epoch) { return Err("key changed".into()); }
             let d = self.doc(id, name);
             if upto == 0 || upto > self.length(id, name) { return Err("no such place in the log".into()); }
@@ -129,7 +129,7 @@ impl Vaults {
     /// existing note) only an admin binds; a name bound already stays as it is. At most MAX_DOCS names per member.
     pub fn doc_bind(&self, fp: &str, id: &str, names: &[String]) -> Result<(), String> {
         if names.len() > 1000 || names.iter().any(|n| !hex(n, 64)) { return Err("bad names".into()); }
-        self.with(id, fp, |_, role| {
+        self.writing(id, fp, |_, role| {
             let d = dir(self.data()).join(id).join("bound");
             fs::create_dir_all(&d).map_err(|e| e.to_string())?;
             let mine = fs::read_dir(&d).into_iter().flatten().flatten().filter(|e| fs::read_to_string(e.path()).is_ok_and(|b| b == fp)).count();
@@ -144,7 +144,7 @@ impl Vaults {
     /// who bound a name, or an admin; a name not bound is skipped.
     pub fn doc_unbind(&self, fp: &str, id: &str, names: &[String]) -> Result<(), String> {
         if names.len() > 1000 || names.iter().any(|n| !hex(n, 64)) { return Err("bad names".into()); }
-        self.with(id, fp, |_, role| {
+        self.writing(id, fp, |_, role| {
             let d = dir(self.data()).join(id).join("bound");
             for n in names {
                 let Ok(by) = fs::read_to_string(d.join(n)) else { continue };

@@ -90,12 +90,16 @@ fn on_ram(dir: &Path) -> bool {
         .max_by_key(|(mnt, _)| mnt.len()).is_some_and(|(_, ty)| ty == "tmpfs" || ty == "ramfs")
 }
 
+/// The working copy's folder: RELAY_SERVER_WORKDIR (a tmpfs), else `<data>/work`.
+pub fn work_dir(data: &Path) -> PathBuf { std::env::var_os("RELAY_SERVER_WORKDIR").map(PathBuf::from).unwrap_or_else(|| data.join("work")) }
+
 impl Mirror {
     pub fn new(data: &Path) -> Arc<Mirror> {
-        let work = std::env::var_os("RELAY_SERVER_WORKDIR").map(PathBuf::from).unwrap_or_else(|| data.join("work"));
+        let work = work_dir(data);
         fs::create_dir_all(&work).ok();
         let in_ram = on_ram(&work);
-        if !in_ram { eprintln!("relay-server: the mirror's working copy {} is not on a RAM disk, plaintext lands on disk (set RELAY_SERVER_WORKDIR to a tmpfs, or serve --ram-disk on a Mac)", work.display()); }
+        if !in_ram && cfg!(windows) { eprintln!("relay-server: the mirror's working copy {} is on disk, readable by this user only (Windows has no RAM disk without a driver: keep the disk encrypted, BitLocker)", work.display()); }
+        else if !in_ram { eprintln!("relay-server: the mirror's working copy {} is not on a RAM disk, plaintext lands on disk (set RELAY_SERVER_WORKDIR to a tmpfs, or serve --ram-disk on a Mac)", work.display()); }
         let m = Arc::new(Mirror { data: data.into(), work, projects: claude_projects(), in_ram, open: Mutex::new(HashMap::new()), unlocking: Mutex::new(()) });
         let m2 = m.clone();
         thread::spawn(move || loop { thread::sleep(FLUSH); m2.flush_all(); });
@@ -213,7 +217,7 @@ impl Mirror {
     /// Forget everything of a device here: store, working copy, key.
     pub fn wipe(&self, ns: &str) {
         self.open.lock().unwrap().remove(ns);
-        fs::remove_file(self.sessions_link(ns)).ok();
+        fs::remove_file(self.sessions_link(ns)).or_else(|_| fs::remove_dir(self.sessions_link(ns))).ok(); // a junction on Windows
         fs::remove_dir_all(self.store(ns)).ok();
         fs::remove_dir_all(self.work_of(ns)).ok();
     }
@@ -237,11 +241,16 @@ impl Mirror {
                 move_into(&link, &dir).map_err(|e| format!("moving the transcripts in: {e}"))?;
                 fs::remove_dir_all(&link).map_err(|e| e.to_string())?;
             }
-            Ok(_) => { fs::remove_file(&link).ok(); } // the link of an earlier run
+            // the link of an earlier run (a junction is a folder to Windows: remove_dir takes it, not what it leads to)
+            Ok(_) => { fs::remove_file(&link).or_else(|_| fs::remove_dir(&link)).ok(); }
             Err(_) => {}
         }
         fs::create_dir_all(&self.projects).map_err(|e| e.to_string())?;
-        std::os::unix::fs::symlink(&dir, &link).map_err(|e| e.to_string())
+        #[cfg(unix)]
+        { std::os::unix::fs::symlink(&dir, &link).map_err(|e| e.to_string()) }
+        // a directory junction: no Developer Mode or admin rights needed, as for a vault's `.claude` in the app
+        #[cfg(windows)]
+        { fs::create_dir_all(&dir).and_then(|_| junction::create(&dir, &link)).map_err(|e| e.to_string()) }
     }
     fn check(&self, ns: &str, root: &str, rel: &str) -> Result<(), String> {
         if !ROOTS.contains(&root) { return Err("unknown root".into()); }
@@ -286,7 +295,7 @@ impl Mirror {
 /// Claude Code's transcripts on this server: `<CLAUDE_CONFIG_DIR or ~/.claude>/projects`.
 pub fn claude_projects() -> PathBuf {
     std::env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".claude")).join("projects")
+        .unwrap_or_else(|| PathBuf::from(crate::home()).join(".claude")).join("projects")
 }
 
 /// Copy `from` into `to`, files overwritten (they are newer than what the store had). A copy, not a rename: the

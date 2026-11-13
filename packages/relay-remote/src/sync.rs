@@ -157,6 +157,9 @@ pub enum Mode {
     Replica,
     /// both sides may change; a file changed on both with different content keeps both
     TwoWay,
+    /// only the remote changes (a reader of a shared vault): its changes come, nothing goes, a change here stays here
+    /// (`Keep`), a file deleted here comes back
+    Pull,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -164,16 +167,19 @@ pub enum Action {
     Push(String), Pull(String), DeleteRemote(String), DeleteLocal(String),
     /// both changed differently: keep local at `path`, save the remote version locally as `copy`, push both
     Conflict { path: String, copy: String },
+    /// Pull: changed here, left as it is and not sent (`Report::unsent`)
+    Keep(String),
     /// both changed a line-mergeable file (an index like MEMORY.md): union of the lines, written to both sides
     Merge(String),
 }
 fn target(a: &Action) -> &str {
-    match a { Action::Push(p) | Action::Pull(p) | Action::DeleteRemote(p) | Action::DeleteLocal(p) | Action::Merge(p) | Action::Conflict { path: p, .. } => p }
+    match a { Action::Push(p) | Action::Pull(p) | Action::DeleteRemote(p) | Action::DeleteLocal(p) | Action::Merge(p) | Action::Keep(p) | Action::Conflict { path: p, .. } => p }
 }
 
 /// Pure planning, by hash only. TwoWay: a change on one side goes to the other (a delete included), a delete against a
 /// modification keeps the modification, a change on both is a Merge when `mergeable(path)` and a Conflict otherwise.
-/// Replica: push what differs, delete on the remote what the local side lacks. In both modes paths that are one file on
+/// Replica: push what differs, delete on the remote what the local side lacks. Pull: what is unchanged here takes the
+/// remote side, a file deleted here is pulled back, any other change here is kept and not sent. In both modes paths that are one file on
 /// a Mac's disk (`fold`, as the filter compares: `a.md` and `A.md`, `first.md` and `ﬁrst.md`) are skipped and returned:
 /// either would clobber the other.
 pub fn plan(mode: Mode, base: &Manifest, local: &Manifest, remote: &Manifest, copy_name: &dyn Fn(&str) -> String, mergeable: &dyn Fn(&str) -> bool) -> (Vec<Action>, Vec<String>) {
@@ -200,17 +206,24 @@ pub fn plan(mode: Mode, base: &Manifest, local: &Manifest, remote: &Manifest, co
                     _ => Action::Conflict { copy: copy_name(&p), path: p },
                 },
             },
+            Mode::Pull => match (l == b || l.is_none(), r.is_some()) {
+                (true, true) => Action::Pull(p),
+                (true, false) => Action::DeleteLocal(p),
+                _ => Action::Keep(p),
+            },
         });
     }
     (acts, clash.into_iter().map(String::from).collect())
 }
 
 /// "Notes/A.md","LServer","2026-10-02 1530" -> "Notes/A (conflict LServer 2026-10-02 1530).md". A dotfile or a name
-/// without a dot gets the tag at the end, so the copy keeps its kind.
+/// without a dot gets the tag at the end, so the copy keeps its kind. No machine (a workspace without history):
+/// "Notes/A (conflict 2026-10-02 1530).md".
 pub fn conflict_copy(path: &str, machine: &str, stamp: &str) -> String {
     let (dir, name) = match path.rfind('/') { Some(i) => path.split_at(i + 1), None => ("", path) };
     let (stem, ext) = match name.rfind('.') { Some(i) if i > 0 => name.split_at(i), _ => (name, "") };
-    format!("{dir}{stem} (conflict {machine} {stamp}){ext}")
+    let tag = if machine.is_empty() { stamp.to_string() } else { format!("{machine} {stamp}") };
+    format!("{dir}{stem} (conflict {tag}){ext}")
 }
 
 /// Line union for an index: the local lines in their order, then the remote lines the local side lacks, in their order,
@@ -249,8 +262,13 @@ pub struct Report {
     /// the copy paths
     pub conflicts: Vec<String>,
     pub skipped: Vec<String>, pub errors: Vec<String>,
+    /// files kept out because of their name, also in `skipped`, for the user to rename where they were made: a name
+    /// Windows cannot hold (on Windows, `windows_name`), or one that is the same file as another on this disk (case)
+    pub names: Vec<String>,
     /// deletes that wait for the user (`Guard`): these paths keep their base, so every round plans them again
     pub held: Vec<String>,
+    /// Pull: changes here that were not sent (they keep their base, so every round finds them again)
+    pub unsent: Vec<String>,
 }
 
 /// What a round may destroy on this side. More deletes than `max(5, a fifth of the base)` in one TwoWay round wait for
@@ -278,14 +296,16 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
     let all = match remote.manifest() { Ok(m) => m, Err(e) => { rep.errors.push(format!("remote manifest: {e}")); return (base.clone(), rep); } };
     let (mut rm, folded) = (Manifest::new(), filter.folded());
     for (p, e) in all {
-        if !safe_rel(&p) || (filter.max_size > 0 && e.size > filter.max_size) { skipped.push(p); }
+        // a name NTFS refuses would land as another file there (`a:b` a stream of `a`, `a.` as `a`, `CON` a device)
+        if cfg!(windows) && safe_rel(&p) && !windows_name(&p) { rep.names.push(p.clone()); skipped.push(p); }
+        else if !safe_rel(&p) || (filter.max_size > 0 && e.size > filter.max_size) { skipped.push(p); }
         else if !folded.skips_folded(&fold(&p), false) { rm.insert(p.clone(), Entry { path: p, ..e }); }
     }
     // with no_links, a path behind a link here stays as it is on both sides: not followed, and not read as deleted
     // either (a vault synced before no_links has such paths in its base, and the server would lose them)
     let linked: BTreeSet<String> = if filter.no_links { base.keys().chain(rm.keys()).filter(|p| through_link(root, p)).cloned().collect() } else { BTreeSet::new() };
     let had = base.keys().filter(|p| !linked.contains(*p)).count();
-    if had > 0 && (local.is_empty() || (mode == Mode::TwoWay && rm.is_empty())) {
+    if had > 0 && (local.is_empty() || (mode != Mode::Replica && rm.is_empty())) {
         rep.errors.push(format!("{} side is empty while the last sync had {had} files: refusing to mirror that", if local.is_empty() { "local" } else { "remote" }));
         return (base.clone(), rep);
     }
@@ -325,7 +345,7 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
         _ => false,
     };
     let deletes = acts.iter().filter(|a| braked(a)).count();
-    if mode == Mode::TwoWay && !guard.allow_deletes && deletes > delete_cap(base) {
+    if mode != Mode::Replica && !guard.allow_deletes && deletes > delete_cap(base) {
         acts.retain(|a| { if braked(a) { rep.held.push(target(a).into()); } !braked(a) });
     }
     let mut next = Manifest::new();
@@ -371,6 +391,7 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
                     Action::Push(p) => (&mut rep.pushed, p), Action::Pull(p) => (&mut rep.pulled, p),
                     Action::DeleteRemote(p) => (&mut rep.deleted_remote, p), Action::DeleteLocal(p) => (&mut rep.deleted_local, p),
                     Action::Merge(p) => (&mut rep.merged, p), Action::Conflict { copy, .. } => (&mut rep.conflicts, copy),
+                    Action::Keep(p) => (&mut rep.unsent, p),
                 };
                 list.push(p.clone());
             }
@@ -378,6 +399,7 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
         }
     }
     progress(acts.len(), acts.len());
+    rep.names.extend(clashes.iter().cloned());
     skipped.extend(clashes);
     rep.skipped = skipped;
     (next, rep)
@@ -408,6 +430,7 @@ fn exec(root: &Path, no_links: bool, local: &Manifest, rm: &Manifest, remote: &d
     let mut put_local = |e: &Entry, d: &[u8]| -> Result<(), String> { inside(&e.path)?; write_atomic(&abs(&e.path), d, Some(e.mtime)).map_err(io)?; walker.note(e); Ok(()) };
     match a {
         Action::Push(_) => unreachable!("pushes go in batches, in run()"),
+        Action::Keep(_) => Ok(vec![]),
         Action::Pull(p) => {
             let (d, e) = fetch(p)?;
             if let Some(old) = same(p)? { if shrinks(&old, &d) { keep(p, &old)?; } }
@@ -484,6 +507,22 @@ pub fn write_atomic(path: &Path, data: &[u8], mtime: Option<i64>) -> io::Result<
 /// sides before touching disk.
 pub fn safe_rel(rel: &str) -> bool {
     !rel.is_empty() && !rel.contains(['\0', '\\']) && rel.split('/').all(|s| !s.is_empty() && s != "." && s != "..")
+}
+
+/// Whether every name in `rel` can exist on Windows: none of `< > : " | ? *` or a control character, no dot or space at
+/// the end, and not a device name (CON, PRN, AUX, NUL, COM0-9, LPT0-9, also with ¹²³ and with an extension, as
+/// `nul.txt`), and nothing that reads as an 8.3 short name (`~` and a digit, as `GIT~1` or `SETTIN~1.JSO`): Windows
+/// opens such a name as the long one it stands for, which would take a write past the filter into `.git` or a guarded
+/// file. Names that differ in case only are `plan`'s clashes, on every disk.
+pub fn windows_name(rel: &str) -> bool {
+    rel.split('/').all(|n| {
+        let stem = n.split('.').next().unwrap_or("").trim_end_matches(' ').to_ascii_uppercase();
+        let device = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+            || ["COM", "LPT"].iter().any(|d| stem.strip_prefix(d).is_some_and(|x| (x.len() == 1 && x.as_bytes()[0].is_ascii_digit()) || matches!(x, "¹" | "²" | "³")));
+        // ponytail: any `~` and digit, also a long name like `draft~2.md`, which is then listed for a rename
+        let short = n.split('~').skip(1).any(|x| x.starts_with(|c: char| c.is_ascii_digit()));
+        !n.is_empty() && !device && !short && !n.ends_with(['.', ' ']) && !n.chars().any(|c| c < ' ' || "<>:\"|?*".contains(c))
+    })
 }
 
 pub fn sha256_hex(data: &[u8]) -> String {
@@ -635,6 +674,24 @@ mod tests {
         assert!(remote.get("linked/a.md").is_ok() && next.contains_key("linked/a.md"), "left alone on both sides");
     }
 
+    #[test] fn a_name_the_filter_gains_stays_where_it_synced_before() {
+        // .codex synced before the filter kept it out: from then on neither sent, fetched nor deleted on either side
+        let t = Tmp::new("filter-gains");
+        t.put("ok.md", "x");
+        t.put(".codex/config.toml", "a");
+        let remote = Mem::default();
+        let (base, _) = run(Mode::TwoWay, &t.0, &Manifest::new(), &mut Walker::default(), &Filter::default(), &remote, &|p| p.into(), &|_| false, OPEN, &|_, _| {});
+        assert!(base.contains_key(".codex/config.toml") && remote.get(".codex/config.toml").is_ok());
+        let f = Filter { names: vec![".codex".into()], ..Default::default() };
+        t.put(".codex/config.toml", "changed here");
+        remote.put(".codex/hooks.json", b"a member's", 1, "").unwrap();
+        let (next, r) = run(Mode::TwoWay, &t.0, &base, &mut Walker::default(), &f, &remote, &|p| p.into(), &|_| false, OPEN, &|_, _| {});
+        assert!(r.errors.is_empty() && r.deleted_remote.is_empty() && r.deleted_local.is_empty() && r.pushed.is_empty() && r.pulled.is_empty(), "{r:?}");
+        assert_eq!(remote.get(".codex/config.toml").unwrap(), b"a");
+        assert_eq!(fs::read_to_string(t.0.join(".codex/config.toml")).unwrap(), "changed here");
+        assert!(!t.0.join(".codex/hooks.json").exists() && !next.contains_key(".codex/config.toml") && next.contains_key("ok.md"));
+    }
+
     // ---------- run
 
     #[derive(Default)]
@@ -689,6 +746,39 @@ mod tests {
         assert_eq!((r.pushed.len(), r.errors.clone()), (1099, vec!["n/0007.md: refused".to_string()]));
         assert!(!base.contains_key("n/0007.md") && base.contains_key("n/0008.md"), "the refused file is retried next round");
         assert_eq!(last.get(), (1100, 1100));
+    }
+
+    // a server that refuses every write, as it does a reader's
+    struct ReadOnly<'a>(&'a Mem);
+    impl Remote for ReadOnly<'_> {
+        fn manifest(&self) -> Result<Manifest, String> { self.0.manifest() }
+        fn get(&self, p: &str) -> Result<Vec<u8>, String> { self.0.get(p) }
+        fn put(&self, _: &str, _: &[u8], _: i64, _: &str) -> Result<(), String> { Err("read only".into()) }
+        fn delete(&self, _: &str, _: &str) -> Result<(), String> { Err("read only".into()) }
+    }
+    #[test]
+    fn a_pull_round_takes_the_remote_and_sends_nothing() {
+        let (t, mut w, mem) = (Tmp::new("pull"), Walker::default(), Mem::default());
+        for p in ["same.md", "edited.md", "deleted.md", "theirs.md", "gone.md"] { mem.set(p, "v1"); }
+        let run_pull = |w: &mut Walker, base: &Manifest| run(Mode::Pull, &t.0, base, w, &Filter::vault_default(), &ReadOnly(&mem), &|p| p.into(), &|_| false, OPEN, &|_, _| {});
+        let (base, r) = run_pull(&mut w, &Manifest::new());
+        assert_eq!((r.pulled.len(), r.errors.len()), (5, 0));
+        // here: an edit, a delete, a new file. There: an edit and a delete
+        t.put("edited.md", "mine");
+        fs::remove_file(t.0.join("deleted.md")).unwrap();
+        t.put("new.md", "mine");
+        mem.set("theirs.md", "v2");
+        mem.files.borrow_mut().remove("gone.md");
+        let (next, r) = run_pull(&mut w, &base);
+        assert!(r.errors.is_empty() && r.pushed.is_empty() && r.deleted_remote.is_empty(), "{r:?}");
+        assert_eq!(r.unsent, vec![s("edited.md"), s("new.md")]);
+        assert_eq!((t.read("edited.md").as_deref(), t.read("new.md").as_deref()), (Some("mine"), Some("mine")), "kept here");
+        assert_eq!((t.read("deleted.md").as_deref(), t.read("theirs.md").as_deref(), t.read("gone.md")), (Some("v1"), Some("v2"), None));
+        assert_eq!((mem.read("edited.md").as_deref(), mem.read("new.md")), (Some("v1"), None), "nothing sent");
+        // the next round finds the same changes, and their change to an edited file waits
+        mem.set("edited.md", "v2");
+        let (_, r) = run_pull(&mut w, &next);
+        assert_eq!((r.unsent, t.read("edited.md").as_deref()), (vec![s("edited.md"), s("new.md")], Some("mine")));
     }
 
     const COPY: &str = "a (conflict srv 2026-10-02 1530).md";
@@ -922,6 +1012,16 @@ mod tests {
 
     // ---------- helpers
 
+    #[test] fn windows_name_cases() {
+        for ok in ["Notes/a.md", "System/rules/core/memory.md", "CONSOLE.md", "com10.md", "Nul cat.md", ".claude/x", "a b/c d.md", "Café.md", "LPT.md", "a~b.md", "x~"] {
+            assert!(windows_name(ok), "{ok}");
+        }
+        for bad in ["a:b.md", "Notes/what?.md", "x*.md", "a<b", "a>b", "a|b", "say \"hi\".md", "tab\there", "trail.", "Notes /a.md", "dir./a.md",
+            "CON", "con.md", "Notes/nul.txt", "AUX.tar.gz", "prn", "COM1.md", "lpt9", "com0", "COM\u{b9}.md", "NUL .md",
+            "GIT~1/hooks/pre-commit", "System/SETTIN~1.JSO", "CLAUDE~1/settings.json", "draft~2.md"] {
+            assert!(!windows_name(bad), "{bad}");
+        }
+    }
     #[test] fn safe_rel_cases() {
         for bad in ["../x", "/x", "a//b", "a\\b", "a/../b", "./a", "", "a/", "a\0b"] { assert!(!safe_rel(bad), "{bad}"); }
         assert!(safe_rel("Notes/A b.md"));
@@ -932,6 +1032,7 @@ mod tests {
         assert_eq!(conflict_copy("x/.env", "m", "s"), "x/.env (conflict m s)");
         assert_eq!(conflict_copy("v1.2/notes", "m", "s"), "v1.2/notes (conflict m s)");
         assert_eq!(conflict_copy("a.tar.gz", "m", "s"), "a.tar (conflict m s).gz");
+        assert_eq!(conflict_copy("Notes/A.md", "", "2026-10-02 1530"), "Notes/A (conflict 2026-10-02 1530).md", "without history");
     }
     #[test] fn merge_lines_cases() {
         assert_eq!(merge_lines("a\nb\n", "a\nc\n"), "a\nb\nc\n");

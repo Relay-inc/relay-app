@@ -11,7 +11,7 @@ export function machinePick(list: MachineChoice[] | undefined, picked: string | 
   return list.find(machine => machine.default)?.id ?? "";
 }
 
-/** Settings › Machines: the shared vaults each machine keeps (the vault's server pinned by that machine's fingerprint),
+/** Settings › Workspaces: the shared vaults each machine keeps (the vault's server pinned by that machine's fingerprint),
  *  and the rest, on a server that is not one of this Mac's machines: a vault this Mac joined with a link. */
 export function vaultsByMachine(machines: Machine[], vaults: SharedVault[]) {
   const on: Record<string, SharedVault[]> = Object.fromEntries(machines.map(machine => [machine.id, []]));

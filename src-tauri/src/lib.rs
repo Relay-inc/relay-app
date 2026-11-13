@@ -29,7 +29,22 @@ mod design;
 mod commits;
 mod dictation;
 mod files;
+mod platform;
+#[cfg(target_os = "macos")]
 mod host;
+// this PC as a work machine: relay-server under Task Scheduler
+#[cfg(windows)]
+#[path = "host_windows.rs"]
+mod host;
+// relay-server runs on Linux on its own (Docker), the app is not its host there
+#[cfg(not(any(target_os = "macos", windows)))]
+mod host {
+    pub fn status() -> serde_json::Value { serde_json::json!({"supported": false, "on": false, "running": false, "ram": false, "fingerprint": "", "clients": []}) }
+    pub fn set(_on: bool) -> Result<serde_json::Value, String> { Err("A work machine needs macOS or Windows.".into()) }
+    pub fn pair() -> Result<String, String> { Err("A work machine needs macOS or Windows.".into()) }
+    pub fn refresh() {}
+    pub fn work_dir() -> Option<std::path::PathBuf> { None }
+}
 mod machine_git;
 mod machines;
 mod mirror;
@@ -60,10 +75,13 @@ mod reminders;
 mod retry;
 mod inbox;
 mod scratch;
+mod secrets;
 mod session;
 mod policy;
 mod share;
 mod shared_vaults;
+mod sso;
+mod team;
 pub(crate) use policy::{all_vaults, extra_vaults, fence_in, in_shared_vault, own_extra, project_home, SHARED_NO_READ};
 #[cfg(feature = "selftest")]
 mod selftest;
@@ -77,7 +95,7 @@ mod worktrees;
 
 use session::{account_of, limit_key, pipe_reply, quit, reattach, reattach_remote, spawn_or_get, Proc};
 
-fn home() -> String { std::env::var("HOME").unwrap_or_default() }
+fn home() -> String { agent_core::home() }
 /// The vault folder from the settings, "" before one is chosen.
 fn vault(st: &App) -> String {
     st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string()
@@ -220,8 +238,8 @@ const TEXT: &[(&str, [&str; 4])] = &[
         "Un coffre ou un espace de travail est en cours d'ajout : renvoyez dans un instant", "Ein Vault oder Workspace wird gerade hinzugefügt: sende gleich noch einmal"]),
     ("err.refence_busy", ["A conversation is still working: adding a vault or workspace restarts every conversation, try again when its turn has ended", "Een gesprek is nog bezig: een vault of workspace toevoegen herstart elk gesprek, probeer opnieuw als de beurt klaar is",
         "Une conversation travaille encore : ajouter un coffre ou un espace de travail redémarre chaque conversation, réessayez quand son tour est fini", "Ein Gespräch arbeitet noch: Einen Vault oder Workspace hinzuzufügen startet jedes Gespräch neu, versuche es nach dem Ende seiner Runde erneut"]),
-    ("err.unfenceable_vault", ["A vault folder may not have [ ] * ? or \\ in its path: {v}. Relay could not keep conversations out of it", "Een vaultmap mag geen [ ] * ? of \\ in het pad hebben: {v}. Relay kan gesprekken er dan niet buiten houden",
-        "Un dossier de coffre ne peut pas contenir [ ] * ? ou \\ dans son chemin : {v}. Relay ne pourrait pas en tenir les conversations à l'écart", "Ein Vault-Ordner darf kein [ ] * ? oder \\ im Pfad haben: {v}. Relay könnte Gespräche nicht davon fernhalten"]),
+    ("err.unfenceable_vault", ["A vault folder may not have [ ] * or ? in its path, and on Windows it must be on a drive letter, not a network share: {v}. Relay could not keep conversations out of it", "Een vaultmap mag geen [ ] * of ? in het pad hebben, en moet op Windows op een stationsletter staan, niet op een netwerkshare: {v}. Relay kan gesprekken er dan niet buiten houden",
+        "Un dossier de coffre ne peut pas contenir [ ] * ou ? dans son chemin, et sous Windows il doit être sur une lettre de lecteur, pas sur un partage réseau : {v}. Relay ne pourrait pas en tenir les conversations à l'écart", "Ein Vault-Ordner darf kein [ ] * oder ? im Pfad haben und muss unter Windows auf einem Laufwerksbuchstaben liegen, nicht auf einer Netzwerkfreigabe: {v}. Relay könnte Gespräche nicht davon fernhalten"]),
     ("err.nested_vault", ["One folder lies inside the other: {v}. Each vault and workspace needs its own folder, so a conversation in one cannot see the other",
         "De ene map ligt in de andere: {v}. Elke vault en workspace heeft een eigen map nodig, zodat een gesprek in de ene de andere niet ziet",
         "Un dossier se trouve dans l'autre : {v}. Chaque coffre et espace de travail a besoin de son propre dossier, pour qu'une conversation dans l'un ne voie pas l'autre",
@@ -318,8 +336,10 @@ const TEXT: &[(&str, [&str; 4])] = &[
         "Ajoutez d'abord un téléphone : Réglages › Machines › Ajouter un téléphone (un téléphone ajouté avant cette version : ajoutez-le à nouveau)", "Füge zuerst ein Telefon hinzu: Einstellungen › Maschinen › Telefon hinzufügen (ein Telefon von vor dieser Version: füge es erneut hinzu)"]),
     ("err.machine_shared_vault", ["A conversation in a workspace or another vault folder runs on this Mac: a work machine has the main vault only", "Een gesprek in een workspace of een andere vaultmap loopt op deze Mac: een werkmachine heeft enkel de hoofdvault",
         "Une conversation dans un espace de travail ou un autre dossier de coffre tourne sur ce Mac : une machine de travail n'a que le coffre principal", "Ein Gespräch in einem Workspace oder einem anderen Vault-Ordner läuft auf diesem Mac: Eine Arbeitsmaschine hat nur den Haupt-Vault"]),
-    ("err.vault_only_claude", ["A conversation in a workspace or another vault folder runs with Claude Code only: only it keeps the conversation inside that folder", "Een gesprek in een workspace of een andere vaultmap loopt enkel met Claude Code: enkel dat houdt het gesprek binnen die map",
-        "Une conversation dans un espace de travail ou un autre dossier de coffre tourne uniquement avec Claude Code : lui seul la garde dans ce dossier", "Ein Gespräch in einem Workspace oder einem anderen Vault-Ordner läuft nur mit Claude Code: Nur es hält das Gespräch in diesem Ordner"]),
+    ("err.vault_agents", ["A conversation in a workspace or another vault folder runs in Relay with Claude Code or Codex: only those keep the conversation inside that folder", "Een gesprek in een workspace of een andere vaultmap loopt in Relay met Claude Code of Codex: enkel die houden het gesprek binnen die map",
+        "Une conversation dans un espace de travail ou un autre dossier de coffre tourne dans Relay avec Claude Code ou Codex : eux seuls la gardent dans ce dossier", "Ein Gespräch in einem Workspace oder einem anderen Vault-Ordner läuft in Relay mit Claude Code oder Codex: Nur sie halten das Gespräch in diesem Ordner"]),
+    ("err.mig_provider", ["Only a Claude Code conversation moves to another workspace or vault folder with its history", "Enkel een gesprek met Claude Code verhuist met zijn geschiedenis naar een andere workspace of vaultmap",
+        "Seule une conversation avec Claude Code déménage avec son historique vers un autre espace de travail ou dossier de coffre", "Nur ein Gespräch mit Claude Code zieht mit seinem Verlauf in einen anderen Workspace oder Vault-Ordner um"]),
     ("err.machine_mail", ["A conversation about a mail runs on this Mac, not on a work machine", "Een gesprek over een mail loopt op deze Mac, niet op een werkmachine",
         "Une conversation sur un mail tourne sur ce Mac, pas sur une machine de travail", "Ein Gespräch über eine Mail läuft auf diesem Mac, nicht auf einer Arbeitsmaschine"]),
     ("err.machine_down", ["Work machine unreachable: {v}", "Werkmachine niet bereikbaar: {v}", "Machine de travail injoignable : {v}", "Arbeitsmaschine nicht erreichbar: {v}"]),
@@ -412,8 +432,10 @@ fn build_menu(h: &AppHandle, lang: &str, keys: Option<&Value>) -> tauri::Result<
         &P::minimize(h, Some(&t("minimize")))?, &P::maximize(h, Some(&t("zoom")))?, &P::fullscreen(h, Some(&t("fullscreen")))?])?;
     Menu::with_items(h, &[&app, &chat, &edit, &window])
 }
-/// The menu bar again, with the settings' language and shortcuts (none while Settings records one).
+/// The menu bar again, with the settings' language and shortcuts (none while Settings records one). macOS only:
+/// a Windows window has no menu bar, the webview takes those keys (src/ui/app/App.tsx onKey).
 pub(crate) fn refresh_menu(app: &AppHandle) {
+    if !cfg!(target_os = "macos") { return; }
     let settings = app.state::<App>().settings.lock().unwrap().clone();
     let keys = (!anywhere::paused()).then_some(&settings["shortcuts"]);
     if let Ok(m) = build_menu(app, ui_lang_of(&settings), keys) { app.set_menu(m).ok(); }
@@ -457,6 +479,7 @@ fn save_worktrees(app: &AppHandle, w: &HashMap<String, Vec<String>>) {
 
 /// The user's own login shell, not zsh: a fish or bash user's PATH (npm, Homebrew) lives in that shell's config.
 /// The last line, in case the rc files print something first.
+#[cfg(unix)]
 fn login_path() -> String {
     let sh = std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/zsh".into());
     Command::new(sh).args(["-lic", "printf '\\n%s' \"$PATH\""]).stdin(Stdio::null()).output()
@@ -464,6 +487,9 @@ fn login_path() -> String {
         .filter(|p| !p.is_empty())
         .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin".into())
 }
+/// Windows: the stored PATH of this machine and user (agent_core::stored_path), the app's own PATH when that fails.
+#[cfg(windows)]
+fn login_path() -> String { agent_core::stored_path().unwrap_or_else(|| std::env::var("PATH").unwrap_or_default()) }
 
 /// A mapped path of a vault status as an absolute one, "" when it is not there.
 fn mapped(st: &Value, k: &str) -> String {
@@ -850,8 +876,9 @@ fn refresh_index(app: &AppHandle) {
 fn rebuild_index(app: &AppHandle, vault: &str) {
     let bundled = app.path().resolve("default-vault/System/scripts/build-index.py", tauri::path::BaseDirectory::Resource).ok();
     let Some(script) = index_script(PathBuf::from(vault).join("System/scripts/build-index.py"), bundled) else { return };
-    let path = app.state::<App>().path.clone();
-    match Command::new("python3").arg(&script).env("VAULT", vault).env("PATH", &path).output() {
+    // without Python (Windows has none of its own) the index stays as it was: the vault check says so
+    let Some(mut python) = platform::python(&app.state::<App>().path) else { return eprintln!("build-index: no Python 3 on this computer") };
+    match python.arg(&script).env("VAULT", vault).output() {
         Ok(o) if o.status.success() => {}
         Ok(o) => eprintln!("build-index: {}", String::from_utf8_lossy(&o.stderr).trim()),
         Err(e) => eprintln!("build-index: {e}"),
@@ -895,7 +922,7 @@ async fn migrate_project(app: AppHandle, project: String, to: String, context: S
 }
 /// On a move, which of the project's conversations go along to `to`, and their transcripts' folders: a Claude Code one
 /// that ran in the project's vault, except one that read mail when `to` is a team workspace (the mail would reach the
-/// team's notes). Codex and OpenCode run in the main vault only (err.vault_only_claude), so theirs stay. The whole move
+/// team's notes). Only Claude Code's transcripts move (err.mig_provider), so the others stay. The whole move
 /// is refused while one of them runs a turn, waits on a card, runs on a work machine or is shared with the phone: its
 /// session would change folders under it.
 fn migrate_chats(app: &AppHandle, from_vault: &str, to: &str, team: bool, chats: &[Value]) -> Result<(Vec<Value>, Vec<(String, migrate::Carry)>), String> {
@@ -994,7 +1021,7 @@ async fn move_chat_workspace(app: AppHandle, key: String, title: String, mail: b
         let team = shared_vaults::list(&s).iter().any(|v| v.folder == to);
         let (out, carries) = migrate_chats(&app, &from, &to, team, &[json!({"key": key, "title": title, "mail": mail})])?;
         match out.first().and_then(|c| c["why"].as_str()) {
-            Some("provider") => return Err(trc("err.vault_only_claude")),
+            Some("provider") => return Err(trc("err.mig_provider")),
             Some("mail") => return Err(trc("err.mig_mail")),
             _ => {}
         }
@@ -2284,13 +2311,13 @@ fn ttl_cached(slot: &Mutex<Option<(std::time::Instant, Value)>>, ttl: std::time:
 }
 fn agents_now(app: &AppHandle, state: &App) -> Value {
     let on = agents::enabled(&state.settings.lock().unwrap());
-    let server_work = relay_server::data_dir().join("work");
+    let server_work = host::work_dir();
     let ps = Command::new("/bin/ps").args(["-axo", "pid=,ppid=,command="]).output().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
     let ours = under_broker(&ps);
     let mut out = vec![];
     for p in on.into_iter().filter(|p| p.caps().background) {
         for mut a in p.sessions(&env_of(app, state, p).env()) {
-            if runs_for_server(&a, &server_work) { continue; }
+            if server_work.as_deref().is_some_and(|w| runs_for_server(&a, w)) { continue; }
             a["provider"] = json!(p.id());
             // the app's own process is listed before its session id reaches app_sids: marked, so the sidebar does not
             // show it as a terminal session meanwhile. It stays in the list, syncBusy reads its busy state after a restart.
@@ -2337,8 +2364,9 @@ fn terminal_cmd(app: &AppHandle, state: &App, project: &str, session: Option<Str
         (false, None, Some(v)) => eb.vault = v,
         _ => {}
     }
-    // the terminal's claude gets the same fence as the conversation in Relay, and a shared vault Claude Code only
-    if eb.vault != need_vault(state)? && p.id() != "claude" { return Err(trc("err.vault_only_claude")); }
+    // the terminal's claude gets the same fence as the conversation in Relay, and a shared vault Claude Code only: a
+    // terminal's codex asks in the terminal, past Relay's guard (policy::guard)
+    if eb.vault != need_vault(state)? && p.id() != "claude" { return Err(trc("err.vault_agents")); }
     if policy::adding() { return Err(trc("err.vault_adding")); }
     fence_in(app, state, &mut eb);
     let sid = session.or_else(|| state.sids.lock().unwrap().get(project).map(|s| s.sid.clone()));
@@ -2514,8 +2542,9 @@ fn set_settings(app: AppHandle, state: State<App>, mut settings: Value) -> Resul
     // extra vaults by their real path, each usable, the main vault and doubles left out
     // the shared vaults are this app's to write (shared_vaults.rs): what the window sends back is ignored
     s["sharedVaults"] = state.settings.lock().unwrap()["sharedVaults"].clone();
+    s["teams"] = state.settings.lock().unwrap()["teams"].clone();
     let shared: Vec<String> = shared_vaults::list(&s).into_iter().map(|x| x.folder).collect();
-    if !policy::fenceable(&v) { return Err(tr_v(lang, "err.unfenceable_vault", &v)); }
+    if !policy::fenceable(&v, cfg!(windows)) { return Err(tr_v(lang, "err.unfenceable_vault", &v)); }
     // the main vault may not hold a shared vault's folder or lie inside one either
     if let Some(o) = shared.iter().find(|o| policy::nested(&v, o)) { return Err(tr_v(lang, "err.nested_vault", &format!("{v}, {o}"))); }
     let protected = { let p = agents::get("claude").ok(); p.map(|p| policy::protected(&app, &env_of(&app, &state, p))).unwrap_or_default() };
@@ -2560,6 +2589,7 @@ fn set_settings(app: AppHandle, state: State<App>, mut settings: Value) -> Resul
     let (relang, rekey) = {
         let mut cur = state.settings.lock().unwrap();
         s["sharedVaults"] = cur["sharedVaults"].clone();
+        s["teams"] = cur["teams"].clone();
         shared_vaults::keepers(&mut s);
         relay_remote::sync::write_atomic(&data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap().as_bytes(), None).map_err(|e| e.to_string())?;
         let changed = (ui_lang_of(&cur) != lang, cur["shortcuts"] != s["shortcuts"]);
@@ -2715,9 +2745,7 @@ fn integration_import(state: State<App>, provider: String) -> Result<Value, Stri
 // Read-only. The search queries are built here from the settings, the webview only asks for the list.
 
 /// A binary from the login-shell PATH: an app started from the Finder does not have /opt/homebrew/bin.
-fn in_path(state: &App, name: &str) -> Option<String> {
-    state.path.split(':').map(|d| format!("{d}/{name}")).find(|p| PathBuf::from(p).is_file())
-}
+fn in_path(state: &App, name: &str) -> Option<String> { agent_core::which(name, &state.path) }
 /// gh from the login-shell PATH: an app started from the Finder does not have /opt/homebrew/bin.
 fn gh(state: &App, args: &[&str]) -> Result<String, String> {
     let bin = in_path(state, "gh").ok_or_else(|| trc("err.no_gh"))?;
@@ -3084,15 +3112,11 @@ async fn mail_connect(state: State<'_, App>, email: String, password: String, ho
         if !(1..=256).contains(&password.chars().count()) || password.chars().any(char::is_control) { return Err(trc("err.mail_pw_any")); }
         password
     };
-    // hex (-X) so no password character can end the command line `security -i` reads
-    let hex: String = pw.bytes().map(|b| format!("{b:02x}")).collect();
-    let mut ch = Command::new("/usr/bin/security").arg("-i").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(|e| e.to_string())?;
-    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s relay-mail -a {email} -X {hex}").map_err(|e| e.to_string())?;
-    ch.wait().map_err(|e| e.to_string())?;
+    secrets::set("relay-mail", &email, &pw)?;
     match state.mail.test(&a).await {
         Ok(n) => Ok(json!({"account": account, "result": n})),
         Err(e) => {
-            if e.starts_with("Login failed") { Command::new("/usr/bin/security").args(["delete-generic-password", "-s", "relay-mail", "-a", &email]).output().ok(); }
+            if e.starts_with("Login failed") { secrets::delete("relay-mail", &email).ok(); }
             Err(e)
         }
     }
@@ -3380,7 +3404,14 @@ fn nav_internal(url: &tauri::Url) -> bool {
 pub fn cli(args: &[String]) -> i32 { actions::cli(args) }
 
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Windows: a second start, or a relay:// link (the deep-link feature hands it to on_open_url below), brings the
+    // running window up instead of a second Relay. macOS does both itself. Must be the first plugin
+    #[cfg(windows)]
+    let builder = builder
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| { windows::show_active(app); }))
+        .plugin(tauri_plugin_notification::init());
+    builder
         // settings live in their own small window, the Mac way: open it, or bring it forward when it is open
         .on_menu_event(|app, event| {
             let settings = app.get_webview_window("settings");
@@ -3441,7 +3472,7 @@ pub fn run() {
             let settings = norm(fs::read_to_string(data_dir(app.handle()).join("settings.json")).ok()
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default());
             set_cur_lang(ui_lang_of(&settings));
-            app.set_menu(build_menu(app.handle(), ui_lang_of(&settings), Some(&settings["shortcuts"]))?)?;
+            if cfg!(target_os = "macos") { app.set_menu(build_menu(app.handle(), ui_lang_of(&settings), Some(&settings["shortcuts"]))?)?; }
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
             let machines = machines::Machines::load(&data_dir(app.handle()))?;
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default(), orch: Mutex::new(()), proj_vault: Default::default(), extra: Mutex::new(json!([])), shared: Default::default(), tidied: Default::default(), vault_gate: Mutex::new(()) });
@@ -3536,24 +3567,28 @@ pub fn run() {
                 }
             });
             tray::init(app.handle())?;
+            // the installer registers relay:// (bundle config), a `tauri dev` build registers itself
+            #[cfg(all(windows, debug_assertions))]
+            app.deep_link().register_all().ok();
             let handle = app.handle().clone();
-            // an invite to a shared vault (relay://…&vault=…) opens Settings › Machines with the link filled in
+            // an invite to a shared vault (relay://…&vault=…) opens Settings › Workspaces with the link filled in
             app.deep_link().on_open_url(move |e| {
                 windows::show_active(&handle);
                 if let Some(link) = e.urls().iter().map(|u| u.to_string()).find(|u| relay_remote::proto::PairLine::parse(u).is_some_and(|l| l.is_invite())) {
                     shared_vaults::invite_opened(link);
-                    open_settings(&handle, Some("machines"));
+                    open_settings(&handle, Some("workspaces"));
                     // a ping: Settings takes the link from shared_vault_pending_invite, the one place it is kept
                     handle.emit("vault-invite", ()).ok();
                 }
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![shared_doc_absorb, shared_doc_open, page_history, page_restore, page_comments, page_comment, workspace_inbox, shared_doc_edit, shared_awareness, shared_vaults::shared_vault_docs, snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, page_action, change_record, changes_list, change_keep, change_undo, change_resolve, project_repos, set_project_repos, migrate_project, move_chat_workspace, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, note_by_event, note_home, write_note, property_values, create_note, create_context, create_project, project_kinds, set_project_state, project_row, vault_check, vault_garden, garden_ask, garden_about, vault_repair, tidy_preview, tidy_apply, tidy_undo, free_page_name, attach_copy, attach_save, attach_dest, embed_info, duplicate_note, move_path, trash_path, restore_path, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, quick_capture_save, inbox_list, inbox_home, note_types, inbox_propose, inbox_accept, anywhere::quick_capture_hide, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_trust, shared_vaults::shared_vault_admin, shared_vaults::shared_vault_add, shared_vaults::shared_vault_pending_invite, notes_graph, notes_linked, notes_collection, views_list, view_save, view_delete, note_rail, find_notes, note_times, note_icons, note_templates, new_from_template, daily_note, favourites, set_favourites, note_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_kept, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
+        .invoke_handler(tauri::generate_handler![shared_doc_absorb, shared_doc_open, page_history, page_restore, page_comments, page_comment, workspace_inbox, shared_doc_edit, shared_awareness, shared_vaults::shared_vault_docs, shared_vaults::shared_vault_admin, snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, page_action, change_record, changes_list, change_keep, change_undo, change_resolve, project_repos, set_project_repos, migrate_project, move_chat_workspace, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, note_by_event, note_home, write_note, property_values, create_note, create_context, create_project, project_kinds, set_project_state, project_row, vault_check, vault_garden, garden_ask, garden_about, vault_repair, tidy_preview, tidy_apply, tidy_undo, free_page_name, attach_copy, attach_save, attach_dest, embed_info, duplicate_note, move_path, trash_path, restore_path, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, quick_capture_save, inbox_list, inbox_home, note_types, inbox_propose, inbox_accept, anywhere::quick_capture_hide, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_recovery, shared_vaults::shared_vault_trust, shared_vaults::shared_vault_add, shared_vaults::shared_vault_pending_invite, team::team_login, team::team_me, team::team_open, team::team_create, team::team_call, team::team_link, team::team_logout, sso::sso_cancel, notes_graph, notes_linked, notes_collection, views_list, view_save, view_delete, note_rail, find_notes, note_times, note_icons, note_templates, new_from_template, daily_note, favourites, set_favourites, note_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_kept, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window, windows::new_window])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the window used last back (the main one may be hidden)
         .run(|app, e| match e {
+            #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen { .. } => { windows::show_active(app); }
             tauri::RunEvent::Exit => { quit(app); pty::kill_all(app); plugins::kill_all(app); }
             _ => {}

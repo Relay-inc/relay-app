@@ -9,6 +9,21 @@ and the shared workspaces. The sidebar shows one workspace at a time, picked in 
 The protocol and the code call a workspace a vault: the server ops are `vault_*`, the Tauri commands `shared_vault_*`,
 the settings key `sharedVaults`, the Rust module `shared_vaults.rs`. Only the app and these docs say workspace.
 
+## Two roles
+
+A relay-server runs in one of two roles, set when it is set up and fixed after:
+
+| | Personal (this page, as before) | Team (below, Teams) |
+|---|---|---|
+| Who | Devices, by certificate, paired or joined with a link | Accounts by email: an invite link or the organisation's Google or Microsoft sign-in |
+| Key | On the members' Macs only, the server keeps ciphertext | The server keeps it and hands it to a member |
+| Members and roles | A signed member list every Mac checks | The server's own data, `team.json` |
+| Roles | admin, member | admin, member, reader per workspace, organisation admin per server |
+| What the server reads | Nothing | Everything |
+
+Records, the sync, documents, the fence and Codex's guard are the same in both. One Relay can use both at once:
+Settings › Workspaces shows each team server with its workspaces, and a team workspace carries "Server reads along".
+
 ## Deletes
 
 A round that would delete more than max(5, a fifth of the files) holds those deletes until the user lets them through
@@ -46,6 +61,15 @@ a removal counts at once. In Relay the server then shows under Settings › Mach
 `auto` in the settings (`shared_vaults::keepers`), with no Forget and no New workspace: it goes again when this Mac is
 admin of no workspace there. A machine the user paired is never touched.
 
+**A Windows PC as a work machine keeps the working copy on disk.** On a Mac and in Docker the plaintext a work machine
+opens (the device's mirrored vault and memory, its GitHub token, the transcripts) lives on a RAM disk or a tmpfs and is
+gone when the server stops. Windows has no RAM disk without a third-party driver, so there it is a folder in
+`%LOCALAPPDATA%\Relay\server` with a DACL for the user alone (no other user, no Administrators or SYSTEM entry), and it
+stays there when the server stops, until the device is forgotten in Relay or revoked on the server. Whoever can read that disk outside Windows (a stolen
+laptop, a disk image, a backup of the profile) reads the vault's plain text. Turn on BitLocker (device encryption)
+before making a Windows PC a work machine. An administrator of that PC can still take the folder over, as root can on
+any server. Workspaces are not affected: the server keeps those as ciphertext only, on every system.
+
 **The live channel** passes frames, not files: sealed under the workspace key on the sender's Mac, passed to the
 other members, never written to disk. The server sees which workspace and which record name (an HMAC) a frame is for,
 its size, its kind (`update` or `awareness`) and who sent it, as with records. It could drop or delay one, not read,
@@ -62,7 +86,7 @@ members a key of its own, add a member, make one admin or hide a removal without
 **The fence is a guard, not a sandbox.** It keeps a conversation in its workspace and Claude Code's file tools and file
 commands out of your vault and the other workspaces. It is not a boundary against a member who sets out to reach your
 Mac through a note that steers your agent: a script in Bash or a local socket can still get out, and only the
-auto-mode classifier judges those. Share a workspace with people you would let read what your agent can read. What it
+auto-mode classifier judges those (for Codex, its sandbox and Relay's guard, below). Share a workspace with people you would let read what your agent can read. What it
 does:
 
 - **A conversation stays where it runs.** It runs in its project's vault or workspace, a general one in the one picked
@@ -71,9 +95,66 @@ does:
   of that vault or workspace, and once it started it moves only to its projects. Anywhere but the main vault it also
   may not touch Relay's data folder or Claude's config folders (with their `.claude.json`), and runs with no own MCP
   servers or connectors, no hooks, no auto memory, in auto mode. A main-vault conversation may not read the workspaces'
-  trash, bases and keys. Codex and OpenCode run in the main vault only.
+  trash, bases and keys. Claude Code and Codex run in a workspace, OpenCode and Pi in the main vault only.
+- **Codex has Relay's guard, not Claude Code's rules.** Codex reads no deny rules, so Relay checks every permission
+  request Codex raises before it becomes a card (`policy::guard`, `session/tauri_sink.rs`): a request that names a
+  path outside the workspace (a file it changes, the folder a command runs in, a word of the command that reads as a
+  path: absolute, `~`, `$HOME`, or with `..`) is declined at once, as is one on what the rules above keep (another
+  vault, Relay's data, Claude's config folders, the workspace's `.claude`). The system's programs and devices (`/bin`,
+  `/usr`, `/opt/homebrew`, `/dev`) are not outside. In the main vault the same check runs on those rules only. In a
+  workspace Codex also keeps its sandbox (`danger-full-access` becomes `workspace-write`), asks (`never` becomes
+  `on-request`), and asks the user, not its own auto review. Its `workspace-write` runs as Relay's own Codex
+  permission profile (`relay-workspace`, which extends Codex's `:workspace`): it writes inside the workspace without
+  asking, except in `.claude` (and the folder it links to), `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `AGENTS.override.md`, `.codex`,
+  `.agents` and `.git`, which its sandbox keeps read-only, so a write there fails or comes as a request the guard
+  declines (instruction files in subfolders are notes that sync, which any member can write anyway). Extra writable roots in the user's own Codex config do not apply there. Codex starts there without the
+  MCP servers of its config, its plugins and its apps, as Claude Code runs with `--strict-mcp-config`. This needs
+  codex-cli 0.163 or newer, an older Codex is refused in a workspace (it would ignore the profile).
+  **What Codex reads in a workspace.** The same profile (and, for the `read-only` sandbox, one that extends Codex's
+  `:read-only`) sets everything outside the workspace to `none`, so a note cannot have Codex read a file of yours and
+  write it into a note that syncs. Its commands, `apply_patch` and its own `view_image` then read only this
+  (`bridge::readable`):
+  - the workspace itself.
+  - Codex's `:minimal`: macOS's system folders, without which no program starts.
+  - `/opt/homebrew` but not its `var`: the Homebrew programs, as the guard lets them through, not the databases and
+    logs of Homebrew services.
+  - `~/.gitconfig` and the files `config`, `ignore` and `attributes` of `~/.config/git`: git stops without its global
+    config. Not that folder whole, it can hold git's credential store.
+  - the user's `$TMPDIR`, which stays writable as in `:workspace`: here-documents and xcrun need it.
+
+  Not `/tmp`, not the rest of your home, not `/Library`, `/Users` or `/Volumes`. Codex itself is not in the sandbox: it reads its own `~/.codex` (login, sessions)
+  as before, its commands do not. A workspace conversation gets no project repos, so none are listed. Programs in your
+  home (`~/.local/bin`, a node version manager) do not run there, and a login shell starts without your own
+  `~/.zshrc`. Checked against codex-cli 0.163.0 with a shell `cat`, `apply_patch` and `view_image` on a file in `/tmp`
+  and a shell `wc` of `~/.ssh/known_hosts`: each "Operation not permitted", while notes, `apply_patch` in the workspace and
+  `git status` work. What this is not: the guard sees only what Codex asks for and a path a command builds at run time
+  is not seen by it, and `$TMPDIR` is shared with the user's other programs, so what they leave there is readable and a
+  command can write there without asking. A workspace's `.codex` and `.agents` do not sync (below). A Codex
+  conversation opened in a terminal asks there, past the guard and without
+  the profile, so a workspace's terminal stays Claude Code's.
+  **Codex on Windows.** The guard compares paths the Windows way there (`platform::norm_path`): `\` and `/`, any case,
+  the drive letter, `\\?\`, `\\.\` and shares are one path, a name's trailing dots and spaces drop as Windows drops them,
+  and `~`, `$HOME`, `$env:NAME` and `%NAME%` are written out. `/a/b` is a path on the current drive (PowerShell reads it
+  so), a short switch is not (`cmd /c`, `/all`, `/o:n`). A device path, a drive's admin share (`\\host\c$`) and an 8.3
+  short name (`VAULT~1`) are declined, the guard cannot tell where they lead. An NTFS stream (`vault::$INDEX_ALLOCATION`, `x.md:s`) and `%`
+  in a path are declined too. On both systems a path with a variable left in it (`/me/$V/x`, `$PWD/../x`), `**` or braces
+  (`{a,b}`) is declined, a path with a wildcard (`/me/va*/x`) is declined when one of the paths it may stand for is
+  fenced, and the command's first word is dropped only as a plain or single-quoted word that names a system program. Codex runs every command in PowerShell (`pwsh`,
+  else Windows PowerShell, `cmd.exe` as the last fallback, codex-cli 0.163's `shell_detect.rs`), never `/bin/zsh -lc`,
+  so the system's programs there are `%SystemRoot%`, `%ProgramFiles%` and `%ProgramFiles(x86)%` (PowerShell and Git for
+  Windows): the program folders of Codex's own `:minimal` on Windows, without `C:\ProgramData`. The shell's own path
+  (`'C:\Program Files\PowerShell\7\pwsh.exe' -Command '…'`) counts as one word. Another path with a space in a
+  command is read up to the space, as on macOS, which may decline what was inside. The profile reads `:minimal` and git's
+  global config under the profile folder there, no Homebrew. Not tested on Windows: codex-cli's elevated Windows
+  sandbox refuses a profile without read access to `:root` ("requires effective `:root` read access",
+  `windows-sandbox-rs/src/resolved_permissions.rs`), and Relay's keeps `:root` at `none`, so a workspace's Codex
+  commands are expected to fail there rather than read outside it (fail-closed). The alternative is `:root` read on
+  Windows, with which Codex's commands read outside the workspace, as they do in the main vault. Which one stays is
+  decided after a test on Windows.
 - **Nothing a member writes runs on your Mac.** `.claude` never syncs, and of the folder it links to (`System/`) only
-  the notes go (`rules/`, `reference/`, `archive/`, `reminders.md`). Names compare as APFS and HFS+ do, a round
+  the notes go (`rules/`, `reference/`, `archive/`, `reminders.md`). Codex's `.codex` (config, rules, hooks) and
+  `.agents` (skills) never sync either, at any depth. One that synced before this stays as it is on every Mac and on
+  the server, only no longer sent or fetched: a member's later change to it reaches nobody, and nothing is deleted. Names compare as APFS and HFS+ do, a round
   follows no symlink, and a `.claude` linking somewhere the filter cannot guard is refused.
 - **The project index is each Mac's own.** `work-state.md` and `System/index/` are generated from the project cards,
   so they do not sync: Relay rebuilds them after every round that moved a file. `System/scripts/` does not sync either,
@@ -94,6 +175,28 @@ does:
 - **A project's key never moves.** It is its name in the main vault, else its name and its workspace's id. The sidebar
   shows a label, with the folder only when two of them have the name.
 
+## Members on Windows
+
+**File names.** NTFS refuses names a Mac takes: `< > : " | ? *` and control characters, a name ending in a dot or a
+space, and the device names CON, PRN, AUX, NUL, COM0-9 and LPT0-9 (with ¹²³, and also with an extension, so `nul.txt`).
+A name with `~` and a digit is left out too: Windows may open `GIT~1` as `.git` (an 8.3 short name), past the filter.
+Written there anyway, such a name lands as another file (`a:b.md` as a stream of `a`, `notes.` as `notes`, `CON` as the
+console). A round on Windows leaves such a file out on both sides (`sync::windows_name`) and lists it on the workspace's page in Settings ›
+Workspaces, as it does on every computer with two names that differ in case only (`a.md` and
+`A.md`, one file on APFS and NTFS). Relay never renames a member's file. The team agreement: in a workspace with a
+Windows member, name files so Windows can hold them, and whoever made a listed file renames it on their Mac. The Mac
+syncs these files as before.
+
+**The `.claude` link** is a directory junction on Windows (`platform::dir_link`), which needs no admin rights or
+Developer Mode. A junction holds an absolute path: when the folder moves, the vault check finds the link broken and
+Repair makes it again.
+
+**What the starter's files run.** The hooks in `System/hooks` are bash scripts that read their input with `jq`. Claude
+Code on Windows runs hooks in Git Bash, or in PowerShell without Git for Windows, where these fail. The project index
+(`System/scripts/build-index.py`) needs Python 3, which Relay looks for as `py -3`, `python` or `python3`. Windows has
+none of the three, so Git for Windows, jq and Python 3 are prerequisites there: the vault check lists what is missing
+("Missing on this computer"), and without Python the index is not rebuilt at start (the log says so).
+
 ## What a new workspace starts as
 
 A workspace made in an empty folder starts as the team starter (`vault::create_team`): the starter vault
@@ -105,7 +208,7 @@ personal things in each member's own vault), `System/rules/core/team.md` in plac
 interviews whoever runs it about the team: what the workspace is for, who works in it, the contexts, conventions,
 external people and organizations, projects, and what never goes in. On a workspace that started as a personal vault
 it offers to move what is the team's into `team.md` and asks before it removes a personal file. A folder with notes is
-uploaded as it is. The first start of Relay still makes the personal starter vault. `scripts/check-default-vault.py`
+uploaded as it is. Both starters carry an `AGENTS.md` (from the default vault, the overlay does not replace it) that points Codex and OpenCode at `CLAUDE.md` and `System/rules/`, so the one set of rules serves every agent. The first start of Relay still makes the personal starter vault. `scripts/check-default-vault.py`
 checks the team starter too.
 
 **Skills are placed on each Mac.** `System/skills/` never syncs, so after a round that moved a file Relay writes its
@@ -259,8 +362,8 @@ an agent. Its edits merge; there are no conflict copies for it.
   wrote it (to the trash first otherwise), unless another note has that place now or the file rounds keep it out. A
   note that is a document, and its old path until that file is gone, stay out of the file rounds. A live update is
   taken on a thread of its own, under the same lock as the rounds.
-- **Which notes are documents.** None until an admin turns it on (Settings › Machines, "Notes as shared
-  documents"): a `docs-on` entry in the member list, signed like any other, which every member checks; `docs-off`
+- **Which notes are documents.** None until an admin turns it on (Settings › Workspaces, the workspace's page, Documents, "Notes as
+  shared documents"): a `docs-on` entry in the member list, signed like any other, which every member checks; `docs-off`
   turns it off again. Then each round on an admin's Mac makes up to 50 notes documents: `.md` files the file rounds
   would sync, not through a link, no conflict copy, at most 2 MiB, and only once the last file round left the file the
   same here and on the server; never past 10 000 documents. A note's text goes to the server before its place in the
@@ -380,7 +483,7 @@ manifest) and the epoch (to refuse a write under an old key), and checks it fits
   invite named, until checked once), `joined <hex>` (the invite secret, until this Mac is added), and
   `invite <id> <secret> <role> <epoch>` per open invite this Mac made. Every value is checked (64 lowercase hex where it
   is a key or hash); a duplicate or unknown line makes the file unreadable. The keys alone are the recovery key Relay
-  shows when the workspace is made, and again on its row in Settings › Machines.
+  shows when the workspace is made, and again on its page in Settings › Workspaces.
 
 ## Members
 
@@ -479,8 +582,41 @@ The pairing line with three more fields, and from member lists on two more:
 `relay://<host>:<port>#fp=<64 hex>&code=<32 hex>&vault=<16 hex>&invite=<16 hex>&secret=<64 hex>&creator=<64 hex>&head=<64 hex>`
 (`creator` the identity the member list starts with, `head` the list's last hash when the invite was made).
 `PairLine` parses them as optional `vault`, `invite`, `secret`. A line with all three is an invite.
-A link that opens Relay opens Settings › Machines with it in the join form. That page shows a workspace under the
+A link that opens Relay opens Settings › Workspaces with it in the join form. That page lists a workspace under the
 machine that keeps it (the workspace's `fp` is the machine's), and under Workspaces when its server is not one of this
-Mac's machines, as for a member who joined with a link.
+Mac's machines, as for a member who joined with a link. Each row opens the workspace's page.
 
 The client side lives in `packages/relay-remote` (`vault.rs`, `client.rs`), the server side in `packages/relay-server/src/vaults.rs`.
+
+## Teams
+
+A team server (`relay-server/src/team.rs`) is a server the team trusts: it reads the workspaces, as a shared drive
+does. `relay-server team you@example.com` makes an empty data folder one (refused once a device is paired or a shared
+vault is there), with that address an organisation admin, and prints an invite link. It stays a team server: it pairs
+no devices, runs no conversations, keeps no mirror or GitHub token, and refuses the personal ops (`vault_create`,
+`vault_invite`, `vault_join`, the member list's). A personal server refuses the team's.
+
+- **Accounts and sessions.** An account is an email address. A device logs in with an invite link (one device, one
+  use, 7 days, its code proven over both certificates as a pairing is) or with an ID token of the provider an
+  organisation admin set (Google with its email domains, or one Entra tenant, `oidc.rs`, PKCE in the browser,
+  `src-tauri/src/sso.rs`). The address must have an account that is on. The device's certificate stays the transport
+  identity and becomes a session of the account. An Entra account is bound to its user (`oid`) at its first Entra login.
+- **Workspaces** are shared vaults without a member list. `team.json` keeps per workspace its key, its members by email
+  with their role, and whether it is without history. `vault.json`'s members follow from it (`team::apply`): every
+  session of a member account, with its role. A member's Relay gets the key with `team_me` and syncs as for any shared
+  vault. A reader's writes are refused (`READ_ONLY`), its rounds only pull and its pages open read-only.
+- **Who manages what.** A workspace's admin changes roles there and invites an address with a role: a new account gets
+  an invite link, an existing one is only added (a link would let the admin in as that person). Any account makes a
+  workspace and is its admin. An organisation admin sees every account and workspace (Settings › Organisation), turns
+  an account off (all its devices are out at once), makes organisation admins and sets the sign-in. The last admin of
+  a workspace, and of the server, stays.
+- **Without history** is a flag a workspace gets when it is made, for good. Conflict copies name no computer, the
+  server lists no devices in `vault_info`, so history and cursors show no names, and the starter asks for no names in
+  its log. What it is not: a document's updates stay sealed to the device that wrote them (the seal is unchanged), so a
+  device's edits can be told apart, and in a small team who wrote what can be guessed. The server itself knows who sent
+  what. These workspaces are the knowledge workspaces: `relay knowledge.search query=…` searches them from any
+  conversation, read-only, passages only (path, workspace, line, score), never the user's own vault.
+- **Backup.** Everything is in the data folder (`team.json`, `vaults/`, `clients.json`), so `deploy/relay-server/backup.sh`
+  covers it. Without a backup, a member's Mac has the files: a new workspace filled from that folder, and the accounts
+  invited again.
+

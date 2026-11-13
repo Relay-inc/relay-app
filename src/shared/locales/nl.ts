@@ -92,6 +92,9 @@ export default {
   "vc.contextMismatchTitle": "Notes die een andere context noemen",
   "vc.cardFields": "Projectkaarten met ontbrekende velden",
   "vc.rowWithoutNote": "Rijen in work-state zonder projectnote",
+  "vc.missingTool": "Ontbreekt op deze computer",
+  "vc.missingToolSub":
+    "De hooks van de vault hebben Git Bash (Git for Windows) en jq nodig, de projectindex Python 3. Installeer wat ontbreekt en herstart Relay.",
   "vc.manual": "Vraagt jou",
   "vc.repair": "Herstellen",
   "vc.repairAll": "Alles herstellen ({n})",
@@ -304,7 +307,7 @@ export default {
   "usage.limitTop": "{name}: {label}",
   "composer.agent": "Agent",
   "composer.agentSharedVault":
-    "Een gesprek in een andere workspace dan Persoonlijk loopt op Claude Code: de beperkingen daar zijn gebouwd op de permissieregels van Claude Code.",
+    "Een gesprek in een andere workspace dan Persoonlijk loopt op Claude Code of Codex: Claude Code houdt zich daar aan zijn permissieregels, Relay controleert wat Codex vraagt.",
   "set.tab.agents": "Agents",
   "ag.default": "Standaardagent",
   "ag.defaultHelp":
@@ -600,11 +603,12 @@ export default {
   "page.reload": "Opnieuw laden",
   "page.keepMine": "Mijn versie houden",
   "page.tooBig": "Deze note is groter dan 1 MB: ze is alleen te lezen.",
+  "page.readOnly": "Je kan deze workspace lezen, niet wijzigen. Een beheerder kan je lid maken.",
   "page.conversations": "Gesprekken",
   "page.latest": "{n} · laatste {time}",
   "page.comments": "Opmerkingen",
   "page.comment": "Opmerking",
-  "page.commentHint": "Selecteer tekst op de pagina om er een opmerking bij te zetten (⌥⌘M).",
+  "page.commentHint": "Selecteer tekst op de pagina om er een opmerking bij te zetten ({key}).",
   "page.commentPlaceholderTeam": "Schrijf een opmerking… @ noemt een lid",
   "page.commentPlaceholder": "Schrijf een opmerking…",
   "page.replyPlaceholder": "Antwoord…",
@@ -666,6 +670,7 @@ export default {
   "header.addCover": "Cover toevoegen",
   "header.icon": "Pagina-icoon",
   "header.iconHint": "Eén emoji (⌃⌘Spatie)",
+  "header.iconHintWin": "Eén emoji (Win+.)",
   "header.iconRefused": "Alleen één emoji",
   "header.remove": "Verwijderen",
   "header.cover": "Cover",
@@ -1282,11 +1287,15 @@ export default {
   "set.extraVaultRemove": "{name} verwijderen",
   "set.extraVaultsTitle": "Andere workspacemappen",
   "set.sharedHelp":
-    "Workspaces die een team met je deelt op een relay-server die niet een van je machines is. De server bewaart enkel versleutelde bestanden. Elke Mac synchroniseert de workspace naar een eigen map. Een workspace op een van je machines staat onder die machine.",
+    "Workspaces die een team met je deelt op een relay-server die niet een van je machines is. De server bewaart enkel versleutelde bestanden. Elke Mac synchroniseert de workspace naar een eigen map. Workspaces op een van je machines volgen hieronder, per machine.",
   "set.sharedAdmin": "Beheerder",
   "set.sharedMember": "Lid",
-  "set.sharedMakeAdmin": "Maak beheerder",
-  "set.sharedMakeMember": "Maak lid",
+  "set.sharedReader": "Lezer",
+  "set.sharedRoleOf": "Rol van {name}",
+  "set.sharedUnsent_one":
+    "{n} wijziging in deze map blijft op deze Mac: je kan deze workspace lezen, niet wijzigen. Verwijder het bestand om de versie van de workspace terug te krijgen.",
+  "set.sharedUnsent_other":
+    "{n} wijzigingen in deze map blijven op deze Mac: je kan deze workspace lezen, niet wijzigen. Verwijder een bestand om de versie van de workspace terug te krijgen.",
   "set.sharedNotListed": "Niet op de lijst",
   "set.sharedAddToList": "Zet op de lijst",
   "set.sharedNotListedHint":
@@ -1316,6 +1325,10 @@ export default {
   "set.sharedTrust": "Nieuwe sleutel vertrouwen",
   "set.sharedConflicts_one": "{n} conflict. Beide versies zijn bewaard:",
   "set.sharedConflicts_other": "{n} conflicten. Beide versies zijn bewaard:",
+  "set.sharedNames_one":
+    "{n} bestand niet gesynct op deze computer: de naam kan hier niet bestaan (op Windows, of dezelfde naam als een ander bestand op hoofdletters na). Hernoem het waar het gemaakt is:",
+  "set.sharedNames_other":
+    "{n} bestanden niet gesynct op deze computer: hun namen kunnen hier niet bestaan (op Windows, of dezelfde naam als een ander bestand op hoofdletters na). Hernoem ze waar ze gemaakt zijn:",
   "set.sharedHeld_one":
     "{n} verwijdering tegengehouden: veel bestanden zouden tegelijk verdwijnen. Er gaat niets weg tot je kiest:",
   "set.sharedHeld_other":
@@ -1342,6 +1355,8 @@ export default {
   "set.sharedFolder": "Map",
   "set.sharedNewFolderHelp": "Een lege map start als nieuwe workspace. Een map met notities gaat online zoals ze is.",
   "set.sharedJoinFolderHelp": "Een lege map op deze Mac. De workspace komt erin.",
+  "set.sharedNoHistory": "Workspace zonder historiek",
+  "set.sharedNoHistoryLabel": "Zonder historiek",
   "set.sharedCreate": "Maken",
   "set.sharedRecovery": "Herstelsleutel",
   "set.sharedRecoveryHelp":
@@ -1351,6 +1366,20 @@ export default {
   "set.sharedLinkLabel": "Uitnodigingslink",
   "set.sharedLinkLabelHelp": "De relay://-link die een beheerder je stuurde.",
   "set.sharedJoinButton": "Deelnemen",
+  "set.ssoProvider": "Aanbieder",
+  "set.ssoEntra": "Microsoft Entra ID",
+  "set.ssoTenant": "Tenant-ID",
+  "set.ssoClientHelpEntra":
+    "De application (client) ID van de app-registratie die je voor Relay maakte. Een client secret is niet nodig.",
+  "set.ssoClient": "Client-ID",
+  "set.ssoClientHelp": "De OAuth-client die je voor Relay maakte (een desktopclient). Een client secret is niet nodig.",
+  "set.ssoDomains": "E-maildomeinen",
+  "set.ssoSave": "Bewaren",
+  "set.orgAdmin": "Organisatie-admin",
+  "set.orgWorkspaces": "Workspaces",
+  "set.orgDevices_one": "{n} toestel",
+  "set.orgDevices_other": "{n} toestellen",
+  "set.orgNoWorkspaces": "Nog geen workspaces op deze server.",
   "set.title": "Instellingen",
   "set.vaultHelp":
     "De map van je workspace Persoonlijk, je Obsidian-vault. Gesprekken starten daarin, en de zijbalk leest er work-state en reminders uit.",
@@ -1379,6 +1408,7 @@ export default {
     "Waar “Openen in Terminal” een gesprek verderzet. Automatisch neemt de eerste die geïnstalleerd is: iTerm, WezTerm, dan Terminal.",
   "set.favicons": "Projecticonen",
   "act.reminders": "Herinneringen",
+  "act.knowledge": "Kennisworkspaces",
   "vs.title": "Git-backup",
   "vs.help":
     "Om de paar minuten commit Relay de vault en pusht hem naar een git-repository. Enkel pushen, nooit pullen. Git gebruikt je eigen login: een ssh-sleutel, een credential helper of <code>gh</code>. Een publieke repository wordt geweigerd.",
@@ -1451,6 +1481,7 @@ export default {
   "perm.title": "Toestemmingen",
   "perm.help":
     "Wat macOS Relay laat doen. Een build die niet door Apple ondertekend is, verliest deze bij elke update.",
+  "perm.helpWin": "Wat Windows Relay laat doen. Opnemen wat deze computer afspeelt vraagt geen toestemming.",
   "perm.fullDisk": "Volledige schijftoegang",
   "perm.fullDiskHelp": "Agents lezen je bestanden zonder dat macOS per map vraagt (Documenten, Foto's, Muziek, …).",
   "perm.microphone": "Microfoon",
@@ -1466,6 +1497,7 @@ export default {
   "perm.state.missing": "Niet toegestaan",
   "perm.state.ask": "Gevraagd bij eerste gebruik",
   "perm.open": "Systeeminstellingen openen",
+  "perm.openWin": "Instellingen openen",
   "set.sidebarLayout": "Bovenste items",
   "set.sidebarLayoutHelp": "Een lijst met namen, of een compacte rij iconen.",
   "set.sidebarList": "Lijst",
@@ -1876,6 +1908,11 @@ export default {
   "notes.noRelated": "Nog geen verwante notes: het gesprek zegt nog te weinig.",
   "notes.noChat": "Open een gesprek om de notes te zien waarover het gaat.",
   "set.tab.machines": "Machines",
+  "set.tab.workspaces": "Workspaces",
+  "set.tab.organisation": "Organisatie",
+  "set.wsInvites": "Uitnodigingen",
+  "set.wsSync": "Synchronisatie",
+  "set.wsLeaveTitle": "{name} verlaten",
   "set.tab.voice": "Spraak",
   "set.tab.updates": "Updates",
   "set.tab.shortcuts": "Sneltoetsen",
@@ -1901,7 +1938,9 @@ export default {
   "keys.reset": "Terug naar de standaard",
   "keys.resetAll": "Alles terugzetten",
   "keys.typing": "{key} zou hier in een veld typen. Gebruik er ⌘, ⌥ of ⌃ bij.",
+  "keys.typingWin": "{key} zou hier in een veld typen. Gebruik er Ctrl of Alt bij.",
   "keys.reserved": "{key} hoort bij macOS of het menu Wijzig.",
+  "keys.reservedWin": "{key} hoort bij Windows of het bewerken van tekst.",
   "keys.taken": "{key} wordt al gebruikt voor “{name}”.",
   "keys.takenVoice": "{key} is al een sneltoets om te dicteren.",
   "keys.app.quickAsk": "Snelle vraag, beantwoord in een nieuw algemeen gesprek",
@@ -1974,6 +2013,7 @@ export default {
   "pill.copied": "Gekopieerd, plak met ⌘V",
   "pill.noModel": "Geen spraakmodel: zie Instellingen › Spraak",
   "pill.silent": "Geen geluid van de microfoon",
+  "pill.micOff": "Microfoon uit in Windows-instellingen",
   "pill.failed": "Dicteren mislukt",
   "voice.chat": "Nieuw gesprek vanuit elke app",
   "voice.chatHelp": "Zeg wat je wil, waar je ook bent: Relay komt naar voren en start er een nieuw gesprek mee.",
@@ -1984,6 +2024,7 @@ export default {
   "voice.anyAppShortcutHelp": "Werkt in elke app, ook als Relay op de achtergrond staat.",
   "voice.shortcutPress": "Druk de toetsen…",
   "voice.shortcutRecordHelp": "Klik en druk dan de toetsen (met ⌘, ⌥, ⌃ of ⇧). Escape annuleert.",
+  "voice.shortcutRecordHelpWin": "Klik en druk dan de toetsen (met Ctrl, Alt of Shift). Escape annuleert.",
   "voice.shortcutTaken": "{key} wordt al gebruikt door een andere manier van dicteren.",
   "voice.shortcut": "Sneltoets",
   "voice.sec.model": "Spraakmodel",
@@ -1994,6 +2035,7 @@ export default {
   "voice.desc.canary-1b-v2": "Nauwkeuriger en trager, 25 Europese talen. Krijgt de taal mee in plaats van ze te horen.",
   "voice.desc.cohere": "Het nauwkeurigst en het traagst, 14 talen waaronder Nederlands.",
   "voice.desc.whisper-turbo": "Whisper van OpenAI, zo'n 100 talen waaronder Nederlands. Draait op de GPU van de Mac.",
+  "voice.desc.whisper-turboWin": "Whisper van OpenAI, zo'n 100 talen waaronder Nederlands. Draait op de processor.",
   "voice.desc.moonshine-base": "Klein en heel snel, enkel Engels.",
   "voice.size": "{mb} MB",
   "voice.langs_one": "{n} taal",
@@ -2017,6 +2059,8 @@ export default {
   "voice.sameModel": "Hetzelfde als dicteren",
   "voice.keepAudio": "Audio bewaren",
   "voice.keepAudioHelp": "Bewaart de opname als .m4a naast de transcriptie, in de bijlagenmap van Obsidian.",
+  "voice.keepAudioHelpWin":
+    "Bewaart de opname als .wav naast de transcriptie, in de bijlagenmap van Obsidian (ongeveer 115 MB per uur).",
   "voice.summarize": "Samenvatting schrijven",
   "voice.summarizeHelp":
     "Na de transcriptie schrijft Claude in de Wrap-up van de meeting een conceptsamenvatting uit je notities en de transcriptie. Er komt niets in de note tot je het accepteert.",
@@ -2178,6 +2222,9 @@ export default {
     "Enkel je microfoon wordt opgenomen, het geluid van de Mac niet: {why}. Sta Relay toe in Systeeminstellingen › Privacy en beveiliging › Scherm- en systeemaudio-opname.",
   "rec.silentMac":
     "Nog geen geluid van de Mac. Speelt de call al, sta Relay dan toe in Systeeminstellingen › Privacy en beveiliging › Scherm- en systeemaudio-opname.",
+  "rec.noSystemWin": "Enkel je microfoon wordt opgenomen, niet wat deze computer afspeelt: {why}.",
+  "rec.silentWin":
+    "Nog geen geluid van deze computer. Het verschijnt zodra de call speelt op het standaard uitvoerapparaat.",
   "rec.dictatingIn": "Dicteren · {name}",
   "rec.dictatingElsewhere": "Dicteren in een andere app",
   "rec.transcribingPct": "uitschrijven {pct}%",
@@ -2188,6 +2235,8 @@ export default {
   "rec.noModel":
     "Het spraakmodel voor meetings is nog niet gedownload. Download het in Instellingen › Spraak; de opname blijft bewaard.",
   "rec.noModelStart": "Download eerst het spraakmodel voor meetings in Instellingen › Spraak, dan kan je opnemen.",
+  "rec.micOff":
+    "Relay mag de microfoon niet gebruiken. Zet Toegang tot microfoon en Desktop-apps toegang geven tot je microfoon aan in Instellingen › Privacy en beveiliging › Microfoon, en neem opnieuw op.",
   "rec.retry": "Opnieuw proberen",
   "rec.keepOpen": "Laat de laptop open tot het transcript klaar is: als hij in slaap valt, stopt het transcriberen.",
   "rec.kept": "Een opname van {time} is nooit getranscribeerd.",
@@ -2577,4 +2626,46 @@ export default {
   "coll.col.linked": "hieraan gekoppeld",
   "coll.col.followed-up": "Opgevolgd",
   "coll.followed": "✓ Mail klaar",
+  "set.sharedMakeAdmin": "Maak beheerder",
+  "set.sharedMakeMember": "Maak lid",
+  "set.teamLoginTitle": "Inloggen op een teamserver",
+  "set.teamLoginHelp":
+    "Een teamserver bewaart de workspaces van je team en kan ze lezen. Plak de link die een admin je stuurde: een uitnodiging logt deze Mac meteen in, de eigen link van de server opent de aanmelding van je organisatie in de browser.",
+  "set.teamLink": "Link naar de teamserver",
+  "set.teamLogin": "Inloggen",
+  "set.teamSigningIn": "Rond het aanmelden af in je browser…",
+  "set.teamServer": "{host} · {email}",
+  "set.teamNew": "Nieuwe workspace…",
+  "set.teamLogout": "Uitloggen",
+  "set.teamSyncHere": "Hier syncen…",
+  "set.teamReadsAlong": "Server leest mee",
+  "set.teamReadsAlongTip":
+    "Een teamserver houdt deze workspaces leesbaar: de server en wie hem beheert kunnen alles erin lezen.",
+  "set.teamYou": "jij",
+  "set.teamInviteEmail": "E-mailadres",
+  "set.teamInviteHelp":
+    "Een nieuw adres krijgt een link voor één toestel: stuur die zelf door. Wie hier al een account heeft, wordt toegevoegd en logt in zoals voordien.",
+  "set.teamInviteLink": "Uitnodigingslink voor {email}",
+  "set.teamInviteLinkHelp": "Werkt één keer, op één toestel, 7 dagen lang.",
+  "set.sharedNoHistoryHelp":
+    "De server geeft niemand de auteur van een wijziging: conflictkopieën noemen geen computer, en paginahistoriek en cursors tonen geen namen. Leden en hun rollen blijven zichtbaar, en in een klein team valt te raden wie wat schreef. Dit kan niet meer uit.",
+  "set.sharedNoHistoryTip":
+    "Gemaakt zonder historiek: geen namen bij wijzigingen. Leden en hun rollen blijven zichtbaar.",
+  "set.orgServerLink": "Link van de server tonen",
+  "set.orgServerLinkHelp":
+    "Wie hier een account heeft, logt in met deze link en de aanmelding hieronder. Er zit geen uitnodiging in.",
+  "set.orgAccounts": "Accounts",
+  "set.orgMakeAdmin": "Organisatie-admin maken",
+  "set.orgUnmakeAdmin": "Geen organisatie-admin",
+  "set.orgTurnOff": "Uitzetten",
+  "set.orgTurnOn": "Aanzetten",
+  "set.orgInviteOpen": "Uitnodiging voor {email}, tot {time}",
+  "set.orgMembers_one": "{n} lid",
+  "set.orgMembers_other": "{n} leden",
+  "set.orgSso": "Aanmelden",
+  "set.orgSsoHelp":
+    "Naast uitnodigingslinks kunnen accounts inloggen met het Google- of Microsoft-account van de organisatie. Het adres moet hier een account hebben.",
+  "set.orgSsoNone": "Enkel uitnodigingslinks",
+  "set.orgSsoDomainsHelp": "De Google Workspace-domeinen van de organisatie, gescheiden door komma's.",
+  "set.ssoTenantHelp": "De ID van je Entra-tenant, een GUID. Zijn aanmeldnamen zijn hier de adressen van de accounts.",
 } satisfies Record<Key, string>;

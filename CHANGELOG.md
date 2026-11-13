@@ -3,15 +3,47 @@
 Every PR adds a line under **Unreleased**, in the group that fits (Added, Changed, Fixed, Removed). CI fails a PR
 that doesn't touch this file; the `skip-changelog` label opts out (docs, CI, refactors nobody notices).
 
-To release: move Unreleased under a new version heading with the date, then set that version in `package.json` and
+To release: move Unreleased under a new version heading with the date, then set that version in `package.json`,
 the root `Cargo.toml` (`[workspace.package]`, the app and relay-server read it there, `tauri.conf.json` reads it from
-`package.json`). Once that is on main, run `scripts/release.sh` on a Mac, on main: it builds Relay and publishes it as
+`package.json`) and the image tag in `deploy/relay-server/compose.yml`. Once that is on main, run `scripts/release.sh` on a Mac, on main: it builds Relay and publishes it as
 GitHub release `v<version>` with this version's section as its notes, then pushes relay-server's image and attaches
-its Linux binaries (`scripts/push-server-image.sh`). Nothing of a release runs in GitHub Actions, only the checks of
-a PR. Versions follow
+its Linux binaries (`scripts/push-server-image.sh`). The Windows installer is built on a Windows machine with
+`scripts/release-windows.ps1`, not in GitHub Actions: `RELAY_WINDOWS_SETUP=/path/to/Relay_<version>_x64-setup.exe`
+makes the script add it to the release (docs/development.md › Releasing for Windows). Versions follow
 [semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
+
+### Added
+
+- Teams on a trusted server: `relay-server team you@example.com` sets up a team server, where an account is an email address and a device logs in with an invite link or the organisation's Google or Microsoft Entra sign-in. The server keeps each workspace's key and reads it, so Relay marks those workspaces "Server reads along". Settings › Workspaces lists each team server's workspaces with Sync here…, makes one (also without history: no names on changes) and invites an address as admin, member or reader. A reader's Mac only pulls and its pages open read-only, and the server refuses its writes. Settings › Organisation lets an organisation admin turn accounts off (their devices are out at once), make organisation admins and set the sign-in. A personal server works as before (#475).
+- Conversations can search the team workspaces without history this Mac syncs with `relay knowledge.search query=…`, also from a conversation fenced to another workspace. It returns passages only: the note's path, the workspace, the matching line and a score, at most 20, never an author or a time and never your own vault, and only for a conversation the Relay app runs. Settings › Workspaces › Agent access can make it ask or switch it off (#475).
+- Relay installs on Windows x64 with `Relay_<version>_x64-setup.exe`: for the current user without admin rights, with `relay://` links, `relay` in cmd and PowerShell, and an uninstall that removes it all. Relay on Windows updates itself like on the Mac. The installer is built on a Windows machine with `scripts/release-windows.ps1` and added to a release by `scripts/release.sh`, not built in GitHub Actions. It is not code-signed yet, so Windows shows a SmartScreen warning when it is opened: More info, then Run anyway (#479)
+- Relay compiles for Windows, and every PR is checked on macOS and Windows. It does not work on Windows yet: conversations and the `relay` command report that local sockets are not supported, and the login PATH, the `.claude` link of a vault, Whisper and this computer as a work machine are missing there (#451)
+- A new vault and a new team workspace start with an `AGENTS.md` next to `CLAUDE.md`, so Codex and OpenCode load the same rules as Claude Code (it points at `CLAUDE.md` and `System/rules/`, nothing is copied). Checking a vault reports a missing `AGENTS.md` and repairs it on request, an existing vault never gets one unasked (#452).
+- Conversations and the `relay` command run on Windows: local sockets are named pipes open to the user only, `relay` from an agent is traced to its conversation as on macOS, agents, plugins and their children run in a Job Object that ends them together, and the PATH is read from Windows' stored PATH (#454)
+- Secrets (integration tokens, plugin secrets, mail passwords, calendar addresses) are kept in Credential Manager on Windows. On the Mac they stay in the keychain as before (#457)
+- Vaults on Windows: `.claude` links to `System/` as a directory junction (no admin rights needed), a workspace round there leaves out files whose names Windows cannot hold and lists them on the workspace's page in Settings › Workspaces with the case clashes every computer skips, and the vault check lists Git Bash, jq and Python 3 when the vault's hooks or project index need them and they are missing (#458)
+- On Windows, Relay has the normal title bar, a sidebar in the theme's colour that follows light and dark, Ctrl where macOS has ⌘ in every shortcut and its label (Settings › Shortcuts included), toasts for a finished turn or a waiting card, and a `relay://` link or a second start goes to the window that is already open (#459)
+- A recipe to run relay-server for a team on a Linux box with Docker: `deploy/relay-server/compose.yml` on the published image with a healthcheck (`relay-server health`), `backup.sh` to back up and restore the server with its certificate, so paired Macs keep trusting it on a new box, and a guide in `docs/relay-server.md` from opening the port to the first pairing, updates and what the server keeps (#467).
+- On Windows, recording a meeting takes the microphone and what the computer plays, transcribes it with the ONNX models and keeps the audio as .wav. A microphone switched off in Windows' privacy settings is said before the recording starts, and Settings › Permissions shows it (#470)
+- On Windows, Whisper works for dictation and meetings, on the processor: download it in Settings › Voice like on the Mac (#471)
+- On Windows, dictating into any app works: the shortcut records wherever the cursor is, the text is pasted with Ctrl+V into the window that was in front, and the clipboard is put back after. Its keys there are Ctrl+Space in Relay, Ctrl+Shift+Space for a new conversation, Ctrl+Alt+Space to paste and Ctrl+Alt+N for quick capture, changeable in Settings › Shortcuts. A microphone switched off in Windows' privacy settings is said in the pill and the composer (#472)
+- On Windows, the Design drawer works: Google's sign-in popup opens and closes by itself, and an agent's snapshot of the drawer comes back as a picture (#473)
+- A Windows PC can be a work machine: Settings › Machines › This Mac as a machine registers a scheduled task that runs Relay's server at logon, and relay-server itself builds and runs on Windows, updates by starting the new version (one server at a time) and keeps its working copy on disk in a folder only the user may open, since Windows has no RAM disk (#474)
+
+### Changed
+
+- Settings has its own Workspaces and Organisation tabs. Workspaces lists every workspace of this Mac with its server and role, and opens a page per workspace with its folder, members, invites, sync and Leave. Organisation shows only for an organisation admin of a team server. Machines keeps pairing, updates, the mirror, GitHub and the repos. An invite link and the workspace switcher open Workspaces (#480)
+- Codex runs in team workspaces and other vault folders next to Claude Code. Relay declines a Codex permission request for a path outside the workspace (or into another vault, Relay's data or Claude's config) before it becomes a card, and keeps Codex in its sandbox and asking there. OpenCode and Pi stay in the main vault. (#456)
+- Codex in a team workspace can no longer change `.claude`, `CLAUDE.md`, `AGENTS.md` or its own config there without asking, and starts without the MCP servers, plugins and apps of your own Codex config. A workspace needs Codex 0.163 or newer. (#468)
+- Codex in a team workspace no longer reads your files outside it: only the workspace, the system's and Homebrew's programs, git's own config and the temp folder. A workspace's `.codex` and `.agents` no longer sync, what synced before stays where it is. (#469)
+
+### Fixed
+
+- Vaults and workspaces on Windows: Claude Code's fence was written in a path form Claude Code never matches there, and a vault folder with `\` in its path (every Windows path) was refused on save. The fence now uses the `/c/Users/...` form Claude Code compares against, a vault on a drive letter is accepted, and one on a network share is refused (#478)
+- Workspaces on Windows: Relay's guard for Codex read paths the macOS way, so a path with `\`, a drive letter, another case or `%USERPROFILE%` got past it or a workspace's own files were refused, and its system programs were the Mac's. A workspace's policy is now found however its folder is written, and Codex's permission profile there reads Windows' folders and git's config under the profile folder (#476, #477)
+- The Pi agent was only declared as a dependency of the macOS build, so a build for any other system failed on it (#451)
 
 ## [0.0.52] - 2026-11-11
 

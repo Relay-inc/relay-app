@@ -477,7 +477,9 @@ impl SealedRemote {
 /// `docs`: an admin turned on making the workspace's notes documents (the member list's `docs-on`); `admin`: this Mac
 /// is an admin of the list; `admins`: the list's admins and `listed` all its members (fingerprints), None when there
 /// is no list yet.
-pub struct KeyStep { pub keys: Option<Keys>, pub warnings: Vec<String>, pub changed: Vec<(String, String)>, pub errors: Vec<String>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>> }
+pub struct KeyStep { pub keys: Option<Keys>, pub warnings: Vec<String>, pub changed: Vec<(String, String)>, pub errors: Vec<String>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>>,
+    /// this Mac only reads: the server's role for it
+    pub reader: bool }
 use crate::members::{self, List};
 impl SealedRemote {
     fn info(&self) -> Result<Value, String> { Ok((self.call)(json!({"op": "vault_info", "vault": self.vault}), None, None)?.0["vault"].take()) }
@@ -555,6 +557,10 @@ impl SealedRemote {
         let keep = |k: &Keys, step: &mut KeyStep| -> Result<(), String> { save(k)?; *lock(&self.keys) = k.clone(); step.keys = Some(k.clone()); Ok(()) };
         if k.ensure() { keep(&k, &mut step)?; }
         let v = self.info()?;
+        step.reader = v["role"] == "reader";
+        // a team server's workspace (docs/workspaces.md, Teams): no member list, the server says who is in and keeps
+        // the key, documents are on
+        if v["team"] == true { (step.docs, step.admin) = (v["docs"] == true, v["role"] == "admin"); return Ok(step); }
         if v["epoch"].as_u64().is_none() {
             // a server that stopped reporting the key after this Mac saw a member list: as held back, never skipped
             if k.has_list() {

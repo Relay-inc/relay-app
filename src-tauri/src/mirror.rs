@@ -50,7 +50,7 @@ pub fn key(data: &Path, id: &str) -> Result<String, String> {
     let p = data.join(format!("mirror-{id}.key"));
     if let Ok(k) = std::fs::read_to_string(&p) { if k.trim().len() == 64 { return Ok(k.trim().into()); } }
     let k = relay_remote::tls::random_key();
-    use std::os::unix::fs::OpenOptionsExt;
+    use crate::platform::OpenOptionsExt;
     std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&p).and_then(|mut f| std::io::Write::write_all(&mut f, k.as_bytes())).map_err(|e| e.to_string())?;
     Ok(k)
 }
@@ -89,7 +89,7 @@ fn rules(s: &Value) -> Value {
 fn source(data: &Path, id: &str, root: &str, vault: &str) -> Option<PathBuf> {
     let link = |stage: &Path, name: &str, to: &Path| {
         let at = stage.join(name);
-        if std::fs::read_link(&at).ok().as_deref() != Some(to) { std::fs::remove_file(&at).ok(); std::os::unix::fs::symlink(to, &at).ok(); }
+        if std::fs::read_link(&at).ok().as_deref() != Some(to) { std::fs::remove_file(&at).ok(); crate::platform::symlink(to, &at).ok(); }
     };
     match root {
         "context" => {

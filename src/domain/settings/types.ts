@@ -108,8 +108,9 @@ export type HostStatus = {
   fingerprint: string;
   clients: string[]; // names of the paired devices
 };
-/** What a member may do in a shared vault: an admin also invites and removes members. */
-export type SharedRole = "admin" | "member";
+/** What a member may do in a shared vault: an admin also invites and removes members, a reader (team workspaces only)
+ *  only reads. */
+export type SharedRole = "admin" | "member" | "reader";
 /** A shared vault on a relay-server (src-tauri/src/shared_vaults.rs): the server it lives on (pinned by `fp`), its
  *  folder on this Mac and this Mac's role there. Only the backend writes the list. */
 export type SharedVault = {
@@ -120,6 +121,8 @@ export type SharedVault = {
   fp: string;
   folder: string;
   role: SharedRole;
+  team?: boolean; // on a team server, which keeps its key and reads along (docs/workspaces.md, Teams)
+  nohistory?: boolean; // a team workspace made without history
 };
 /** The last sync round of a shared vault (`shared_vaults_status`): `at` in epoch seconds, the counts since the app
  *  started, the conflict copies made, the deletes held for the user, and `bad` files that do not open with the key. */
@@ -130,6 +133,8 @@ export type SharedStatus = {
   conflicts: string[];
   errors: string[];
   held: string[];
+  // files the last round left out for their name: one Windows cannot hold (on Windows), or a clash in case only
+  names?: string[];
   bad: number;
   live?: boolean; // the live channel is connected; false or missing: rounds every 10 s only
   // what the member list says is wrong: a list the server cannot be trusted on, another member who saw a newer one, a
@@ -141,6 +146,8 @@ export type SharedStatus = {
   admin?: boolean; // this Mac is an admin of the member list: it may turn that on or off, and make members admins
   admins?: string[] | null; // the member list's admins (fingerprints); null while the workspace has no list
   listed?: string[] | null; // every member on the member list (fingerprints); null while the workspace has no list
+  reader?: boolean; // this Mac only reads the workspace: its rounds only pull
+  unsent?: number; // a reader's changes in the folder that its rounds leave out
 };
 /** An open invite of a shared vault: single use, `expires` in epoch seconds. */
 export type SharedInvite = { id: string; role: SharedRole; expires: number };
@@ -152,14 +159,39 @@ export type SharedInfo = {
     role: SharedRole;
     members: { name: string; fp: string; role: SharedRole; added: number }[];
     invites: SharedInvite[];
+    team?: boolean;
+    nohistory?: boolean;
+    accounts?: { email: string; role: SharedRole }[]; // a team workspace's members by email
   };
   me: string;
 };
+/** A team server this Mac is logged in to (src-tauri/src/team.rs): `email` its account there, `admin` an organisation
+ *  admin. Only the backend writes the list. */
+export type TeamServer = { host: string; port: number; fp: string; email: string; admin: boolean };
+/** The sign-in a team server takes besides invite links: Google (with its email domains) or one Entra tenant. */
+export type TeamSso = { issuer: string; client: string; domains: string[] };
+/** This Mac's account on a team server (`team_me`) and its workspaces there, `here` the folder one syncs into. */
+export type TeamMe = {
+  email: string;
+  admin: boolean;
+  workspaces: { id: string; name: string; role: SharedRole; nohistory: boolean; here: string | null }[];
+};
+/** A team server as its organisation admins see it (`team_overview`). */
+export type TeamOverview = {
+  accounts: { email: string; admin: boolean; off: boolean; devices: number }[];
+  workspaces: { id: string; name: string; nohistory: boolean; members: Record<string, SharedRole> }[];
+  invites: { id: string; email: string; expires: number }[];
+  sso: TeamSso | null;
+};
+/** Google's issuer, and an Entra tenant's (`ENTRA` + tenant id + `/v2.0`). */
+export const GOOGLE_ISSUER = "https://accounts.google.com";
+export const ENTRA = "https://login.microsoftonline.com/";
 export type Settings = {
   vault: string;
   vaults?: Record<string, VaultMap>; // the mapping per vault folder
   extraVaults?: string[]; // other vault folders whose projects show next to the main vault's
   sharedVaults?: SharedVault[]; // the vaults shared on a relay-server, kept by the backend (set_settings ignores them)
+  teams?: TeamServer[]; // the team servers this Mac is logged in to, kept by the backend
   projects: Record<string, { icon?: string; img?: string; label?: string }>;
   overrides: Record<string, string | null>; // a terminal session's project, by session id
   integrations: Record<string, IntegrationConfig>;

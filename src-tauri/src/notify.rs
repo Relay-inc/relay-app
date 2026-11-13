@@ -1,22 +1,37 @@
-// macOS banners for a finished turn or a waiting card. A click brings the main window up and opens that
-// conversation. Each banner is a child process (`relay --notify`) that waits for the click, one per conversation:
-// a new banner kills the previous one's process, so unclicked banners don't pile up. It runs from a
-// copy in the app data folder: usernoted may not read a binary under ~/Documents (privacy protection) and
-// then denies the banner. `tauri dev` has no registered bundle, so the banner goes out as Terminal there.
+// Banners for a finished turn or a waiting card, a toast through the notification plugin on Windows. On macOS a click
+// brings the main window up and opens that conversation. Each banner is a child process (`relay --notify`) that waits
+// for the click, one per conversation: a new banner kills the previous one's process, so unclicked banners don't pile
+// up. It runs from a copy in the app data folder: usernoted may not read a binary under ~/Documents (privacy
+// protection) and then denies the banner. `tauri dev` has no registered bundle, so the banner goes out as Terminal there.
 
-use std::collections::HashMap;
-use std::io::Read;
-use std::process::{Child, Command, Stdio};
-use std::sync::{LazyLock, Mutex};
-use tauri::{AppHandle, Emitter};
+#[cfg(not(windows))]
+use std::{collections::HashMap, io::Read, process::{Child, Command, Stdio}, sync::{LazyLock, Mutex}};
+use tauri::AppHandle;
+#[cfg(not(windows))]
+use tauri::Emitter;
 
 /// banner slot (the conversation key, or the caller's own slot) -> the process of its latest banner
+#[cfg(not(windows))]
 static BANNERS: LazyLock<Mutex<HashMap<String, Child>>> = LazyLock::new(Default::default);
 
 /// `key` is what a click opens. `slot` is which earlier banner this one replaces, the key when left out: a meeting's
 /// banner has its own slot and opens Waiting, so two meetings close together both keep their banner.
 #[tauri::command]
 pub fn notify(app: AppHandle, key: String, title: String, body: String, slot: Option<String>) {
+    // ponytail: no click back to the conversation on Windows, the plugin has no click event on desktop. A
+    // tauri-winrt-notification toast with on_activated if that is missed
+    #[cfg(windows)]
+    {
+        use tauri_plugin_notification::NotificationExt;
+        let _ = (key, slot);
+        app.notification().builder().title(title).body(body).show().ok();
+    }
+    #[cfg(not(windows))]
+    banner_process(app, key, title, body, slot);
+}
+
+#[cfg(not(windows))]
+fn banner_process(app: AppHandle, key: String, title: String, body: String, slot: Option<String>) {
     let slot = slot.unwrap_or_else(|| key.clone());
     std::thread::spawn(move || {
         let Some(exe) = helper(&app) else { return };
@@ -42,6 +57,7 @@ pub fn notify(app: AppHandle, key: String, title: String, body: String, slot: Op
 }
 
 /// The copy of this binary that sends the banners, refreshed after every build.
+#[cfg(not(windows))]
 fn helper(app: &AppHandle) -> Option<std::path::PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let dst = super::data_dir(app).join("relay-notify");
@@ -56,6 +72,8 @@ fn helper(app: &AppHandle) -> Option<std::path::PathBuf> {
 
 /// The child: one banner, "click" on stdout when it was clicked.
 pub fn banner(title: &str, body: &str) {
+    #[cfg(not(target_os = "macos"))]
+    let _ = (title, body);
     #[cfg(target_os = "macos")]
     {
         use mac_notification_sys::{set_application, Notification, NotificationResponse};

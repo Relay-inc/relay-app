@@ -678,3 +678,51 @@ export const FLAT_NOTE = "Contexts/Agency/Projects/Delmas Bakery.md";
 /** For collections.ts: the fixture's projects and linked notes, as the notes they are. */
 export const projectsList = P;
 export const linkedEntries = linkedList;
+
+/** team: a team server this Mac is logged in to as an organisation admin (src-tauri/src/team.rs). Handbook syncs here,
+ *  Sales notes and Research (without history) are the account's other workspaces there. */
+export const TEAM_FP = "7ea3".padEnd(64, "b");
+export const team = { host: "relay.example.com", port: 47800, fp: TEAM_FP, email: "alex@example.com", admin: true };
+export const teamVaults = [
+  {
+    id: "1123456789abcdef",
+    name: "Handbook",
+    host: "relay.example.com",
+    port: 47800,
+    fp: TEAM_FP,
+    folder: "/Users/me/Team/Handbook",
+    role: "admin",
+    team: true,
+  },
+];
+export const teamMe = {
+  email: "alex@example.com",
+  admin: true,
+  workspaces: [
+    { id: "1123456789abcdef", name: "Handbook", role: "admin", nohistory: false, here: "/Users/me/Team/Handbook" },
+    { id: "2123456789abcdef", name: "Sales notes", role: "member", nohistory: false, here: null },
+    { id: "3123456789abcdef", name: "Research", role: "reader", nohistory: true, here: null },
+  ],
+};
+export const teamAccounts = [
+  { email: "alex@example.com", role: "admin" },
+  { email: "sam@example.com", role: "member" },
+  { email: "jo@example.com", role: "reader" },
+];
+export const teamOverview = {
+  accounts: [
+    { email: "alex@example.com", admin: true, off: false, devices: 2 },
+    { email: "sam@example.com", admin: false, off: false, devices: 1 },
+    { email: "jo@example.com", admin: false, off: false, devices: 1 },
+    { email: "kim@example.com", admin: false, off: true, devices: 0 },
+  ],
+  workspaces: [
+    { id: "1123456789abcdef", name: "Handbook", nohistory: false, members: { "alex@example.com": "admin", "sam@example.com": "member", "jo@example.com": "reader" } },
+    { id: "2123456789abcdef", name: "Sales notes", nohistory: false, members: { "alex@example.com": "member", "sam@example.com": "admin" } },
+    { id: "3123456789abcdef", name: "Research", nohistory: true, members: { "alex@example.com": "reader", "jo@example.com": "admin" } },
+  ],
+  invites: [{ id: "a1b2c3d4e5f60718", email: "lee@example.com", expires: 0 }],
+  sso: null as null | { issuer: string; client: string; domains: string[] },
+};
+export const teamLink = (invite = "") =>
+  `relay://relay.example.com:47800#team&fp=${TEAM_FP}${invite ? `&invite=${invite}&code=${"c".repeat(64)}` : ""}`;

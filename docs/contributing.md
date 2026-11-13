@@ -42,10 +42,12 @@ A new Tauri command gets its answer in `harness/mock-backend.ts` in the same PR,
 
 ## Versions and releases
 
-The version lives in `package.json` and the root `Cargo.toml`. Only bump it when cutting a release: move Unreleased
+The version lives in `package.json` and the root `Cargo.toml`, and the image tag in `deploy/relay-server/compose.yml`
+follows it. Only bump it when cutting a release: move Unreleased
 under a new version heading in `CHANGELOG.md`, set the version, merge, then run `scripts/release.sh` on a Mac, on an
 up-to-date `main`. The top of `CHANGELOG.md` has the details. Run it from your own terminal: its dmg step needs
-Finder permission that an agent session doesn't have.
+Finder permission that an agent session doesn't have. It adds the Windows installer when `RELAY_WINDOWS_SETUP` names one, built on a Windows
+machine with `scripts/release-windows.ps1` ([development.md › Releasing for Windows](development.md#releasing-for-windows)).
 
 ## Adding things
 

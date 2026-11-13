@@ -913,6 +913,13 @@ export const actions = [
   act("reminders", "add", "Add a reminder to the vault.", true, "auto"),
   act("reminders", "done", "Mark a reminder done (a repeating one moves on).", true, "auto"),
   act("reminders", "push", "Move a reminder to another date.", true, "auto"),
+  act(
+    "knowledge",
+    "search",
+    "Search the knowledge workspaces (team workspaces without history) for passages, read-only: path, workspace, the matching line, score.",
+    false,
+    "auto",
+  ),
 ];
 export const actionConfig = (): Record<string, unknown> => ({ productive: { "*": "ask", add_time: "auto" } });
 

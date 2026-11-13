@@ -92,6 +92,9 @@ export default {
   "vc.contextMismatchTitle": "Notizen, die einen anderen Kontext nennen",
   "vc.cardFields": "Projektkarten mit fehlenden Feldern",
   "vc.rowWithoutNote": "work-state-Zeilen ohne Projektnotiz",
+  "vc.missingTool": "Fehlt auf diesem Computer",
+  "vc.missingToolSub":
+    "Die Hooks des Vaults brauchen Git Bash (Git for Windows) und jq, sein Projektindex Python 3. Installieren Sie, was fehlt, und starten Sie Relay neu.",
   "vc.manual": "Braucht dich",
   "vc.repair": "Reparieren",
   "vc.repairAll": "Alle reparieren ({n})",
@@ -303,7 +306,7 @@ export default {
   "usage.limitTop": "{name}: {label}",
   "composer.agent": "Agent",
   "composer.agentSharedVault":
-    "Ein Gespräch in einem anderen Workspace als Persönlich läuft mit Claude Code: Seine Grenzen dort beruhen auf den Berechtigungsregeln von Claude Code.",
+    "Ein Gespräch in einem anderen Workspace als Persönlich läuft mit Claude Code oder Codex: Claude Code hält sich dort an seine Berechtigungsregeln, Relay prüft, was Codex anfragt.",
   "set.tab.agents": "Agenten",
   "ag.default": "Standard-Agent",
   "ag.defaultHelp":
@@ -601,11 +604,12 @@ export default {
   "page.reload": "Neu laden",
   "page.keepMine": "Meine behalten",
   "page.tooBig": "Diese Notiz ist größer als 1 MB: sie ist nur lesbar.",
+  "page.readOnly": "Du kannst diesen Workspace lesen, nicht ändern. Ein Admin kann dich zum Mitglied machen.",
   "page.conversations": "Unterhaltungen",
   "page.latest": "{n} · zuletzt {time}",
   "page.comments": "Kommentare",
   "page.comment": "Kommentieren",
-  "page.commentHint": "Wähle Text auf der Seite, um ihn zu kommentieren (⌥⌘M).",
+  "page.commentHint": "Wähle Text auf der Seite, um ihn zu kommentieren ({key}).",
   "page.commentPlaceholderTeam": "Kommentar schreiben… @ erwähnt ein Mitglied",
   "page.commentPlaceholder": "Kommentar schreiben…",
   "page.replyPlaceholder": "Antworten…",
@@ -667,6 +671,7 @@ export default {
   "header.addCover": "Titelbild hinzufügen",
   "header.icon": "Seitensymbol",
   "header.iconHint": "Ein Emoji (⌃⌘Leertaste)",
+  "header.iconHintWin": "Ein Emoji (Win+.)",
   "header.iconRefused": "Nur ein Emoji",
   "header.remove": "Entfernen",
   "header.cover": "Titelbild",
@@ -1288,11 +1293,15 @@ export default {
   "set.extraVaultRemove": "{name} entfernen",
   "set.extraVaultsTitle": "Andere Workspace-Ordner",
   "set.sharedHelp":
-    "Workspaces, die ein Team mit dir auf einem relay-server teilt, der keine deiner Maschinen ist. Der Server speichert nur verschlüsselte Dateien. Jeder Mac synchronisiert den Workspace in einen eigenen Ordner. Ein Workspace auf einer deiner Maschinen steht unter dieser Maschine.",
+    "Workspaces, die ein Team mit dir auf einem relay-server teilt, der keine deiner Maschinen ist. Der Server speichert nur verschlüsselte Dateien. Jeder Mac synchronisiert den Workspace in einen eigenen Ordner. Workspaces auf deinen Maschinen folgen darunter, pro Maschine.",
   "set.sharedAdmin": "Admin",
   "set.sharedMember": "Mitglied",
-  "set.sharedMakeAdmin": "Zum Admin machen",
-  "set.sharedMakeMember": "Zum Mitglied machen",
+  "set.sharedReader": "Leser",
+  "set.sharedRoleOf": "Rolle von {name}",
+  "set.sharedUnsent_one":
+    "{n} Änderung in diesem Ordner bleibt auf diesem Mac: du kannst diesen Workspace lesen, nicht ändern. Lösche die Datei, um die Version des Workspace zurückzubekommen.",
+  "set.sharedUnsent_other":
+    "{n} Änderungen in diesem Ordner bleiben auf diesem Mac: du kannst diesen Workspace lesen, nicht ändern. Lösche eine Datei, um die Version des Workspace zurückzubekommen.",
   "set.sharedNotListed": "Nicht auf der Liste",
   "set.sharedAddToList": "Auf die Liste setzen",
   "set.sharedNotListedHint":
@@ -1323,6 +1332,10 @@ export default {
   "set.sharedTrust": "Neuem Schlüssel vertrauen",
   "set.sharedConflicts_one": "{n} Konflikt. Beide Versionen wurden behalten:",
   "set.sharedConflicts_other": "{n} Konflikte. Beide Versionen wurden behalten:",
+  "set.sharedNames_one":
+    "{n} Datei hier nicht synchronisiert: Ihr Name kann auf diesem Computer nicht existieren (unter Windows, oder bis auf Groß- und Kleinschreibung gleich wie eine andere Datei). Benennen Sie sie dort um, wo sie erstellt wurde:",
+  "set.sharedNames_other":
+    "{n} Dateien hier nicht synchronisiert: Ihre Namen können auf diesem Computer nicht existieren (unter Windows, oder bis auf Groß- und Kleinschreibung gleich wie eine andere Datei). Benennen Sie sie dort um, wo sie erstellt wurden:",
   "set.sharedHeld_one":
     "{n} Löschung zurückgehalten: viele Dateien würden auf einmal verschwinden. Nichts wird gelöscht, bis du wählst:",
   "set.sharedHeld_other":
@@ -1350,6 +1363,8 @@ export default {
   "set.sharedNewFolderHelp":
     "Ein leerer Ordner startet als neuer Workspace. Ein Ordner mit Notizen wird so hochgeladen, wie er ist.",
   "set.sharedJoinFolderHelp": "Ein leerer Ordner auf diesem Mac. Der Workspace kommt dort hinein.",
+  "set.sharedNoHistory": "Workspace ohne Verlauf",
+  "set.sharedNoHistoryLabel": "Ohne Verlauf",
   "set.sharedCreate": "Erstellen",
   "set.sharedRecovery": "Wiederherstellungsschlüssel",
   "set.sharedRecoveryHelp":
@@ -1359,6 +1374,21 @@ export default {
   "set.sharedLinkLabel": "Einladungslink",
   "set.sharedLinkLabelHelp": "Der relay://-Link, den dir ein Admin geschickt hat.",
   "set.sharedJoinButton": "Beitreten",
+  "set.ssoProvider": "Anbieter",
+  "set.ssoEntra": "Microsoft Entra ID",
+  "set.ssoTenant": "Mandanten-ID",
+  "set.ssoClientHelpEntra":
+    "Die Anwendungs-ID (Client-ID) der App-Registrierung, die du für Relay angelegt hast. Ein Client-Secret ist nicht nötig.",
+  "set.ssoClient": "Client-ID",
+  "set.ssoClientHelp":
+    "Der OAuth-Client, den du für Relay angelegt hast (ein Desktop-App-Client). Ein Client-Secret ist nicht nötig.",
+  "set.ssoDomains": "E-Mail-Domains",
+  "set.ssoSave": "Speichern",
+  "set.orgAdmin": "Organisations-Admin",
+  "set.orgWorkspaces": "Workspaces",
+  "set.orgDevices_one": "{n} Gerät",
+  "set.orgDevices_other": "{n} Geräte",
+  "set.orgNoWorkspaces": "Noch keine Workspaces auf diesem Server.",
   "set.title": "Einstellungen",
   "set.vaultHelp":
     "Der Ordner deines Workspaces Persönlich, dein Obsidian-Vault. Gespräche starten darin, und die Seitenleiste liest daraus work-state und Erinnerungen.",
@@ -1388,6 +1418,7 @@ export default {
     "Wo „Im Terminal öffnen“ ein Gespräch fortsetzt. Automatisch nimmt das erste installierte: iTerm, WezTerm, dann Terminal.",
   "set.favicons": "Projektsymbole",
   "act.reminders": "Erinnerungen",
+  "act.knowledge": "Wissens-Workspaces",
   "vs.title": "Git-Backup",
   "vs.help":
     "Alle paar Minuten committet Relay den Vault und pusht ihn in ein Git-Repository. Nur Push, nie Pull. Git nutzt deinen eigenen Login: einen SSH-Schlüssel, einen Credential Helper oder <code>gh</code>. Ein öffentliches Repository wird abgelehnt.",
@@ -1459,6 +1490,8 @@ export default {
   "set.sec.sidebar": "Seitenleiste",
   "perm.title": "Berechtigungen",
   "perm.help": "Was macOS Relay erlaubt. Ein nicht von Apple signierter Build verliert sie bei jedem Update.",
+  "perm.helpWin":
+    "Was Windows Relay erlaubt. Für die Aufnahme dessen, was dieser Computer abspielt, ist keine Berechtigung nötig.",
   "perm.fullDisk": "Festplattenvollzugriff",
   "perm.fullDiskHelp": "Agents lesen deine Dateien, ohne dass macOS pro Ordner fragt (Dokumente, Fotos, Musik, …).",
   "perm.microphone": "Mikrofon",
@@ -1475,6 +1508,7 @@ export default {
   "perm.state.missing": "Nicht erlaubt",
   "perm.state.ask": "Wird beim ersten Mal gefragt",
   "perm.open": "Systemeinstellungen öffnen",
+  "perm.openWin": "Einstellungen öffnen",
   "set.sidebarLayout": "Obere Einträge",
   "set.sidebarLayoutHelp": "Eine Liste mit Namen oder eine kompakte Symbolleiste.",
   "set.sidebarList": "Liste",
@@ -1889,6 +1923,11 @@ export default {
   "notes.noRelated": "Noch keine verwandten Notizen: das Gespräch gibt zu wenig her.",
   "notes.noChat": "Öffne ein Gespräch, um die Notizen dazu zu sehen.",
   "set.tab.machines": "Maschinen",
+  "set.tab.workspaces": "Workspaces",
+  "set.tab.organisation": "Organisation",
+  "set.wsInvites": "Einladungen",
+  "set.wsSync": "Synchronisierung",
+  "set.wsLeaveTitle": "{name} verlassen",
   "set.tab.voice": "Sprache",
   "set.tab.updates": "Updates",
   "set.tab.shortcuts": "Tastenkürzel",
@@ -1914,7 +1953,9 @@ export default {
   "keys.reset": "Zurück zum Standard",
   "keys.resetAll": "Alle zurücksetzen",
   "keys.typing": "{key} würde hier in ein Feld tippen. Nimm ⌘, ⌥ oder ⌃ dazu.",
+  "keys.typingWin": "{key} würde hier in ein Feld tippen. Nimm Ctrl oder Alt dazu.",
   "keys.reserved": "{key} gehört zu macOS oder zum Menü Bearbeiten.",
+  "keys.reservedWin": "{key} gehört zu Windows oder zur Textbearbeitung.",
   "keys.taken": "{key} wird schon für „{name}“ verwendet.",
   "keys.takenVoice": "{key} ist schon ein Diktier-Kürzel.",
   "keys.app.quickAsk": "Schnelle Frage, beantwortet in einem neuen allgemeinen Gespräch",
@@ -1988,6 +2029,7 @@ export default {
   "pill.copied": "Kopiert, mit ⌘V einfügen",
   "pill.noModel": "Kein Sprachmodell: siehe Einstellungen › Sprache",
   "pill.silent": "Kein Ton vom Mikrofon",
+  "pill.micOff": "Mikrofon in den Windows-Einstellungen aus",
   "pill.failed": "Diktieren fehlgeschlagen",
   "voice.chat": "Neue Unterhaltung aus jeder App",
   "voice.chatHelp": "Sag von überall, was du willst: Relay kommt nach vorne und startet damit eine neue Unterhaltung.",
@@ -1998,6 +2040,7 @@ export default {
   "voice.anyAppShortcutHelp": "Wirkt in jeder App, auch mit Relay im Hintergrund.",
   "voice.shortcutPress": "Tasten drücken…",
   "voice.shortcutRecordHelp": "Klicken, dann die Tasten drücken (mit ⌘, ⌥, ⌃ oder ⇧). Escape bricht ab.",
+  "voice.shortcutRecordHelpWin": "Klicken, dann die Tasten drücken (mit Ctrl, Alt oder Shift). Escape bricht ab.",
   "voice.shortcutTaken": "{key} nutzt schon eine andere Art zu diktieren.",
   "voice.shortcut": "Tastenkürzel",
   "voice.sec.model": "Sprachmodell",
@@ -2010,6 +2053,8 @@ export default {
   "voice.desc.cohere": "Das genaueste und langsamste, 14 Sprachen inklusive Niederländisch.",
   "voice.desc.whisper-turbo":
     "Whisper von OpenAI, etwa 100 Sprachen inklusive Niederländisch. Läuft auf der GPU des Mac.",
+  "voice.desc.whisper-turboWin":
+    "Whisper von OpenAI, etwa 100 Sprachen inklusive Niederländisch. Läuft auf dem Prozessor.",
   "voice.desc.moonshine-base": "Klein und sehr schnell, nur Englisch.",
   "voice.size": "{mb} MB",
   "voice.langs_one": "{n} Sprache",
@@ -2033,6 +2078,8 @@ export default {
   "voice.sameModel": "Wie beim Diktieren",
   "voice.keepAudio": "Audio behalten",
   "voice.keepAudioHelp": "Speichert die Aufnahme als .m4a neben dem Transkript, im Anhangordner von Obsidian.",
+  "voice.keepAudioHelpWin":
+    "Speichert die Aufnahme als .wav neben dem Transkript, im Anhangordner von Obsidian (etwa 115 MB pro Stunde).",
   "voice.summarize": "Zusammenfassung schreiben",
   "voice.summarizeHelp":
     "Nach dem Transkript schreibt Claude im Abschluss des Meetings einen Entwurf aus deinen Notizen und dem Transkript. In die Notiz kommt nichts, bevor du ihn übernimmst.",
@@ -2194,6 +2241,9 @@ export default {
     "Nur dein Mikrofon wird aufgenommen, der Ton des Mac nicht: {why}. Erlaube Relay in Systemeinstellungen › Datenschutz & Sicherheit › Bildschirm- & Systemaudioaufnahme.",
   "rec.silentMac":
     "Noch kein Ton vom Mac. Läuft der Call schon, erlaube Relay in Systemeinstellungen › Datenschutz & Sicherheit › Bildschirm- & Systemaudioaufnahme.",
+  "rec.noSystemWin": "Nur dein Mikrofon wird aufgenommen, nicht was dieser Computer abspielt: {why}.",
+  "rec.silentWin":
+    "Noch kein Ton von diesem Computer. Er erscheint, sobald der Anruf über das Standard-Ausgabegerät läuft.",
   "rec.dictatingIn": "Diktieren · {name}",
   "rec.dictatingElsewhere": "Diktieren in einer anderen App",
   "rec.transcribingPct": "transkribiert {pct} %",
@@ -2204,6 +2254,8 @@ export default {
   "rec.noModel":
     "Das Sprachmodell für Meetings ist noch nicht geladen. Lade es in Einstellungen › Sprache; die Aufnahme bleibt erhalten.",
   "rec.noModelStart": "Lade zuerst das Sprachmodell für Meetings in Einstellungen › Sprache, dann kannst du aufnehmen.",
+  "rec.micOff":
+    "Relay darf das Mikrofon nicht verwenden. Schalte Mikrofonzugriff und Desktop-Apps den Zugriff auf das Mikrofon erlauben in Einstellungen › Datenschutz und Sicherheit › Mikrofon ein und nimm erneut auf.",
   "rec.retry": "Erneut versuchen",
   "rec.keepOpen": "Lass den Laptop geöffnet, bis das Transkript fertig ist: im Ruhezustand stoppt die Transkription.",
   "rec.kept": "Eine Aufnahme von {time} wurde nie transkribiert.",
@@ -2250,7 +2302,7 @@ export default {
   "mc.sharedOnlyRow":
     "Nur für Workspaces. Der Workspace Persönlich, Claude-Kontext und Memory dieses Macs gehen nicht hierher, und hier läuft kein Gespräch. Um das zu ändern, vergiss die Maschine und kopple sie neu.",
   "mc.keeperRow":
-    "Du betreust diesen Server als Admin eines Workspaces darauf: Du kannst ihn von hier aktualisieren. Er führt kein Gespräch für dich und hält keinen Mirror. Er verschwindet aus dieser Liste, sobald du hier von keinem Workspace mehr Admin bist.",
+    "Du betreust diesen Server als Admin eines Workspaces darauf: du kannst ihn von hier aktualisieren. Er führt kein Gespräch für dich und hält keinen Mirror. Er verschwindet aus dieser Liste, sobald du hier von keinem Workspace mehr Admin bist.",
   "mc.pair": "Koppeln",
   "mc.pairing": "Koppeln…",
   "mc.setupTitle": "Maschine einrichten",
@@ -2598,4 +2650,46 @@ export default {
   "coll.col.linked": "hier verknüpft",
   "coll.col.followed-up": "Nachgefasst",
   "coll.followed": "✓ Mail entworfen",
+  "set.sharedMakeAdmin": "Zum Admin machen",
+  "set.sharedMakeMember": "Zum Mitglied machen",
+  "set.teamLoginTitle": "Bei einem Teamserver anmelden",
+  "set.teamLoginHelp":
+    "Ein Teamserver bewahrt die Workspaces deines Teams und kann sie lesen. Füge den Link ein, den dir ein Admin geschickt hat: Eine Einladung meldet diesen Mac sofort an, der eigene Link des Servers öffnet die Anmeldung deiner Organisation im Browser.",
+  "set.teamLink": "Link zum Teamserver",
+  "set.teamLogin": "Anmelden",
+  "set.teamSigningIn": "Schließe die Anmeldung im Browser ab…",
+  "set.teamServer": "{host} · {email}",
+  "set.teamNew": "Neuer Workspace…",
+  "set.teamLogout": "Abmelden",
+  "set.teamSyncHere": "Hier synchronisieren…",
+  "set.teamReadsAlong": "Server liest mit",
+  "set.teamReadsAlongTip":
+    "Ein Teamserver hält diese Workspaces lesbar: Der Server und wer ihn betreibt, können alles darin lesen.",
+  "set.teamYou": "du",
+  "set.teamInviteEmail": "E-Mail-Adresse",
+  "set.teamInviteHelp":
+    "Eine neue Adresse bekommt einen Link für eines ihrer Geräte: Schick ihn selbst weiter. Wer hier schon ein Konto hat, wird hinzugefügt und meldet sich an wie bisher.",
+  "set.teamInviteLink": "Einladungslink für {email}",
+  "set.teamInviteLinkHelp": "Funktioniert einmal, auf einem Gerät, 7 Tage lang.",
+  "set.sharedNoHistoryHelp":
+    "Der Server nennt niemandem den Autor einer Änderung: Konfliktkopien nennen keinen Computer, Seitenverlauf und Cursor zeigen keine Namen. Mitglieder und ihre Rollen bleiben sichtbar, und in einem kleinen Team lässt sich erraten, wer was schrieb. Das lässt sich nicht abschalten.",
+  "set.sharedNoHistoryTip":
+    "Ohne Verlauf erstellt: keine Namen bei Änderungen. Mitglieder und ihre Rollen bleiben sichtbar.",
+  "set.orgServerLink": "Link des Servers zeigen",
+  "set.orgServerLinkHelp":
+    "Wer hier ein Konto hat, meldet sich mit diesem Link und der Anmeldung unten an. Er enthält keine Einladung.",
+  "set.orgAccounts": "Konten",
+  "set.orgMakeAdmin": "Zum Organisations-Admin machen",
+  "set.orgUnmakeAdmin": "Kein Organisations-Admin",
+  "set.orgTurnOff": "Abschalten",
+  "set.orgTurnOn": "Einschalten",
+  "set.orgInviteOpen": "Einladung für {email}, bis {time}",
+  "set.orgMembers_one": "{n} Mitglied",
+  "set.orgMembers_other": "{n} Mitglieder",
+  "set.orgSso": "Anmeldung",
+  "set.orgSsoHelp":
+    "Neben Einladungslinks können Konten sich mit dem Google- oder Microsoft-Konto der Organisation anmelden. Die Adresse muss hier ein Konto haben.",
+  "set.orgSsoNone": "Nur Einladungslinks",
+  "set.orgSsoDomainsHelp": "Die Google-Workspace-Domains der Organisation, durch Kommas getrennt.",
+  "set.ssoTenantHelp": "Die ID deines Entra-Tenants, eine GUID. Seine Anmeldenamen sind hier die Adressen der Konten.",
 } satisfies Record<Key, string>;

@@ -6,19 +6,26 @@ use std::process::exit;
 const USAGE: &str = "relay-server: runs Relay conversations on this machine
 
   relay-server serve [--port 47800] [--bind 0.0.0.0] [--ram-disk]
-                                                        run (a launchd or systemd service, see `service`)
+                                                        run (a launchd or systemd service, a scheduled task on
+                                                        Windows, see `service`)
   relay-server pair [--host <ip>] [--port <port>]      a one-time line to paste in Relay › Settings › Machines
+  relay-server team <email> [--host <host>] [--port <port>]
+                                                        make this a team server (once, on an empty data folder)
+                                                        with <email> an organisation admin, and print an invite
+                                                        link for one of its devices (again: a new link)
   relay-server clients                                  the paired devices
   relay-server revoke <name | fingerprint>              unpair a device, at once (and take it out of its shared vaults)
   relay-server vaults                                   the shared vaults: members and open invites
   relay-server service                                  a service file that keeps `serve` running
   relay-server info                                     this server's fingerprint and data folder
   relay-server version                                  this binary's version (Relay's)
+  relay-server health                                   whether `serve` answers here (a container's healthcheck)
   relay-server git-credential <token file> <get|store|erase>
                                                         git's credential helper for github.com, set by the server
 
 The data folder is RELAY_SERVER_DATA, else the platform's application data folder. --ram-disk (Mac) keeps the
-mirror's working copy on a RAM disk, as a tmpfs does on Linux.";
+mirror's working copy on a RAM disk, as a tmpfs does on Linux. Windows has neither: the working copy is on disk there,
+in a folder only this user may open.";
 
 fn flag(args: &[String], name: &str) -> Option<String> { args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned() }
 fn fail(e: impl std::fmt::Display) -> ! { eprintln!("relay-server: {e}"); exit(1) }
@@ -30,6 +37,8 @@ pub fn run(a: &[String]) {
     match a.get(1).map(String::as_str) {
         Some("serve") => {
             crate::upgrade::adopt(&data);
+            #[cfg(windows)]
+            let _lock = windows_serve(&data);
             // before Server::new starts any thread, see ramdisk::eject_on_stop
             if a.iter().any(|x| x == "--ram-disk") { ram_disk(&data); }
             set_broker_env();
@@ -44,6 +53,12 @@ pub fn run(a: &[String]) {
             let port = flag(a, "--port").map(|p| p.parse().unwrap_or_else(|_| fail("bad --port")));
             let line = pair_line(&data, flag(a, "--host"), port).unwrap_or_else(|e| fail(e));
             println!("Paste this line in Relay › Settings › Machines. It works once, for 10 minutes:\n\n{line}\n");
+        }
+        Some("team") => {
+            let email = a.get(2).filter(|e| !e.starts_with("--")).unwrap_or_else(|| fail("team <email> [--host <host>] [--port <port>]"));
+            let inv = crate::team::init(&data, email).unwrap_or_else(|e| fail(e));
+            let link = crate::team_link(&data, flag(a, "--host"), flag(a, "--port").map(|p| p.parse().unwrap_or_else(|_| fail("bad --port"))), &inv).unwrap_or_else(|e| fail(e));
+            println!("This is a team server. Open this link in Relay on a device of {} (Settings › Workspaces › Log in to a team server). It works once, for 7 days:\n\n{link}\n", inv["email"].as_str().unwrap_or(email));
         }
         Some("clients") => {
             let list = clients(&data);
@@ -72,6 +87,15 @@ pub fn run(a: &[String]) {
             println!("fingerprint {}\ndata {}", id.fingerprint(), data.display());
         }
         Some("version") => println!("{}", crate::upgrade::VERSION),
+        Some("health") => {
+            // a TLS handshake with this server's own certificate on the port `serve` wrote, and one request
+            let id = crate::identity(&data).unwrap_or_else(|e| fail(e));
+            let port = std::fs::read_to_string(data.join("serve.json")).ok().and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                .and_then(|v| v["port"].as_u64()).unwrap_or_else(|| fail("not serving (no serve.json)"));
+            let fp = id.fingerprint();
+            let v = relay_remote::client::Client::new("127.0.0.1", port as u16, &fp, id).call(serde_json::json!({"op": "health"})).unwrap_or_else(|e| fail(e));
+            println!("ok {} on port {port}", v["version"].as_str().unwrap_or("?"));
+        }
         Some("git-credential") => {
             let (Some(file), Some(op)) = (a.get(2), a.get(3)) else { fail("git-credential <token file> <get|store|erase>") };
             let mut input = String::new();
@@ -95,3 +119,14 @@ fn ram_disk(data: &std::path::Path) {
 }
 #[cfg(not(target_os = "macos"))]
 fn ram_disk(_: &std::path::Path) { eprintln!("relay-server: --ram-disk is for a Mac, mount a tmpfs here (RELAY_SERVER_WORKDIR)"); }
+
+/// Windows, before `serve` starts: the data folder's lock (one server at a time, also across an update, upgrade::lock)
+/// and the data folder and working copy for this user only. Without a RAM disk the working copy's plaintext is on
+/// disk, so that DACL is the wall: no serving without it.
+// ponytail: the working copy on disk behind a user-only DACL, a RAM disk driver if plaintext may not touch the disk
+#[cfg(windows)]
+fn windows_serve(data: &std::path::Path) -> std::fs::File {
+    let lock = crate::upgrade::lock(data).unwrap_or_else(|e| fail(e));
+    for d in [data.to_path_buf(), crate::mirror::work_dir(data)] { crate::private_dir(&d).unwrap_or_else(|e| fail(format!("{}: {e}", d.display()))); }
+    lock
+}
