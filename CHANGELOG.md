@@ -14,6 +14,8 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+## [0.0.53] - 2026-11-13
+
 ### Added
 
 - The workspace menu at the bottom left groups the workspaces by where they live: On this Mac, each machine of your own with the encrypted workspaces it keeps, another server's encrypted workspaces under its address, and each organisation under its name. Who can read them shows once on the group (Only you, Encrypted, "<name> can read"), each row says your role in a shared workspace or its note count, and ⌃1 to ⌃9 follow the menu's order (#492).
