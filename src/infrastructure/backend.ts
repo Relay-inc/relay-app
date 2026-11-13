@@ -44,6 +44,7 @@ import type {
   SharedInvite,
   SharedRole,
   TeamMe,
+  TeamSso,
   SharedStatus,
 } from "../domain/settings/types";
 import type {
@@ -715,7 +716,10 @@ export const sharedVaultHeld = (id: string, allow: boolean, paths: string[]) =>
 /** The invite link that opened Relay, taken: the backend keeps it until then. */
 export const sharedVaultPendingInvite = () => invoke<string | null>("shared_vault_pending_invite");
 /** Team servers (src-tauri/src/team.rs): log in with a link (an invite in it, or the server's provider in the browser). */
-export const teamLogin = (link: string) => invoke<{ email: string; admin: boolean }>("team_login", { link });
+export const teamLogin = (link: string) =>
+  invoke<{ email: string; admin: boolean; name?: string }>("team_login", { link });
+/** What a team server says before this Mac logs in: the organisation's name ("" none) and its sign-in. */
+export const teamPeek = (link: string) => invoke<{ name?: string; sso: TeamSso | null }>("team_peek", { link });
 export const teamMe = (fp: string) => invoke<TeamMe>("team_me", { fp });
 export const teamOpen = (fp: string, id: string, folder: string) => invoke("team_open", { fp, id, folder });
 export const teamCreate = (fp: string, name: string, folder: string, nohistory: boolean) =>

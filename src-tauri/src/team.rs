@@ -1,6 +1,7 @@
 // Team servers (docs/workspaces.md, Teams): a server a team trusts, with accounts. This Mac logs in to one with an
 // invite link or the organisation's provider (sso.rs), and its certificate becomes a session of that account there.
-// The settings keep each team server (`teams`: host, port, fp, email, admin); only this module writes that list,
+// The settings keep each team server (`teams`: host, port, fp, email, admin, name, the organisation's name as the server
+// last said it, "" none); only this module writes that list,
 // set_settings keeps what is there. A team workspace is a shared vault (shared_vaults.rs) with `team` set: its key
 // comes from the server, its rounds, documents and fence are a shared vault's.
 
@@ -15,7 +16,7 @@ use tauri::{AppHandle, Manager};
 type St<'a> = tauri::State<'a, crate::App>;
 
 /// The team ops Settings may ask through `team_call`: every other one has a command of its own.
-const PASSED: [&str; 6] = ["team_invite", "team_invite_revoke", "team_member", "team_overview", "team_account", "team_sso"];
+const PASSED: [&str; 7] = ["team_name", "team_invite", "team_invite_revoke", "team_member", "team_overview", "team_account", "team_sso"];
 
 /// The team servers in the settings.
 pub fn list(s: &Value) -> Vec<Value> { s["teams"].as_array().cloned().unwrap_or_default() }
@@ -62,7 +63,7 @@ pub async fn team_login(app: AppHandle, state: St<'_>, link: String) -> Result<V
     }).await.map_err(|e| e.to_string())??;
     change(&app, &state, |all| {
         all.retain(|t| t["fp"] != l.fp.as_str());
-        all.push(json!({"host": l.host, "port": l.port, "fp": l.fp, "email": who["email"], "admin": who["admin"]}));
+        all.push(json!({"host": l.host, "port": l.port, "fp": l.fp, "email": who["email"], "admin": who["admin"], "name": who["name"].as_str().unwrap_or("")}));
     })?;
     Ok(who)
 }
@@ -77,9 +78,9 @@ pub async fn team_me(app: AppHandle, state: St<'_>, fp: String) -> Result<Value,
         w.as_object_mut().map(|o| o.remove("key"));
         w["here"] = json!(v);
     }
-    // an organisation admin made or unmade meanwhile
-    let admin = me["admin"].clone();
-    change(&app, &state, |all| for t in all.iter_mut().filter(|t| t["fp"] == fp.as_str()) { t["admin"] = admin.clone(); })?;
+    // an organisation admin made or unmade meanwhile, the organisation renamed (an older server sends no name)
+    let (admin, name) = (me["admin"].clone(), me["name"].as_str().unwrap_or("").to_string());
+    change(&app, &state, |all| for t in all.iter_mut().filter(|t| t["fp"] == fp.as_str()) { t["admin"] = admin.clone(); t["name"] = json!(name); })?;
     Ok(me)
 }
 
@@ -135,9 +136,21 @@ fn open(app: &AppHandle, state: &crate::App, fp: &str, w: &Value, folder: String
     shared_vaults::add(app, state, &v)
 }
 
-/// One of the admin ops (PASSED) on team server `fp`: an invite comes back with its `link`.
+/// What the server of team link `link` says before this Mac logs in: the name it gives itself ("" none) and its sign-in.
+/// Only on the user's click (Check this server), never for a link as it arrives. It goes with a throwaway certificate,
+/// not this Mac's, so a server never learns which device asked before it logs in.
 #[tauri::command]
-pub async fn team_call(state: St<'_>, fp: String, req: Value) -> Result<Value, String> {
+pub async fn team_peek(link: String) -> Result<Value, String> {
+    let l = Link::parse(&link).ok_or("not a team server's link")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let once = relay_remote::tls::Identity::generate().map_err(|e| e.to_string())?;
+        Client::new(&l.host, l.port, &l.fp, once).call(json!({"op": "team_info"}))
+    }).await.map_err(|e| e.to_string())?
+}
+
+/// One of the admin ops (PASSED) on team server `fp`: an invite comes back with its `link`, a new name is kept here.
+#[tauri::command]
+pub async fn team_call(app: AppHandle, state: St<'_>, fp: String, req: Value) -> Result<Value, String> {
     let op = req["op"].as_str().unwrap_or_default();
     if !PASSED.contains(&op) { return Err(format!("{op:?} is not asked from Settings")); }
     let mut out = call(&state, &fp, req.clone()).await?;
@@ -147,6 +160,10 @@ pub async fn team_call(state: St<'_>, fp: String, req: Value) -> Result<Value, S
     }
     // a role changed: the rounds take it at once
     if op == "team_member" { shared_vaults::sync_now(); }
+    if op == "team_name" {
+        let name = out["name"].clone();
+        change(&app, &state, |all| for t in all.iter_mut().filter(|t| t["fp"] == fp.as_str()) { t["name"] = name.clone(); })?;
+    }
     Ok(out)
 }
 

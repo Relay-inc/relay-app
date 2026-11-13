@@ -3,7 +3,13 @@ import assert from "node:assert/strict";
 import {
   invitePlan,
   ORG_SETUP_DEFAULTS,
+  nameFromDomain,
   orgDisplayName,
+  orgInitials,
+  teamOf,
+  cleanOrgName,
+  nameClash,
+  teamPortOk,
   orgInstallCommands,
   orgServerCommands,
   orgTabs,
@@ -30,8 +36,48 @@ const overview = (): TeamOverview => ({
   sso: null,
 });
 
-test("org name: the host until the server has a name", () => {
+test("org name: the server's name, the host until it has one", () => {
   assert.equal(orgDisplayName({ host: "relay.example.com" }), "relay.example.com");
+  assert.equal(orgDisplayName({ host: "relay.example.com", name: "  " }), "relay.example.com");
+  assert.equal(orgDisplayName({ host: "relay.example.com", name: "Bluebird Studio" }), "Bluebird Studio");
+});
+test("org name from a server: format and control characters stripped, at most 60 characters", () => {
+  assert.equal(cleanOrgName("Blue\u202Eoiduts"), "Blueoiduts", "a bidi override");
+  assert.equal(cleanOrgName("\u2066Blue\u200Bbird\u2069 \uFEFF"), "Bluebird");
+  assert.equal(cleanOrgName("two\nlines"), "twolines");
+  assert.equal([...cleanOrgName("é".repeat(80))].length, 60);
+  assert.equal(orgDisplayName({ host: "relay.example.com", name: "\u200B\u200D" }), "relay.example.com");
+});
+test("name clash: another organisation here shows the same name", () => {
+  const teams = [
+    { host: "relay.example.com", port: 47800, fp: "f1", email: "a@example.com", admin: false, name: "Northwind" },
+  ];
+  assert.equal(nameClash(teams, "f2", " north\u200Bwind ")?.host, "relay.example.com");
+  assert.equal(nameClash(teams, "f1", "Northwind"), undefined, "the same server");
+  assert.equal(nameClash(teams, "f2", "Bluebird Studio"), undefined);
+  assert.equal(nameClash(teams, "f2", ""), undefined);
+});
+test("team link ports: 443 or 1024 and up", () => {
+  for (const ok of [443, 1024, 47800, 65535]) assert.ok(teamPortOk(ok), String(ok));
+  for (const bad of [0, 22, 80, 1023, 65536]) assert.ok(!teamPortOk(bad), String(bad));
+});
+test("org initials: the first letters of two words, none without a name", () => {
+  assert.equal(orgInitials("Bluebird Studio"), "BS");
+  assert.equal(orgInitials(" northwind "), "N");
+  assert.equal(orgInitials("Ätna Bau und Partner"), "ÄB");
+  assert.equal(orgInitials(""), "");
+  assert.equal(orgInitials(undefined), "");
+});
+test("org of a workspace: by the server's fingerprint, else its host", () => {
+  const teams = [
+    { host: "relay.example.com", port: 47800, fp: "f1", email: "a@example.com", admin: false, name: "Northwind" },
+  ];
+  assert.equal(orgDisplayName(teamOf(teams, { fp: "f1", host: "relay.example.com" })), "Northwind");
+  assert.equal(orgDisplayName(teamOf(teams, { fp: "f2", host: "other.example.com" })), "other.example.com");
+});
+test("name from a sign-in domain: its first label, capitalised", () => {
+  assert.equal(nameFromDomain("example.com"), "Example");
+  assert.equal(nameFromDomain(""), "");
 });
 
 test("checklist: a turned-off admin does not count as the second one", () => {
@@ -133,7 +179,7 @@ test("organisation server: the image tag of this Relay, the cron line as the doc
 
 const FP = "ab".repeat(32);
 test("pasted line: an organisation's invite, its sign-in link, a workspace invite, a pairing line", () => {
-  const at = { host: "relay.example.com", port: 47800 };
+  const at = { host: "relay.example.com", port: 47800, fp: FP };
   assert.deepEqual(
     recogniseLine(` relay://relay.example.com:47800#team&fp=${FP}&invite=${"1".repeat(16)}&code=${"c".repeat(64)} `),
     { kind: "team-invite", ...at },
@@ -149,6 +195,7 @@ test("pasted line: an organisation's invite, its sign-in link, a workspace invit
     kind: "pairing",
     host: "192.168.1.2",
     port: 47800,
+    fp: FP,
   });
   assert.deepEqual(recogniseLine(`relay://[fd00::2]:47800#fp=${FP}&code=${"d".repeat(32)}`)?.host, "fd00::2");
 });
@@ -162,6 +209,9 @@ test("pasted line: anything else is not recognised", () => {
     `relay://relay.example.com:47800#fp=${FP}&code=${"d".repeat(31)}`,
     `relay://relay.example.com:47800#fp=${FP}&code=${"d".repeat(32)}&key=${"e".repeat(64)}&link=${"f".repeat(64)}`, // a phone's
     `relay://bad host:47800#fp=${FP}&code=${"d".repeat(32)}`,
+    `relay://relay.example.com:0#team&fp=${FP}`, // no port
+    `relay://relay.example.com:22#team&fp=${FP}`, // a privileged port: a team link names 443 or 1024 and up
+    `relay://relay.example.com:1023#team&fp=${FP}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`,
   ])
     assert.equal(recogniseLine(bad), null, bad);
 });

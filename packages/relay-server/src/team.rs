@@ -28,15 +28,16 @@ const INVITE_TRIES: u32 = 5;
 /// The roles in a workspace.
 const ROLES: [&str; 3] = ["admin", "member", "reader"];
 /// What a device with an account may ask besides a shared vault's ops (lib.rs VAULT_OPS).
-pub const OPS: &[&str] = &["team_me", "team_create", "team_invite", "team_invite_revoke", "team_member", "team_overview", "team_account", "team_sso", "team_logout"];
+pub const OPS: &[&str] = &["team_me", "team_name", "team_create", "team_invite", "team_invite_revoke", "team_member", "team_overview", "team_account", "team_sso", "team_logout"];
 /// What a device without a session may ask a team server.
 pub const OPEN_OPS: &[&str] = &["team_info", "team_login"];
 /// The end-to-end ops of shared vaults on a personal server: a team server answers none of them.
 pub const NOT_HERE: &[&str] = &["pair", "pair_device", "vault_create", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_pk", "vault_rotate", "vault_append"];
 
-/// `sso`: the provider a device may log in with (none: invite links only).
+/// `name`: the organisation's name every Mac shows ("" none: they show the host). `sso`: the provider a device may log
+/// in with (none: invite links only).
 #[derive(serde::Serialize, serde::Deserialize, Default)]
-pub struct Team { #[serde(default)] pub sso: Option<Sso>, #[serde(default)] pub accounts: Vec<Account>, #[serde(default)] pub sessions: Vec<Session>,
+pub struct Team { #[serde(default, skip_serializing_if = "String::is_empty")] pub name: String, #[serde(default)] pub sso: Option<Sso>, #[serde(default)] pub accounts: Vec<Account>, #[serde(default)] pub sessions: Vec<Session>,
     #[serde(default)] pub invites: Vec<Invite>, #[serde(default)] pub workspaces: BTreeMap<String, Space> }
 /// `admin`: an organisation admin, who sees and manages every workspace and account here. `off`: turned off. `oid`:
 /// the Entra user its first Entra login came from: a sign-in name moved to another user does not log in to it.
@@ -67,6 +68,22 @@ fn save(data: &Path, t: &Team) -> Result<(), String> { write_private(&data.join(
 /// For the handshake: a device without a session gets in while it could log in (a provider set, or an invite open).
 pub fn open(data: &Path) -> bool { is_team(data) && { let t = load(data); t.sso.is_some() || !t.invites.is_empty() } }
 
+/// The most characters an organisation's name has.
+const NAME_MAX: usize = 60;
+/// Characters that change how text around them shows without showing themselves: bidi controls (which can turn a
+/// name around), zero-width ones and the BOM (which can make two names look the same). A name has none of them.
+fn invisible(c: char) -> bool {
+    matches!(c, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{2069}' | '\u{FEFF}' | '\u{061C}' | '\u{180E}')
+}
+/// An organisation's name as it is kept: trimmed, one line of visible text, at most NAME_MAX characters. "" takes the
+/// name away. Every Mac shows it, so nothing in it may hide or reorder what it says.
+fn org_name(s: &str) -> Result<String, String> {
+    let n = s.trim();
+    if n.chars().any(|c| c.is_control() || invisible(c)) { return Err("a name is one line of visible text".into()); }
+    if n.chars().count() > NAME_MAX { return Err(format!("a name has at most {NAME_MAX} characters")); }
+    Ok(n.into())
+}
+
 /// An address as accounts keep it: trimmed, lower case, one `@`, no spaces.
 fn email(s: &str) -> Result<String, String> {
     let e = s.trim().to_lowercase();
@@ -93,14 +110,17 @@ impl Team {
     fn manages(&self, a: &Account, id: &str) -> bool { a.admin || self.workspaces.get(id).is_some_and(|w| w.members.get(&a.email).is_some_and(|r| r == "admin")) }
 }
 
-/// `relay-server team <email>`: makes this a team server (on a data folder without paired devices), with `email` an
-/// organisation admin, and opens an invite link for one of its devices. Returns the invite.
-pub fn init(data: &Path, owner: &str) -> Result<Value, String> {
+/// `relay-server team <email> [--name <name>]`: makes this a team server (on a data folder without paired devices), with
+/// `email` an organisation admin, and opens an invite link for one of its devices. `name` names the organisation (again:
+/// renames it, none keeps the name). Returns the invite.
+pub fn init(data: &Path, owner: &str, name: Option<&str>) -> Result<Value, String> {
     let owner = email(owner)?;
+    let name = name.map(org_name).transpose()?;
     let _t = TEAM.lock().unwrap_or_else(|e| e.into_inner());
     if !is_team(data) && clients(data).iter().any(|c| !c.vaults_only) { return Err("this server has paired devices: a team server starts on a data folder of its own".into()); }
     if !is_team(data) && !crate::vaults::all(data).is_empty() { return Err("this server has shared vaults: a team server starts on a data folder of its own".into()); }
     let mut t = load(data);
+    if let Some(n) = name { t.name = n; }
     t.ensure(&owner);
     t.accounts.iter_mut().filter(|a| a.email == owner).for_each(|a| { a.admin = true; a.off = false; });
     let out = t.invite(&owner);
@@ -112,7 +132,8 @@ pub fn init(data: &Path, owner: &str) -> Result<Value, String> {
 pub fn op(vaults: &Vaults, server: &str, fp: &str, op: &str, req: &Value) -> Result<Value, String> {
     let data = vaults.data();
     let s = |k: &str| req[k].as_str().unwrap_or("");
-    if op == "team_info" { return Ok(json!({"team": true, "sso": load(data).sso})); }
+    // the name too, so a Mac that pastes an invite says whose it is before it logs in
+    if op == "team_info" { let t = load(data); return Ok(json!({"team": true, "name": t.name, "sso": t.sso})); }
     let _t = TEAM.lock().unwrap_or_else(|e| e.into_inner());
     let mut t = load(data);
     if op == "team_login" { return login(vaults, &mut t, server, fp, req); }
@@ -124,7 +145,14 @@ pub fn op(vaults: &Vaults, server: &str, fp: &str, op: &str, req: &Value) -> Res
                 let role = w.members.get(&me.email)?;
                 Some(json!({"id": id, "name": names.get(id)?, "role": role, "nohistory": w.nohistory, "key": w.key}))
             }).collect();
-            return Ok(json!({"email": me.email, "admin": me.admin, "workspaces": ws}));
+            return Ok(json!({"email": me.email, "admin": me.admin, "name": t.name, "workspaces": ws}));
+        }
+        // the organisation's name, set or changed ("" takes it away) by an organisation admin. Every Mac gets it with
+        // its next team_me
+        "team_name" => {
+            if !me.admin { return Err("only an organisation admin names the organisation".into()); }
+            t.name = org_name(s("name"))?;
+            json!({"name": t.name})
         }
         "team_create" => {
             let made = vaults.create(fp, &me.email, s("name"))?;
@@ -253,7 +281,7 @@ fn login(vaults: &Vaults, t: &mut Team, server: &str, fp: &str, req: &Value) -> 
     t.sessions.push(Session { fp: fp.into(), email: who.clone(), added: now() });
     save(data, t)?;
     apply(vaults, t)?;
-    Ok(json!({"email": who, "admin": a.admin}))
+    Ok(json!({"email": who, "admin": a.admin, "name": t.name}))
 }
 
 /// The sessions `gone` says, out: their devices unpaired here and out of every workspace.
@@ -308,7 +336,7 @@ mod tests {
         std::fs::remove_dir_all(&d).ok();
         std::fs::create_dir_all(&d).unwrap();
         let v = Vaults::new(&d, SERVER);
-        init(&d, "owner@example.com").unwrap();
+        init(&d, "owner@example.com", None).unwrap();
         let (dev, salt) = ("b".repeat(64), "5".repeat(64));
         let login = |issuer: &Idp, email: &str, edit: &dyn Fn(&mut Value)| {
             let token = issuer.token(email, &relay_remote::team::sso_nonce(SERVER, &dev, &salt), now(), edit);
@@ -334,6 +362,48 @@ mod tests {
         assert!(login(&ms, "", &|c| entra_claims(c, TENANT)).is_ok());
         let other = |c: &mut Value| { entra_claims(c, TENANT); c["oid"] = json!("ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee"); };
         assert!(login(&ms, "", &other).unwrap_err().contains("another Microsoft account"));
+        std::fs::remove_dir_all(&d).ok();
+    }
+    /// The organisation's name: set by `relay-server team --name`, changed by an organisation admin and by nobody else,
+    /// given to every account with team_me and to a device before it logs in with team_info. A team.json from before
+    /// the name loads without one.
+    #[test]
+    fn an_organisation_admin_names_the_organisation_and_a_member_cannot() {
+        let d = std::env::temp_dir().join(format!("relay-team-name-{}", std::process::id()));
+        std::fs::remove_dir_all(&d).ok();
+        std::fs::create_dir_all(&d).unwrap();
+        // a team.json written before there was a name
+        std::fs::write(d.join("team.json"), r#"{"accounts":[{"email":"owner@example.com","admin":true,"added":1}],"sessions":[],"invites":[],"workspaces":{}}"#).unwrap();
+        assert_eq!(load(&d).name, "");
+        assert_eq!(load(&d).accounts.len(), 1, "the rest still loads");
+        init(&d, "owner@example.com", Some("  Bluebird Studio ")).unwrap();
+        assert_eq!(load(&d).name, "Bluebird Studio");
+        init(&d, "owner@example.com", None).unwrap();
+        assert_eq!(load(&d).name, "Bluebird Studio", "again without --name keeps it");
+        assert!(init(&d, "owner@example.com", Some("two\nlines")).is_err());
+        // bidi controls, zero-width characters and the BOM: refused, by --name and by team_name
+        for bad in ["Blue\u{202E}oiduts", "Blue\u{2066}bird", "Blue\u{200B}bird", "\u{FEFF}Bluebird", "Blue\u{200D}bird"] {
+            assert!(init(&d, "owner@example.com", Some(bad)).is_err(), "{bad:?}");
+        }
+        assert_eq!(load(&d).name, "Bluebird Studio");
+        let v = Vaults::new(&d, SERVER);
+        let (admin, member) = ("a".repeat(64), "b".repeat(64));
+        let mut t = load(&d);
+        t.ensure("ann@example.com");
+        t.sessions = vec![Session { fp: admin.clone(), email: "owner@example.com".into(), added: 1 }, Session { fp: member.clone(), email: "ann@example.com".into(), added: 1 }];
+        save(&d, &t).unwrap();
+        let name = |fp: &str, n: &str| op(&v, SERVER, fp, "team_name", &json!({"name": n}));
+        assert!(name(&member, "Ann's").unwrap_err().contains("only an organisation admin"));
+        assert_eq!(name(&admin, " Northwind ").unwrap()["name"], "Northwind");
+        assert_eq!(op(&v, SERVER, &member, "team_me", &json!({})).unwrap()["name"], "Northwind", "a member gets it");
+        assert_eq!(op(&v, SERVER, "", "team_info", &json!({})).unwrap()["name"], "Northwind");
+        assert!(name(&admin, &"x".repeat(NAME_MAX + 1)).is_err());
+        assert!(name(&admin, "North\u{202E}dniw").is_err());
+        assert_eq!(name(&admin, &"é".repeat(NAME_MAX)).unwrap()["name"].as_str().unwrap().chars().count(), NAME_MAX, "characters, not bytes");
+        name(&admin, "Northwind").unwrap();
+        assert_eq!(load(&d).name, "Northwind", "a refused name changes nothing");
+        name(&admin, "").unwrap();
+        assert!(!std::fs::read_to_string(d.join("team.json")).unwrap().contains("\"name\""), "no name: not written");
         std::fs::remove_dir_all(&d).ok();
     }
     #[test]

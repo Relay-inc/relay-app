@@ -9,6 +9,7 @@ import { useT } from "../../hooks/useT";
 import { buttonClass, ERROR_MESSAGE, FIELD, HINT } from "./blocks";
 import { ConnectHelp } from "./ConnectHelp";
 import { PathField } from "./PathField";
+import { ServerClaim } from "./ServerClaim";
 import { Steps } from "./Steps";
 import { TrustBadge } from "./TrustBadge";
 
@@ -50,7 +51,7 @@ export function AddJoin() {
           onChange={e => editForm({ link: e.target.value })}
         />
         {!line.trim() ? null : seen ? (
-          <Recognised line={line.trim()} kind={seen.kind} host={seen.host} />
+          <Recognised line={line.trim()} kind={seen.kind} host={seen.host} fp={seen.fp} />
         ) : (
           <span className={ERROR_MESSAGE}>{t("srv.notALine")}</span>
         )}
@@ -83,10 +84,12 @@ function Recognised({
   line,
   kind,
   host,
+  fp,
 }: {
   line: string;
   kind: "team-invite" | "team-signin" | "workspace" | "pairing";
   host: string;
+  fp: string;
 }) {
   const { t } = useT();
   const teamBusy = useSettingsStore(s => !!s.shared.busy.team);
@@ -98,13 +101,13 @@ function Recognised({
   const pairError = useSettingsStore(s => s.machinesPage.pairError);
   const [name, setName] = useState("");
   const [sharedOnly, setSharedOnly] = useState(false);
+  const team = kind === "team-invite" || kind === "team-signin";
   const row = (key: string, value: ReactNode) => (
     <>
       <dt className={KEY}>{key}</dt>
       <dd className="text-xs text-s-fg">{value}</dd>
     </>
   );
-  const team = kind === "team-invite" || kind === "team-signin";
   return (
     <div className="grid gap-3 rounded-lg bg-s-mutedbg/40 px-3.5 py-3">
       <span className="flex items-center gap-1.5 text-[13px] font-medium text-s-fg">
@@ -120,6 +123,7 @@ function Recognised({
         )}
         <span className="font-mono text-xs font-normal text-s-muted">{host}</span>
       </span>
+      {team ? <ServerClaim link={line} host={host} fp={fp} /> : null}
       <dl className="grid grid-cols-[9rem_1fr] gap-x-3 gap-y-2">
         {team
           ? row(t("srv.youGet"), t(kind === "team-invite" ? "srv.getTeamInvite" : "srv.getTeamSignIn", { host }))

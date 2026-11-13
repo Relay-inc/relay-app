@@ -4,9 +4,39 @@ import { DEPLOY_BASE } from "./machines.ts";
 // Servers and organisations, the page in the main window: what it shows about a team server, worked out from what the
 // server already gives (`team_me`, `team_overview`). Nothing here is a guess about what the server does not say.
 
-/** The name an organisation shows. The server only knows its host today: when `team.json` gets a name, it comes in
- *  here and nowhere else. */
-export const orgDisplayName = (team: Pick<TeamServer, "host">) => team.host;
+/** The most characters an organisation's name has (relay-server's team.rs NAME_MAX). */
+const NAME_MAX = 60;
+/** A name a server gave, as it may show: without control and format characters (bidi controls that turn text around,
+ *  zero-width ones and the BOM that make two names look alike), trimmed, at most NAME_MAX characters. The server
+ *  refuses such names, this is for a server that does not. */
+export const cleanOrgName = (name: string | undefined) =>
+  [...(name ?? "").replace(/[\p{Cc}\p{Cf}]/gu, "").trim()].slice(0, NAME_MAX).join("").trim();
+/** The name an organisation shows: the one its server keeps (`team.json`, set by an organisation admin), else its host
+ *  (no name yet, or an older server). */
+export const orgDisplayName = (team: Pick<TeamServer, "host" | "name">) => cleanOrgName(team.name) || team.host;
+/** Another organisation this Mac is in that shows the same name as `name` from the server `fp`: a server can call
+ *  itself anything, so a name that copies one you know is said, with that one's host. */
+export const nameClash = (teams: TeamServer[] | undefined, fp: string, name: string | undefined) => {
+  const shown = cleanOrgName(name).toLowerCase();
+  return shown ? teams?.find(team => team.fp !== fp && orgDisplayName(team).toLowerCase() === shown) : undefined;
+};
+/** The letters of an organisation's square: the first of its first two words ("Bluebird Studio" BS), "" without a
+ *  name (the square shows a building). */
+export const orgInitials = (name: string | undefined) =>
+  cleanOrgName(name)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(word => [...word][0].toUpperCase())
+    .join("");
+/** The team server a workspace of the organisation is on, by its fingerprint: its name comes from there. */
+export const teamOf = (teams: TeamServer[] | undefined, vault: { fp: string; host: string }) =>
+  teams?.find(team => team.fp === vault.fp) ?? { host: vault.host, name: "" };
+/** A first name for an organisation from its sign-in's email domain: "example.com" Example. */
+export function nameFromDomain(domain: string) {
+  const first = domain.trim().toLowerCase().split(".")[0] ?? "";
+  return first ? first[0].toUpperCase() + first.slice(1) : "";
+}
 
 /** What the Overview's setup list says is done or still open, only what follows from the overview:
  *  `admins` a second organisation admin, `signin` a provider besides invite links, `alone` the workspaces with one admin
@@ -132,7 +162,11 @@ export type PastedLine = {
   kind: "team-invite" | "team-signin" | "workspace" | "pairing";
   host: string;
   port: number;
+  fp: string; // the server's certificate fingerprint, lower case
 } | null;
+/** A port a team link may name, as relay-remote's `team::port_ok`: 443 or 1024 and up, never 0 or another privileged
+ *  one. */
+export const teamPortOk = (port: number) => port === 443 || (port >= 1024 && port <= 65535);
 export function recogniseLine(text: string): PastedLine {
   const m = /^relay:\/\/(\[[^\]]+\]|[^:/#]+):(\d{1,5})#(.+)$/.exec(text.trim());
   if (!m) return null;
@@ -148,13 +182,15 @@ export function recogniseLine(text: string): PastedLine {
     else kv[part.slice(0, i)] = part.slice(i + 1);
   }
   if (!hex(kv.fp, 64)) return null;
-  const at = { host, port };
+  const at = { host, port, fp: kv.fp.toLowerCase() };
   if (flags.has("team"))
-    return hex(kv.invite, 16) && hex(kv.code, 64)
-      ? { kind: "team-invite", ...at }
-      : kv.invite || kv.code
-        ? null
-        : { kind: "team-signin", ...at };
+    return !teamPortOk(port)
+      ? null
+      : hex(kv.invite, 16) && hex(kv.code, 64)
+        ? { kind: "team-invite", ...at }
+        : kv.invite || kv.code
+          ? null
+          : { kind: "team-signin", ...at };
   if (!hex(kv.code, 32)) return null;
   if (hex(kv.vault, 16) && hex(kv.invite, 16) && hex(kv.secret, 64)) return { kind: "workspace", ...at };
   // a phone's line (its mirror key and link secret) is not for a Mac

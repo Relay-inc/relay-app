@@ -44,6 +44,10 @@ pub fn guid(t: &str) -> bool { t.len() == 36 && t.char_indices().all(|(i, c)| if
 /// device sends along, so a token is good for one login of one device only.
 pub fn sso_nonce(server: &str, device: &str, salt: &str) -> String { sha256_hex(format!("relay-sso:{server}:{device}:{salt}").as_bytes()) }
 
+/// A port a team link may name: 443, or 1024 and up (47800 by default, RELAY_PORT any other). Never 0, and none of the
+/// other privileged ports, so a pasted link cannot point Relay at a box's mail, SSH or other system services.
+pub fn port_ok(port: u16) -> bool { port == 443 || port >= 1024 }
+
 /// A team server's link: `relay://host:port#team&fp=<server>`, and for one device's login `&invite=<id>&code=<secret>`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Link { pub host: String, pub port: u16, pub fp: String, pub invite: Option<(String, String)> }
@@ -65,7 +69,9 @@ impl Link {
         }
         let ok_host = !host.is_empty() && host.len() <= 253 && host.chars().all(|c| c.is_ascii_alphanumeric() || ".-:".contains(c));
         (team && ok_host).then_some(())?;
-        Some(Link { host: host.into(), port: port.parse().ok()?, fp: fp?, invite: invite.zip(code) })
+        let port: u16 = port.parse().ok()?;
+        port_ok(port).then_some(())?;
+        Some(Link { host: host.into(), port, fp: fp?, invite: invite.zip(code) })
     }
     pub fn format(&self) -> String {
         let host = if self.host.contains(':') { format!("[{}]", self.host) } else { self.host.clone() };
@@ -87,6 +93,12 @@ mod tests {
         assert_eq!(Link::parse(&bare.format()), Some(bare));
         assert!(Link::parse(&format!("relay://192.168.1.2:47800#fp={}&code={}", "a".repeat(64), "c".repeat(32))).is_none(), "a pairing line");
         assert!(Link::parse("relay://bad host:1#team&fp=00").is_none());
+    }
+    #[test]
+    fn a_link_names_443_or_an_unprivileged_port() {
+        let at = |port: u16| Link::parse(&Link { host: "relay.example.com".into(), port, fp: "a".repeat(64), invite: None }.format());
+        for ok in [47800, 47899, 443, 1024, 65535] { assert!(at(ok).is_some(), "{ok}"); }
+        for bad in [0, 22, 25, 80, 1023] { assert!(at(bad).is_none(), "{bad}"); }
     }
     #[test]
     fn a_provider_setting_is_google_with_domains_or_one_entra_tenant() {

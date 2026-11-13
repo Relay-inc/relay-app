@@ -5,6 +5,7 @@ import { openAdd, pickServer } from "../../../application/settings/servers";
 import { useSettingsStore } from "../../../application/settings/store";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
+import { OrgSquare } from "./OrgSquare";
 
 const NO_MACHINES: Machine[] = [];
 const NO_TEAMS: TeamServer[] = [];
@@ -76,6 +77,7 @@ export function ServersList({ item }: { item: string }) {
             <Row
               key={team.fp}
               icon="building"
+              square={<OrgSquare name={team.name} />}
               name={orgDisplayName(team)}
               sub={t(team.admin ? "set.orgAdmin" : "srv.member")}
               picked={item === `org:${team.fp}`}
@@ -102,12 +104,14 @@ export function ServersList({ item }: { item: string }) {
 
 function Row({
   icon,
+  square,
   name,
   sub,
   picked = false,
   onClick,
 }: {
   icon: string;
+  square?: ReactNode;
   name: string;
   sub: ReactNode;
   picked?: boolean;
@@ -119,7 +123,7 @@ function Row({
       aria-current={picked ? "page" : undefined}
       onClick={onClick}
     >
-      <Icon name={icon} className="glyph mt-px size-4 flex-none stroke-[1.5] text-s-muted" />
+      {square ?? <Icon name={icon} className="glyph mt-px size-4 flex-none stroke-[1.5] text-s-muted" />}
       <span className="grid min-w-0 flex-1">
         <span className="truncate text-[13px] text-s-fg">{name}</span>
         {sub ? <span className="truncate text-xs text-s-muted">{sub}</span> : null}

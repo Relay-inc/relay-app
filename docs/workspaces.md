@@ -613,6 +613,15 @@ no devices, runs no conversations, keeps no mirror or GitHub token, and refuses 
   its devices are out at once), makes organisation admins and sets the sign-in. The last admin of a workspace, and of
   the server, stays. An invite's link is shown once, the server never hands it out again: New link withdraws an open
   invite and makes another for the same address (the roles are the account's, not the invite's, so they stay).
+- **The organisation's name** is `name` in `team.json`, set with `relay-server team <email> --name "<name>"` (again
+  with another name renames it, without `--name` keeps it) and changed by an organisation admin with `team_name`
+  (Overview's title, Edit). It is one line of visible text, at most 60 characters: control characters, bidi controls,
+  zero-width characters and the BOM are refused, and the app strips them again from whatever a server sends. Every
+  account gets it with `team_me`. Before logging in, the name is only a claim: Join and the connect step show the
+  address and certificate from the link, and ask the server (`team_info`, with a throwaway certificate) only when the
+  user clicks Check this server, never for a link as it arrives. The answer shows as "calls itself", with a warning
+  when another organisation this Mac is in has that name. A team link names port 443 or 1024 and up. A server without a
+  name, or one from before names, shows its host.
 - **Without history** is a flag a workspace gets when it is made, for good. Conflict copies name no computer, the
   server lists no devices in `vault_info`, so history and cursors show no names, and the starter asks for no names in
   its log. What it is not: a document's updates stay sealed to the device that wrote them (the seal is unchanged), so a

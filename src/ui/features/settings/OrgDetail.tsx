@@ -1,17 +1,19 @@
 import type { TeamServer } from "../../../domain/settings/types";
-import { orgDisplayName, orgTabs } from "../../../domain/settings/servers";
+import { nameClash, orgDisplayName, orgTabs } from "../../../domain/settings/servers";
 import { orgTabName, pickOrgTab } from "../../../application/settings/servers";
 import { useSettingsStore } from "../../../application/settings/store";
 import { teamLink } from "../../../application/settings/teams";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
 import { ERROR_MESSAGE } from "./blocks";
+import { OrgName } from "./OrgName";
 import { CopyButton } from "./CopyButton";
 import { OrgInvite } from "./OrgInvite";
 import { OrgOverview } from "./OrgOverview";
 import { OrgPeople } from "./OrgPeople";
 import { OrgServer } from "./OrgServer";
 import { OrgSignIn } from "./OrgSignIn";
+import { OrgSquare } from "./OrgSquare";
 import { OrgWorkspaces } from "./OrgWorkspaces";
 import { TrustBadge } from "./TrustBadge";
 
@@ -26,16 +28,16 @@ export function OrgDetail({ team }: { team: TeamServer }) {
   const tabs = orgTabs(team.admin);
   const tab = tabs.includes(picked) ? picked : "overview";
   const name = orgDisplayName(team);
+  // a server can call itself anything: one named like another organisation here says so, with that one's host
+  const clash = useSettingsStore(s => nameClash(s.settings.teams, team.fp, team.name));
   const count = (id: typeof tab) =>
     id === "people" ? overview?.accounts.length : id === "workspaces" ? overview?.workspaces.length : undefined;
   return (
     <div className="mx-auto grid max-w-240 min-w-0 gap-5 px-8 pt-6 pb-10">
       <header className="flex min-w-0 items-start gap-3.5">
-        <span className="grid size-11 flex-none place-items-center rounded-xl bg-trust-org/12 text-trust-org">
-          <Icon name="building" className="glyph size-5.5 stroke-[1.5]" />
-        </span>
+        <OrgSquare name={team.name} big />
         <div className="grid min-w-0 flex-1 gap-1">
-          <h1 className="truncate text-xl font-semibold text-s-fg">{name}</h1>
+          <OrgName team={team} />
           <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-s-muted">
             {name !== team.host ? <span className="font-mono">{team.host}</span> : null}
             <TrustBadge kind="org" name={name} />
@@ -46,6 +48,12 @@ export function OrgDetail({ team }: { team: TeamServer }) {
         </div>
         <CopyButton label={t("srv.copySignInLink")} get={() => teamLink(team.fp)} />
       </header>
+      {clash ? (
+        <span className="flex items-start gap-1.5 text-xs text-s-warn">
+          <Icon name="alert" className="glyph mt-px size-3.5 flex-none stroke-2" />
+          {t("srv.nameClashHere", { name, host: clash.host })}
+        </span>
+      ) : null}
       {message && !message.ok ? <span className={ERROR_MESSAGE}>{message.text}</span> : null}
       <div role="tablist" className="flex gap-5 border-b border-s-seam">
         {tabs.map(id => (

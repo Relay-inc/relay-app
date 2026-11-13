@@ -1,5 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { orgInstallCommands, recogniseLine, type OrgDraft } from "../../../domain/settings/servers";
+import {
+  cleanOrgName,
+  nameFromDomain,
+  orgInstallCommands,
+  recogniseLine,
+  type OrgDraft,
+} from "../../../domain/settings/servers";
 import { connectOrg, dropDraft, editDraft, openServers } from "../../../application/settings/servers";
 import { useSettingsStore } from "../../../application/settings/store";
 import { cancelSignIn } from "../../../application/settings/teams";
@@ -10,6 +16,7 @@ import { buttonClass, ERROR_MESSAGE, FIELD, HINT } from "./blocks";
 import { ConnectHelp } from "./ConnectHelp";
 import { CopyButton } from "./CopyButton";
 import { CommandBlock } from "./MachineSetup";
+import { ServerClaim } from "./ServerClaim";
 import { Steps } from "./Steps";
 import { TrustBadge } from "./TrustBadge";
 import { WhereTag } from "./WhereTag";
@@ -260,13 +267,21 @@ function Install({ draft }: { draft: OrgDraft }) {
   );
 }
 
-/** Step 4: the link the team command printed, Log in. The organisation's page opens with what is left to set up. */
+/** Step 4: the link the team command printed, the organisation's name, Log in. After Check this server the name is
+ *  filled in with the one the server has (`--name`), else from its sign-in's domain. The organisation's page opens
+ *  with what is left to set up. */
 function Connect() {
   const { t } = useT();
   const busy = useSettingsStore(s => !!s.shared.busy.team);
   const message = useSettingsStore(s => s.shared.messages.team);
   const [line, setLine] = useState("");
+  const [name, setName] = useState<string | null>(null);
   const seen = recogniseLine(line);
+  const team = seen?.kind === "team-invite" || seen?.kind === "team-signin";
+  const link = line.trim();
+  // filled in once Check this server asked the server: the name it has, else from its sign-in's domain
+  const peek = useSettingsStore(s => (s.team.peek?.link === link ? s.team.peek : null));
+  const shown = name ?? (cleanOrgName(peek?.name) || nameFromDomain(peek?.domain ?? ""));
   return (
     <>
       <section className={CARD}>
@@ -290,11 +305,7 @@ function Connect() {
               </button>
             </>
           ) : (
-            <button
-              className={buttonClass("primary")}
-              disabled={seen?.kind !== "team-invite" && seen?.kind !== "team-signin"}
-              onClick={() => void connectOrg(line.trim())}
-            >
+            <button className={buttonClass("primary")} disabled={!team} onClick={() => void connectOrg(link, shown)}>
               {t("set.teamLogin")}
             </button>
           )}
@@ -302,14 +313,29 @@ function Connect() {
         {seen && seen.kind !== "team-invite" && seen.kind !== "team-signin" ? (
           <span className="text-xs text-s-warn">{t("srv.seenNotTeam")}</span>
         ) : seen ? (
-          <span className="flex items-center gap-1.5 text-xs text-s-ok">
-            <Icon name="check" className="glyph size-3.5 stroke-2" />
-            {t("srv.seenTeam", { host: seen.host })}
-          </span>
+          <>
+            <span className="flex items-center gap-1.5 text-xs text-s-ok">
+              <Icon name="check" className="glyph size-3.5 stroke-2" />
+              {t("srv.seenTeam", { host: seen.host })}
+            </span>
+            <ServerClaim link={link} host={seen.host} fp={seen.fp} />
+          </>
         ) : (
           <span className={HINT}>{t("srv.connectHelp")}</span>
         )}
         {message && !message.ok ? <span className={ERROR_MESSAGE}>{message.text}</span> : null}
+        <label htmlFor="org-name" className={H2}>
+          {t("srv.name")}
+        </label>
+        <input
+          id="org-name"
+          className={`${FIELD} w-80`}
+          placeholder={seen?.host || "relay.example.com"}
+          maxLength={60}
+          value={shown}
+          onChange={e => setName(e.target.value)}
+        />
+        <span className={HINT}>{t("srv.nameConnectHelp")}</span>
       </section>
       <section className={CARD}>
         <h2 className={H2}>{t("srv.afterConnect")}</h2>
