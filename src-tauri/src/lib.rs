@@ -1832,6 +1832,8 @@ impl EnvBuf {
 fn env_of(app: &AppHandle, st: &App, p: &dyn AgentProvider) -> EnvBuf {
     // the accounts conversations were recorded on, also one removed from the list since: its transcripts are still there
     let recorded: Vec<String> = st.sids.lock().unwrap().values().filter(|x| x.provider == p.id() && !x.account.is_empty()).map(|x| x.account.clone()).collect();
+    // "most room" is not a folder: the account a new conversation gets now (read before the settings lock)
+    let roomy = account_of(st, p, "", "");
     let s = st.settings.lock().unwrap();
     let mut opts = s["agents"]["providers"][p.id()].clone();
     // a provider with a control pipe gets the relay-mail tools only when mail is on and an account is set up; set by the app, never the user
@@ -1839,7 +1841,7 @@ fn env_of(app: &AppHandle, st: &App, p: &dyn AgentProvider) -> EnvBuf {
     if p.caps().control && opts.is_object() { grants.mail = mail_on(&s); grants.design = true; }
     // the account calls run on unless they say otherwise (spawn, limits): the active one
     if p.caps().accounts && opts.is_object() {
-        opts["account"] = opts["active"].clone();
+        opts["account"] = if opts["active"] == agents::MOST_ROOM { json!(roomy) } else { opts["active"].clone() };
         let mut list = opts["accounts"].as_array().cloned().unwrap_or_default();
         for d in recorded { if !list.iter().any(|a| a["dir"] == d.as_str()) { list.push(json!({"name": "", "dir": d})); } }
         opts["accounts"] = json!(list);

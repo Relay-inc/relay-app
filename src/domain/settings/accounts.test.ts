@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { accountsOf, addAccount, removeAccount, renameAccount } from "./accounts.ts";
+import { accountsOf, addAccount, MOST_ROOM, removeAccount, renameAccount } from "./accounts.ts";
 
 const work = { name: "claude-work", dir: "/Users/me/.claude-work" };
 
@@ -20,4 +20,6 @@ test("renaming trims, removing the active one falls back to the CLI's own", () =
   assert.equal(renameAccount(now, 0, "   "), null);
   assert.deepEqual(removeAccount(now, 0), { accounts: [{ name: "home", dir: "/h" }], active: "", auto: true });
   assert.equal(removeAccount(now, 1).active, work.dir);
+  // "the one with the most room" is not an account: removing one keeps it
+  assert.equal(removeAccount({ ...now, active: MOST_ROOM }, 0).active, MOST_ROOM);
 });

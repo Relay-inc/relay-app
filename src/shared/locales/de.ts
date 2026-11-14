@@ -342,6 +342,9 @@ export default {
   "ag.accountName": "Name des Kontos",
   "ag.accountOwn": "Das von Claude Code selbst (~/.claude)",
   "ag.accountActive": "Neue Unterhaltungen nutzen",
+  "ag.accountMostRoom": "Das Konto mit dem meisten Spielraum",
+  "ag.accountMostRoomHelp":
+    "Jede neue Unterhaltung startet auf dem Konto, dessen Limits am wenigsten genutzt sind, und bleibt dort.",
   "ag.accountAuto": "Konten automatisch wechseln",
   "ag.accountAutoHelp":
     "Ist das Planlimit eines Kontos aufgebraucht, zieht die Unterhaltung zum nächsten Konto mit Luft um und geht sofort weiter.",

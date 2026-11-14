@@ -343,6 +343,9 @@ export default {
   "ag.accountName": "Naam van het account",
   "ag.accountOwn": "Dat van Claude Code zelf (~/.claude)",
   "ag.accountActive": "Nieuwe gesprekken gebruiken",
+  "ag.accountMostRoom": "Het account met de meeste ruimte",
+  "ag.accountMostRoomHelp":
+    "Elk nieuw gesprek start op het account waarvan de limieten het minst gebruikt zijn, en blijft daar.",
   "ag.accountAuto": "Automatisch van account wisselen",
   "ag.accountAutoHelp":
     "Is de planlimiet van een account op, dan verhuist het gesprek naar het volgende account met ruimte en gaat het meteen verder.",
