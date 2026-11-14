@@ -14,6 +14,14 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Added
+
+- A machine's mirror can sync every 5, 15, 30 or 60 minutes instead of all the time: How often it syncs, on the machine's page under Mirror this Mac. With an interval a change reaches the other side up to that much later; changing a mirror setting or settling held deletions syncs at once.
+
+### Fixed
+
+- The mirror no longer rewrites its record of the last sync after a round that changed nothing. With a mirror on, that wrote the whole record to disk every few seconds, megabytes for a large vault.
+
 ## [0.0.53] - 2026-11-13
 
 ### Added

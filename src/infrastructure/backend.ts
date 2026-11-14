@@ -497,7 +497,8 @@ export const machineUpdate = (id: string) => invoke<{ version: string }>("machin
 /** Where new conversations run without a pick ("" this Mac); the backend emits settings-changed. */
 export const setMachinesDefault = (id: string) => invoke("set_machines_default", { id });
 /** The vault folders that stay on this Mac, out of a machine's mirror. */
-export const setMachineMirror = (id: string, exclude: string[]) => invoke("set_machine_mirror", { id, exclude });
+export const setMachineMirror = (id: string, exclude: string[], every: number) =>
+  invoke("set_machine_mirror", { id, exclude, every });
 /** The last sync round of a machine's mirror, null before the first. */
 export const mirrorStatus = (id: string) => invoke<MirrorStatus | null>("mirror_status", { id });
 /** The deletes a machine's mirror holds back go through in its next round. */

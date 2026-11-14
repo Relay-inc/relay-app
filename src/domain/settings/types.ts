@@ -42,7 +42,8 @@ export type Machine = {
   host: string;
   port: number;
   fp: string;
-  mirror?: { exclude: string[] }; // vault folders that stay on this Mac, out of the machine's mirror
+  // exclude: vault folders that stay on this Mac, out of the machine's mirror; every: minutes between rounds (0 = all the time)
+  mirror?: { exclude: string[]; every?: number };
   sharedOnly?: boolean; // paired for shared vaults only: no mirror and no conversations there
   auto?: boolean; // shared vaults only, added because this Mac is admin of a vault there: goes again with that role
 };
