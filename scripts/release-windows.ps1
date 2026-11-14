@@ -38,6 +38,8 @@ switch ($env:WINDOWS_SIGN) {
 $conf = Join-Path $env:TEMP relay-windows.conf.json
 @{ bundle = @{ createUpdaterArtifacts = $false; windows = $win } } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8NoBOM $conf
 
+# ort-sys rc.13 panics on Rust 1.100+ without these (see .github/workflows/checks.yml). Drop with ort-sys rc.14+.
+New-Item -ItemType Directory -Force target\release\build\examples, target\release\build\deps | Out-Null
 pnpm tauri build --bundles nsis --config $conf
 if ($LASTEXITCODE) { throw 'tauri build failed' }
 
