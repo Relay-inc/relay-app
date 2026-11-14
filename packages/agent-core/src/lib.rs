@@ -255,6 +255,8 @@ pub trait AgentProvider: Sync {
     fn npm_package(&self) -> Option<&'static str> { None }
     /// The CLI's own update command, for an install outside npm and Homebrew (the native installer).
     fn self_update(&self) -> &'static [&'static str] { &[] }
+    /// The CLI's own login, run on this machine for the account in `env`: it opens the browser and ends once signed in.
+    fn login(&self, _env: &Env) -> Option<std::process::Command> { None }
     fn models(&self) -> Vec<Choice>;
     /// Executable slash commands/skills in this vault, without starting a conversation.
     fn commands(&self, _env: &Env) -> Value { serde_json::json!([]) }

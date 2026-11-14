@@ -61,6 +61,8 @@ export type Item = {
   output?: string;
   /** the end of a turn: what the turn did, and what it cost when the provider says (USD) */
   receipt?: { edits: number; errors: number; agents: number; cost?: number };
+  /** a turn refused because the agent is not signed in: drawn as a card with a sign-in button */
+  login?: true;
 };
 export type Chat = {
   key: string;
