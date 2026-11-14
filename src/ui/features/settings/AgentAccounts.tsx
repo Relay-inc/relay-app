@@ -1,5 +1,5 @@
 import type { AgentCfg } from "../../../domain/settings/types";
-import { accountsOf, removeAccount, renameAccount } from "../../../domain/settings/accounts";
+import { accountsOf, MOST_ROOM, removeAccount, renameAccount } from "../../../domain/settings/accounts";
 import { addAgentAccount, saveAgentAccounts } from "../../../application/settings/agents-page";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
@@ -58,11 +58,18 @@ export function AgentAccounts({ id, config }: { id: string; config: AgentCfg }) 
       </Field>
       {now.accounts.length > 0 && (
         <>
-          <Field label={t("ag.accountActive")} id={`agact-${id}`}>
+          <Field
+            label={t("ag.accountActive")}
+            id={`agact-${id}`}
+            hint={now.active === MOST_ROOM ? t("ag.accountMostRoomHelp") : undefined}
+          >
             <Select
               className={SELECT}
               id={`agact-${id}`}
-              options={[{ name: t("ag.accountOwn"), dir: "" }, ...now.accounts].map(a => ({ id: a.dir, name: a.name }))}
+              options={[
+                ...[{ name: t("ag.accountOwn"), dir: "" }, ...now.accounts].map(a => ({ id: a.dir, name: a.name })),
+                { id: MOST_ROOM, name: t("ag.accountMostRoom") },
+              ]}
               value={now.active}
               onChange={active => saveAgentAccounts(id, { ...now, active })}
             />

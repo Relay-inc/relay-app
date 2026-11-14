@@ -341,6 +341,8 @@ const en = {
   "ag.accountName": "Account name",
   "ag.accountOwn": "Claude Code’s own (~/.claude)",
   "ag.accountActive": "New conversations use",
+  "ag.accountMostRoom": "The account with the most room",
+  "ag.accountMostRoomHelp": "Each new conversation starts on the account whose limits are least used, and stays on it.",
   "ag.accountAuto": "Switch accounts automatically",
   "ag.accountAutoHelp":
     "When an account’s plan limit is used up, the conversation moves to the next account that has room and goes on right away.",

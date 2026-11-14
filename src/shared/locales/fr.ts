@@ -346,6 +346,9 @@ export default {
   "ag.accountName": "Nom du compte",
   "ag.accountOwn": "Celui de Claude Code (~/.claude)",
   "ag.accountActive": "Les nouvelles conversations utilisent",
+  "ag.accountMostRoom": "Le compte qui a le plus de marge",
+  "ag.accountMostRoomHelp":
+    "Chaque nouvelle conversation démarre sur le compte dont les limites sont le moins entamées, et y reste.",
   "ag.accountAuto": "Changer de compte automatiquement",
   "ag.accountAutoHelp":
     "Quand la limite du forfait d’un compte est atteinte, la conversation passe au compte suivant qui a de la marge et continue aussitôt.",

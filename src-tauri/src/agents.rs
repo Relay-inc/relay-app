@@ -30,7 +30,8 @@ pub fn migrate(v: &mut Value) {
         if !c["on"].is_boolean() { c["on"] = json!(p.id() == FIRST); }
         if !c["bin"].is_string() { c["bin"] = json!(""); }
         if p.caps().accounts {
-            // accounts: the extra logins as {name, dir}; active: the one new conversations start on ("" the CLI's own);
+            // accounts: the extra logins as {name, dir}; active: the one new conversations start on ("" the CLI's own,
+            // MOST_ROOM whichever has the most room then);
             // auto: move to the next account when one's limits are used up
             // a blank name (older builds saved one) becomes the folder's, so check() still passes
             let list: Vec<Value> = c["accounts"].as_array().into_iter().flatten()
@@ -38,7 +39,7 @@ pub fn migrate(v: &mut Value) {
                 .map(|mut a| { if a["name"].as_str().unwrap_or("").trim().is_empty() {
                     a["name"] = json!(a["dir"].as_str().unwrap_or("").trim_end_matches('/').rsplit('/').next().unwrap_or("").trim_start_matches('.'));
                 } a }).collect();
-            let active = c["active"].as_str().filter(|d| list.iter().any(|a| a["dir"] == *d)).unwrap_or("").to_string();
+            let active = c["active"].as_str().filter(|d| (*d == MOST_ROOM && !list.is_empty()) || list.iter().any(|a| a["dir"] == *d)).unwrap_or("").to_string();
             (c["accounts"], c["active"]) = (json!(list), json!(active));
             if !c["auto"].is_boolean() { c["auto"] = json!(false); }
         }
@@ -89,6 +90,16 @@ pub fn accounts(s: &Value, p: &dyn AgentProvider) -> Vec<String> {
     let extra = c["accounts"].as_array().into_iter().flatten().filter_map(|a| a["dir"].as_str()).map(String::from);
     std::iter::once(String::new()).chain(extra.filter(|_| p.caps().accounts)).collect()
 }
+/// `active` when a new conversation starts on the account with the most room then, not on one fixed account. Never a
+/// folder: those are absolute paths (`check`).
+pub const MOST_ROOM: &str = "most-room";
+/// The account with the most room: of the `ready` (signed-in) accounts the one with the lowest `load` (how full its
+/// limits are, in percent), the first listed on a tie. One whose limits were not read yet (None) comes after every
+/// read one with room and before a full one. The first listed when none is ready.
+pub fn most_room(list: &[String], load: impl Fn(&str) -> Option<f64>, ready: impl Fn(&str) -> bool) -> String {
+    let rank = |a: &str| match load(a) { Some(p) if p < 100.0 => p, Some(_) => 101.0, None => 100.0 };
+    list.iter().filter(|a| ready(a)).min_by(|x, y| rank(x).total_cmp(&rank(y))).or(list.first()).cloned().unwrap_or_default()
+}
 /// The account a conversation runs on: `cur` (its own, or the active one for a new conversation), also when it left
 /// the list (its transcript is still there); with `auto` and `cur` used up, the next listed account after it that is
 /// not and is `ready` (signed in), round the list, else `cur`.
@@ -104,10 +115,19 @@ pub fn pick_account(list: &[String], cur: &str, auto: bool, spent: impl Fn(&str)
 pub fn used_up(limits: &Value, model: &str) -> bool { full(limits, model).next().is_some() }
 /// The windows of `limits` at 100% that apply to `model`, as in [`used_up`].
 pub fn full<'a>(limits: &'a Value, model: &str) -> impl Iterator<Item = &'a Value> {
+    applies(limits, model).filter(|w| w["pct"].as_f64().is_some_and(|x| x >= 100.0))
+}
+/// The windows of `limits` that count for `model`: the unnamed ones, and a model's own when `model` is that model.
+fn applies<'a>(limits: &'a Value, model: &str) -> impl Iterator<Item = &'a Value> {
     let model = model.to_lowercase();
     limits["windows"].as_array().into_iter().flatten()
         .filter(move |w| w["name"].as_str().is_none_or(|n| !model.is_empty() && model.contains(&n.to_lowercase())))
-        .filter(|w| w["pct"].as_f64().is_some_and(|x| x >= 100.0))
+}
+/// How full `limits` are for `model`, in percent: its fullest window that applies, 0 without one. None for limits
+/// that did not read.
+/// ponytail: the fullest window decides, a session at 90% outweighs a week at 60%; weigh by reset time if that picks badly
+pub fn fullest(limits: &Value, model: &str) -> Option<f64> {
+    (limits["ok"] == true).then(|| applies(limits, model).filter_map(|w| w["pct"].as_f64()).fold(0.0, f64::max))
 }
 /// Limits read without a login: the account was never signed in (an expired token the CLI refreshes itself).
 pub fn no_login(limits: &Value) -> bool { limits["ok"] == false && limits["reason"] == "no-login" }
@@ -199,6 +219,34 @@ mod tests {
         assert!(!used_up(&opus_week, "sonnet") && !used_up(&opus_week, ""));
         assert!(used_up(&json!({"windows": [w(Value::Null, 100.0)]}), "sonnet"));
         assert!(no_login(&json!({"ok": false, "reason": "no-login"})) && !no_login(&json!({"ok": false, "reason": "expired"})));
+    }
+    #[test]
+    fn a_new_conversation_takes_the_account_with_the_most_room() {
+        let l: Vec<String> = ["", "/a", "/b"].map(String::from).to_vec();
+        let ok = |_: &str| true;
+        let load = |m: &'static [(&'static str, Option<f64>)]| move |a: &str| m.iter().find(|(k, _)| *k == a).and_then(|(_, v)| *v);
+        assert_eq!(most_room(&l, load(&[("", Some(80.0)), ("/a", Some(17.0)), ("/b", Some(40.0))]), ok), "/a");
+        // a tie keeps the list's order
+        assert_eq!(most_room(&l, load(&[("", Some(20.0)), ("/a", Some(20.0)), ("/b", Some(20.0))]), ok), "");
+        // not read yet: after one with room, before a full one
+        assert_eq!(most_room(&l, load(&[("", Some(99.0)), ("/b", Some(100.0))]), ok), "");
+        assert_eq!(most_room(&l, load(&[("", Some(100.0)), ("/b", Some(100.0))]), ok), "/a");
+        // never one that is not signed in; none ready: the first listed
+        assert_eq!(most_room(&l, load(&[("", Some(80.0)), ("/a", Some(0.0)), ("/b", Some(90.0))]), |a| a != "/a"), "");
+        assert_eq!(most_room(&l, load(&[]), |_| false), "");
+        // the fullest window that counts for the model decides
+        let w = |name: Value, pct: f64| json!({"name": name, "pct": pct});
+        let limits = json!({"ok": true, "windows": [w(Value::Null, 40.0), w(Value::Null, 12.0), w(json!("Opus"), 90.0)]});
+        assert_eq!((fullest(&limits, "opus"), fullest(&limits, "sonnet"), fullest(&limits, "")), (Some(90.0), Some(40.0), Some(40.0)));
+        assert_eq!((fullest(&json!({"ok": true, "windows": []}), ""), fullest(&json!({"ok": false, "reason": "expired"}), "")), (Some(0.0), None));
+        // the setting survives a migrate with accounts, and falls back to the CLI's own without any
+        let mut v = json!({"agents": {"providers": {"claude": {"accounts": [{"name": "Work", "dir": "/h/w"}], "active": MOST_ROOM}}}});
+        migrate(&mut v);
+        assert!(check(&v).is_ok());
+        assert_eq!(v["agents"]["providers"]["claude"]["active"], MOST_ROOM);
+        v["agents"]["providers"]["claude"]["accounts"] = json!([]);
+        migrate(&mut v);
+        assert_eq!(v["agents"]["providers"]["claude"]["active"], "");
     }
     #[test]
     fn accounts_switch_only_when_used_up() {
