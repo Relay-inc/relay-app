@@ -352,6 +352,8 @@ export const agentsStatus = () => invoke<AgentsStatus>("agents_status");
 export const agentCommands = (provider: string) => invoke<SlashCommand[]>("agent_commands", { provider });
 /** Every conversation key the backend has a session for (older versions' keys too). */
 export const chats = () => invoke<string[]>("chats");
+/** Sign the conversation's agent in on this Mac: resolves once the login in the browser is done. */
+export const agentLogin = (key: string) => invoke("agent_login", { key });
 export const chatProviders = () => invoke<Record<string, string>>("chat_providers");
 type SendArgs = {
   project: string;

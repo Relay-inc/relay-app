@@ -177,6 +177,12 @@ impl AgentProvider for Claude {
     }
     fn npm_package(&self) -> Option<&'static str> { Some("@anthropic-ai/claude-code") }
     fn self_update(&self) -> &'static [&'static str] { &["update"] }
+    fn login(&self, env: &Env) -> Option<Command> {
+        let mut cmd = Command::new(env.bin);
+        cmd.args(["auth", "login"]).env("PATH", env.path).env_remove("ANTHROPIC_API_KEY");
+        on_account(&mut cmd, account(env));
+        Some(cmd)
+    }
     fn default_bin(&self, home: &str) -> String { format!("{home}/.local/bin/claude") }
     fn detect(&self, env: &Env) -> Detect {
         let installed = Path::new(env.bin).is_file();
@@ -537,6 +543,17 @@ mod tests {
         assert_eq!(PROVIDER.terminal(&work, Terminal::New("x")).unwrap(), "cd '/Users/me/my vault' && CLAUDE_CONFIG_DIR='/Users/me/.claude-work' claude -n 'x'");
     }
     #[cfg(unix)]
+    #[test]
+    fn the_login_runs_on_the_conversations_account() {
+        let p = std::env::temp_dir();
+        let c = PROVIDER.login(&env(&p)).unwrap();
+        assert_eq!(c.get_args().collect::<Vec<_>>(), ["auth", "login"]);
+        assert!(c.get_envs().any(|(k, v)| k == "CLAUDE_CONFIG_DIR" && v.is_none()));
+        let opts = json!({"account": "/Users/me/.claude-work"});
+        let work = Env { opts: &opts, ..env(&p) };
+        assert!(PROVIDER.login(&work).unwrap().get_envs().any(|(k, v)| k == "CLAUDE_CONFIG_DIR" && v.is_some_and(|v| v == "/Users/me/.claude-work")));
+    }
+
     #[test]
     fn accounts_sharing_one_transcript_folder_keep_the_transcript() {
         let root = std::env::temp_dir().join(format!("relay-acct-link-{}", std::process::id()));

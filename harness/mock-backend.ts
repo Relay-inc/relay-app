@@ -352,6 +352,9 @@ function handle(cmd: string, a: Args): unknown {
       ];
     case "agent_update":
       return new Promise(resolve => setTimeout(() => resolve(null), 400));
+    // the sign-in card: the login in the browser takes a moment
+    case "agent_login":
+      return new Promise(resolve => setTimeout(() => resolve(null), 1500));
     // work machines (fixture "machines": one that speaks an older protocol, "phone", "nomirror" and shared: online)
     case "machine_status":
       // shared-keeper: a server older than this Relay, so its row offers the update
