@@ -2423,6 +2423,11 @@ const en = {
   "mc.mirror": "Mirror this Mac",
   "mc.mirrorHelp":
     "Your Claude context, plugins, vault and its memory, always kept in sync and encrypted on the machine. Forget removes the copy there.",
+  "mc.mirrorEvery": "How often it syncs",
+  "mc.mirrorEveryAlways": "All the time",
+  "mc.mirrorEveryMinutes": "Every {n} minutes",
+  "mc.mirrorEveryHelp":
+    "A change here reaches the machine up to {n} minutes later, and one made there comes back as late. Changing a setting here syncs at once.",
   "mc.mirrorExclude": "Folders that stay on this Mac",
   "mc.mirrorNoExclude": "No excluded folders. The whole vault is copied.",
   "mc.mirrorExcludePath": "Vault folder to exclude",

@@ -2467,6 +2467,11 @@ export default {
   "mc.mirror": "Mettre ce Mac en miroir",
   "mc.mirrorHelp":
     "Votre contexte Claude, vos plugins, votre vault et sa mémoire, toujours synchronisés et chiffrés sur la machine. Oublier supprime la copie là-bas.",
+  "mc.mirrorEvery": "Fréquence de synchronisation",
+  "mc.mirrorEveryAlways": "En continu",
+  "mc.mirrorEveryMinutes": "Toutes les {n} minutes",
+  "mc.mirrorEveryHelp":
+    "Une modification ici arrive sur la machine jusqu'à {n} minutes plus tard, et une modification là-bas revient aussi tard. Modifier un réglage ici synchronise tout de suite.",
   "mc.mirrorExclude": "Dossiers qui restent sur ce Mac",
   "mc.mirrorNoExclude": "Aucun dossier exclu. Tout le vault est copié.",
   "mc.mirrorExcludePath": "Dossier du vault à exclure",

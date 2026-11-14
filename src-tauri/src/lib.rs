@@ -3296,14 +3296,16 @@ fn machine_forget(app: AppHandle, state: State<App>, id: String) -> Result<(), S
     share::forget(&app, &id);
     save_settings(&app, &s)
 }
-/// The vault folders that stay on this Mac, out of a machine's mirror.
+/// The vault folders that stay on this Mac, out of a machine's mirror, and the minutes between its rounds (0 = all the
+/// time). The next round comes at once.
 #[tauri::command]
-fn set_machine_mirror(app: AppHandle, state: State<App>, id: String, exclude: Vec<String>) -> Result<(), String> {
+fn set_machine_mirror(app: AppHandle, state: State<App>, id: String, exclude: Vec<String>, every: u64) -> Result<(), String> {
     let exclude: Vec<String> = exclude.into_iter().map(|e| e.trim().trim_matches('/').to_string()).filter(|e| !e.is_empty()).collect();
     if let Some(e) = exclude.iter().find(|e| !relay_remote::sync::safe_rel(e)) { return Err(trc_v("err.machine_folder", e)); }
     let mut s = state.settings.lock().unwrap();
     let m = s["machines"].as_array_mut().unwrap().iter_mut().find(|m| m["id"] == id.as_str()).ok_or_else(|| trc("err.no_machine"))?;
-    m["mirror"] = json!({"exclude": exclude});
+    m["mirror"] = json!({"exclude": exclude, "every": every.min(mirror::EVERY_MAX)});
+    state.mirrors.ask(&id);
     save_settings(&app, &s)
 }
 /// What the mirror of a machine did lately: {at, pushed, pulled, conflicts, skipped, errors, held, locked, in_ram}, or null.
@@ -3511,7 +3513,8 @@ pub fn run() {
                     std::thread::sleep(std::time::Duration::from_secs(1));
                 }
             });
-            // the mirrors: a round every 5 s for each machine that has one (not one for shared vaults only: nothing of
+            // the mirrors: a round every 5 s, or every so many minutes when the machine is set so (mirror::every), for
+            // each machine that has one (not one for shared vaults only: nothing of
             // this Mac's goes there, not even the profile) and answers, on a thread of their own so a
             // first big copy never holds up the cards
             // With each round, how this Mac starts Claude there (when it changed), so its phone can start conversations
@@ -3527,7 +3530,7 @@ pub fn run() {
                     let id = m["id"].as_str().unwrap_or("");
                     let Some(info) = st.machines.seen.lock().unwrap().get(id).filter(|x| x.error.is_none()).and_then(|x| x.info.clone()) else { continue };
                     let client = st.machines.client(m);
-                    st.mirrors.round(&data_dir(&h), m, &client, &info, &vault);
+                    if st.mirrors.due(m) { st.mirrors.round(&data_dir(&h), m, &client, &info, &vault); }
                     let Ok(p) = agents::get("claude") else { continue };
                     let notify = mirror::key(&data_dir(&h), id).map(|k| ntfy_url(&k)).unwrap_or_default();
                     let eb = env_of(&h, &st, p);

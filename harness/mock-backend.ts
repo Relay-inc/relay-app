@@ -356,7 +356,7 @@ function handle(cmd: string, a: Args): unknown {
     case "machine_status":
       // shared-keeper: a server older than this Relay, so its row offers the update
       if (fixture === "shared-keeper") return { ok: true, version: "0.0.3", os: "linux", host: "server", update: true };
-      if (fixture === "phone" || fixture === "mirror" || fixture === "nomirror" || shared)
+      if (fixture === "phone" || fixture === "mirror" || fixture === "every" || fixture === "nomirror" || shared)
         return { ok: true, version: "0.0.14", os: "linux", host: "server", update: true };
       if (fixture === "github")
         return { ok: true, version: "0.0.25", os: "linux", host: "server", update: true, repos: true };

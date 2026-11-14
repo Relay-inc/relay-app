@@ -2436,6 +2436,11 @@ export default {
   "mc.mirror": "Deze Mac spiegelen",
   "mc.mirrorHelp":
     "Je Claude-context, plugins, vault en het geheugen ervan, altijd gesynchroniseerd en versleuteld op de machine. Vergeten verwijdert de kopie daar.",
+  "mc.mirrorEvery": "Hoe vaak hij synchroniseert",
+  "mc.mirrorEveryAlways": "Voortdurend",
+  "mc.mirrorEveryMinutes": "Elke {n} minuten",
+  "mc.mirrorEveryHelp":
+    "Een wijziging hier komt tot {n} minuten later op de machine aan, en een wijziging daar komt even laat terug. Een instelling hier wijzigen synchroniseert meteen.",
   "mc.mirrorExclude": "Mappen die op deze Mac blijven",
   "mc.mirrorNoExclude": "Geen uitgesloten mappen. De hele vault wordt gekopieerd.",
   "mc.mirrorExcludePath": "Vaultmap om uit te sluiten",

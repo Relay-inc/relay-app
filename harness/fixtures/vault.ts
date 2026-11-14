@@ -390,12 +390,13 @@ export function settings(fixture: string) {
   const onboarding = fixture === "onboarding";
   // a paired work machine that speaks an older protocol (Settings › Machines); phone: the same machine online; github:
   // online, connected to GitHub, with three repos (machineGit). mirror: online, its mirror holding deletes back.
-  // nomirror: online, next to a second one paired for workspaces only
+  // nomirror: online, next to a second one paired for workspaces only. every: online, its mirror set to every 15 minutes
   const machines =
     fixture === "machines" ||
     fixture === "phone" ||
     fixture === "github" ||
     fixture === "mirror" ||
+    fixture === "every" ||
     fixture === "nomirror"
       ? {
           machines: [
@@ -405,7 +406,7 @@ export function settings(fixture: string) {
               host: "192.168.1.2",
               port: 47800,
               fp: "0f9534960dd3570a".padEnd(64, "0"),
-              mirror: { exclude: [] },
+              mirror: { exclude: [], ...(fixture === "every" ? { every: 15 } : {}) },
             },
             ...(fixture === "nomirror"
               ? [

@@ -2457,6 +2457,11 @@ export default {
   "mc.mirror": "Diesen Mac spiegeln",
   "mc.mirrorHelp":
     "Dein Claude-Kontext, Plugins, Vault und dessen Gedächtnis, immer synchron gehalten und verschlüsselt auf der Maschine. Vergessen entfernt die Kopie dort.",
+  "mc.mirrorEvery": "Wie oft synchronisiert wird",
+  "mc.mirrorEveryAlways": "Laufend",
+  "mc.mirrorEveryMinutes": "Alle {n} Minuten",
+  "mc.mirrorEveryHelp":
+    "Eine Änderung hier erreicht die Maschine bis zu {n} Minuten später, und eine Änderung dort kommt ebenso spät zurück. Eine Einstellung hier zu ändern synchronisiert sofort.",
   "mc.mirrorExclude": "Ordner, die auf diesem Mac bleiben",
   "mc.mirrorNoExclude": "Keine ausgeschlossenen Ordner. Der ganze Vault wird kopiert.",
   "mc.mirrorExcludePath": "Auszuschließender Vault-Ordner",

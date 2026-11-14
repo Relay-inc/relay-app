@@ -422,6 +422,12 @@ const VIEWS = {
     await waitText("9 deletions held");
     await intoView("Restore them");
   },
+  // a machine's page, online, its mirror set to sync every 15 minutes: the choice and what it means (#496)
+  "settings-machines-mirror-every": async () => {
+    await machinePage("every");
+    await waitText("How often it syncs");
+    await waitText("up to 15 minutes later");
+  },
   // a machine's page, online, with GitHub connected and three repos: clean, 2 commits not pushed, work
   // not committed
   "settings-machines-github": async () => {
