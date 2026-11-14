@@ -367,8 +367,8 @@ pnpm check:compiler           # the React Compiler compiles every component and 
 pnpm format:check             # Prettier
 ```
 
-CI (`.github/workflows/checks.yml`) runs the TypeScript checks plus `vite build` on macOS and Windows, then
-`cargo check`: on macOS with the tests. On Windows the app's unit tests build but do not run yet (a test that makes a
+CI (`.github/workflows/checks.yml`) runs the TypeScript checks plus `vite build` on macOS and Windows, and beside them,
+as a second job, `cargo check`: on macOS with the tests. On Windows the app's unit tests build but do not run yet (a test that makes a
 symlink or reads a Unix file mode is `#[cfg(unix)]`), relay-server's unit tests run, its e2e tests build, and its update
 test runs.
 Unix-only calls that remain sit behind `cfg` gates with stand-ins (`src-tauri/src/platform.rs`), each with a

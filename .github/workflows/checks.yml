@@ -1,12 +1,17 @@
-# The gates on every PR and on main, on macOS and on Windows: the frontend's types, tests, lint (layer boundaries
-# included), the React Compiler compiling every component and formatting, then the Rust side building.
+# The gates on every PR and on main, on macOS and on Windows. Two jobs per system, side by side: the frontend's types,
+# tests, lint (layer boundaries included), the React Compiler compiling every component, formatting and the build, and
+# the Rust side building.
 name: checks
 on:
   pull_request:
   push:
     branches: [main]
+# A new push to a PR stops the run of the push before it. Runs on main all finish.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  checks:
+  frontend:
     strategy:
       fail-fast: false
       matrix:
@@ -30,6 +35,19 @@ jobs:
       - run: pnpm check:compiler
       - run: pnpm format:check
       - run: pnpm exec vite build
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # The fixtures the tests read stay LF on Windows too
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v7
+      # Tauri wants the frontend's folder to exist. The frontend job does the real build.
+      - run: mkdir dist && touch dist/index.html
+        shell: bash
       - run: rustup update stable --no-self-update
       - uses: Swatinem/rust-cache@v2
       # relay-mobile is the phone app. On Windows the app's unit tests build but do not run yet (the ones that make a
@@ -38,6 +56,11 @@ jobs:
       # git, so they are only built there.
       - if: runner.os == 'macOS'
         run: cargo check --workspace --exclude relay-mobile --all-targets
+      # ort-sys 2.0.0-rc.13 (through transcribe-rs) copies its DLLs into the target folder it derives from OUT_DIR. Since
+      # Rust 1.100's build-dir layout that resolves to target\debug\build, and it panics when examples\ and deps\ are
+      # missing there. ort-sys rc.14 fixes it, but transcribe-rs 0.3.12 does not compile against rc.14. Drop this then.
+      - if: runner.os == 'Windows'
+        run: New-Item -ItemType Directory -Force target\debug\build\examples, target\debug\build\deps
       - if: runner.os == 'Windows'
         run: cargo check --workspace --exclude relay-mobile
       - if: runner.os == 'Windows'
