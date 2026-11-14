@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Added
+
+- Settings › Agents › "New conversations use" has a choice "The account with the most room": with several Claude accounts, each new conversation starts on the signed-in account whose plan limits are least used for its model. A conversation stays on the account it started on, so nothing is read again on another account. Switching automatically still moves it when that account runs out.
+
 ## [0.0.53] - 2026-11-13
 
 ### Added

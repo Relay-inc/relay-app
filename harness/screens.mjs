@@ -3189,6 +3189,14 @@ const VIEWS = {
     await unfold("Claude Code");
     await intoView("Switch accounts automatically");
   },
+  // the same, new conversations on the account with the most room: the choice and its hint
+  "settings-agent-most-room": async () => {
+    await settingsPage("Agents", undefined, "accounts");
+    await unfold("Claude Code");
+    await page.getByLabel("New conversations use").selectOption("most-room");
+    await settle(page);
+    await intoView("Switch accounts automatically");
+  },
   // the board pipeline of a project with a linked board, folded open in Settings › Projects
   "settings-pipeline": async () => {
     await settingsPage("Projects");
