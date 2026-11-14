@@ -207,11 +207,11 @@ export async function settleHeldDeletes(machine: Machine, allow: boolean) {
     mirrorMessage(machine.id, String(error));
   }
 }
-/** Saves the excluded folders. True when it worked. */
-async function saveExclude(machine: Machine, exclude: string[]) {
+/** Saves the mirror's settings: the excluded folders and the minutes between rounds. True when it worked. */
+async function saveMirror(machine: Machine, exclude: string[], every = machine.mirror?.every ?? 0) {
   mirrorMessage(machine.id, "");
   try {
-    await backend.setMachineMirror(machine.id, exclude);
+    await backend.setMachineMirror(machine.id, exclude, every);
     await reload();
     pollMirrors();
     return true;
@@ -226,13 +226,16 @@ export async function addMirrorExclude(machine: Machine, input: string) {
   if (!path) return t("mc.mirrorErrExclude");
   const current = machine.mirror?.exclude ?? [];
   if (current.includes(path)) return "";
-  return (await saveExclude(machine, [...current, path])) ? "" : t("mc.mirrorErrSave");
+  return (await saveMirror(machine, [...current, path])) ? "" : t("mc.mirrorErrSave");
 }
 export const removeMirrorExclude = (machine: Machine, path: string) =>
-  saveExclude(
+  saveMirror(
     machine,
     (machine.mirror?.exclude ?? []).filter(item => item !== path),
   );
+/** How often the mirror syncs: every so many minutes, 0 = all the time. */
+export const setMirrorEvery = (machine: Machine, minutes: number) =>
+  saveMirror(machine, machine.mirror?.exclude ?? [], minutes);
 /** The kind of machine the setup commands are for, with that kind's folder. */
 export const setSetupPlatform = (platform: SetupPlatform) =>
   change(draft => {
