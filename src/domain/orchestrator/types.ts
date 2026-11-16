@@ -31,6 +31,8 @@ export type Worker = {
   answer?: string | null; // what dispatch asked for (fable, opus, sonnet, haiku), "" for the CLI default
   /** its own progress from its `step` tool, while it works: steps done of its plan, the one it is on */
   step?: { done: number; total: number; note: string | null } | null;
+  /** its `decision` trail over its whole life, oldest first: what it chose, why, a pointer to the evidence, the result */
+  decisions?: { at: number; decision: string; why: string; evidence: string | null; result: string | null }[];
   /** a board pipeline's worker: its ticket (domain/pipeline Ticket), the branch its PR goes to, the PR or why there is
    *  none, and what the pipeline last did on the board for it */
   ticket?: unknown;

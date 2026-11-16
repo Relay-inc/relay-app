@@ -147,6 +147,29 @@ function Page({ worker }: { worker: Worker }) {
           </pre>
         </section>
       ) : null}
+      {worker.decisions?.length ? (
+        <section className="flex flex-col gap-1.5">
+          <span className={LABEL}>{t("orch.decisions")}</span>
+          <div className="flex flex-col border border-separator rounded-[10px]">
+            {worker.decisions.map(d => (
+              <div
+                key={d.at + d.decision}
+                className="flex flex-col gap-0.5 px-3 py-2 border-t border-separator first:border-t-0 text-[13px]"
+              >
+                <div className="flex items-baseline gap-2">
+                  <span className="flex-1 min-w-0 font-medium">{d.decision}</span>
+                  {d.result ? <span className="flex-none text-xs text-secondary">{d.result}</span> : null}
+                  <span className="flex-none text-[11px] text-tertiary">{ago(d.at)}</span>
+                </div>
+                <span className="text-secondary">{d.why}</span>
+                {d.evidence ? (
+                  <code className="font-mono text-[11px] text-tertiary break-all">{d.evidence}</code>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
       {report?.flags.length ? (
         <section className="flex flex-col gap-1.5">
           <span className={LABEL}>{t("orch.flags")}</span>
