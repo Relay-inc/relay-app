@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Added
+
+- Agents in a conversation can carry a Productive ticket through the flow: look a ticket up by its number, list the statuses it can move to, move it, assign it, edit its title and description, add subtasks and mark what blocks what. Each change asks first. Comments an agent posts are now hidden from the client by default on client projects. (#503)
+
 ## [0.0.55] - 2026-11-16
 
 ### Added
