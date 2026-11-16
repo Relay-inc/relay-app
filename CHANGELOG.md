@@ -14,11 +14,13 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+## [0.0.55] - 2026-11-16
+
 ### Added
 
-- A meeting that starts while nothing records gets a small window at the top right, "Meeting started, not recording", with Skip and Record. It stays above every app and next to a full-screen call until one of the two is clicked, the meeting ends, or a recording starts some other way. A notification would vanish after a few seconds and is hidden while the screen is shared.
+- A meeting that starts while nothing records gets a small window at the top right, "Meeting started, not recording", with Skip and Record. It stays above every app and next to a full-screen call until one of the two is clicked, the meeting ends, or a recording starts some other way. A notification would vanish after a few seconds and is hidden while the screen is shared. (#501)
 - A worker now logs its decisions as it goes (what it chose, why, where the evidence is, how it turned out). The trail shows on its page, and a board pipeline's PR description lists it under Decisions. (#450)
-- A turn Claude Code refuses because it is not signed in shows a card with a Sign in button instead of "Not logged in · Please run /login": the button starts Claude Code's own login for the account that conversation runs on and opens the sign-in page in your browser. A conversation on a work machine says to sign in on that machine.
+- A turn Claude Code refuses because it is not signed in shows a card with a Sign in button instead of "Not logged in · Please run /login": the button starts Claude Code's own login for the account that conversation runs on and opens the sign-in page in your browser. A conversation on a work machine says to sign in on that machine. (#499)
 
 ### Fixed
 
