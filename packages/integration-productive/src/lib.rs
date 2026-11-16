@@ -36,7 +36,7 @@ pub const PROVIDER: Provider = Provider {
         let one = |kind: &str| path.strip_prefix(kind).is_some_and(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()));
         let write = body.is_some() && match method {
             "PATCH" => one("/tasks/") || one("/comments/") || one("/attachments/"),
-            "POST" => path == "/comments" || path == "/attachments" || path == "/tasks",
+            "POST" => path == "/comments" || path == "/attachments" || path == "/tasks" || path == "/task_dependencies",
             _ => false,
         };
         (path_ok(path) && (method == "GET" || write)).then(|| format!("https://api.productive.io/api/v2{path}"))
@@ -84,23 +84,65 @@ fn inc<'a>(v: &'a Value, rel: &str) -> &'a Value {
     v["included"].as_array().and_then(|i| i.iter().find(|x| x["type"] == d["type"] && x["id"] == d["id"])).map_or(&Value::Null, |x| &x["attributes"])
 }
 fn person(a: &Value) -> Value { if a.is_null() { Value::Null } else { json!(format!("{} {}", a["first_name"].as_str().unwrap_or(""), a["last_name"].as_str().unwrap_or("")).trim()) } }
+fn patch(task: &str, attrs: Value, rels: Value) -> Result<Req, String> {
+    Ok(Req { method: "PATCH", url: format!("{API}/tasks/{task}"), body: Some(json!({ "data": { "type": "tasks", "id": task, "attributes": attrs, "relationships": rels } })) })
+}
+/// 'me' or a person id, as the relationship of a task.
+fn assignee(cfg: &Value, a: &Value, who: String) -> Result<Value, String> {
+    Ok(rel("people", &if who == "me" { me(cfg)? } else { arg_ok(a, "assignee", digits)? }))
+}
+/// An optional true/false argument (the CLI passes key=value as text).
+fn flag(a: &Value, k: &str) -> Result<Option<bool>, String> {
+    match (a[k].as_bool(), arg(a, k).as_deref()) {
+        (Some(b), _) => Ok(Some(b)),
+        (_, None) => Ok(None),
+        (_, Some("true")) => Ok(Some(true)),
+        (_, Some("false")) => Ok(Some(false)),
+        _ => Err(format!("'{k}' is true or false")),
+    }
+}
+/// The id a relationship of the main record points at.
+fn rel_id(v: &Value, k: &str) -> Option<String> { v["data"]["relationships"][k]["data"]["id"].as_str().map(String::from) }
 fn created(v: &Value) -> Value { json!({ "id": v["data"]["id"], "type": v["data"]["type"] }) }
+
+const CATEGORIES: [&str; 4] = ["", "not started", "started", "closed"];
+const TASK_INCLUDE: &str = "?include=project,workflow_status,assignee";
 
 const ACTIONS: &[Action] = &[
     read("projects", "Active projects you can see.", &[],
         |_, _| get("/projects?filter[status]=1&page[size]=200".into()), |v| rows(v, &["name", "project_number"])),
     read("task_lists", "Open task lists of a project, where a new task goes.", &[("project", "project id")],
         |_, a| get(format!("/task_lists?filter[project_id]={}&filter[status]=1&page[size]=200", arg_ok(a, "project", digits)?)), |v| rows(v, &["name"])),
-    read("search", "Search tasks by text (title or number), up to 20.", &[("query", "search text"), ("project?", "project id")],
+    read("search", "Search tasks by text (title or number), up to 20. Closed tasks are included, see 'closed'.", &[("query", "search text"), ("project?", "project id")],
         |_, a| {
             let p = match arg(a, "project") { Some(_) => format!("&filter[project_id]={}", arg_ok(a, "project", digits)?), None => String::new() };
             get(format!("/tasks?filter[query]={}{p}&page[size]=20", query_text(&arg(a, "query").unwrap_or_default())))
         }, |v| v["data"].as_array().map(|d| d.iter().map(|r| json!({ "id": r["id"], "number": r["attributes"]["task_number"], "title": r["attributes"]["title"],
             "closed": r["attributes"]["closed"], "project": r["relationships"]["project"]["data"]["id"] })).collect()).unwrap_or_default()),
-    read("task", "Read one task: title, description (HTML), status, assignee, project, due date.", &[("task", "task id")],
-        |_, a| get(format!("/tasks/{}?include=project,workflow_status,assignee", arg_ok(a, "task", digits)?)),
+    read("task", "Read one task: title, description (HTML), status, assignee, project, due date. Give its id, or its number (as in 'ticket 447') with the project id.",
+        &[("task?", "task id"), ("number?", "task number, with project"), ("project?", "project id, with number")],
+        |_, a| match arg(a, "task") {
+            Some(_) => get(format!("/tasks/{}{TASK_INCLUDE}", arg_ok(a, "task", digits)?)),
+            None => get(format!("/tasks?filter[task_number]={}&filter[project_id]={}&page[size]=2", arg_ok(a, "number", digits)?, arg_ok(a, "project", digits)?)),
+        },
         |v| { let t = &v["data"]["attributes"]; json!({ "id": v["data"]["id"], "number": t["task_number"], "title": t["title"], "description": t["description"],
-            "due_date": t["due_date"], "closed": t["closed"], "status": inc(v, "workflow_status")["name"], "assignee": person(inc(v, "assignee")), "project": inc(v, "project")["name"] }) }),
+            "due_date": t["due_date"], "closed": t["closed"], "status": inc(v, "workflow_status")["name"], "assignee": person(inc(v, "assignee")), "project": inc(v, "project")["name"] }) })
+        .then(|_, a, first| match first["data"].as_array().map(Vec::as_slice) {
+            None => Ok(None),
+            Some([t]) => get(format!("/tasks/{}{TASK_INCLUDE}", t["id"].as_str().unwrap_or_default())).map(Some),
+            Some(l) => Err(format!("{} tasks with number {} in project {}", if l.is_empty() { "no" } else { "more than one" }, arg(a, "number").unwrap_or_default(), arg(a, "project").unwrap_or_default())),
+        }),
+    read("statuses", "The workflow statuses a task of a project can move to: id, name, category (not started, started, closed).", &[("project", "project id")],
+        |_, a| get(format!("/projects/{}", arg_ok(a, "project", digits)?)),
+        |v| v["data"].as_array().map(|d| d.iter().map(|r| json!({ "id": r["id"], "name": r["attributes"]["name"],
+            "category": CATEGORIES.get(r["attributes"]["category_id"].as_u64().unwrap_or(0) as usize) })).collect()).unwrap_or_default())
+        .then(|_, _, first| match rel_id(first, "workflow") {
+            Some(w) => get(format!("/workflow_statuses?filter[workflow_id]={w}&page[size]=200")).map(Some),
+            None => Err("this project has no workflow".into()),
+        }),
+    read("people", "People on a project, for assigning.", &[("project", "project id")],
+        |_, a| get(format!("/people?filter[project_id]={}&filter[status]=1&page[size]=200", arg_ok(a, "project", digits)?)),
+        |v| v["data"].as_array().map(|d| d.iter().map(|r| json!({ "id": r["id"], "name": person(&r["attributes"]) })).collect()).unwrap_or_default()),
     read("comments", "The comments on a task; bodies are HTML.", &[("task", "task id")],
         |_, a| get(format!("/comments?filter[task_id]={}&include=creator&page[size]=200", arg_ok(a, "task", digits)?)),
         |v| v["data"].as_array().map(|d| d.iter().map(|r| {
@@ -112,11 +154,52 @@ const ACTIONS: &[Action] = &[
         &[("project", "project id"), ("task_list", "task list id"), ("title", "task title"), ("description?", "body, HTML"), ("assignee?", "person id, or 'me'")],
         |cfg, a| {
             let mut r = json!({ "project": rel("projects", &arg_ok(a, "project", digits)?), "task_list": rel("task_lists", &arg_ok(a, "task_list", digits)?) });
-            if let Some(who) = arg(a, "assignee") { r["assignee"] = rel("people", &if who == "me" { me(cfg)? } else { arg_ok(a, "assignee", digits)? }); }
+            if let Some(who) = arg(a, "assignee") { r["assignee"] = assignee(cfg, a, who)?; }
             post("/tasks", json!({ "data": { "type": "tasks", "attributes": { "title": arg(a, "title"), "description": arg(a, "description").unwrap_or_default() }, "relationships": r } }))
         }, created),
-    write("comment", "Comment on a task.", &[("task", "task id"), ("body", "the comment, HTML")],
-        |_, a| post("/comments", json!({ "data": { "type": "comments", "attributes": { "body": arg(a, "body") }, "relationships": { "task": rel("tasks", &arg_ok(a, "task", digits)?) } } })),
+    write("comment", "Comment on a task; bodies are HTML. Hidden from the client by default on client projects (internal notes), visible on internal ones; hidden=false posts a visible comment.",
+        &[("task", "task id"), ("body", "the comment, HTML"), ("hidden?", "true or false")],
+        |_, a| { flag(a, "hidden")?; get(format!("/tasks/{}?include=project", arg_ok(a, "task", digits)?)) },
+        created)
+        .then(|_, a, first| {
+            // Productive refuses hidden in an internal project (project_type_id 1)
+            let hide = !inc(first, "project")["project_type_id"].eq(&1) && flag(a, "hidden")?.unwrap_or(true);
+            let mut at = json!({ "body": arg(a, "body") });
+            if hide { at["hidden"] = json!(true); }
+            post("/comments", json!({ "data": { "type": "comments", "attributes": at, "relationships": { "task": rel("tasks", &arg_ok(a, "task", digits)?) } } })).map(Some)
+        }),
+    write("subtask", "Create a subtask under a task, in its project and task list unless task_list is given.",
+        &[("parent_task_id", "parent task id"), ("title", "task title"), ("description?", "body, HTML"), ("assignee?", "person id, or 'me'"), ("task_list?", "task list id")],
+        |_, a| get(format!("/tasks/{}", arg_ok(a, "parent_task_id", digits)?)),
+        created)
+        .then(|cfg, a, first| {
+            let project = rel_id(first, "project").ok_or("the parent task has no project")?;
+            let list = match arg(a, "task_list") { Some(_) => arg_ok(a, "task_list", digits)?, None => rel_id(first, "task_list").ok_or("the parent task has no task list, give task_list")? };
+            let mut r = json!({ "project": rel("projects", &project), "task_list": rel("task_lists", &list), "parent_task": rel("tasks", &arg_ok(a, "parent_task_id", digits)?) });
+            if let Some(who) = arg(a, "assignee") { r["assignee"] = assignee(cfg, a, who)?; }
+            post("/tasks", json!({ "data": { "type": "tasks", "attributes": { "title": arg(a, "title"), "description": arg(a, "description").unwrap_or_default() }, "relationships": r } })).map(Some)
+        }),
+    write("move", "Set a task's workflow status (see statuses), and/or move it to another task list.",
+        &[("task", "task id"), ("status?", "workflow status id"), ("task_list?", "task list id")],
+        |_, a| {
+            let mut r = json!({});
+            if arg(a, "status").is_some() { r["workflow_status"] = rel("workflow_statuses", &arg_ok(a, "status", digits)?); }
+            if arg(a, "task_list").is_some() { r["task_list"] = rel("task_lists", &arg_ok(a, "task_list", digits)?); }
+            if r.as_object().unwrap().is_empty() { return Err("give status and/or task_list".into()); }
+            patch(&arg_ok(a, "task", digits)?, json!({}), r)
+        }, created),
+    write("assign", "Set a task's assignee.", &[("task", "task id"), ("assignee", "person id, or 'me'")],
+        |cfg, a| patch(&arg_ok(a, "task", digits)?, json!({}), json!({ "assignee": assignee(cfg, a, arg(a, "assignee").unwrap_or_default())? })), created),
+    write("update", "Change a task's title and/or description (HTML).", &[("task", "task id"), ("title?", "new title"), ("description?", "new body, HTML")],
+        |_, a| {
+            let mut at = json!({});
+            for k in ["title", "description"] { if let Some(v) = arg(a, k) { at[k] = json!(v); } }
+            if at.as_object().unwrap().is_empty() { return Err("give title and/or description".into()); }
+            patch(&arg_ok(a, "task", digits)?, at, json!({}))
+        }, created),
+    write("depend", "Mark that one task blocks another.", &[("blocker", "task id that blocks"), ("blocked", "task id that waits")],
+        |_, a| post("/task_dependencies", json!({ "data": { "type": "task_dependencies", "attributes": { "type_id": 1 },
+            "relationships": { "task": rel("tasks", &arg_ok(a, "blocker", digits)?), "dependent_task": rel("tasks", &arg_ok(a, "blocked", digits)?) } } })),
         created),
     read("services", "The services (budget lines) of a project that time can be booked on.", &[("project", "project id")],
         |_, a| get(format!("/services?filter[project_id]={}&page[size]=200", arg_ok(a, "project", digits)?)), |v| rows(v, &["name"])),
@@ -160,6 +243,7 @@ mod tests {
         assert!((p.url)(&c, "PATCH", "/tasks", &Some(json!({}))).is_none());
         assert!((p.url)(&c, "PATCH", "/comments/7", &Some(json!({}))).is_some() && (p.url)(&c, "PATCH", "/attachments/7", &Some(json!({}))).is_some());
         assert!((p.url)(&c, "POST", "/comments", &Some(json!({}))).is_some() && (p.url)(&c, "POST", "/attachments", &Some(json!({}))).is_some());
+        assert!((p.url)(&c, "POST", "/task_dependencies", &Some(json!({}))).is_some() && (p.url)(&c, "POST", "/task_dependencies/1", &Some(json!({}))).is_none());
         assert!((p.url)(&c, "POST", "/comments", &None).is_none() && (p.url)(&c, "POST", "/tasks", &None).is_none());
         // a new task from the board
         assert!((p.url)(&c, "POST", "/tasks", &Some(json!({}))).is_some() && (p.url)(&c, "POST", "/tasks/42", &Some(json!({}))).is_none());
@@ -200,6 +284,47 @@ mod tests {
             "included": [{ "type": "people", "id": "7", "attributes": { "first_name": "Ann", "last_name": "Lee" } }, { "type": "projects", "id": "7", "attributes": { "name": "wrong" } }] });
         let out = (act("task").out)(&task);
         assert_eq!((out["assignee"].clone(), out["status"].clone(), out["number"].clone()), (json!("Ann Lee"), Value::Null, json!(12)));
+        // a task by number: the list answers first, exactly one match goes on to the task
+        let by = (act("task").build)(&cfg, &json!({ "number": "447", "project": "3" })).unwrap();
+        assert!(by.url.contains("filter[task_number]=447&filter[project_id]=3"), "{}", by.url);
+        assert!((act("task").build)(&cfg, &json!({ "number": "447" })).is_err());
+        let then = |id: &str, a: Value, first: Value| (act(id).then.unwrap())(&cfg, &a, &first);
+        let one = then("task", json!({ "number": "447", "project": "3" }), json!({ "data": [{ "id": "88" }] })).unwrap().unwrap();
+        assert!(one.url.starts_with("https://api.productive.io/api/v2/tasks/88?include="));
+        assert!(then("task", json!({ "number": "4", "project": "3" }), json!({ "data": [] })).unwrap_err().starts_with("no tasks"));
+        assert!(then("task", json!({ "number": "4", "project": "3" }), json!({ "data": [{ "id": "1" }, { "id": "2" }] })).unwrap_err().starts_with("more than one"));
+        assert!(then("task", json!({ "task": "5" }), json!({ "data": { "id": "5" } })).unwrap().is_none());
+        // statuses go through the project's workflow
+        let wf = then("statuses", json!({ "project": "3" }), json!({ "data": { "relationships": { "workflow": { "data": { "id": "9" } } } } })).unwrap().unwrap();
+        assert!(wf.url.ends_with("/workflow_statuses?filter[workflow_id]=9&page[size]=200"));
+        assert!(then("statuses", json!({ "project": "3" }), json!({ "data": { "relationships": { "workflow": { "data": null } } } })).is_err());
+        assert_eq!((act("statuses").out)(&json!({ "data": [{ "id": "1", "attributes": { "name": "Ready", "category_id": 1 } }] })), json!([{ "id": "1", "name": "Ready", "category": "not started" }]));
+        // move, assign, update patch the task; they need something to change
+        let mv = (act("move").build)(&cfg, &json!({ "task": "5", "status": "11", "task_list": "4" })).unwrap();
+        assert_eq!((mv.method, mv.url.as_str()), ("PATCH", "https://api.productive.io/api/v2/tasks/5"));
+        assert_eq!(mv.body.unwrap()["data"]["relationships"]["workflow_status"]["data"]["id"], "11");
+        assert!((act("move").build)(&cfg, &json!({ "task": "5" })).is_err() && (act("update").build)(&cfg, &json!({ "task": "5" })).is_err());
+        assert_eq!((act("assign").build)(&cfg, &json!({ "task": "5", "assignee": "me" })).unwrap().body.unwrap()["data"]["relationships"]["assignee"]["data"]["id"], "7");
+        assert!((act("assign").build)(&cfg, &json!({ "task": "5", "assignee": "x" })).is_err());
+        assert_eq!((act("update").build)(&cfg, &json!({ "task": "5", "title": "New" })).unwrap().body.unwrap()["data"]["attributes"], json!({ "title": "New" }));
+        // a subtask lands in the parent's project and list
+        let parent = json!({ "data": { "relationships": { "project": { "data": { "id": "3" } }, "task_list": { "data": { "id": "4" } } } } });
+        let sub = then("subtask", json!({ "parent_task_id": "5", "title": "S" }), parent.clone()).unwrap().unwrap().body.unwrap();
+        assert_eq!((sub["data"]["relationships"]["project"]["data"]["id"].clone(), sub["data"]["relationships"]["task_list"]["data"]["id"].clone(), sub["data"]["relationships"]["parent_task"]["data"]["id"].clone()), (json!("3"), json!("4"), json!("5")));
+        let other = then("subtask", json!({ "parent_task_id": "5", "title": "S", "task_list": "8" }), parent).unwrap().unwrap().body.unwrap();
+        assert_eq!(other["data"]["relationships"]["task_list"]["data"]["id"], "8");
+        // blocker is the primary task, type 1
+        let d = (act("depend").build)(&cfg, &json!({ "blocker": "5", "blocked": "6" })).unwrap();
+        assert_eq!(d.url, "https://api.productive.io/api/v2/task_dependencies");
+        let d = d.body.unwrap();
+        assert_eq!((d["data"]["relationships"]["task"]["data"]["id"].clone(), d["data"]["relationships"]["dependent_task"]["data"]["id"].clone(), d["data"]["attributes"]["type_id"].clone()), (json!("5"), json!("6"), json!(1)));
+        // comments: hidden on client projects unless said otherwise, never on internal ones
+        let proj = |t: u64| json!({ "data": { "relationships": { "project": { "data": { "type": "projects", "id": "3" } } } }, "included": [{ "type": "projects", "id": "3", "attributes": { "project_type_id": t } }] });
+        let hidden = |a: Value, t: u64| then("comment", a, proj(t)).unwrap().unwrap().body.unwrap()["data"]["attributes"]["hidden"].clone();
+        let a = json!({ "task": "5", "body": "b" });
+        assert_eq!((hidden(a.clone(), 2), hidden(a, 1), hidden(json!({ "task": "5", "body": "b", "hidden": "false" }), 2), hidden(json!({ "task": "5", "body": "b", "hidden": true }), 1)),
+            (json!(true), Value::Null, Value::Null, Value::Null));
+        assert!((act("comment").build)(&cfg, &json!({ "task": "5", "body": "b", "hidden": "maybe" })).is_err());
         // writes ask unless the user says otherwise
         for a in PROVIDER.actions { assert!(a.write == (a.default == board_core::Policy::Ask), "{}", a.id); }
     }
