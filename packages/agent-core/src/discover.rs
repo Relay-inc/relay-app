@@ -6,6 +6,7 @@ use base64::Engine;
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -17,15 +18,20 @@ type R<T> = Result<T, String>;
 struct Session { child: Child, stdin: ChildStdin, stdout: Option<BufReader<ChildStdout>> }
 
 /// The children of one discovery, addressed by the index [`Probe::start`] returns.
-pub struct Probe<'a> { env: &'a Env<'a>, sessions: Vec<Session>, pids: Arc<Mutex<Vec<i32>>> }
+/// On Windows every child of one discovery runs in one Job Object, ended as a whole.
+pub struct Probe<'a> { env: &'a Env<'a>, sessions: Vec<Session>, pids: Arc<Mutex<Vec<i32>>>, #[cfg(windows)] job: Arc<crate::job::Job> }
 
+#[cfg(unix)]
 fn kill_group(pid: i32) { unsafe { libc::killpg(pid, libc::SIGKILL); } }
 
 impl Probe<'_> {
     /// Spawns `cmd` in its own process group, with the login PATH and without stdin/stdout of ours.
     pub fn start(&mut self, mut cmd: Command) -> R<usize> {
-        let mut child = cmd.env("PATH", self.env.path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
-            .process_group(0).spawn().map_err(|e| e.to_string())?;
+        cmd.env("PATH", self.env.path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+        #[cfg(unix)]
+        let mut child = cmd.process_group(0).spawn().map_err(|e| e.to_string())?;
+        #[cfg(windows)]
+        let mut child = self.job.spawn(&mut cmd).map_err(|e| e.to_string())?;
         self.pids.lock().unwrap().push(child.id() as i32);
         let (stdin, stdout) = (child.stdin.take().unwrap(), BufReader::new(child.stdout.take().unwrap()));
         self.sessions.push(Session { child, stdin, stdout: Some(stdout) });
@@ -114,16 +120,29 @@ pub fn discover_commands(env: &Env, probe: impl FnOnce(&mut Probe) -> R<Value>) 
 
 fn discover_within(env: &Env, limit: Duration, probe: impl FnOnce(&mut Probe) -> R<Value>) -> Value {
     let pids = Arc::new(Mutex::new(Vec::new()));
+    #[cfg(windows)]
+    let Ok(job) = crate::job::Job::new().map(Arc::new) else { return json!({}) };
     let (done, wait) = mpsc::channel::<()>();
-    let watchdog = { let pids = pids.clone(); std::thread::spawn(move || {
+    let watchdog = { let pids = pids.clone(); #[cfg(windows)] let job = job.clone(); std::thread::spawn(move || {
         // killing the children makes the probe's blocked reads see EOF
-        if wait.recv_timeout(limit) == Err(mpsc::RecvTimeoutError::Timeout) { pids.lock().unwrap().iter().for_each(|&p| kill_group(p)); }
+        if wait.recv_timeout(limit) == Err(mpsc::RecvTimeoutError::Timeout) {
+            #[cfg(unix)]
+            pids.lock().unwrap().iter().for_each(|&p| kill_group(p));
+            #[cfg(windows)]
+            { let _ = pids; job.kill(); }
+        }
     }) };
-    let mut p = Probe { env, sessions: Vec::new(), pids };
+    let mut p = Probe { env, sessions: Vec::new(), pids, #[cfg(windows)] job };
     let result = probe(&mut p);
     drop(done);
     let _ = watchdog.join();
-    for s in &mut p.sessions { kill_group(s.child.id() as i32); let _ = s.child.wait(); }
+    #[cfg(windows)]
+    p.job.kill();
+    for s in &mut p.sessions {
+        #[cfg(unix)]
+        kill_group(s.child.id() as i32);
+        let _ = s.child.wait();
+    }
     result.unwrap_or_else(|_| json!({}))
 }
 

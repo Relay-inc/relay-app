@@ -1,6 +1,6 @@
 import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import type { FilingItem, InboxNote } from "../domain/inbox/rules";
-import { listen } from "@tauri-apps/api/event";
+import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
@@ -43,6 +43,8 @@ import type {
   SharedInfo,
   SharedInvite,
   SharedRole,
+  TeamMe,
+  TeamSso,
   SharedStatus,
 } from "../domain/settings/types";
 import type {
@@ -109,6 +111,8 @@ export const uiLang = () => invoke<string>("ui_lang");
 /** The macOS locale in the UI language (nl-BE for nl), for dates and sorting. */
 export const uiLocale = () => invoke<string>("ui_locale");
 export const openSettingsWindow = (tab?: string) => invoke("open_settings_window", tab ? { tab } : {});
+/** Another Relay window (Ctrl-N on Windows, macOS has it in the menu bar). */
+export const newWindow = () => invoke("new_window");
 /** Relay's updates (src-tauri/src/updater.rs): the last check's answer, a new check, and installing what it found
  *  (restarts the app). */
 export const updatesStatus = () => invoke<UpdatesStatus>("updates_status");
@@ -348,6 +352,8 @@ export const agentsStatus = () => invoke<AgentsStatus>("agents_status");
 export const agentCommands = (provider: string) => invoke<SlashCommand[]>("agent_commands", { provider });
 /** Every conversation key the backend has a session for (older versions' keys too). */
 export const chats = () => invoke<string[]>("chats");
+/** Sign the conversation's agent in on this Mac: resolves once the login in the browser is done. */
+export const agentLogin = (key: string) => invoke("agent_login", { key });
 export const chatProviders = () => invoke<Record<string, string>>("chat_providers");
 type SendArgs = {
   project: string;
@@ -493,7 +499,8 @@ export const machineUpdate = (id: string) => invoke<{ version: string }>("machin
 /** Where new conversations run without a pick ("" this Mac); the backend emits settings-changed. */
 export const setMachinesDefault = (id: string) => invoke("set_machines_default", { id });
 /** The vault folders that stay on this Mac, out of a machine's mirror. */
-export const setMachineMirror = (id: string, exclude: string[]) => invoke("set_machine_mirror", { id, exclude });
+export const setMachineMirror = (id: string, exclude: string[], every: number) =>
+  invoke("set_machine_mirror", { id, exclude, every });
 /** The last sync round of a machine's mirror, null before the first. */
 export const mirrorStatus = (id: string) => invoke<MirrorStatus | null>("mirror_status", { id });
 /** The deletes a machine's mirror holds back go through in its next round. */
@@ -711,6 +718,21 @@ export const sharedVaultHeld = (id: string, allow: boolean, paths: string[]) =>
   invoke("shared_vault_held", { id, allow, paths });
 /** The invite link that opened Relay, taken: the backend keeps it until then. */
 export const sharedVaultPendingInvite = () => invoke<string | null>("shared_vault_pending_invite");
+/** Team servers (src-tauri/src/team.rs): log in with a link (an invite in it, or the server's provider in the browser). */
+export const teamLogin = (link: string) =>
+  invoke<{ email: string; admin: boolean; name?: string }>("team_login", { link });
+/** What a team server says before this Mac logs in: the organisation's name ("" none) and its sign-in. */
+export const teamPeek = (link: string) => invoke<{ name?: string; sso: TeamSso | null }>("team_peek", { link });
+export const teamMe = (fp: string) => invoke<TeamMe>("team_me", { fp });
+export const teamOpen = (fp: string, id: string, folder: string) => invoke("team_open", { fp, id, folder });
+export const teamCreate = (fp: string, name: string, folder: string, nohistory: boolean) =>
+  invoke("team_create", { fp, name, folder, nohistory });
+/** An admin op: team_invite (answers with `link`), team_invite_revoke, team_member, team_overview, team_account, team_sso. */
+export const teamCall = <T = Record<string, unknown>>(fp: string, req: Record<string, unknown>) =>
+  invoke<T>("team_call", { fp, req });
+export const teamLink = (fp: string) => invoke<string>("team_link", { fp });
+export const teamLogout = (fp: string) => invoke("team_logout", { fp });
+export const ssoCancel = () => invoke("sso_cancel");
 /** A new invite link waits in the backend (`sharedVaultPendingInvite`): a ping, no payload. */
 export const onVaultInvite = (handler: () => void) => listen("vault-invite", () => handler());
 /** A note changed outside Relay (watch.rs): its page path, its text's hash ("" when it is gone), and whether it was a
@@ -894,6 +916,10 @@ export const onUpdateProgress = (handler: (progress: UpdateProgress) => void) =>
   listen<UpdateProgress>("update-progress", e => handler(e.payload));
 /** The open settings window is asked to show a page (Relay › Check for Updates). */
 export const onSettingsGo = (handler: (tab: string) => void) => listen<string>("settings-go", e => handler(e.payload));
+/** The settings window asks the main window to show Organisations and servers, with `item` picked ("" as it was). */
+export const openServersInMain = (item: string) => emitTo("main", "open-servers", item);
+export const onOpenServers = (handler: (item: string) => void) =>
+  listenHere<string>("open-servers", e => handler(e.payload));
 /** An item of the app menu (new-project, new-general, reopen-chat, close-chat). */
 export const onMenu = (handler: (item: string) => void) => listenHere<string>("menu", e => handler(e.payload));
 export const onIconsChanged = (handler: () => void) => listen("icons-changed", () => handler());

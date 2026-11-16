@@ -28,7 +28,9 @@ pub struct Progress { pub root: &'static str, pub step: usize, pub done: usize, 
 
 #[derive(Default)]
 /// `allow`: the machines whose next round may delete more than the brake lets through (the user said so).
-pub struct Mirrors { walkers: Mutex<HashMap<String, Walker>>, pub status: Mutex<HashMap<String, Status>>, pub progress: Mutex<HashMap<String, Progress>>, busy: Mutex<std::collections::HashSet<String>>, allow: Mutex<std::collections::HashSet<String>> }
+pub struct Mirrors { walkers: Mutex<HashMap<String, Walker>>, pub status: Mutex<HashMap<String, Status>>, pub progress: Mutex<HashMap<String, Progress>>, busy: Mutex<std::collections::HashSet<String>>, allow: Mutex<std::collections::HashSet<String>>,
+    // `asked`: the machines whose next round does not wait for its interval; `last`: when each one's last round ended
+    asked: Mutex<std::collections::HashSet<String>>, last: Mutex<HashMap<String, std::time::Instant>> }
 
 /// Where a round keeps what it deletes or mostly empties here: <data>/mirror-trash/<machine>/<round's minute>/<root>/<path>.
 fn trash(data: &Path, id: &str) -> PathBuf { data.join("mirror-trash").join(id) }
@@ -39,9 +41,13 @@ const TRASH_DAYS: i64 = 30;
 pub fn excludes(m: &Value) -> Vec<String> {
     m["mirror"]["exclude"].as_array().into_iter().flatten().filter_map(|x| x.as_str()).map(|x| x.trim_matches('/').to_string()).filter(|x| sync::safe_rel(x)).collect()
 }
+/// Minutes between a machine's rounds, 0 = all the time (a round every few seconds).
+pub fn every(m: &Value) -> u64 { m["mirror"]["every"].as_u64().unwrap_or(0) }
+/// The longest interval: a day.
+pub const EVERY_MAX: u64 = 24 * 60;
 pub fn valid(m: &Value) -> bool {
     let x = &m["mirror"];
-    x.is_null() || (x["exclude"].is_null() || x["exclude"].as_array().is_some_and(|a| a.len() <= 100 && a.iter().all(|e| e.as_str().is_some_and(|s| s.len() <= 300 && sync::safe_rel(s.trim_matches('/'))))))
+    x.is_null() || (x["every"].is_null() || x["every"].as_u64().is_some_and(|n| n <= EVERY_MAX)) && (x["exclude"].is_null() || x["exclude"].as_array().is_some_and(|a| a.len() <= 100 && a.iter().all(|e| e.as_str().is_some_and(|s| s.len() <= 300 && sync::safe_rel(s.trim_matches('/'))))))
 }
 
 fn home() -> String { std::env::var("HOME").unwrap_or_default() }
@@ -50,7 +56,7 @@ pub fn key(data: &Path, id: &str) -> Result<String, String> {
     let p = data.join(format!("mirror-{id}.key"));
     if let Ok(k) = std::fs::read_to_string(&p) { if k.trim().len() == 64 { return Ok(k.trim().into()); } }
     let k = relay_remote::tls::random_key();
-    use std::os::unix::fs::OpenOptionsExt;
+    use crate::platform::OpenOptionsExt;
     std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&p).and_then(|mut f| std::io::Write::write_all(&mut f, k.as_bytes())).map_err(|e| e.to_string())?;
     Ok(k)
 }
@@ -89,7 +95,7 @@ fn rules(s: &Value) -> Value {
 fn source(data: &Path, id: &str, root: &str, vault: &str) -> Option<PathBuf> {
     let link = |stage: &Path, name: &str, to: &Path| {
         let at = stage.join(name);
-        if std::fs::read_link(&at).ok().as_deref() != Some(to) { std::fs::remove_file(&at).ok(); std::os::unix::fs::symlink(to, &at).ok(); }
+        if std::fs::read_link(&at).ok().as_deref() != Some(to) { std::fs::remove_file(&at).ok(); crate::platform::symlink(to, &at).ok(); }
     };
     match root {
         "context" => {
@@ -165,7 +171,8 @@ impl Mirrors {
                 let guard = Guard { allow_deletes, allowed: &[], moved: &[], keep: &keep };
                 let (next, r): (Manifest, Report) = sync::run(mode, &src, &base, w, &filter(root, m), &client.root(root), &copy, &mergeable, &guard, &progress);
                 drop(walkers);
-                Self::save_base(data, &id, root, &next);
+                // only a round that changed something writes: the manifests are megabytes and a round comes every few seconds
+                if next != base { Self::save_base(data, &id, root, &next); }
                 st.pushed += r.pushed.len() + r.deleted_remote.len();
                 st.pulled += r.pulled.len() + r.deleted_local.len() + r.merged.len();
                 st.conflicts.extend(r.conflicts.into_iter().map(|c| format!("{root}/{c}")));
@@ -176,6 +183,7 @@ impl Mirrors {
         }
         self.progress.lock().unwrap().remove(&id);
         self.busy.lock().unwrap().remove(&id);
+        self.last.lock().unwrap().insert(id.clone(), std::time::Instant::now());
         let mut all = self.status.lock().unwrap();
         // the counts add up over the rounds since the app started, conflicts stay listed
         let prev = all.remove(&id).unwrap_or_default();
@@ -187,7 +195,15 @@ impl Mirrors {
     }
 
     /// The held deletes of a machine go through in its next round.
-    pub fn allow_deletes(&self, id: &str) { self.allow.lock().unwrap().insert(id.into()); }
+    pub fn allow_deletes(&self, id: &str) { self.allow.lock().unwrap().insert(id.into()); self.ask(id); }
+    /// A machine's next round does not wait for its interval (a choice made in Settings).
+    pub fn ask(&self, id: &str) { self.asked.lock().unwrap().insert(id.into()); }
+    /// Whether a machine's round is due: asked for, none yet since the app started, or its interval went by.
+    pub fn due(&self, m: &Value) -> bool {
+        let id = m["id"].as_str().unwrap_or("");
+        let asked = self.asked.lock().unwrap().remove(id);
+        asked || self.last.lock().unwrap().get(id).is_none_or(|t| t.elapsed().as_secs() >= every(m) * 60)
+    }
     /// The held deletes of a machine are undone instead: out of the base, so the next round sees each file as new on
     /// the side that still has it and copies it back to the other.
     pub fn restore_held(&self, data: &Path, id: &str) {
@@ -198,6 +214,7 @@ impl Mirrors {
             for p in st.iter().filter_map(|h| h.strip_prefix(root)?.strip_prefix('/')) { base.remove(p); }
             if base.len() != n { Self::save_base(data, id, root, &base); }
         }
+        self.ask(id);
     }
 
     /// Forget this Mac's side of a machine's mirror: the bases (so a new mirror starts from nothing) and the stage.
@@ -231,6 +248,8 @@ mod tests {
         // an older settings file still has the switch: ignored
         assert!(valid(&json!({"mirror": {"on": false}})) && !valid(&json!({"mirror": {"exclude": ["../x"]}})));
         assert_eq!(excludes(&json!({"mirror": {"exclude": ["/Archive/", "a/../b"]}})), vec!["Archive".to_string()]);
+        assert!(valid(&json!({"mirror": {"every": 15}})) && !valid(&json!({"mirror": {"every": EVERY_MAX + 1}})) && !valid(&json!({"mirror": {"every": "5"}})));
+        assert_eq!((every(&json!({})), every(&json!({"mirror": {"every": 15}}))), (0, 15));
         let info = Info { work: "/w/dev".into(), ..Default::default() };
         let (args, env) = session_args(&info, "/w/dev/vault");
         assert_eq!(&args[..2], ["--add-dir", "/w/dev/context"]);
@@ -240,6 +259,16 @@ mod tests {
         assert_eq!(env[0].0, "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD");
         let (args, _) = session_args(&info, "/home/relay/repos/x");
         assert!(serde_json::from_str::<Value>(args.last().unwrap()).unwrap()["autoMemoryDirectory"].is_null(), "memory only for the vault");
+    }
+    #[test]
+    fn a_round_waits_for_its_interval_unless_asked() {
+        let ms = Mirrors::default();
+        let (always, slow) = (json!({"id": "m"}), json!({"id": "m", "mirror": {"every": 15}}));
+        assert!(ms.due(&slow), "the first round since the app started");
+        ms.last.lock().unwrap().insert("m".into(), std::time::Instant::now());
+        assert!(ms.due(&always) && !ms.due(&slow));
+        ms.ask("m");
+        assert!(ms.due(&slow) && !ms.due(&slow), "asked once, one round");
     }
     #[test]
     fn restoring_held_deletes_takes_them_out_of_the_base() {

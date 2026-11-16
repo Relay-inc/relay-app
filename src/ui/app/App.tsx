@@ -20,7 +20,9 @@ import { request } from "../../application/navigation/requests";
 import { toggleShowMarkdown } from "../../application/navigation/editor";
 import { isKey, mailExperimental, settings } from "../../application/settings/settings";
 import { switchToNth } from "../../application/navigation/workspaces";
-import { workspaceDigit } from "../../domain/settings/shortcuts";
+import { isBinding, workspaceDigit } from "../../domain/settings/shortcuts";
+import { isMac } from "../../shared/platform";
+import { menuKey } from "../../application/boot";
 import { openNoteLink, swapSidebarTab } from "../../application/navigation/pages";
 import { useMailStore } from "../../application/mail/store";
 import {
@@ -185,8 +187,20 @@ function stuckArrow(e: KeyboardEvent) {
     (e.key === "ArrowUp" && atStart)
   );
 }
+// Ctrl-C on Windows is copy too: with text selected it copies, the turn keeps running
+function copies(e: KeyboardEvent) {
+  if (!isBinding(e, "mod+KeyC")) return false;
+  const el = e.target;
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return el.selectionStart !== el.selectionEnd;
+  return document.getSelection()?.isCollapsed === false;
+}
 function onKey(e: KeyboardEvent) {
   if (stuckArrow(e)) {
+    e.preventDefault();
+    return;
+  }
+  // Windows has no menu bar: Ctrl-T, Ctrl-W, Ctrl-N and the like come here (macOS: the menu takes them first)
+  if (!isMac() && !e.defaultPrevented && menuKey(e)) {
     e.preventDefault();
     return;
   }
@@ -196,7 +210,7 @@ function onKey(e: KeyboardEvent) {
     // Cmd-K: a question that starts a general conversation in the background
     e.preventDefault();
     toggleQuickAsk();
-  } else if (isKey(e, "app.stop")) {
+  } else if (isKey(e, "app.stop") && !copies(e)) {
     // Ctrl-C like in the terminal: stops a running turn, otherwise clears what is typed
     e.preventDefault();
     ctrlC();
@@ -218,7 +232,8 @@ function onKey(e: KeyboardEvent) {
     // ⌘[: a page back to the conversation or view it was opened from
     e.preventDefault();
     void goBack();
-  } else if (workspaceDigit(settings(), e)) {
+  } else if (!e.defaultPrevented && workspaceDigit(settings(), e)) {
+    // (not when the editor took it: the meeting notes mark a line with Ctrl-1 to 3 on Windows)
     // ⌃1 to ⌃9 by default (Settings › Shortcuts): the workspace at that place in the footer's menu
     e.preventDefault();
     switchToNth(workspaceDigit(settings(), e));

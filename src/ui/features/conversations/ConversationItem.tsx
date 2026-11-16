@@ -13,6 +13,7 @@ import { Answer } from "./Answer";
 import { Thinking } from "./Thinking";
 import { ToolStep } from "./ToolStep";
 import { NoteLine } from "./NoteLine";
+import { LoginCard } from "./LoginCard";
 import { RelayTurn } from "./RelayTurn";
 import { ReportCard } from "../orchestrator/ReportCard";
 
@@ -51,7 +52,7 @@ export const ConversationItem = memo(function ConversationItem({ item }: { item:
       );
     }
     case "err":
-      return <div className="err-box">{item.text}</div>;
+      return item.login ? <LoginCard /> : <div className="err-box">{item.text}</div>;
     case "done":
       // the end of a turn: a centred label between two lines under the answer, so it is clear the agent stopped
       return (

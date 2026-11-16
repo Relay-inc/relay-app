@@ -14,6 +14,7 @@ import {
 } from "../../../application/settings/voice-page";
 import { MODEL_NAMES, voiceOf, type ShortcutKey, type VoiceMode } from "../../../domain/settings/voice";
 import type { Key } from "../../../shared/i18n";
+import { isMac } from "../../../shared/platform";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
 import { buttonClass, ERROR_MESSAGE, HINT_IN_ROW, OK_MESSAGE, SELECT } from "./blocks";
@@ -86,7 +87,8 @@ export function VoicePage({ active }: { active: boolean }) {
           <Switch id="voicepaste" on={voice.pasteOn} onToggle={pasteOn => saveVoice({ pasteOn })} />
         </Field>
         {voice.pasteOn ? shortcutRow("pasteShortcut", t("voice.anyAppShortcutHelp")) : null}
-        {voice.pasteOn ? (
+        {/* Windows lets any app send Ctrl+V, there is nothing to allow */}
+        {voice.pasteOn && isMac() ? (
           <Field label={t("voice.access")} className="pl-6" hint={t(access ? "voice.accessOk" : "voice.accessHelp")}>
             {access ? (
               <span className={OK_MESSAGE}>{t("voice.accessAllowed")}</span>
@@ -129,7 +131,13 @@ export function VoicePage({ active }: { active: boolean }) {
                     <span className={`ml-2 ${OK_MESSAGE}`}>{t("voice.inUse")}</span>
                   ) : null}
                 </span>
-                <span className={HINT_IN_ROW}>{t(`voice.desc.${model.id}` as Key)}</span>
+                <span className={HINT_IN_ROW}>
+                  {t(
+                    model.id === "whisper-turbo" && !isMac()
+                      ? "voice.desc.whisper-turboWin"
+                      : (`voice.desc.${model.id}` as Key),
+                  )}
+                </span>
                 <span className={HINT_IN_ROW}>
                   {t("voice.size", { mb: model.mb })} · {tn("voice.langs", model.langs.length)}
                 </span>
@@ -176,7 +184,11 @@ export function VoicePage({ active }: { active: boolean }) {
             onChange={meetingModel => saveVoice({ meetingModel })}
           />
         </Field>
-        <Field label={t("voice.keepAudio")} id="voiceaudio" hint={t("voice.keepAudioHelp")}>
+        <Field
+          label={t("voice.keepAudio")}
+          id="voiceaudio"
+          hint={t(isMac() ? "voice.keepAudioHelp" : "voice.keepAudioHelpWin")}
+        >
           <Switch id="voiceaudio" on={voice.keepAudio} onToggle={keepAudio => saveVoice({ keepAudio })} />
         </Field>
         <Field label={t("voice.summarize")} id="voicesum" hint={t("voice.summarizeHelp")}>

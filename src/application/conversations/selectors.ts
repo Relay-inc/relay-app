@@ -12,6 +12,7 @@ import {
   USAGE,
   INBOX_VIEW,
   COLLECTION_VIEW,
+  SERVERS,
   isView,
   pluginIdOf,
   reviewOf,
@@ -38,6 +39,7 @@ import { useGraphStore } from "../navigation/graph";
 import { useInboxStore } from "../inbox/store";
 import { useCollectionsStore } from "../collections/store";
 import { activeFolder } from "../navigation/workspaces";
+import { serversCrumb } from "../settings/servers";
 
 // Reads over the conversations as they are now, in the UI language set last. Components call them inside
 // `useDerived` (ui/hooks), which redraws when what they return changes.
@@ -87,6 +89,7 @@ const VIEW_ICONS: Record<string, string> = {
   [INBOX_VIEW]: "inbox",
   [COLLECTION_VIEW]: "rows",
   [ORCH]: "agent",
+  [SERVERS]: "server",
 };
 
 // the phrase after the view's name in the title bar: what needs you now
@@ -122,6 +125,7 @@ function viewSummary(key: string) {
     const { name } = useCollectionsStore.getState();
     return name ? t("coll.viewOf", { name }) : "";
   }
+  if (key === SERVERS) return serversCrumb();
   if (key === ORCH) {
     const counts = workerCounts();
     return counts.running + counts.need + counts.done ? t("orch.counts", counts) : t("bar.orchIdle");
@@ -153,6 +157,7 @@ export function chatBar(key: string) {
     [REM]: "nav.reminders",
     [WAIT]: "nav.today",
     [ORCH]: "nav.orch",
+    [SERVERS]: "nav.servers",
   };
   // a review of Today's work in progress: named by its PR, under its project
   const review = reviewOf(key) ? useReviewStore.getState().reviews[reviewOf(key)] : undefined;

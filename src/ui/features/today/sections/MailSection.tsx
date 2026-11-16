@@ -28,6 +28,7 @@ import { useT } from "../../../hooks/useT";
 import { Glyph } from "../../../components/Glyph";
 import { Icon } from "../../../components/Icon";
 import type { SectionDef, SectionProps } from "./types";
+import { bindingLabel } from "../../../../domain/settings/shortcuts";
 
 const initials = (a?: Addr | { name: string | null; email: string }) =>
   (a?.name || a?.email || "?")
@@ -380,7 +381,7 @@ export function MailComposer() {
             className="inline-flex items-center gap-2 h-7.5 px-3 rounded-lg bg-accent text-on-accent text-[13px] font-medium cursor-pointer hover:bg-accent-hover disabled:opacity-50"
           >
             {compose.busy === "save" ? t("today.saving") : t("today.saveDraft")}
-            <span className="font-mono text-[11px] opacity-75">⌘↵</span>
+            <span className="font-mono text-[11px] opacity-75">{bindingLabel("mod+Enter")}</span>
           </button>
         </div>
       </div>

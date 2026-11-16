@@ -105,8 +105,10 @@ export async function startRecording(id: string, fallback?: Meeting) {
     );
     set({ system, why: why ?? "" });
   } catch (e) {
-    // nothing recorded yet: a missing model is caught before the microphone opens
-    set({ phase: "idle", meeting: null, error: e === "model" ? t("rec.noModelStart") : String(e) });
+    // nothing recorded yet: a missing model is caught before the microphone opens, a microphone Windows keeps from
+    // Relay when it opens
+    const error = e === "model" ? t("rec.noModelStart") : e === "microphone" ? t("rec.micOff") : String(e);
+    set({ phase: "idle", meeting: null, error });
   }
 }
 

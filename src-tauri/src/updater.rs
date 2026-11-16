@@ -63,7 +63,12 @@ fn releases(app: &AppHandle) -> Result<Vec<Value>, String> {
 
 async fn find(app: &AppHandle) -> Result<Option<tauri_plugin_updater::Update>, String> {
     // latest.json raw from the contents API, not wrapped in JSON
-    let mut builder = app.updater_builder().header("Accept", "application/vnd.github.raw").map_err(|e| e.to_string())?;
+    // Windows: the updater starts the installer and ends Relay with process::exit, which skips RunEvent::Exit, so
+    // what quitting does happens here first (the installer then closes the brokers and relay-server it finds
+    // running from relay.exe, docs/development.md › Releasing for Windows)
+    let h = app.clone();
+    let mut builder = app.updater_builder().on_before_exit(move || { crate::quit(&h); crate::pty::kill_all(&h); crate::plugins::kill_all(&h); })
+        .header("Accept", "application/vnd.github.raw").map_err(|e| e.to_string())?;
     // the repo is public: without gh (or its login) the check goes anonymous
     if let Ok(token) = crate::gh(&app.state::<crate::App>(), &["auth", "token"]) {
         builder = builder.header("Authorization", format!("Bearer {}", token.trim())).map_err(|e| e.to_string())?;

@@ -190,7 +190,8 @@ function ProviderCard({ id, hasLimits, format }: { id: string; hasLimits: boolea
   const allLimits = useUsageStore(s => s.limits);
   const tokensError = useUsageStore(s => s.tokensError);
   const entry = useUsageStore(s => s.tokens?.providers.find(x => x.provider === id));
-  const limits = allLimits?.find(x => x.provider === id)?.limits;
+  const prov = allLimits?.find(x => x.provider === id);
+  const limits = prov?.limits;
   // the conversations the token list names, opened on a click
   const sessions = useDerived(() =>
     Object.fromEntries((entry?.sessions ?? []).map(x => [x.sid, usageSession(x.key, x.sid)])),
@@ -284,7 +285,18 @@ function ProviderCard({ id, hasLimits, format }: { id: string; hasLimits: boolea
       {hasLimits && (
         <div className="flex flex-col gap-3 px-4 pt-3 pb-3.5">
           <span className={LABEL}>{t("usage.limits")}</span>
-          {limitsBody(limits)}
+          {prov?.accounts
+            ? // several accounts: each one's limits, the one a new conversation gets marked
+              prov.accounts.map(a => (
+                <div key={a.dir} className="flex flex-col gap-3">
+                  <span className="text-xs font-medium text-secondary">
+                    {a.name || t("ag.accountOwn")}
+                    {a.dir === prov.active && <span className="ml-1.5 text-tertiary">{t("usage.inUse")}</span>}
+                  </span>
+                  {limitsBody(a.limits)}
+                </div>
+              ))
+            : limitsBody(limits)}
         </div>
       )}
       <div className="flex flex-col px-4 pt-3 pb-1 border-t border-separator">

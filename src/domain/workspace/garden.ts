@@ -13,6 +13,7 @@ export const HEALTH = [
   "card_fields",
   "orphan_rule",
   "row_without_note",
+  "missing_tool",
 ] as const;
 /** The kinds the garden finds, in the order the list shows them. */
 export const GARDEN = ["outside_home", "no_project", "broken_link", "orphan", "unused_attachment", "no_type"] as const;

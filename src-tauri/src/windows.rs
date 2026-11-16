@@ -47,6 +47,10 @@ pub fn open_new(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Ctrl-N on Windows, where the webview takes the key (macOS has it in the menu bar).
+#[tauri::command]
+pub fn new_window(app: AppHandle) -> Result<(), String> { open_new(&app).map_err(|e| e.to_string()) }
+
 /// Bring the active window up (the main one may be hidden), its label.
 pub fn show_active(app: &AppHandle) -> String {
     let label = active();

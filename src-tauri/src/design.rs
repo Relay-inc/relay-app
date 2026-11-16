@@ -71,6 +71,9 @@ mod popup {
         }
     }
 }
+/// WebView2: wry 0.57 answers `Allow` with `SetHandled(false)` on `NewWindowRequested`, so WebView2 opens and owns its
+/// default popup window (the opener's profile and cookies, `window.opener` intact) and handles its `window.close()`.
+/// If a sign-in popup stays open on Windows, close it here from its `WindowCloseRequested`.
 #[cfg(not(target_os = "macos"))]
 mod popup { pub fn watch() {} }
 
@@ -536,8 +539,46 @@ fn snapshot(view: &Webview) -> Result<Vec<u8>, String> {
     }).map_err(|e| e.to_string())?;
     rx.recv_timeout(Duration::from_secs(15)).map_err(|_| "no snapshot in time".to_string())?.ok_or_else(|| "the snapshot failed".to_string())
 }
-#[cfg(not(target_os = "macos"))]
-fn snapshot(_: &Webview) -> Result<Vec<u8>, String> { Err("snapshots are macOS only".into()) }
+/// WebView2's `CapturePreview` writes a PNG of the visible page into a memory stream, read back once it completes.
+#[cfg(windows)]
+fn snapshot(view: &Webview) -> Result<Vec<u8>, String> {
+    use webview2_com::CapturePreviewCompletedHandler;
+    use webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG;
+    use windows::Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal;
+    let (tx, rx) = mpsc::channel::<Result<Vec<u8>, String>>();
+    view.with_webview(move |w| {
+        let start = || -> windows::core::Result<()> {
+            // SAFETY: COM calls on the webview's own (main) thread, the stream owns its memory
+            unsafe {
+                let stream = CreateStreamOnHGlobal(Default::default(), true)?;
+                let out = stream.clone();
+                let tx = tx.clone();
+                let done = CapturePreviewCompletedHandler::create(Box::new(move |r| {
+                    tx.send(r.and_then(|_| stream_bytes(&out)).map_err(|e| e.to_string())).ok();
+                    Ok(())
+                }));
+                w.controller().CoreWebView2()?.CapturePreview(COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG, &stream, &done)
+            }
+        };
+        if let Err(e) = start() { tx.send(Err(e.to_string())).ok(); }
+    }).map_err(|e| e.to_string())?;
+    rx.recv_timeout(Duration::from_secs(15)).map_err(|_| "no snapshot in time".to_string())?.map_err(|e| format!("the snapshot failed: {e}"))
+}
+/// The whole of a memory stream, from its start.
+#[cfg(windows)]
+unsafe fn stream_bytes(s: &windows::Win32::System::Com::IStream) -> windows::core::Result<Vec<u8>> {
+    use windows::Win32::System::Com::{STREAM_SEEK_END, STREAM_SEEK_SET};
+    let mut len = 0u64;
+    s.Seek(0, STREAM_SEEK_END, Some(&mut len))?;
+    s.Seek(0, STREAM_SEEK_SET, None)?;
+    let mut buf = vec![0u8; len as usize];
+    let mut read = 0u32;
+    s.Read(buf.as_mut_ptr().cast(), len as u32, Some(&mut read)).ok()?;
+    buf.truncate(read as usize);
+    Ok(buf)
+}
+#[cfg(not(any(target_os = "macos", windows)))]
+fn snapshot(_: &Webview) -> Result<Vec<u8>, String> { Err("snapshots are macOS and Windows only".into()) }
 
 /// A new design: the "new design" tile of claude.ai's design page makes a Cowork session with an empty canvas. Returns its link.
 /// ponytail: the tile has no test id, it is found by its aria-label (tile_label_ok); claude.ai changing it fails here, with this error.

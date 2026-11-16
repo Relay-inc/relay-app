@@ -18,7 +18,7 @@ use crate::{providers, reminders};
 use board_core::{check_args, Action, Policy, Provider};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::os::unix::net::{UnixListener, UnixStream};
+use relay_remote::sock::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
@@ -29,7 +29,7 @@ pub fn sock() -> PathBuf { crate::broker::dir().join("relay.sock") }
 
 /// One command: where it runs and what the user decides about it.
 struct Item { ext: &'static str, id: &'static str, about: &'static str, args: &'static [(&'static str, &'static str)], write: bool, default: Policy, run: Run }
-enum Run { Board(&'static Provider, &'static Action), Mail, Reminders, Calendar, Comments }
+enum Run { Board(&'static Provider, &'static Action), Mail, Reminders, Calendar, Comments, Knowledge }
 
 const MAIL: &[(&str, &str, &[(&str, &str)], bool)] = &[
     ("search", "Search Gmail (All Mail) with Gmail search syntax, newest first: ids, senders, subjects, dates.", &[("query", "Gmail search"), ("account?", "account email"), ("limit?", "1 to 50, default 20")], false),
@@ -56,6 +56,9 @@ fn items() -> Vec<Item> {
     // the conversation's own workspace's pages: reading runs, a reply is the user's word under their name, so it asks
     out.push(Item { ext: "comments", id: "list", about: "The open comment threads on a page of this conversation's workspace (resolved ones marked), with their ids, quotes and replies.", args: &[("path", "the note's path in the workspace, e.g. Clients/a2a.md")], write: false, default: Policy::Auto, run: Run::Comments });
     out.push(Item { ext: "comments", id: "reply", about: "Reply to a comment thread on a page of this conversation's workspace, as the user.", args: &[("path", "the note's path in the workspace"), ("id", "the thread's id from comments.list"), ("text", "the reply")], write: true, default: Policy::Ask, run: Run::Comments });
+    // the knowledge workspaces, read-only from any conversation: a conversation is fenced to its own workspace, so this
+    // is the one way in, and it only gives passages (no author, session or time)
+    out.push(Item { ext: "knowledge", id: "search", about: "Search the knowledge workspaces (team workspaces without history) for passages, read-only: path, workspace, the matching line, score.", args: &[("query", "words to find, as word prefixes"), ("workspace?", "one knowledge workspace by name"), ("limit?", "1 to 20, default 10")], write: false, default: Policy::Auto, run: Run::Knowledge });
     out.push(Item { ext: "calendar", id: "meetings", about: "Meetings on the user's calendars from an hour ago to 12 hours ahead, or of one whole day, with errors per calendar.", args: &[("date?", "YYYY-MM-DD, a whole local day")], write: false, default: Policy::Auto, run: Run::Calendar });
     out
 }
@@ -104,6 +107,7 @@ fn ready(app: &AppHandle, ext: &str) -> bool {
         "reminders" => crate::vault_of(&s)["ok"] == true,
         "calendar" => !crate::calendar::feeds(&s).is_empty(),
         "comments" => crate::files_on(&s),
+        "knowledge" => !crate::shared_vaults::knowledge(&s).is_empty(),
         id => providers::get(id).is_ok_and(|p| (p.ready)(&s["integrations"][p.id]) && providers::token(p).is_some()),
     }
 }
@@ -133,6 +137,9 @@ pub fn start(app: &AppHandle) {
         let script = format!("#!/bin/sh\nexec '{}' --cli \"$@\"\n", exe.replace('\'', "'\\''"));
         let f = bin.join("relay");
         if std::fs::write(&f, script).is_ok() { set_mode(&f, 0o755); }
+        // Windows: `relay` above serves a POSIX shell (Git Bash), `relay.cmd` serves cmd and PowerShell
+        #[cfg(windows)]
+        std::fs::write(bin.join("relay.cmd"), format!("@\"{}\" --cli %*\r\n", exe.replace('%', "%%"))).ok();
     }
     let path = sock();
     std::fs::create_dir_all(path.parent().unwrap()).ok();
@@ -146,7 +153,7 @@ pub fn bin_dir(app: &AppHandle) -> Option<PathBuf> {
     let d = app.path().app_data_dir().ok()?.join("bin");
     std::fs::create_dir_all(&d).ok().map(|_| d)
 }
-fn set_mode(p: &std::path::Path, mode: u32) { use std::os::unix::fs::PermissionsExt; std::fs::set_permissions(p, std::fs::Permissions::from_mode(mode)).ok(); }
+fn set_mode(p: &std::path::Path, mode: u32) { crate::platform::set_mode(p, mode).ok(); }
 
 fn serve(app: &AppHandle, c: UnixStream) {
     let mut line = String::new();
@@ -166,14 +173,24 @@ fn serve(app: &AppHandle, c: UnixStream) {
     (&c).write_all(format!("{out}\n").as_bytes()).ok();
 }
 
+/// Whether tracing proves which conversation calls. Not on Windows: any process of the user may start a child with
+/// another process named as its parent (PROC_THREAD_ATTRIBUTE_PARENT_PROCESS), or run code inside another process,
+/// so an agent of a shared vault could pass for one of the main vault. There a traced call still picks its
+/// conversation, but personal reads are refused for every caller.
+// ponytail: refuses personal reads through `relay` on Windows (Claude Code's mail tools over the control pipe are not
+// affected). A per-conversation pipe the app hands only to that agent would prove it, if Windows users need the reads
+const TRACE_PROVES: bool = cfg!(not(windows));
 /// The app conversation a request on the socket comes from: up from the calling process to an agent the app runs.
 /// None when it descends from none (a terminal of the user's own) or the platform cannot tell.
 fn caller(app: &AppHandle, c: &UnixStream) -> Option<String> {
-    use std::os::fd::AsRawFd;
     let agents: std::collections::HashMap<u32, String> = app.state::<crate::App>().procs.lock().unwrap().iter()
         // a remote agent's pid is one on the work machine: it could match a process here
         .filter(|(_, p)| !p.remote).map(|(k, p)| (p.child.id(), k.clone())).collect();
-    let mut pid = agent_core::peer::peer_pid(c.as_raw_fd())?;
+    #[cfg(unix)]
+    let mut pid = agent_core::peer::peer_pid(std::os::fd::AsRawFd::as_raw_fd(c))?;
+    // the pid Windows recorded when the CLI opened the pipe
+    #[cfg(windows)]
+    let mut pid = agent_core::peer::peer_pid(std::os::windows::io::AsRawHandle::as_raw_handle(c))?;
     for _ in 0..64 {
         if let Some(k) = agents.get(&pid) { return Some(k.clone()); }
         pid = agent_core::peer::parent(pid).filter(|p| *p > 1)?;
@@ -204,8 +221,7 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, known: bool, action: &str, a
     let it = all.iter().find(|it| format!("{}.{}", it.ext, it.id) == action).ok_or_else(|| format!("no action '{action}', `relay help` lists them"))?;
     check_args(it.args, args)?;
     // a shared vault's conversation reads none of the user's own mail, reminders or calendar (it may still write to them)
-    let personal = matches!(it.ext, "mail" | "reminders" | "calendar");
-    if personal && !it.write && (!known || crate::in_shared_vault(&app.state::<crate::App>(), key)) { return Err(crate::SHARED_NO_READ.into()); }
+    if let Some(e) = refused(it, known, || crate::in_shared_vault(&app.state::<crate::App>(), key)) { return Err(e.into()); }
     let s = acts(app);
     if !access(&s, it.ext) { return Err(format!("the user switched off agent access to {}", it.ext)); }
     if !ready(app, it.ext) { return Err(format!("{} is not set up in Relay (Settings)", it.ext)); }
@@ -224,6 +240,10 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, known: bool, action: &str, a
         Run::Mail => mail(app, key, &provider, it.id, args),
         Run::Reminders => reminder(app, it.id, args),
         Run::Comments => comments(app, key, it.id, args),
+        Run::Knowledge => {
+            let spaces = crate::shared_vaults::knowledge(&app.state::<crate::App>().settings.lock().unwrap());
+            knowledge(&crate::index_dir(app), &spaces, args)
+        }
         Run::Calendar => {
             let s = app.state::<crate::App>().settings.lock().unwrap().clone();
             match args["date"].as_str() {
@@ -233,6 +253,24 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, known: bool, action: &str, a
         }
     }
 }
+
+/// What runs only for a caller traced to a conversation (`known`), whatever the user's policy. A shared vault's
+/// conversation, or a caller that only named one, reads none of the user's own mail, reminders or calendar (it may still
+/// write to them). The knowledge workspaces only for a caller traced to one of the app's agents: a process that found
+/// the socket and a running conversation's key (`ps -E`) reads none of them. On Windows that trace (W3, the pipe's pid)
+/// does not prove which conversation calls, but every conversation gets the same passages, none of the user's own data,
+/// so a traced call is enough there too.
+fn refused(it: &Item, known: bool, shared: impl FnOnce() -> bool) -> Option<&'static str> {
+    let personal = matches!(it.ext, "mail" | "reminders" | "calendar");
+    // the trace does not prove the caller on Windows (TRACE_PROVES): no personal reads there for any caller. The
+    // knowledge workspaces hold no personal data, so a traced caller still searches them there.
+    if personal && !it.write && !TRACE_PROVES { return Some(WINDOWS_NO_READ); }
+    if personal && !it.write && (!known || shared()) { return Some(crate::SHARED_NO_READ); }
+    if it.ext == "knowledge" && !known { return Some(NOT_TRACED); }
+    None
+}
+const WINDOWS_NO_READ: &str = "on Windows, `relay` does not read the user's own mail, reminders or calendar: Relay cannot tell which conversation asks. Writing to the user (a reminder, a mail draft) still works.";
+const NOT_TRACED: &str = "relay searches the knowledge workspaces only for a conversation the Relay app runs, not for a command it cannot trace to one";
 
 /// A card in the conversation, as for a permission; blocks until the user answers or the agent stops waiting.
 fn ask(app: &AppHandle, stopped: &dyn Fn() -> bool, key: &str, provider: &str, action: &str, args: &Value) -> Result<(), String> {
@@ -300,6 +338,35 @@ fn comments(app: &AppHandle, key: &str, name: &str, args: &Value) -> Result<Valu
     if name == "list" { return tauri::async_runtime::block_on(crate::comments_of(&st, &target)).map(|v| v["threads"].clone()); }
     let id = crate::comment_add(&st, &target, "reply", &a("id"), &a("text"), "", &Value::Null, &[])?;
     Ok(json!({ "id": id }))
+}
+
+const KNOWLEDGE_MAX: usize = 20;
+/// `knowledge.search` over `spaces` (shared_vaults::knowledge) with the note index of each (related::passages):
+/// [{workspace, path, passage, score}], best first across them, at most `limit` (default 10, at most 20).
+// ponytail: bm25 scores of separate indexes compared as they are, fine for a few workspaces. A shared scale if one
+// big workspace keeps crowding out a small one.
+fn knowledge(dir: &std::path::Path, spaces: &[crate::shared_vaults::Shared], args: &Value) -> Result<Value, String> {
+    let a = |k: &str| board_core::arg(args, k);
+    let limit = match a("limit") {
+        None => 10,
+        Some(n) => n.parse::<usize>().ok().filter(|n| (1..=KNOWLEDGE_MAX).contains(n)).ok_or("limit is a number from 1 to 20")?,
+    };
+    let only = a("workspace");
+    let spaces: Vec<_> = spaces.iter().filter(|v| only.as_deref().is_none_or(|w| v.name.eq_ignore_ascii_case(w))).collect();
+    if spaces.is_empty() {
+        return Err(match only { Some(w) => format!("no knowledge workspace named '{w}' on this Mac"), None => "this Mac is a member of no knowledge workspace".into() });
+    }
+    let query = a("query").unwrap_or_default();
+    let mut out = vec![];
+    for v in spaces {
+        for mut p in crate::related::passages(dir, &crate::vault::canon(&v.folder), &query, limit)? {
+            p["workspace"] = json!(v.name);
+            out.push(p);
+        }
+    }
+    out.sort_by(|x, y| y["score"].as_f64().unwrap_or(0.0).total_cmp(&x["score"].as_f64().unwrap_or(0.0)));
+    out.truncate(limit);
+    Ok(json!(out))
 }
 
 fn reminder(app: &AppHandle, name: &str, args: &Value) -> Result<Value, String> {
@@ -391,6 +458,67 @@ mod tests {
         let mut d = names.clone(); d.sort(); d.dedup();
         assert_eq!(d.len(), names.len());
         assert!(names.contains(&"productive.add_time".into()) && names.contains(&"reminders.add".into()) && names.contains(&"calendar.meetings".into()) && names.contains(&"trello.create_card".into()));
+    }
+    #[test]
+    fn knowledge_search_gives_passages_only_of_the_flagged_workspaces() {
+        let d = std::env::temp_dir().join(format!("relay-knowledge-{}", std::process::id()));
+        std::fs::remove_dir_all(&d).ok();
+        let (data, dir) = (d.join("data"), d.join("data/index"));
+        std::fs::create_dir_all(&data).unwrap();
+        let space = |id: &str, name: &str, team: bool, nohistory: bool| json!({"id": id, "name": name, "host": "h", "port": 1, "fp": "f", "folder": d.join(name).to_string_lossy(), "team": team, "nohistory": nohistory});
+        let s = json!({"vault": d.join("Own").to_string_lossy(), "sharedVaults": [space("0000000000000001", "Know", true, true), space("0000000000000002", "Client", true, false), space("0000000000000003", "Nokey", false, false)]});
+        for w in ["Own", "Know", "Client", "Nokey"] {
+            std::fs::create_dir_all(d.join(w).join("Notes")).unwrap();
+            std::fs::write(d.join(w).join("Notes/Rates.md"), format!("---\ntype: Document\nauthor: someone\n---\nIntro.\nThe zebracache rate limit in {w} is 60 per minute\n")).unwrap();
+        }
+        for i in 0..25 { std::fs::write(d.join(format!("Know/Notes/More {i}.md")), format!("zebracache note {i}\n")).unwrap(); }
+        // only the team workspace without history, never the own vault, one with history or a personal shared one
+        let spaces = crate::shared_vaults::knowledge(&s);
+        assert_eq!(spaces.iter().map(|v| v.name.as_str()).collect::<Vec<_>>(), vec!["Know"]);
+        let run = |a: Value| knowledge(&dir, &spaces, &a);
+        let hits = run(json!({"query": "zebracache rate"})).unwrap();
+        let first = &hits[0];
+        assert_eq!(first["path"], "Notes/Rates.md");
+        assert_eq!(first["workspace"], "Know");
+        assert_eq!(first["passage"], "The zebracache rate limit in Know is 60 per minute");
+        assert!(first["score"].as_f64().unwrap() > 0.0);
+        // nothing on who or when: exactly these four fields, on every hit
+        for h in run(json!({"query": "zebracache"})).unwrap().as_array().unwrap() {
+            let mut keys: Vec<&str> = h.as_object().unwrap().keys().map(String::as_str).collect();
+            keys.sort();
+            assert_eq!(keys, ["passage", "path", "score", "workspace"]);
+        }
+        // the limit: 10 by default, at most 20
+        assert_eq!(run(json!({"query": "zebracache"})).unwrap().as_array().unwrap().len(), 10);
+        assert_eq!(run(json!({"query": "zebracache", "limit": "20"})).unwrap().as_array().unwrap().len(), 20);
+        assert_eq!(run(json!({"query": "zebracache", "limit": 3})).unwrap().as_array().unwrap().len(), 3);
+        assert!(run(json!({"query": "zebracache", "limit": "21"})).is_err() && run(json!({"query": "zebracache", "limit": "0"})).is_err());
+        // an empty query: refused by the arguments' check, and a query without words finds nothing
+        let it = items().into_iter().find(|i| i.ext == "knowledge").unwrap();
+        assert!(!it.write && it.default == Policy::Auto);
+        assert!(check_args(it.args, &json!({"query": ""})).is_err());
+        assert_eq!(run(json!({"query": " ?! "})).unwrap(), json!([]));
+        // one workspace by name, an unknown or unflagged one is refused
+        assert_eq!(run(json!({"query": "zebracache", "workspace": "know", "limit": 1})).unwrap()[0]["workspace"], "Know");
+        assert!(run(json!({"query": "zebracache", "workspace": "Client"})).unwrap_err().contains("no knowledge workspace"));
+        assert!(knowledge(&dir, &[], &json!({"query": "zebracache"})).unwrap_err().contains("no knowledge workspace"));
+        std::fs::remove_dir_all(&d).ok();
+    }
+    #[test]
+    fn only_a_traced_caller_searches_the_knowledge_workspaces() {
+        let all = items();
+        let it = |ext: &str, write: bool| all.iter().find(|i| i.ext == ext && i.write == write).unwrap();
+        // a process that only named a running conversation: no knowledge, none of the user's own reads
+        assert_eq!(refused(it("knowledge", false), false, || false), Some(NOT_TRACED));
+        let own = |shared_no_read| if TRACE_PROVES { shared_no_read } else { Some(WINDOWS_NO_READ) };
+        assert_eq!(refused(it("reminders", false), false, || false), own(Some(crate::SHARED_NO_READ)));
+        // traced: the knowledge workspaces from any conversation, also one in a shared vault
+        assert_eq!(refused(it("knowledge", false), true, || true), None);
+        assert_eq!(refused(it("reminders", false), true, || true), own(Some(crate::SHARED_NO_READ)));
+        assert_eq!(refused(it("reminders", false), true, || false), own(None));
+        // writing to the user and the other actions are as before
+        assert_eq!(refused(it("reminders", true), false, || true), None);
+        assert_eq!(refused(it("comments", false), false, || false), None);
     }
     #[test]
     fn cli_arguments() {

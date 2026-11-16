@@ -47,6 +47,9 @@ importers:
       '@relay/board-core':
         specifier: workspace:*
         version: link:packages/board-core
+      '@relay/integration-github-projects':
+        specifier: workspace:*
+        version: link:packages/integration-github-projects
       '@relay/integration-linear':
         specifier: workspace:*
         version: link:packages/integration-linear
@@ -197,6 +200,12 @@ importers:
       marked:
         specifier: ^18.0.14
         version: 18.0.14
+
+  packages/integration-github-projects:
+    dependencies:
+      '@relay/board-core':
+        specifier: workspace:*
+        version: link:../board-core
 
   packages/integration-linear:
     dependencies:

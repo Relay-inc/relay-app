@@ -6,6 +6,7 @@ import { othersLabel } from "../../../domain/calendar/meeting-view";
 import type { Meeting } from "../../../domain/calendar/types";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
+import { isMac } from "../../../shared/platform";
 import { clock } from "../conversations/RecordingBar";
 import { Menu } from "./Menu";
 
@@ -35,9 +36,9 @@ export function MeetingBar({ meeting, note }: { meeting: Meeting; note: { path: 
   const [confirm, setConfirm] = useState(false);
   const file = note?.path.split("/").pop();
   const tip = !system
-    ? t("rec.noSystem", { why: why || "?" })
+    ? t(isMac() ? "rec.noSystem" : "rec.noSystemWin", { why: why || "?" })
     : !heard && secs >= 15
-      ? t("rec.silentMac")
+      ? t(isMac() ? "rec.silentMac" : "rec.silentWin")
       : t("rec.consent");
   return (
     <div

@@ -12,7 +12,15 @@ export function DictationPill() {
       : state.phase === "copied"
         ? t("pill.copied")
         : state.phase === "error"
-          ? t(state.error === "model" ? "pill.noModel" : state.error === "silent" ? "pill.silent" : "pill.failed")
+          ? t(
+              state.error === "model"
+                ? "pill.noModel"
+                : state.error === "silent"
+                  ? "pill.silent"
+                  : state.error === "microphone"
+                    ? "pill.micOff"
+                    : "pill.failed",
+            )
           : "";
   return (
     <div className="flex h-screen items-center justify-center select-none">

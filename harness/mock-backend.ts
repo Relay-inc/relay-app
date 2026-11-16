@@ -2,7 +2,8 @@
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
 // events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-member-dark|shared-keeper|shared-live|shared-live-dark, ?sel=<selection key> (what the window
-// opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
+// opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened),
+// ?platform=windows (the app as it runs on Windows).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
 import * as embeds from "./fixtures/embeds";
@@ -28,6 +29,13 @@ type Call = { cmd: string; args: Args; at: number };
 
 const query = new URLSearchParams(location.search);
 const fixture = query.get("fixture") || "default";
+// ?platform=windows: the app as WebView2 on Windows runs it, whose user agent names Windows (src/shared/platform.ts):
+// Ctrl keys and their labels, no menu bar, an opaque sidebar
+if (query.get("platform") === "windows")
+  Object.defineProperty(navigator, "userAgent", {
+    value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0 Edg/142.0",
+    configurable: true,
+  });
 const onboarding = fixture === "onboarding";
 const isSettingsWindow = location.pathname.endsWith("settings.html");
 
@@ -46,6 +54,10 @@ function seedStorage() {
   if (fixture === "linear") {
     localStorage.setItem("linearProject", integ.LINEAR_TEAM);
     localStorage.setItem("linearBoard", `cycle_${integ.LINEAR_TEAM}`);
+  }
+  if (fixture === "ghprojects") {
+    localStorage.setItem("github-projectsProject", "beacon");
+    localStorage.setItem("github-projectsBoard", integ.GH_PROJECT);
   }
 }
 seedStorage();
@@ -76,8 +88,26 @@ const shared =
   fixture === "shared-invite" ||
   fixture === "shared-rekey" ||
   fixture === "shared-unlisted" ||
+  fixture === "shared-windows" ||
   member ||
   live;
+// team: a team server, this account an organisation admin there, Handbook synced here (fixtures/vault.ts team)
+// team-member: the same server, this account a member there and not an organisation admin (no team_overview)
+// team-unnamed: the team fixture on a server whose organisation has no name yet (the host shows)
+const teamFixture = fixture === "team" || fixture === "team-member" || fixture === "team-unnamed";
+const teamMember = fixture === "team-member";
+const orgName = fixture === "team-unnamed" ? "" : vault.ORG_NAME;
+if (teamFixture)
+  settings = {
+    ...settings,
+    teams: [{ ...structuredClone(vault.team), admin: !teamMember, name: orgName }],
+    sharedVaults: structuredClone(vault.teamVaults),
+  };
+let teamMe = { ...structuredClone(vault.teamMe), admin: !teamMember, name: orgName };
+let teamAccounts = structuredClone(vault.teamAccounts);
+let teamOverview = structuredClone(vault.teamOverview);
+let teamInviteSeq = 20;
+teamOverview.invites[0].expires = Math.floor(Date.now() / 1000) + 6 * 86400;
 if (shared)
   settings = {
     ...settings,
@@ -131,6 +161,10 @@ for (const s of Object.values(sharedStatus).slice(0, 1)) {
     .map(m => m.fp)
     .filter(fp => fixture !== "shared-unlisted" || fp !== vault.sharedMembers[2].fp);
 }
+// shared-windows: a round on Windows left out two files Windows cannot name and a pair that differs in case only
+if (fixture === "shared-windows")
+  for (const s of Object.values(sharedStatus))
+    Object.assign(s, { names: ["Notes/Q&A: pricing.md", "Notes/aux.md", "Notes/Plan.md", "Notes/plan.md"], held: [] });
 if (fixture === "shared-rekey")
   for (const s of Object.values(sharedStatus))
     Object.assign(s, {
@@ -318,11 +352,14 @@ function handle(cmd: string, a: Args): unknown {
       ];
     case "agent_update":
       return new Promise(resolve => setTimeout(() => resolve(null), 400));
+    // the sign-in card: the login in the browser takes a moment
+    case "agent_login":
+      return new Promise(resolve => setTimeout(() => resolve(null), 1500));
     // work machines (fixture "machines": one that speaks an older protocol, "phone", "nomirror" and shared: online)
     case "machine_status":
       // shared-keeper: a server older than this Relay, so its row offers the update
       if (fixture === "shared-keeper") return { ok: true, version: "0.0.3", os: "linux", host: "server", update: true };
-      if (fixture === "phone" || fixture === "mirror" || fixture === "nomirror" || shared)
+      if (fixture === "phone" || fixture === "mirror" || fixture === "every" || fixture === "nomirror" || shared)
         return { ok: true, version: "0.0.14", os: "linux", host: "server", update: true };
       if (fixture === "github")
         return { ok: true, version: "0.0.25", os: "linux", host: "server", update: true, repos: true };
@@ -393,10 +430,8 @@ function handle(cmd: string, a: Args): unknown {
       return new Promise(resolve =>
         setTimeout(() => resolve({ branch: "relay/server", dir: `/Users/demo/Code/${a.name}` }), 600),
       );
-    case "host_status": // fixture "github": a development build, This Mac cannot be a machine
-      return fixture === "github"
-        ? { supported: false, on: false, running: false, ram: false, fingerprint: "", clients: [] }
-        : null;
+    case "host_status": // fixture "github": a development build, This Mac cannot be a machine; else switched off
+      return { supported: fixture !== "github", on: false, running: false, ram: false, fingerprint: "", clients: [] };
     // shared vaults on a relay-server (src-tauri/src/shared_vaults.rs), fixture "shared"
     case "shared_vaults_status":
       return structuredClone(sharedStatus);
@@ -448,6 +483,19 @@ function handle(cmd: string, a: Args): unknown {
     case "shared_vault_info": {
       const v = (settings.sharedVaults ?? []).find((x: { id: string }) => x.id === a.id);
       if (!v) return Promise.reject(`no workspace ${a.id}`);
+      if (v.team)
+        return {
+          vault: {
+            id: v.id,
+            name: v.name,
+            role: v.role,
+            members: [],
+            invites: [],
+            team: true,
+            accounts: structuredClone(teamAccounts),
+          },
+          me: vault.SHARED_ME,
+        };
       if (fixture === "shared-keeper" && v.role !== "admin") {
         v.role = "admin";
         settings.machines = [...(settings.machines ?? []), structuredClone(vault.keeperMachine)];
@@ -457,6 +505,96 @@ function handle(cmd: string, a: Args): unknown {
         vault: { id: v.id, name: v.name, role: v.role, members: structuredClone(sharedMembers), invites },
         me: vault.SHARED_ME,
       };
+    }
+    // team servers (src-tauri/src/team.rs)
+    case "team_login":
+      settings.teams = [structuredClone(vault.team)];
+      return { email: vault.team.email, admin: true, name: vault.ORG_NAME };
+    // what a team server says before logging in: its organisation's name, no sign-in
+    case "team_peek":
+      return { team: true, name: vault.ORG_NAME, sso: null };
+    case "team_me":
+      return structuredClone(teamMe);
+    case "team_link":
+      return vault.teamLink();
+    case "team_open":
+    case "team_create": {
+      const w = teamMe.workspaces.find(x => x.id === a.id) ?? {
+        id: hex(16, teamMe.workspaces.length + 9),
+        name: a.name,
+        role: "admin",
+        nohistory: !!a.nohistory,
+        here: null,
+      };
+      if (!teamMe.workspaces.includes(w)) teamMe.workspaces.push(w);
+      w.here = a.folder;
+      const { here: _, ...rest } = w;
+      settings.sharedVaults = [
+        ...(settings.sharedVaults ?? []),
+        { ...rest, host: vault.team.host, port: vault.team.port, fp: vault.TEAM_FP, folder: a.folder, team: true },
+      ];
+      return null;
+    }
+    case "team_logout":
+      settings.teams = [];
+      settings.sharedVaults = (settings.sharedVaults ?? []).filter((x: { team?: boolean }) => !x.team);
+      return null;
+    case "sso_cancel":
+      return null;
+    case "team_call": {
+      const r = a.req;
+      if (r.op === "team_overview") {
+        if (teamMember) return Promise.reject("only an organisation admin sees the whole server");
+        return structuredClone(teamOverview);
+      }
+      // as relay-server's team.rs: an account made when there is none, the role in `vault`, and a link for one device
+      if (r.op === "team_invite") {
+        if (!teamAccounts.some(x => x.email === r.email) && r.vault)
+          teamAccounts = [...teamAccounts, { email: r.email, role: r.role }];
+        const id = hex(16, ++teamInviteSeq);
+        if (!teamOverview.accounts.some(x => x.email === r.email))
+          teamOverview.accounts.push({ email: r.email, admin: !!r.admin, off: false, devices: 0 });
+        const w = teamOverview.workspaces.find(x => x.id === r.vault);
+        if (w) w.members = { ...w.members, [r.email]: r.role };
+        const expires = Math.floor(Date.now() / 1000) + 7 * 86400;
+        teamOverview.invites.push({ id, email: r.email, expires });
+        return { invite: id, code: "c".repeat(64), email: r.email, expires, link: vault.teamLink(id) };
+      }
+      if (r.op === "team_member") {
+        teamAccounts = r.role
+          ? teamAccounts.map(x => (x.email === r.email ? { ...x, role: r.role } : x))
+          : teamAccounts.filter(x => x.email !== r.email);
+        const w = teamOverview.workspaces.find(x => x.id === r.vault);
+        if (w) {
+          const members: Record<string, string> = { ...w.members };
+          if (r.role) members[r.email] = r.role;
+          else delete members[r.email];
+          w.members = members;
+        }
+        return {};
+      }
+      if (r.op === "team_account") {
+        teamOverview.accounts = teamOverview.accounts.map(x =>
+          x.email === r.email
+            ? { ...x, ...("admin" in r ? { admin: r.admin } : {}), ...("off" in r ? { off: r.off } : {}) }
+            : x,
+        );
+        return {};
+      }
+      if (r.op === "team_name") {
+        teamMe = { ...teamMe, name: r.name };
+        settings.teams = (settings.teams ?? []).map((x: { fp: string }) => (x.fp === a.fp ? { ...x, name: r.name } : x));
+        return { name: r.name };
+      }
+      if (r.op === "team_sso") {
+        teamOverview = { ...teamOverview, sso: r.sso };
+        return {};
+      }
+      if (r.op === "team_invite_revoke") {
+        teamOverview = { ...teamOverview, invites: teamOverview.invites.filter(i => i.id !== r.invite) };
+        return {};
+      }
+      return Promise.reject(`unknown ${r.op}`);
     }
     case "shared_vault_invite_revoke":
       sharedInvites = sharedInvites.filter(i => i.id !== a.invite);
@@ -490,7 +628,7 @@ function handle(cmd: string, a: Args): unknown {
       return structuredClone(settings);
     case "set_settings":
       // the shared vaults are the backend's own: what the window sends for them is ignored
-      settings = { ...structuredClone(a.settings), sharedVaults: settings.sharedVaults };
+      settings = { ...structuredClone(a.settings), sharedVaults: settings.sharedVaults, teams: settings.teams };
       if (settings.vault) vaultOk = true;
       return structuredClone(settings);
     case "ui_lang":
@@ -614,7 +752,15 @@ function handle(cmd: string, a: Args): unknown {
       return null;
     // the workspace check: a few of each kind, gone once repaired
     case "vault_check":
-      return VAULT_FINDINGS.filter(f => !repaired.has(f.id));
+      // fixture windows: a Windows computer without Git Bash, jq and Python (vaultcheck.rs missing_tools)
+      return [
+        ...VAULT_FINDINGS,
+        ...(fixture === "windows"
+          ? ["python", "bash", "jq"].map(t =>
+              finding("missing_tool", t === "python" ? "System/scripts/build-index.py" : "System/hooks", t, [], false),
+            )
+          : []),
+      ].filter(f => !repaired.has(f.id));
     case "vault_garden":
       return gardenFindings();
     case "garden_about":
@@ -1173,6 +1319,8 @@ function handle(cmd: string, a: Args): unknown {
       return a.state;
     case "active_window":
       return "main";
+    case "new_window":
+      return null;
     case "ui_state_set":
       localStorage.setItem(a.key, a.value);
       if (keepState) sessionStorage.setItem(`mockUi:${a.key}`, a.value);
@@ -1181,7 +1329,14 @@ function handle(cmd: string, a: Args): unknown {
       return structuredClone(voiceModels);
     case "dictation_model":
     case "permissions":
-      return { microphone: "ok", accessibility: "ok", fullDisk: "missing", systemAudio: null, notifications: null };
+      // mic-off: the microphone switched off in Windows' privacy settings (src-tauri/src/permissions.rs)
+      return {
+        microphone: fixture === "mic-off" ? "missing" : "ok",
+        accessibility: "ok",
+        fullDisk: "missing",
+        systemAudio: null,
+        notifications: null,
+      };
     case "permissions_open":
       return null;
     case "dictation_access":
@@ -1201,6 +1356,7 @@ function handle(cmd: string, a: Args): unknown {
       dictationLevels = null;
       return null;
     case "meeting_record_start":
+      if (fixture === "mic-off") return Promise.reject("microphone");
       meetingTicks = { channel: channelId(a.onTick), index: 0 };
       return { system: true, why: null };
     case "meeting_record_stop":
@@ -1341,7 +1497,7 @@ function handle(cmd: string, a: Args): unknown {
     case "open_settings_window":
       return null;
     case "usage_limits":
-      return integ.usageLimits;
+      return fixture.startsWith("accounts") ? integ.usageLimitsAccounts : integ.usageLimits;
     case "usage_tokens":
       return integ.usageTokens();
 
@@ -1730,6 +1886,7 @@ function handle(cmd: string, a: Args): unknown {
       return (
         a.provider === "productive" ||
         (fixture === "linear" && a.provider === "linear") ||
+        (fixture === "ghprojects" && a.provider === "github-projects") ||
         (fixture === "buddy" && a.provider === "buddy")
       );
     case "integration_mcp":
@@ -1738,6 +1895,7 @@ function handle(cmd: string, a: Args): unknown {
       return null;
     case "integration_call":
       if (fixture === "linear" && a.provider === "linear") return integ.linear(a.body);
+      if (fixture === "ghprojects" && a.provider === "github-projects") return integ.githubProjects(a.body);
       if (fixture === "buddy" && a.provider === "buddy") return integ.buddy(a.path);
       if (a.provider !== "productive") throw new Error(`${a.provider} is not set up in the harness`);
       return integ.productive(a.method, a.path, a.body);
@@ -1937,6 +2095,7 @@ const gardenFindings = () => {
 // one of every health kind (issue 425)
 const VAULT_FINDINGS = [
   finding("claude_link", "", ".claude"),
+  finding("missing_file", "", "AGENTS.md"),
   finding("missing_file", "", "System/rules/core/team.md"),
   finding("context_note", "Studio", "Contexts/Studio/Studio.md"),
   finding("context_heading", "Studio", "Contexts/Personal/State/work-state.md"),
@@ -2027,7 +2186,17 @@ function collectionRow(path: string, text: string) {
           ? "briefed"
           : "planned";
   const links = [...text.matchAll(/\[\[([^\]|#\n]+)/g)].map(x => x[1].trim());
-  return { p: path, t: stem, k: kind, at: Math.floor(NOW_S - 3 * 86400), date, stage, props, links, tags: props.tags ?? [] };
+  return {
+    p: path,
+    t: stem,
+    k: kind,
+    at: Math.floor(NOW_S - 3 * 86400),
+    date,
+    stage,
+    props,
+    links,
+    tags: props.tags ?? [],
+  };
 }
 const pageRel = (p: unknown) => String(p).replace(vault.VAULT, "").replace(/^\//, "");
 // shared-live: the Mac's document of the page, which the editor and the mock peers share, and the cursors sent

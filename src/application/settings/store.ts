@@ -21,9 +21,12 @@ import {
   type SharedInfo,
   type SharedInvite,
   type SharedStatus,
+  type TeamMe,
+  type TeamOverview,
   type VaultSync,
 } from "../../domain/settings/types";
 import { SETUP_FOLDERS, type SetupPlatform } from "../../domain/settings/machines";
+import type { ORG_TABS, OrgDraft } from "../../domain/settings/servers";
 import type { AgentsStatus } from "../../domain/agents/types";
 import type { AgentUpdate, UpdateProgress, UpdatesStatus } from "../../domain/settings/updates";
 import type { BoardOpt } from "../../domain/board/types";
@@ -31,8 +34,14 @@ import type { PluginTest } from "../../domain/plugins/types";
 import type { ExtraVault, ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
 import { makeStore } from "../make-store";
 
+/** What a server added on Organisations and servers is for: a machine of your own, an organisation's server, or one
+ *  someone else runs (Join). */
+export type AddKind = "" | "own" | "org" | "join";
+/** An organisation's tabs on Organisations and servers; a member sees Overview and Workspaces. */
+export type OrgTab = (typeof ORG_TABS)[number];
+
 export type SettingsTab =
-  "general" | "projects" | "agents" | "integrations" | "plugins" | "machines" | "voice" | "shortcuts" | "updates";
+  "general" | "projects" | "agents" | "integrations" | "plugins" | "voice" | "shortcuts" | "updates";
 
 /** The settings as the backend keeps them and the UI language (both windows), plus what the settings window shows.
  *  Every save result is a `Message | null` (null: nothing to say). */
@@ -105,8 +114,41 @@ export type SettingsState = {
     keys: Record<string, string>;
     messages: Record<string, Message | null>; // per vault, "form" for the new and join forms
     busy: Record<string, boolean>; // what runs: a vault's id (one action per row at a time), or "form"
-    // the one form, a new vault on `machine` or joining one (machine ""): where it and the "form" message show
-    form: { mode: "" | "new" | "join"; machine: string; name: string; folder: string; link: string };
+    open: string; // the workspace whose page shows on Settings › Workspaces, "" for the list
+    // the one form, a new vault on `machine` (a team server: "team:<fp>") or joining one (machine ""): where it and
+    // the "form" message show. `noHistory`: a new team workspace without history
+    form: {
+      mode: "" | "new" | "join";
+      machine: string;
+      name: string;
+      folder: string;
+      link: string;
+      noHistory: boolean;
+    };
+  };
+  // the team servers (application/settings/teams.ts): per server (fp) its account and workspaces, what its organisation
+  // admins see, the link to log in with as typed, the links New link made, per invite id (the server never gives an
+  // open invite's link again), and what the server of a pasted link said before logging in (its name, the first domain
+  // of its sign-in)
+  team: {
+    me: Record<string, TeamMe | null>;
+    overview: Record<string, TeamOverview | null>;
+    link: string;
+    links: Record<string, string>;
+    peek: { link: string; name: string; domain: string } | null;
+  };
+  // Organisations and servers, the page in the main window (application/settings/servers.ts): the item picked in its
+  // list ("mac", "machine:<id>", "org:<fp>", "setup", "add"), the organisation's tab, the workspace open on its
+  // Workspaces tab that is not synced here ("" none), whether Invite people shows, on Add a server what it is for
+  // ("" not chosen yet) and its step, and the organisation server being set up (kept on this Mac, null none)
+  serversPage: {
+    item: string;
+    tab: OrgTab;
+    workspace: string;
+    inviting: boolean;
+    add: AddKind;
+    step: number;
+    draft: OrgDraft | null;
   };
   pluginsPage: {
     loaded: boolean; // the secrets are known
@@ -196,8 +238,11 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     keys: {},
     messages: {},
     busy: {},
-    form: { mode: "", machine: "", name: "", folder: "", link: "" },
+    open: "",
+    form: { mode: "", machine: "", name: "", folder: "", link: "", noHistory: false },
   },
+  team: { me: {}, overview: {}, link: "", links: {}, peek: null },
+  serversPage: { item: "", tab: "overview", workspace: "", inviting: false, add: "", step: 1, draft: null },
   pluginsPage: { loaded: false, secrets: {}, imports: [], messages: {}, tests: {} },
   integrations: {
     loaded: false,

@@ -161,6 +161,25 @@ test("a turn that fails shows the error and says so in the banner", () => {
   assert.deepEqual(unknown.messages["c:1"], [{ kind: "err", text: "err.unknown" }]);
 });
 
+test("a turn refused for a missing login becomes one sign-in card, without the agent's own line", () => {
+  const refused = "Not logged in \u00b7 Please run /login";
+  const said = produce(fresh(), draft => {
+    draft.status["c:1"] = "busy";
+    draft.messages["c:1"] = [
+      { kind: "me", text: "hi" },
+      { kind: "ai", text: refused },
+    ];
+  });
+  const { next } = run(said, { type: "turn_end", ok: false, error: refused });
+  assert.deepEqual(next.messages["c:1"], [
+    { kind: "me", text: "hi" },
+    { kind: "err", text: refused, login: true },
+  ]);
+  // another failure keeps the answer above it and gets no button
+  const { next: other } = run(said, { type: "turn_end", ok: false, error: "rate limited" });
+  assert.deepEqual(other.messages["c:1"], [...(said.messages["c:1"] ?? []), { kind: "err", text: "rate limited" }]);
+});
+
 test("the process exiting during a turn is an interruption; after it, nothing is said", () => {
   const busy = produce(fresh(), draft => {
     draft.status["c:1"] = "busy";

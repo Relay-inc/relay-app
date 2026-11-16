@@ -2,6 +2,7 @@ import type { Mail } from "../../../domain/mail/types";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { dateFormat, dayMonth } from "../../../shared/format";
+import { modKey } from "../../../shared/platform";
 
 // today a time, otherwise the day
 function formatWhen(iso: string, locale: string) {
@@ -73,7 +74,7 @@ export function MailRow({
       }}
       className={`group flex gap-3 items-start p-2.5 rounded-[9px] text-inherit cursor-pointer transition-colors duration-150 ease-out ${selected || checked ? "bg-accent-soft" : "hover:bg-fill"}`}
       onClick={e => {
-        if (selectable && (e.metaKey || e.shiftKey)) onSelect?.(e.shiftKey);
+        if (selectable && (modKey(e) || e.shiftKey)) onSelect?.(e.shiftKey);
         else onOpen();
       }}
     >

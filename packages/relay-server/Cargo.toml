@@ -19,3 +19,9 @@ base64 = "0.23"
 [dev-dependencies]
 # the e2e test edits a shared vault document the way an editor would (docs.rs)
 yrs = "0.28"
+
+# Windows: the server's own folders for this user only (lib.rs private_dir), the transcripts' link as a junction
+# (mirror.rs), consoles kept shut and processes in jobs (agent_core::job)
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization"] }
+junction = "2"

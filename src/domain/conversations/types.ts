@@ -61,6 +61,8 @@ export type Item = {
   output?: string;
   /** the end of a turn: what the turn did, and what it cost when the provider says (USD) */
   receipt?: { edits: number; errors: number; agents: number; cost?: number };
+  /** a turn refused because the agent is not signed in: drawn as a card with a sign-in button */
+  login?: true;
 };
 export type Chat = {
   key: string;
@@ -139,4 +141,5 @@ export type RouteChoice = { key: string; text: string; hits: string[] };
 /** A conversation refused for its provider's limit, waiting to be sent again: at the reset (`known`), or `at` is when
  *  the limits are read again. `fresh`: the refused turn did nothing yet, so its message goes again. */
 export type Retry = { key: string; at: number; known: boolean; fresh: boolean };
-export type RetryEvent = { type: "list"; retries: Retry[] } | { type: "fire"; key: string; fresh: boolean };
+export type RetryEvent =
+  { type: "list"; retries: Retry[] } | { type: "fire"; key: string; fresh: boolean; switched?: boolean };

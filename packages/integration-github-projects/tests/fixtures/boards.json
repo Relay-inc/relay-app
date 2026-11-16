@@ -1,0 +1,6 @@
+{ "data": { "viewer": { "login": "octo", "name": "Octo Cat",
+  "projectsV2": { "nodes": [{ "id": "PVT_u2", "title": "Side project", "closed": false }, { "id": "PVT_u1", "title": "Old", "closed": true }] },
+  "organizations": { "nodes": [
+    { "login": "acme", "name": "Acme", "projectsV2": { "nodes": [{ "id": "PVT_o2", "title": "Website", "closed": false }, { "id": "PVT_o1", "title": "Roadmap", "closed": false }] } },
+    { "login": "sso-org", "name": null, "projectsV2": null }
+  ] } } } }

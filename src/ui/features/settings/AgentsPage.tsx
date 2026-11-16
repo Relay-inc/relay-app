@@ -9,9 +9,11 @@ import { Html } from "../../components/Html";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
 import { buttonClass, DEFAULT_PILL, EMPTY_LIST, SELECT, TILE } from "./blocks";
+import { ActionsSection } from "./ActionsSection";
 import { AgentSettings } from "./AgentSettings";
 import { Footer } from "./Footer";
 import { LoadingSection } from "./LoadingSection";
+import { RunDefault } from "./RunDefault";
 import { Section } from "./Section";
 import { SettingsFold } from "./SettingsFold";
 import { StatusLine } from "./StatusLine";
@@ -25,7 +27,8 @@ const agentGlyph = (id: string) => {
 };
 
 /** Agents: every known agent is listed, a switch turns it on or off (off ones are dimmed). A row folds open to its program and
- *  options. Every change saves at once. What is installed is checked when the window opens. */
+ *  options. Every change saves at once. What is installed is checked when the window opens. Below, where new
+ *  conversations run (with a machine of your own) and the agents' access to knowledge workspaces. */
 export function AgentsPage() {
   const { t, th } = useT();
   const detected = useSettingsStore(s => s.agentsPage.detected);
@@ -137,6 +140,8 @@ export function AgentsPage() {
           }
         />
       )}
+      <RunDefault />
+      <ActionsSection ext="knowledge" name={t("act.knowledge")} />
     </>
   );
 }

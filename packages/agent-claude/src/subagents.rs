@@ -46,7 +46,10 @@ fn agent_row(path: &std::path::Path) -> Value {
         if let Some(last) = msgs.last() {
             row["last_at"] = last["timestamp"].clone();
             let stop = last["message"]["stop_reason"].as_str();
-            row["ended"] = json!(last["type"] == "assistant" && stop.is_some_and(|s| s != "tool_use"));
+            // newer Claude Code hands back with a SubagentHandback tool call: then its result is the last line
+            let handback = last["type"] == "user" && msgs.iter().rev().nth(1).is_some_and(|a| a["type"] == "assistant"
+                && a["message"]["content"].as_array().is_some_and(|c| c.iter().any(|x| x["name"] == "SubagentHandback")));
+            row["ended"] = json!(handback || (last["type"] == "assistant" && stop.is_some_and(|s| s != "tool_use")));
         }
         // the context of its latest request, and whether that answer hit the output limit
         if let Some(a) = msgs.iter().rev().find(|e| e["type"] == "assistant") {
@@ -159,6 +162,25 @@ mod tests {
         assert_eq!(get("a13a6342c4ed7b3e7")["running"], false); // ended with end_turn
         assert_eq!(get("a896673643d285b30")["running"], false); // no end_turn, finished per the parent's notification
         assert!(rows.iter().all(|r| r["description"].is_string() && r["started_at"].is_string()));
+    }
+}
+
+#[cfg(test)]
+mod handback_tests {
+    #[test]
+    fn handback_tool_call_ends_the_agent() {
+        let d = std::env::temp_dir().join(format!("relay-handback-{}.jsonl", std::process::id()));
+        let call = |name: &str| format!(r#"{{"type":"assistant","timestamp":"t1","message":{{"stop_reason":"tool_use","content":[{{"type":"tool_use","name":"{name}","input":{{}}}}]}}}}"#);
+        let result = r#"{"type":"user","timestamp":"t2","message":{"content":[{"type":"tool_result"}]}}"#;
+        std::fs::write(&d, format!("{}\n{result}\n", call("SubagentHandback"))).unwrap();
+        assert_eq!(super::agent_row(&d)["ended"], true);
+        // any other tool result: still at work
+        std::fs::write(&d, format!("{}\n{result}\n", call("WebFetch"))).unwrap();
+        assert_eq!(super::agent_row(&d)["ended"], false);
+        // continued after a handback: at work again
+        std::fs::write(&d, format!("{}\n{result}\n{result}\n", call("SubagentHandback"))).unwrap();
+        assert_eq!(super::agent_row(&d)["ended"], false);
+        std::fs::remove_file(&d).ok();
     }
 }
 

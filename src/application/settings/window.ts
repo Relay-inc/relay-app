@@ -6,12 +6,13 @@ import { applyTheme, closeWindow, setTitle } from "../../infrastructure/window";
 import { initLanguage } from "./settings";
 import { watchUpdates } from "./updates-page";
 import { watchVaultSync } from "./vault-sync";
-import { watchSharedVaults } from "./shared-vaults";
 import { useSettingsStore, type SettingsTab } from "./store";
 
 // The settings window, laid out like bb's: the pages in a sidebar on the left, the window title follows the page.
 // General holds the vault folder with its mapping and the language, Projects the projects the user customised,
-// Agents the coding-agent CLIs, Integrations the external services, Plugins the MCP servers that bring views, Machines the computers running relay-server, Voice dictation, Shortcuts the keys (read only), Updates Relay itself and the agent CLIs; each
+// Agents the coding-agent CLIs (and where conversations run, and the agents' access to knowledge workspaces),
+// Integrations the external services, Plugins the MCP servers that bring views, Voice dictation, Shortcuts the keys (read
+// only), Updates Relay itself and the agent CLIs; each
 // page's use cases are in <page>-page.ts and integrations.ts. Saving emits "settings-changed" from the backend, the main window follows it.
 export const TABS = [
   ["general", "set.tab.general", "gear"],
@@ -19,11 +20,13 @@ export const TABS = [
   ["agents", "set.tab.agents", "agent"],
   ["integrations", "set.tab.integrations", "plug"],
   ["plugins", "set.tab.plugins", "puzzle"],
-  ["machines", "set.tab.machines", "server"],
   ["voice", "set.tab.voice", "mic"],
   ["shortcuts", "set.tab.shortcuts", "keyboard"],
   ["updates", "set.tab.updates", "refresh"],
 ] as const satisfies readonly (readonly [SettingsTab, Key, string])[];
+
+/** Pages that moved to Organisations and servers, and what opens there for them. */
+const MOVED: Record<string, string> = { workspaces: "join", machines: "mac", organisation: "" };
 
 const st = () => useSettingsStore.getState();
 const set = useSettingsStore.setState;
@@ -48,12 +51,14 @@ export async function initSettingsWindow() {
   });
   void watchUpdates();
   void watchVaultSync();
-  // an invite link that opened Relay: the join form (the backend opens the window on Machines)
-  void watchSharedVaults();
   showTitle();
+  // machines, workspaces and organisations are on Organisations and servers in the main window: asked for here (an
+  // invite link that opened Relay asks for "workspaces"), the window sends it there and closes
+  if (asked && asked in MOVED) return void openServersPage(MOVED[asked]);
   void backend.onSettingsGo(to => {
     const tab = TABS.find(x => x[0] === to)?.[0];
     if (tab) go(tab);
+    else if (to in MOVED) void openServersPage(MOVED[to]);
   });
 }
 /** The window title follows the page (call after the page or the language changed). */
@@ -65,6 +70,14 @@ export function go(to: SettingsTab) {
     draft.message = null;
   });
   showTitle();
+}
+/** Organisations and servers is a page in the main window: it opens there with `item` picked and this window closes. */
+export async function openServersPage(item = "") {
+  try {
+    await backend.openServersInMain(item);
+  } finally {
+    closeWindow();
+  }
 }
 /** Escape and Cmd-W close the window. */
 export const close = closeWindow;

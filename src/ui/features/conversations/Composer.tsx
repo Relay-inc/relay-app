@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { isTerminal } from "../../../domain/navigation/keys";
+import { FENCED_AGENTS } from "../../../domain/agents/rules";
 import type { PickKind } from "../../../domain/agents/types";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { typedOf, useDraftsStore } from "../../../application/conversations/drafts";
@@ -403,9 +404,11 @@ export function Composer({ className }: { className: string }) {
           <div className="flex items-center gap-2 mb-2 text-xs text-secondary">
             <span className="flex-1">
               {dictationError
-                ? t(dictationError === "silent" ? "composer.dictationSilent" : "composer.dictationFailed", {
-                    error: dictationError,
-                  })
+                ? dictationError === "microphone"
+                  ? t("rec.micOff")
+                  : t(dictationError === "silent" ? "composer.dictationSilent" : "composer.dictationFailed", {
+                      error: dictationError,
+                    })
                 : dictation === "downloading"
                   ? t("composer.dictationDownloading", { pct: Math.round(progress * 100) })
                   : t("composer.dictationModel")}
@@ -480,13 +483,13 @@ export function Composer({ className }: { className: string }) {
           {/* with one agent there is nothing to pick */}
           {view.agents.length > 1 && !isTerminal(selected) && !agentFixed && !inOrchestrator ? (
             <>
-              {/* another vault than the main one runs Claude Code only (its fence is Claude Code's rules) */}
+              {/* another vault than the main one runs Claude Code or Codex only (FENCED_AGENTS) */}
               <PickMenu
                 pill
                 options={view.agents.map(option => ({
                   ...option,
                   icon: glyphOf(option.id),
-                  disabled: !!inShared && option.id !== "claude",
+                  disabled: !!inShared && !FENCED_AGENTS.includes(option.id),
                 }))}
                 value={view.agentId}
                 label={t("composer.agent")}

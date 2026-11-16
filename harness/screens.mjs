@@ -308,11 +308,42 @@ const todayDay = async (variant, dark) => {
   await page.mouse.move(900, 800);
   await settle(page);
 };
-const settingsPage = async (tab, sub, fixture = "default") => {
+const settingsPage = async (tab, sub, fixture = "default", platform = "") => {
   await page.setViewportSize({ width: 900, height: 700 });
-  await open(page, server.url, { path: "/settings.html", fixture });
+  await open(page, server.url, { path: "/settings.html", fixture, platform });
   await click(tab);
   if (sub) await click(sub);
+};
+/** Organisations and servers (main window) of `fixture`, `height` tall, on the list's item `name` (This Mac, a machine) */
+const serversItem = async (fixture, name, height = 1100) => {
+  await page.setViewportSize({ width: 1440, height });
+  await open(page, server.url, { fixture, sel: "__servers" });
+  await page
+    .getByRole("navigation", { name: "Organisations and servers" })
+    .getByRole("button", { name: new RegExp(`^${name}`) })
+    .first()
+    .click();
+  await settle(page);
+};
+/** the page of the fixture's machine "Server" (what Settings › Machines had for it) */
+const machinePage = (fixture, height = 1100) => serversItem(fixture, "Server", height);
+/** a workspace's page on Organisations and servers, `height` tall: found on This Mac or on one of the machines */
+const workspacePage = async (fixture, height = 1200, name = "Northwind") => {
+  await page.setViewportSize({ width: 1440, height });
+  await open(page, server.url, { fixture, sel: "__servers" });
+  const rows = page.getByRole("navigation", { name: "Organisations and servers" }).getByRole("button");
+  const pane = page.locator(".s-palette > section");
+  for (let i = 0; i < (await rows.count()); i++) {
+    await rows.nth(i).click();
+    await settle(page);
+    const row = pane.getByRole("button", { name: new RegExp(`^${name}`) }).locator("visible=true");
+    if (await row.count()) {
+      await row.first().click();
+      break;
+    }
+  }
+  await waitText(`Leave ${name}`);
+  await settle(page);
 };
 
 const VIEWS = {
@@ -356,47 +387,58 @@ const VIEWS = {
     await click("Install and restart");
     await waitText("55%");
   },
-  // Settings › Machines, a machine online, Add phone pressed: the QR and the line for the phone
+  // a machine's page on Organisations and servers, online, Add phone pressed: the QR and the line for the phone
   "settings-machines-phone": async () => {
-    await settingsPage("Machines", null, "phone");
+    await machinePage("phone");
     await click("Add phone");
     await waitText("Scan this with Relay on your phone");
     await page.getByText("ntfy.sh/relay-").scrollIntoViewIfNeeded();
   },
-  // Settings › Machines, pairing a machine for workspaces only: the line pasted, the checkbox ticked
+  // Add a server › A machine of your own › Pair, for workspaces only: the line pasted and recognised, the box ticked
   "settings-machines-pair-shared": async () => {
-    await settingsPage("Machines", null, "nomirror");
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await open(page, server.url, { fixture: "nomirror", sel: "__servers" });
+    await button("Add a server").click();
+    await button("Continue").click();
+    await button("I have the line").click();
     await page
-      .locator("#mcline")
+      .locator("#own-line")
       .fill(`relay://192.168.1.3:47800#fp=${"7c2e41a09b85d3f6".padEnd(64, "0")}&code=${"c".repeat(32)}`);
-    await page.locator("#mcname").fill("Team server");
-    await page.locator("#mcshared").check();
-    await intoView("Only for workspaces: no mirror of this Mac's vault");
+    await page.locator("#own-name").fill("Team server");
+    await page.getByLabel(/^Only for workspaces/).check();
+    await waitText("A pairing line for a machine of your own");
+    await settle(page);
   },
   // the same page further down: Team server, paired for workspaces only, says so where Server shows its mirror
   "settings-machines-shared-only": async () => {
-    await settingsPage("Machines", null, "nomirror");
+    await serversItem("nomirror", "Team server");
     await waitText("For workspaces only.");
     // the intro says "for workspaces only." too (text matches ignore case): the row's own words
     await intoView("For workspaces only. This Mac's Personal workspace");
   },
-  // Settings › Machines, a machine online whose mirror holds 9 deletes back: the first 5 listed, Restore and Delete
+  // a machine's page, online, whose mirror holds 9 deletes back: the first 5 listed, Restore and Delete
   "settings-machines-mirror-held": async () => {
-    await settingsPage("Machines", null, "mirror");
+    await machinePage("mirror");
     await waitText("9 deletions held");
     await intoView("Restore them");
   },
-  // Settings › Machines, a machine online with GitHub connected and three repos: clean, 2 commits not pushed, work
+  // a machine's page, online, its mirror set to sync every 15 minutes: the choice and what it means (#496)
+  "settings-machines-mirror-every": async () => {
+    await machinePage("every");
+    await waitText("How often it syncs");
+    await waitText("up to 15 minutes later");
+  },
+  // a machine's page, online, with GitHub connected and three repos: clean, 2 commits not pushed, work
   // not committed
   "settings-machines-github": async () => {
-    await settingsPage("Machines", null, "github");
+    await machinePage("github");
     await waitText("Connected as octo-demo");
     await waitText("2 commits not pushed");
     await intoView("Repos on Server");
   },
   // the same after Disconnect and Connect GitHub: the code to type on GitHub, waiting for it
   "settings-machines-github-code": async () => {
-    await settingsPage("Machines", null, "github");
+    await machinePage("github");
     await waitText("Connected as octo-demo");
     await button("Disconnect").click();
     await button("Disconnect").click();
@@ -427,7 +469,7 @@ const VIEWS = {
     await page.getByRole("button", { name: "Runs in", exact: true }).locator("visible=true").first().click();
     await waitText("Northwind");
   },
-  // the workspace Northwind picked there: no Runs on, and Claude Code is the only agent to pick
+  // the workspace Northwind picked there: no Runs on, and Claude Code and Codex are the agents to pick
   "composer-vault-picked": async () => {
     await open(page, server.url, { fixture: "shared" });
     await page.evaluate(() => window.__harness.emit("menu", "new-general"));
@@ -1071,6 +1113,18 @@ const VIEWS = {
     await click("Current cycle");
     await waitText("Cycle 42");
   },
+  // an organization's GitHub project as a board, its Status options as columns, and its Integrations page (PR github-projects)
+  "board-github-projects": async () => {
+    await open(page, server.url, { fixture: "ghprojects" });
+    await click("GitHub Projects");
+    await waitText("GitHub Projects as board");
+  },
+  "board-github-projects-picker": async () => {
+    await VIEWS["board-github-projects"]();
+    await click("Billing roadmap");
+    await waitText("Website");
+  },
+  "settings-integration-github-projects": () => settingsPage("Integrations", "GitHub Projects", "ghprojects"),
   // a project's Buddy pipelines in its title bar, the menu open: failed, running and passed, each with its last run (PR buddy)
   "buddy-menu": async () => {
     await open(page, server.url, { fixture: "buddy", sel: keys.switchTo });
@@ -1146,6 +1200,15 @@ const VIEWS = {
   },
   usage: async () => {
     await VIEWS["usage-popover"]();
+    await page.getByRole("button", { name: "View details" }).click();
+    await waitText("All of Claude Code", 10000);
+    await settle(page);
+  },
+  // two Claude accounts, the first used up: each account's limits, the one in use marked
+  "usage-accounts": async () => {
+    await open(page, server.url, { fixture: "accounts" });
+    await page.getByRole("button", { name: /^Usage/ }).click();
+    await waitText("View details");
     await page.getByRole("button", { name: "View details" }).click();
     await waitText("All of Claude Code", 10000);
     await settle(page);
@@ -1713,13 +1776,12 @@ const VIEWS = {
     await settingsPage("Voice");
     await intoView("Whisper Large v3 Turbo");
   },
-  // Settings › Machines of the workspace's admin: Team server, paired for workspaces only, with the workspace under it: its
-  // last round (a conflict copy, two deletes held), the members open (this Mac, an admin, a member, an open invite), a
-  // new invite link made and the recovery key shown again
+  // a workspace's page on Organisations and servers for its admin (was Settings › Workspaces): Northwind on Team
+  // server, its last round (a conflict copy, two deletes held), its people (this Mac, an admin, a member, an open
+  // invite), a new invite link made and the recovery key shown again
   // a member left: the workspace's key changes once the remaining members' Relay can receive it (PR key rotation)
   "settings-shared-rekey": async () => {
-    await settingsPage("Machines", undefined, "shared-rekey");
-    await page.setViewportSize({ width: 900, height: 1000 });
+    await workspacePage("shared-rekey", 1000);
     await waitText("the key has not changed since");
     await page.getByText("the key has not changed since").scrollIntoViewIfNeeded();
     await settle(page);
@@ -1734,8 +1796,7 @@ const VIEWS = {
   },
   // an admin turns making the notes documents on (ticket 8b, opt-in per workspace)
   "settings-shared-docs": async () => {
-    await settingsPage("Machines", undefined, "shared");
-    await page.setViewportSize({ width: 900, height: 1000 });
+    await workspacePage("shared", 1000);
     await waitText("Notes as shared documents");
     await page.getByRole("switch").first().click();
     await page.getByText("Notes as shared documents").first().scrollIntoViewIfNeeded();
@@ -1743,9 +1804,7 @@ const VIEWS = {
   },
   // the member list's roles in Members, with Make admin / Make member for a list admin (PR member roles)
   "settings-shared-members": async () => {
-    await settingsPage("Machines", undefined, "shared");
-    await page.setViewportSize({ width: 900, height: 1200 });
-    await button("Members").first().click();
+    await workspacePage("shared");
     await waitText("Design laptop");
     await page.getByText("Design laptop").scrollIntoViewIfNeeded();
     await settle(page);
@@ -1760,9 +1819,7 @@ const VIEWS = {
   },
   // a member the server has and the list lacks: Not on the list, Add to list and why, no Make admin or Remove
   "settings-shared-unlisted": async () => {
-    await settingsPage("Machines", undefined, "shared-unlisted");
-    await page.setViewportSize({ width: 900, height: 1200 });
-    await button("Members").first().click();
+    await workspacePage("shared-unlisted");
     await waitText("Not on the list");
     await page.getByText("Design laptop").scrollIntoViewIfNeeded();
     await settle(page);
@@ -1775,23 +1832,262 @@ const VIEWS = {
     await page.getByText("Design laptop").scrollIntoViewIfNeeded();
     await settle(page);
   },
+  // a round on Windows left out files Windows cannot name, and a case clash: listed under the workspace (PR W4)
+  "settings-shared-names": async () => {
+    await workspacePage("shared-windows", 1000);
+    await waitText("not synced here");
+    await page.getByText("not synced here").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // Organisations and servers (PR servers-page), a page in the main window, fixture team: an organisation admin of
+  // relay.example.com. The Overview: counts, the server, the sign-in link, you, and what is still to set up
+  "servers-overview": async () => {
+    await open(page, server.url, { fixture: "team", sel: "__servers" });
+    await waitText("Sign-in link");
+    await settle(page);
+  },
+  // the workspace menu grouped by place: On this Mac, then the organisation by its name with who can read on its head
+  // and your role per row (PR menu-by-place)
+  "workspace-menu-places": async () => {
+    await open(page, server.url, { fixture: "team" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await waitText("On this Mac");
+    await settle(page);
+  },
+  // the same with a machine of your own keeping encrypted workspaces (fixture shared)
+  "workspace-menu-machine": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await waitText("On this Mac");
+    await settle(page);
+  },
+  // the organisation's name edited in place by an organisation admin (PR org-name)
+  "servers-org-name-edit": async () => {
+    await VIEWS["servers-overview"]();
+    await button("Edit").first().click();
+    await page.getByLabel("Organisation name").fill("Bluebird Studio Gent");
+    await settle(page);
+  },
+  // an organisation without a name yet (an older server, or nobody named it): the host, the building, Add a name
+  "servers-org-unnamed": async () => {
+    await open(page, server.url, { fixture: "team-unnamed", sel: "__servers" });
+    await waitText("Add a name");
+    await settle(page);
+  },
+  // the footer's workspace menu, with Organisations and servers… and Add a server… at the bottom
+  "servers-menu": async () => {
+    await open(page, server.url, { fixture: "team" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await waitText("Add a server…");
+    await settle(page);
+  },
+  // People: an open invite, the accounts (one turned off) with their workspaces as squares
+  "servers-people": async () => {
+    await VIEWS["servers-overview"]();
+    await page.getByRole("tab", { name: /^People/ }).click();
+    await waitText("kim@example.com");
+    await settle(page);
+  },
+  // New link on the open invite: withdrawn and made again for the same address, the new link to copy on its row
+  "servers-people-new-link": async () => {
+    await VIEWS["servers-people"]();
+    await button("New link").first().click();
+    await waitText("relay://relay.example.com");
+    await settle(page);
+  },
+  // Invite people: a new address and an existing account, two workspaces
+  "servers-invite": async () => {
+    await VIEWS["servers-people"]();
+    await button("Invite people").click();
+    await page.getByLabel("Email addresses").fill("nina@example.com, sam@example.com");
+    await page.getByRole("checkbox", { name: "Handbook", exact: true }).check();
+    await page.getByRole("checkbox", { name: "Research", exact: true }).check();
+    await waitText("What they get");
+    await settle(page);
+  },
+  // and created: the link for the new address, the existing account added
+  "servers-invited": async () => {
+    await VIEWS["servers-invite"]();
+    await button("Create 1 invite link").click();
+    await waitText("Existing account: added");
+    await settle(page);
+  },
+  // Workspaces: every workspace with members, admins, your role and whether it syncs here, New workspace… open
+  "servers-workspaces": async () => {
+    await VIEWS["servers-overview"]();
+    await page.getByRole("tab", { name: /^Workspaces/ }).click();
+    await button("New workspace…").click();
+    await page.getByRole("textbox", { name: "Name", exact: true }).fill("Proposals");
+    await page.getByRole("radio", { name: /Without history/ }).click();
+    await intoView("Create workspace");
+  },
+  // a workspace synced here: its page (members, history, sync, leave)
+  "servers-workspace": async () => {
+    await VIEWS["servers-overview"]();
+    await page.getByRole("tab", { name: /^Workspaces/ }).click();
+    await button("Open Handbook").click();
+    await waitText("sam@example.com");
+    await settle(page);
+  },
+  // a workspace the organisation admin is not in: its members, add an address
+  "servers-org-workspace": async () => {
+    await VIEWS["servers-overview"]();
+    await page.getByRole("tab", { name: /^Workspaces/ }).click();
+    await button("Open Finance").click();
+    await waitText("you manage it as organisation admin");
+    await settle(page);
+  },
+  // Sign-in with Microsoft Entra picked: the steps in the admin center, the fields, what the server needs
+  "servers-signin": async () => {
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await open(page, server.url, { fixture: "team", sel: "__servers" });
+    await page.getByRole("tab", { name: /^Sign-in/ }).click();
+    await page.getByRole("radio", { name: /Microsoft Entra/ }).click();
+    await page.getByLabel("Tenant ID").fill("11111111-2222-3333-4444-555555555555");
+    await waitText("Each account is tied to one person");
+    await settle(page);
+  },
+  // Server: what Relay knows, and what whoever runs the box does there (update, move, back up, restore)
+  "servers-server": async () => {
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await open(page, server.url, { fixture: "team", sel: "__servers" });
+    await page.getByRole("tab", { name: /^Server/ }).click();
+    await waitText("What the server keeps");
+    await settle(page);
+  },
+  // fixture team-member: a member's Overview, two tabs, their own workspaces and who can read
+  "servers-member": async () => {
+    await open(page, server.url, { fixture: "team-member", sel: "__servers" });
+    await waitText("Your workspaces");
+    await settle(page);
+  },
+  // Add a server (PR add-server): what it is for, side by side, fixed once set up
+  "servers-add": async () => {
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await open(page, server.url, { sel: "__servers" });
+    await waitText("What it is for");
+    await settle(page);
+  },
+  // A machine of your own, step 2: what it needs and the setup commands, compose as for an organisation server
+  "servers-add-own": async () => {
+    await VIEWS["servers-add"]();
+    await button("Continue").click();
+    await waitText("Kind of machine");
+    await settle(page);
+  },
+  // step 3: a pairing line pasted and recognised, what happens after pairing
+  "servers-add-pair": async () => {
+    await VIEWS["servers-add-own"]();
+    await button("I have the line").click();
+    await page
+      .locator("#own-line")
+      .fill(`relay://192.168.1.3:47800#fp=${"7c2e41a09b85d3f6".padEnd(64, "0")}&code=${"c".repeat(32)}`);
+    await page.locator("#own-name").fill("Office box");
+    await waitText("A pairing line for a machine of your own");
+    await settle(page);
+  },
+  // A server for an organisation, step 2: the values, who does what, who can read, what it needs. It stays in the
+  // list as being set up
+  "servers-add-org": async () => {
+    await VIEWS["servers-add"]();
+    await page.getByRole("radio", { name: /A server for an organisation/ }).click();
+    await button("Continue").click();
+    await page.getByLabel("Address the Macs use").fill("relay.example.com");
+    await page.getByLabel("First organisation admin").fill("alex@example.com");
+    await page.getByLabel("Where the Macs are").fill("192.168.1.0/24");
+    await waitText("Setting up, step 2 of 4");
+    await settle(page);
+  },
+  // step 3: the commands for the box, filled in
+  "servers-add-org-install": async () => {
+    await page.setViewportSize({ width: 1440, height: 1500 });
+    await VIEWS["servers-add-org"]();
+    await button("Continue").click();
+    await waitText("Make it a team server");
+    await settle(page);
+  },
+  // step 4: the link it printed, and when it does not connect unfolded
+  "servers-add-org-connect": async () => {
+    await VIEWS["servers-add-org-install"]();
+    await button("I have the link").click();
+    await page.getByLabel("Link to the team server").fill(`relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`);
+    await page.getByText("When it does not connect").click();
+    await waitText("Certificate does not match");
+    await button("Check this server").click();
+    await page.getByLabel("Organisation name").and(page.locator('[value="Bluebird Studio"]')).waitFor();
+    await settle(page);
+  },
+  // Join: an organisation's invite pasted, what it is and who can read before Log in
+  "servers-join": async () => {
+    await VIEWS["servers-add"]();
+    await page.getByRole("radio", { name: /Join a server someone else runs/ }).click();
+    await button("Continue").click();
+    await page.getByLabel("Invite or pairing line").fill(`relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`);
+    await waitText("Invite to an organisation");
+    await settle(page);
+  },
+  // Join after Check this server: the address and certificate first, the name the server gives itself second
+  "servers-join-checked": async () => {
+    await VIEWS["servers-join"]();
+    await button("Check this server").click();
+    await waitText("calls itself Bluebird Studio");
+    await settle(page);
+  },
+  // a server that calls itself like an organisation this Mac is in (another certificate): said before Log in
+  "servers-join-clash": async () => {
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await open(page, server.url, { fixture: "team", sel: "__servers" });
+    await button("Add a server").last().click();
+    await page.getByRole("radio", { name: /Join a server someone else runs/ }).click();
+    await button("Continue").click();
+    await page.getByLabel("Invite or pairing line").fill(`relay://relay.example.net:47800#team&fp=${"9c1d".padEnd(64, "e")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`);
+    await button("Check this server").click();
+    await waitText("is also called Bluebird Studio");
+    await settle(page);
+  },
+  // This Mac: this Mac as a machine, and the encrypted workspaces it joined with a link
+  "servers-mac": async () => {
+    await serversItem("shared-member", "This Mac");
+    await waitText("This Mac as a machine");
+  },
+  // a machine of your own: online, its mirror, GitHub and repos, the workspaces it keeps
+  "servers-machine": async () => {
+    await machinePage("github", 1300);
+    await waitText("Connected as octo-demo");
+  },
+  // a machine of your own that speaks an older protocol: the compose update for its folder (PR add-server, one route)
+  "servers-machine-outdated": async () => {
+    await machinePage("machines");
+    await waitText("docker compose pull");
+  },
+  // A machine of your own on Unraid: the compose commands with Unraid's folder
+  "servers-add-own-unraid": async () => {
+    await VIEWS["servers-add-own"]();
+    await page.getByRole("radio", { name: "Unraid", exact: true }).click();
+    await waitText("/mnt/user/appdata/relay-server");
+    await settle(page);
+  },
+  // Settings: Organisations and servers is a row under the pages, Workspaces points there for organisations
+  "settings-servers-row": async () => {
+    await settingsPage("Agents", undefined, "machines");
+    await waitText("Organisations and servers");
+    await intoView("Agent access");
+  },
   "settings-shared-vaults": async () => {
-    await settingsPage("Machines", undefined, "shared");
-    await page.setViewportSize({ width: 900, height: 1600 });
+    await workspacePage("shared", 1600);
     await waitText("Put them back");
-    await button("Members").click();
     await waitText("Design laptop");
     await button("Invite…").click();
     await button("Create link").click();
     await waitText("Single use, valid until");
     await button("Show recovery key").click();
     await waitText("Keep this key in your password manager");
-    await intoView("Team server");
+    await intoView("Folder");
   },
-  // New workspace on this machine… under Team server, filled in and created: the form closes, the new workspace's row
-  // under the machine shows its recovery key
+  // New workspace on this machine… under Team server, filled in and created: the form closes, the new workspace's page
+  // opens on its recovery key
   "settings-shared-new": async () => {
-    await settingsPage("Machines", undefined, "shared");
+    await serversItem("shared", "Team server");
     await page.evaluate(() => (window.__harness.pickFolder = "/Users/me/Shared/Launch"));
     await button("New workspace on this machine…").click();
     await page.locator("#shared-name").fill("Launch");
@@ -1803,29 +2099,31 @@ const VIEWS = {
     await waitText("Keep this key in your password manager");
     await intoView("Keep this key in your password manager");
   },
-  // a member's Settings › Machines: no machine, the workspace they joined with a link under Workspaces
+  // a member's This Mac on Organisations and servers: no machine, the workspace they joined with a link
   "settings-shared-member": async () => {
-    await settingsPage("Machines", undefined, "shared-member");
-    await waitText("Put them back");
-    await intoView("Workspaces");
+    await serversItem("shared-member", "This Mac");
+    await waitText("Join a workspace with a link…");
+    await settle(page);
   },
-  // fixture shared-keeper: that member, made admin on the server, opens Members: the server shows under Machines,
-  // for workspaces only, with its workspace under it, an Update button and no Forget or New workspace
+  // fixture shared-keeper: that member, made admin on the server, opens the workspace's page: the server shows under
+  // Machines, for workspaces only, with an Update button and no Forget, and on Workspaces with no New workspace
   "settings-shared-keeper": async () => {
-    await settingsPage("Machines", undefined, "shared-keeper");
-    await page.setViewportSize({ width: 900, height: 1300 });
+    await workspacePage("shared-keeper", 1300);
     await waitText("Put them back");
-    await button("Members").click();
+    await page
+      .getByRole("navigation", { name: "Organisations and servers" })
+      .getByRole("button", { name: /^192\.168\.1\.2/ })
+      .click();
     await waitText("You keep this server");
     await waitText("Update to");
     await intoView("You keep this server");
   },
-  // Relay opened by an invite link: Machines with the join form under Workspaces, the link in it
+  // Relay opened by an invite link: Add a server › Join in the main window, the link in it and recognised
   "settings-shared-join": async () => {
-    await settingsPage("Machines", undefined, "shared-invite");
-    await page.setViewportSize({ width: 900, height: 1000 });
-    await waitText("Join a workspace");
-    await intoView("Join a workspace");
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await open(page, server.url, { fixture: "shared-invite" });
+    await waitText("Invite to an encrypted workspace");
+    await settle(page);
   },
   // the other vault folders under General: a path, Remove, and the project shown under another name (the main vault
   // has one)
@@ -1883,7 +2181,7 @@ const VIEWS = {
   // Settings › General, the Experimental section at the bottom with the Files switch off
   "settings-experimental": async () => {
     await settingsPage("General", undefined, "files-off");
-    await page.setViewportSize({ width: 900, height: 2400 });
+    await page.setViewportSize({ width: 900, height: 1350 });
     await page.getByText("Experimental", { exact: true }).scrollIntoViewIfNeeded();
     await settle(page);
   },
@@ -2057,15 +2355,24 @@ const VIEWS = {
     await open(page, server.url);
     await page.getByRole("button", { name: /^Switch workspace/ }).click();
     await page.getByRole("button", { name: "Check workspace…" }).click();
-    await waitText("Repair all (7)");
+    await waitText("Repair all (8)");
     await page.locator("[data-kind=context_mismatch] summary").click();
+    await settle(page);
+  },
+  // on Windows without Git Bash, jq and Python: the check lists them under Missing on this computer (PR W4)
+  "vault-check-windows": async () => {
+    await open(page, server.url, { fixture: "windows" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await page.getByRole("button", { name: "Check workspace…" }).click();
+    await waitText("Missing on this computer");
+    await page.locator("[data-kind=missing_tool]").scrollIntoViewIfNeeded();
     await settle(page);
   },
   "vault-check-dark": async () => {
     await open(page, server.url, { fixture: "dark" });
     await page.getByRole("button", { name: /^Switch workspace/ }).click();
     await page.getByRole("button", { name: "Check workspace…" }).click();
-    await waitText("Repair all (7)");
+    await waitText("Repair all (8)");
     await settle(page);
   },
   // Tidy structure (PR 365): the notes outside their home, and the dry run sheet over the check
@@ -2120,8 +2427,8 @@ const VIEWS = {
   // after Repair all: what needs a person stays
   "vault-check-repaired": async () => {
     await VIEWS["vault-check"]();
-    await page.getByRole("button", { name: "Repair all (7)" }).click();
-    await waitText("Repaired 7 findings");
+    await page.getByRole("button", { name: "Repair all (8)" }).click();
+    await waitText("Repaired 8 findings");
     await settle(page);
   },
   // a member of a shared workspace sees the findings, not Repair, Tidy structure or Move to trash
@@ -2277,7 +2584,8 @@ const VIEWS = {
     await page.locator('[data-type-group="Document"]').first().click();
     const launch = page.locator('[data-page$="/Launch checklist.md"]', { hasText: "🚀" }).first();
     await launch.waitFor({ timeout: 4000 });
-    if (await page.locator('[data-page$="/Brand notes.md"]', { hasText: "🚀" }).count()) throw new Error("an icon on a page without");
+    if (await page.locator('[data-page$="/Brand notes.md"]', { hasText: "🚀" }).count())
+      throw new Error("an icon on a page without");
     await launch.scrollIntoViewIfNeeded();
     await settle(page, 300);
   },
@@ -2366,7 +2674,10 @@ const VIEWS = {
   // the rest of that page: the embedded .base grouped by status is a board, the formula block offers Obsidian
   "page-views-board": async (fixture = "linked-views") => {
     await VIEWS["page-views"](fixture);
-    await page.locator(".cm-base").nth(1).evaluate(el => el.scrollIntoView({ block: "start" }));
+    await page
+      .locator(".cm-base")
+      .nth(1)
+      .evaluate(el => el.scrollIntoView({ block: "start" }));
     await settle(page);
   },
   // a cell edited in the page's table: the date of a meeting, written into that note; the table re-sorts, the block's
@@ -2562,7 +2873,9 @@ const VIEWS = {
     const status = page.getByLabel("status", { exact: true });
     await status.fill("Someday");
     await status.press("Enter");
-    await page.waitForFunction(() => /\nstatus: Someday\n/.test(window.__harness.written() ?? ""), null, { timeout: 4000 });
+    await page.waitForFunction(() => /\nstatus: Someday\n/.test(window.__harness.written() ?? ""), null, {
+      timeout: 4000,
+    });
     await page.getByRole("combobox", { name: "Note type" }).selectOption("Project");
     await page.waitForFunction(() => /type: Project\n/.test(window.__harness.written() ?? ""), null, { timeout: 4000 });
     await page.getByRole("combobox", { name: "status", exact: true }).hover();
@@ -2603,8 +2916,7 @@ const VIEWS = {
       throw new Error(`Jane Doe made with ${JSON.stringify(made)}`);
     await settle(page, 300);
   },
-  "typed-person": async (fixture = "kb") =>
-    VIEWS["typed-meeting"](fixture, "Contexts/Agency/People/Tom Willems.md"),
+  "typed-person": async (fixture = "kb") => VIEWS["typed-meeting"](fixture, "Contexts/Agency/People/Tom Willems.md"),
   "typed-person-dark": async () => VIEWS["typed-person"]("kb-dark"),
   // a Project's rail groups the meetings that link to it through about:
   "typed-project": async (fixture = "kb") => {
@@ -2618,7 +2930,10 @@ const VIEWS = {
     VIEWS["typed-meeting"](fixture, "Contexts/Agency/Projects/Northwind Portal/Documents/Pricing sketch.md"),
   "typed-untyped-dark": async () => VIEWS["typed-untyped"]("kb-sketch-dark"),
   // page icons and covers (issue 424): a page with its own icon and a cover banner; `note` another page of fixture kb
-  "page-icon-cover": async (fixture = "kb", note = "Contexts/Agency/Projects/Northwind Portal/Documents/Launch checklist.md") => {
+  "page-icon-cover": async (
+    fixture = "kb",
+    note = "Contexts/Agency/Projects/Northwind Portal/Documents/Launch checklist.md",
+  ) => {
     await VIEWS["typed-meeting"](fixture, note);
     await page.locator("[data-page-cover] img").waitFor();
     await settle(page, 300);
@@ -2641,7 +2956,8 @@ const VIEWS = {
     await page.getByRole("textbox", { name: "Page icon" }).fill("ab");
     await page.keyboard.press("Enter");
     await waitText("Only one emoji");
-    if (/\nicon:/.test((await page.evaluate(() => window.__harness.written())) ?? "")) throw new Error("ab was written");
+    if (/\nicon:/.test((await page.evaluate(() => window.__harness.written())) ?? ""))
+      throw new Error("ab was written");
     await settle(page);
   },
   "page-icon-project-dark": async () => VIEWS["page-icon-project"]("kb-dark"),
@@ -2672,7 +2988,8 @@ const VIEWS = {
     await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
     const launch = page.locator('[data-page$="/Launch checklist.md"]', { hasText: "🚀" }).first();
     await launch.click();
-    if (await page.locator('[data-page$="/Brand notes.md"]', { hasText: "🚀" }).count()) throw new Error("an icon on a page without");
+    if (await page.locator('[data-page$="/Brand notes.md"]', { hasText: "🚀" }).count())
+      throw new Error("an icon on a page without");
     await settle(page, 300);
   },
   "pages-tree-icons-dark": async () => VIEWS["pages-tree-icons"]("kb-dark"),
@@ -2685,7 +3002,8 @@ const VIEWS = {
     await page.getByRole("textbox", { name: "Page icon" }).fill("🧭");
     await page.keyboard.press("Enter");
     await page.locator('[data-project="Northwind Portal"]', { hasText: "🧭" }).waitFor({ timeout: 4000 });
-    if (await page.locator('[data-project="Northwind Portal"] img').count()) throw new Error("the config picture stayed");
+    if (await page.locator('[data-project="Northwind Portal"] img').count())
+      throw new Error("the config picture stayed");
     await settle(page, 300);
   },
   // Add cover from a file: copied into the attachments folder, cover: written, the banner above the title
@@ -2695,9 +3013,13 @@ const VIEWS = {
     await page.locator("h1").hover();
     await page.getByRole("button", { name: "Add cover" }).click();
     await page.getByRole("button", { name: "Choose image…" }).click();
-    await page.waitForFunction(() => /\ncover: "\[\[Kickoff banner\.png\]\]"\n/.test(window.__harness.written() ?? ""), null, {
-      timeout: 4000,
-    });
+    await page.waitForFunction(
+      () => /\ncover: "\[\[Kickoff banner\.png\]\]"\n/.test(window.__harness.written() ?? ""),
+      null,
+      {
+        timeout: 4000,
+      },
+    );
     await page.locator("[data-page-cover] img").waitFor();
     await settle(page);
   },
@@ -2826,6 +3148,29 @@ const VIEWS = {
     await settingsPage("General");
     await intoView("Propose the day's time from conversations");
   },
+  // Windows (W10): dictation from any app switched on, its keys with Ctrl, no Accessibility to allow
+  "settings-voice-windows": async () => {
+    await settingsPage("Voice", undefined, "default", "windows");
+    for (const id of ["#voicechat", "#voicepaste"]) await page.locator(id).click();
+    await settle(page);
+  },
+  // the same keys in Settings › Shortcuts, with quick capture's Ctrl+Alt+N (W10)
+  "settings-shortcuts-windows": async () => {
+    await settingsPage("Voice", undefined, "default", "windows");
+    for (const id of ["#voicechat", "#voicepaste"]) await page.locator(id).click();
+    await click("Shortcuts");
+    await intoView("Paste in any app");
+  },
+  "settings-shortcuts-capture-windows": async () => {
+    await settingsPage("Shortcuts", undefined, "default", "windows");
+    await intoView("Quick capture");
+  },
+  // Settings › General › Permissions on Windows: the microphone only, no Accessibility (W7, W10)
+  "settings-permissions-windows": async () => {
+    await settingsPage("General", undefined, "default", "windows");
+    await scrollMain("bottom");
+    await settle(page);
+  },
   // Settings › General › Permissions: the mock has Full Disk Access missing (PR permissions-check)
   "settings-permissions": async () => {
     await settingsPage("General");
@@ -2854,6 +3199,14 @@ const VIEWS = {
   "settings-agent-accounts": async () => {
     await settingsPage("Agents", undefined, "accounts");
     await unfold("Claude Code");
+    await intoView("Switch accounts automatically");
+  },
+  // the same, new conversations on the account with the most room: the choice and its hint
+  "settings-agent-most-room": async () => {
+    await settingsPage("Agents", undefined, "accounts");
+    await unfold("Claude Code");
+    await page.getByLabel("New conversations use").selectOption("most-room");
+    await settle(page);
     await intoView("Switch accounts automatically");
   },
   // the board pipeline of a project with a linked board, folded open in Settings › Projects

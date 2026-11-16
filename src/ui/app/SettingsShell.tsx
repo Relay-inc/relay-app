@@ -2,10 +2,11 @@ import { useEffect } from "react";
 import { useSettingsStore } from "../../application/settings/store";
 import { close, initSettingsWindow, openLink } from "../../application/settings/window";
 import { SettingsApp } from "../features/settings/SettingsApp";
+import { modKey } from "../../shared/platform";
 
-// the settings window's keys: Escape and Cmd-W close it
+// the settings window's keys: Escape and Cmd-W (Ctrl-W on Windows) close it
 function onKey(e: KeyboardEvent) {
-  if (e.key === "Escape" || (e.metaKey && e.key === "w")) close();
+  if (e.key === "Escape" || (modKey(e) && e.key === "w")) close();
 }
 // a web link (Google's app password page) opens in the browser, the settings window never navigates
 function onLink(e: MouseEvent) {

@@ -10,6 +10,7 @@ export const {
   usage: USAGE,
   inbox: INBOX_VIEW,
   collection: COLLECTION_VIEW,
+  servers: SERVERS,
 } = VIEW;
 
 /** The id of the provider whose board a selection key opens (application/navigation's `boardOf` gives the provider). */

@@ -2,8 +2,11 @@ import type { AgentCfg } from "./types";
 
 /** An extra login of an agent: its config folder (CLAUDE_CONFIG_DIR for Claude Code). */
 export type Account = { name: string; dir: string };
+/** `active` when each new conversation starts on whichever account has the most room then (agents.rs MOST_ROOM). */
+export const MOST_ROOM = "most-room";
 /** An agent's logins as settings.agents.providers.<id> keeps them: the extra folders, the one new conversations start
- *  on ("" the CLI's own folder), and whether a conversation moves on when its account's limits run out. */
+ *  on ("" the CLI's own folder, MOST_ROOM the one with the most room), and whether a conversation moves on when its
+ *  account's limits run out. */
 export type Accounts = { accounts: Account[]; active: string; auto: boolean };
 
 export const accountsOf = (config: AgentCfg): Accounts => ({

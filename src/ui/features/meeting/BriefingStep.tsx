@@ -14,6 +14,7 @@ import { Icon } from "../../components/Icon";
 import { agent } from "../../../shared/plugins";
 import { useT } from "../../hooks/useT";
 import { OUTLINE, PRIMARY } from "./buttons";
+import { bindingLabel } from "../../../domain/settings/shortcuts";
 
 /** The briefing as the design draws it: its markdown, whose `- [ ]` lists are real checkboxes that write back. */
 function BriefingBody({ text, onTick }: { text: string; onTick: (n: number) => void }) {
@@ -133,7 +134,7 @@ export function BriefingStep({
                   </button>
                   <button className={PRIMARY} onClick={save}>
                     {t("today.saveBriefing")}
-                    <span className="font-mono text-[11px] opacity-75">⌘↵</span>
+                    <span className="font-mono text-[11px] opacity-75">{bindingLabel("mod+Enter")}</span>
                   </button>
                 </div>
                 <textarea

@@ -232,13 +232,22 @@ export function receiptOf(items: Item[] | undefined, cost?: number | null): Item
   return receipt;
 }
 
+/** A turn the agent refused because nobody is signed in (Claude Code: "Not logged in · Please run /login"). */
+export const needsLogin = (error?: string | null) => /please run \/login/i.test(error ?? "");
+
 function onTurnEnd(state: ConversationsState, key: string, end: EventOf<"turn_end">, env: EventEnv): Effect[] {
   const { t } = env;
   const effects: Effect[] = [];
   endCompaction(state.messages[key], "err");
   finishTurnInQueue(state, key);
-  if (!end.ok) push(state, key, { kind: "err", text: end.error || t("err.unknown") });
-  else if (!state.queued[key])
+  if (!end.ok) {
+    const login = needsLogin(end.error);
+    // the agent says the same in a message of its own: the card stands for both
+    const items = state.messages[key];
+    const last = items?.[items.length - 1];
+    if (login && last?.kind === "ai" && last.text.trim() === end.error?.trim()) items?.pop();
+    push(state, key, { kind: "err", text: end.error || t("err.unknown"), ...(login ? { login: true as const } : {}) });
+  } else if (!state.queued[key])
     push(state, key, {
       kind: "done",
       text: doneText(end.duration_ms ? end.duration_ms / 1000 : 0, t),

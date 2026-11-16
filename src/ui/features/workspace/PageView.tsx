@@ -91,7 +91,10 @@ export function PageView({ target, className }: { target: string; className: str
   const scroller = useRef<HTMLDivElement>(null);
   const path = pagePath(target) || target;
   // the page's own workspace, not the one the sidebar shows
-  const workspace = useDerived(() => workspaces().find(w => w.folder === workspaceOf(pageKey(target)))?.name ?? "");
+  const own = () => workspaces().find(w => w.folder === workspaceOf(pageKey(target)));
+  const workspace = useDerived(() => own()?.name ?? "");
+  // a shared workspace this Mac only reads: its notes show, nothing on the page writes (docs/workspaces.md, Roles)
+  const reader = useDerived(() => !!own()?.reader);
   const project = useDerived(() => pageProject(path));
   const icon = useWorkspaceStore(s => (project ? s.icons[project.key] : undefined));
   // the project's conversations, newest first
@@ -337,34 +340,39 @@ export function PageView({ target, className }: { target: string; className: str
             </div>
           ) : (
             <article className="w-full max-w-180 mx-auto pt-10 px-8 pb-16 flex flex-col gap-6">
-              <PageTop
-                page={target}
-                project={icon}
-                title={title}
-                yaml={frontmatterOf(head) ?? ""}
-                onChange={yaml => {
-                  const next = withFrontmatter(head, yaml);
-                  // through the editor: what is typed in the body goes along, one write, one hash check
-                  void (headRef.current ? headRef.current(next) : savePage(target, next + body));
-                }}
-              >
-                {project ? (
-                  <>
-                    <dt className="h-7 flex items-center pl-4 text-tertiary">{t("page.conversations")}</dt>
-                    <dd className="flex items-center px-2">
-                      <span className="inline-flex items-center gap-1.5 px-2 rounded-md border border-separator text-accent-text">
-                        <Icon name="chat" className="glyph size-3" />
-                        {chats.length
-                          ? t("page.latest", {
-                              n: chats.length,
-                              time: clockTime(new Date(chats[0].at).toISOString(), locale),
-                            })
-                          : 0}
-                      </span>
-                    </dd>
-                  </>
-                ) : null}
-              </PageTop>
+              {/* a reader's page: every field shown, none takes input */}
+              <fieldset disabled={reader} className="m-0 min-w-0 border-0 p-0">
+                <PageTop
+                  page={target}
+                  project={icon}
+                  title={title}
+                  yaml={frontmatterOf(head) ?? ""}
+                  readOnly={reader}
+                  onChange={yaml => {
+                    if (reader) return;
+                    const next = withFrontmatter(head, yaml);
+                    // through the editor: what is typed in the body goes along, one write, one hash check
+                    void (headRef.current ? headRef.current(next) : savePage(target, next + body));
+                  }}
+                >
+                  {project ? (
+                    <>
+                      <dt className="h-7 flex items-center pl-4 text-tertiary">{t("page.conversations")}</dt>
+                      <dd className="flex items-center px-2">
+                        <span className="inline-flex items-center gap-1.5 px-2 rounded-md border border-separator text-accent-text">
+                          <Icon name="chat" className="glyph size-3" />
+                          {chats.length
+                            ? t("page.latest", {
+                                n: chats.length,
+                                time: clockTime(new Date(chats[0].at).toISOString(), locale),
+                              })
+                            : 0}
+                        </span>
+                      </dd>
+                    </>
+                  ) : null}
+                </PageTop>
+              </fieldset>
               <div className="h-px bg-separator" />
               {picked ? (
                 <VersionDiff
@@ -377,9 +385,9 @@ export function PageView({ target, className }: { target: string; className: str
                     void loadPage(target);
                   }}
                 />
-              ) : page.text.length > EDIT_MAX ? (
+              ) : reader || page.text.length > EDIT_MAX ? (
                 <>
-                  <Note>{t("page.tooBig")}</Note>
+                  <Note>{t(reader ? "page.readOnly" : "page.tooBig")}</Note>
                   <PageBody text={body} />
                 </>
               ) : (

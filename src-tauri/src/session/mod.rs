@@ -101,8 +101,8 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         },
     };
     let shared = dir != main;
-    // Codex and OpenCode get no fence (fence below): a shared vault's conversation is Claude Code's only
-    if shared && p.id() != "claude" { return Err(trc("err.vault_only_claude")); }
+    // OpenCode and Pi get no fence: a shared vault's conversation is Claude Code's (its own rules) or Codex's (Relay's guard)
+    if shared && !crate::policy::FENCED_AGENTS.contains(&p.id()) { return Err(trc("err.vault_agents")); }
     let extra = if shared { dir.as_str() } else { "" };
     // a fork carries the other conversation's transcript: only one from this same vault
     let fork_vault = |f: &str| state.sids.lock().unwrap().values().find(|s| s.sid == f).map(|s| s.vault.clone()).unwrap_or_default();
@@ -150,7 +150,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         crate::fence_in(app, state, &mut eb);
         let mut cmd = p.command(&eb.env(), &l)?;
         // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
-        let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();
+        let bin = actions::bin_dir(app).map(|b| format!("{}{}", b.display(), agent_core::PATH_SEP)).unwrap_or_default();
         cmd.current_dir(&dir).env("PATH", format!("{bin}{}", state.path)).env(actions::CONVERSATION, project);
         (broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?, eb.grants.mail, false)
     };
@@ -261,8 +261,13 @@ pub(crate) fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, 
     let _gate = state.vault_gate.lock().unwrap();
     let mut procs = state.procs.lock().unwrap();
     if crate::policy::adding() || procs.get(key).is_some_and(|x| x.turns.busy()) { return Ok(false); }
+    // its account used up and auto-switch picked another: the account is a start flag, so a new process (as in send)
+    let mut was_tainted = false;
+    if procs.get(key).is_some_and(|x| !x.remote && x.account != account) {
+        if let Some(mut x) = procs.remove(key) { x.child.kill().ok(); was_tainted = x.tainted; }
+    }
     if !procs.contains_key(key) {
-        let x = spawn(app, &state, p, Start { project: key, name, fork: None, opts: (model, String::new()), turn: None, from_mail: taint, account: &account, machine: Some(""), about: None, vault: None })?;
+        let x = spawn(app, &state, p, Start { project: key, name, fork: None, opts: (model, String::new()), turn: None, from_mail: taint || was_tainted, account: &account, machine: Some(""), about: None, vault: None })?;
         procs.insert(key.to_string(), x);
     }
     let x = procs.get_mut(key).unwrap();

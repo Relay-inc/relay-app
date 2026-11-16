@@ -3,11 +3,19 @@ import type { Machine, MirrorProgress } from "../../../domain/settings/types";
 import type { Key } from "../../../shared/i18n";
 import { agoParts, conflictPath } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
-import { addMirrorExclude, removeMirrorExclude, settleHeldDeletes } from "../../../application/settings/machines-page";
+import {
+  addMirrorExclude,
+  removeMirrorExclude,
+  setMirrorEvery,
+  settleHeldDeletes,
+} from "../../../application/settings/machines-page";
 import { relativeFormat } from "../../../shared/format";
 import { useT } from "../../hooks/useT";
-import { buttonClass, ERROR_MESSAGE, FIELD, HINT_IN_ROW } from "./blocks";
+import { buttonClass, ERROR_MESSAGE, FIELD, HINT_IN_ROW, SELECT } from "./blocks";
 import { StatusLine } from "./StatusLine";
+
+/** The minutes between rounds on offer, 0 = all the time. */
+const EVERY = [0, 5, 15, 30, 60];
 
 /** Held deletes listed by name, the rest counted. */
 const HELD_SHOWN = 5;
@@ -24,6 +32,7 @@ const ROOT: Record<MirrorProgress["root"], Key> = {
 export function MachineMirror({ machine }: { machine: Machine }) {
   const { t, tn, locale } = useT();
   const exclude = machine.mirror?.exclude ?? [];
+  const every = machine.mirror?.every ?? 0;
   const status = useSettingsStore(s => s.machinesPage.mirror[machine.id]);
   const message = useSettingsStore(s => s.machinesPage.mirrorMessages[machine.id]);
   const progress = useSettingsStore(s => s.machinesPage.mirrorProgress[machine.id]);
@@ -34,6 +43,25 @@ export function MachineMirror({ machine }: { machine: Machine }) {
     <div className="grid gap-1.5">
       <span className="text-xs font-medium text-s-fg">{t("mc.mirror")}</span>
       <p className={HINT_IN_ROW}>{t("mc.mirrorHelp")}</p>
+      <div className="grid gap-1.5">
+        <span className="text-xs font-medium text-s-fg">{t("mc.mirrorEvery")}</span>
+        <select
+          className={`${SELECT} w-65`}
+          aria-label={t("mc.mirrorEvery")}
+          value={every}
+          onChange={e => setMirrorEvery(machine, Number(e.target.value))}
+        >
+          {/* a value set by hand in the settings file stays on offer */}
+          {[...new Set([...EVERY, every])]
+            .sort((a, b) => a - b)
+            .map(minutes => (
+              <option key={minutes} value={minutes}>
+                {minutes ? t("mc.mirrorEveryMinutes", { n: minutes }) : t("mc.mirrorEveryAlways")}
+              </option>
+            ))}
+        </select>
+        {every ? <p className={HINT_IN_ROW}>{t("mc.mirrorEveryHelp", { n: every })}</p> : null}
+      </div>
       <div className="grid gap-1.5">
         <span className="text-xs font-medium text-s-fg">{t("mc.mirrorExclude")}</span>
         {exclude.length ? (

@@ -9,6 +9,7 @@ import {
   MAIL,
   PRS,
   REM,
+  SERVERS,
   USAGE,
   WAIT,
   reviewOf,
@@ -38,6 +39,7 @@ import { GraphView } from "../workspace/GraphView";
 import { InboxView } from "../inbox/InboxView";
 import { CollectionView } from "../collections/CollectionView";
 import { MailView } from "../mail/MailView";
+import { ServersView } from "../settings/ServersView";
 import { TodayView } from "../today/TodayView";
 import { ReviewView } from "../today/ReviewView";
 import { MeetingView } from "../meeting/MeetingView";
@@ -118,6 +120,7 @@ export function ConversationsView({ className }: { className: string }) {
     selected === INBOX_VIEW ||
     selected === COLLECTION_VIEW ||
     selected === WAIT ||
+    selected === SERVERS ||
     !!review ||
     !!meeting ||
     plugin !== undefined;
@@ -217,6 +220,8 @@ export function ConversationsView({ className }: { className: string }) {
           <CollectionView className="flex-1" />
         ) : selected === WAIT ? (
           <TodayView className="flex-1" />
+        ) : selected === SERVERS ? (
+          <ServersView className="flex-1" />
         ) : review ? (
           <ReviewView className="flex-1" />
         ) : plugin !== undefined ? (

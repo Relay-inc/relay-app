@@ -34,6 +34,7 @@ const TITLE = {
   card_fields: "vc.cardFields",
   orphan_rule: "vc.orphanRule",
   row_without_note: "vc.rowWithoutNote",
+  missing_tool: "vc.missingTool",
   outside_home: "vc.outsideTitle",
   no_project: "garden.noProjectTitle",
   broken_link: "garden.brokenTitle",
@@ -178,6 +179,8 @@ export function VaultCheckDialog({
         ];
       case "no_type":
         return [t("garden.noTypeSub"), act(t("garden.fixProps"), () => setSheet("properties"))];
+      case "missing_tool":
+        return [t("vc.missingToolSub"), null];
       default:
         return ["", null];
     }

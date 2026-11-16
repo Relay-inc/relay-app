@@ -49,30 +49,50 @@ test("conflict path loses its vault/ prefix", () => {
   assert.equal(conflictPath("vault/Notes/a (conflict).md"), "Notes/a (conflict).md");
 });
 
-test("setup: the image of this version, the folders under the one given", () => {
+test("setup: compose in the folder given, .env pins the image of this version", () => {
   const c = setupCommands("ghcr.io/x/relay-server", "0.3.0", "/srv/relay/", "unraid");
-  assert.match(
-    c.install,
-    /^mkdir -p \/srv\/relay\/data \/srv\/relay\/claude \/srv\/relay\/repos \/srv\/relay\/local\nchown -R 1000:1000 \/srv\/relay\n/,
+  const lines = c.install.split("\n");
+  assert.equal(lines[0], "mkdir -p /srv/relay && cd /srv/relay");
+  assert.ok(lines.includes('curl -fsSLO "$base/compose.yml" -O "$base/backup.sh"'));
+  assert.ok(lines.includes('echo "RELAY_SERVER_IMAGE=ghcr.io/x/relay-server:0.3.0" > .env'));
+  assert.ok(
+    lines.includes('echo "RELAY_HOST=$(hostname)" >> .env'),
+    "the machine's name, as docker run's --hostname was",
   );
-  assert.match(c.install, /-v \/srv\/relay\/local:\/home\/relay\/.local \\\n {2}ghcr.io\/x\/relay-server:0.3.0$/);
-  assert.match(c.update, /^docker pull ghcr.io\/x\/relay-server:0.3.0\ndocker rm -f relay-server\ndocker run /);
+  assert.equal(lines.at(-1), "docker compose up -d --wait");
+  assert.ok(!c.install.includes("docker run") && !c.install.includes("chown -R 1000"), "the volume is compose's own");
+});
+test("setup: update goes to this version in the same folder and keeps the volume", () => {
+  const c = setupCommands("ghcr.io/x/relay-server", "0.3.1", "/srv/relay", "linux");
+  assert.equal(
+    c.update,
+    [
+      "cd /srv/relay",
+      "sed -i.bak '/^RELAY_SERVER_IMAGE=/d' .env && echo \"RELAY_SERVER_IMAGE=ghcr.io/x/relay-server:0.3.1\" >> .env",
+      "docker compose pull && docker compose up -d --wait",
+    ].join("\n"),
+  );
+  assert.ok(!/down|volume|rm /.test(c.update), "nothing that would drop the pairing");
 });
 test("setup: an empty folder is the default, one with a space is quoted", () => {
-  assert.ok(setupCommands("i", "1", " ", "linux").install.includes(`${SETUP_FOLDERS.linux}/data`));
-  assert.ok(
-    setupCommands("i", "1", "/mnt/my disk", "unraid").install.includes('-v "/mnt/my disk/data:/home/relay/data"'),
+  assert.ok(setupCommands("i", "1", " ", "linux").install.includes(`cd ${SETUP_FOLDERS.linux}`));
+  assert.match(
+    setupCommands("i", "1", "/mnt/my disk", "unraid").install,
+    /^mkdir -p "\/mnt\/my disk" && cd "\/mnt\/my disk"/,
   );
 });
-test("setup: a Mac skips chown and keeps ~ outside the quotes, Linux makes the folders with sudo", () => {
-  const mac = setupCommands("i", "1", "~/my relay", "mac");
-  assert.match(mac.install, /^mkdir -p ~\/"my relay\/data" /);
-  assert.ok(!mac.install.includes("chown"));
-  assert.ok(setupCommands("i", "1", "", "mac").install.includes("-v ~/relay-server/data:/home/relay/data"));
+test("setup: a Mac keeps ~ outside the quotes, Linux makes the folder with sudo and then owns it", () => {
+  assert.match(setupCommands("i", "1", "~/my relay", "mac").install, /^mkdir -p ~\/"my relay" && cd ~\/"my relay"\n/);
+  assert.match(setupCommands("i", "1", "", "mac").update, /^cd ~\/relay-server\n/);
   assert.match(
     setupCommands("i", "1", "", "linux").install,
-    /^sudo mkdir -p .*\nsudo chown -R 1000:1000 \/srv\/relay-server\n/,
+    /^sudo mkdir -p \/opt\/relay-server && sudo chown "\$USER" \/opt\/relay-server && cd \/opt\/relay-server\n/,
   );
+});
+test("setup: Claude's login and pairing run through compose", () => {
+  const c = setupCommands("i", "1", "", "linux");
+  assert.equal(c.claude, "docker compose exec -it relay-server claude");
+  assert.match(c.pair, /^docker compose exec relay-server relay-server pair --host "/);
 });
 test("setup: the pairing line looks up the machine's own LAN address", () => {
   assert.match(setupCommands("i", "1", "", "mac").pair, /--host "\$\(ipconfig getifaddr en0/);
