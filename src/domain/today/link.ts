@@ -76,3 +76,8 @@ export function movesToReview(
     !!review && card.state === "doing" && column !== review.id && review.state !== "todo" && review.state !== "done"
   );
 }
+
+/** The open PRs that already have a ticket: what the first run of the review move records as seen, so cards that were
+ *  in progress before it existed stay where they are. */
+export const alreadyLinked = (links: Record<string, { card?: string }>, open: string[]) =>
+  open.filter(url => links[url]?.card);

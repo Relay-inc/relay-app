@@ -1,7 +1,7 @@
 import { provider } from "../../shared/plugins";
 import type { BoardRef, Card } from "../../domain/board/types";
 import { fill, prompts, untrusted, untrustedNote } from "../../shared/prompts";
-import { byNumber, byTitle, movesToReview, type Candidate } from "../../domain/today/link";
+import { byNumber, byTitle, alreadyLinked, movesToReview, type Candidate } from "../../domain/today/link";
 import { colOf, withCol } from "../../domain/board/rules";
 import type { PR } from "../../domain/pull-requests/types";
 import * as backend from "../../infrastructure/backend";
@@ -48,6 +48,15 @@ export async function linkPrs() {
   const list = usePullRequestsStore.getState().list;
   if (running || !list || !isPrimary()) return; // the main window works them out, the others follow its store
   running = true;
+  // first run since the review move exists: the PRs that have a ticket already are seen, their cards stay put
+  if (!storage.get<string[] | null>(REVIEWED, null))
+    storage.set(
+      REVIEWED,
+      alreadyLinked(
+        useLinksStore.getState().links,
+        list.mine.map(pr => pr.url),
+      ),
+    );
   let ai = AI_PER_ROUND;
   try {
     for (const pr of [...new Map([...list.review, ...list.mine].map(pr => [pr.url, pr])).values()]) {
