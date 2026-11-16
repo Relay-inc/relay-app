@@ -117,16 +117,16 @@ impl State {
         if line.contains("\"<synthetic>\"") { out.push(Event::Synthetic); }
         match ev["type"].as_str().unwrap_or("") {
             "stream_event" => self.delta(&ev, &mut out),
+            // a subagent's steps are not in the conversation: its column and page show them (subagents.rs)
+            "user" | "assistant" if !ev["parent_tool_use_id"].is_null() => {}
             "user" if ev["isReplay"] == true => {
-                if ev["parent_tool_use_id"].is_null() { out.push(Event::Picked { text: user_text(&ev["message"]["content"]) }); }
+                out.push(Event::Picked { text: user_text(&ev["message"]["content"]) });
             }
             "assistant" => {
                 let streamed = ev["message"]["id"].as_str().is_some_and(|id| self.streamed.contains(id));
                 assistant(&ev["message"]["content"], streamed, &mut out);
-                if ev["parent_tool_use_id"].is_null() {
-                    out.extend(context(&ev["message"]["usage"]));
-                    self.bash.extend(out.iter().filter_map(|e| match e { Event::ToolCall { id, name, .. } if name == "Bash" => Some(id.clone()), _ => None }));
-                }
+                out.extend(context(&ev["message"]["usage"]));
+                self.bash.extend(out.iter().filter_map(|e| match e { Event::ToolCall { id, name, .. } if name == "Bash" => Some(id.clone()), _ => None }));
             }
             _ => {
                 let mut evs = parse(&ev);
@@ -136,7 +136,7 @@ impl State {
                     }
                 }
                 out.extend(evs);
-                if ev["type"] == "user" && ev["parent_tool_use_id"].is_null() {
+                if ev["type"] == "user" {
                     out.extend(tool_output(&ev["message"]["content"], |id| self.bash.remove(id)));
                 }
             }
@@ -180,8 +180,7 @@ fn parse(ev: &Value) -> Vec<Event> {
                 out.push(Event::ToolResult { id: c["tool_use_id"].as_str().unwrap_or("").into(), error: c["is_error"] == true });
             }
             patch(&ev["message"]["content"], &ev["tool_use_result"], &mut out);
-            // a subagent's results stay out: its steps are not in the conversation
-            if ev["parent_tool_use_id"].is_null() { tool_images(&ev["message"]["content"], &mut out); }
+            tool_images(&ev["message"]["content"], &mut out);
         }
         "result" => {
             let ok = ev["is_error"] != true && ev["subtype"] == "success";
@@ -394,9 +393,9 @@ mod tests {
         let image = Image { media_type: "image/png".into(), data: "AA==".into() };
         let live = json!({"type": "user", "message": {"content": content}}).to_string();
         assert_eq!(st.parse(&live), vec![Event::ToolResult { id: "t1".into(), error: false }, Event::ToolImages { id: "t1".into(), images: vec![image.clone()] }]);
-        // a subagent's screenshot is not shown
+        // a subagent's result and screenshot are not shown
         let sub = json!({"type": "user", "parent_tool_use_id": "toolu_9", "message": {"content": content}}).to_string();
-        assert_eq!(st.parse(&sub), vec![Event::ToolResult { id: "t1".into(), error: false }]);
+        assert_eq!(st.parse(&sub), vec![]);
         let mut out = vec![];
         history_line(&json!({"type": "user", "message": {"content": content}}), &mut out);
         assert_eq!(out, vec![Event::ToolImages { id: "t1".into(), images: vec![image] }]);
@@ -453,8 +452,9 @@ mod tests {
         let usage = json!({"input_tokens": 10, "cache_creation_input_tokens": 12947, "cache_read_input_tokens": 14160, "output_tokens": 6});
         let top = go(json!({"type": "assistant", "parent_tool_use_id": null, "message": {"id": "m1", "content": [], "usage": usage}}));
         assert_eq!(top, vec![Event::Context { used: Some(27123), window: None }]);
-        // a subagent's message is not the conversation's context
-        assert_eq!(go(json!({"type": "assistant", "parent_tool_use_id": "toolu_1", "message": {"id": "m2", "content": [], "usage": usage}})), vec![]);
+        // a subagent's message is not the conversation's context, nor are its tool calls and text in it
+        let calls = json!([{"type": "text", "text": "Scanning"}, {"type": "tool_use", "id": "toolu_2", "name": "Bash", "input": {"command": "ls"}}]);
+        assert_eq!(go(json!({"type": "assistant", "parent_tool_use_id": "toolu_1", "message": {"id": "m2", "content": calls, "usage": usage}})), vec![]);
         assert_eq!(go(json!({"type": "system", "subtype": "status", "status": "compacting"})), vec![Event::Compacting]);
         assert_eq!(go(json!({"type": "system", "subtype": "status", "status": null, "compact_result": "success"})), vec![]);
         assert_eq!(go(json!({"type": "system", "subtype": "compact_boundary", "compact_metadata": {"trigger": "manual", "pre_tokens": 27319, "post_tokens": 7963}})),
