@@ -883,6 +883,8 @@ const en = {
   "today.timeBook": "Book time",
   "today.timeBody":
     "Relay counted about {n} minutes of your own activity in today's conversations, per project. Book time asks the agent to subtract what Productive already has and to propose one time entry per project, which you approve one by one.",
+  "time.timesheet_one": "Using your timesheet settings: {n} service",
+  "time.timesheet_other": "Using your timesheet settings: {n} services",
   "time.title": "Time {date}",
   "time.note": "Booking the time of {date} from your conversations",
   "today.allow": "Allow {tool}?",

@@ -894,6 +894,8 @@ export default {
   "today.timeBook": "Zeit buchen",
   "today.timeBody":
     "Relay hat in den Gesprächen von heute etwa {n} Minuten eigene Aktivität gezählt, pro Projekt. Zeit buchen bittet den Agenten, abzuziehen, was in Productive schon steht, und pro Projekt einen Zeiteintrag vorzuschlagen, den du einzeln freigibst.",
+  "time.timesheet_one": "Deine Timesheet-Einstellungen gelten: {n} Service",
+  "time.timesheet_other": "Deine Timesheet-Einstellungen gelten: {n} Services",
   "time.title": "Zeit {date}",
   "time.note": "Die Zeit vom {date} aus deinen Gesprächen buchen",
   "today.allow": "{tool} erlauben?",

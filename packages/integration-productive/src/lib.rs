@@ -103,6 +103,18 @@ fn flag(a: &Value, k: &str) -> Result<Option<bool>, String> {
 }
 /// The id a relationship of the main record points at.
 fn rel_id(v: &Value, k: &str) -> Option<String> { v["data"]["relationships"][k]["data"]["id"].as_str().map(String::from) }
+/// A note without em and en dashes (a colon, comma or period belongs there; the timesheet plugin's note style).
+fn no_dashes(s: &str) -> String { s.replace(" \u{2013} ", ", ").replace(" \u{2014} ", ", ").replace(['\u{2013}', '\u{2014}'], ",") }
+/// The body of an `add_time` booking, from checked arguments.
+fn time_entry(cfg: &Value, a: &Value) -> Result<Value, String> {
+    let minutes: u32 = arg_ok(a, "minutes", digits)?.parse().ok().filter(|m| (1..=1440).contains(m)).ok_or("'minutes' must be 1 to 1440")?;
+    let mut r = json!({ "person": rel("people", &me(cfg)?), "service": rel("services", &arg_ok(a, "service", digits)?) });
+    if arg(a, "task").is_some() { r["task"] = rel("tasks", &arg_ok(a, "task", digits)?); }
+    let mut attrs = json!({ "date": arg_ok(a, "date", iso_date)?, "time": minutes, "note": no_dashes(&arg(a, "note").unwrap_or_default()) });
+    // billable_time is the billable part in minutes: 0 books the whole entry as not billable
+    if flag(a, "billable")? == Some(false) { attrs["billable_time"] = json!(0); }
+    Ok(json!({ "data": { "type": "time_entries", "attributes": attrs, "relationships": r } }))
+}
 fn created(v: &Value) -> Value { json!({ "id": v["data"]["id"], "type": v["data"]["type"] }) }
 
 const CATEGORIES: [&str; 4] = ["", "not started", "started", "closed"];
@@ -207,13 +219,23 @@ const ACTIONS: &[Action] = &[
         |cfg, a| get(format!("/time_entries?filter[person_id]={}&filter[after]={}&filter[before]={}&page[size]=200", me(cfg)?, arg_ok(a, "after", iso_date)?, arg_ok(a, "before", iso_date)?)),
         |v| v["data"].as_array().map(|d| d.iter().map(|r| json!({ "id": r["id"], "date": r["attributes"]["date"], "time": r["attributes"]["time"],
             "note": r["attributes"]["note"], "service": r["relationships"]["service"]["data"]["id"] })).collect()).unwrap_or_default()),
-    write("add_time", "Book time on a service for you.", &[("service", "service id"), ("date", "YYYY-MM-DD"), ("minutes", "duration in minutes"), ("note?", "what was done"), ("task?", "task id")],
+    write("add_time", "Book time on a service for you. Refused when you already have an entry on that service that day, unless extra=true. Dashes in the note become commas.",
+        &[("service", "service id"), ("date", "YYYY-MM-DD"), ("minutes", "duration in minutes"), ("note?", "what was done"), ("task?", "task id"),
+          ("billable?", "false books it as not billable, default true"), ("extra?", "true: book although the service already has an entry that day")],
         |cfg, a| {
-            let minutes: u32 = arg_ok(a, "minutes", digits)?.parse().ok().filter(|m| (1..=1440).contains(m)).ok_or("'minutes' must be 1 to 1440")?;
-            let mut r = json!({ "person": rel("people", &me(cfg)?), "service": rel("services", &arg_ok(a, "service", digits)?) });
-            if arg(a, "task").is_some() { r["task"] = rel("tasks", &arg_ok(a, "task", digits)?); }
-            post("/time_entries", json!({ "data": { "type": "time_entries", "attributes": { "date": arg_ok(a, "date", iso_date)?, "time": minutes, "note": arg(a, "note").unwrap_or_default() }, "relationships": r } }))
-        }, created),
+            // the day's entries first: `then` books only when the service has none yet (or extra=true)
+            time_entry(cfg, a)?;
+            let d = arg_ok(a, "date", iso_date)?;
+            get(format!("/time_entries?filter[person_id]={}&filter[after]={d}&filter[before]={d}&page[size]=200", me(cfg)?))
+        }, created)
+        .then(|cfg, a, day| {
+            let service = arg(a, "service").unwrap_or_default();
+            let has = day["data"].as_array().is_some_and(|d| d.iter().any(|r| r["relationships"]["service"]["data"]["id"] == service.as_str()));
+            if has && flag(a, "extra")? != Some(true) {
+                return Err(format!("you already have a time entry on service {service} on {}: not booked twice. Pass extra=true to book it anyway.", arg(a, "date").unwrap_or_default()));
+            }
+            post("/time_entries", time_entry(cfg, a)?).map(Some)
+        }),
 ];
 
 #[cfg(test)]
@@ -271,8 +293,24 @@ mod tests {
         assert_eq!(b["data"]["relationships"]["task_list"]["data"]["id"], "4");
         assert_eq!(b["data"]["relationships"]["assignee"]["data"]["id"], "7");
         assert!((act("create_task").build)(&cfg, &json!({ "project": "3&x=1", "task_list": "4", "title": "T" })).is_err());
-        let t = (act("add_time").build)(&cfg, &json!({ "service": "9", "date": "2026-10-01", "minutes": "90" })).unwrap().body.unwrap();
+        // add_time reads the day's entries first; `then` books unless the service has one (extra=true overrides)
+        let add = act("add_time");
+        let args = |extra: Option<&str>| json!({ "service": "9", "date": "2026-10-01", "minutes": "90", "extra": extra });
+        let read = (add.build)(&cfg, &args(None)).unwrap();
+        assert_eq!((read.method, read.body.is_none()), ("GET", true));
+        assert!(read.url.ends_with("filter[person_id]=7&filter[after]=2026-10-01&filter[before]=2026-10-01&page[size]=200"), "{}", read.url);
+        let then = add.then.unwrap();
+        let day = json!({ "data": [{ "id": "1", "relationships": { "service": { "data": { "id": "9" } } } }] });
+        let t = then(&cfg, &args(None), &json!({ "data": [] })).unwrap().unwrap().body.unwrap();
         assert_eq!((t["data"]["attributes"]["time"].clone(), t["data"]["relationships"]["person"]["data"]["id"].clone()), (json!(90), json!("7")));
+        assert!(then(&cfg, &args(None), &day).unwrap_err().contains("already have a time entry on service 9"));
+        assert!(then(&cfg, &args(Some("true")), &day).unwrap().is_some());
+        assert!(then(&cfg, &json!({ "service": "10", "date": "2026-10-01", "minutes": "5" }), &day).unwrap().is_some());
+        // billable=false books no billable minutes, dashes leave the note
+        let book = |a: Value| then(&cfg, &a, &json!({})).unwrap().unwrap().body.unwrap()["data"]["attributes"].clone();
+        let n = book(json!({ "service": "9", "date": "2026-10-01", "minutes": "30", "note": "Dev \u{2013} intake\u{2014}fix", "billable": "false" }));
+        assert_eq!((n["billable_time"].clone(), n["note"].clone()), (json!(0), json!("Dev, intake,fix")));
+        assert!(book(json!({ "service": "9", "date": "2026-10-01", "minutes": "30", "billable": "true" })).get("billable_time").is_none());
         assert!((act("add_time").build)(&cfg, &json!({ "service": "9", "date": "1 okt", "minutes": "90" })).is_err());
         assert!((act("add_time").build)(&json!({ "org": "1", "user": "" }), &json!({ "service": "9", "date": "2026-10-01", "minutes": "90" })).unwrap_err().contains("user ID"));
         assert!((act("task_lists").build)(&cfg, &json!({ "project": "3" })).unwrap().url.ends_with("filter[project_id]=3&filter[status]=1&page[size]=200"));

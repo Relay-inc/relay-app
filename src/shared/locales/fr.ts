@@ -902,6 +902,8 @@ export default {
   "today.timeBook": "Saisir le temps",
   "today.timeBody":
     "Relay a compté environ {n} minutes de ton activité dans les conversations d'aujourd'hui, par projet. Saisir le temps demande à l'agent de déduire ce que Productive contient déjà et de proposer une entrée par projet, que tu approuves une par une.",
+  "time.timesheet_one": "Tes réglages de timesheet s'appliquent : {n} service",
+  "time.timesheet_other": "Tes réglages de timesheet s'appliquent : {n} services",
   "time.title": "Temps {date}",
   "time.note": "Saisie du temps du {date} depuis tes conversations",
   "today.allow": "Autoriser {tool} ?",

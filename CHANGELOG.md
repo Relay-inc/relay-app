@@ -18,6 +18,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 - Agents in a conversation can carry a Productive ticket through the flow: look a ticket up by its number, list the statuses it can move to, move it, assign it, edit its title and description, add subtasks and mark what blocks what. Each change asks first. Comments an agent posts are now hidden from the client by default on client projects. (#503)
 
+### Changed
+
+- Booking time in Productive follows your timesheet plugin's settings when `~/.claude/timesheet.config.json` exists: its services, rounding, workday, note language and note style, and the Today item says so. Relay's agent no longer books a second entry on a service you already have that day (unless it is told to), books non-billable services as not billable and keeps dashes out of notes. Without that file nothing changes (#505).
+
 ## [0.0.55] - 2026-11-16
 
 ### Added

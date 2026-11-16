@@ -57,6 +57,7 @@ import type {
   VaultStatus,
 } from "../domain/workspace/types";
 import type { Mail, MailBody } from "../domain/mail/types";
+import type { Timesheet } from "../domain/time/blocks";
 import type { Meeting, Meetings } from "../domain/calendar/types";
 import type { PrDetail, PRs } from "../domain/pull-requests/types";
 import type { NotesGraph, Touch } from "../domain/graph/types";
@@ -438,6 +439,8 @@ export const agents = () => invoke<AgentSession[]>("agents");
 export const appSids = () => invoke<string[]>("app_sids");
 export const appSessions = () => invoke<SessionOf>("app_sessions");
 /** When the user wrote in each of these Claude Code sessions on a day (yyyy-mm-dd, local), in ms. */
+/** The rules in ~/.claude/timesheet.config.json (the timesheet plugin's), null when there is no valid file. */
+export const timesheetConfig = () => invoke<Timesheet | null>("timesheet_config");
 export const activity = (date: string, sessions: string[]) =>
   invoke<Record<string, number[]>>("activity", { date, sessions });
 

@@ -891,6 +891,8 @@ export default {
   "today.timeBook": "Tijd boeken",
   "today.timeBody":
     "Relay telde ongeveer {n} minuten eigen activiteit in de gesprekken van vandaag, per project. Tijd boeken vraagt de agent af te trekken wat in Productive al staat en per project één tijdsregistratie voor te stellen, die je een voor een goedkeurt.",
+  "time.timesheet_one": "Je timesheet-instellingen gelden: {n} service",
+  "time.timesheet_other": "Je timesheet-instellingen gelden: {n} services",
   "time.title": "Tijd {date}",
   "time.note": "De tijd van {date} boeken vanuit je gesprekken",
   "today.allow": "{tool} toestaan?",
