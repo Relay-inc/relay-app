@@ -1,5 +1,5 @@
 import { t } from "../../shared/i18n";
-import { timeLines, timePrompt, type Activity } from "../../domain/time/blocks";
+import { timeLines, timePrompt, type Activity, type Timesheet } from "../../domain/time/blocks";
 import { todayIso } from "../../domain/reminders/rules";
 import * as backend from "../../infrastructure/backend";
 import { settings, timeFromSessionsOn } from "../settings/settings";
@@ -12,10 +12,14 @@ import { useTodayStore } from "../today/store";
 
 // "Time from sessions": the day's time per project from when the user wrote in their conversations (Claude Code
 // transcripts, read by the backend), proposed as Productive time entries the user approves one by one. The agent adds
-// the other sources acme/team-tools' timesheet skill reads (calendar, Slack, git, other sessions, ...).
+// the other sources acme/team-tools' timesheet skill reads (calendar, Slack, git, other sessions, ...). When the user has
+// that skill's config (~/.claude/timesheet.config.json), its rules are the booking rules: one set, not two.
+
+/** The timesheet plugin's rules, none without its config. */
+const timesheet = () => backend.timesheetConfig().catch(() => null);
 
 /** The day's time lines from the conversations under a project. Other providers' conversations are not counted. */
-async function linesOf(date: string) {
+async function linesOf(date: string, sheet: Timesheet | null) {
   const { chats, sidOf } = useConversationsStore.getState();
   const bySid = new Map<string, { project: string; title: string }>();
   for (const [key, chat] of Object.entries(chats))
@@ -26,21 +30,24 @@ async function linesOf(date: string) {
   const events: Activity[] = Object.entries(days).flatMap(([sid, times]) =>
     times.map(at => ({ ...bySid.get(sid)!, at })),
   );
-  return Object.assign(timeLines(events), { sids: Object.keys(days) });
+  return Object.assign(timeLines(events, sheet?.granularityMinutes || undefined), { sids: Object.keys(days) });
 }
 
 /** Minutes of activity today that look unbooked: Productive is not asked, the backend only reads local transcripts. */
 export async function loadTodayTime() {
   // switched off: the transcripts are not read at all
-  const lines = timeFromSessionsOn() ? await linesOf(todayIso()).catch(() => []) : [];
+  const sheet = await timesheet();
+  const lines = timeFromSessionsOn() ? await linesOf(todayIso(), sheet).catch(() => []) : [];
   useTodayStore.setState(draft => {
     draft.timeMin = lines.reduce((sum, line) => sum + line.minutes, 0);
+    draft.timesheetServices = sheet?.services.length ?? 0;
   });
 }
 
 /** A conversation "Time <date>" that books the day's time: the summary per project and how the agent proceeds. */
 export async function proposeTime(date: string) {
-  const lines = await linesOf(date);
+  const sheet = await timesheet();
+  const lines = await linesOf(date, sheet);
   const key = startChat(null, { provider: "claude", title: t("time.title", { date }), note: t("time.note", { date }) });
   await select(key);
   const boards = settings().boards || {};
@@ -53,6 +60,7 @@ export async function proposeTime(date: string) {
         board: boards[line.project]?.provider === "productive" ? boards[line.project].project : undefined,
       })),
       lines.sids,
+      sheet,
     ),
   );
 }

@@ -64,3 +64,44 @@ test("the prompt names every source and leaves out the sessions already counted"
     assert.ok(p.includes(s), s);
   assert.ok(timePrompt("2026-10-08", []).includes("geen activiteit"));
 });
+
+const sheet = {
+  services: [
+    { id: "101", label: "Northwind support", billable: true, keywords: ["northwind", "api"] },
+    { id: "102", label: "Internal", billable: false, keywords: [] },
+  ],
+  placeholderServiceId: "101",
+  targetHoursPerDay: 7.5,
+  granularityMinutes: 30,
+  noteLanguage: "nl",
+  gitRepoParents: ["~/code"],
+};
+
+test("the timesheet's granularity replaces the 15 minutes", () => {
+  // one message is 20 minutes: under a step of 30 it is dropped, 40 minutes rounds to 30
+  assert.deepEqual(timeLines([ev("a", 0)], 30), []);
+  assert.equal(timeLines([ev("a", 0), ev("a", 40)], 30)[0].minutes, 30);
+});
+
+test("the prompt follows the timesheet config: services, placeholder, step, hours, note style, git", () => {
+  const p = timePrompt("2026-10-05", [{ label: "Northwind", minutes: 90, titles: ["API"] }], [], sheet);
+  for (const s of [
+    "101 | Northwind support | billable | northwind, api",
+    "102 | Internal | niet billable",
+    "placeholder-entry op service 101 (Northwind support)",
+    "op 30 minuten",
+    "werkdag van 7.5 uur",
+    'code "nl"',
+    "geen streepjes",
+    "billable=false",
+    "~/code",
+  ])
+    assert.ok(p.includes(s), s);
+});
+
+test("without the config the prompt is as it was: 15 minutes, 8 hours, no timesheet rules", () => {
+  const p = timePrompt("2026-10-05", [{ label: "Northwind", minutes: 90, titles: ["API"] }]);
+  assert.match(p, /afgerond op 15 minuten/);
+  assert.match(p, /werkdag van 8 uur/);
+  assert.ok(!p.includes("timesheet"));
+});

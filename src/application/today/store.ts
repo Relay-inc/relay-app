@@ -25,6 +25,7 @@ export type TodayState = DayState & {
   errors: string[]; // per board that did not load
   at: number; // when the cards last arrived, ms; 0 before that
   timeMin: number; // minutes of the user's own activity in today's conversations (Time from sessions), 0 until read
+  timesheetServices: number; // services in the user's timesheet config (booking follows its rules), 0 without one
   reloading: boolean; // Refresh is reading every source again
   selected: string; // the item open in the detail, "" for the first in the queue
   context: string; // the context filter: "" all, "-" no project, else a context; kept across days
@@ -50,6 +51,7 @@ export const useTodayStore = makeStore<TodayState>(() => ({
   errors: [],
   at: 0,
   timeMin: 0,
+  timesheetServices: 0,
   reloading: false,
   selected: "",
   context: storage.getRaw("todayContext"),

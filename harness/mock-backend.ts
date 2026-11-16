@@ -1092,6 +1092,22 @@ function handle(cmd: string, a: Args): unknown {
       return conv.conversations.map(c => conv.sidOf(c.key));
     case "app_sessions":
       return sidKeys();
+    case "timesheet_config":
+      // the timesheet plugin's file, for the "timesheet" fixture only
+      return fixture === "timesheet"
+        ? {
+            services: [
+              { id: "101", label: "Northwind support", billable: true, keywords: ["northwind", "support"] },
+              { id: "102", label: "Internal", billable: false, keywords: ["intern"] },
+              { id: "103", label: "Northwind build", billable: true, keywords: ["api"] },
+            ],
+            placeholderServiceId: "101",
+            targetHoursPerDay: 8,
+            granularityMinutes: 30,
+            noteLanguage: "nl",
+            gitRepoParents: ["~/projects"],
+          }
+        : null;
     case "activity": {
       // the user's own messages that day in the first four sessions: 9:00, 11:00 and 14:00, a little shifted per session
       const day = Date.parse(`${a.date}T00:00:00+02:00`);

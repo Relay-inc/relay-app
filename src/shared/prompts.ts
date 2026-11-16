@@ -37,6 +37,7 @@ import sharedUntrustedNl from "../../prompts/shared/untrusted-nl.md?raw";
 import timeBooking from "../../prompts/time/booking.md?raw";
 import timeIntro from "../../prompts/time/intro.md?raw";
 import timeIntroEmpty from "../../prompts/time/intro-empty.md?raw";
+import timeTimesheet from "../../prompts/time/timesheet.md?raw";
 
 // the files end with a newline an editor adds; the prompt itself does not
 const text = (raw: string) => raw.replace(/\n$/, "");
@@ -93,6 +94,7 @@ export const prompts = {
     booking: text(timeBooking),
     intro: text(timeIntro),
     introEmpty: text(timeIntroEmpty),
+    timesheet: text(timeTimesheet),
   },
 };
 

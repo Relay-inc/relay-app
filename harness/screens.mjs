@@ -3467,6 +3467,14 @@ const VIEWS = {
     await waitText("Book today's time");
     await click("Book today's time");
   },
+  // the user has the timesheet plugin's config: the item says whose rules book the time
+  "today-time-timesheet": async () => {
+    await page.clock.setFixedTime(Date.parse("2026-10-01T14:30:00Z"));
+    await open(page, server.url, { fixture: "timesheet" });
+    await waitText("Book today's time");
+    await click("Book today's time");
+    await waitText("Using your timesheet settings: 3 services");
+  },
   // switched off in Settings › General: the item goes, and the transcripts are not read for it
   "today-time-off": async () => {
     await page.clock.setFixedTime(Date.parse("2026-10-01T14:30:00Z"));
