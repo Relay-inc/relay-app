@@ -64,3 +64,20 @@ export function byTitle(title: string, cards: Candidate[]): Candidate | null {
   const [best, next] = scored;
   return best && best.score >= 0.6 && (!next || best.score - next.score >= 0.15) ? best.card : null;
 }
+
+/** Whether a card moves to the review column when its PR opens: only a card in progress, not in review already, and
+ *  never to a column that is a step back (to do, done). */
+export function movesToReview(
+  card: { state?: "todo" | "doing" | "done" },
+  column: string,
+  review: { id: string; state?: "todo" | "doing" | "done" } | undefined,
+) {
+  return (
+    !!review && card.state === "doing" && column !== review.id && review.state !== "todo" && review.state !== "done"
+  );
+}
+
+/** The open PRs that already have a ticket: what the first run of the review move records as seen, so cards that were
+ *  in progress before it existed stay where they are. */
+export const alreadyLinked = (links: Record<string, { card?: string }>, open: string[]) =>
+  open.filter(url => links[url]?.card);

@@ -402,7 +402,8 @@ export default {
   "pl.col.busy": "Tijdens het bouwen",
   "pl.col.busyHelp": "Een opgepikt ticket gaat eerst hierheen: dat is de claim.",
   "pl.col.review": "PR open",
-  "pl.col.reviewHelp": "Met de PR-link als commentaar. Reviewcommentaar op de PR gaat terug naar de agent.",
+  "pl.col.reviewHelp":
+    "Met de PR-link als commentaar. Reviewcommentaar op de PR gaat terug naar de agent. Ook waar Relay jouw ticket naartoe zet als je er een PR voor opent, alleen vanuit Bezig.",
   "pl.col.input": "Heeft iemand nodig",
   "pl.col.inputHelp":
     "Vragen, geen PR of een mislukte run, met de reden als commentaar. Zet het terug in Oppikken uit om verder te gaan.",
@@ -920,6 +921,11 @@ export default {
   "today.read": "Lezen",
   "today.fixChanges": "Op deze pull request zijn wijzigingen gevraagd. Lees de reviewopmerkingen en verwerk ze:",
   "today.fixChecks": "De checks op deze pull request falen. Zoek uit waarom en los het op:",
+  "link.noBoard": "Er is geen bord van {tracker} aan een project in Relay gekoppeld, dus het ticket kan niet openen.",
+  "ticket.branch":
+    "Werk in een nieuwe git worktree van {repos} op de branch {branch} (bestaat die branch al, check hem dan uit in de worktree in plaats van hem aan te maken). Laat de PR-titel beginnen met {number} en zet de ticketlink {url} in de PR-beschrijving.",
+  "ticket.branchAsk":
+    "Vraag me eerst voor welke repo dit is ({repos}) en werk dan in een nieuwe git worktree ervan op de branch {branch} (bestaat die branch al, check hem dan uit in de worktree in plaats van hem aan te maken). Laat de PR-titel beginnen met {number} en zet de ticketlink {url} in de PR-beschrijving.",
   "today.slotNow": "Nu",
   "today.slotAfter": "Na {title}",
   "today.slotLater": "Later vandaag",

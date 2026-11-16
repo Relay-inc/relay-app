@@ -187,3 +187,15 @@ export const show = (hash: string) => {
   ];
   return { hash, body: c ? `${c.subject}\n\nA retried sync job added the same period's balance again.` : "", files };
 };
+
+// the ticket-branch fixture: Northwind Portal has one clean checkout, so Start conversation names a worktree branch
+export const northwind = {
+  repo: "/Users/demo/code/northwind-portal",
+  name: "northwind-portal",
+  branch: "main",
+  upstream: "origin/main",
+  ahead: 0,
+  behind: 0,
+  made: false,
+  files: [],
+};
