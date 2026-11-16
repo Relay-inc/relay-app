@@ -235,7 +235,9 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, known: bool, action: &str, a
         Run::Board(p, a) => {
             let cfg = app.state::<crate::App>().settings.lock().unwrap()["integrations"][p.id].clone();
             let r = (a.build)(&cfg, args)?;
-            providers::send(p, &cfg, r.method, &r.url, r.body).map(|v| (a.out)(&v))
+            let mut v = providers::send(p, &cfg, r.method, &r.url, r.body)?;
+            if let Some(f) = a.then { if let Some(r) = f(&cfg, args, &v)? { v = providers::send(p, &cfg, r.method, &r.url, r.body)?; } }
+            Ok((a.out)(&v))
         }
         Run::Mail => mail(app, key, &provider, it.id, args),
         Run::Reminders => reminder(app, it.id, args),

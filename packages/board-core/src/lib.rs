@@ -81,16 +81,21 @@ pub struct Action {
     pub default: Policy,
     /// the request, from the provider's config and the arguments, or why the arguments do not do
     pub build: fn(cfg: &Value, args: &Value) -> Result<Req, String>,
+    /// a second request that needs the first one's answer (a lookup): None when the first answer is the result
+    pub then: Option<fn(cfg: &Value, args: &Value, first: &Value) -> Result<Option<Req>, String>>,
     /// the answer as the agent gets it: only what it needs, the APIs answer with a lot
     pub out: fn(&Value) -> Value,
 }
 pub const fn read(id: &'static str, about: &'static str, args: &'static [(&'static str, &'static str)],
                   build: fn(&Value, &Value) -> Result<Req, String>, out: fn(&Value) -> Value) -> Action {
-    Action { id, about, args, write: false, default: Policy::Auto, build, out }
+    Action { id, about, args, write: false, default: Policy::Auto, build, then: None, out }
 }
 pub const fn write(id: &'static str, about: &'static str, args: &'static [(&'static str, &'static str)],
                    build: fn(&Value, &Value) -> Result<Req, String>, out: fn(&Value) -> Value) -> Action {
-    Action { id, about, args, write: true, default: Policy::Ask, build, out }
+    Action { id, about, args, write: true, default: Policy::Ask, build, then: None, out }
+}
+impl Action {
+    pub const fn then(self, f: fn(&Value, &Value, &Value) -> Result<Option<Req>, String>) -> Action { Action { then: Some(f), ..self } }
 }
 
 /// The arguments against an action's `args`: an object, every required one there, nothing else.

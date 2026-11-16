@@ -894,10 +894,13 @@ const act = (ext: string, id: string, about: string, write: boolean, def: string
   default: def,
 });
 export const actions = [
-  act("productive", "list_tasks", "List the open tasks of a board.", false, "auto"),
-  act("productive", "create_task", "Create a task on a board.", true, "ask"),
-  act("productive", "comment", "Comment on a task.", true, "ask"),
-  act("productive", "add_time", "Book time on a service.", true, "ask"),
+  act("productive", "search", "Search tasks by text (title or number), up to 20. Closed tasks are included, see 'closed'.", false, "auto"),
+  act("productive", "task", "Read one task by id, or by number with the project id.", false, "auto"),
+  act("productive", "statuses", "The workflow statuses a task of a project can move to.", false, "auto"),
+  act("productive", "create_task", "Create a task in a project's task list.", true, "ask"),
+  act("productive", "move", "Set a task's workflow status, and/or move it to another task list.", true, "ask"),
+  act("productive", "comment", "Comment on a task. Hidden from the client by default on client projects.", true, "ask"),
+  act("productive", "add_time", "Book time on a service for you.", true, "ask"),
   act(
     "mail",
     "search",

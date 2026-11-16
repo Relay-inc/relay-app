@@ -260,7 +260,7 @@ export function history(key: string): Ev[] {
   if (key === ACTION_KEY)
     base.push(
       user("Make a ticket for the depot import."),
-      tool("Bash", { command: "relay productive.create_task title='Depot import script' list='To do'" }),
+      tool("Bash", { command: "relay productive.create_task project=3 task_list=4 title='Depot import script'" }),
       ai("I asked to create the ticket, it waits for your go."),
     );
   return base;
