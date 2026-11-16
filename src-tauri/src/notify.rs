@@ -92,3 +92,64 @@ pub fn banner(title: &str, body: &str) {
         if let Ok(NotificationResponse::Click) = r { println!("click"); }
     }
 }
+
+// ---------- Record nudge
+// A meeting that started without a recording (src/application/calendar/nudge.ts): a small window at the top right that
+// stays above every app, on every desktop and next to a full-screen call, until Record or Skip. Not a banner: macOS
+// hides a banner after a few seconds unless the user made Relay's style Alerts, and hides all of them while the screen
+// is shared. It never takes the focus from the call; a click goes through at once (accept_first_mouse).
+const NUDGE: &str = "record-nudge";
+const NUDGE_SIZE: (f64, f64) = (440.0, 92.0);
+/// The meeting the nudge shows, for the window to read when it loads (an event sent before that is lost).
+static NUDGE_NOW: std::sync::Mutex<Option<serde_json::Value>> = std::sync::Mutex::new(None);
+
+/// `meeting` ({id, title, time}) shows the nudge with it, None hides it.
+#[tauri::command]
+pub fn record_nudge(app: AppHandle, meeting: Option<serde_json::Value>) {
+    use tauri::{Emitter, Manager};
+    *NUDGE_NOW.lock().unwrap() = meeting.clone();
+    let a = app.clone();
+    app.run_on_main_thread(move || {
+        let app = &a;
+        let Some(meeting) = meeting else {
+            if let Some(w) = app.get_webview_window(NUDGE) { w.hide().ok(); }
+            return;
+        };
+        if app.get_webview_window(NUDGE).is_none() {
+            let (width, height) = NUDGE_SIZE;
+            let built = tauri::WebviewWindowBuilder::new(app, NUDGE, tauri::WebviewUrl::App("nudge.html".into()))
+                .title("Relay").inner_size(width, height).decorations(false).transparent(true).resizable(false)
+                .always_on_top(true).visible_on_all_workspaces(true).skip_taskbar(true)
+                .focusable(false).focused(false).accept_first_mouse(true).visible(false)
+                .build();
+            let Ok(w) = built else { return };
+            // top right of the screen with the cursor, under the menu bar, where a banner would be
+            if let Some(m) = w.cursor_position().ok().and_then(|p| w.monitor_from_point(p.x, p.y).ok().flatten()).or_else(|| w.primary_monitor().ok().flatten()) {
+                let (size, at, scale) = (m.size(), m.position(), m.scale_factor());
+                let x = at.x as f64 + size.width as f64 - (width + 16.0) * scale;
+                let y = at.y as f64 + 40.0 * scale;
+                w.set_position(tauri::PhysicalPosition::new(x, y)).ok();
+            }
+            #[cfg(target_os = "macos")]
+            above_full_screen(&w);
+        }
+        app.emit_to(NUDGE, "record-nudge", meeting).ok();
+        if let Some(w) = app.get_webview_window(NUDGE) { w.show().ok(); }
+    }).ok();
+}
+/// What the nudge shows now, null when hidden.
+#[tauri::command]
+pub fn record_nudge_now() -> Option<serde_json::Value> { NUDGE_NOW.lock().unwrap().clone() }
+
+/// On every Space including a full-screen app's, above floating windows: a window that only floats stays behind a
+/// full-screen Meet or Zoom.
+#[cfg(target_os = "macos")]
+fn above_full_screen(w: &tauri::WebviewWindow) {
+    let Ok(ns) = w.ns_window() else { return };
+    let ns = ns as *mut objc2::runtime::AnyObject;
+    // NSWindowCollectionBehavior CanJoinAllSpaces (1) | Stationary (16) | FullScreenAuxiliary (256); NSStatusWindowLevel (25)
+    unsafe {
+        let _: () = objc2::msg_send![ns, setCollectionBehavior: 1usize | 16 | 256];
+        let _: () = objc2::msg_send![ns, setLevel: 25isize];
+    }
+}

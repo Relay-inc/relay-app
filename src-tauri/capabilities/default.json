@@ -7,7 +7,8 @@
     "main-*",
     "settings",
     "dictation-pill",
-    "capture"
+    "capture",
+    "record-nudge"
   ],
   "permissions": [
     "core:default",

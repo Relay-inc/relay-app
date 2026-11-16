@@ -34,6 +34,7 @@ import { loadPrs, resetPrs, loadProjectRepos, askRepo } from "./pull-requests/pr
 import { loadMails, resetMail, mailLinkClicked } from "./mail/mail";
 import { startUsage, reloadUsage } from "./usage/usage";
 import { loadMeetings, tick } from "./calendar/calendar";
+import { listenToNudge, nudgeTick } from "./calendar/nudge";
 import { loadTodayCards } from "./today/today";
 import { loadTodayTime } from "./time/time";
 import { listenToLinks } from "./deep-links";
@@ -307,6 +308,8 @@ function startPolls() {
   setInterval(loadTodayCards, 5 * 60000); // the user's cards under Today
   setInterval(loadTodayTime, 5 * 60000); // the day's time to book
   setInterval(tick, 30000);
+  void listenToNudge(); // a meeting that started without a recording: a window that asks to record it
+  setInterval(nudgeTick, 30000);
   runPipelines(); // the board pipelines: ended runs on the board, PRs in review, new tickets
   setInterval(runPipelines, 5 * 60000);
 }

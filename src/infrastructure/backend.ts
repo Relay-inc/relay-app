@@ -128,6 +128,16 @@ export const openUrl = (url: string) => invoke("plugin:opener|open_url", { url }
 export const notify = (key: string, title: string, body: string, slot?: string) =>
   invoke("notify", { key, title, body, ...(slot ? { slot } : {}) });
 
+/** The record nudge (src-tauri/src/notify.rs): shown with a meeting that started without a recording, null hides it. */
+export type Nudge = { id: string; title: string; time: string };
+export const recordNudge = (meeting: Nudge | null) => invoke("record_nudge", { meeting });
+export const recordNudgeNow = () => invoke<Nudge | null>("record_nudge_now");
+export const onRecordNudge = (cb: (meeting: Nudge) => void) => listen<Nudge>("record-nudge", e => cb(e.payload));
+/** Record or Skip in the nudge, to the main window, which keeps the recording. */
+export const answerRecordNudge = (id: string, record: boolean) => emitTo("main", "record-nudge-answer", { id, record });
+export const onRecordNudgeAnswer = (cb: (answer: { id: string; record: boolean }) => void) =>
+  listen<{ id: string; record: boolean }>("record-nudge-answer", e => cb(e.payload));
+
 // ---------- the vault
 export const vaultStatus = () => invoke<VaultStatus>("vault_status");
 export const extraVaultsStatus = () => invoke<ExtraVault[]>("extra_vaults_status");

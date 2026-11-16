@@ -1495,7 +1495,10 @@ function handle(cmd: string, a: Args): unknown {
       return [...phoneShared];
     case "notify":
     case "open_settings_window":
+    case "record_nudge":
       return null;
+    case "record_nudge_now":
+      return { id: "weekly@1", title: "Weekly sync with the design team about the onboarding flow", time: "10:00" };
     case "usage_limits":
       return fixture.startsWith("accounts") ? integ.usageLimitsAccounts : integ.usageLimits;
     case "usage_tokens":

@@ -1179,6 +1179,8 @@ export default {
   "today.doneIn.fix": "Fait seulement dans Aujourd'hui : rien ne se passe sur GitHub",
   "today.doneIn.finished": "Fait le marque comme lu",
   "note.meetingStarted": "À propos de la réunion : {title}",
+  "cal.nudge": "Réunion commencée, pas d’enregistrement",
+  "cal.nudgeSkip": "Ignorer",
   "cal.banner": "Réunion à {time}",
   "cal.prepTitle": "Préparation : ",
   "cal.needClaude":
