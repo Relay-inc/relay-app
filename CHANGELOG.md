@@ -19,6 +19,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 - A worker now logs its decisions as it goes (what it chose, why, where the evidence is, how it turned out). The trail shows on its page, and a board pipeline's PR description lists it under Decisions. (#450)
 - A turn Claude Code refuses because it is not signed in shows a card with a Sign in button instead of "Not logged in · Please run /login": the button starts Claude Code's own login for the account that conversation runs on and opens the sign-in page in your browser. A conversation on a work machine says to sign in on that machine.
 
+### Fixed
+
+- A subagent's commands and messages no longer show up in the conversation while it runs, mixed in with Claude's own steps. They stay in the agents column and on the subagent's page, as they already did after reopening the conversation (#500).
+
 ## [0.0.54] - 2026-11-15
 
 ### Added
