@@ -20,7 +20,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Fixed
 
-- A subagent's commands and messages no longer show up in the conversation while it runs, mixed in with Claude's own steps. They stay in the agents column and on the subagent's page, as they already did after reopening the conversation.
+- A subagent's commands and messages no longer show up in the conversation while it runs, mixed in with Claude's own steps. They stay in the agents column and on the subagent's page, as they already did after reopening the conversation (#500).
 
 ## [0.0.54] - 2026-11-15
 
