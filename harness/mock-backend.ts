@@ -1121,6 +1121,7 @@ function handle(cmd: string, a: Args): unknown {
       return null;
     // the Git drawer: Beacon Billing's two checkouts, staged, discarded and committed in memory
     case "git_repos":
+      if (fixture === "ticket-branch" && a.project === "Northwind Portal") return [git.northwind];
       return a.project === "Beacon Billing" ? structuredClone(gitRepos) : [];
     case "git_log":
       return git.log(a.repo, a.all);
@@ -1643,7 +1644,10 @@ function handle(cmd: string, a: Args): unknown {
     case "github_status":
       return "lena";
     case "github_prs":
-      return integ.prs;
+      // review-move: the PR on ticket #312 is ready for review, so its card moves on
+      return fixture === "review-move"
+        ? { ...integ.prs, mine: integ.prs.mine.map(pr => (pr.number === 420 ? { ...pr, draft: false } : pr)) }
+        : integ.prs;
     case "github_pr":
       return integ.prDetail(a.repo, a.number);
     case "mail_list":

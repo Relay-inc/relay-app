@@ -2038,6 +2038,45 @@ const SCENARIOS = {
     s.fact("card send", sends[0]?.args ?? null);
   },
 
+  // Start conversation names the team's branch: a worktree on <type>/<number>-<slug>, the PR title with the number and
+  // the ticket link in the PR body. A relay://ticket link opens the same ticket window and starts nothing by itself.
+  async ticketBranch(s) {
+    await s.load({ fixture: "ticket-branch" });
+    const { page } = s;
+    const sendsBefore = (await s.calls("send")).length;
+    await page.evaluate(() => window.__harness.deepLink("relay://ticket?provider=productive&id=900100&project=p1"));
+    s.check("the link opens the ticket window", await waitText(page, "Amount excl. VAT"));
+    await settle(page, 300);
+    s.check("the link starts no conversation", Object.keys(await s.chatChanges()).length === 0);
+    s.check("the link sends nothing", (await s.calls("send")).length === sendsBefore);
+    await click(button(page, "Start conversation"), 400);
+    const created = Object.entries(await s.chatChanges()).filter(([, c]) => c !== "removed");
+    s.check("a conversation under the linked project", created.length === 1 && created[0][1].project === "Northwind Portal");
+    const typed = (await composerValue(page)) ?? "";
+    s.check("the composer names the branch", typed.includes("feat/300-invoice-export-csv"));
+    s.check("the composer asks for the number in the PR title and the link in its body", /PR title/.test(typed) && /PR body/.test(typed));
+    s.fact("composer", typed);
+    await page.evaluate(() => window.__harness.deepLink("relay://ticket?provider=productive&id=900100&project=nope"));
+    s.check("a board that is not linked says so", await waitText(page, "is linked to a project in Relay"));
+  },
+
+  // A PR of yours that Relay links to a ticket in progress moves the ticket to the pipeline's review column, once, and
+  // only when the PR is not a draft (the PRs on #312 are drafts in the default fixture)
+  async reviewMove(s) {
+    // the move happens while the page loads, so every call since the page opened counts, not only those after load()
+    const moves = async () =>
+      (await s.page.evaluate(() => window.__harness.calls))
+        .filter(c => c.cmd === "integration_call" && c.args.method === "PATCH" && String(c.args.path).startsWith("/tasks/"))
+        .map(c => c.args);
+    await s.load({ fixture: "review-move" });
+    await settle(s.page, 1500);
+    s.check("the card moved to the review column once", (await moves()).length === 1 && JSON.stringify((await moves())[0].body).includes("tl4"));
+    s.fact("moves", await moves());
+    await s.load({ fixture: "default" });
+    await settle(s.page, 1500);
+    s.check("a draft moves nothing", (await moves()).length === 0);
+  },
+
   async boardNewTask(s) {
     await s.load();
     const { page } = s;

@@ -1094,6 +1094,17 @@ const VIEWS = {
     await page.locator(".ticket-window").waitFor({ state: "detached" });
     await settle(page);
   },
+  // Start conversation on a ticket of a project with one checkout: the worktree branch and the PR rules are typed in
+  "ticket-chat-branch": async () => {
+    await open(page, server.url, { fixture: "ticket-branch" });
+    await click("Productive");
+    await waitText(markers.card);
+    await click(markers.card);
+    await waitText("Amount excl. VAT");
+    await button("Start conversation").click();
+    await page.locator(".ticket-window").waitFor({ state: "detached" });
+    await settle(page);
+  },
   // the ticket window of a board with a hand-picked pipeline: Build with agent under Start conversation
   "ticket-build": async () => {
     await open(page, server.url, { fixture: "pipeline-manual" });

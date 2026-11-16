@@ -408,7 +408,7 @@ export default {
   "pl.col.busyHelp": "Un ticket pris va d'abord ici : c'est la réservation.",
   "pl.col.review": "PR ouverte",
   "pl.col.reviewHelp":
-    "Avec le lien de la PR en commentaire. Les commentaires de revue sur la PR retournent à l'agent.",
+    "Avec le lien de la PR en commentaire. Les commentaires de revue sur la PR retournent à l'agent. C'est aussi où Relay déplace ton ticket quand tu ouvres une PR, seulement depuis En cours.",
   "pl.col.input": "Demande une personne",
   "pl.col.inputHelp":
     "Questions, pas de PR ou une exécution ratée, avec la raison en commentaire. Remettez-le dans Prendre dans pour continuer.",
@@ -932,6 +932,11 @@ export default {
   "today.fixChanges":
     "Des modifications ont été demandées sur cette pull request. Lis les commentaires de revue et corrige-les :",
   "today.fixChecks": "Les checks de cette pull request échouent. Trouve pourquoi et corrige :",
+  "link.noBoard": "Aucun tableau de {tracker} n'est lié à un projet dans Relay, le ticket ne peut pas s'ouvrir.",
+  "ticket.branch":
+    "Travaille dans un nouveau git worktree de {repos} sur la branche {branch} (si cette branche existe déjà, fais-en le checkout dans le worktree au lieu de la créer). Commence le titre de la PR par {number} et mets le lien du ticket {url} dans la description de la PR.",
+  "ticket.branchAsk":
+    "Demande-moi d'abord pour quel repo c'est ({repos}), puis travaille dans un nouveau git worktree de celui-ci sur la branche {branch} (si cette branche existe déjà, fais-en le checkout dans le worktree au lieu de la créer). Commence le titre de la PR par {number} et mets le lien du ticket {url} dans la description de la PR.",
   "today.slotNow": "Maintenant",
   "today.slotAfter": "Après {title}",
   "today.slotLater": "Plus tard aujourd'hui",

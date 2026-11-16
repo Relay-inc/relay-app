@@ -255,10 +255,9 @@ export async function openTodayCardIn(item: TodayCard) {
 export async function todayCardChat(item: TodayCard) {
   const tracker = trackerOf(item);
   const url = await tracker.url(ctxOf(tracker), item.ref, item.card.id).catch(() => "");
-  // as the ticket window types it
   await ticketChat(
     tracker,
-    [`${item.card.number} ${item.card.title}`.trim(), url].filter(Boolean).join("\n"),
+    { number: item.card.number, title: item.card.title, url, labels: item.card.labels },
     item.project,
   );
 }

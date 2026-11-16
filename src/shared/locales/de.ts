@@ -402,7 +402,8 @@ export default {
   "pl.col.busy": "Während des Bauens",
   "pl.col.busyHelp": "Ein abgeholtes Ticket kommt zuerst hierhin: das ist der Claim.",
   "pl.col.review": "PR offen",
-  "pl.col.reviewHelp": "Mit dem PR-Link als Kommentar. Review-Kommentare zum PR gehen zurück an den Agent.",
+  "pl.col.reviewHelp":
+    "Mit dem PR-Link als Kommentar. Review-Kommentare zum PR gehen zurück an den Agent. Dorthin verschiebt Relay auch dein Ticket, wenn du einen PR dafür öffnest, nur aus In Arbeit.",
   "pl.col.input": "Braucht eine Person",
   "pl.col.inputHelp":
     "Fragen, kein PR oder ein fehlgeschlagener Lauf, mit dem Grund als Kommentar. Zurück nach Abholen aus, um weiterzumachen.",
@@ -924,6 +925,12 @@ export default {
   "today.fixChanges":
     "Für diesen Pull Request wurden Änderungen angefordert. Lies die Review-Kommentare und setze sie um:",
   "today.fixChecks": "Die Checks dieses Pull Requests schlagen fehl. Finde heraus warum und behebe es:",
+  "link.noBoard":
+    "Kein Board von {tracker} ist in Relay mit einem Projekt verknüpft, das Ticket lässt sich daher nicht öffnen.",
+  "ticket.branch":
+    "Arbeite in einem neuen git worktree von {repos} auf dem Branch {branch} (existiert der Branch schon, checke ihn im Worktree aus, statt ihn anzulegen). Der PR-Titel beginnt mit {number}, der Ticket-Link {url} kommt in die PR-Beschreibung.",
+  "ticket.branchAsk":
+    "Frag mich zuerst, für welches Repo das ist ({repos}), und arbeite dann in einem neuen git worktree davon auf dem Branch {branch} (existiert der Branch schon, checke ihn im Worktree aus, statt ihn anzulegen). Der PR-Titel beginnt mit {number}, der Ticket-Link {url} kommt in die PR-Beschreibung.",
   "today.slotNow": "Jetzt",
   "today.slotAfter": "Nach {title}",
   "today.slotLater": "Später heute",

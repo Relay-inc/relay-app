@@ -1,11 +1,15 @@
 import { provider } from "../../shared/plugins";
+import type { BoardRef, Card } from "../../domain/board/types";
 import { fill, prompts, untrusted, untrustedNote } from "../../shared/prompts";
-import { byNumber, byTitle, type Candidate } from "../../domain/today/link";
+import { byNumber, byTitle, movesToReview, type Candidate } from "../../domain/today/link";
+import { colOf, withCol } from "../../domain/board/rules";
 import type { PR } from "../../domain/pull-requests/types";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
 import { isPrimary } from "../../infrastructure/window";
 import { makeStore } from "../make-store";
+import { ctxOf } from "../board/ctx";
+import { pipelineOf } from "../settings/pipeline";
 import { usePullRequestsStore } from "../pull-requests/store";
 import { useTodayStore } from "./store";
 
@@ -76,6 +80,7 @@ async function linkOne(pr: PR, allowAi: boolean): Promise<"number" | "title" | "
   if (!number && !title && !allowAi) return "skipped";
   const found = number ?? title ?? (await askClaude(pr, cards));
   const how = number ? "number" : title ? "title" : "ai";
+  if (found) await moveToReview(pr, board, found.id);
   keep(
     pr.url,
     found
@@ -83,6 +88,32 @@ async function linkOne(pr: PR, allowAi: boolean): Promise<"number" | "title" | "
       : { at: Date.now(), how: "none" },
   );
   return how;
+}
+
+// An open PR of mine, first linked to a card that is in progress: the card goes to the review column of the project's
+// pipeline settings (Settings › Projects), once per PR (also when the link is found again later), and nothing happens
+// without that column or for a card that is not in progress. A failed move is only logged, the PR is not tried again.
+const REVIEWED = "prReviewed";
+async function moveToReview(pr: PR, board: { provider: string; ref: BoardRef; cards: Card[] }, id: string) {
+  const done = storage.get<string[]>(REVIEWED, []);
+  const p = pipelineOf(pr.project ?? "");
+  const card = board.cards.find(x => x.id === id);
+  const prov = provider(board.provider);
+  const mine = usePullRequestsStore.getState().list?.mine.some(x => x.url === pr.url);
+  // a draft is not up for review yet; the link is kept and the card stays
+  if (!mine || pr.draft || !card || !prov || !p.review || done.includes(pr.url)) return;
+  try {
+    const group = p.group || prov.groupings?.[0].id || "";
+    const ctx = ctxOf(prov);
+    const target = (await prov.columns(ctx, board.ref, group)).find(column => column.id === p.review);
+    storage.set(REVIEWED, [...done, pr.url]);
+    if (!movesToReview(card, colOf(prov, { group }, card), target)) return;
+    await prov.move(ctx, board.ref, card, p.review, group);
+    // Today's copy at once: a second PR of the card must not find it in progress still
+    Object.assign(card, withCol(prov, { group }, card, p.review), { state: target?.state });
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 // Claude picks the card from the list, or none; what it answers counts only when it is a number on the list

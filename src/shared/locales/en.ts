@@ -397,7 +397,8 @@ const en = {
   "pl.col.busy": "While building",
   "pl.col.busyHelp": "A picked ticket moves here first: that is the claim.",
   "pl.col.review": "PR open",
-  "pl.col.reviewHelp": "With the PR link as a comment. Review comments on the PR go back to the agent.",
+  "pl.col.reviewHelp":
+    "With the PR link as a comment. Review comments on the PR go back to the agent. Also where Relay moves your ticket when you open a PR for it, from In progress only.",
   "pl.col.input": "Needs a person",
   "pl.col.inputHelp":
     "Questions, no PR, or a failed run, with why as a comment. Move it back to Pick up from to continue.",
@@ -912,6 +913,11 @@ const en = {
   "today.read": "Read",
   "today.fixChanges": "Changes were requested on this pull request. Read the review comments and fix them:",
   "today.fixChecks": "The checks on this pull request fail. Find out why and fix it:",
+  "link.noBoard": "No board of {tracker} is linked to a project in Relay, so the ticket cannot open.",
+  "ticket.branch":
+    "Work in a new git worktree of {repos} on the branch {branch} (if that branch already exists, check it out in the worktree instead of creating it). Start the PR title with {number} and put the ticket link {url} in the PR body.",
+  "ticket.branchAsk":
+    "Ask me first which repo this is for ({repos}), then work in a new git worktree of it on the branch {branch} (if that branch already exists, check it out in the worktree instead of creating it). Start the PR title with {number} and put the ticket link {url} in the PR body.",
   "today.slotNow": "Now",
   "today.slotAfter": "After {title}",
   "today.slotLater": "Later today",
