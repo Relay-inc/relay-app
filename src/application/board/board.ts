@@ -210,11 +210,21 @@ async function loadCards(provider: BoardProvider, live: () => boolean, boardId: 
   const state = boardState(provider);
   const ref = { ...refOf(provider, state), board: boardId };
   const ctx = ctxOf(provider);
+  // what the provider adds to cards after returning them (Productive's grooming badges): kept for when they are on the board
+  const late: Record<string, Partial<Card>> = {};
+  let shown = false;
+  const patch = (changes: Record<string, Partial<Card>>) => {
+    for (const id in changes) late[id] = { ...late[id], ...changes[id] };
+    if (shown && live())
+      change(provider, draft => {
+        for (const card of draft.cards) Object.assign(card, changes[card.id]);
+      });
+  };
   // the views are extra: a board still shows when they don't load
   const [columns, cards, views] = boardId
     ? await Promise.all([
         provider.columns(ctx, ref, state.group || undefined),
-        provider.cards(ctx, ref),
+        provider.cards(ctx, ref, patch),
         provider.views?.(ctx, ref).catch(() => []) ?? [],
       ])
     : [[], [], []];
@@ -222,12 +232,13 @@ async function loadCards(provider: BoardProvider, live: () => boolean, boardId: 
   change(provider, draft => {
     draft.board = boardId;
     draft.columns = columns;
-    draft.cards = cards;
+    draft.cards = cards.map(card => ({ ...card, ...late[card.id] }));
     draft.views = views;
     draft.presets = parsePresets(storage.getRaw(presetsKey(provider, boardId)) || null);
     draft.filters = tidied(draft);
     draft.loadedAt = Date.now();
   });
+  shown = true;
   const key = storageKey(provider);
   storage.setRaw(`${key}Project`, boardState(provider).project);
   storage.setRaw(`${key}Board`, boardId);

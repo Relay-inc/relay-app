@@ -3,6 +3,7 @@ import { toneOf } from "@relay/board-core/tone";
 import { safeUrl } from "@relay/board-core/detail";
 import strings, { type Key } from "./locales";
 import { showMentions, toHtml, uploadFile } from "./write";
+import { ticketFlow } from "./flow";
 import { toFilters, toGroup, toLayout } from "./views";
 
 const t = translator<Key>("productive");
@@ -106,6 +107,9 @@ function build(ref: BoardRef, task: any, inc: any[], cs: any[], csInc: any[], ac
   const list = pick(inc, "task_lists", rel.task_list)?.attributes.name || "";
   const parent = pick(inc, "tasks", rel.parent_task);
   return { title: a.title, number: a.number, closed: a.closed, description: clean(a.description), created: a.created_at, creator: person(pick(inc, "people", rel.creator)),
+    // the lead's grooming verdict, from the comments; the estimate and worked minutes for the budget line
+    flow: ticketFlow(cs.map((c: any) => ({ at: c.attributes.created_at, html: c.attributes.body || "" }))),
+    time: { estimate: a.initial_estimate ?? null, worked: a.worked_time ?? null },
     board: boardNames.get(ref.board) || "", list, url: taskUrl(ref, id), project: ref.project,
     statusId: rel.workflow_status?.data?.id ?? "", assigneeId: rel.assignee?.data?.id ?? "",
     statusName: pick(inc, "workflow_statuses", rel.workflow_status)?.attributes.name || "", state: a.closed ? "done" as State : stateOf(pick(inc, "workflow_statuses", rel.workflow_status)?.attributes.category_id),
@@ -139,7 +143,7 @@ const internal = (c: Ctx, project: string) => {
   return got;
 };
 
-async function prefetch(c: Ctx, ref: BoardRef, tk: { data: any[]; included: any[] }) {
+async function prefetch(c: Ctx, ref: BoardRef, tk: { data: any[]; included: any[] }, patch?: (changes: Record<string, Partial<Card>>) => void) {
   const g = ++warming;
   try {
     await ready(c);
@@ -149,6 +153,8 @@ async function prefetch(c: Ctx, ref: BoardRef, tk: { data: any[]; included: any[
       if (g !== warming) return;
       for (const x of part) details.set(x.id, build(ref, x, tk.included, cs.data.filter((y: any) => y.relationships.task?.data?.id === x.id), cs.included,
         acts.data.filter((y: any) => String(y.attributes.task_id) === x.id), acts.included, null));
+      // the cards were shown before the comments came: their badges follow
+      patch?.(Object.fromEntries(part.filter((x: any) => details.get(x.id)?.flow).map((x: any) => [x.id, { flow: details.get(x.id)!.flow }])));
     }
   } catch { /* see above */ }
 }
@@ -186,12 +192,12 @@ const productive: BoardProvider<Key> = {
   },
   columns: async (c, ref, group) => group === "status" ? (await optsOf(c, ref.project)).statuses : (await all(c, `/task_lists?filter[folder_id]=${ref.board}&filter[status]=1`)).data
     .map((x: any) => ({ id: x.id, name: x.attributes.name, placement: x.attributes.placement ?? 0 })).sort((a, b) => a.placement - b.placement),
-  cards: async (c, ref) => {
+  cards: async (c, ref, patch) => {
     // include=task_list is required: without it the relationship comes back without an id. The project's statuses
     // give the rings their colour. Without them a card still shows, coloured by its status' kind
     const [tk, o] = await Promise.all([all(c, `/tasks?filter[folder_id]=${ref.board}&filter[status]=1&include=task_list,assignee,workflow_status,creator`),
       optsOf(c, ref.project).catch(() => null)]);
-    prefetch(c, ref, tk);
+    prefetch(c, ref, tk, patch);
     return tk.data.map((x: any) => toCard(c, ref, x, tk.included, o));
   },
   // at the end of the lane: a task in the column's task list, or with the column's status in the board's first task list
@@ -257,7 +263,7 @@ const productive: BoardProvider<Key> = {
         editLabels: true, folder: tk.board,
         assignee: tk.assigneeId ? { id: tk.assigneeId, name: tk.assignee } : undefined, due: tk.due, labels: tk.labels,
         statuses: o?.statuses, people: o?.people, files: tk.files, feed: tk.feed,
-        subtasks: tk.subtasks, parent: tk.parent };
+        subtasks: tk.subtasks, parent: tk.parent, flow: tk.flow, time: tk.time };
     },
     /** comment, status, assignee, attach: done in Productive, then the task read again */
     async act(c, ref, id, action, { value, files, mentions = [], hidden = false }) {

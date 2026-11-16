@@ -1068,6 +1068,20 @@ const VIEWS = {
     await click("Productive");
     await waitText(markers.card);
   },
+  // grooming verdicts on cards, drawn once the comments arrive: Not ready, Ready and Built with a risk marker, Split
+  "board-flow": async (fixture = "default") => {
+    await open(page, server.url, { fixture });
+    await click("Productive");
+    await waitText("Built");
+  },
+  "board-flow-dark": () => VIEWS["board-flow"]("dark"),
+  // a ticket with a verdict, its estimate against the time worked on it
+  "ticket-flow": async (fixture = "default") => {
+    await VIEWS["board-flow"](fixture);
+    await click("Viewer role sees invoices");
+    await waitText("Over by");
+  },
+  "ticket-flow-dark": () => VIEWS["ticket-flow"]("dark"),
   "card-detail": async () => {
     await VIEWS.board();
     await click(markers.card);

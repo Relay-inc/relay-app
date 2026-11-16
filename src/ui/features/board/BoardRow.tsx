@@ -2,6 +2,7 @@ import type { Card } from "../../../domain/board/types";
 import { useT } from "../../hooks/useT";
 import { Avatar } from "../../components/Avatar";
 import { Ring } from "./Ring";
+import { FlowChips } from "./TicketFlow";
 import { SubtaskCount } from "./BoardCard";
 import { due, numbered, updated } from "./format";
 
@@ -26,6 +27,7 @@ export function BoardRow({ card, selected, onOpen }: { card: Card; selected: boo
           {name}
         </span>
       ))}
+      <FlowChips flow={card.flow} />
       <span className="text-[11px] text-secondary">
         <SubtaskCount subtasks={card.subtasks} />
       </span>

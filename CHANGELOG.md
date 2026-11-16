@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Added
+
+- A Productive card shows what the lead decided when grooming it (Ready with its size, Not ready, Split), a marker for high risk and Built once the ticket was built, read from the hidden `Ticket flow:` and `Ticket built:` comments. The ticket window shows the same at the top, with the estimate against the time worked and how far over it is. (#504)
+
 ## [0.0.55] - 2026-11-16
 
 ### Added
