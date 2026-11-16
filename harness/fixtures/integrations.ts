@@ -380,6 +380,23 @@ const SUBTASKS = ["CSV column order", "VAT column per rate", "Export button in t
     assignee: { data: i === 2 ? null : { type: "people", id: PEOPLE[i].id } },
   },
 }));
+// hidden grooming comments (the lead's "Ticket flow:", the developer's "Ticket built:"), on three cards, newest first:
+// a newer flow comment replaces the older one, the second card was built and went over its estimate
+const FLOW_COMMENTS: Record<string, string[]> = {
+  "900101": [
+    "<p><strong>Ticket flow:</strong></p><p>Niet klaar</p><p>Grootte M (6-10u): de rollen zijn nog niet beschreven</p><p>Risico: normaal</p><p>Budget: geen schatting</p>",
+    "<p><strong>Ticket flow:</strong></p><p>Ready</p>",
+  ],
+  "900102": [
+    "<p><strong>Ticket built:</strong> M, 5h worked against 4h estimated.</p>",
+    "<p><strong>Ticket flow:</strong></p><p>Ready</p><p>Size M (6-10h): role checks in three places</p><p>Risk: high (access: who can see invoices)</p><p>Budget: fits 3h</p>",
+  ],
+  "900103": [
+    "<p><strong>Ticket flow:</strong></p><p>Split</p><p>Size L (16h+): upload, resize and storage in one ticket</p>",
+    "<p>Sofie: I'll cut it in two.</p>",
+  ],
+};
+Object.assign(TASKS[2].attributes, { initial_estimate: 240, worked_time: 300, remaining_time: 0 });
 export const CARD_TITLE = TASK_TITLES[0];
 /** The public 100x100 thumb of the picture attachment; integration_thumb turns it into a data URL. */
 export const THUMB_URL = "https://files.example/thumb/invoice-list.png";
@@ -476,14 +493,17 @@ export function productive(method: string, path: string, body: unknown): unknown
     const ids = (f("task_id") || "").split(",");
     return page(
       ids.slice(0, 40).flatMap((id, i) =>
-        [0, 1].map(k => ({
+        [0, 1, ...(FLOW_COMMENTS[id] ? [2, 3] : [])].map(k => ({
           id: `cm${id}${k}`,
           type: "comments",
           attributes: {
             created_at: iso(NOW - (k + 1 + i) * 5 * HOUR),
-            body: k
-              ? "<p>Client confirmed the <b>VAT</b> column.</p>"
-              : "<p>Started on this, first export on staging.</p><ul><li>CSV</li><li>XLSX later</li></ul>",
+            body:
+              k > 1
+                ? FLOW_COMMENTS[id][k - 2]
+                : k
+                  ? "<p>Client confirmed the <b>VAT</b> column.</p>"
+                  : "<p>Started on this, first export on staging.</p><ul><li>CSV</li><li>XLSX later</li></ul>",
           },
           relationships: {
             creator: { data: { type: "people", id: k ? "70002" : "70001" } },
@@ -1122,7 +1142,9 @@ const GH_ITEMS = [
 export function githubProjects(body: unknown): unknown {
   const q = String((body as { query?: string })?.query ?? "");
   const op = q.match(/^\s*(?:query|mutation)\s+(\w+)/)?.[1];
-  const projects = (nodes: [string, string][]) => ({ nodes: nodes.map(([id, title]) => ({ id, title, closed: false })) });
+  const projects = (nodes: [string, string][]) => ({
+    nodes: nodes.map(([id, title]) => ({ id, title, closed: false })),
+  });
   if (op === "Boards")
     return {
       data: {
@@ -1131,7 +1153,16 @@ export function githubProjects(body: unknown): unknown {
           name: "Demo User",
           projectsV2: projects([["PVT_kwDOPersonal1", "Side projects"]]),
           organizations: {
-            nodes: [{ login: "beacon", name: "Beacon", projectsV2: projects([[GH_PROJECT, "Billing roadmap"], ["PVT_kwDOBeacon02", "Website"]]) }],
+            nodes: [
+              {
+                login: "beacon",
+                name: "Beacon",
+                projectsV2: projects([
+                  [GH_PROJECT, "Billing roadmap"],
+                  ["PVT_kwDOBeacon02", "Website"],
+                ]),
+              },
+            ],
           },
         },
       },
@@ -1145,7 +1176,8 @@ export function githubProjects(body: unknown): unknown {
         },
       },
     };
-  if (op === "Items") return { data: { node: { items: { nodes: GH_ITEMS, pageInfo: { hasNextPage: false, endCursor: null } } } } };
+  if (op === "Items")
+    return { data: { node: { items: { nodes: GH_ITEMS, pageInfo: { hasNextPage: false, endCursor: null } } } } };
   if (op === "Move") return { data: { updateProjectV2ItemFieldValue: { projectV2Item: { id: "x" } } } };
   if (op === "Clear") return { data: { clearProjectV2ItemFieldValue: { projectV2Item: { id: "x" } } } };
   if (op === "Create") return { data: { addProjectV2DraftIssue: { projectItem: { id: "PVTI_lADOBeaconNew" } } } };

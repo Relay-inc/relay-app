@@ -12,6 +12,7 @@ import { ModalHeader } from "../../components/ModalHeader";
 import { ModalLink } from "../../components/ModalLink";
 import { useT } from "../../hooks/useT";
 import { TicketActivity } from "./TicketActivity";
+import { TicketFlowLine } from "./TicketFlow";
 import { TicketFiles } from "./TicketFiles";
 import { TicketHeading } from "./TicketHeading";
 import { TicketSidebar } from "./TicketSidebar";
@@ -101,6 +102,7 @@ export function BoardTicket({
             )}
             {view.title}
           </h2>
+          <TicketFlowLine flow={view.flow} time={view.time} />
           {view.description.trim() ? (
             // the provider's HTML after its clean() or its safe Markdown
             <div

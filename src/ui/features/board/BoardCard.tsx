@@ -5,6 +5,7 @@ import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
 import { Avatar } from "../../components/Avatar";
 import { Ring } from "./Ring";
+import { FlowChips } from "./TicketFlow";
 import { due, numbered, updated } from "./format";
 
 /** where a card was grabbed: the pointer, and the pointer's offset inside the card */
@@ -108,7 +109,7 @@ export function BoardCard({
         <div className="text-[13px] font-medium leading-[1.4] text-pretty">{card.title}</div>
       </div>
       {path && <div className={`text-[11px] text-secondary ${card.state ? "pl-5.5" : ""}`}>{path}</div>}
-      {(!!card.labels?.length || dueDay || touched || !!card.subtasks) && (
+      {(!!card.labels?.length || dueDay || touched || !!card.subtasks || !!card.flow) && (
         <div
           className={`flex items-center gap-1.5 text-[11px] text-secondary tabular-nums ${card.state ? "pl-5.5" : ""}`}
         >
@@ -118,6 +119,7 @@ export function BoardCard({
             </span>
           ))}
           <SubtaskCount subtasks={card.subtasks} />
+          <FlowChips flow={card.flow} />
           {dueDay && (
             <span className={`inline-flex items-center gap-1 font-medium ${dueDay.tone}`}>
               <Icon name="cal" className="glyph size-3" />

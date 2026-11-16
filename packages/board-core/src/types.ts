@@ -19,6 +19,8 @@ export type Tone = "idle" | "planned" | "active" | "blocked" | "review" | "done"
 /** A card in a column. `number` is shown as #number (as it is when not only digits, Linear's ENG-12), `who` is the
  * assignee's first name (what the filters and saved views match on), `whoName` their full name (the avatar's
  * initials), `me` whether that is the user, `due` is yyyy-mm-dd, `priority` Linear's scale: 1 urgent to 4 low, 0 or absent none. */
+/** The lead's grooming verdict on a ticket (Productive: its `Ticket flow:` comment), `built` once the developer reported it built. */
+export type TicketFlow = { verdict: "ready" | "not-ready" | "split"; size?: "S" | "M" | "L"; hours?: string; risk?: "high" | "normal"; budget?: string; built: boolean };
 export type Card = { id: string; title: string; number: string; column: string; placement: number; due: string | null; who: string; priority?: number;
   whoName?: string; me?: boolean;
   /** its column in each grouping but the first (`column`): Productive's { status: workflow status id } */
@@ -27,7 +29,9 @@ export type Card = { id: string; title: string; number: string; column: string; 
    *  its workflow status (name and kind), the folder (Productive board) and task list it sits in, labels, and the last update as an ISO time. */
   status?: string; state?: State; tone?: Tone; folder?: string; list?: string; labels?: string[]; updated?: string;
   /** its subtasks, when it has any: how many are still open of all of them */
-  subtasks?: { open: number; total: number } };
+  subtasks?: { open: number; total: number };
+  /** its grooming verdict; only known once the provider's background load has read the comments (see BoardProvider.cards) */
+  flow?: TicketFlow };
 /** A subtask as the ticket window lists it, or the parent a subtask belongs to (only id, number and title). */
 export type SubCard = { id: string; number: string; title: string; closed?: boolean; state?: State; tone?: Tone; who?: string };
 /** A card for the ticket window, in a shape every provider's detail can fill: the app draws it, the provider only maps. `description` and the feed's `html` are sanitised HTML. */
@@ -51,6 +55,9 @@ export type CardView = {
   subtasks?: SubCard[] | null;
   /** the task this one is a subtask of */
   parent?: SubCard;
+  flow?: TicketFlow;
+  /** the time budget in minutes: the estimate and what was worked on it, each null when unknown */
+  time?: { estimate: number | null; worked: number | null };
   feed: { at: string; who: string; html: string; change: string; files: { id: string; name: string; size: number; url: string; thumb?: string }[] }[];
 };
 /** A way to lay out the columns, when a provider has more than one: Productive's task lists or workflow statuses. */
@@ -113,7 +120,8 @@ export interface BoardProvider<K extends string = string> {
   /** the groupings it offers, the first is the default (the cards' `column`) */
   groupings?: Grouping<K>[];
   columns(ctx: Ctx, ref: BoardRef, group?: string): Promise<Column[]>;
-  cards(ctx: Ctx, ref: BoardRef): Promise<Card[]>;
+  /** `patch` is for what arrives after the cards: fields per card id, merged into the cards on the board. */
+  cards(ctx: Ctx, ref: BoardRef, patch?: (changes: Record<string, Partial<Card>>) => void): Promise<Card[]>;
   /** Move the card to another column, in the tracker right away. Resolves with the new placement when the API gives one. */
   move(ctx: Ctx, ref: BoardRef, card: Card, to: string, group?: string): Promise<number | void>;
   /** A new card in a column of the grouping shown (`group`), at its end. Resolves with the card as the tracker made it.
