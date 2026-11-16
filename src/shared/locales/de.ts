@@ -1172,6 +1172,8 @@ export default {
   "today.doneIn.fix": "Erledigt nur unter Heute: auf GitHub passiert nichts",
   "today.doneIn.finished": "Erledigt markiert es als gelesen",
   "note.meetingStarted": "Zum Meeting: {title}",
+  "cal.nudge": "Meeting läuft, keine Aufnahme",
+  "cal.nudgeSkip": "Überspringen",
   "cal.banner": "Meeting um {time}",
   "cal.prepTitle": "Vorbereitung: ",
   "cal.needClaude":

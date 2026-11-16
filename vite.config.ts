@@ -13,7 +13,7 @@ export default defineConfig(() => ({
   // four pages: the main window, the settings window, the dictation pill and the quick capture window
   build: {
     rollupOptions: {
-      input: { main: "index.html", settings: "settings.html", overlay: "overlay.html", capture: "capture.html" },
+      input: { main: "index.html", settings: "settings.html", overlay: "overlay.html", capture: "capture.html", nudge: "nudge.html" },
     },
   },
 

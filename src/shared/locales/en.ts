@@ -1158,6 +1158,8 @@ const en = {
   "today.doneIn.fix": "Done on Today only: nothing happens on GitHub",
   "today.doneIn.finished": "Done marks it read",
   "note.meetingStarted": "About the meeting: {title}",
+  "cal.nudge": "Meeting started, not recording",
+  "cal.nudgeSkip": "Skip",
   "cal.banner": "Meeting at {time}",
   "cal.prepTitle": "Prep: ",
   "cal.needClaude":

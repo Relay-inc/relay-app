@@ -1167,6 +1167,8 @@ export default {
   "today.doneIn.fix": "Klaar enkel op Vandaag: op GitHub gebeurt niets",
   "today.doneIn.finished": "Klaar markeert het als gelezen",
   "note.meetingStarted": "Over de meeting: {title}",
+  "cal.nudge": "Meeting gestart, geen opname",
+  "cal.nudgeSkip": "Overslaan",
   "cal.banner": "Meeting om {time}",
   "cal.prepTitle": "Voorbereiding: ",
   "cal.needClaude":
