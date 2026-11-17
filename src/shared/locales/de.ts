@@ -345,7 +345,7 @@ export default {
   "ag.accountActive": "Neue Unterhaltungen nutzen",
   "ag.accountMostRoom": "Das Konto mit dem meisten Spielraum",
   "ag.accountMostRoomHelp":
-    "Jede neue Unterhaltung startet auf dem Konto, dessen Limits am wenigsten genutzt sind, und bleibt dort.",
+    "Jede neue Unterhaltung startet auf dem Konto mit dem meisten Spielraum bis zum Zurücksetzen seiner Limits und bleibt dort.",
   "ag.accountAuto": "Konten automatisch wechseln",
   "ag.accountAutoHelp":
     "Ist das Planlimit eines Kontos aufgebraucht, zieht die Unterhaltung zum nächsten Konto mit Luft um und geht sofort weiter.",

@@ -24,6 +24,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 - `relay://ticket?provider=productive&id=<task id>` opens that ticket in Relay, with Start conversation one click away. Work never starts from the link itself. (#506)
 - Agents in a conversation can carry a Productive ticket through the flow: look a ticket up by its number, list the statuses it can move to, move it, assign it, edit its title and description, add subtasks and mark what blocks what. Each change asks first. Comments an agent posts are now hidden from the client by default on client projects. (#503)
 
+### Changed
+
+- "The account with the most room" (Settings › Agents › New conversations use) now weighs what is left of an account's limits against the time until they reset, instead of taking the least used one. An account with 20% left shortly before its reset goes first, since that room is lost otherwise, and one that would run out long before its reset goes last. The tightest of the session and weekly limits decides (#509).
+
 ## [0.0.55] - 2026-11-16
 
 ### Added
