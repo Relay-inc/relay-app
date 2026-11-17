@@ -15,11 +15,8 @@ use serde::Serialize;
 use serde_json::Value;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
-use transcribe_rs::onnx::canary::CanaryModel;
-use transcribe_rs::onnx::cohere::CohereModel;
-use transcribe_rs::onnx::moonshine::{MoonshineModel, MoonshineVariant};
-use transcribe_rs::onnx::parakeet::ParakeetModel;
-use transcribe_rs::onnx::Quantization;
+#[cfg(onnx)]
+use transcribe_rs::onnx::{canary::CanaryModel, cohere::CohereModel, moonshine::{MoonshineModel, MoonshineVariant}, parakeet::ParakeetModel, Quantization};
 #[cfg(feature = "whisper")]
 use transcribe_rs::whisper_cpp::WhisperEngine;
 use transcribe_rs::{SpeechModel, TranscribeOptions};
@@ -29,33 +26,49 @@ const HOST: &str = "https://blob.handy.computer"; // Handy's model mirror (MIT, 
 
 /// A model Settings › Voice offers. `auto`: it hears the language itself; without it the language is passed.
 struct Model { id: &'static str, file: &'static str, sha256: &'static str, mb: u32, langs: &'static [&'static str], auto: bool }
+#[cfg(onnx)]
 const EU: &[&str] = &["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"];
 // Whisper knows ~99; these are the ones the language picker can name
 const WHISPER: &[&str] = &["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk", "zh", "ja", "ko", "vi", "ar"];
 const MODELS: &[Model] = &[
+    #[cfg(onnx)]
     Model { id: "parakeet-v3", file: "parakeet-v3-int8.tar.gz", sha256: "43d37191602727524a7d8c6da0eef11c4ba24320f5b4730f1a2497befc2efa77", mb: 456, langs: EU, auto: true },
+    #[cfg(onnx)]
     Model { id: "parakeet-v2", file: "parakeet-v2-int8.tar.gz", sha256: "ac9b9429984dd565b25097337a887bb7f0f8ac393573661c651f0e7d31563991", mb: 451, langs: &["en"], auto: true },
+    #[cfg(onnx)]
     Model { id: "canary-1b-v2", file: "canary-1b-v2.tar.gz", sha256: "02305b2a25f9cf3e7deaffa7f94df00efa44f442cd55c101c2cb9c000f904666", mb: 691, langs: EU, auto: false },
+    #[cfg(onnx)]
     Model { id: "cohere", file: "cohere-int8.tar.gz", sha256: "ea2257d52434f3644574f187dcdcf666e302cd11b92866116ab8e14cd9c887f0", mb: 1708, langs: &["en", "fr", "de", "it", "es", "pt", "el", "nl", "pl", "zh", "ja", "ko", "vi", "ar"], auto: true },
     Model { id: "whisper-turbo", file: "ggml-large-v3-turbo-q5_0.bin", sha256: "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2", mb: 574, langs: WHISPER, auto: true },
+    #[cfg(onnx)]
     Model { id: "moonshine-base", file: "moonshine-base.tar.gz", sha256: "04bf6ab012cfceebd4ac7cf88c1b31d027bbdd3cd704649b692e2e935236b7e8", mb: 55, langs: &["en"], auto: true },
 ];
+// first in MODELS: Settings › Voice falls back to the first model listed, as picked() does to this one
+#[cfg(onnx)]
 const DEFAULT: &str = "parakeet-v3";
+#[cfg(not(onnx))]
+const DEFAULT: &str = "whisper-turbo"; // an Intel Mac, see Cargo.toml
 
 fn model(id: &str) -> Result<&'static Model, String> { MODELS.iter().find(|m| m.id == id).ok_or_else(|| format!("unknown model {id}")) }
 
 fn load(m: &Model, dir: &Path) -> Result<Box<dyn SpeechModel>, String> {
+    #[cfg(onnx)]
     let int8 = &Quantization::Int8;
     let e = |e: transcribe_rs::TranscribeError| e.to_string();
     Ok(match m.id {
+        #[cfg(onnx)]
         "parakeet-v3" | "parakeet-v2" => Box::new(ParakeetModel::load(dir, int8).map_err(e)?),
+        #[cfg(onnx)]
         "canary-1b-v2" => Box::new(CanaryModel::load(dir, int8).map_err(e)?),
+        #[cfg(onnx)]
         "cohere" => Box::new(CohereModel::load(dir, int8).map_err(e)?),
+        #[cfg(onnx)]
+        "moonshine-base" => Box::new(MoonshineModel::load(dir, MoonshineVariant::Base, &Quantization::default()).map_err(e)?),
         #[cfg(feature = "whisper")]
         "whisper-turbo" => Box::new(WhisperEngine::load(&dir.join(m.file)).map_err(e)?), // whisper.cpp, Metal on a Mac, the CPU on Windows
         #[cfg(not(feature = "whisper"))]
         "whisper-turbo" => return Err("this build has no Whisper".into()),
-        _ => Box::new(MoonshineModel::load(dir, MoonshineVariant::Base, &Quantization::default()).map_err(e)?),
+        id => return Err(format!("unknown model {id}")),
     })
 }
 

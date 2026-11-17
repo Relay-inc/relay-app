@@ -46,7 +46,8 @@ export function VoicePage({ active }: { active: boolean }) {
     return () => clearInterval(timer);
   }, [active, access]);
 
-  const picked = models.find(model => model.id === voice.model);
+  // a model this build lacks (Parakeet on an Intel Mac) is the first one listed, as in src-tauri/src/dictation.rs
+  const picked = models.find(model => model.id === voice.model) ?? models[0];
   const names = new Intl.DisplayNames([locale], { type: "language" });
   const languages = [
     { id: "auto", name: t(picked?.auto === false ? "voice.langMac" : "voice.langAuto") },
@@ -121,13 +122,13 @@ export function VoicePage({ active }: { active: boolean }) {
                 name="voicemodel"
                 id={`vm-${model.id}`}
                 className="mt-1 accent-(--color-accent)"
-                checked={voice.model === model.id}
+                checked={picked?.id === model.id}
                 onChange={() => pickModel(model.id)}
               />
               <label htmlFor={`vm-${model.id}`} className="grid min-w-0 flex-1 gap-0.5">
                 <span className="text-[13px] text-s-fg">
                   {MODEL_NAMES[model.id] ?? model.id}
-                  {voice.model === model.id && model.installed ? (
+                  {picked?.id === model.id && model.installed ? (
                     <span className={`ml-2 ${OK_MESSAGE}`}>{t("voice.inUse")}</span>
                   ) : null}
                 </span>
