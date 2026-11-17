@@ -93,11 +93,11 @@ pub fn accounts(s: &Value, p: &dyn AgentProvider) -> Vec<String> {
 /// `active` when a new conversation starts on the account with the most room then, not on one fixed account. Never a
 /// folder: those are absolute paths (`check`).
 pub const MOST_ROOM: &str = "most-room";
-/// The account with the most room: of the `ready` (signed-in) accounts the one with the lowest `load` (how full its
-/// limits are, in percent), the first listed on a tie. One whose limits were not read yet (None) comes after every
-/// read one with room and before a full one. The first listed when none is ready.
-pub fn most_room(list: &[String], load: impl Fn(&str) -> Option<f64>, ready: impl Fn(&str) -> bool) -> String {
-    let rank = |a: &str| match load(a) { Some(p) if p < 100.0 => p, Some(_) => 101.0, None => 100.0 };
+/// The account with the most room: of the `ready` (signed-in) accounts the one with the highest `room` ([`room`]:
+/// what is left of its limits against the time left to use it), the first listed on a tie. One whose limits were
+/// not read yet (None) comes after every read one with room and before a full one. The first listed when none is ready.
+pub fn most_room(list: &[String], room: impl Fn(&str) -> Option<f64>, ready: impl Fn(&str) -> bool) -> String {
+    let rank = |a: &str| match room(a) { Some(r) if r > 0.0 => -r, Some(_) => 1.0, None => 0.0 };
     list.iter().filter(|a| ready(a)).min_by(|x, y| rank(x).total_cmp(&rank(y))).or(list.first()).cloned().unwrap_or_default()
 }
 /// The account a conversation runs on: `cur` (its own, or the active one for a new conversation), also when it left
@@ -123,11 +123,24 @@ fn applies<'a>(limits: &'a Value, model: &str) -> impl Iterator<Item = &'a Value
     limits["windows"].as_array().into_iter().flatten()
         .filter(move |w| w["name"].as_str().is_none_or(|n| !model.is_empty() && model.contains(&n.to_lowercase())))
 }
-/// How full `limits` are for `model`, in percent: its fullest window that applies, 0 without one. None for limits
-/// that did not read.
-/// ponytail: the fullest window decides, a session at 90% outweighs a week at 60%; weigh by reset time if that picks badly
-pub fn fullest(limits: &Value, model: &str) -> Option<f64> {
-    (limits["ok"] == true).then(|| applies(limits, model).filter_map(|w| w["pct"].as_f64()).fold(0.0, f64::max))
+/// The least of a window that still counts as time left, as a share of its length (15 minutes of a session, 8 hours
+/// of a week): closer to the reset the room does not grow further, so a sliver left just before a reset never beats
+/// an account that is on pace.
+const LEAST_LEFT: f64 = 0.05;
+/// How much room `limits` leave for `model` at `now` (epoch ms), against the time left to use it. Per window that
+/// counts: the share still unused over the share of the window still to run, and the tightest window decides. 1 is
+/// on pace (half used at half time, or untouched). Above 1 more is left than there is time for: 20% unused shortly
+/// before the reset scores 4, room that is lost when nobody uses it. Below 1 it runs out before its reset. A window
+/// that names no reset (not started) counts its whole length. 0 with a full window, None for limits that did not read.
+/// ponytail: lengths by window id, a session five hours and every other window a week; a third length gets its own arm
+pub fn room(limits: &Value, model: &str, now: i64) -> Option<f64> {
+    // no window that counts (a provider without one): on pace
+    (limits["ok"] == true).then(|| applies(limits, model).filter_map(|w| {
+        let unused = (100.0 - w["pct"].as_f64()?).max(0.0) / 100.0;
+        let span = if w["id"] == "session" { 5.0 * 3_600_000.0 } else { 7.0 * 86_400_000.0 };
+        let left = w["resets"].as_str().and_then(|r| chrono::DateTime::parse_from_rfc3339(r).ok()).map_or(span, |d| (d.timestamp_millis() - now) as f64);
+        Some(unused / (left / span).clamp(LEAST_LEFT, 1.0))
+    }).reduce(f64::min).unwrap_or(1.0))
 }
 /// Limits read without a login: the account was never signed in (an expired token the CLI refreshes itself).
 pub fn no_login(limits: &Value) -> bool { limits["ok"] == false && limits["reason"] == "no-login" }
@@ -224,21 +237,16 @@ mod tests {
     fn a_new_conversation_takes_the_account_with_the_most_room() {
         let l: Vec<String> = ["", "/a", "/b"].map(String::from).to_vec();
         let ok = |_: &str| true;
-        let load = |m: &'static [(&'static str, Option<f64>)]| move |a: &str| m.iter().find(|(k, _)| *k == a).and_then(|(_, v)| *v);
-        assert_eq!(most_room(&l, load(&[("", Some(80.0)), ("/a", Some(17.0)), ("/b", Some(40.0))]), ok), "/a");
+        let room = |m: &'static [(&'static str, Option<f64>)]| move |a: &str| m.iter().find(|(k, _)| *k == a).and_then(|(_, v)| *v);
+        assert_eq!(most_room(&l, room(&[("", Some(0.2)), ("/a", Some(4.0)), ("/b", Some(1.0))]), ok), "/a");
         // a tie keeps the list's order
-        assert_eq!(most_room(&l, load(&[("", Some(20.0)), ("/a", Some(20.0)), ("/b", Some(20.0))]), ok), "");
+        assert_eq!(most_room(&l, room(&[("", Some(1.0)), ("/a", Some(1.0)), ("/b", Some(1.0))]), ok), "");
         // not read yet: after one with room, before a full one
-        assert_eq!(most_room(&l, load(&[("", Some(99.0)), ("/b", Some(100.0))]), ok), "");
-        assert_eq!(most_room(&l, load(&[("", Some(100.0)), ("/b", Some(100.0))]), ok), "/a");
+        assert_eq!(most_room(&l, room(&[("", Some(0.01)), ("/b", Some(0.0))]), ok), "");
+        assert_eq!(most_room(&l, room(&[("", Some(0.0)), ("/b", Some(0.0))]), ok), "/a");
         // never one that is not signed in; none ready: the first listed
-        assert_eq!(most_room(&l, load(&[("", Some(80.0)), ("/a", Some(0.0)), ("/b", Some(90.0))]), |a| a != "/a"), "");
-        assert_eq!(most_room(&l, load(&[]), |_| false), "");
-        // the fullest window that counts for the model decides
-        let w = |name: Value, pct: f64| json!({"name": name, "pct": pct});
-        let limits = json!({"ok": true, "windows": [w(Value::Null, 40.0), w(Value::Null, 12.0), w(json!("Opus"), 90.0)]});
-        assert_eq!((fullest(&limits, "opus"), fullest(&limits, "sonnet"), fullest(&limits, "")), (Some(90.0), Some(40.0), Some(40.0)));
-        assert_eq!((fullest(&json!({"ok": true, "windows": []}), ""), fullest(&json!({"ok": false, "reason": "expired"}), "")), (Some(0.0), None));
+        assert_eq!(most_room(&l, room(&[("", Some(0.2)), ("/a", Some(1.0)), ("/b", Some(0.1))]), |a| a != "/a"), "");
+        assert_eq!(most_room(&l, room(&[]), |_| false), "");
         // the setting survives a migrate with accounts, and falls back to the CLI's own without any
         let mut v = json!({"agents": {"providers": {"claude": {"accounts": [{"name": "Work", "dir": "/h/w"}], "active": MOST_ROOM}}}});
         migrate(&mut v);
@@ -247,6 +255,34 @@ mod tests {
         v["agents"]["providers"]["claude"]["accounts"] = json!([]);
         migrate(&mut v);
         assert_eq!(v["agents"]["providers"]["claude"]["active"], "");
+    }
+    #[test]
+    fn room_is_what_is_left_against_the_time_left() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-11-17T12:00:00Z").unwrap().timestamp_millis();
+        let at = |min: i64| json!(chrono::DateTime::from_timestamp_millis(now + min * 60_000).unwrap().to_rfc3339());
+        let one = |id: &str, pct: f64, resets: Value| json!({"ok": true, "windows": [{"id": id, "name": null, "pct": pct, "resets": resets}]});
+        let near = |x: Option<f64>, want: f64| assert!((x.unwrap() - want).abs() < 1e-9, "{x:?} is not {want}");
+        // on pace: half used at half time, and untouched, with or without a reset named
+        near(room(&one("session", 50.0, at(150)), "", now), 1.0);
+        near(room(&one("session", 0.0, Value::Null), "", now), 1.0);
+        near(room(&one("weekly", 0.0, at(7 * 24 * 60)), "", now), 1.0);
+        // 20% unused ten minutes before the reset: room that is lost otherwise, above an untouched account
+        near(room(&one("session", 80.0, at(10)), "", now), 4.0);
+        // the same 20% with four hours to go runs out early
+        near(room(&one("session", 80.0, at(240)), "", now), 0.25);
+        // a sliver before the reset stays under on pace, a reset already past counts as about to
+        near(room(&one("session", 97.0, at(5)), "", now), 0.6);
+        near(room(&one("session", 80.0, at(-5)), "", now), 4.0);
+        // a week: 40% unused with a day to go
+        near(room(&one("weekly", 60.0, at(24 * 60)), "", now), 2.8);
+        // the tightest window that counts for the model decides, a full one leaves none
+        let w = |id: &str, name: Value, pct: f64, min: i64| json!({"id": id, "name": name, "pct": pct, "resets": at(min)});
+        let limits = json!({"ok": true, "windows": [w("session", Value::Null, 50.0, 150), w("weekly", Value::Null, 10.0, 7 * 24 * 60), w("weekly:Opus", json!("Opus"), 100.0, 60)]});
+        near(room(&limits, "sonnet", now), 0.9);
+        near(room(&limits, "", now), 0.9);
+        near(room(&limits, "claude-opus-5-5", now), 0.0);
+        near(room(&json!({"ok": true, "windows": []}), "", now), 1.0);
+        assert_eq!(room(&json!({"ok": false, "reason": "expired"}), "", now), None);
     }
     #[test]
     fn accounts_switch_only_when_used_up() {
