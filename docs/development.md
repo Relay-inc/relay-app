@@ -516,7 +516,7 @@ What the installer does (`src-tauri/tauri.windows.conf.json` › `bundle.windows
 **Updates.** Copy the setup.exe to the Mac and run `RELAY_WINDOWS_SETUP=/path/to/Relay_<version>_x64-setup.exe
 scripts/release.sh`. It checks that the file exists and that its name carries the version, signs it for the updater
 with `tauri signer sign` (the updater key stays on the Mac, so the Windows build makes no updater artifacts), uploads it
-to the release and writes `windows-x86_64` into `latest.json` next to `darwin-aarch64`: the setup.exe's API url and
+to the release and writes `windows-x86_64` into `latest.json` next to `darwin-aarch64` and `darwin-x86_64`: the setup.exe's API url and
 its signature. Without `RELAY_WINDOWS_SETUP` the release has no Windows installer and says so. The app checks the minisign signature against the `pubkey` in `tauri.conf.json` after the download, on
 Windows as on macOS (tauri-plugin-updater's `download`), then starts the installer with `/P /UPDATE /R` (passive: a
 progress bar only, no questions) and ends Relay with `process::exit`. That skips `RunEvent::Exit`, so `updater.rs`

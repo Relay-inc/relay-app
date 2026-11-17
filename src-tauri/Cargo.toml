@@ -68,7 +68,7 @@ portable-pty = "0.9"
 # cmake: MSVC and cmake on Windows.
 # ponytail: CPU only on Windows. Vulkan (`whisper-vulkan`) needs the Vulkan SDK and VULKAN_SDK on the build machine
 cpal = "0.18"
-transcribe-rs = { version = "0.3.12", features = ["onnx"] }
+transcribe-rs = "0.3.12"
 # the downloaded speech model's SHA-256 (src/dictation.rs)
 sha2 = "0.10"
 # the meeting recordings (src/meeting.rs): their tracks on disk
@@ -89,6 +89,11 @@ tauri-plugin-global-shortcut = "2"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 tauri-plugin-updater = "2"
 qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
+
+# Parakeet and the other ONNX models (src/dictation.rs). ort-sys downloads ONNX Runtime per target and has none for an
+# Intel Mac, so dictation there has Whisper only (build.rs sets `onnx` to match)
+[target.'cfg(not(all(target_os = "macos", target_arch = "x86_64")))'.dependencies]
+transcribe-rs = { version = "0.3.12", features = ["onnx"] }
 
 # Windows: a second start and a relay:// link go to the running window (src/lib.rs run), toasts for a finished turn or a
 # waiting card (src/notify.rs)

@@ -1,9 +1,10 @@
 #!/bin/sh
 # A release, built on this Mac instead of in GitHub Actions (macOS minutes there cost ten times Linux ones): Relay for
-# Apple silicon as GitHub release v<version> with the version's section of CHANGELOG.md as its notes, then
-# relay-server's image and Linux binaries (scripts/push-server-image.sh). Run it on main once the version bump is
-# merged. Needs Docker, pnpm, Rust and a gh login that may write packages (gh auth refresh -h github.com -s write:packages),
-# and the updater's signing key (~/.tauri/relay.key, or TAURI_SIGNING_PRIVATE_KEY): lose it and every install has to be
+# Apple silicon and for Intel Macs as GitHub release v<version> with the version's section of CHANGELOG.md as its
+# notes, then relay-server's image and Linux binaries (scripts/push-server-image.sh). Run it on main once the version
+# bump is merged. Needs Docker, pnpm, Rust with the Intel target (rustup target add x86_64-apple-darwin), a gh login
+# that may write packages (gh auth refresh -h github.com -s write:packages), and the updater's signing key
+# (~/.tauri/relay.key, or TAURI_SIGNING_PRIVATE_KEY): lose it and every install has to be
 # reinstalled by hand. The installed apps update from latest.json on the `updates` branch (src-tauri/src/updater.rs).
 # The phone app (mobile/) goes along as Relay_<version>_android.apk, signed with ~/.tauri/relay-android.properties
 # (or the file RELAY_ANDROID_KEYSTORE names): lose that key and every phone has to uninstall before it can update.
@@ -23,6 +24,7 @@ grep -q "ghcr.io/relay-inc/relay-server:$version}" deploy/relay-server/compose.y
 # the release must be main as it is on GitHub, nothing more and nothing less
 [ "$(git rev-parse --abbrev-ref HEAD)" = main ] || { echo "release from main (git checkout main)" >&2; exit 1; }
 [ -z "$(git status --porcelain)" ] || { echo "the checkout has changes" >&2; exit 1; }
+rustup target list --installed | grep -qx x86_64-apple-darwin || { echo "no Intel target (rustup target add x86_64-apple-darwin)" >&2; exit 1; }
 git fetch -q origin main --tags
 [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || { echo "main is not origin/main (git pull)" >&2; exit 1; }
 if gh release view "v$version" >/dev/null 2>&1; then echo "v$version is already released" >&2; exit 1; fi
@@ -69,6 +71,15 @@ bundle=target/release/bundle/macos/Relay.app.tar.gz
 [ -f "$bundle.sig" ] || { echo "no $bundle.sig after the build" >&2; exit 1; }
 tgz="$(mktemp -d)/Relay_${version}_aarch64.app.tar.gz"
 cp "$bundle" "$tgz"
+# the same for Intel Macs, without the ONNX speech models (src-tauri/Cargo.toml)
+pnpm tauri build --target x86_64-apple-darwin
+intel=target/x86_64-apple-darwin/release/bundle
+idmg="$intel/dmg/Relay_${version}_x64.dmg"
+[ -f "$idmg" ] || { echo "no $idmg after the build" >&2; exit 1; }
+codesign --verify --deep --strict "$intel/macos/Relay.app" || { echo "the Intel Relay.app is not signed as a whole" >&2; exit 1; }
+[ -f "$intel/macos/Relay.app.tar.gz.sig" ] || { echo "no $intel/macos/Relay.app.tar.gz.sig after the build" >&2; exit 1; }
+itgz="$(dirname "$tgz")/Relay_${version}_x64.app.tar.gz"
+cp "$intel/macos/Relay.app.tar.gz" "$itgz"
 apk=""
 if [ -z "$android" ]; then
   (cd mobile && node ../node_modules/@tauri-apps/cli/tauri.js android build --apk --target aarch64 --ci)
@@ -80,7 +91,7 @@ if [ -z "$android" ]; then
   apk="$(dirname "$tgz")/Relay_${version}_android.apk"
   cp "$built" "$apk"
 fi
-gh release create "v$version" "$dmg" "$tgz" ${apk:+"$apk"} --target "$(git rev-parse HEAD)" --title "Relay $version" --notes-file "$notes"
+gh release create "v$version" "$dmg" "$tgz" "$idmg" "$itgz" ${apk:+"$apk"} --target "$(git rev-parse HEAD)" --title "Relay $version" --notes-file "$notes"
 rm -f "$notes"
 
 exe=""
@@ -99,13 +110,14 @@ fi
 repo=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 asset() { gh release view "v$version" --json assets -q ".assets[] | select(.name == \"$1\") | .apiUrl"; }
 url=$(asset "$(basename "$tgz")")
+intelurl=$(asset "$(basename "$itgz")")
 winurl=${exe:+$(asset "$(basename "$exe")")}
 gh api "repos/$repo/git/ref/heads/updates" >/dev/null 2>&1 ||
   gh api "repos/$repo/git/refs" -f ref=refs/heads/updates -f sha="$(git rev-parse HEAD)" >/dev/null
 # Windows: the setup.exe itself, the updater runs it with /UPDATE (no admin, the app closes, NSIS installs, Relay restarts)
-latest=$(VERSION="$version" URL="$url" SIG="$(cat "$bundle.sig")" WINURL="$winurl" WINSIG="$([ -z "$exe" ] || cat "$exe.sig")" \
+latest=$(VERSION="$version" URL="$url" SIG="$(cat "$bundle.sig")" INTELURL="$intelurl" INTELSIG="$(cat "$intel/macos/Relay.app.tar.gz.sig")" WINURL="$winurl" WINSIG="$([ -z "$exe" ] || cat "$exe.sig")" \
   NOTES="$(scripts/changelog-section.sh "$version")" node -p \
-  'const e = process.env, platforms = { "darwin-aarch64": { signature: e.SIG, url: e.URL } };
+  'const e = process.env, platforms = { "darwin-aarch64": { signature: e.SIG, url: e.URL }, "darwin-x86_64": { signature: e.INTELSIG, url: e.INTELURL } };
   if (e.WINURL) platforms["windows-x86_64"] = { signature: e.WINSIG, url: e.WINURL };
   JSON.stringify({ version: e.VERSION, notes: e.NOTES, pub_date: new Date().toISOString(), platforms }, null, 2)')
 old=$(gh api "repos/$repo/contents/latest.json?ref=updates" -q .sha 2>/dev/null || true)
