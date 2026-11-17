@@ -14,9 +14,11 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+## [0.0.56] - 2026-11-17
+
 ### Added
 
-- Relay for Intel Macs, next to the one for Apple silicon, and it updates itself like that one. Dictation there has Whisper only: Parakeet and the other ONNX models have no build of their runtime for Intel Macs.
+- Relay for Intel Macs, next to the one for Apple silicon, and it updates itself like that one. Dictation there has Whisper only: Parakeet and the other ONNX models have no build of their runtime for Intel Macs. (#507)
 - Start working on a card, or Start conversation in its ticket window, now also tells the agent to work in a git worktree on the team's branch (`fix/417-decimal-quantities`, `feat/…` unless the card says bug or fix), to reuse that branch when it exists, to start the PR title with the ticket number and to put the ticket link in the PR body. A project with several repos asks which one first. (#506)
 - When a PR of yours that is not a draft is linked to a card that is in progress, Relay moves the card to the PR open column of the project's pipeline settings, once per PR. Nothing moves without that column set. (#506)
 - `relay://ticket?provider=productive&id=<task id>` opens that ticket in Relay, with Start conversation one click away. Work never starts from the link itself. (#506)
