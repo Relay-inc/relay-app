@@ -24,7 +24,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Changed
 
-- "The account with the most room" (Settings › Agents › New conversations use) now weighs what is left of an account's limits against the time until they reset, instead of taking the least used one. An account with 20% left shortly before its reset goes first, since that room is lost otherwise, and one that would run out long before its reset goes last. The tightest of the session and weekly limits decides.
+- "The account with the most room" (Settings › Agents › New conversations use) now weighs what is left of an account's limits against the time until they reset, instead of taking the least used one. An account with 20% left shortly before its reset goes first, since that room is lost otherwise, and one that would run out long before its reset goes last. The tightest of the session and weekly limits decides (#509).
 
 ## [0.0.55] - 2026-11-16
 
