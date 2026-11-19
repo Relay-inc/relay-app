@@ -3,7 +3,7 @@ import { briefingIn, prepChatOf, joinable } from "../../../domain/calendar/rules
 import type { Meeting } from "../../../domain/calendar/types";
 import { chatAbout, joinMeeting, meetingChat, meetingProjectOf, timeOf } from "../../../application/calendar/calendar";
 import { loadMeetingNote, saveBriefing, toggleBriefingTask } from "../../../application/calendar/meeting-view";
-import { startRecording, useRecordingStore } from "../../../application/calendar/recording";
+import { importRecording, startRecording, useRecordingStore } from "../../../application/calendar/recording";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useWorkspaceStore } from "../../../application/workspace/store";
 import { markdownHtml } from "../../../shared/markdown";
@@ -105,6 +105,9 @@ export function BriefingStep({
             </button>
           ) : null}
           {record}
+          <button className={OUTLINE} disabled={busy} onClick={() => importRecording(meeting)}>
+            {t("rec.upload")}
+          </button>
           <button className={OUTLINE} onClick={onStart}>
             {t("meet.startNotes")}
           </button>

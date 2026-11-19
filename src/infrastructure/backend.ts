@@ -266,7 +266,8 @@ export const tidyApply = (workspace: string) => invoke<TidyPlan>("tidy_apply", {
 export const tidyUndo = (workspace: string) => invoke<number>("tidy_undo", { workspace });
 export const propertyValues = (folder: string, key: string) => invoke<string[]>("property_values", { folder, key });
 export const pickFolder = () => invoke<string | null>("pick_folder");
-export const pickPath = (folder: boolean, start: string) => invoke<string | null>("pick_path", { folder, start });
+export const pickPath = (folder: boolean, start: string, extensions?: string[]) =>
+  invoke<string | null>("pick_path", { folder, start, extensions });
 export const detectVault = (path: string) => invoke<VaultStatus>("detect_vault", { path });
 export const checkVault = (path: string, map: VaultMap) => invoke<VaultStatus>("check_vault", { path, map });
 /** The starter vault copied to ~/Relay (kept when it is already there), with its status. */
@@ -899,6 +900,21 @@ export const meetingRecordRetry = (
   const channel = new Channel<number>();
   channel.onmessage = onProgress;
   return invoke<Recording>("meeting_record_retry", { folder, title, note, me, others, onProgress: channel });
+};
+/** Writes out an audio file recorded elsewhere as the recording of `meeting`, as `meetingRecordStop`; every line of the
+ *  transcript is `speaker`'s. */
+export const meetingImport = (
+  path: string,
+  language: string | undefined,
+  meeting: unknown, // kept beside the recording, as at `meetingRecordStart`
+  title: string,
+  note: string | null,
+  speaker: string,
+  onProgress: (done: number) => void,
+) => {
+  const channel = new Channel<number>();
+  channel.onmessage = onProgress;
+  return invoke<Recording>("meeting_import", { path, language, meeting, title, note, speaker, onProgress: channel });
 };
 export const meetingRecordCancel = () => invoke("meeting_record_cancel");
 
