@@ -199,7 +199,7 @@ async function save(write: typeof meetingRecordStop, folder = "") {
     error: "",
     retry: "",
   });
-  const had = rec().kept[0];
+  const had = new Set(rec().kept);
   let recording: Recording;
   try {
     // the transcript names the meeting's note: the one it has (renamed or not), else the one attachRecording makes
@@ -214,8 +214,9 @@ async function save(write: typeof meetingRecordStop, folder = "") {
     await loadKept();
     set({
       phase: "idle",
-      // the newest kept one, unless it was a retry or nothing was kept (an import of a file that could not be read)
-      retry: folder || (rec().kept[0] !== had ? rec().kept[0] : "") || "",
+      // the one this save kept (an import is named by the meeting's start, so not always the newest), unless it was a
+      // retry or nothing was kept (an import of a file that could not be read)
+      retry: folder || rec().kept.find(k => !had.has(k)) || "",
       error: String(e).startsWith("model") ? t("rec.noModel") : String(e),
     });
     return;
