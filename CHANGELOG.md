@@ -16,7 +16,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Added
 
-- Upload recording on a meeting: pick an audio file recorded elsewhere (phone, Zoom or Teams download, voice memo) and Relay transcribes and summarises it as if it had recorded it. The transcript names its one voice Speaker. (#PR)
+- Upload recording on a meeting: pick an audio file recorded elsewhere (phone, Zoom or Teams download, voice memo) and Relay transcribes and summarises it as if it had recorded it. The transcript names its one voice Speaker. (#511)
 - Mark as unread in a conversation's menu in the sidebar: the conversation turns bold again and shows under Agents waiting on you in Today until you open it. On an unread one the item reads Mark as read. (#510)
 
 ## [0.0.56] - 2026-11-17
