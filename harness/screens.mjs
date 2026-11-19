@@ -1531,6 +1531,30 @@ const VIEWS = {
     await waitText("Move to workspace");
     await settle(page);
   },
+  // a conversation's menu offers Mark as unread (PR #510)
+  "chat-unread-menu": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page
+      .getByRole("navigation")
+      .first()
+      .getByText("Billing sync double balances", { exact: true })
+      .first()
+      .click({ button: "right" });
+    await waitText("Mark as unread");
+    await settle(page);
+  },
+  // picked: the conversation is bold again in the sidebar until it is opened (PR #510)
+  "chat-marked-unread": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page
+      .getByRole("navigation")
+      .first()
+      .getByText("Billing sync double balances", { exact: true })
+      .first()
+      .click({ button: "right" });
+    await click("Mark as unread");
+    await settle(page);
+  },
   // a project moved to another workspace: what goes and what stays (PR workspace-migrate)
   "migrate-personal": async () => {
     await open(page, server.url, { fixture: "shared" });
