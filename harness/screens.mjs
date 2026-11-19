@@ -1531,7 +1531,7 @@ const VIEWS = {
     await waitText("Move to workspace");
     await settle(page);
   },
-  // a conversation's menu offers Mark as unread (PR mark-unread)
+  // a conversation's menu offers Mark as unread (PR #510)
   "chat-unread-menu": async () => {
     await open(page, server.url, { fixture: "shared" });
     await page
@@ -1543,7 +1543,7 @@ const VIEWS = {
     await waitText("Mark as unread");
     await settle(page);
   },
-  // picked: the conversation is bold again in the sidebar until it is opened (PR mark-unread)
+  // picked: the conversation is bold again in the sidebar until it is opened (PR #510)
   "chat-marked-unread": async () => {
     await open(page, server.url, { fixture: "shared" });
     await page
