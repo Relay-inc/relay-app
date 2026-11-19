@@ -2091,6 +2091,7 @@ const en = {
   "meet.notRecording": "Not recording. The notes work without it.",
   "meet.gone": "This meeting is no longer in your calendar.",
   "meet.moreRecording": "More",
+  "meet.renameRecording": "Rename the meeting",
   "meet.discardAsk": "Discard this recording?",
   "meet.discard": "Discard",
   "meet.keep": "Keep recording",

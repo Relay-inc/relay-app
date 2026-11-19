@@ -40,6 +40,8 @@ import { useT } from "../../hooks/useT";
 import { useKeyLabel } from "../../hooks/useKeyLabel";
 import { copyText } from "../../components/copy";
 import { Icon } from "../../components/Icon";
+import { recordNow, useRecordingStore } from "../../../application/calendar/recording";
+import { openMeetingView } from "../../../application/calendar/meeting-view";
 import { SidebarRow } from "./SidebarRow";
 import { SidebarHead } from "./SidebarHead";
 import { SidebarMenu, type MenuItem } from "./SidebarMenu";
@@ -70,6 +72,8 @@ type MenuTarget = {
  *  The rows come from the application (sidebarModel); the drag to reorder and the menu live here. */
 export function NavigationView({ className }: { className: string }) {
   const { t } = useT();
+  const recPhase = useRecordingStore(s => s.phase);
+  const recMeeting = useRecordingStore(s => (s.phase === "recording" ? s.meeting : null));
   const { views, sections } = useDerived(() => sidebarModel());
   const usage = useDerived(() => usageSummary());
   const layout = useDerived(() => viewsLayout());
@@ -428,7 +432,17 @@ export function NavigationView({ className }: { className: string }) {
 
   return (
     <div ref={root} className={`relay-sidebar ${className}`} data-reordering={reordering || undefined}>
-      <div className="h-12 flex-none flex items-center justify-end pr-2.5" data-tauri-drag-region>
+      <div className="h-12 flex-none flex items-center justify-end gap-0.5 pr-2.5" data-tauri-drag-region>
+        <button
+          className="btn-icon relative"
+          title={t("rec.recordHelp")}
+          aria-label={t("rec.now")}
+          disabled={recPhase === "saving"}
+          onClick={() => (recMeeting ? openMeetingView(recMeeting) : void recordNow())}
+        >
+          <Icon name="mic" className={`glyph size-4 ${recMeeting ? "text-late" : ""}`} />
+          {recMeeting ? <span className="absolute top-1 right-1 size-1.5 rounded-full bg-late animate-pulse" /> : null}
+        </button>
         <button
           className="btn-icon"
           title={t("nav.newChat")}

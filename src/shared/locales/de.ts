@@ -2120,6 +2120,7 @@ export default {
   "meet.notRecording": "Keine Aufnahme. Die Notizen funktionieren auch ohne.",
   "meet.gone": "Dieses Meeting ist nicht mehr in deinem Kalender.",
   "meet.moreRecording": "Mehr",
+  "meet.renameRecording": "Meeting umbenennen",
   "meet.discardAsk": "Diese Aufnahme verwerfen?",
   "meet.discard": "Verwerfen",
   "meet.keep": "Aufnahme behalten",
