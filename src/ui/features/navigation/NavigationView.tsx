@@ -28,7 +28,8 @@ import {
   renameFolder,
   deleteFolder,
 } from "../../../application/navigation/sidebar";
-import { newChatHere } from "../../../application/conversations/chats";
+import { markSeen, markUnseen, newChatHere } from "../../../application/conversations/chats";
+import { useConversationsStore } from "../../../application/conversations/store";
 import { chatsOf, closedOf, sessionIdOf, terminalSessions } from "../../../application/conversations/selectors";
 import { closeAll, closeChat, reopen } from "../../../application/conversations/actions";
 import { usageSummary } from "../../../application/usage/usage";
@@ -127,6 +128,7 @@ export function NavigationView({ className }: { className: string }) {
     else if (itemId === "sidebarsettings") openSettings();
     else setViewHidden(itemId.slice("show:".length), false);
   };
+  const unseenNow = (key: string) => useConversationsStore.getState().unseen.has(key);
   const menuItems = (target: MenuTarget): MenuItem[] => {
     if (target.kind === "view") return viewMenuItems(target);
     if (target.kind === "ctx")
@@ -148,6 +150,9 @@ export function NavigationView({ className }: { className: string }) {
       const others = here ? workspaces().filter(w => w.folder !== here) : [];
       return [
         { id: "assign", label: t("ctx.assign") },
+        unseenNow(target.chatKey)
+          ? { id: "markread", label: t("mail.markRead") }
+          : { id: "markunread", label: t("mail.markUnread") },
         ...(sessionIdOf(target.chatKey) ? [{ id: "copyid", label: t("ctx.copyId") }] : []),
         { id: "close", label: t("nav.close") },
         ...(others.length
@@ -193,7 +198,9 @@ export function NavigationView({ className }: { className: string }) {
     else if (itemId === "assign") {
       await select(target.chatKey);
       openProjectPanel();
-    } else if (itemId === "copyid") copyText(sessionIdOf(target.chatKey));
+    } else if (itemId === "markread") markSeen(target.chatKey);
+    else if (itemId === "markunread") markUnseen(target.chatKey);
+    else if (itemId === "copyid") copyText(sessionIdOf(target.chatKey));
     else if (itemId === "close") closeChat(target.chatKey);
     else if (itemId.startsWith("chatto:")) {
       const error = await moveChatTo(target.chatKey, itemId.slice("chatto:".length));

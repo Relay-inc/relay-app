@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Added
+
+- Mark as unread in a conversation's menu in the sidebar: the conversation turns bold again and shows under Agents waiting on you in Today until you open it. On an unread one the item reads Mark as read.
+
 ## [0.0.56] - 2026-11-17
 
 ### Added
