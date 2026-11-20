@@ -440,7 +440,7 @@ export function NavigationView({ className }: { className: string }) {
           disabled={recPhase === "saving"}
           onClick={() => (recMeeting ? openMeetingView(recMeeting) : void recordNow())}
         >
-          <Icon name="mic" className={`glyph size-4 ${recMeeting ? "text-late" : ""}`} />
+          <Icon name="users" className={`glyph size-4 ${recMeeting ? "text-late" : ""}`} />
           {recMeeting ? <span className="absolute top-1 right-1 size-1.5 rounded-full bg-late animate-pulse" /> : null}
         </button>
         <button
