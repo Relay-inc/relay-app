@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import type { Meeting } from "../../../domain/calendar/types";
 import { meetingLanguage } from "../../../domain/calendar/rules";
 import { hhmm, othersLabel } from "../../../domain/calendar/meeting-view";
-import { startRecording, useRecordingStore, type LiveLine } from "../../../application/calendar/recording";
+import {
+  importRecording,
+  startRecording,
+  useRecordingStore,
+  type LiveLine,
+} from "../../../application/calendar/recording";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 
@@ -127,6 +132,13 @@ export function Transcript({
           >
             <span className="size-2 rounded-full bg-late" />
             {t("rec.record")}
+          </button>
+          <button
+            className="text-[13px] text-secondary cursor-pointer hover:text-label disabled:opacity-50 disabled:cursor-default"
+            disabled={busy}
+            onClick={() => importRecording(meeting)}
+          >
+            {t("rec.upload")}
           </button>
         </div>
       )}

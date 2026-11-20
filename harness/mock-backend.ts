@@ -646,8 +646,8 @@ function handle(cmd: string, a: Args): unknown {
       return { ...vault.vaultStatus(true), vault: "/Users/me/Relay" };
     case "pick_folder":
       return harness.pickFolder;
-    case "pick_path":
-      return null;
+    case "pick_path": // an audio file (the meeting's Upload recording) is the first of `pickFiles`
+      return a.extensions ? (harness.pickFiles[0] ?? null) : null;
     // files attached by their path (src-tauri/src/files.rs)
     case "pick_files":
       return [...harness.pickFiles];
@@ -1372,6 +1372,8 @@ function handle(cmd: string, a: Args): unknown {
     case "meeting_record_retry": // in the kept-recording fixture it never ends, to look at the saving state
       if (fixture === "kept-recording") return new Promise(() => {});
       return { audio: null, transcript: "Attachments/2026-09-30 1526 Meeting.md", seconds: 60 };
+    case "meeting_import": // never ends, to look at the saving state
+      return new Promise(() => {});
     case "meeting_record_cancel":
       meetingTicks = null;
       return null;

@@ -3445,6 +3445,13 @@ const VIEWS = {
   "today-t3-dark": async () => todayDay("t3", true),
   "today-empty": async () => todayDay("empty", false),
   "today-empty-dark": async () => todayDay("empty", true),
+  // Upload recording on a meeting: an audio file picked (the mock's `pickFiles`), then the bar shows it transcribing
+  "meeting-upload": async () => {
+    await meetingBriefing("calendar", "Daily standup", true);
+    await page.evaluate(() => window.__harness.pickFiles.push("/Users/me/Downloads/standup-call.m4a"));
+    await click("Upload recording");
+    await waitText("transcribing 0%");
+  },
   "meeting-live": async () => meetingLive("calendar"),
   "meeting-briefing-dark": async () => meetingBriefing("calendar-dark", "Daily standup", true),
   "meeting-live-dark": async () => meetingLive("calendar-dark"),
