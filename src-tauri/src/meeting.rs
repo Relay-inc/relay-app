@@ -381,7 +381,11 @@ async fn save(app: AppHandle, dir: PathBuf, title: String, note: Option<String>,
         // kept when it failed, so nothing is lost: the error says where it is
         match done {
             Ok(v) => { std::fs::remove_dir_all(&work).ok(); Ok(v) }
-            Err(e) => Err(format!("{e} (the recording is kept in {})", work.display())),
+            Err(e) => {
+                // renamed while it recorded: a retry after a restart reads the title from meeting.json
+                if let Some(mut m) = read_meta(&work) { m["title"] = json!(title); std::fs::write(work.join(META), m.to_string()).ok(); }
+                Err(format!("{e} (the recording is kept in {})", work.display()))
+            }
         }
     }).await.map_err(|e| e.to_string())?
 }

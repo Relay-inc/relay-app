@@ -346,6 +346,13 @@ const workspacePage = async (fixture, height = 1200, name = "Northwind") => {
   await settle(page);
 };
 
+async function recordFromTitleBar(fixture) {
+  await open(page, server.url, { fixture });
+  await waitText("Daily standup");
+  await page.locator('button[aria-label="Record a meeting now"]').click();
+  await page.evaluate(() => window.__harness.recordingTick(754, 0.35, 0.25));
+  await waitText("12:34");
+}
 const VIEWS = {
   // the phone (mobile.html) at an iPhone's width: the conversation list, and one with a permission card
   "phone-list": async () => {
@@ -3392,6 +3399,25 @@ const VIEWS = {
     await page.locator("section", { hasText: "Daily standup" }).last().getByRole("button", { name: "Record" }).click();
     await page.evaluate(() => window.__harness.recordingTick(754, 0.35, 0.25));
     await waitText("12:34");
+  },
+  // the title bar's record button: idle, while it records (red dot, opens the meeting), and the title being renamed
+  "titlebar-record": async () => {
+    await open(page, server.url, { fixture: "calendar" });
+    await waitText("Daily standup");
+  },
+  "titlebar-record-dark": async () => {
+    await open(page, server.url, { fixture: "calendar-dark" });
+    await waitText("Daily standup");
+  },
+  "titlebar-recording": async () => recordFromTitleBar("calendar"),
+  "titlebar-recording-dark": async () => recordFromTitleBar("calendar-dark"),
+  "recording-rename": async () => {
+    await recordFromTitleBar("calendar");
+    await page.getByLabel("Rename the meeting").fill("Northwind sync");
+  },
+  "recording-rename-dark": async () => {
+    await recordFromTitleBar("calendar-dark");
+    await page.getByLabel("Rename the meeting").fill("Northwind sync");
   },
   // the Meeting view (#363): a meeting from Today with its briefing, one without, and a 1:1 recorded with notes (an
   // action, a decision, a question, a quote) next to the live transcript, in light and dark

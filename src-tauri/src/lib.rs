@@ -219,6 +219,7 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("new_project", ["New Conversation in This Project", "Nieuw gesprek in dit project", "Nouvelle conversation dans ce projet", "Neues Gespräch in diesem Projekt"]),
     ("reopen_chat", ["Reopen Closed Conversation", "Heropen gesloten gesprek", "Rouvrir la conversation fermée", "Geschlossenes Gespräch öffnen"]),
     ("new_window", ["New Window", "Nieuw venster", "Nouvelle fenêtre", "Neues Fenster"]),
+    ("record_now", ["Record a Meeting Now", "Nu een meeting opnemen", "Enregistrer une réunion maintenant", "Jetzt ein Meeting aufnehmen"]),
     ("close_chat", ["Close Conversation", "Sluit gesprek", "Fermer la conversation", "Gespräch schließen"]),
     ("run_setup", ["Set Up Vault…", "Vault instellen…", "Configurer la vault…", "Vault einrichten…"]),
     ("err.no_vault", ["No vault: work-state.md not found in {v}", "Geen vault: work-state.md niet gevonden in {v}",
@@ -427,6 +428,7 @@ fn build_menu(h: &AppHandle, lang: &str, keys: Option<&Value>) -> tauri::Result<
         &item("new-project", "app.newProject", "meta+KeyT")?,
         &item("new-general", "app.newGeneral", "alt+meta+KeyT")?,
         &item("reopen-chat", "app.reopenChat", "shift+meta+KeyT")?,
+        &MenuItem::with_id(h, "record-now", t("record_now"), true, None::<&str>)?,
         &MenuItem::with_id(h, "run-setup", t("run_setup"), true, None::<&str>)?,
         &P::separator(h)?,
         &item("close-chat", "app.closeChat", "meta+KeyW")?])?;

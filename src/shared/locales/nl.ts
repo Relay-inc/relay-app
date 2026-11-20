@@ -2100,6 +2100,7 @@ export default {
   "meet.notRecording": "Geen opname. De notities werken ook zonder.",
   "meet.gone": "Deze meeting staat niet meer in je agenda.",
   "meet.moreRecording": "Meer",
+  "meet.renameRecording": "Hernoem de meeting",
   "meet.discardAsk": "Deze opname weggooien?",
   "meet.discard": "Weggooien",
   "meet.keep": "Opname houden",
