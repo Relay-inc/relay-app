@@ -314,8 +314,57 @@ pub async fn meeting_record_retry(app: AppHandle, state: State<'_, MeetingRec>, 
     let dir = recordings(&app)?.join(&folder);
     // only a folder this app made: its name is a start time, no path
     if started(&dir).is_none() || !dir.join("me.wav").is_file() { return Err("no kept recording".into()); }
-    let language = Language(read_meta(&dir).and_then(|m| m["language"].as_str().map(str::to_string)));
+    let meta = read_meta(&dir);
+    let language = Language(meta.as_ref().and_then(|m| m["language"].as_str().map(str::to_string)));
+    // an imported recording keeps the label it was given, not the microphone's
+    let me = meta.as_ref().and_then(|m| m["speaker"].as_str().map(str::to_string)).unwrap_or(me);
     save(app, dir, title, note, me, others, (vec![], vec![], language), on_progress).await
+}
+
+/// Attaches an audio file recorded elsewhere to `meeting`: a recordings folder named by the meeting's start, the file as
+/// its one track (`me.wav`, so a failure is a kept recording like any other), then written out as `meeting_record_stop`.
+/// The track is a stranger's voices, not the microphone: `speaker` names every line, and with no second track the echo
+/// check has nothing to drop. `speaker` goes into `meeting.json`, so a retry keeps it.
+#[tauri::command]
+pub async fn meeting_import(app: AppHandle, state: State<'_, MeetingRec>, path: String, language: Option<String>, mut meeting: Value, title: String, note: Option<String>, speaker: String, on_progress: Channel<f64>) -> Result<Value, String> {
+    if state.session.lock().unwrap().is_some() { return Err("already recording".into()); }
+    let dir = import_dir(&recordings(&app)?, meeting["start"].as_str())?;
+    meeting["speaker"] = json!(speaker);
+    let (from, d, l) = (PathBuf::from(path), dir.clone(), language.clone());
+    let made = tauri::async_runtime::spawn_blocking(move || {
+        write_meta(&d, &meeting, l.as_deref())?;
+        import_wav(&from, &d.join("me.wav"))
+    }).await.map_err(|e| e.to_string())?;
+    // nothing to keep when the file could not be read
+    if let Err(e) = made { std::fs::remove_dir_all(&dir).ok(); return Err(e); }
+    save(app, dir, title, note, speaker, String::new(), (vec![], vec![], Language(language)), on_progress).await
+}
+
+/// A new recordings folder named by `start` (an ISO time, now when it is not one), a second on when that is taken.
+fn import_dir(root: &Path, start: Option<&str>) -> Result<PathBuf, String> {
+    let mut at = start.and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map_or_else(|| chrono::Local::now().naive_local(), |t| t.with_timezone(&chrono::Local).naive_local());
+    loop {
+        let dir = root.join(at.format("%Y%m%d-%H%M%S").to_string());
+        if !dir.exists() {
+            std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+            return Ok(dir);
+        }
+        at += chrono::Duration::seconds(1);
+    }
+}
+
+/// The picked file as the 16 kHz mono WAV the pipeline reads: afconvert takes whatever Core Audio plays (m4a, mp3, wav,
+/// aac, caf, aiff, and the audio of mp4 and mov).
+#[cfg(target_os = "macos")]
+fn import_wav(from: &Path, to: &Path) -> Result<(), String> {
+    afconvert(&["-f", "WAVE", "-d", "LEI16@16000", "-c", "1"], from, to)
+}
+/// Windows has no converter: a WAV, which `read_16k` takes at any rate.
+#[cfg(not(target_os = "macos"))]
+fn import_wav(from: &Path, to: &Path) -> Result<(), String> {
+    hound::WavReader::open(from).map_err(|e| e.to_string())?;
+    std::fs::copy(from, to).map(drop).map_err(|e| e.to_string())
 }
 
 /// When a recording started: its folder's name.
@@ -709,6 +758,20 @@ mod tap {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn import_folder_is_named_by_the_meeting_start_and_never_reuses_one() {
+        let root = std::env::temp_dir().join(format!("relay-import-{}", std::process::id()));
+        let start = chrono::DateTime::parse_from_rfc3339("2026-10-29T15:26:00+00:00").unwrap();
+        let local = start.with_timezone(&chrono::Local).naive_local();
+        let first = import_dir(&root, Some("2026-10-29T15:26:00+00:00")).unwrap();
+        assert_eq!(started(&first), Some(local));
+        let second = import_dir(&root, Some("2026-10-29T15:26:00+00:00")).unwrap();
+        assert_eq!(started(&second), Some(local + chrono::Duration::seconds(1)));
+        // no start, or a garbled one: now
+        assert!(started(&import_dir(&root, Some("soon")).unwrap()).is_some());
+        std::fs::remove_dir_all(&root).ok();
+    }
 
     #[test]
     fn regions_follow_speech_and_bridge_short_gaps() {

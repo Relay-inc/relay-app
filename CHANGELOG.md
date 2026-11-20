@@ -17,6 +17,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 ### Added
 
 - A meeting button in the title bar, next to New conversation, and Record a Meeting Now in the Conversation menu, start a recording from any view. While one runs the button shows a red dot and opens its meeting. You can rename the meeting while it records, in the title of its Meeting view; the new name is used for the transcript, the note and the summary (#512)
+- Upload recording on a meeting: pick an audio file recorded elsewhere (phone, Zoom or Teams download, voice memo) and Relay transcribes and summarises it as if it had recorded it. The transcript names its one voice Speaker. (#511)
 - Mark as unread in a conversation's menu in the sidebar: the conversation turns bold again and shows under Agents waiting on you in Today until you open it. On an unread one the item reads Mark as read. (#510)
 
 ## [0.0.56] - 2026-11-17
