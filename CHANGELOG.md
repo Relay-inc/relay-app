@@ -14,18 +14,23 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
-## [0.0.57] - 2026-11-21
+## [0.0.58] - 2026-11-21
 
 ### Added
 
 - Antigravity as an agent: conversations run on Google's Antigravity CLI (`agy`) with the login it has, next to Claude Code, Codex, OpenCode and Pi. Edits and commands ask on a card first, a conversation continues in the terminal, and the Usage view shows the plan and the tokens of the conversations Relay ran. Switch it on in Settings › Agents. It runs in the main vault only, and Antigravity does not report how much of the plan is left. (#513)
-- Claude in Chrome in Relay's conversations: when it is on by default for the account (`/chrome` › Enabled by default, `claudeInChromeDefaultEnabled`), a conversation gets the browser tools like the terminal does. Not in a shared vault, where the browser's logins are yours, and not on a work machine. (#514)
-- Upload recording on a meeting: pick an audio file recorded elsewhere (phone, Zoom or Teams download, voice memo) and Relay transcribes and summarises it as if it had recorded it. The transcript names its one voice Speaker. (#511)
-- Mark as unread in a conversation's menu in the sidebar: the conversation turns bold again and shows under Agents waiting on you in Today until you open it. On an unread one the item reads Mark as read. (#510)
 
 ### Changed
 
 - Codex asks less: a command that needs more than its sandbox (the network, a folder outside the vault) is now weighed by Codex's own reviewer instead of put on a card. Settings › Agents › Codex › Approvals brings the cards back. In a workspace every approval still reaches you. (#513)
+
+## [0.0.57] - 2026-11-21
+
+### Added
+
+- Claude in Chrome in Relay's conversations: when it is on by default for the account (`/chrome` › Enabled by default, `claudeInChromeDefaultEnabled`), a conversation gets the browser tools like the terminal does. Not in a shared vault, where the browser's logins are yours, and not on a work machine. (#514)
+- Upload recording on a meeting: pick an audio file recorded elsewhere (phone, Zoom or Teams download, voice memo) and Relay transcribes and summarises it as if it had recorded it. The transcript names its one voice Speaker. (#511)
+- Mark as unread in a conversation's menu in the sidebar: the conversation turns bold again and shows under Agents waiting on you in Today until you open it. On an unread one the item reads Mark as read. (#510)
 
 ## [0.0.56] - 2026-11-17
 
