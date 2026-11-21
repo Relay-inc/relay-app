@@ -88,6 +88,15 @@ fn mode_set(env: &Env) -> bool {
         || ["settings.json", "settings.local.json"].iter().filter_map(|f| mode(format!("{}/.claude/{f}", env.vault)))
             .any(|m| m != "auto" && m != "bypassPermissions")
 }
+/// Claude in Chrome turned on by default for the account (`claudeInChromeDefaultEnabled` in its `.claude.json`, which
+/// sits in the config folder of an account and next to ~/.claude for the default one). `-p` ignores that setting, so
+/// the spawn passes `--chrome` itself.
+fn chrome_on(env: &Env) -> bool {
+    let a = account(env);
+    let f = if a.is_empty() { format!("{}/.claude.json", env.home) } else { format!("{a}/.claude.json") };
+    std::fs::read_to_string(f).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok())
+        .is_some_and(|v| v["claudeInChromeDefaultEnabled"] == true)
+}
 /// The vault's transcript folder on the env's account.
 pub fn transcripts(env: &Env) -> String { transcripts_in(&config_dir(env.home, account(env)), env.vault) }
 /// The config folder a session lives in: of the accounts that have its transcript, the one written last (a
@@ -248,6 +257,9 @@ impl AgentProvider for Claude {
         if !mcp["mcpServers"].as_object().is_some_and(|m| m.is_empty()) { cmd.arg("--mcp-config").arg(mcp.to_string()); }
         // grants.fenced, set by the app in a shared vault: only the servers above, none of the user's own or claude.ai's
         if fenced { cmd.arg("--strict-mcp-config"); }
+        // Claude in Chrome as the account has it, except in a shared vault (the browser holds the user's own logins)
+        // and on a work machine (its Chrome is not this Mac's, and this reads this Mac's setting)
+        if !fenced && !env.grants.machine && chrome_on(env) { cmd.arg("--chrome"); }
         let ask = strs("ask");
         let mut settings: serde_json::Map<String, Value> = if fenced { serde_json::from_str(fenced_settings()).unwrap() } else { Default::default() };
         if !ask.is_empty() { settings.insert("permissions".into(), json!({"ask": ask})); }
@@ -429,6 +441,25 @@ mod tests {
         std::fs::remove_file(vault.join(".claude/settings.local.json")).unwrap();
         mode(&home.join(".claude/settings.json"), "manual");
         assert!(!auto(&NO_GRANTS), "the user's own mode stays");
+        std::fs::remove_dir_all(&d).ok();
+    }
+    #[test]
+    fn chrome_follows_the_account_setting() {
+        let d = std::env::temp_dir().join(format!("relay-chrome-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let p = PathBuf::from("/tmp/pending");
+        let l = Launch { key: "c:1", name: "x", model: "", effort: "", resume: None, fork: None, turn: None };
+        let chrome = |grants: &Grants| {
+            let e = Env { home: d.to_str().unwrap(), grants, ..env(&p) };
+            PROVIDER.command(&e, &l).unwrap().get_args().any(|a| a == "--chrome")
+        };
+        assert!(!chrome(&NO_GRANTS), "no .claude.json: off");
+        std::fs::write(d.join(".claude.json"), json!({"claudeInChromeDefaultEnabled": false}).to_string()).unwrap();
+        assert!(!chrome(&NO_GRANTS), "turned off: off");
+        std::fs::write(d.join(".claude.json"), json!({"claudeInChromeDefaultEnabled": true}).to_string()).unwrap();
+        assert!(chrome(&NO_GRANTS), "turned on: --chrome");
+        assert!(!chrome(&Grants { fenced: true, ..Default::default() }), "never in a shared vault");
+        assert!(!chrome(&Grants { machine: true, ..Default::default() }), "never on a work machine");
         std::fs::remove_dir_all(&d).ok();
     }
     #[test]
