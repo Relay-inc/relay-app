@@ -1215,6 +1215,27 @@ const VIEWS = {
     await waitText("All of Claude Code", 10000);
     await settle(page);
   },
+  // Antigravity in the Usage view: its plan's name and the note that it reports no limit windows (PR #513)
+  "usage-antigravity": async () => {
+    await open(page, server.url, { fixture: "antigravity" });
+    await page.getByRole("button", { name: /^Usage/ }).click();
+    await waitText("View details");
+    await page.getByRole("button", { name: "View details" }).click();
+    await waitText("All of Claude Code", 10000);
+    await intoView("Antigravity reports its plan");
+  },
+  // Settings › Agents › Antigravity: installed and on, the hint and the Ask option, auto first (PR #513)
+  "settings-agents-antigravity": async () => {
+    await settingsPage("Agents", undefined, "antigravity");
+    await unfold("Antigravity");
+    await intoView("Ask");
+  },
+  // Settings › Agents › Codex: the Approvals option, Codex's own reviewer first (PR #513)
+  "settings-agents-codex-approvals": async () => {
+    await settingsPage("Agents");
+    await unfold("Codex");
+    await intoView("Approvals");
+  },
   // two Claude accounts, the first used up: each account's limits, the one in use marked
   "usage-accounts": async () => {
     await open(page, server.url, { fixture: "accounts" });
