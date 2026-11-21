@@ -1,15 +1,15 @@
 {
-  "version": "0.0.57",
-  "notes": "### Added\n\n- Claude in Chrome in Relay's conversations: when it is on by default for the account (`/chrome` › Enabled by default, `claudeInChromeDefaultEnabled`), a conversation gets the browser tools like the terminal does. Not in a shared vault, where the browser's logins are yours, and not on a work machine. (#514)\n- Upload recording on a meeting: pick an audio file recorded elsewhere (phone, Zoom or Teams download, voice memo) and Relay transcribes and summarises it as if it had recorded it. The transcript names its one voice Speaker. (#511)\n- Mark as unread in a conversation's menu in the sidebar: the conversation turns bold again and shows under Agents waiting on you in Today until you open it. On an unread one the item reads Mark as read. (#510)",
-  "pub_date": "2026-11-21T10:01:29.347Z",
+  "version": "0.0.58",
+  "notes": "### Added\n\n- Antigravity as an agent: conversations run on Google's Antigravity CLI (`agy`) with the login it has, next to Claude Code, Codex, OpenCode and Pi. Edits and commands ask on a card first, a conversation continues in the terminal, and the Usage view shows the plan and the tokens of the conversations Relay ran. Switch it on in Settings › Agents. It runs in the main vault only, and Antigravity does not report how much of the plan is left. (#513)\n\n### Changed\n\n- Codex asks less: a command that needs more than its sandbox (the network, a folder outside the vault) is now weighed by Codex's own reviewer instead of put on a card. Settings › Agents › Codex › Approvals brings the cards back. In a workspace every approval still reaches you. (#513)",
+  "pub_date": "2026-11-21T11:35:43.428Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnJRdDFTdnJIV2RSaUFIeDlKa2VBK1V4cnB5cWNYUng4RDNuRGM4cDFuSHVsRUVwTTMyWVJEK2NleTk0S0twdGZvUzFUTE9vWEQyTW4wcjZBbnp4clFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MjU0MjkwCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC41NwpaRlNCbGt3Y0lwbXVJVTdlTkl5a0tKY0tkQit4d2Vaa2lKYXV6Y2dTbURHb2RIUkFMOGtrSS9VR0NiUGJUZjE0aFR1MXlNSVlxd1BuRTdOb3d2UURDQT09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/775134821"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnVUMEYyRHh4ejRYRGJUUlZHM3didFV3OEpXYTIyNlpRaWY3RjN5ZnY3aFVvdVBkaFRUbHliNWRQaEdaVU5qWDJaeUM0R09USEpFeUN0ZEpXVzh0R2dnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MjYwNTEyCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC41OAo0cEd0QlllR3pTS0lRZ3lpSDBsajQxeTdPVmZFOGRPNGVjYlFCZ3FRZ0NCMEZNaTNldTlWTDNndVRCVktDdDZtRzBQSWhEWDYzSDlJZWt5RDdFRjNBdz09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/775374047"
     },
     "darwin-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnJhT1hqYWxSOFp3Q0FQQWduZFBxRXJ5Yi85dWozRUlPbSsxQzNNc1hoMzc2U1VNOFpWTDdlK3J6M0dmekR1SW1YUGxzcU1xbmVIVkxIUk9UUURFSndFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MjU1MDY4CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC41NwpDYXlZc1pFUGtCallRbFkzemV5ZXpkMW0yQklSdVhPSWk5SUhMZUNJV24wRmFUZjd4Q0pqZVVnSWhmdmJUTElVNEo3SjhqbitqQXltWEd1dDBjeElCQT09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/775134826"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWmw3MHVKc1lCTkwyK2FhQlNHVUVkRzNCNFpXRllZYUJIRFF1MUxSWWtkOUg2RjdSSklvbS93Rjl3ZkpNcnN4N2x3dmgwMWhTQ0Nwa2dleHgwNXhHVVEwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MjYwODEzCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC41OApGQ2srazQwWm51dStYWjY3TzRaSzN6UndEQTV6ZXViWXNMK3dLelIrWXllblVFR3B6WFc3azN1ZzlmbGY1OEd2UEpMeG5EQVF2aFpVQ2pBYWF4TGxBQT09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/775374048"
     }
   }
 }
