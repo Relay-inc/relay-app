@@ -524,6 +524,7 @@ export function settings(fixture: string) {
         codex: { on: true, bin: "", sandbox: "workspace-write" },
         opencode: { on: false, bin: "" },
         pi: { on: false, bin: "" },
+        antigravity: { on: false, bin: "" },
       },
     },
   };

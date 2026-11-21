@@ -349,6 +349,7 @@ function handle(cmd: string, a: Args): unknown {
         },
         { id: "opencode", name: "OpenCode", on: false, installed: "1.1.6", latest: "1.19.0", command: null },
         { id: "pi", name: "Pi", on: false, installed: null, latest: null, command: null },
+        { id: "antigravity", name: "Antigravity", on: false, installed: null, latest: null, command: null },
       ];
     case "agent_update":
       return new Promise(resolve => setTimeout(() => resolve(null), 400));

@@ -96,7 +96,7 @@ does:
   of that vault or workspace, and once it started it moves only to its projects. Anywhere but the main vault it also
   may not touch Relay's data folder or Claude's config folders (with their `.claude.json`), and runs with no own MCP
   servers or connectors, no hooks, no auto memory, in auto mode. A main-vault conversation may not read the workspaces'
-  trash, bases and keys. Claude Code and Codex run in a workspace, OpenCode and Pi in the main vault only.
+  trash, bases and keys. Claude Code and Codex run in a workspace, OpenCode, Pi and Antigravity in the main vault only.
 - **Codex has Relay's guard, not Claude Code's rules.** Codex reads no deny rules, so Relay checks every permission
   request Codex raises before it becomes a card (`policy::guard`, `session/tauri_sink.rs`): a request that names a
   path outside the workspace (a file it changes, the folder a command runs in, a word of the command that reads as a

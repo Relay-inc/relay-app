@@ -101,7 +101,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         },
     };
     let shared = dir != main;
-    // OpenCode and Pi get no fence: a shared vault's conversation is Claude Code's (its own rules) or Codex's (Relay's guard)
+    // OpenCode, Pi and Antigravity get no fence: a shared vault's conversation is Claude Code's (its own rules) or Codex's (Relay's guard)
     if shared && !crate::policy::FENCED_AGENTS.contains(&p.id()) { return Err(trc("err.vault_agents")); }
     let extra = if shared { dir.as_str() } else { "" };
     // a fork carries the other conversation's transcript: only one from this same vault

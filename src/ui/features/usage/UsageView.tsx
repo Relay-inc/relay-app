@@ -206,6 +206,8 @@ function ProviderCard({ id, hasLimits, format }: { id: string; hasLimits: boolea
     if (!allLimits) return note(providerText("limits.loading"));
     if (!limits) return note(providerText("off.unavailable"));
     if (!limits.ok) return note(providerText(`off.${limits.reason}`));
+    // a plan without windows (the provider cannot say what is left of it): its own note, when it has one
+    if (!limits.windows.length && provider?.strings.en["limits.none"]) return note(providerText("limits.none"));
     return limits.windows.map(w => {
       const when = resetWhen(w.resets, locale);
       return (

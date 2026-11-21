@@ -846,6 +846,18 @@ export const agentsStatus = {
       bin: "",
       defaultBin: "/opt/homebrew/bin/pi",
     },
+    {
+      id: "antigravity",
+      name: "Antigravity",
+      on: false,
+      caps: caps(false),
+      textOnly: [],
+      detect: { installed: false, bin: "/Users/me/.local/bin/agy", version: null, loggedIn: null, note: null },
+      models: [],
+      efforts: [],
+      bin: "",
+      defaultBin: "/Users/me/.local/bin/agy",
+    },
   ],
 };
 /** agents_status of fixture `models`: Claude with 40 models, so the composer's model pick gets its filter field. */
