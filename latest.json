@@ -1,15 +1,15 @@
 {
-  "version": "0.0.56",
-  "notes": "### Added\n\n- Relay for Intel Macs, next to the one for Apple silicon, and it updates itself like that one. Dictation there has Whisper only: Parakeet and the other ONNX models have no build of their runtime for Intel Macs. (#507)\n- Start working on a card, or Start conversation in its ticket window, now also tells the agent to work in a git worktree on the team's branch (`fix/417-decimal-quantities`, `feat/…` unless the card says bug or fix), to reuse that branch when it exists, to start the PR title with the ticket number and to put the ticket link in the PR body. A project with several repos asks which one first. (#506)\n- When a PR of yours that is not a draft is linked to a card that is in progress, Relay moves the card to the PR open column of the project's pipeline settings, once per PR. Nothing moves without that column set. (#506)\n- `relay://ticket?provider=productive&id=<task id>` opens that ticket in Relay, with Start conversation one click away. Work never starts from the link itself. (#506)\n- Agents in a conversation can carry a Productive ticket through the flow: look a ticket up by its number, list the statuses it can move to, move it, assign it, edit its title and description, add subtasks and mark what blocks what. Each change asks first. Comments an agent posts are now hidden from the client by default on client projects. (#503)",
-  "pub_date": "2026-11-17T13:00:19.033Z",
+  "version": "0.0.57",
+  "notes": "### Added\n\n- Claude in Chrome in Relay's conversations: when it is on by default for the account (`/chrome` › Enabled by default, `claudeInChromeDefaultEnabled`), a conversation gets the browser tools like the terminal does. Not in a shared vault, where the browser's logins are yours, and not on a work machine. (#514)\n- Upload recording on a meeting: pick an audio file recorded elsewhere (phone, Zoom or Teams download, voice memo) and Relay transcribes and summarises it as if it had recorded it. The transcript names its one voice Speaker. (#511)\n- Mark as unread in a conversation's menu in the sidebar: the conversation turns bold again and shows under Agents waiting on you in Today until you open it. On an unread one the item reads Mark as read. (#510)",
+  "pub_date": "2026-11-21T10:01:29.347Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnF1YXo4UTJ2NjFJd21sWTVqRmUzZXBNU1dtc1Bkd1JHSkx6WSthSnMxWUw0WmcxclFVaFozSVk4aXBsL2ZDQmIrWGpCTE9ibUpad1dselhCQ3R5OVFZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0OTIwMDY5CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC41NgovWDR1S000OStEVWFEVk9rSkE5SVg5c3A0cjF4SitHM1NoY0Q1My85eVBDNnByRmRzZkh2djljemZMSVlWcXcrdU5JSTZFdmRqYmpnRzhwRzNBVzdEQT09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/759084132"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnJRdDFTdnJIV2RSaUFIeDlKa2VBK1V4cnB5cWNYUng4RDNuRGM4cDFuSHVsRUVwTTMyWVJEK2NleTk0S0twdGZvUzFUTE9vWEQyTW4wcjZBbnp4clFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MjU0MjkwCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC41NwpaRlNCbGt3Y0lwbXVJVTdlTkl5a0tKY0tkQit4d2Vaa2lKYXV6Y2dTbURHb2RIUkFMOGtrSS9VR0NiUGJUZjE0aFR1MXlNSVlxd1BuRTdOb3d2UURDQT09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/775134821"
     },
     "darwin-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWm1oSUJvaHVNaERKbHJQWXdCc2VPMyt5Qm1DbTIxZVB4NjZDeGRMTHdtb2Urb1lZWVg1Z2RyeVBjUW5MTXZVWUp1bWZyODNOUVE1NCtXT1J4RnF4ekF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0OTIwMzQ1CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC41Ngp0TVBuNXFKaEl0N3JlRVBUU0VxVUhoMlExaUdidFNpTnM1WXQ5aUlQRkNQTyszUUZpSVVHTlVLbzcreDYzR0RsaEhydHdGVWh0bndhME9XcStNZXZCUT09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/759084134"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnJhT1hqYWxSOFp3Q0FQQWduZFBxRXJ5Yi85dWozRUlPbSsxQzNNc1hoMzc2U1VNOFpWTDdlK3J6M0dmekR1SW1YUGxzcU1xbmVIVkxIUk9UUURFSndFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MjU1MDY4CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC41NwpDYXlZc1pFUGtCallRbFkzemV5ZXpkMW0yQklSdVhPSWk5SUhMZUNJV24wRmFUZjd4Q0pqZVVnSWhmdmJUTElVNEo3SjhqbitqQXltWEd1dDBjeElCQT09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/775134826"
     }
   }
 }
