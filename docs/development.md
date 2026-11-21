@@ -4,7 +4,7 @@ How Relay is built and how to run it from source. Using Relay: the [README](../R
 [contributing.md](contributing.md). Design and layout: [`DESIGN.md`](../DESIGN.md). Frontend layers:
 [frontend-architecture.md](frontend-architecture.md).
 
-Relay is a Tauri shell around the real coding-agent CLIs (`claude`, `codex`, `opencode`, `pi`), running on their own
+Relay is a Tauri shell around the real coding-agent CLIs (`claude`, `codex`, `opencode`, `pi`, `agy`), running on their own
 logins, never an API key.
 
 ## Run
@@ -191,26 +191,26 @@ Code. Not yet: views inside conversations, display modes, model context and perm
 
 ## Agent providers
 
-The conversations run on a coding-agent CLI: Claude Code, Codex, OpenCode or Pi. Each is one package `packages/agent-<id>/` (Rust + TypeScript + strings + tests) implementing the contract in
+The conversations run on a coding-agent CLI: Claude Code, Codex, OpenCode, Pi or Antigravity. Each is one package `packages/agent-<id>/` (Rust + TypeScript + strings + tests) implementing the contract in
 [`packages/agent-core`](../packages/agent-core/README.md). The app owns the processes, `sessions.json`, the pending folder,
 the settings and the commands; a provider builds its command line, turns its output into normalised events, reads its
 own transcripts and logs, and reports its limits and tokens.
 
-| | Claude Code | Codex | OpenCode | Pi |
-|---|---|---|---|---|
-| Package | [`agent-claude`](../packages/agent-claude/README.md) | [`agent-codex`](../packages/agent-codex/README.md) | [`agent-opencode`](../packages/agent-opencode/README.md) | [`agent-pi`](../packages/agent-pi/README.md) |
-| Permissions | cards, over the pipe (`--permission-prompt-tool stdio`), with "Always allow" | cards: command and patch approvals | cards: `permission.asked` (edits, commands, fetches ask by default) | none (pi runs every tool call) |
-| Runs as | `claude -p` stream-json, one process per conversation | `codex app-server` (JSON-RPC over stdio) behind its bridge (`relay --codex-bridge`) | a private `opencode serve` (HTTP + SSE) behind its bridge (`relay --opencode-bridge`) | `pi --mode rpc` (JSON lines over stdio), no bridge |
-| Questions | yes (AskUserQuestion) | no (declined) | yes (`question.asked`) | no |
-| Thinking, images | –, yes | yes, yes | yes, yes | yes, yes |
-| Resume, fork | yes, yes | yes, – | yes, yes | yes (`--session-id`), yes (`--fork`) |
-| Subagents, titles | yes, yes | –, – | –, – | –, – |
-| Models, efforts | built-in list, efforts | `~/.codex/models_cache.json` | `opencode models --verbose` (configured providers), model variants | `pi --list-models`, thinking levels |
-| Session list, terminal | `claude agents`, attach / stop | `state_5.sqlite` threads, `codex resume` | `opencode.db` sessions, `opencode --session` | session files, `pi --session` |
-| Tokens | `~/.claude/projects/**/*.jsonl`, priced at API list prices | rollout `token_count` events, unpriced | `opencode.db` assistant messages, with the cost OpenCode recorded | session files, with the cost pi computed from its prices |
-| Limits | plan limits (`api.anthropic.com/api/oauth/usage`) | rate-limit windows from the rollouts and the app-server | none (OpenCode has none) | none (pi has none) |
-| Workspaces | yes: the fence's deny rules, strict MCP, auto mode (`policy::fence_in`) | yes: Relay's guard declines a request outside the fence before it is a card, sandbox and approvals kept (`policy::guard`), a permission profile keeps `.claude` and the agents' files read-only and closes reads outside the workspace, no MCP servers, plugins or apps (`bridge::thread_params`, codex-cli 0.163 or newer) | no, main vault only | no, main vault only |
-| Known gaps | see its README | no questions, fork, subagents or titles; no accept-for-session; tokens unpriced | no limits, subagents or titles; no "always"; cost 0 where OpenCode has no price | no permissions or questions; extension dialogs unanswered; no limits, subagents or titles |
+| | Claude Code | Codex | OpenCode | Pi | Antigravity |
+|---|---|---|---|---|---|
+| Package | [`agent-claude`](../packages/agent-claude/README.md) | [`agent-codex`](../packages/agent-codex/README.md) | [`agent-opencode`](../packages/agent-opencode/README.md) | [`agent-pi`](../packages/agent-pi/README.md) | [`agent-antigravity`](../packages/agent-antigravity/README.md) |
+| Permissions | cards, over the pipe (`--permission-prompt-tool stdio`), with "Always allow" | cards: command and patch approvals | cards: `permission.asked` (edits, commands, fetches ask by default) | none (pi runs every tool call) | cards: `session/request_permission` (edits and commands ask by default) |
+| Runs as | `claude -p` stream-json, one process per conversation | `codex app-server` (JSON-RPC over stdio) behind its bridge (`relay --codex-bridge`) | a private `opencode serve` (HTTP + SSE) behind its bridge (`relay --opencode-bridge`) | `pi --mode rpc` (JSON lines over stdio), no bridge | `agy acp` (Agent Client Protocol, JSON-RPC over stdio) behind its bridge (`relay --antigravity-bridge`) |
+| Questions | yes (AskUserQuestion) | no (declined) | yes (`question.asked`) | no | no (declined) |
+| Thinking, images | –, yes | yes, yes | yes, yes | yes, yes | yes, yes |
+| Resume, fork | yes, yes | yes, – | yes, yes | yes (`--session-id`), yes (`--fork`) | yes (`session/resume`), – |
+| Subagents, titles | yes, yes | –, – | –, – | –, – | –, – |
+| Models, efforts | built-in list, efforts | `~/.codex/models_cache.json` | `opencode models --verbose` (configured providers), model variants | `pi --list-models`, thinking levels | `agy models` (the account's models, the thinking level in the id), no efforts |
+| Session list, terminal | `claude agents`, attach / stop | `state_5.sqlite` threads, `codex resume` | `opencode.db` sessions, `opencode --session` | session files, `pi --session` | –, `agy --conversation` |
+| Tokens | `~/.claude/projects/**/*.jsonl`, priced at API list prices | rollout `token_count` events, unpriced | `opencode.db` assistant messages, with the cost OpenCode recorded | session files, with the cost pi computed from its prices | the log its bridge keeps per conversation, unpriced |
+| Limits | plan limits (`api.anthropic.com/api/oauth/usage`) | rate-limit windows from the rollouts and the app-server | none (OpenCode has none) | none (pi has none) | the plan's name, no windows (Antigravity does not report what is left) |
+| Workspaces | yes: the fence's deny rules, strict MCP, auto mode (`policy::fence_in`) | yes: Relay's guard declines a request outside the fence before it is a card, sandbox and approvals kept (`policy::guard`), a permission profile keeps `.claude` and the agents' files read-only and closes reads outside the workspace, no MCP servers, plugins or apps (`bridge::thread_params`, codex-cli 0.163 or newer) | no, main vault only | no, main vault only | no, main vault only |
+| Known gaps | see its README | no questions, fork, subagents or titles; no accept-for-session; tokens unpriced | no limits, subagents or titles; no "always"; cost 0 where OpenCode has no price | no permissions or questions; extension dialogs unanswered; no limits, subagents or titles | no questions, fork, subagents, titles or session list; no "always"; history only of conversations Relay ran; tokens unpriced |
 
 **Backend**, `agent_core::AgentProvider` (`packages/agent-core/src/lib.rs`), a `pub static PROVIDER` in the package,
 registered in `PROVIDERS` in `src-tauri/src/agents.rs`:

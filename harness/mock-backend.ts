@@ -349,6 +349,7 @@ function handle(cmd: string, a: Args): unknown {
         },
         { id: "opencode", name: "OpenCode", on: false, installed: "1.1.6", latest: "1.19.0", command: null },
         { id: "pi", name: "Pi", on: false, installed: null, latest: null, command: null },
+        { id: "antigravity", name: "Antigravity", on: false, installed: null, latest: null, command: null },
       ];
     case "agent_update":
       return new Promise(resolve => setTimeout(() => resolve(null), 400));
@@ -1074,6 +1075,7 @@ function handle(cmd: string, a: Args): unknown {
 
     // agents and conversations
     case "agents_status":
+      if (fixture === "antigravity") return integ.agentsStatusAntigravity;
       return fixture === "models" ? integ.agentsStatusManyModels : integ.agentsStatus;
     case "agent_commands":
       return integ.agentCommands(a.provider);
@@ -1503,6 +1505,7 @@ function handle(cmd: string, a: Args): unknown {
     case "record_nudge_now":
       return { id: "weekly@1", title: "Weekly sync with the design team about the onboarding flow", time: "10:00" };
     case "usage_limits":
+      if (fixture === "antigravity") return integ.usageLimitsAntigravity;
       return fixture.startsWith("accounts") ? integ.usageLimitsAccounts : integ.usageLimits;
     case "usage_tokens":
       return integ.usageTokens();

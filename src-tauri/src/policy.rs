@@ -152,7 +152,7 @@ pub fn fence_in(app: &AppHandle, st: &App, eb: &mut EnvBuf) {
 }
 
 /// The agents a conversation in a workspace or another vault folder may run with: Claude Code applies the fence's
-/// rules itself, Relay guards Codex (`guard`). OpenCode and Pi get no fence, they run in the main vault only.
+/// rules itself, Relay guards Codex (`guard`). OpenCode, Pi and Antigravity get no fence, they run in the main vault only.
 pub const FENCED_AGENTS: [&str; 2] = ["claude", "codex"];
 /// The agents whose CLI does not read the fence's rules: Relay checks each permission request they raise.
 const GUARDED: [&str; 1] = ["codex"];
@@ -542,7 +542,7 @@ mod tests {
     fn workspaces_run_claude_code_and_codex_only() {
         let ids: Vec<&str> = crate::agents::PROVIDERS.iter().map(|p| p.id()).collect();
         assert_eq!(ids.iter().filter(|i| FENCED_AGENTS.contains(i)).collect::<Vec<_>>(), [&"claude", &"codex"]);
-        assert!(ids.contains(&"opencode") && ids.contains(&"pi"));
+        assert!(ids.contains(&"opencode") && ids.contains(&"pi") && ids.contains(&"antigravity"));
         // every guarded agent answers a deny in its own protocol
         assert!(GUARDED.iter().all(|id| FENCED_AGENTS.contains(id)));
     }

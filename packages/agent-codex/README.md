@@ -22,7 +22,12 @@ Then Settings › Agents › Codex › Use. The program defaults to the first of
 - **Account**: `OPENAI_API_KEY` and `CODEX_API_KEY` are removed from the environment, so it runs on the ChatGPT login,
   unless Settings › Agents › Codex › Account is "OPENAI_API_KEY from the environment".
 - **Sandbox and approvals** (Settings › Agents › Codex, stored as `settings.agents.providers.codex.{sandbox, approval}`):
-  `workspace-write` + `on-request` by default; also `read-only` / `danger-full-access` and `untrusted` / `never`. In a
+  `workspace-write` + `on-request` by default; also `read-only` / `danger-full-access` and `untrusted` / `never`. An
+  approval request (a command that needs more than the sandbox: the network, a folder outside the vault) goes to
+  Codex's own reviewer by default (`approvalsReviewer: auto_review`, a subagent that weighs the risk and approves or
+  refuses, a few seconds per request), so it is no card; Settings › Agents › Codex › Approvals "Every one on a card"
+  (`reviewer: user`) puts each on a card again. Measured with codex-cli 0.163 on a ChatGPT login: a `curl` the sandbox
+  blocked was approved by the reviewer, and asked on a card with `user`. In a
   workspace or another vault folder (`grants.fenced`) `danger-full-access` runs as `workspace-write`, `never` as
   `on-request`, and `approvalsReviewer` is `user`, so every approval reaches the app, where Relay's guard declines one
   outside the fence before it is a card (`docs/workspaces.md` › Trust). The fileChange approval carries every changed

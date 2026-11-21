@@ -22,6 +22,7 @@
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.15",
     "@hugeicons/core-free-icons": "^4.3.5",
+    "@relay/agent-antigravity": "workspace:*",
     "@relay/agent-claude": "workspace:*",
     "@relay/agent-codex": "workspace:*",
     "@relay/agent-core": "workspace:*",
