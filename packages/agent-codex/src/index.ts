@@ -2,13 +2,15 @@ import type { AgentOption, AgentProvider } from "@relay/agent-core";
 import { strings, type Key } from "./locales.ts";
 import { modelName } from "./models.ts";
 
-// Settings › Agents: the choices of src/lib.rs (SANDBOX, APPROVAL, AUTH), the first one the default
+// Settings › Agents: the choices of src/lib.rs (SANDBOX, APPROVAL, REVIEWER, AUTH), the first one the default
 const options: AgentOption<Key>[] = [
   { id: "sandbox", label: "opt.sandbox", choices: [
     { id: "workspace-write", label: "opt.sandbox.workspace-write" }, { id: "read-only", label: "opt.sandbox.read-only" },
     { id: "danger-full-access", label: "opt.sandbox.danger-full-access" }] },
   { id: "approval", label: "opt.approval", choices: [
     { id: "on-request", label: "opt.approval.on-request" }, { id: "untrusted", label: "opt.approval.untrusted" }, { id: "never", label: "opt.approval.never" }] },
+  { id: "reviewer", label: "opt.reviewer", choices: [
+    { id: "auto_review", label: "opt.reviewer.auto_review" }, { id: "user", label: "opt.reviewer.user" }] },
   { id: "auth", label: "opt.auth", choices: [{ id: "chatgpt", label: "opt.auth.chatgpt" }, { id: "api-key", label: "opt.auth.api-key" }] },
 ];
 
