@@ -396,9 +396,10 @@ export default {
     "Ein Checkout eines Repos, das nicht beim Projekt steht, oder der für ein Repo statt des gefundenen verwendet werden soll.",
   "pl.repoPh": "Ordner wählen",
   "pl.repoPick": "Checkout wählen",
-  "pl.base": "Branch",
-  "pl.baseHelp":
-    "Die Arbeit beginnt dort in jedem Repo und die PRs gehen dorthin. Leer: der Standard-Branch jedes Repositorys.",
+  "pl.base": "Starten von",
+  "pl.baseHelp": "Der Branch, von dem die Arbeit in jedem Repo ausgeht. Leer: der Standard-Branch jedes Repositorys.",
+  "pl.into": "PRs nach",
+  "pl.intoHelp": "Der Branch, in den die PRs gehen. Leer: der Branch, von dem die Arbeit ausging.",
   "pl.group": "Spalten nach",
   "pl.col.pick": "Abholen aus",
   "pl.col.pickHelp": "Tickets hier bekommen einen Agent. Leg ein Ticket hierhin, wenn es klar genug zum Bauen ist.",

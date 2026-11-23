@@ -246,6 +246,7 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
       project,
       repos,
       base: b.p.base,
+      into: b.p.into ?? "",
       ticket,
       // the checks are per repo now, in `repos`
       validate: { checks: "", review: b.p.reviewer ?? "", rounds: b.p.rounds ?? 3 },

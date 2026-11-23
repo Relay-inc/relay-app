@@ -746,9 +746,10 @@ fn dispatch(app: &AppHandle, title: Option<String>, task: Option<String>, projec
 }
 
 /// What a board pipeline adds to a dispatch: the project's checkouts the worker gets (each with its checks), the branch
-/// to start from and to open the PRs against (else each remote's default branch), and its ticket.
+/// to start from (else each remote's default branch), the one to open the PRs against (else the one it started from),
+/// and its ticket.
 /// `skill`: a Claude Code skill the worker follows for the ticket, within these rules; empty: none.
-pub struct Pipe { pub repos: Vec<RepoIn>, pub base: Option<String>, pub ticket: Value, pub validate: Validate, pub plan: bool, pub skill: String }
+pub struct Pipe { pub repos: Vec<RepoIn>, pub base: Option<String>, pub into: Option<String>, pub ticket: Value, pub validate: Validate, pub plan: bool, pub skill: String }
 
 /// A worker from the board pipeline: the ticket text as the brief, a worktree of each repo on one fresh branch from
 /// `base`. The agent changes the repos the ticket needs, Relay opens a PR in each one it committed in.
@@ -794,7 +795,8 @@ fn start(app: &AppHandle, title: Option<String>, task: Option<String>, project: 
         let from = pipe.as_ref().and_then(|p| p.base.as_deref());
         if from.is_some() { git(&r, &["fetch", "-q", "origin"]); } // a pipeline starts from what the remote has now
         match add_worktree(&r, &title, &key[WORKER_PREFIX.len()..], from) {
-            Ok((dir, b, sha, bb)) => { made.push(Tree { repo: r, worktree: dir, start: sha, base: bb, checks: g.checks, ..Default::default() }); branch = Some(b); }
+            Ok((dir, b, sha, bb)) => { let bb = pipe.as_ref().and_then(|p| p.into.clone()).unwrap_or(bb);
+                made.push(Tree { repo: r, worktree: dir, start: sha, base: bb, checks: g.checks, ..Default::default() }); branch = Some(b); }
             Err(e) => { undo(&made, &branch); return Err(e) }
         }
     }
@@ -1321,7 +1323,7 @@ mod tests {
     }
     #[test]
     fn pipe_brief_with_a_skill() {
-        let pipe = |skill: &str, plan| Pipe { repos: vec![], base: None, ticket: json!({}), validate: Validate { review: "off".into(), ..Default::default() }, plan, skill: skill.into() };
+        let pipe = |skill: &str, plan| Pipe { repos: vec![], base: None, into: None, ticket: json!({}), validate: Validate { review: "off".into(), ..Default::default() }, plan, skill: skill.into() };
         let none = pipe_brief(&pipe("", false), &[]);
         assert!(none.starts_with(&pipe_rules()) && !none.contains("skill"), "no skill: Relay's rules only");
         let b = pipe_brief(&pipe(" /ticket-flow:develop ", false), &[]);
@@ -1353,7 +1355,7 @@ mod tests {
         // the brief lists every worktree, the checks only of the repo that has them
         let brief = repos_brief(&made, "relay/cart-total-t1");
         assert!(brief.contains(&format!("- backend: {}", made[0].worktree)) && brief.contains(&format!("- frontend: {}", made[1].worktree)), "{brief}");
-        let pipe = Pipe { repos: vec![], base: None, ticket: json!({}), validate: Validate { review: "off".into(), ..Default::default() }, plan: false, skill: String::new() };
+        let pipe = Pipe { repos: vec![], base: None, into: None, ticket: json!({}), validate: Validate { review: "off".into(), ..Default::default() }, plan: false, skill: String::new() };
         let p = pipe_brief(&pipe, &made);
         assert!(p.contains("- backend: `composer test`") && !p.contains("- frontend:"), "{p}");
         assert_eq!(repos_brief(&made[..1], "b"), format!("Repo: {}. Work only in the worktree {}, on branch b. Commit there, never on main.\n", made[0].repo, made[0].worktree), "one repo: as before");
