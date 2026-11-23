@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Changed
+
+- Pasting with Cmd-V (Ctrl-V on Windows) in a conversation while the composer is not focused now pastes into the composer, as typing already did. (#518)
+
 ## [0.0.58] - 2026-11-21
 
 ### Added
