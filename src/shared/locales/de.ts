@@ -289,6 +289,7 @@ export default {
   "orch.starter3": "Entwirf die Statusmail dieser Woche pro Kunde aus den Boards",
   "orch.step": "Schritt {done}/{total}",
   "orch.prInto": "Pull Request nach {base}",
+  "orch.prIn": "Pull Request in {repo}",
   "orch.started": "Gestartet {ago}",
   "orch.ended": "Beendet {ago}",
   "orch.model.default": "CLI-Standard",
@@ -389,13 +390,15 @@ export default {
   "pc.reposHelp": "Ihre offenen Pull Requests erscheinen unter diesem Projekt.",
   "pl.title": "Board-Pipeline",
   "pl.help":
-    "Relay nimmt Tickets aus einer Spalte des Boards dieses Projekts, ein Agent baut jedes in einem eigenen Worktree, Relay öffnet den PR und schiebt das Ticket weiter. Alle 5 Minuten geprüft, solange Relay läuft.",
-  "pl.repo": "Checkout",
-  "pl.repoHelp": "Der lokale Klon, aus dem die Worktrees der Agents entstehen.",
+    "Relay nimmt Tickets aus einer Spalte des Boards dieses Projekts, ein Agent baut jedes in einem Worktree jedes Repos des Projekts, Relay öffnet in jedem geänderten Repo einen PR und schiebt das Ticket weiter. Alle 5 Minuten geprüft, solange Relay läuft.",
+  "pl.repo": "Weiterer Checkout",
+  "pl.repoHelp":
+    "Ein Checkout eines Repos, das nicht beim Projekt steht, oder der für ein Repo statt des gefundenen verwendet werden soll.",
   "pl.repoPh": "Ordner wählen",
   "pl.repoPick": "Checkout wählen",
   "pl.base": "Branch",
-  "pl.baseHelp": "Die Arbeit beginnt dort und der PR geht dorthin. Leer: der Standard-Branch des Repositorys.",
+  "pl.baseHelp":
+    "Die Arbeit beginnt dort in jedem Repo und die PRs gehen dorthin. Leer: der Standard-Branch jedes Repositorys.",
   "pl.group": "Spalten nach",
   "pl.col.pick": "Abholen aus",
   "pl.col.pickHelp": "Tickets hier bekommen einen Agent. Leg ein Ticket hierhin, wenn es klar genug zum Bauen ist.",
@@ -422,7 +425,7 @@ export default {
   "pl.parallel": "Agents gleichzeitig",
   "pl.checks": "Checks",
   "pl.checksHelp":
-    "Laufen im Worktree, sobald der Agent sagt, er sei fertig: Lint, statische Analyse, Tests. Der Worktree startet ohne Abhängigkeiten, installiere sie also zuerst. Leer: keine Checks.",
+    "Laufen im Worktree eines Repos, sobald der Agent sagt, er sei fertig, und dieses Repo geändert hat: Lint, statische Analyse, Tests. Der Worktree startet ohne Abhängigkeiten, installiere sie also zuerst. Leer: keine Checks.",
   "pl.review": "Review",
   "pl.reviewHelp":
     "Nach den Checks prüft ein anderer Agent den Diff. Blockierende Befunde gehen zurück an den Agent, die übrigen in den PR.",
@@ -467,6 +470,16 @@ export default {
   "pl.feedback": "Review-Kommentare zum PR: der Agent arbeitet sie ein.",
   "pl.merged": "PR gemergt: {pr}",
   "pl.closed": "PR ohne Merge geschlossen: {pr}",
+  "pl.prPartial":
+    "PRs: {pr}\n\nNicht die ganze Arbeit des Agents ist in einem PR: {reason}. Merge nichts, bevor sie es ist.\n\n{summary}",
+  "pl.noRepos": "kein Checkout der Repos dieses Projekts auf diesem Mac, siehe Einstellungen › Projekte",
+  "pl.repoChecks": "Checks für {repo}",
+  "pl.repoOn": "Agents dürfen {repo} ändern",
+  "pl.reposNone":
+    "Kein Checkout der Repos dieses Projekts auf diesem Mac: füge oben die GitHub-Repositorys hinzu oder wähle unten einen Checkout.",
+  "pl.reposHelp":
+    "Die Checkouts der GitHub-Repositorys des Projekts auf diesem Mac. Der Agent ändert die, die ein Ticket braucht, Relay öffnet in jedem einen PR. Schalte eines aus, um die Agents herauszuhalten.",
+  "pl.repos": "Repos",
   "pc.repoCount_one": "{n} Repo",
   "pc.repoCount_other": "{n} Repos",
   "pi.find": "Symbole suchen",

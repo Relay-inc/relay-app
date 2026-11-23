@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Changed
+
+- The board pipeline builds in every repo of its project: a ticket that needs the backend and the frontend gets a worktree of each, on one branch, and a PR in each repo the agent changed, with the checks of that repo. Settings › Projects lists the project's repos found on this Mac, each with its own checks and a switch to keep agents out of it; the single checkout is now an optional extra. A ticket moves on once all its PRs are merged, and goes to a person when a repo it changed got no PR.
+
 ## [0.0.58] - 2026-11-21
 
 ### Added

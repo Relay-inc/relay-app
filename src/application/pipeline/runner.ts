@@ -14,8 +14,10 @@ import {
   pipelineAt,
   PREFLIGHT_PROMPT,
   preflightOf,
+  prsOf,
   ready,
-  review,
+  reposFor,
+  reviewAll,
   stalled,
   step,
   usedUp,
@@ -35,7 +37,8 @@ import { settings } from "../settings/settings";
 import { projectName } from "../workspace/vault";
 
 // The board pipeline, while the app runs: every few minutes and when a pipeline worker changes, per switched-on
-// pipeline (settings.pipelines): put ended runs on the board, follow the PRs in review, start on the tickets in the
+// pipeline (settings.pipelines): put ended runs on the board, follow the PRs in review (one per repo a ticket changed),
+// start on the tickets in the
 // pick column (unless it is hand-picked: then only the tickets started from the ticket window, see buildTicket). The
 // board is the record: a ticket is claimed by moving it, so a second runner never takes it too.
 
@@ -144,20 +147,21 @@ async function runOne(project: string, p: Pipeline) {
   }
   // PRs in review: merged, closed, or comments for the worker
   for (const w of workersOf(allWorkers(), project).filter(inReview)) {
-    const pr = await backend.orchPr(w.key).catch(() => null);
-    const r = pr && review(pr, w.ended ?? 0);
+    const prs = await backend.orchPr(w.key).catch(() => null);
+    const r = prs && reviewAll(prs, w.ended ?? 0);
     if (!r) continue;
     const id = ticketOf(w)!.card;
+    const links = prsOf(w).join("\n");
     if (r.kind === "merged") {
       if (p.merged) await move(b, id, p.merged);
-      await comment(b, id, t("pl.merged", { pr: w.pr ?? "" }));
+      await comment(b, id, t("pl.merged", { pr: links }));
       adopt(await backend.orchBoard(w.key, "merged"));
     } else if (r.kind === "closed") {
       await move(b, id, p.input);
-      await comment(b, id, t("pl.closed", { pr: w.pr ?? "" }));
+      await comment(b, id, t("pl.closed", { pr: links }));
       adopt(await backend.orchBoard(w.key, "closed"));
     } else {
-      await sendWorker(w, fill(prompts.pipeline.reviewComments, { pr: String(w.pr), text: r.text }));
+      await sendWorker(w, fill(prompts.pipeline.reviewComments, { pr: prsOf(w).join(", "), text: r.text }));
       await move(b, id, p.busy);
       await comment(b, id, t("pl.feedback"));
     }
@@ -178,6 +182,9 @@ async function runOne(project: string, p: Pipeline) {
   // runs keep ending without a PR: tickets moved back still go on (a person looked at them), new ones wait
   if (stalled(workersOf(allWorkers(), project))) return hold(project, "pl.stalled");
   hold(project, "");
+  // no repo to build in: said once, the tickets stay where they are
+  if (fresh.length && !reposFor(await backend.pipelineRepos(project, p.repo), p).length)
+    throw new Error(t("pl.noRepos"));
   for (const card of fresh) {
     if (room-- <= 0) return;
     await claim(b, project, card);
@@ -231,14 +238,17 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
     // ponytail: only at the start; a picture added later reaches a resumed worker as a link
     const pictures = view ? await backend.ticketPictures(b.prov.id, picturesOf(view)).catch(() => []) : [];
     const task = view ? withPictures(briefOf(view), pictures) : `Ticket #${card.number} "${card.title}"\n${url}`;
+    const repos = reposFor(await backend.pipelineRepos(project, b.p.repo), b.p);
+    if (!repos.length) throw new Error(t("pl.noRepos"));
     const w = await backend.orchDispatchTicket({
       title: card.title,
       task,
       project,
-      repo: b.p.repo,
+      repos,
       base: b.p.base,
       ticket,
-      validate: { checks: b.p.checks ?? "", review: b.p.reviewer ?? "", rounds: b.p.rounds ?? 3 },
+      // the checks are per repo now, in `repos`
+      validate: { checks: "", review: b.p.reviewer ?? "", rounds: b.p.rounds ?? 3 },
       // with a skill, the skill decides per ticket whether a plan needs approval
       plan: !!b.p.plan && !b.p.skill?.trim(),
       skill: b.p.skill?.trim() ?? "",
@@ -258,7 +268,8 @@ async function land(b: Board, w: Worker, s: Step) {
   const summary = (w.report?.summary ?? "").slice(0, 3000);
   const text = {
     // a later done on the same PR: the branch was pushed again
-    pr: () => t(w.board?.startsWith("done:") ? "pl.prUpdated" : "pl.pr", { pr: w.pr ?? "", summary }),
+    pr: () => t(w.board?.startsWith("done:") ? "pl.prUpdated" : "pl.pr", { pr: prsOf(w).join("\n"), summary }),
+    partial: () => t("pl.prPartial", { pr: prsOf(w).join("\n"), reason: w.pr_error ?? "", summary }),
     nopr: () => t("pl.noPr", { reason: w.pr_error ?? "", summary }),
     blocked: () =>
       manual(b.p)

@@ -46,6 +46,19 @@ export type Worker = {
   review_notes?: string | null;
   /** why a running worker looks stuck (a card nobody answered, no output for a long while), from the backend */
   stalled?: string | null;
+  /** a pipeline worker's repos, each in its own worktree on `branch`, with its PR or why it has none; `repo`,
+   *  `worktree` and `pr` are the first one's. Absent or empty for others and for pipeline workers from before */
+  trees?: WorkerTree[];
+};
+/** One repo of a pipeline worker (orch.rs Tree). */
+export type WorkerTree = {
+  repo: string;
+  worktree: string;
+  start: string;
+  base: string;
+  checks: string;
+  pr: string | null;
+  pr_error: string | null;
 };
 /** The backend's `orch` event: a worker made or changed, or a user turn Relay wrote into a conversation itself. */
 export type OrchEvent = { type: "worker"; worker: Worker } | { type: "sent"; key: string; text: string };

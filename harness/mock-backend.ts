@@ -584,7 +584,9 @@ function handle(cmd: string, a: Args): unknown {
       }
       if (r.op === "team_name") {
         teamMe = { ...teamMe, name: r.name };
-        settings.teams = (settings.teams ?? []).map((x: { fp: string }) => (x.fp === a.fp ? { ...x, name: r.name } : x));
+        settings.teams = (settings.teams ?? []).map((x: { fp: string }) =>
+          x.fp === a.fp ? { ...x, name: r.name } : x,
+        );
         return { name: r.name };
       }
       if (r.op === "team_sso") {
@@ -1175,14 +1177,25 @@ function handle(cmd: string, a: Args): unknown {
     }
     // the board pipeline: a worker on a ticket, a follow-up, its PR (open, nothing new), what it did on the board
     case "orch_dispatch_ticket": {
+      const n = workers.length;
+      const trees = (a.repos as { path: string; checks: string }[]).map(r => ({
+        repo: r.path,
+        worktree: `${r.path}-relay-t${n}`,
+        start: "a1b2c3d",
+        base: a.base || "main",
+        checks: r.checks,
+        pr: null,
+        pr_error: null,
+      }));
       const worker = {
-        key: `c:orch-w-t${workers.length}`,
+        key: `c:orch-w-t${n}`,
         project: a.project,
         title: a.title,
         task: a.task,
-        repo: a.repo,
-        worktree: `${a.repo}-relay-t${workers.length}`,
-        branch: `relay/ticket-t${workers.length}`,
+        repo: trees[0]?.repo ?? null,
+        worktree: trees[0]?.worktree ?? null,
+        branch: `relay/ticket-t${n}`,
+        trees,
         state: "running",
         at: Date.now(),
         ended: null,
@@ -1230,8 +1243,28 @@ function handle(cmd: string, a: Args): unknown {
       setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
       return structuredClone(worker);
     }
-    case "orch_pr":
-      return structuredClone(prStatus);
+    // one status per PR of the worker, as gh reads each
+    case "orch_pr": {
+      const w = workers.find(x => x.key === a.key);
+      const urls = w?.trees?.length ? w.trees.flatMap(t => (t.pr ? [t.pr] : [])) : w?.pr ? [w.pr] : [];
+      return urls.map(url => ({ ...structuredClone(prStatus), url }));
+    }
+    // the checkouts of a project's repos on this Mac (lib.rs pipeline_repos): Northwind Portal's two, and one picked by
+    // hand in place of the one found for its repo
+    case "pipeline_repos": {
+      const found: Record<string, string> =
+        a.project === "Northwind Portal"
+          ? {
+              "acme/northwind-api": "/Users/demo/code/northwind-api",
+              "acme/northwind-infra": "/Users/demo/code/northwind-infra",
+              "acme/northwind-portal": "/Users/demo/code/northwind",
+            }
+          : {};
+      if (a.extra) found[a.extra === "/Users/demo/code/northwind" ? "acme/northwind-portal" : "acme/extra"] = a.extra;
+      return Object.entries(found)
+        .sort()
+        .map(([slug, path]) => ({ slug, path }));
+    }
     case "orch_board": {
       const worker = workers.find(w => w.key === a.key);
       if (worker) worker.board = a.mark;

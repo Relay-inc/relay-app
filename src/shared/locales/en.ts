@@ -288,6 +288,7 @@ const en = {
   "orch.starter3": "Draft this week's status mail per client from the boards",
   "orch.step": "Step {done}/{total}",
   "orch.prInto": "Pull request into {base}",
+  "orch.prIn": "Pull request in {repo}",
   "orch.started": "Started {ago}",
   "orch.ended": "Ended {ago}",
   "orch.model.default": "CLI default",
@@ -385,13 +386,14 @@ const en = {
   "pc.reposHelp": "Their open pull requests show under this project.",
   "pl.title": "Board pipeline",
   "pl.help":
-    "Relay picks tickets from a column of this project's board, an agent builds each in its own worktree, Relay opens the PR and moves the ticket on. Checked every 5 minutes while Relay runs.",
-  "pl.repo": "Checkout",
-  "pl.repoHelp": "The local clone the agents' worktrees are made from.",
+    "Relay picks tickets from a column of this project's board, an agent builds each in a worktree of every repo of the project, Relay opens a PR in each repo it changed and moves the ticket on. Checked every 5 minutes while Relay runs.",
+  "pl.repo": "Other checkout",
+  "pl.repoHelp":
+    "A checkout of a repo not listed under the project, or the one to use for a listed repo instead of the one Relay finds.",
   "pl.repoPh": "Pick a folder",
   "pl.repoPick": "Choose the checkout",
   "pl.base": "Branch",
-  "pl.baseHelp": "Work starts from it and the PR goes to it. Empty: the repository's default branch.",
+  "pl.baseHelp": "Work starts from it in every repo and the PRs go to it. Empty: each repository's default branch.",
   "pl.group": "Columns by",
   "pl.col.pick": "Pick up from",
   "pl.col.pickHelp": "Tickets here get an agent. Put a ticket here when it is clear enough to build.",
@@ -418,7 +420,7 @@ const en = {
   "pl.parallel": "Agents at once",
   "pl.checks": "Checks",
   "pl.checksHelp":
-    "Run in the worktree when the agent says it is done: lint, static analysis, tests. The worktree starts without dependencies, so install them first. Empty: no checks.",
+    "Run in a repo's worktree when the agent says it is done and changed that repo: lint, static analysis, tests. The worktree starts without dependencies, so install them first. Empty: no checks.",
   "pl.review": "Review",
   "pl.reviewHelp":
     "After the checks another agent reviews the diff. Blocking findings go back to the agent, the others go in the PR.",
@@ -462,6 +464,16 @@ const en = {
   "pl.feedback": "Review comments on the PR: the agent is working them in.",
   "pl.merged": "PR merged: {pr}",
   "pl.closed": "PR closed without merging: {pr}",
+  "pl.prPartial":
+    "PRs: {pr}\n\nNot all of the agent's work reached a PR: {reason}. Merge nothing before it has.\n\n{summary}",
+  "pl.noRepos": "no checkout of this project's repos on this Mac, see Settings › Projects",
+  "pl.repoChecks": "Checks for {repo}",
+  "pl.repoOn": "Agents may change {repo}",
+  "pl.reposNone":
+    "No checkout of this project's repos on this Mac: add its GitHub repositories above, or pick a checkout below.",
+  "pl.reposHelp":
+    "The checkouts on this Mac of the project's GitHub repositories. The agent changes the ones a ticket needs, Relay opens a PR in each. Switch one off to keep the agents out of it.",
+  "pl.repos": "Repos",
   "pc.repoCount_one": "{n} repo",
   "pc.repoCount_other": "{n} repos",
   "pi.find": "Find icons",
