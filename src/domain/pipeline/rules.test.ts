@@ -18,6 +18,7 @@ import {
   prsOf,
   ready,
   reposFor,
+  retask,
   review,
   reviewAll,
   stalled,
@@ -207,6 +208,32 @@ test("picturesOf: the ticket's and its comments' pictures; withPictures: their p
   ]);
   assert.equal(withPictures("brief", []), "brief");
   assert.match(withPictures("brief", ["/tmp/a.png"]), /^brief\n\n.*Read.*\n- \/tmp\/a\.png$/);
+});
+
+test("retask: the ticket as it reads now only when it changed since the worker started", () => {
+  const v = (description: string, later = false) =>
+    ({
+      title: "Orchard",
+      number: "7",
+      url: "https://t/7",
+      description,
+      feed: [
+        { at: at(50), who: "Ann", html: "<p>north side first</p>", change: "", files: [] },
+        ...(later ? [{ at: at(150), who: "Acme", html: "<p>PR opened, all done</p>", change: "", files: [] }] : []),
+      ],
+      files: [],
+    }) as unknown as CardView;
+  const task = withPictures(briefOf(v("<p>Plant the apple trees</p>")), ["/tmp/a.png"]);
+  assert.equal(retask(task, v("<p>Plant the apple trees</p>"), 100), null, "unchanged: the task stays");
+  assert.equal(
+    retask(task, v("<p>Plant the apple trees</p>", true), 100),
+    null,
+    "a comment since the start is no change",
+  );
+  const b = retask(task, v("<p>Plant the pear trees</p>", true), 100);
+  assert.ok(b?.includes("Plant the pear trees") && b.includes("north side first"), b ?? "");
+  assert.ok(!b.includes("all done") && b.endsWith("- /tmp/a.png"), "later comments stay out, the pictures stay in");
+  assert.equal(retask(b, v("<p>Plant the pear trees</p>", true), 100), null, "a replaced task is stable");
 });
 
 test("hand-picked: no pick column needed; the board's pipeline; what the ticket window offers", () => {

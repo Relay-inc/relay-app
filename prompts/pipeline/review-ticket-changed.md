@@ -1,0 +1,1 @@
+The ticket changed since the agent started: the text above is the ticket as it reads now, and the agent got the change as a message along the way. Judge the change against this text, not against what the ticket said before: a part that follows the new text is no deviation.

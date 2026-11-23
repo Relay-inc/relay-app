@@ -95,6 +95,9 @@ pub struct Worker {
     /// Such a worker reports to Relay, not to the coordinator, and on `done` Relay pushes its branch and opens the PR.
     #[serde(default)]
     pub ticket: Option<Value>,
+    /// the ticket changed since it started and `task` is the ticket as it read when it was sent the change (see retask)
+    #[serde(default)]
+    pub ticket_changed: bool,
     /// the branch its PR goes to
     #[serde(default)]
     pub base_branch: Option<String>,
@@ -430,6 +433,7 @@ const REVIEW_EARLIER_ROUND: &str = prompt::text(include_str!("../../prompts/pipe
 const REVIEW_SINCE: &str = prompt::text(include_str!("../../prompts/pipeline/review-since.md"));
 const REVIEW_CHECKED: &str = prompt::text(include_str!("../../prompts/pipeline/review-checked.md"));
 const REVIEW_OTHER_REPOS: &str = prompt::text(include_str!("../../prompts/pipeline/review-other-repos.md"));
+const REVIEW_TICKET_CHANGED: &str = prompt::text(include_str!("../../prompts/pipeline/review-ticket-changed.md"));
 const REVIEW_MAX: usize = 40_000;
 /// The ticket's text in the review prompt, its start.
 const TICKET_MAX: usize = 8_000;
@@ -595,13 +599,14 @@ fn write_text(head: &str, claims: &str, diff: &str) -> (String, bool) {
     let shown: String = diff.chars().take(room).collect();
     (format!("{head}{claims}\n\nThe diff{}:\n{}", if cut { " (cut: only its start fits)" } else { "" }, prompt::untrusted("diff", &shown)), cut)
 }
-/// The review's brief around the diff. Before it: the ticket as the worker got it (the review judges the change
-/// against what was asked, not only as code). After it, so the reviewer forms its own view first: what the agent says
-/// it did, and the round that sent the work back, whose findings are checked first so a later round does not judge a
-/// moving target from scratch.
+/// The review's brief around the diff. Before it: the ticket as the worker got it, or as it reads now when it changed
+/// since (see retask), so the review judges the change against what is asked, not only as code. After it, so the
+/// reviewer forms its own view first: what the agent says it did, and the round that sent the work back, whose
+/// findings are checked first so a later round does not judge a moving target from scratch.
 fn review_head(w: &Worker, start: &str, last: Option<&LastReview>, others: &[&str]) -> (String, String) {
     let t = |k: &str| w.ticket.as_ref().and_then(|x| x[k].as_str()).unwrap_or("").to_string();
     let mut head = format!("{}\n\n", prompt::fill(REVIEW_BRIEF, &[("number", &t("number")), ("title", &t("title")), ("task", &prompt::untrusted("ticket", &head_cut(&w.task, TICKET_MAX))), ("start", start)]));
+    if w.ticket_changed { head += &format!("{REVIEW_TICKET_CHANGED}\n\n"); }
     if !others.is_empty() { head += &format!("{}\n\n", prompt::fill(REVIEW_OTHER_REPOS, &[("repos", &others.join(", "))])); }
     let mut claims = prompt::fill(REVIEW_CLAIMS, &[("summary", &prompt::untrusted("agent_claims", w.report.as_ref().map(|r| r.summary.as_str()).unwrap_or("")))]);
     if let Some(last) = last.filter(|l| !l.blocking.is_empty()) {
@@ -897,6 +902,11 @@ pub fn ask_report(app: &AppHandle, worker: &str) -> Result<(), String> {
 pub fn restart(app: &AppHandle, worker: &str) -> Result<Worker, String> {
     let w = load(app).into_iter().find(|w| w.key == worker).ok_or_else(|| format!("no worker {worker}"))?;
     start(app, Some(w.title), Some(w.task), w.project, w.repo, Some(w.model).filter(|m| !m.is_empty()), None)
+}
+/// A pipeline worker's ticket changed since it started: the ticket as it reads now becomes its task, which its review
+/// judges the work against from then on.
+pub fn retask(app: &AppHandle, worker: &str, task: String) -> Result<(), String> {
+    update(app, worker, |w| if w.task != task { w.task = task; w.ticket_changed = true; }).map(|_| ()).ok_or_else(|| format!("no worker {worker}"))
 }
 /// The pipeline's follow-up for one of its workers (moved back on the board, review comments on its PR).
 pub fn pipe_message(app: &AppHandle, worker: &str, t: &str) -> Result<(), String> {
@@ -1269,6 +1279,17 @@ mod tests {
     }
 
     #[test]
+    fn review_judges_against_the_ticket_as_it_reads_now() {
+        let mut w = Worker { task: "Plant the apple trees".into(), ticket: Some(json!({"number": "7", "title": "Orchard"})), ..Default::default() };
+        let (head, _) = review_head(&w, "abc", None, &[]);
+        assert!(head.contains("Plant the apple trees") && !head.contains("changed since"), "an unchanged ticket: as the agent got it");
+        w.task = "Plant the pear trees".into();
+        w.ticket_changed = true;
+        let (head, _) = review_head(&w, "abc", None, &[]);
+        assert!(head.contains("Plant the pear trees") && !head.contains("apple") && head.contains("changed since the agent started"), "{head}");
+    }
+
+    #[test]
     fn review_findings() {
         let f = findings("Here:\n```json\n{\"findings\": [{\"file\": \"a.ts\", \"line\": 3, \"blocking\": true, \"text\": \"null deref\"}, {\"file\": \"b.ts\", \"blocking\": false, \"text\": \"naming\"}], \"checked\": [\"c.ts:4: the guard covers empty carts\"]}\n```").unwrap();
         assert_eq!(f, Findings { blocking: vec!["- a.ts:3: null deref".into()], minor: vec!["- b.ts: naming".into()], checked: vec!["- c.ts:4: the guard covers empty carts".into()] });
@@ -1396,12 +1417,12 @@ mod tests {
             assert!(!o.system.unwrap().contains("{{"), "{key}");
         }
         let mut w = Worker { ticket: Some(json!({"number": "#5", "title": "T"})), task: "task".into(), ..Default::default() };
-        let mut heads = vec![review_head(&w, "abc", None, &["frontend"])];
+        let mut heads = vec![review_head(&w, "abc", None, &["frontend"]), review_head(&Worker { ticket_changed: true, ..w.clone() }, "abc", None, &[])];
         for (head, checked) in [("", vec![]), ("def", vec!["- a:1: ok".to_string()])] {
             w.last_review = Some(LastReview { head: head.into(), blocking: vec!["- x:1: bad".into()], checked });
             heads.push(review_head(&w, "abc", w.last_review.as_ref(), &[]));
         }
-        assert!(heads[2].1.contains("git diff def HEAD") && heads[2].1.contains("- a:1: ok") && !heads[1].1.contains("since"));
+        assert!(heads[3].1.contains("git diff def HEAD") && heads[3].1.contains("- a:1: ok") && !heads[2].1.contains("since"));
         for (head, claims) in heads { assert!(!head.contains("{{") && !claims.contains("{{")); }
         assert!(!review_prompt().contains("{{") && prompt::fill(PIPE_RULES, &[("untrusted", "x")]).contains(" x "));
         for fixed in [PLAN_RULE, SKILL_REVIEW_RULE, crate::CAPTURE_PROMPT, agent_core::envelope::HINT] { assert!(!fixed.contains("{{") && !fixed.ends_with('\n')); }

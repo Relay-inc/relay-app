@@ -189,11 +189,20 @@ export const picturesOf = (v: CardView): [string, string][] =>
     .filter(f => f.url && /\.(png|jpe?g|gif|webp)$/i.test(f.name))
     .map(f => [f.name, f.url]);
 
+const PICTURES = "\n\nThe ticket's pictures, saved on this Mac (open them with Read):\n";
 /** The brief with where the ticket's pictures were saved: the agent cannot open the tracker's links. */
 export const withPictures = (brief: string, paths: string[]) =>
-  paths.length
-    ? `${brief}\n\nThe ticket's pictures, saved on this Mac (open them with Read):\n${paths.map(p => `- ${p}`).join("\n")}`
-    : brief;
+  paths.length ? `${brief}${PICTURES}${paths.map(p => `- ${p}`).join("\n")}` : brief;
+
+/** The ticket as it reads now, for a worker that started on `task` at `since`: null when nothing changed. Only the
+ *  comments from before the start count, as at the start: the later ones are the conversation with the worker
+ *  (Relay's own comments with the agent's summary among them), which it gets as news and the review must not read as
+ *  what was asked. The pictures saved at the start stay. */
+export function retask(task: string, v: CardView, since: number) {
+  const at = task.lastIndexOf(PICTURES);
+  const now = briefOf({ ...v, feed: v.feed.filter(f => Date.parse(f.at) <= since) }) + (at < 0 ? "" : task.slice(at));
+  return now === task ? null : now;
+}
 
 /** Before a ticket from the pick column gets a worker: one call without tools judges whether an agent can build it
  *  without asking anyone, so an unclear ticket goes back with questions instead of costing a whole run. */

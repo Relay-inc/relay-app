@@ -464,7 +464,9 @@ export const orchDispatchTicket = (a: {
   plan: boolean;
   skill: string;
 }) => invoke<Worker>("orch_dispatch_ticket", a);
-export const orchMessage = (key: string, text: string) => invoke<void>("orch_message", { key, text });
+/** `task`: the worker's brief from now on, for a ticket that changed since it started (its review judges against it) */
+export const orchMessage = (key: string, text: string, task: string | null = null) =>
+  invoke<void>("orch_message", { key, text, task });
 export const orchAnswer = (key: string, answer: string) => invoke<Worker | null>("orch_answer", { key, answer });
 export const orchAskReport = (key: string) => invoke<void>("orch_ask_report", { key });
 export const orchRestart = (key: string) => invoke<Worker>("orch_restart", { key });

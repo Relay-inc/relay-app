@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Fixed
+
+- A board pipeline ticket whose description changed before it went back to its agent (moved back to the pick column, or review comments on its PR) is now reviewed against the ticket as it reads then, not as it read at the start: the review no longer sends work back as off-ticket for following the new text.
+
 ## [0.0.59] - 2026-11-23
 
 ### Changed
