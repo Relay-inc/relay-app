@@ -292,6 +292,7 @@ export default {
   "orch.starter3": "Rédigez le mail d'état de la semaine par client à partir des tableaux",
   "orch.step": "Étape {done}/{total}",
   "orch.prInto": "Pull request vers {base}",
+  "orch.prIn": "Pull request dans {repo}",
   "orch.started": "Lancé {ago}",
   "orch.ended": "Terminé {ago}",
   "orch.model.default": "Défaut de la CLI",
@@ -393,13 +394,15 @@ export default {
   "pc.reposHelp": "Leurs pull requests ouvertes apparaissent sous ce projet.",
   "pl.title": "Pipeline du tableau",
   "pl.help":
-    "Relay prend les tickets d'une colonne du tableau de ce projet, un agent construit chacun dans son propre worktree, Relay ouvre la PR et fait avancer le ticket. Vérifié toutes les 5 minutes tant que Relay tourne.",
-  "pl.repo": "Checkout",
-  "pl.repoHelp": "Le clone local d'où sont créés les worktrees des agents.",
+    "Relay prend les tickets d'une colonne du tableau de ce projet, un agent construit chacun dans un worktree de chaque dépôt du projet, Relay ouvre une PR dans chaque dépôt modifié et fait avancer le ticket. Vérifié toutes les 5 minutes tant que Relay tourne.",
+  "pl.repo": "Autre checkout",
+  "pl.repoHelp":
+    "Le checkout d'un dépôt qui n'est pas lié au projet, ou celui à utiliser pour un dépôt à la place de celui que Relay trouve.",
   "pl.repoPh": "Choisir un dossier",
   "pl.repoPick": "Choisir le checkout",
   "pl.base": "Branche",
-  "pl.baseHelp": "Le travail part d'elle et la PR va vers elle. Vide : la branche par défaut du dépôt.",
+  "pl.baseHelp":
+    "Le travail part d'elle dans chaque dépôt et les PR vont vers elle. Vide : la branche par défaut de chaque dépôt.",
   "pl.group": "Colonnes par",
   "pl.col.pick": "Prendre dans",
   "pl.col.pickHelp":
@@ -427,7 +430,7 @@ export default {
   "pl.parallel": "Agents en même temps",
   "pl.checks": "Vérifications",
   "pl.checksHelp":
-    "Lancées dans le worktree quand l'agent dit avoir fini : lint, analyse statique, tests. Le worktree démarre sans dépendances, installez-les d'abord. Vide : aucune vérification.",
+    "Lancées dans le worktree d'un dépôt quand l'agent dit avoir fini et a modifié ce dépôt : lint, analyse statique, tests. Le worktree démarre sans dépendances, installez-les d'abord. Vide : aucune vérification.",
   "pl.review": "Revue",
   "pl.reviewHelp":
     "Après les vérifications, un autre agent relit le diff. Les points bloquants retournent à l'agent, les autres vont dans la PR.",
@@ -474,6 +477,16 @@ export default {
   "pl.feedback": "Commentaires de revue sur la PR : l'agent les intègre.",
   "pl.merged": "PR mergée : {pr}",
   "pl.closed": "PR fermée sans merge : {pr}",
+  "pl.prPartial":
+    "PR : {pr}\n\nTout le travail de l'agent n'est pas dans une PR : {reason}. Ne mergez rien avant qu'il y soit.\n\n{summary}",
+  "pl.noRepos": "aucun checkout des dépôts de ce projet sur ce Mac, voir Réglages › Projets",
+  "pl.repoChecks": "Vérifications pour {repo}",
+  "pl.repoOn": "Les agents peuvent modifier {repo}",
+  "pl.reposNone":
+    "Aucun checkout des dépôts de ce projet sur ce Mac : ajoutez ses dépôts GitHub ci-dessus, ou choisissez un checkout ci-dessous.",
+  "pl.reposHelp":
+    "Les checkouts sur ce Mac des dépôts GitHub du projet. L'agent modifie ceux dont un ticket a besoin, Relay ouvre une PR dans chacun. Désactivez-en un pour en tenir les agents à l'écart.",
+  "pl.repos": "Dépôts",
   "pc.repoCount_one": "{n} dépôt",
   "pc.repoCount_other": "{n} dépôts",
   "pi.find": "Chercher les icônes",

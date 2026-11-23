@@ -2,7 +2,7 @@ import type { BoardRef, Card, CardView } from "../board/types";
 import type { Worker } from "../orchestrator/types";
 import type { Limits } from "../agents/types";
 import type { ProvLimits } from "../usage/types";
-import type { Pipeline, PrStatus, Step, Ticket } from "./types";
+import type { Pipeline, PipelineRepo, PrStatus, Step, Ticket } from "./types";
 import { fill, prompts, untrustedNote } from "../../shared/prompts.ts";
 
 export const EMPTY_PIPELINE: Pipeline = {
@@ -22,9 +22,22 @@ export const EMPTY_PIPELINE: Pipeline = {
 /** You start each ticket yourself, nothing is picked up from a column. */
 export const manual = (p: Pipeline) => p.mode === "manual";
 
-/** Switched on and every field it cannot run without filled in (the pick column only when it picks by itself). */
+/** Switched on and every column it cannot run without filled in (the pick column only when it picks by itself). The
+ *  repos are found when it runs (see reposFor). */
 export const ready = (p: Pipeline | undefined): p is Pipeline =>
-  !!p?.on && !!p.repo && (manual(p) || !!p.pick) && !!p.busy && !!p.review && !!p.input;
+  !!p?.on && (manual(p) || !!p.pick) && !!p.busy && !!p.review && !!p.input;
+
+/** A repo's checks: its own, else the pipeline's one command from before for the one checkout it had. */
+export const checksOf = (p: Pipeline, r: PipelineRepo) =>
+  (p.repos?.[r.slug]?.checks ?? (r.path === p.repo ? p.checks : "") ?? "").trim();
+
+/** The repos a worker gets, of the checkouts found for the project: the ones not left out, each with its checks. */
+export const reposFor = (found: PipelineRepo[], p: Pipeline) =>
+  found.filter(r => !p.repos?.[r.slug]?.off).map(r => ({ path: r.path, checks: checksOf(p, r) }));
+
+/** A worker's PRs, one per repo it opened one in. */
+export const prsOf = (w: Pick<Worker, "pr" | "trees">) =>
+  w.trees?.length ? w.trees.flatMap(t => (t.pr ? [t.pr] : [])) : w.pr ? [w.pr] : [];
 
 /** The vault project whose ready pipeline runs on this board, if any. */
 export function pipelineAt(
@@ -77,23 +90,42 @@ export function step(w: Worker): Step | null {
   if (!ticketOf(w) || w.state === "running" || !w.ended || w.board === "merged" || w.board === "closed") return null;
   const mark = `${w.state}:${w.ended}`;
   if (w.board === mark) return null;
-  if (w.state === "done") return w.pr ? { mark, to: "review", kind: "pr" } : { mark, to: "input", kind: "nopr" };
+  // a repo it changed without a PR: a person first, half of a change is not for review
+  if (w.state === "done")
+    return !prsOf(w).length
+      ? { mark, to: "input", kind: "nopr" }
+      : w.pr_error
+        ? { mark, to: "input", kind: "partial" }
+        : { mark, to: "review", kind: "pr" };
   if (w.state === "blocked") return { mark, to: "input", kind: "blocked" };
   return { mark, to: "input", kind: "failed" };
 }
 
-/** A worker whose PR waits for review: its done was put on the board, nothing came after. */
-export const inReview = (w: Worker) => !!w.pr && w.state === "done" && w.board === `done:${w.ended}`;
+/** A worker whose PRs wait for review: its done was put on the board, nothing came after. */
+export const inReview = (w: Worker) =>
+  !!prsOf(w).length && !w.pr_error && w.state === "done" && w.board === `done:${w.ended}`;
 
 const bot = (login: string | undefined) => !login || login.endsWith("[bot]") || login.toLowerCase().includes("copilot");
 const after = (iso: string, since: number) => Date.parse(iso) > since;
 
+type Review = { kind: "merged" } | { kind: "closed" } | { kind: "feedback"; text: string } | null;
+
+/** What happened to a worker's PRs in review: merged once every one is, closed once one is (a ticket over several
+ *  repos goes back to a person), else what people wrote on any of them as the next brief, each under its PR. */
+export function reviewAll(prs: PrStatus[], since: number): Review {
+  const each = prs.map(pr => ({ url: pr.url, r: review(pr, since) }));
+  if (!each.length) return null;
+  if (each.every(x => x.r?.kind === "merged")) return { kind: "merged" };
+  if (each.some(x => x.r?.kind === "closed")) return { kind: "closed" };
+  const said = each.flatMap(x =>
+    x.r?.kind === "feedback" ? [prs.length > 1 ? `On ${x.url}:\n${x.r.text}` : x.r.text] : [],
+  );
+  return said.length ? { kind: "feedback", text: said.join("\n\n") } : null;
+}
+
 /** What happened to a PR in review: merged, closed, or what people wrote on it since the worker's run ended (reviews
  *  that are not an approval, comments, line comments; bots left out, they would start a loop) as the next brief. */
-export function review(
-  pr: PrStatus,
-  since: number,
-): { kind: "merged" } | { kind: "closed" } | { kind: "feedback"; text: string } | null {
+export function review(pr: PrStatus, since: number): Review {
   if (pr.state === "MERGED") return { kind: "merged" };
   if (pr.state === "CLOSED") return { kind: "closed" };
   const reviews = pr.reviews.filter(
@@ -191,7 +223,9 @@ export function preflightOf(answer: string): { clear: true } | { clear: false; q
  *  taking new tickets. A plan sent for approval and a run you stopped are not misses. */
 export const MISSES = 3;
 const missed = (w: Worker) =>
-  w.state === "done" ? !w.pr : w.state !== "stopped" && !w.report?.questions?.startsWith("Plan for approval:");
+  w.state === "done"
+    ? !prsOf(w).length
+    : w.state !== "stopped" && !w.report?.questions?.startsWith("Plan for approval:");
 
 /** The pipeline's last MISSES ended runs all missed: something is off (the tickets, the repo, the checks) and new
  *  tickets would only fail the same way. A run that opens a PR, a ticket moved back or one you start yourself goes on. */

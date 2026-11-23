@@ -290,6 +290,7 @@ export default {
   "orch.starter3": "Stel per klant de statusmail van deze week op uit de borden",
   "orch.step": "Stap {done}/{total}",
   "orch.prInto": "Pull request naar {base}",
+  "orch.prIn": "Pull request in {repo}",
   "orch.started": "Gestart {ago}",
   "orch.ended": "Gestopt {ago}",
   "orch.model.default": "CLI-standaard",
@@ -389,13 +390,15 @@ export default {
   "pc.reposHelp": "Hun open pull requests verschijnen onder dit project.",
   "pl.title": "Bordpipeline",
   "pl.help":
-    "Relay neemt tickets uit een kolom van het bord van dit project, een agent bouwt elk in een eigen worktree, Relay opent de PR en schuift het ticket door. Elke 5 minuten nagekeken zolang Relay draait.",
-  "pl.repo": "Checkout",
-  "pl.repoHelp": "De lokale clone waarvan de worktrees van de agents gemaakt worden.",
+    "Relay neemt tickets uit een kolom van het bord van dit project, een agent bouwt elk in een worktree van elke repo van het project, Relay opent een PR in elke repo die hij wijzigde en schuift het ticket door. Elke 5 minuten nagekeken zolang Relay draait.",
+  "pl.repo": "Andere checkout",
+  "pl.repoHelp":
+    "Een checkout van een repo die niet bij het project staat, of die Relay moet gebruiken voor een repo in plaats van degene die het vindt.",
   "pl.repoPh": "Kies een map",
   "pl.repoPick": "Kies de checkout",
   "pl.base": "Branch",
-  "pl.baseHelp": "Het werk vertrekt ervan en de PR gaat ernaar. Leeg: de standaardbranch van de repository.",
+  "pl.baseHelp":
+    "Het werk vertrekt ervan in elke repo en de PR's gaan ernaar. Leeg: de standaardbranch van elke repository.",
   "pl.group": "Kolommen volgens",
   "pl.col.pick": "Oppikken uit",
   "pl.col.pickHelp": "Tickets hier krijgen een agent. Zet een ticket hier als het duidelijk genoeg is om te bouwen.",
@@ -422,7 +425,7 @@ export default {
   "pl.parallel": "Agents tegelijk",
   "pl.checks": "Checks",
   "pl.checksHelp":
-    "Draait in de worktree zodra de agent zegt dat hij klaar is: lint, statische analyse, tests. De worktree start zonder dependencies, installeer die dus eerst. Leeg: geen checks.",
+    "Draait in de worktree van een repo zodra de agent zegt dat hij klaar is en die repo wijzigde: lint, statische analyse, tests. De worktree start zonder dependencies, installeer die dus eerst. Leeg: geen checks.",
   "pl.review": "Review",
   "pl.reviewHelp":
     "Na de checks reviewt een andere agent de diff. Blokkerende bevindingen gaan terug naar de agent, de rest komt in de PR.",
@@ -467,6 +470,16 @@ export default {
   "pl.feedback": "Reviewcommentaar op de PR: de agent werkt het in.",
   "pl.merged": "PR gemerged: {pr}",
   "pl.closed": "PR gesloten zonder merge: {pr}",
+  "pl.prPartial":
+    "PR's: {pr}\n\nNiet al het werk van de agent zit in een PR: {reason}. Merge niets voor het er is.\n\n{summary}",
+  "pl.noRepos": "geen checkout van de repo's van dit project op deze Mac, kijk Instellingen › Projecten na",
+  "pl.repoChecks": "Checks voor {repo}",
+  "pl.repoOn": "Agents mogen {repo} wijzigen",
+  "pl.reposNone":
+    "Geen checkout van de repo's van dit project op deze Mac: voeg de GitHub-repositories hierboven toe, of kies hieronder een checkout.",
+  "pl.reposHelp":
+    "De checkouts op deze Mac van de GitHub-repositories van het project. De agent wijzigt de repo's die een ticket nodig heeft, Relay opent in elk een PR. Zet er een uit om de agents eruit te houden.",
+  "pl.repos": "Repo's",
   "pc.repoCount_one": "{n} repo",
   "pc.repoCount_other": "{n} repo's",
   "pi.find": "Iconen zoeken",

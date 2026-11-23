@@ -53,10 +53,34 @@ const running: Worker = {
   model: "opus",
   step: { done: 2, total: 5, note: "Writing the redirect test" },
   decisions: [
-    { at: NOW - 92 * MIN, decision: "Fix the cookie domain, not the redirect loop guard", why: "The loop only happens when the session cookie is set for the wrong host; a guard would hide it", evidence: "src/auth/session.ts:41", result: "open" },
-    { at: NOW - 70 * MIN, decision: "Reproduce with a failing test first", why: "No test covers the SSO callback, so the fix needs one to stay fixed", evidence: "tests/auth/redirect.test.ts", result: "fails as expected" },
-    { at: NOW - 41 * MIN, decision: "Set the cookie domain from the request host", why: "A fixed domain breaks the staging host; the config value is only a fallback", evidence: "a1b2c3d", result: "tests green" },
-    { at: NOW - 18 * MIN, decision: "Reverted the shared-config change", why: "It moved the default for every environment, more than the ticket asks", evidence: "e4f5a6b", result: "reverted" },
+    {
+      at: NOW - 92 * MIN,
+      decision: "Fix the cookie domain, not the redirect loop guard",
+      why: "The loop only happens when the session cookie is set for the wrong host; a guard would hide it",
+      evidence: "src/auth/session.ts:41",
+      result: "open",
+    },
+    {
+      at: NOW - 70 * MIN,
+      decision: "Reproduce with a failing test first",
+      why: "No test covers the SSO callback, so the fix needs one to stay fixed",
+      evidence: "tests/auth/redirect.test.ts",
+      result: "fails as expected",
+    },
+    {
+      at: NOW - 41 * MIN,
+      decision: "Set the cookie domain from the request host",
+      why: "A fixed domain breaks the staging host; the config value is only a fallback",
+      evidence: "a1b2c3d",
+      result: "tests green",
+    },
+    {
+      at: NOW - 18 * MIN,
+      decision: "Reverted the shared-config change",
+      why: "It moved the default for every environment, more than the ticket asks",
+      evidence: "e4f5a6b",
+      result: "reverted",
+    },
   ],
 };
 const done: Worker = {
@@ -99,7 +123,7 @@ const silent: Worker = {
   ended: NOW - 80 * MIN,
   report: null,
 };
-// a board pipeline's worker: picked from the board, its PR opened by Relay
+// a board pipeline's worker: picked from the board, a ticket over the project's two repos, a PR opened by Relay in each
 const ticketed: Worker = {
   key: "c:orch-w-d4",
   project: "Northwind Portal",
@@ -116,11 +140,12 @@ const ticketed: Worker = {
     summary:
       "Invoices export as CSV from the list's menu, one row per invoice line. Tests for the empty list and for amounts in another currency.",
     questions: null,
-    diff: " src/Invoice/CsvExport.php | 61 ++++++++++\n tests/Invoice/CsvExportTest.php | 48 +++++++++\n 2 files changed, 109 insertions(+)",
+    diff: "northwind-api:\n src/Invoice/CsvExport.php | 61 ++++++++++\n tests/Invoice/CsvExportTest.php | 48 +++++++++\n 2 files changed, 109 insertions(+)\n\nnorthwind:\n src/invoices/ExportMenu.tsx | 14 ++++\n 1 file changed, 14 insertions(+)",
     flags: [],
     files: [
-      ["src/Invoice/CsvExport.php", 61, 0],
-      ["tests/Invoice/CsvExportTest.php", 48, 0],
+      ["northwind-api/src/Invoice/CsvExport.php", 61, 0],
+      ["northwind-api/tests/Invoice/CsvExportTest.php", 48, 0],
+      ["northwind/src/invoices/ExportMenu.tsx", 14, 0],
     ],
   },
   ticket: {
@@ -136,6 +161,26 @@ const ticketed: Worker = {
   base_branch: "develop",
   pr: "https://github.com/acme/northwind/pull/88",
   board: `done:${NOW - 35 * MIN}`,
+  trees: [
+    {
+      repo: "/Users/demo/code/northwind",
+      worktree: "/Users/demo/code/northwind-relay-d4",
+      start: "a1b2c3d",
+      base: "develop",
+      checks: "pnpm install && pnpm test",
+      pr: "https://github.com/acme/northwind/pull/88",
+      pr_error: null,
+    },
+    {
+      repo: "/Users/demo/code/northwind-api",
+      worktree: "/Users/demo/code/northwind-api-relay-d4",
+      start: "e4f5a6b",
+      base: "develop",
+      checks: "composer install -q && vendor/bin/phpunit",
+      pr: "https://github.com/acme/northwind-api/pull/31",
+      pr_error: null,
+    },
+  ],
 };
 export const workers: Worker[] = [running, done, silent, ticketed];
 

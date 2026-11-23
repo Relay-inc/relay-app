@@ -1,6 +1,6 @@
 import type { Column } from "../../domain/board/types";
 import { EMPTY_PIPELINE } from "../../domain/pipeline/rules";
-import type { Pipeline } from "../../domain/pipeline/types";
+import type { Pipeline, PipelineRepo } from "../../domain/pipeline/types";
 import * as backend from "../../infrastructure/backend";
 import { provider as providerOf } from "../../shared/plugins";
 import { ctxOf } from "../board/ctx";
@@ -20,7 +20,17 @@ export function setPipeline(project: string, patch: Partial<Pipeline>) {
   return save(next);
 }
 
-/** The checkout, picked in a folder dialog. */
+/** One repo of the project in the pipeline: switched off, or its checks. */
+export function setPipelineRepo(project: string, slug: string, patch: { off?: boolean; checks?: string }) {
+  const p = pipelineOf(project);
+  return setPipeline(project, { repos: { ...p.repos, [slug]: { ...p.repos?.[slug], ...patch } } });
+}
+
+/** The checkouts on this Mac of the project's repos, with the one picked by hand. */
+export const pipelineRepos = (project: string, extra: string): Promise<PipelineRepo[]> =>
+  backend.pipelineRepos(project, extra);
+
+/** A checkout beyond the project's repos, picked in a folder dialog. */
 export async function pickPipelineRepo(project: string) {
   const folder = await backend.pickFolder();
   if (folder) await setPipeline(project, { repo: folder });

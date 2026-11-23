@@ -1136,6 +1136,15 @@ const VIEWS = {
     await waitText("Website");
   },
   "settings-integration-github-projects": () => settingsPage("Integrations", "GitHub Projects", "ghprojects"),
+  // a project's board pipeline in Settings › Projects: its repos found on this Mac, each with its checks or switched off
+  "settings-project-pipeline": async () => {
+    await page.setViewportSize({ width: 900, height: 1700 });
+    await open(page, server.url, { path: "/settings.html", fixture: "pipeline-label" });
+    await click("Projects");
+    await unfold("Northwind Portal");
+    await waitText("acme/northwind-api");
+    await intoView("Board pipeline");
+  },
   // a project's Buddy pipelines in its title bar, the menu open: failed, running and passed, each with its last run (PR buddy)
   "buddy-menu": async () => {
     await open(page, server.url, { fixture: "buddy", sel: keys.switchTo });
@@ -1737,6 +1746,12 @@ const VIEWS = {
     await VIEWS.orchestrator();
     await intoView("Export invoices as CSV");
   },
+  // its page: a ticket over two repos, a pull request in each
+  "orchestrator-pipeline-worker": async () => {
+    await VIEWS.orchestrator();
+    await page.locator(".relay-drawer").getByText("Export invoices as CSV", { exact: true }).click();
+    await waitText("Pull request in northwind-api");
+  },
   "orchestrator-live": async () => {
     await VIEWS.orchestrator();
     await page.evaluate(() => window.__harness.orchLive());
@@ -2066,7 +2081,11 @@ const VIEWS = {
   "servers-add-org-connect": async () => {
     await VIEWS["servers-add-org-install"]();
     await button("I have the link").click();
-    await page.getByLabel("Link to the team server").fill(`relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`);
+    await page
+      .getByLabel("Link to the team server")
+      .fill(
+        `relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`,
+      );
     await page.getByText("When it does not connect").click();
     await waitText("Certificate does not match");
     await button("Check this server").click();
@@ -2078,7 +2097,11 @@ const VIEWS = {
     await VIEWS["servers-add"]();
     await page.getByRole("radio", { name: /Join a server someone else runs/ }).click();
     await button("Continue").click();
-    await page.getByLabel("Invite or pairing line").fill(`relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`);
+    await page
+      .getByLabel("Invite or pairing line")
+      .fill(
+        `relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`,
+      );
     await waitText("Invite to an organisation");
     await settle(page);
   },
@@ -2096,7 +2119,11 @@ const VIEWS = {
     await button("Add a server").last().click();
     await page.getByRole("radio", { name: /Join a server someone else runs/ }).click();
     await button("Continue").click();
-    await page.getByLabel("Invite or pairing line").fill(`relay://relay.example.net:47800#team&fp=${"9c1d".padEnd(64, "e")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`);
+    await page
+      .getByLabel("Invite or pairing line")
+      .fill(
+        `relay://relay.example.net:47800#team&fp=${"9c1d".padEnd(64, "e")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`,
+      );
     await button("Check this server").click();
     await waitText("is also called Bluebird Studio");
     await settle(page);

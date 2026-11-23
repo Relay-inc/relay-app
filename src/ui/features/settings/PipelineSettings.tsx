@@ -1,13 +1,20 @@
 import { useEffect, useState } from "react";
 import type { Column } from "../../../domain/board/types";
-import { EMPTY_PIPELINE } from "../../../domain/pipeline/rules";
-import type { Pipeline } from "../../../domain/pipeline/types";
+import { checksOf, EMPTY_PIPELINE } from "../../../domain/pipeline/rules";
+import type { Pipeline, PipelineRepo } from "../../../domain/pipeline/types";
 import { useSettingsStore } from "../../../application/settings/store";
-import { pickPipelineRepo, pipelineColumns, setPipeline } from "../../../application/settings/pipeline";
+import {
+  pickPipelineRepo,
+  pipelineColumns,
+  pipelineRepos,
+  setPipeline,
+  setPipelineRepo,
+} from "../../../application/settings/pipeline";
+import { Icon } from "../../components/Icon";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
 import { ChangeInput } from "./ChangeInput";
-import { ERROR_MESSAGE, FIELD, SELECT } from "./blocks";
+import { BUTTON_GLYPH, buttonClass, EMPTY_LIST, ERROR_MESSAGE, FIELD, SELECT } from "./blocks";
 import { Field } from "./Field";
 import { PathField } from "./PathField";
 import { Segmented } from "./Segmented";
@@ -16,8 +23,9 @@ import { Switch } from "./Switch";
 type Cols = { groupings: { id: string; label: string }[]; group: string; columns: Column[] };
 const COLUMNS = ["pick", "busy", "review", "input", "merged"] as const;
 
-/** A project's board pipeline, in its folded-open row when a board is linked: the checkout and branch, the board's
- *  columns it moves tickets through, a label to pick on, how many run at once, and the switch. */
+/** A project's board pipeline, in its folded-open row when a board is linked: the project's repos it builds in (each
+ *  with its checks, or switched off) and a checkout picked by hand, the branch, the board's columns it moves tickets
+ *  through, a label to pick on, how many run at once, and the switch. */
 export function PipelineSettings({ name }: { name: string }) {
   const { t, any } = useT();
   const stored = useSettingsStore(s => s.settings.pipelines?.[name]);
@@ -27,10 +35,15 @@ export function PipelineSettings({ name }: { name: string }) {
   const clients = useSettingsStore(s => s.settings.boards?.[name]?.provider === "productive");
   const [cols, setCols] = useState<Cols | null>(null);
   const [err, setErr] = useState("");
+  const [repos, setRepos] = useState<PipelineRepo[] | null>(null);
   useEffect(() => {
     if (!linked) return;
     pipelineColumns(name, p.group).then(setCols, e => setErr(String(e?.message ?? e)));
   }, [name, p.group, linked]);
+  useEffect(() => {
+    if (!linked) return;
+    pipelineRepos(name, p.repo).then(setRepos, e => setErr(String(e?.message ?? e)));
+  }, [name, p.repo, linked]);
   if (!linked) return null;
 
   const set = (patch: Partial<Pipeline>) => setPipeline(name, patch);
@@ -52,6 +65,29 @@ export function PipelineSettings({ name }: { name: string }) {
           onPick={mode => set({ mode })}
         />
       </Field>
+      <Field label={t("pl.repos")} hint={t("pl.reposHelp")}>
+        {null}
+      </Field>
+      {repos && !repos.length && <p className={EMPTY_LIST}>{t("pl.reposNone")}</p>}
+      {repos?.map(r => (
+        <Field key={r.slug} label={<code className="font-mono text-xs">{r.slug}</code>} hint={r.path}>
+          <ChangeInput
+            className={`${FIELD} font-mono text-xs`}
+            value={checksOf(p, r)}
+            placeholder={t("pl.checks")}
+            aria-label={t("pl.repoChecks", { repo: r.slug })}
+            title={t("pl.checksHelp")}
+            spellCheck={false}
+            onCommit={v => setPipelineRepo(name, r.slug, { checks: v.trim() })}
+          />
+          <Switch
+            id={`pl-repo-${name}-${r.slug}`}
+            label={t("pl.repoOn", { repo: r.slug })}
+            on={!p.repos?.[r.slug]?.off}
+            onToggle={on => setPipelineRepo(name, r.slug, { off: !on })}
+          />
+        </Field>
+      ))}
       <Field label={t("pl.repo")} hint={t("pl.repoHelp")}>
         <PathField
           value={p.repo}
@@ -61,6 +97,16 @@ export function PipelineSettings({ name }: { name: string }) {
           readOnly
           onPick={() => pickPipelineRepo(name)}
         />
+        {p.repo && (
+          <button
+            className={buttonClass("ghost", true)}
+            title={t("int.unlink")}
+            aria-label={t("int.unlink")}
+            onClick={() => set({ repo: "" })}
+          >
+            <Icon name="close" className={BUTTON_GLYPH} />
+          </button>
+        )}
       </Field>
       <Field label={t("pl.base")} hint={t("pl.baseHelp")}>
         <ChangeInput
@@ -120,15 +166,6 @@ export function PipelineSettings({ name }: { name: string }) {
           <Switch id={`pl-plan-${name}`} on={!!p.plan} onToggle={plan => set({ plan })} />
         </Field>
       )}
-      <Field label={t("pl.checks")} hint={t("pl.checksHelp")}>
-        <ChangeInput
-          className={`${FIELD} font-mono text-xs`}
-          value={p.checks ?? ""}
-          placeholder="pnpm install && pnpm lint && pnpm test"
-          spellCheck={false}
-          onCommit={v => set({ checks: v.trim() })}
-        />
-      </Field>
       <Field label={t("pl.review")} hint={t("pl.reviewHelp")}>
         <Select
           className={SELECT}
