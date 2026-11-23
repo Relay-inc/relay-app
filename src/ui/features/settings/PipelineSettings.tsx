@@ -24,7 +24,7 @@ type Cols = { groupings: { id: string; label: string }[]; group: string; columns
 const COLUMNS = ["pick", "busy", "review", "input", "merged"] as const;
 
 /** A project's board pipeline, in its folded-open row when a board is linked: the project's repos it builds in (each
- *  with its checks, or switched off) and a checkout picked by hand, the branch, the board's columns it moves tickets
+ *  with its checks, or switched off) and a checkout picked by hand, the branch it starts from and the one its PRs go to, the board's columns it moves tickets
  *  through, a label to pick on, how many run at once, and the switch. */
 export function PipelineSettings({ name }: { name: string }) {
   const { t, any } = useT();
@@ -70,7 +70,19 @@ export function PipelineSettings({ name }: { name: string }) {
       </Field>
       {repos && !repos.length && <p className={EMPTY_LIST}>{t("pl.reposNone")}</p>}
       {repos?.map(r => (
-        <Field key={r.slug} label={<code className="font-mono text-xs">{r.slug}</code>} hint={r.path}>
+        <Field
+          key={r.slug}
+          label={
+            <code className="block truncate font-mono text-xs" title={r.slug}>
+              {r.slug}
+            </code>
+          }
+          hint={
+            <span className="block truncate" title={r.path}>
+              {r.path.replace(/^\/Users\/[^/]+/, "~")}
+            </span>
+          }
+        >
           <ChangeInput
             className={`${FIELD} font-mono text-xs`}
             value={checksOf(p, r)}
@@ -115,6 +127,15 @@ export function PipelineSettings({ name }: { name: string }) {
           placeholder="develop"
           spellCheck={false}
           onCommit={v => set({ base: v.trim() })}
+        />
+      </Field>
+      <Field label={t("pl.into")} hint={t("pl.intoHelp")}>
+        <ChangeInput
+          className={FIELD}
+          value={p.into ?? ""}
+          placeholder="staging"
+          spellCheck={false}
+          onCommit={v => set({ into: v.trim() })}
         />
       </Field>
       {(cols?.groupings.length ?? 0) > 1 && (

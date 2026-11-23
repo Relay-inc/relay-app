@@ -11,8 +11,10 @@ export type Pipeline = {
   /** per repo of the project, by its GitHub name ("acme/web"): left out of the pipeline, and the command Relay checks
    *  that repo with before it pushes (see checks). Absent: in, without checks */
   repos?: Record<string, { off?: boolean; checks?: string }>;
-  /** the branch work starts from and the PR goes to; empty: the remote's default branch */
+  /** the branch work starts from; empty: the remote's default branch */
   base: string;
+  /** the branch the PRs go to; empty or absent: the branch work started from */
+  into?: string;
   /** the board's grouping the columns are in (Productive: "list" or "status"); empty: the provider's first */
   group: string;
   /** tickets here are picked up */

@@ -1256,7 +1256,7 @@ function handle(cmd: string, a: Args): unknown {
         a.project === "Northwind Portal"
           ? {
               "acme/northwind-api": "/Users/demo/code/northwind-api",
-              "acme/northwind-infra": "/Users/demo/code/northwind-infra",
+              "acme/northwind-infra": "/Users/demo/Documents/Clients/Northwind Holdings/northwind-infrastructure",
               "acme/northwind-portal": "/Users/demo/code/northwind",
             }
           : {};

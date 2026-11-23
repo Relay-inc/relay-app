@@ -459,6 +459,8 @@ export const orchDispatchTicket = (a: {
   /** the checkouts the worker gets a worktree of, each with its checks */
   repos: { path: string; checks: string }[];
   base: string;
+  /** the branch the PRs go to; empty: `base` */
+  into: string;
   ticket: Ticket;
   validate: { checks: string; review: string; rounds: number };
   plan: boolean;
