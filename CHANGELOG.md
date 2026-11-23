@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Changed
+
+- The board pipeline has a branch to start from and a separate branch the PRs go to, so work can start from main and go to staging. Left empty, the PRs go to the branch the work started from, as before. The repo rows in its settings keep a long repo name and path on one line, the full path in the tooltip.
+
 ## [0.0.59] - 2026-11-23
 
 ### Changed
