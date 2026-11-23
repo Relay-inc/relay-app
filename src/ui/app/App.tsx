@@ -135,11 +135,13 @@ function onEscape(e: KeyboardEvent) {
     escStop();
   }
 }
-// typing anywhere in an open conversation goes to the composer, focused or not: the key itself then lands there
+// typing anywhere in an open conversation goes to the composer, focused or not: the key itself then lands there.
+// Cmd-V (Ctrl-V on Windows) too: the paste follows the focus, text or a picture
 function typesIntoComposer(e: KeyboardEvent) {
   const { selected, projectPanel, quickAsk } = useNavigationStore.getState();
   const isCharacter = e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.isComposing;
-  return isCharacter && !isView(selected) && !projectPanel && !quickAsk && !inField(e);
+  const pastes = isBinding(e, "mod+KeyV");
+  return (isCharacter || pastes) && !isView(selected) && !projectPanel && !quickAsk && !inField(e);
 }
 // the Mail view, experimental, as in Gmail and Keel: E archives, # or Delete deletes, Cmd-A ticks all, Esc unticks
 // before the app's Esc (each as Settings › Shortcuts has it). Whether it handled the key.
