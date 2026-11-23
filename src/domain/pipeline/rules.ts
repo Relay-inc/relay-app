@@ -4,6 +4,10 @@ import type { Limits } from "../agents/types";
 import type { ProvLimits } from "../usage/types";
 import type { Pipeline, PipelineRepo, PrStatus, Step, Ticket } from "./types";
 import { fill, prompts, untrustedNote } from "../../shared/prompts.ts";
+import en from "../../shared/locales/en.ts";
+import nl from "../../shared/locales/nl.ts";
+import de from "../../shared/locales/de.ts";
+import fr from "../../shared/locales/fr.ts";
 
 export const EMPTY_PIPELINE: Pipeline = {
   on: false,
@@ -165,6 +169,9 @@ export const bare = (v: CardView) =>
   !v.feed.some(f => htmlText(f.html)) &&
   !(v.files?.length || v.feed.some(f => f.files.length));
 
+/** A comment as a line of a brief. */
+const commentLine = (f: CardView["feed"][number]) => `- ${f.who} (${f.at}): ${htmlText(f.html)}`;
+
 /** The ticket as a brief: title, link, description, the comments (only the ones after `since`, for a worker that picks
  *  it up again) and the files' links. */
 export function briefOf(v: CardView, since?: number) {
@@ -173,11 +180,7 @@ export function briefOf(v: CardView, since?: number) {
   if (since == null) out.push("", "Description:", description || "(none)");
   const feed = v.feed.filter(f => f.html && (since == null || Date.parse(f.at) > since));
   if (feed.length)
-    out.push(
-      "",
-      since == null ? "Comments, oldest first:" : "New on the ticket:",
-      ...feed.map(f => `- ${f.who} (${f.at}): ${htmlText(f.html)}`),
-    );
+    out.push("", since == null ? "Comments, oldest first:" : "New on the ticket:", ...feed.map(commentLine));
   const files = [...(v.files ?? []), ...v.feed.flatMap(f => f.files)];
   if (files.length && since == null) out.push("", "Files:", ...files.map(f => `- ${f.name}: ${f.url}`));
   return out.join("\n");
@@ -194,13 +197,46 @@ const PICTURES = "\n\nThe ticket's pictures, saved on this Mac (open them with R
 export const withPictures = (brief: string, paths: string[]) =>
   paths.length ? `${brief}${PICTURES}${paths.map(p => `- ${p}`).join("\n")}` : brief;
 
-/** The ticket as it reads now, for a worker that started on `task` at `since`: null when nothing changed. Only the
- *  comments from before the start count, as at the start: the later ones are the conversation with the worker
- *  (Relay's own comments with the agent's summary among them), which it gets as news and the review must not read as
- *  what was asked. The pictures saved at the start stay. */
+/** The comments Relay itself puts on a ticket (runner.ts, comment()). */
+export const RELAY_COMMENTS = [
+  "pl.picked",
+  "pl.resumed",
+  "pl.startFailed",
+  "pl.notReady",
+  "pl.unclear",
+  "pl.pr",
+  "pl.prUpdated",
+  "pl.prPartial",
+  "pl.noPr",
+  "pl.blocked",
+  "pl.blockedManual",
+  "pl.failed",
+  "pl.feedback",
+  "pl.merged",
+  "pl.closed",
+] as const;
+const flat = (s: string) => s.replace(/\s+/g, " ").trim();
+/** How each of them opens, in every language (the user may have switched since): its text up to the first
+ *  placeholder, taken from the strings themselves so a reworded one is still recognised. */
+export const RELAY_OPENINGS = [en, nl, de, fr].flatMap(l => RELAY_COMMENTS.map(k => flat(l[k].split("{")[0])));
+/** A comment Relay wrote: it is posted under the user's own account, so only its text tells. */
+export const byRelay = (text: string) => RELAY_OPENINGS.some(o => flat(text).startsWith(o));
+
+/** The ticket as it reads now, for a worker that started on `task` at `since`: null when nothing changed. Built the
+ *  same way each time, so a pass with nothing new gives the same text and an answer already folded in counts once:
+ *  the brief with the comments from before the start, as at the start, then the comments people wrote since (an
+ *  answer on Blocked, a correction) in a block of their own. Relay's own comments stay out, they carry the agent's
+ *  summary, which the review must not read as what was asked. The pictures saved at the start stay. */
 export function retask(task: string, v: CardView, since: number) {
+  const before = (f: CardView["feed"][number]) => Date.parse(f.at) <= since;
+  const answers = v.feed.filter(f => !before(f) && htmlText(f.html) && !byRelay(htmlText(f.html)));
   const at = task.lastIndexOf(PICTURES);
-  const now = briefOf({ ...v, feed: v.feed.filter(f => Date.parse(f.at) <= since) }) + (at < 0 ? "" : task.slice(at));
+  const now =
+    briefOf({ ...v, feed: v.feed.filter(before) }) +
+    (answers.length
+      ? `\n\nAnswers on the ticket since the agent started, oldest first:\n${answers.map(commentLine).join("\n")}`
+      : "") +
+    (at < 0 ? "" : task.slice(at));
   return now === task ? null : now;
 }
 

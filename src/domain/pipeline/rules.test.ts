@@ -1,10 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import en from "../../shared/locales/en.ts";
+import nl from "../../shared/locales/nl.ts";
+import de from "../../shared/locales/de.ts";
+import fr from "../../shared/locales/fr.ts";
 import type { Card, CardView } from "../board/types.ts";
 import type { Worker } from "../orchestrator/types.ts";
 import {
   bare,
   briefOf,
+  byRelay,
+  RELAY_COMMENTS,
+  RELAY_OPENINGS,
   checksOf,
   picturesOf,
   withPictures,
@@ -210,30 +218,50 @@ test("picturesOf: the ticket's and its comments' pictures; withPictures: their p
   assert.match(withPictures("brief", ["/tmp/a.png"]), /^brief\n\n.*Read.*\n- \/tmp\/a\.png$/);
 });
 
-test("retask: the ticket as it reads now only when it changed since the worker started", () => {
-  const v = (description: string, later = false) =>
+test("retask: the ticket as it reads now only when it or what people wrote on it changed since the start", () => {
+  const c = (ms: number, who: string, html: string) => ({ at: at(ms), who, html, change: "", files: [] });
+  const relay = c(150, "Ann", "<p>PR opened: https://g/pr/1</p><p>all done</p>");
+  const answer = c(170, "Ann", "<p>Pears, not apples</p>");
+  const v = (description: string, ...later: ReturnType<typeof c>[]) =>
     ({
       title: "Orchard",
       number: "7",
       url: "https://t/7",
       description,
-      feed: [
-        { at: at(50), who: "Ann", html: "<p>north side first</p>", change: "", files: [] },
-        ...(later ? [{ at: at(150), who: "Acme", html: "<p>PR opened, all done</p>", change: "", files: [] }] : []),
-      ],
+      feed: [c(50, "Ann", "<p>north side first</p>"), ...later],
       files: [],
     }) as unknown as CardView;
   const task = withPictures(briefOf(v("<p>Plant the apple trees</p>")), ["/tmp/a.png"]);
   assert.equal(retask(task, v("<p>Plant the apple trees</p>"), 100), null, "unchanged: the task stays");
+  assert.equal(retask(task, v("<p>Plant the apple trees</p>", relay), 100), null, "Relay's own comment is no change");
+  const b = retask(task, v("<p>Plant the apple trees</p>", relay, answer), 100);
+  assert.ok(b?.includes("Answers on the ticket since the agent started") && b.includes("Pears, not apples"), b ?? "");
+  assert.ok(!b.includes("all done") && b.endsWith("- /tmp/a.png"), "Relay's comment stays out, the pictures stay in");
   assert.equal(
-    retask(task, v("<p>Plant the apple trees</p>", true), 100),
+    retask(b, v("<p>Plant the apple trees</p>", relay, answer), 100),
     null,
-    "a comment since the start is no change",
+    "an answer folded in counts once",
   );
-  const b = retask(task, v("<p>Plant the pear trees</p>", true), 100);
-  assert.ok(b?.includes("Plant the pear trees") && b.includes("north side first"), b ?? "");
-  assert.ok(!b.includes("all done") && b.endsWith("- /tmp/a.png"), "later comments stay out, the pictures stay in");
-  assert.equal(retask(b, v("<p>Plant the pear trees</p>", true), 100), null, "a replaced task is stable");
+  const d = retask(b, v("<p>Plant the pear trees</p>", relay, answer), 100);
+  assert.ok(d?.includes("Plant the pear trees") && d.includes("north side first") && d.includes("Pears, not apples"));
+});
+
+test("byRelay: every comment Relay puts on a ticket, in every language; a person's comment is kept", () => {
+  for (const l of [en, nl, de, fr])
+    for (const k of RELAY_COMMENTS) {
+      const text = l[k].replace(/\{\w+\}/g, "x");
+      assert.ok(byRelay(text), `${k}: ${text}`);
+    }
+  assert.ok(
+    RELAY_OPENINGS.every(o => o.length >= 4),
+    "an opening that is all placeholder would take every comment",
+  );
+  assert.ok(!byRelay("Pears, not apples") && !byRelay("PR looks fine to me"));
+  // a new comment in the runner must be added to RELAY_COMMENTS (the others are toasts and errors)
+  const runner = readFileSync(new URL("../../application/pipeline/runner.ts", import.meta.url), "utf8");
+  const toasts = ["pl.error", "pl.full", "pl.noBoard", "pl.noColumn", "pl.noRepos", "pl.usedUp", "pl.stalled"];
+  for (const k of new Set(runner.match(/"pl\.\w+"/g)!.map(m => m.slice(1, -1))))
+    assert.ok([...RELAY_COMMENTS, ...toasts].includes(k), k);
 });
 
 test("hand-picked: no pick column needed; the board's pipeline; what the ticket window offers", () => {
