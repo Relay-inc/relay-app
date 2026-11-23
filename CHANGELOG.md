@@ -16,7 +16,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Fixed
 
-- Cmd-V outside a field pastes into the composer on the Mac too: the Edit menu took the key before Relay saw it.
+- Cmd-V outside a field pastes into the composer on the Mac too: the Edit menu took the key before Relay saw it. (#521)
 
 ## [0.0.59] - 2026-11-23
 
