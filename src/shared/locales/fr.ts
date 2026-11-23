@@ -400,9 +400,10 @@ export default {
     "Le checkout d'un dépôt qui n'est pas lié au projet, ou celui à utiliser pour un dépôt à la place de celui que Relay trouve.",
   "pl.repoPh": "Choisir un dossier",
   "pl.repoPick": "Choisir le checkout",
-  "pl.base": "Branche",
-  "pl.baseHelp":
-    "Le travail part d'elle dans chaque dépôt et les PR vont vers elle. Vide : la branche par défaut de chaque dépôt.",
+  "pl.base": "Partir de",
+  "pl.baseHelp": "La branche d'où part le travail dans chaque dépôt. Vide : la branche par défaut de chaque dépôt.",
+  "pl.into": "PR vers",
+  "pl.intoHelp": "La branche où vont les PR. Vide : la branche d'où le travail est parti.",
   "pl.group": "Colonnes par",
   "pl.col.pick": "Prendre dans",
   "pl.col.pickHelp":

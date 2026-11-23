@@ -396,9 +396,10 @@ export default {
     "Een checkout van een repo die niet bij het project staat, of die Relay moet gebruiken voor een repo in plaats van degene die het vindt.",
   "pl.repoPh": "Kies een map",
   "pl.repoPick": "Kies de checkout",
-  "pl.base": "Branch",
-  "pl.baseHelp":
-    "Het werk vertrekt ervan in elke repo en de PR's gaan ernaar. Leeg: de standaardbranch van elke repository.",
+  "pl.base": "Vertrek vanaf",
+  "pl.baseHelp": "De branch waarvan het werk vertrekt in elke repo. Leeg: de standaardbranch van elke repository.",
+  "pl.into": "PR's naar",
+  "pl.intoHelp": "De branch waar de PR's naartoe gaan. Leeg: de branch waarvan het werk vertrok.",
   "pl.group": "Kolommen volgens",
   "pl.col.pick": "Oppikken uit",
   "pl.col.pickHelp": "Tickets hier krijgen een agent. Zet een ticket hier als het duidelijk genoeg is om te bouwen.",
