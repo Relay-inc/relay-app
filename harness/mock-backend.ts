@@ -202,7 +202,9 @@ const diceTools = [
     app: true,
   },
 ];
+// pipeline-panel: the board pipeline's three workers (fixtures/orchestrator.ts pipelineWorkers), on a used-up plan
 let workers = orchOn && !orchEmpty ? structuredClone(orch.workers) : [];
+if (fixture === "pipeline-panel") workers = structuredClone(orch.pipelineWorkers) as typeof workers;
 
 // ---------- the event plugin: listeners by event, emitted synchronously (a real Tauri event is one task per event)
 const listeners = new Map<string, Set<number>>();
@@ -1539,6 +1541,13 @@ function handle(cmd: string, a: Args): unknown {
       return { id: "weekly@1", title: "Weekly sync with the design team about the onboarding flow", time: "10:00" };
     case "usage_limits":
       if (fixture === "antigravity") return integ.usageLimitsAntigravity;
+      // the pipeline panel's hold: Claude's session window at 100%
+      if (fixture === "pipeline-panel")
+        return integ.usageLimits.map(p =>
+          p.provider === "claude" && p.limits.ok
+            ? { ...p, limits: { ...p.limits, windows: p.limits.windows.map((w, i) => (i ? w : { ...w, pct: 100 })) } }
+            : p,
+        );
       return fixture.startsWith("accounts") ? integ.usageLimitsAccounts : integ.usageLimits;
     case "usage_tokens":
       return integ.usageTokens();

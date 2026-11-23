@@ -12,12 +12,15 @@ import {
   EMPTY_PIPELINE,
   htmlText,
   inReview,
+  panelTickets,
+  columnOf,
   picks,
   pipelineAt,
   preflightOf,
   prsOf,
   ready,
   reposFor,
+  runnable,
   review,
   reviewAll,
   stalled,
@@ -104,6 +107,55 @@ test("picks: the pick column in board order, the label, running ones left alone,
     ["a"],
     "a merged ticket put back is new work",
   );
+});
+
+test("paused: no new tickets and nothing picked up again, also for one moved back", () => {
+  const cards = [card("a", "todo", 1), card("e", "todo", 2)];
+  const ws = [worker("e", "blocked")];
+  assert.deepEqual(
+    picks(cards, c => c.column, { ...P, paused: true }, ws),
+    { fresh: [], resume: [] },
+  );
+  assert.equal(picks(cards, c => c.column, P, ws).fresh.length, 1, "the same board unpaused picks");
+});
+
+test("the global pause holds every pipeline, each one's own pause stays its own", () => {
+  const cards = [card("a", "todo", 1)];
+  const all = { Acme: P, Northwind: { ...P, paused: true }, Off: { ...P, on: false } };
+  const held = runnable(all, true);
+  assert.deepEqual(
+    held.map(([project]) => project),
+    ["Acme", "Northwind"],
+    "a switched-off pipeline is not run at all",
+  );
+  for (const [, p] of held) assert.equal(picks(cards, c => c.column, p, []).fresh.length, 0);
+  const own = Object.fromEntries(runnable(all, false));
+  assert.equal(own.Acme.paused, false);
+  assert.equal(own.Northwind.paused, true);
+  assert.equal(all.Acme.paused, undefined, "the settings themselves are left alone");
+});
+
+test("panel: each ticket's last worker, newest first, finished ones left out, where each is on the board", () => {
+  const ws = [
+    worker("a", "failed", { key: "a1", at: 1 }),
+    worker("a", "blocked", {
+      key: "a2",
+      at: 5,
+      board: "blocked:100",
+      report: { questions: "Which colour?" } as Worker["report"],
+    }),
+    worker("b", "running", { key: "b1", at: 3 }),
+    worker("c", "done", { key: "c1", at: 4, pr: "https://x/pull/2", board: "done:100" }),
+    worker("d", "done", { key: "d1", at: 6, pr: "https://x/pull/3", board: "merged" }),
+    { ...worker("e", "running", { key: "e1" }), ticket: { pipeline: "Northwind", card: "e" } },
+  ];
+  const rows = panelTickets(ws, "Acme");
+  assert.deepEqual(
+    rows.map(w => w.key),
+    ["a2", "c1", "b1"],
+  );
+  assert.deepEqual(rows.map(columnOf), ["input", "review", "busy"]);
+  assert.equal(columnOf(worker("f", "done", { pr: "p" })), "busy", "ended but not landed yet");
 });
 
 test("step: each end once, done with a PR to review, the rest to a person", () => {

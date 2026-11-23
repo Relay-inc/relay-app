@@ -27,6 +27,15 @@ export const manual = (p: Pipeline) => p.mode === "manual";
 export const ready = (p: Pipeline | undefined): p is Pipeline =>
   !!p?.on && (manual(p) || !!p.pick) && !!p.busy && !!p.review && !!p.input;
 
+/** Paused, by its own pause or by the one for every pipeline (settings.pipelinesPaused). */
+export const pausedOf = (p: Pipeline | undefined, all?: boolean) => !!all || !!p?.paused;
+
+/** The pipelines a pass runs: the ready ones, each paused as it counts now, by its own pause or the global one. */
+export const runnable = (pipelines: Record<string, Pipeline> | undefined, all?: boolean): [string, Pipeline][] =>
+  Object.entries(pipelines ?? {}).flatMap(([project, p]) =>
+    ready(p) ? [[project, { ...p, paused: pausedOf(p, all) }] as [string, Pipeline]] : [],
+  );
+
 /** A repo's checks: its own, else the pipeline's one command from before for the one checkout it had. */
 export const checksOf = (p: Pipeline, r: PipelineRepo) =>
   (p.repos?.[r.slug]?.checks ?? (r.path === p.repo ? p.checks : "") ?? "").trim();
@@ -68,11 +77,13 @@ export const workersOf = (workers: Worker[], project: string) => workers.filter(
 export const lastWorker = (workers: Worker[], card: string) => workers.filter(w => ticketOf(w)?.card === card).pop();
 
 /** The tickets to start on, best first: the ones in the pick column (with the label, when set) that have no running
- *  worker. `resume`: a ticket moved back after a worker ran on it, which that worker picks up again with its worktree. */
+ *  worker. `resume`: a ticket moved back after a worker ran on it, which that worker picks up again with its worktree.
+ *  None while the pipeline is paused. */
 export function picks(cards: Card[], col: (c: Card) => string, p: Pipeline, workers: Worker[]) {
   const label = p.label.trim().toLowerCase();
   const fresh: Card[] = [];
   const resume: { card: Card; worker: Worker }[] = [];
+  if (p.paused) return { fresh, resume };
   const waiting = cards
     .filter(c => col(c) === p.pick && (!label || (c.labels ?? []).some(l => l.toLowerCase() === label)))
     .sort((a, b) => a.placement - b.placement);
@@ -104,6 +115,18 @@ export function step(w: Worker): Step | null {
 /** A worker whose PRs wait for review: its done was put on the board, nothing came after. */
 export const inReview = (w: Worker) =>
   !!prsOf(w).length && !w.pr_error && w.state === "done" && w.board === `done:${w.ended}`;
+
+/** The pipeline panel's tickets: each ticket's last worker, newest first, the merged and closed ones left out. */
+export function panelTickets(workers: Worker[], project: string) {
+  const last = new Map<string, Worker>();
+  for (const w of workersOf(workers, project)) last.set(ticketOf(w)!.card, w);
+  return [...last.values()].filter(w => w.board !== "merged" && w.board !== "closed").sort((a, b) => b.at - a.at);
+}
+
+/** Where a worker's ticket is on the board, by what the pipeline last did with it: a run that ended stays in busy
+ *  until it lands. */
+export const columnOf = (w: Worker): "busy" | "review" | "input" =>
+  w.state === "running" || step(w) ? "busy" : inReview(w) ? "review" : "input";
 
 const bot = (login: string | undefined) => !login || login.endsWith("[bot]") || login.toLowerCase().includes("copilot");
 const after = (iso: string, since: number) => Date.parse(iso) > since;

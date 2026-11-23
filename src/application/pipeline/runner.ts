@@ -10,6 +10,8 @@ import {
   buildState,
   inReview,
   manual,
+  panelTickets,
+  pausedOf,
   picks,
   pipelineAt,
   PREFLIGHT_PROMPT,
@@ -18,6 +20,7 @@ import {
   ready,
   reposFor,
   reviewAll,
+  runnable,
   stalled,
   step,
   usedUp,
@@ -31,16 +34,18 @@ import { t } from "../../shared/i18n";
 import { provider as providerOf } from "../../shared/plugins";
 import { ctxOf } from "../board/ctx";
 import { toast } from "../navigation/navigation";
-import { onOrchEvent } from "../orchestrator/orchestrator";
+import { onOrchEvent, stopWorker } from "../orchestrator/orchestrator";
 import { useOrchestratorStore } from "../orchestrator/store";
-import { settings } from "../settings/settings";
+import { saveMainSettings, settings } from "../settings/settings";
 import { projectName } from "../workspace/vault";
+import { usePipelineStore } from "./store";
 
 // The board pipeline, while the app runs: every few minutes and when a pipeline worker changes, per switched-on
 // pipeline (settings.pipelines): put ended runs on the board, follow the PRs in review (one per repo a ticket changed),
 // start on the tickets in the
 // pick column (unless it is hand-picked: then only the tickets started from the ticket window, see buildTicket). The
-// board is the record: a ticket is claimed by moving it, so a second runner never takes it too.
+// board is the record: a ticket is claimed by moving it, so a second runner never takes it too. A paused pipeline
+// (its own pause or the global one) still lands ended runs and follows merges and closes, but starts no worker.
 
 // passes and hand-picked starts run one after the other, so a ticket is never claimed by both
 let chain: Promise<unknown> = Promise.resolve();
@@ -51,11 +56,15 @@ const serial = <T>(fn: () => Promise<T>): Promise<T> => {
 };
 let queued = false;
 const lastError: Record<string, string> = {};
-// why a pipeline takes no new tickets right now, so it is said once and not every five minutes
-const holding: Record<string, string> = {};
+// why a pipeline takes no new tickets right now, so it is said once and not every five minutes, and the pipeline
+// panel shows it as long as it holds
 function hold(project: string, why: "" | "pl.usedUp" | "pl.stalled") {
+  const { holding } = usePipelineStore.getState();
   if (why && holding[project] !== why) toast(t(why, { project: projectName(project) }));
-  holding[project] = why;
+  if (holding[project] !== why)
+    usePipelineStore.setState(draft => {
+      draft.holding[project] = why;
+    });
 }
 
 /** One pass over every pipeline. Calls while one waits to start make no second one. */
@@ -64,8 +73,7 @@ export function runPipelines() {
   queued = true;
   return serial(async () => {
     queued = false;
-    for (const [project, p] of Object.entries(settings().pipelines ?? {})) {
-      if (!ready(p)) continue;
+    for (const [project, p] of runnable(settings().pipelines, settings().pipelinesPaused)) {
       try {
         await runOne(project, p);
         delete lastError[project];
@@ -90,6 +98,8 @@ export function buildTicket(ref: BoardRef, card: Pick<Card, "id" | "title" | "nu
   return serial(async () => {
     const project = pipelineOfBoard(ref);
     if (!project) return;
+    if (pausedOf(settings().pipelines?.[project], settings().pipelinesPaused))
+      return toast(t("pl.pausedStart", { project: projectName(project) }));
     const b = await open(project, settings().pipelines![project]);
     const mine = workersOf(allWorkers(), project);
     const running = mine.filter(w => w.state === "running").length;
@@ -100,6 +110,51 @@ export function buildTicket(ref: BoardRef, card: Pick<Card, "id" | "title" | "nu
     else await claim(b, project, card as Card, true);
   }).catch(e => toast(t("pl.error", { project: "", error: String((e as Error)?.message ?? e) })));
 }
+
+/** What the pipeline panel shows for a project: its pipeline (undefined without one) and whether it runs, its own and
+ *  the global pause, its workers running against its maximum, why it holds, and its tickets. */
+export function pipelinePanel(project: string) {
+  const s = settings();
+  const p = s.pipelines?.[project];
+  return {
+    linked: !!p && !!s.boards?.[project],
+    on: ready(p),
+    paused: !!p?.paused,
+    all: !!s.pipelinesPaused,
+    running: workersOf(allWorkers(), project).filter(w => w.state === "running").length,
+    parallel: Math.max(1, p?.parallel ?? 1),
+    holding: usePipelineStore.getState().holding[project] ?? "",
+    tickets: panelTickets(allWorkers(), project),
+  };
+}
+
+/** Pause a project's pipeline from its panel, or go on. `stop`: its running workers stop too (their tickets land with
+ *  a person), else they finish their step. Going on starts a pass at once. */
+export async function pausePipeline(project: string, paused: boolean, stop = false) {
+  const s = settings();
+  const p = s.pipelines?.[project];
+  if (!p) return;
+  const failed = await saveMainSettings({ ...s, pipelines: { ...s.pipelines, [project]: { ...p, paused } } });
+  if (failed) return toast(failed);
+  if (stop)
+    await Promise.all(
+      workersOf(allWorkers(), project)
+        .filter(w => w.state === "running")
+        .map(w => takeOver(w)),
+    );
+  if (!paused) runPipelines();
+}
+
+/** Pause every pipeline at once, or go on (each one's own pause stays as it was). */
+export async function pauseAllPipelines(paused: boolean) {
+  const failed = await saveMainSettings({ ...settings(), pipelinesPaused: paused });
+  if (failed) return toast(failed);
+  if (!paused) runPipelines();
+}
+
+/** A person takes a ticket over from its worker: the worker stops, and its stopped run lands the ticket in the input
+ *  column like any run that ended without a PR (runOne, paused or not). */
+export const takeOver = (w: Worker) => stopWorker(w.key);
 
 /** The backend's `orch` event: a pipeline worker that stopped running is put on the board right away. */
 export function onPipelineWorker(w: Worker) {
@@ -160,7 +215,9 @@ async function runOne(project: string, p: Pipeline) {
       await move(b, id, p.input);
       await comment(b, id, t("pl.closed", { pr: links }));
       adopt(await backend.orchBoard(w.key, "closed"));
-    } else {
+    } else if (!p.paused) {
+      // review comments start the worker again: that waits while paused, the comments are read again from the run's
+      // end once the pipeline goes on
       await sendWorker(w, fill(prompts.pipeline.reviewComments, { pr: prsOf(w).join(", "), text: r.text }));
       await move(b, id, p.busy);
       await comment(b, id, t("pl.feedback"));

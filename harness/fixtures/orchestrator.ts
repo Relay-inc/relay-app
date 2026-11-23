@@ -184,6 +184,58 @@ const ticketed: Worker = {
 };
 export const workers: Worker[] = [running, done, silent, ticketed];
 
+// ?fixture=pipeline-panel: the board pipeline of Northwind Portal with three tickets: one building, one whose agent asks
+// a question (in the input column), and the one above with its PRs in review
+const pipelineTicket = (card: string, number: string, title: string) => ({
+  pipeline: "Northwind Portal",
+  provider: "productive",
+  project: "p1",
+  board: "f1",
+  card,
+  number,
+  title,
+  url: `https://app.productive.io/40001/tasks/${card}`,
+});
+const building = {
+  ...running,
+  key: "c:orch-w-p1",
+  project: "Northwind Portal",
+  title: "Plant the apple trees",
+  task: 'Ticket #415 "Plant the apple trees"',
+  branch: "relay/plant-the-apple-trees-p1",
+  model: undefined,
+  at: NOW - 12 * MIN,
+  step: { done: 2, total: 5, note: "Rows in the north field" },
+  decisions: [],
+  ticket: pipelineTicket("t15", "415", "Plant the apple trees"),
+  base_branch: "develop",
+  pr: null,
+  pr_error: null,
+  board: null,
+};
+const asking = {
+  ...building,
+  key: "c:orch-w-p2",
+  title: "Import the orchard map",
+  task: 'Ticket #414 "Import the orchard map"',
+  branch: "relay/import-the-orchard-map-p2",
+  state: "blocked",
+  step: null,
+  at: NOW - 70 * MIN,
+  ended: NOW - 25 * MIN,
+  report: {
+    status: "blocked",
+    summary: "The map importer reads both layers, nothing is written yet.",
+    questions: "The map has two layers for the north field. Import the newest one, or merge both?",
+    diff: null,
+    flags: [],
+    options: ["The newest one", "Merge both"],
+  },
+  ticket: pipelineTicket("t14", "414", "Import the orchard map"),
+  board: `blocked:${NOW - 25 * MIN}`,
+};
+export const pipelineWorkers = [building, asking, ticketed];
+
 const REPORT = `[Relay] Report from worker ${done.key} (Beacon Billing, "Patch the balance sync"): done
 
 ${done.report!.summary}
