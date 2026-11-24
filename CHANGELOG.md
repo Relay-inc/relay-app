@@ -16,7 +16,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Fixed
 
-- Settings › Projects: picking a checkout by hand for a second repo no longer clears the one picked for the first; each repo keeps its own.
+- Settings › Projects: picking a checkout by hand for a second repo no longer clears the one picked for the first; each repo keeps its own (#532).
 
 ## [0.0.61] - 2026-11-24
 
