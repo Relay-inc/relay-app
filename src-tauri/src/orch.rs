@@ -96,7 +96,7 @@ pub struct Worker {
     #[serde(default)]
     pub ticket: Option<Value>,
     /// the ticket changed since it started, or people answered on it: `task` is the ticket as it read when it was sent
-    /// the change, with those answers (see retask)
+    /// the change, with those answers and the questions they answer (see retask)
     #[serde(default)]
     pub ticket_changed: bool,
     /// the branch its PR goes to

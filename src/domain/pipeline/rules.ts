@@ -222,19 +222,49 @@ export const RELAY_OPENINGS = [en, nl, de, fr].flatMap(l => RELAY_COMMENTS.map(k
 /** A comment Relay wrote: it is posted under the user's own account, so only its text tells. */
 export const byRelay = (text: string) => RELAY_OPENINGS.some(o => flat(text).startsWith(o));
 
+// spaces as one, line breaks kept: the questions are often a list
+const spaced = (s: string) => s.replace(/[^\S\n]+/g, " ").trim();
+// each language's Blocked comments as [opening, closing], the fixed text around {questions}, the closing up to its
+// first placeholder
+const BLOCKED = [en, nl, de, fr].flatMap(l =>
+  (["pl.blocked", "pl.blockedManual"] as const).map(k => {
+    const [open, close = ""] = l[k].split("{questions}");
+    return [spaced(open), spaced(close.split("{")[0])] as const;
+  }),
+);
+/** What the agent asked, out of Relay's Blocked comment: the text between its fixed opening and closing (all after
+ *  the opening when no closing is found). Null for any other comment. */
+export function askedIn(text: string) {
+  const t = spaced(text);
+  const mine = BLOCKED.filter(([open]) => t.startsWith(open));
+  if (!mine.length) return null;
+  // the two Blocked comments open the same way: the one whose closing is there
+  const [open, close] = mine.find(([o, c]) => c && t.lastIndexOf(c) > o.length) ?? mine[0];
+  const end = close ? t.lastIndexOf(close) : -1;
+  return t.slice(open.length, end > open.length ? end : undefined).trim();
+}
+
 /** The ticket as it reads now, for a worker that started on `task` at `since`: null when nothing changed. Built the
  *  same way each time, so a pass with nothing new gives the same text and an answer already folded in counts once:
- *  the brief with the comments from before the start, as at the start, then the comments people wrote since (an
- *  answer on Blocked, a correction) in a block of their own. Relay's own comments stay out, they carry the agent's
- *  summary, which the review must not read as what was asked. The pictures saved at the start stay. */
+ *  the brief with the comments from before the start, as at the start, then in a block of their own what people
+ *  wrote since (an answer on Blocked, a correction), with the questions of Relay's Blocked comments they answer. A
+ *  question nobody answered yet is no change. Relay's other comments stay out, they carry the agent's summary, which
+ *  the review must not read as what was asked. The pictures saved at the start stay. */
 export function retask(task: string, v: CardView, since: number) {
-  const before = (f: CardView["feed"][number]) => Date.parse(f.at) <= since;
-  const answers = v.feed.filter(f => !before(f) && htmlText(f.html) && !byRelay(htmlText(f.html)));
+  const lines = v.feed
+    .filter(f => Date.parse(f.at) > since && htmlText(f.html))
+    .flatMap(f => {
+      const text = htmlText(f.html);
+      const asked = askedIn(text);
+      if (asked != null) return [{ person: false, line: `- The agent asked (${f.at}): ${asked}` }];
+      return byRelay(text) ? [] : [{ person: true, line: commentLine(f) }];
+    });
+  const said = lines.slice(0, lines.map(l => l.person).lastIndexOf(true) + 1).map(l => l.line);
   const at = task.lastIndexOf(PICTURES);
   const now =
-    briefOf({ ...v, feed: v.feed.filter(before) }) +
-    (answers.length
-      ? `\n\nAnswers on the ticket since the agent started, oldest first:\n${answers.map(commentLine).join("\n")}`
+    briefOf({ ...v, feed: v.feed.filter(f => Date.parse(f.at) <= since) }) +
+    (said.length
+      ? `\n\nQuestions and answers on the ticket since the agent started, oldest first:\n${said.join("\n")}`
       : "") +
     (at < 0 ? "" : task.slice(at));
   return now === task ? null : now;
