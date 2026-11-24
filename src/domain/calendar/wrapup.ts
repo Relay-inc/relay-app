@@ -146,6 +146,19 @@ export function transcriptIn(text: string) {
   return found.length ? `${found[found.length - 1]}.md` : null;
 }
 
+/** The vault paths of the recordings the note holds, its audio and its transcripts: what goes when the meeting is deleted. */
+export function recordingFilesIn(text: string) {
+  const first = /^## /m.exec(text);
+  return text
+    .slice(0, first ? first.index : text.length)
+    .split("\n")
+    .flatMap(line => {
+      const audio = /^!\[\[(.+\.(?:m4a|mp3|wav|aac|caf|aiff?|mp4|mov))\]\]$/i.exec(line)?.[1];
+      const transcript = TRANSCRIPT.exec(line)?.[1];
+      return audio ? [audio] : transcript ? [`${transcript}.md`] : [];
+    });
+}
+
 // ---------- a decision into its project's note
 /** Whether a decisions section already holds this decision from this meeting, whatever day it was added. */
 export const hasDecision = (section: string, decision: string, from: string) => {

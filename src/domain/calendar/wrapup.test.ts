@@ -4,6 +4,7 @@ import {
   builtFrom,
   hasDecision,
   parseDraft,
+  recordingFilesIn,
   summaryIn,
   summarySection,
   transcriptIn,
@@ -97,6 +98,13 @@ test("the recording's files go under the date line before the first section, nev
   assert.equal(withRecording("# T\n", { audio: null, transcript: "A/z.md" }), "# T\n\nTranscript: [[A/z]]\n");
   // a mention in a section is not the note's recording
   assert.equal(transcriptIn("# T\n\n## Notes\nTranscript: [[A/q]]\n"), null);
+});
+
+test("a deleted meeting takes its recordings' files along, not other embeds or links in its sections", () => {
+  const text =
+    "# T\n![[A/x.m4a]]\nTranscript: [[A/x]]\n![[A/pic.png]]\nTranscript: [[A/y]]\n\n## Notes\n![[A/z.m4a]]\nTranscript: [[A/q]]\n";
+  assert.deepEqual(recordingFilesIn(text), ["A/x.m4a", "A/x.md", "A/y.md"]);
+  assert.deepEqual(recordingFilesIn("# T\n\n## Notes\n"), []);
 });
 
 test("a decision is one dated line at the end of the project's decisions, once", () => {

@@ -896,6 +896,8 @@ export const meetingKept = () =>
   invoke<{ folder: string; meeting: Pick<Meeting, "id" | "title" | "start" | "end" | "people" | "join"> | null }[]>(
     "meeting_kept",
   );
+/** Throws one of those recordings away. */
+export const meetingKeptDiscard = (folder: string) => invoke("meeting_kept_discard", { folder });
 /** Writes out one of those recordings, as `meetingRecordStop`. */
 export const meetingRecordRetry = (
   folder: string,

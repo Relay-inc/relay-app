@@ -229,6 +229,7 @@ const channelId = (c: unknown) =>
 const sendTo = (channel: number | null, index: number, message: unknown) =>
   channel !== null && internals().runCallback(channel, { index, message });
 let meetingTicks: { channel: number; index: number } | null = null;
+let keptDiscarded = false; // the kept recording thrown away (meeting_kept_discard)
 let dictationLevels: { channel: number; index: number } | null = null;
 const voiceModels = [
   { id: "parakeet-v3", mb: 456, langs: ["nl", "en", "de", "fr"], auto: true, installed: true, downloading: false },
@@ -1403,7 +1404,10 @@ function handle(cmd: string, a: Args): unknown {
         seconds: 60,
       };
     case "meeting_kept":
-      return fixture === "kept-recording" ? [{ folder: "20260930-152600", meeting: null }] : [];
+      return fixture === "kept-recording" && !keptDiscarded ? [{ folder: "20260930-152600", meeting: null }] : [];
+    case "meeting_kept_discard":
+      keptDiscarded = true;
+      return null;
     case "meeting_record_retry": // in the kept-recording fixture it never ends, to look at the saving state
       if (fixture === "kept-recording") return new Promise(() => {});
       return { audio: null, transcript: "Attachments/2026-09-30 1526 Meeting.md", seconds: 60 };

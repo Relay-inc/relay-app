@@ -1,7 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   dismissRecordingError,
-  hideKept,
+  discardKept,
   keptStart,
   loadKept,
   retryRecording,
@@ -28,6 +28,8 @@ export const Meter = ({ label, level }: { label: string; level: number }) => (
 export function RecordingBar() {
   const { t, locale } = useT();
   const { title, phase, progress, error, retry, kept } = useRecordingStore();
+  // the close button asks once: what it throws away cannot come back
+  const [sure, setSure] = useState("");
   useEffect(() => {
     loadKept();
   }, []);
@@ -53,13 +55,20 @@ export function RecordingBar() {
           <button className="btn cursor-pointer" onClick={() => retryRecording(kept[0])}>
             {t("rec.transcribe")}
           </button>
-          <button
-            className="grid size-5 place-items-center rounded border-0 bg-transparent text-secondary hover:bg-fill-2"
-            aria-label={t("nav.close")}
-            onClick={hideKept}
-          >
-            <Icon name="close" className="glyph size-3" />
-          </button>
+          {sure === kept[0] ? (
+            <button className="btn cursor-pointer text-late" onClick={() => void discardKept(kept[0])}>
+              {t("rec.discard")}
+            </button>
+          ) : (
+            <button
+              className="grid size-5 place-items-center rounded border-0 bg-transparent text-secondary hover:bg-fill-2"
+              aria-label={t("rec.discardHelp")}
+              title={t("rec.discardHelp")}
+              onClick={() => setSure(kept[0])}
+            >
+              <Icon name="close" className="glyph size-3" />
+            </button>
+          )}
         </div>
       ) : (
         <div className="flex items-start gap-2.5 text-xs text-late">
