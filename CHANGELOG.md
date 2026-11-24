@@ -27,6 +27,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 - A board pipeline ticket whose description changed, or that got answers in its comments (with the agent's question they answer), before it went back to its agent (moved back to the pick column, or review comments on its PR) is now reviewed against the ticket as it reads then, answers included, not as it read at the start: the review no longer sends work back as off-ticket for following the new text. Relay's other comments on the ticket are left out. (#522)
 - A board pipeline worker over several repos is pushed again when a protected branch moved only in a repo it did not change (someone pulled a merge there while it ran). The moved branch stays in its report. One in a repo it changed, or with a tip the remote does not have, still holds the push. (#526)
+
 ## [0.0.60] - 2026-11-24
 
 ### Added
