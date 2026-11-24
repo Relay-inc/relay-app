@@ -531,6 +531,12 @@ fn still_running(app: &AppHandle, key: &str) -> bool { load(app).iter().any(|w| 
 fn head_cut(s: &str, n: usize) -> String {
     if s.chars().count() <= n { s.to_string() } else { format!("{}…", s.chars().take(n).collect::<String>()) }
 }
+/// The ticket in the review's brief, within TICKET_MAX. A changed ticket ends with what people answered since the
+/// start, so a long one keeps its start and its end and loses the middle.
+fn ticket_cut(task: &str, changed: bool) -> String {
+    if !changed || task.chars().count() <= TICKET_MAX { return head_cut(task, TICKET_MAX); }
+    format!("{}\n{}", head_cut(task, TICKET_MAX * 5 / 8), tail(task, TICKET_MAX * 3 / 8))
+}
 fn tail(s: &str, n: usize) -> String {
     let c: Vec<char> = s.chars().collect();
     if c.len() <= n { s.to_string() } else { format!("…{}", c[c.len() - n..].iter().collect::<String>()) }
@@ -606,7 +612,7 @@ fn write_text(head: &str, claims: &str, diff: &str) -> (String, bool) {
 /// findings are checked first so a later round does not judge a moving target from scratch.
 fn review_head(w: &Worker, start: &str, last: Option<&LastReview>, others: &[&str]) -> (String, String) {
     let t = |k: &str| w.ticket.as_ref().and_then(|x| x[k].as_str()).unwrap_or("").to_string();
-    let mut head = format!("{}\n\n", prompt::fill(REVIEW_BRIEF, &[("number", &t("number")), ("title", &t("title")), ("task", &prompt::untrusted("ticket", &head_cut(&w.task, TICKET_MAX))), ("start", start)]));
+    let mut head = format!("{}\n\n", prompt::fill(REVIEW_BRIEF, &[("number", &t("number")), ("title", &t("title")), ("task", &prompt::untrusted("ticket", &ticket_cut(&w.task, w.ticket_changed))), ("start", start)]));
     if w.ticket_changed { head += &format!("{REVIEW_TICKET_CHANGED}\n\n"); }
     if !others.is_empty() { head += &format!("{}\n\n", prompt::fill(REVIEW_OTHER_REPOS, &[("repos", &others.join(", "))])); }
     let mut claims = prompt::fill(REVIEW_CLAIMS, &[("summary", &prompt::untrusted("agent_claims", w.report.as_ref().map(|r| r.summary.as_str()).unwrap_or("")))]);
@@ -1288,6 +1294,11 @@ mod tests {
         w.ticket_changed = true;
         let (head, _) = review_head(&w, "abc", None, &[]);
         assert!(head.contains("Plant the pear trees") && !head.contains("apple") && head.contains("changed since the agent started"), "{head}");
+        // a long changed ticket keeps its end, where the answers are
+        w.task = format!("{}\nthe answer is pears", "x".repeat(TICKET_MAX * 2));
+        assert!(review_head(&w, "abc", None, &[]).0.contains("the answer is pears"));
+        w.ticket_changed = false;
+        assert!(!review_head(&w, "abc", None, &[]).0.contains("the answer is pears"), "an unchanged one is cut at its end as before");
     }
 
     #[test]
