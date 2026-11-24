@@ -89,6 +89,8 @@ fn thread_params(cfg: &Value, mcp: &[String]) -> Value {
     if let Some(m) = text(cfg, "model") { opts["model"] = m.into(); }
     if let Some(e) = text(cfg, "effort") { config.insert("model_reasoning_effort".into(), e.into()); }
     if let Some(i) = text(cfg, "instructions") { opts["developerInstructions"] = i.into(); }
+    // who answers an approval request: codex's own reviewer or the user (lib.rs REVIEWER); unset, codex's config decides
+    if let Some(r) = text(cfg, "reviewer") { opts["approvalsReviewer"] = r.into(); }
     if cfg["fenced"] == true {
         opts["approvalsReviewer"] = "user".into();
         config.insert("features".into(), json!({"plugins": false, "apps": false}));
@@ -319,6 +321,10 @@ mod tests {
         let cfg = json!({"cwd": "/v", "model": "m", "effort": "high", "sandbox": "workspace-write", "approval": "on-request", "fenced": false, "instructions": "i"});
         assert_eq!(thread_params(&cfg, &["mine".into()]), json!({"cwd": "/v", "approvalPolicy": "on-request", "sandbox": "workspace-write", "model": "m", "developerInstructions": "i", "config": {"model_reasoning_effort": "high"}}));
         assert!(thread_params(&json!({"cwd": "/v"}), &[]).get("config").is_none());
+        assert!(thread_params(&json!({"cwd": "/v"}), &[]).get("approvalsReviewer").is_none());
+        assert_eq!(thread_params(&json!({"cwd": "/v", "reviewer": "auto_review"}), &[])["approvalsReviewer"], "auto_review");
+        // a workspace: the user, whatever was asked for
+        assert_eq!(thread_params(&json!({"cwd": "/w", "reviewer": "auto_review", "fenced": true}), &[])["approvalsReviewer"], "user");
     }
 
     #[test]

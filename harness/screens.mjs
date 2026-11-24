@@ -309,10 +309,22 @@ const todayDay = async (variant, dark) => {
   await settle(page);
 };
 const settingsPage = async (tab, sub, fixture = "default", platform = "") => {
-  await page.setViewportSize({ width: 900, height: 700 });
+  // Projects is a list and the picked project side by side: the window's default size
+  await page.setViewportSize(tab === "Projects" ? { width: 1280, height: 800 } : { width: 900, height: 700 });
   await open(page, server.url, { path: "/settings.html", fixture, platform });
   await click(tab);
   if (sub) await click(sub);
+};
+/** Settings › Projects on a project (`name`) and its tab (General or Pipeline), `height` tall */
+const projectTab = async (tabName, { fixture = "default", name = "Northwind Portal", height = 800 } = {}) => {
+  await settingsPage("Projects", undefined, fixture);
+  await page.setViewportSize({ width: 1280, height });
+  await page
+    .getByRole("button", { name: new RegExp(`^${name}`) })
+    .first()
+    .click();
+  await page.getByRole("tab", { name: new RegExp(`^${tabName}`) }).click();
+  await settle(page);
 };
 /** Organisations and servers (main window) of `fixture`, `height` tall, on the list's item `name` (This Mac, a machine) */
 const serversItem = async (fixture, name, height = 1100) => {
@@ -1143,6 +1155,23 @@ const VIEWS = {
     await waitText("Website");
   },
   "settings-integration-github-projects": () => settingsPage("Integrations", "GitHub Projects", "ghprojects"),
+  // a project's Pipeline tab in Settings › Projects, whole: the switch, the ticket flow, the build and the review, each
+  // repo found on this Mac with its checks
+  "settings-project-pipeline": async () => {
+    await projectTab("Pipeline", { fixture: "pipeline-label", height: 1300 });
+    await waitText("acme/northwind-api");
+  },
+  // its General tab: identity, the repos with their checkouts on this Mac, the branches
+  "settings-project-general": async () => {
+    await projectTab("General", { fixture: "pipeline-label", height: 1000 });
+    await waitText("acme/northwind-api");
+  },
+  // the list filtered on Needs setup: a repo without a checkout here, or a pipeline on that misses a column
+  "settings-projects-setup": async () => {
+    await projectTab("General");
+    await button("Needs setup").click();
+    await settle(page);
+  },
   // a project's Buddy pipelines in its title bar, the menu open: failed, running and passed, each with its last run (PR buddy)
   "buddy-menu": async () => {
     await open(page, server.url, { fixture: "buddy", sel: keys.switchTo });
@@ -1153,10 +1182,12 @@ const VIEWS = {
   // Buddy's page in Integrations (region, read-only token) and its Buddy project in Settings › Projects (PR buddy)
   "settings-integration-buddy": () => settingsPage("Integrations", "Buddy", "buddy"),
   "settings-project-buddy": async () => {
-    await settingsPage("Projects", undefined, "buddy");
-    await unfold("Northwind Portal");
+    await projectTab("General", { fixture: "buddy" });
     const field = page.getByRole("combobox", { name: "Buddy", exact: true }).first();
-    await page.waitForFunction(() => document.body.innerText.includes("Web shop · acme"));
+    await field.scrollIntoViewIfNeeded();
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll("select")].some(s => s.selectedOptions[0]?.text === "Web shop · acme"),
+    );
     await field.scrollIntoViewIfNeeded();
     await settle(page);
   },
@@ -1221,6 +1252,27 @@ const VIEWS = {
     await page.getByRole("button", { name: "View details" }).click();
     await waitText("All of Claude Code", 10000);
     await settle(page);
+  },
+  // Antigravity in the Usage view: its plan's name and the note that it reports no limit windows (PR #513)
+  "usage-antigravity": async () => {
+    await open(page, server.url, { fixture: "antigravity" });
+    await page.getByRole("button", { name: /^Usage/ }).click();
+    await waitText("View details");
+    await page.getByRole("button", { name: "View details" }).click();
+    await waitText("All of Claude Code", 10000);
+    await intoView("Antigravity reports its plan");
+  },
+  // Settings › Agents › Antigravity: installed and on, the hint and the Ask option, auto first (PR #513)
+  "settings-agents-antigravity": async () => {
+    await settingsPage("Agents", undefined, "antigravity");
+    await unfold("Antigravity");
+    await intoView("Ask");
+  },
+  // Settings › Agents › Codex: the Approvals option, Codex's own reviewer first (PR #513)
+  "settings-agents-codex-approvals": async () => {
+    await settingsPage("Agents");
+    await unfold("Codex");
+    await intoView("Approvals");
   },
   // two Claude accounts, the first used up: each account's limits, the one in use marked
   "usage-accounts": async () => {
@@ -1723,6 +1775,12 @@ const VIEWS = {
     await VIEWS.orchestrator();
     await intoView("Export invoices as CSV");
   },
+  // its page: a ticket over two repos, a pull request in each
+  "orchestrator-pipeline-worker": async () => {
+    await VIEWS.orchestrator();
+    await page.locator(".relay-drawer").getByText("Export invoices as CSV", { exact: true }).click();
+    await waitText("Pull request in northwind-api");
+  },
   "orchestrator-live": async () => {
     await VIEWS.orchestrator();
     await page.evaluate(() => window.__harness.orchLive());
@@ -2052,7 +2110,11 @@ const VIEWS = {
   "servers-add-org-connect": async () => {
     await VIEWS["servers-add-org-install"]();
     await button("I have the link").click();
-    await page.getByLabel("Link to the team server").fill(`relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`);
+    await page
+      .getByLabel("Link to the team server")
+      .fill(
+        `relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`,
+      );
     await page.getByText("When it does not connect").click();
     await waitText("Certificate does not match");
     await button("Check this server").click();
@@ -2064,7 +2126,11 @@ const VIEWS = {
     await VIEWS["servers-add"]();
     await page.getByRole("radio", { name: /Join a server someone else runs/ }).click();
     await button("Continue").click();
-    await page.getByLabel("Invite or pairing line").fill(`relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`);
+    await page
+      .getByLabel("Invite or pairing line")
+      .fill(
+        `relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`,
+      );
     await waitText("Invite to an organisation");
     await settle(page);
   },
@@ -2082,7 +2148,11 @@ const VIEWS = {
     await button("Add a server").last().click();
     await page.getByRole("radio", { name: /Join a server someone else runs/ }).click();
     await button("Continue").click();
-    await page.getByLabel("Invite or pairing line").fill(`relay://relay.example.net:47800#team&fp=${"9c1d".padEnd(64, "e")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`);
+    await page
+      .getByLabel("Invite or pairing line")
+      .fill(
+        `relay://relay.example.net:47800#team&fp=${"9c1d".padEnd(64, "e")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`,
+      );
     await button("Check this server").click();
     await waitText("is also called Bluebird Studio");
     await settle(page);
@@ -3251,28 +3321,24 @@ const VIEWS = {
     await settle(page);
     await intoView("Switch accounts automatically");
   },
-  // the board pipeline of a project with a linked board, folded open in Settings › Projects
+  // the board pipeline of a project with a linked board, its Pipeline tab in Settings › Projects
   "settings-pipeline": async () => {
-    await settingsPage("Projects");
-    await unfold("Northwind Portal");
+    await projectTab("Pipeline");
     await intoView("Agents at once");
   },
-  // the same, its top: the per-project switch, the checkout and the branch
+  // the same, its top: the switch, how it picks up, the ticket flow
   "settings-pipeline-top": async () => {
-    await settingsPage("Projects");
-    await unfold("Northwind Portal");
-    await intoView("Board pipeline");
+    await projectTab("Pipeline");
+    await intoView("Ticket flow");
   },
   // the same: the skill the agent follows per ticket, above plan first
   "settings-pipeline-skill": async () => {
-    await settingsPage("Projects");
-    await unfold("Northwind Portal");
+    await projectTab("Pipeline");
     await intoView("Plan first");
   },
   // the same with a skill filled in: Plan first is gone, the skill decides that per ticket
   "settings-pipeline-skill-set": async () => {
-    await settingsPage("Projects");
-    await unfold("Northwind Portal");
+    await projectTab("Pipeline");
     await intoView("Skill");
     const field = page.getByPlaceholder("ticket-flow:develop");
     await field.fill("ticket-flow:develop");
@@ -3281,8 +3347,7 @@ const VIEWS = {
   },
   // the same: the validation before a PR (checks, review, rounds)
   "settings-pipeline-validation": async () => {
-    await settingsPage("Projects");
-    await unfold("Northwind Portal");
+    await projectTab("Pipeline");
     await intoView("Rounds");
   },
   // Settings › Plugins with the example plugin (its view found, one tool allowed), and its own page: how the server starts,

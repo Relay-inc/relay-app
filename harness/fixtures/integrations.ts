@@ -671,6 +671,10 @@ export const usageLimitsAccounts = [
   },
   usageLimits[1],
 ];
+export const usageLimitsAntigravity = [
+  ...usageLimits,
+  { provider: "antigravity", limits: { ok: true, plan: "Antigravity Starter Quota", windows: [] }, accounts: null },
+];
 export function usageTokens() {
   const today = tally(182_000, 64_000, 4_100_000, 310_000, 18.4);
   const week = tally(1_240_000, 402_000, 31_800_000, 2_050_000, 131.7);
@@ -846,9 +850,39 @@ export const agentsStatus = {
       bin: "",
       defaultBin: "/opt/homebrew/bin/pi",
     },
+    {
+      id: "antigravity",
+      name: "Antigravity",
+      on: false,
+      caps: caps(false),
+      textOnly: [],
+      detect: { installed: false, bin: "/Users/me/.local/bin/agy", version: null, loggedIn: null, note: null },
+      models: [],
+      efforts: [],
+      bin: "",
+      defaultBin: "/Users/me/.local/bin/agy",
+    },
   ],
 };
 /** agents_status of fixture `models`: Claude with 40 models, so the composer's model pick gets its filter field. */
+// fixture antigravity: Antigravity installed and switched on, its plan known and no limit windows (PR #513)
+export const agentsStatusAntigravity = {
+  ...agentsStatus,
+  providers: agentsStatus.providers.map(p =>
+    p.id === "antigravity"
+      ? {
+          ...p,
+          on: true,
+          caps: { ...caps(false), permissions: true, terminal: true, limits: true, effort: false },
+          detect: { installed: true, bin: "/Users/me/.local/bin/agy", version: "1.5.13", loggedIn: null, note: null },
+          models: choices([
+            ["gemini-3.8-flash-high", "Gemini 3.8 Flash (High)"],
+            ["gemini-3.8-flash-low", "Gemini 3.8 Flash (Low)"],
+          ]),
+        }
+      : p,
+  ),
+};
 export const agentsStatusManyModels = {
   ...agentsStatus,
   providers: agentsStatus.providers.map(p =>

@@ -65,7 +65,7 @@ import type { Row as CollectionRow } from "../domain/collections/rules";
 import type { RailData } from "../domain/workspace/rail";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
 import type { OrchEvent, Worker } from "../domain/orchestrator/types";
-import type { PrStatus, Ticket } from "../domain/pipeline/types";
+import type { PipelineRepo, PrStatus, Ticket } from "../domain/pipeline/types";
 import type { SpeechModelInfo } from "../domain/settings/voice";
 import type { Recording } from "../domain/calendar/rules";
 import type { Plugin, PluginTest, PluginViewInfo, ToolResult } from "../domain/plugins/types";
@@ -456,8 +456,11 @@ export const orchDispatchTicket = (a: {
   title: string;
   task: string;
   project: string;
-  repo: string;
+  /** the checkouts the worker gets a worktree of, each with its checks */
+  repos: { path: string; checks: string }[];
   base: string;
+  /** the branch the PRs go to; empty: `base` */
+  into: string;
   ticket: Ticket;
   validate: { checks: string; review: string; rounds: number };
   plan: boolean;
@@ -467,7 +470,10 @@ export const orchMessage = (key: string, text: string) => invoke<void>("orch_mes
 export const orchAnswer = (key: string, answer: string) => invoke<Worker | null>("orch_answer", { key, answer });
 export const orchAskReport = (key: string) => invoke<void>("orch_ask_report", { key });
 export const orchRestart = (key: string) => invoke<Worker>("orch_restart", { key });
-export const orchPr = (key: string) => invoke<PrStatus>("orch_pr", { key });
+export const orchPr = (key: string) => invoke<PrStatus[]>("orch_pr", { key });
+/** The checkouts on this Mac of a project's repos, for its board pipeline; `extra` one picked by hand. */
+export const pipelineRepos = (project: string, extra: string) =>
+  invoke<PipelineRepo[]>("pipeline_repos", { project, extra });
 export const orchBoard = (key: string, mark: string) => invoke<Worker | null>("orch_board", { key, mark });
 
 // ---------- work machines (relay-server in the LAN)

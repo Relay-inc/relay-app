@@ -5,17 +5,22 @@ import type { Worker } from "../orchestrator/types.ts";
 import {
   bare,
   briefOf,
+  checksOf,
   picturesOf,
   withPictures,
   buildState,
   EMPTY_PIPELINE,
   htmlText,
   inReview,
+  needsSetup,
   picks,
   pipelineAt,
   preflightOf,
+  prsOf,
   ready,
+  reposFor,
   review,
+  reviewAll,
   stalled,
   step,
   usedUp,
@@ -60,6 +65,7 @@ const worker = (card: string, state: Worker["state"], extra: Partial<Worker> = {
 
 test("ready needs the switch and the four columns", () => {
   assert.equal(ready(P), true);
+  assert.equal(ready({ ...P, repo: "" }), true, "the repos are the project's own, found when it runs");
   assert.equal(ready({ ...P, on: false }), false);
   assert.equal(ready({ ...P, input: "" }), false);
   assert.equal(ready(undefined), false);
@@ -123,6 +129,7 @@ test("step: each end once, done with a PR to review, the rest to a person", () =
 });
 
 const pr = (x: Partial<PrStatus>): PrStatus => ({
+  url: "https://github.com/acme/web/pull/1",
   state: "OPEN",
   reviewDecision: null,
   reviews: [],
@@ -290,4 +297,98 @@ test("usedUp: a general window at 100%, on every account", () => {
   );
   accounts[1].limits = lim(w(100));
   assert.equal(usedUp([{ provider: "claude", limits: lim(w(100)), accounts }], "claude"), true);
+});
+
+const tree = (repo: string, pr: string | null, pr_error: string | null = null) => ({
+  repo,
+  worktree: `${repo}-relay-1`,
+  start: "abc",
+  base: "main",
+  checks: "",
+  pr,
+  pr_error,
+});
+
+test("a ticket over several repos: a PR each, review once all are in, merged once all are", () => {
+  const two = { trees: [tree("/c/api", "https://x/api/pull/1"), tree("/c/web", "https://x/web/pull/2")] };
+  assert.deepEqual(prsOf({ pr: "https://x/api/pull/1", ...two }), ["https://x/api/pull/1", "https://x/web/pull/2"]);
+  assert.deepEqual(prsOf({ pr: "p", trees: [] }), ["p"], "a worker from before trees");
+  assert.deepEqual(prsOf({ pr: null, trees: [tree("/c/api", null)] }), []);
+  assert.equal(step(worker("a", "done", two))?.kind, "pr");
+  // one repo it changed got no PR: in front of a person, and its PRs are not followed as if all were in review
+  const half = { trees: [tree("/c/api", "https://x/api/pull/1"), tree("/c/web", null, "git push of b failed")] };
+  const partial = worker("a", "done", { ...half, pr: "https://x/api/pull/1", pr_error: "web: git push of b failed" });
+  assert.deepEqual(step(partial), { mark: "done:100", to: "input", kind: "partial" });
+  assert.equal(inReview({ ...partial, board: "done:100" }), false);
+  assert.equal(inReview(worker("a", "done", { ...two, board: "done:100" })), true);
+  assert.equal(
+    stalled([1, 2, 3].map(i => ({ ...worker(`x${i}`, "done", two), ended: i }))),
+    false,
+    "PRs in trees count",
+  );
+
+  const api = pr({ url: "https://x/api/pull/1" });
+  const web = pr({ url: "https://x/web/pull/2" });
+  assert.equal(reviewAll([{ ...api, state: "MERGED" }, web], 0), null, "one merged waits for the other");
+  assert.deepEqual(
+    reviewAll(
+      [
+        { ...api, state: "MERGED" },
+        { ...web, state: "MERGED" },
+      ],
+      0,
+    ),
+    { kind: "merged" },
+  );
+  assert.deepEqual(
+    reviewAll(
+      [
+        { ...api, state: "MERGED" },
+        { ...web, state: "CLOSED" },
+      ],
+      0,
+    ),
+    { kind: "closed" },
+  );
+  const said = reviewAll(
+    [api, pr({ ...web, comments: [{ author: { login: "alex" }, body: "typo", createdAt: at(200) }] })],
+    100,
+  );
+  assert.ok(said?.kind === "feedback" && said.text.startsWith("On https://x/web/pull/2:\n"), JSON.stringify(said));
+  assert.equal(reviewAll([], 0), null);
+});
+
+test("reposFor: the project's checkouts but the ones switched off, each with its checks", () => {
+  const found = [
+    { slug: "acme/api", path: "/c/api" },
+    { slug: "acme/infra", path: "/c/infra" },
+    { slug: "acme/web", path: "/c/web" },
+  ];
+  const p = {
+    ...P,
+    repo: "/c/api",
+    checks: "make test",
+    repos: { "acme/infra": { off: true }, "acme/web": { checks: " pnpm test " } },
+  };
+  assert.deepEqual(reposFor(found, p), [
+    { path: "/c/api", checks: "make test" },
+    { path: "/c/web", checks: "pnpm test" },
+  ]);
+  assert.equal(
+    checksOf({ ...p, repos: { "acme/api": { checks: "" } } }, found[0]),
+    "",
+    "its own checks, also empty, win over the old command",
+  );
+  assert.equal(checksOf({ ...P, checks: "make test" }, found[2]), "", "the old command was for its one checkout only");
+});
+
+test("needsSetup: a repo without a checkout, or a pipeline on that misses a column", () => {
+  const found = [{ slug: "acme/web", path: "/code/web" }];
+  assert.equal(needsSetup([], [], undefined), false);
+  assert.equal(needsSetup(["acme/web"], found, undefined), false);
+  assert.equal(needsSetup(["acme/web", "acme/api"], found, undefined), true);
+  const on = { ...EMPTY_PIPELINE, on: true, pick: "1", busy: "2", review: "3", input: "4" };
+  assert.equal(needsSetup(["acme/web"], found, on), false);
+  assert.equal(needsSetup(["acme/web"], found, { ...on, input: "" }), true);
+  assert.equal(needsSetup(["acme/web"], found, { ...on, on: false, input: "" }), false);
 });

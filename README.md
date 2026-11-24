@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Your notes, your projects and your coding agents in one Mac app.</b><br>
-  Claude Code, Codex, OpenCode and Pi with a real interface, on top of your Obsidian vault.
+  Claude Code, Codex, OpenCode, Pi and Antigravity with a real interface, on top of your Obsidian vault.
 </p>
 
 <p align="center">
@@ -85,7 +85,7 @@ Off by default, and it may still change.
 ## Quick start
 
 You need a Mac with Apple Silicon and [Claude Code](https://docs.claude.com/en/docs/claude-code/setup), installed and
-logged in (`claude` once in a terminal). Codex, OpenCode or Pi work too, next to it or instead.
+logged in (`claude` once in a terminal). Codex, OpenCode, Pi or Antigravity work too, next to it or instead.
 
 1. Download the `.dmg` from the [latest release](https://github.com/Relay-inc/relay-app/releases/latest) and drag
    Relay to Applications.

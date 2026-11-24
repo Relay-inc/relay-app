@@ -38,4 +38,5 @@ export const AGENT_CHANGELOG: Record<string, string> = {
   codex: "https://github.com/openai/codex/releases",
   opencode: "https://github.com/sst/opencode/releases",
   pi: "https://github.com/earendil-works/pi/releases",
+  antigravity: "https://antigravity.google/docs/changelog",
 };

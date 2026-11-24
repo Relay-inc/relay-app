@@ -450,7 +450,13 @@ export function settings(fixture: string) {
       "Northwind Portal": {
         on: fixture.startsWith("pipeline"),
         mode: fixture === "pipeline-manual" ? "manual" : "auto",
-        repo: "/Users/demo/code/northwind",
+        repo: "",
+        // its repos as pipeline_repos finds them (mock-backend.ts): each with its checks, the infrastructure kept out
+        repos: {
+          "acme/northwind-api": { checks: "composer install -q && vendor/bin/phpstan && vendor/bin/phpunit" },
+          "acme/northwind-infra": { off: true },
+          "acme/northwind-portal": { checks: "pnpm install && pnpm lint && pnpm test" },
+        },
         base: "develop",
         group: "list",
         pick: "tl2",
@@ -460,7 +466,6 @@ export function settings(fixture: string) {
         merged: "tl5",
         label: fixture === "pipeline" ? "" : "agent",
         parallel: 1,
-        checks: "composer install -q && vendor/bin/phpstan && vendor/bin/phpunit",
         reviewer: "codex",
         rounds: 3,
       },
@@ -524,6 +529,7 @@ export function settings(fixture: string) {
         codex: { on: true, bin: "", sandbox: "workspace-write" },
         opencode: { on: false, bin: "" },
         pi: { on: false, bin: "" },
+        antigravity: { on: fixture === "antigravity", bin: "" },
       },
     },
   };
