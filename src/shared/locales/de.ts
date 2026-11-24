@@ -508,6 +508,13 @@ export default {
   "pp.openPr": "PR öffnen",
   "pp.takeOver": "Übernehmen",
   "pp.takeOverHelp": "Den Agenten stoppen und das Ticket in die Spalte für Input verschieben",
+  "pl.pausedBack":
+    "Die Pipeline wurde pausiert, bevor ein Agent mit diesem Ticket begann. Starte es erneut, sobald die Pipeline wieder läuft.",
+  "pp.takeOverAsk": "Diesen Agenten stoppen? Das Ticket geht in die Spalte für Input, Worktree und Commits bleiben.",
+  "pp.takeOverYes": "Stoppen und übernehmen",
+  "pp.waiting": "Wartet in der Abholspalte",
+  "pp.waitingPaused": "Wird aufgenommen, sobald sie wieder läuft",
+  "pp.read": "gelesen {ago}",
   "pc.repoCount_one": "{n} Repo",
   "pc.repoCount_other": "{n} Repos",
   "pi.find": "Symbole suchen",

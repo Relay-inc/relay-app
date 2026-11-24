@@ -501,6 +501,13 @@ const en = {
   "pp.openPr": "Open PR",
   "pp.takeOver": "Take over",
   "pp.takeOverHelp": "Stop the agent and move the ticket to the input column",
+  "pl.pausedBack":
+    "The pipeline was paused before an agent started on this ticket. Start it again once the pipeline goes on.",
+  "pp.takeOverAsk": "Stop this agent? The ticket goes to the input column, its worktree and commits stay.",
+  "pp.takeOverYes": "Stop and take over",
+  "pp.waiting": "Waiting in the pick column",
+  "pp.waitingPaused": "Picked up once it goes on",
+  "pp.read": "read {ago}",
   "pc.repoCount_one": "{n} repo",
   "pc.repoCount_other": "{n} repos",
   "pi.find": "Find icons",

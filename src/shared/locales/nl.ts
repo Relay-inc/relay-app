@@ -507,6 +507,13 @@ export default {
   "pp.openPr": "PR openen",
   "pp.takeOver": "Overnemen",
   "pp.takeOverHelp": "De agent stoppen en het ticket naar de kolom voor input zetten",
+  "pl.pausedBack":
+    "De pipeline werd gepauzeerd voor er een agent aan dit ticket begon. Start het opnieuw zodra de pipeline weer loopt.",
+  "pp.takeOverAsk": "Deze agent stoppen? Het ticket gaat naar de kolom voor input, de worktree en commits blijven.",
+  "pp.takeOverYes": "Stoppen en overnemen",
+  "pp.waiting": "Wacht in de kolom om op te pikken",
+  "pp.waitingPaused": "Wordt opgepikt zodra ze weer loopt",
+  "pp.read": "gelezen {ago}",
   "pc.repoCount_one": "{n} repo",
   "pc.repoCount_other": "{n} repo's",
   "pi.find": "Iconen zoeken",

@@ -22,9 +22,11 @@ import {
   reviewAll,
   runnable,
   stalled,
+  startsNow,
   step,
   usedUp,
   ticketOf,
+  waitingIn,
   workersOf,
 } from "../../domain/pipeline/rules";
 import type { Pipeline, Step, Ticket } from "../../domain/pipeline/types";
@@ -116,6 +118,8 @@ export function buildTicket(ref: BoardRef, card: Pick<Card, "id" | "title" | "nu
 export function pipelinePanel(project: string) {
   const s = settings();
   const p = s.pipelines?.[project];
+  const tickets = panelTickets(allWorkers(), project);
+  const waiting = usePipelineStore.getState().waiting[project];
   return {
     linked: !!p && !!s.boards?.[project],
     on: ready(p),
@@ -124,7 +128,12 @@ export function pipelinePanel(project: string) {
     running: workersOf(allWorkers(), project).filter(w => w.state === "running").length,
     parallel: Math.max(1, p?.parallel ?? 1),
     holding: usePipelineStore.getState().holding[project] ?? "",
-    tickets: panelTickets(allWorkers(), project),
+    tickets,
+    // a hand-picked pipeline reads no pick column. A ticket claimed since the board was read shows with its worker
+    waiting:
+      p && ready(p) && !manual(p) && waiting
+        ? { at: waiting.at, tickets: waiting.tickets.filter(x => !tickets.some(w => ticketOf(w)?.card === x.id)) }
+        : null,
   };
 }
 
@@ -215,9 +224,9 @@ async function runOne(project: string, p: Pipeline) {
       await move(b, id, p.input);
       await comment(b, id, t("pl.closed", { pr: links }));
       adopt(await backend.orchBoard(w.key, "closed"));
-    } else if (!p.paused) {
-      // review comments start the worker again: that waits while paused, the comments are read again from the run's
-      // end once the pipeline goes on
+    } else if (startsNow(settings(), project)) {
+      // review comments start the worker again: that waits while paused (also when paused during this pass), the
+      // comments are read again from the run's end once the pipeline goes on
       await sendWorker(w, fill(prompts.pipeline.reviewComments, { pr: prsOf(w).join(", "), text: r.text }));
       await move(b, id, p.busy);
       await comment(b, id, t("pl.feedback"));
@@ -227,13 +236,16 @@ async function runOne(project: string, p: Pipeline) {
   if (manual(p)) return;
   const cards = await prov.cards(ctx, ref);
   const mine = workersOf(allWorkers(), project);
-  const { fresh, resume: back } = picks(cards, card => colOf(prov, { group }, card), p, mine);
+  const col = (card: Card) => colOf(prov, { group }, card);
+  await keepWaiting(b, project, waitingIn(cards, col, p, mine));
+  const { fresh, resume: back } = picks(cards, col, p, mine);
   let room = Math.max(1, p.parallel) - mine.filter(w => w.state === "running").length;
   if (room <= 0 || (!fresh.length && !back.length)) return;
   // a run on a spent plan would only stall: wait until the limits read again
   if (usedUp(await backend.usageLimits().catch(() => []), "claude")) return hold(project, "pl.usedUp");
+  // the pause as it is now, before every start: one pressed while this pass runs stops it here
   for (const { card, worker } of back) {
-    if (room-- <= 0) return;
+    if (room-- <= 0 || !startsNow(settings(), project)) return;
     await resume(b, card.id, worker, "The ticket was moved back to the pick column on the board.");
   }
   // runs keep ending without a PR: tickets moved back still go on (a person looked at them), new ones wait
@@ -243,7 +255,7 @@ async function runOne(project: string, p: Pipeline) {
   if (fresh.length && !reposFor(await backend.pipelineRepos(project, p.repo), p).length)
     throw new Error(t("pl.noRepos"));
   for (const card of fresh) {
-    if (room-- <= 0) return;
+    if (room-- <= 0 || !startsNow(settings(), project)) return;
     await claim(b, project, card);
   }
 }
@@ -297,6 +309,13 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
     const task = view ? withPictures(briefOf(view), pictures) : `Ticket #${card.number} "${card.title}"\n${url}`;
     const repos = reposFor(await backend.pipelineRepos(project, b.p.repo), b.p);
     if (!repos.length) throw new Error(t("pl.noRepos"));
+    // paused while the ticket was read and judged: back to the pick column for when it goes on, one started by hand
+    // to a person with why
+    if (!startsNow(settings(), project)) {
+      if (!hand && b.p.pick) return await move(b, card.id, b.p.pick);
+      await move(b, card.id, b.p.input);
+      return await comment(b, card.id, t("pl.pausedBack"));
+    }
     const w = await backend.orchDispatchTicket({
       title: card.title,
       task,
@@ -339,6 +358,23 @@ async function land(b: Board, w: Worker, s: Step) {
   await move(b, id, s.to === "review" ? b.p.review : s.to === "merged" ? b.p.merged : b.p.input);
   await comment(b, id, text.trim());
   adopt(await backend.orchBoard(w.key, s.mark));
+}
+
+/** The pick column's tickets without a worker, for the pipeline panel, each with its link (the providers keep the
+ *  links of the cards they just listed, so this asks the tracker nothing new for most). */
+async function keepWaiting(b: Board, project: string, cards: Card[]) {
+  const ctx = ctxOf(b.prov);
+  const tickets = await Promise.all(
+    cards.map(async c => ({
+      id: c.id,
+      number: c.number,
+      title: c.title,
+      url: await b.prov.url(ctx, b.ref, c.id).catch(() => ""),
+    })),
+  );
+  usePipelineStore.setState(draft => {
+    draft.waiting[project] = { at: Date.now(), tickets };
+  });
 }
 
 const nameOf = (b: Board, id: string) => b.columns.find(c => c.id === id)?.name ?? id;

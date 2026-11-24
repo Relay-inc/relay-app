@@ -464,7 +464,7 @@ export function settings(fixture: string) {
         review: "tl4",
         input: "tl1",
         merged: "tl5",
-        label: fixture === "pipeline" || fixture === "pipeline-panel" ? "" : "agent",
+        label: fixture === "pipeline" ? "" : "agent",
         parallel: fixture === "pipeline-panel" ? 3 : 1,
         reviewer: "codex",
         rounds: 3,

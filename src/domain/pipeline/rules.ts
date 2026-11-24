@@ -36,6 +36,12 @@ export const runnable = (pipelines: Record<string, Pipeline> | undefined, all?: 
     ready(p) ? [[project, { ...p, paused: pausedOf(p, all) }] as [string, Pipeline]] : [],
   );
 
+/** Whether a pass may start something for a project right now (claim a ticket, pick one up again, send review
+ *  comments): its pipeline still ready and not paused, read from the settings at that moment, so a pause pressed
+ *  while a pass runs stops it before its next start. */
+export const startsNow = (s: { pipelines?: Record<string, Pipeline>; pipelinesPaused?: boolean }, project: string) =>
+  ready(s.pipelines?.[project]) && !pausedOf(s.pipelines?.[project], s.pipelinesPaused);
+
 /** A repo's checks: its own, else the pipeline's one command from before for the one checkout it had. */
 export const checksOf = (p: Pipeline, r: PipelineRepo) =>
   (p.repos?.[r.slug]?.checks ?? (r.path === p.repo ? p.checks : "") ?? "").trim();
@@ -80,10 +86,18 @@ export const lastWorker = (workers: Worker[], card: string) => workers.filter(w 
  *  worker. `resume`: a ticket moved back after a worker ran on it, which that worker picks up again with its worktree.
  *  None while the pipeline is paused. */
 export function picks(cards: Card[], col: (c: Card) => string, p: Pipeline, workers: Worker[]) {
+  return p.paused ? { fresh: [], resume: [] } : pickColumn(cards, col, p, workers);
+}
+
+/** The tickets waiting in the pick column with no worker yet, in pick order: what the pipeline starts on next, paused
+ *  or not (the pipeline panel lists them). */
+export const waitingIn = (cards: Card[], col: (c: Card) => string, p: Pipeline, workers: Worker[]) =>
+  pickColumn(cards, col, p, workers).fresh;
+
+function pickColumn(cards: Card[], col: (c: Card) => string, p: Pipeline, workers: Worker[]) {
   const label = p.label.trim().toLowerCase();
   const fresh: Card[] = [];
   const resume: { card: Card; worker: Worker }[] = [];
-  if (p.paused) return { fresh, resume };
   const waiting = cards
     .filter(c => col(c) === p.pick && (!label || (c.labels ?? []).some(l => l.toLowerCase() === label)))
     .sort((a, b) => a.placement - b.placement);

@@ -359,6 +359,9 @@ const TASKS = TASK_TITLES.map((title, i) => ({
 }));
 // the first card has three subtasks, one of them closed: the count on its card, the list in its ticket window
 Object.assign(TASKS[0].attributes, { subtask_count: 3, open_subtask_count: 2 });
+/** A label on some tasks, for one fixture only (pipeline-panel: the two "To do" tasks its pipeline waits on). */
+export const tagTasks = (numbers: number[], tag: string) =>
+  TASKS.filter(task => numbers.includes(task.attributes.number)).forEach(task => task.attributes.tag_list.push(tag));
 const SUBTASKS = ["CSV column order", "VAT column per rate", "Export button in the list"].map((title, i) => ({
   ...TASKS[0],
   id: String(900200 + i),

@@ -205,6 +205,8 @@ const diceTools = [
 // pipeline-panel: the board pipeline's three workers (fixtures/orchestrator.ts pipelineWorkers), on a used-up plan
 let workers = orchOn && !orchEmpty ? structuredClone(orch.workers) : [];
 if (fixture === "pipeline-panel") workers = structuredClone(orch.pipelineWorkers) as typeof workers;
+// and two tickets in its pick column with its label, waiting for a worker
+if (fixture === "pipeline-panel") integ.tagTasks([301, 311], "agent");
 
 // ---------- the event plugin: listeners by event, emitted synchronously (a real Tauri event is one task per event)
 const listeners = new Map<string, Set<number>>();

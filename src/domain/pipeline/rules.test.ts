@@ -21,6 +21,8 @@ import {
   ready,
   reposFor,
   runnable,
+  startsNow,
+  waitingIn,
   review,
   reviewAll,
   stalled,
@@ -133,6 +135,38 @@ test("the global pause holds every pipeline, each one's own pause stays its own"
   assert.equal(own.Acme.paused, false);
   assert.equal(own.Northwind.paused, true);
   assert.equal(all.Acme.paused, undefined, "the settings themselves are left alone");
+});
+
+test("startsNow: read at the moment of each start, the own pause, the global one, a pipeline switched off", () => {
+  assert.equal(startsNow({ pipelines: { Acme: P } }, "Acme"), true);
+  assert.equal(startsNow({ pipelines: { Acme: { ...P, paused: true } } }, "Acme"), false);
+  assert.equal(startsNow({ pipelines: { Acme: P }, pipelinesPaused: true }, "Acme"), false);
+  assert.equal(startsNow({ pipelines: { Acme: { ...P, on: false } } }, "Acme"), false);
+  assert.equal(startsNow({ pipelines: { Acme: P } }, "Northwind"), false, "no pipeline, nothing to start");
+});
+
+test("waitingIn: the pick column with the label and no worker yet, in pick order, also while paused", () => {
+  const cards = [
+    card("b", "todo", 2, ["agent"]),
+    card("a", "todo", 1, ["Agent"]),
+    card("c", "todo", 3),
+    card("d", "doing", 0, ["agent"]),
+    card("e", "todo", 4, ["agent"]),
+    card("f", "todo", 5, ["agent"]),
+    card("g", "todo", 6, ["agent"]),
+  ];
+  const ws = [worker("e", "blocked"), worker("f", "running"), worker("g", "done", { board: "merged" })];
+  const labelled = { ...P, label: "agent" };
+  assert.deepEqual(
+    waitingIn(cards, c => c.column, labelled, ws).map(c => c.id),
+    ["a", "b", "g"],
+    "moved back with a worker or running is not waiting, a merged one put back is",
+  );
+  assert.deepEqual(
+    waitingIn(cards, c => c.column, { ...labelled, paused: true }, ws).map(c => c.id),
+    ["a", "b", "g"],
+  );
+  assert.equal(waitingIn(cards, c => c.column, P, ws).length, 4, "without a label every card in the column");
 });
 
 test("panel: each ticket's last worker, newest first, finished ones left out, where each is on the board", () => {

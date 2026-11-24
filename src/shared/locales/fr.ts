@@ -515,6 +515,14 @@ export default {
   "pp.openPr": "Ouvrir la PR",
   "pp.takeOver": "Reprendre la main",
   "pp.takeOverHelp": "Arrêter l'agent et déplacer le ticket dans la colonne pour intervention",
+  "pl.pausedBack":
+    "Le pipeline a été mis en pause avant qu'un agent ne commence ce ticket. Relancez-le quand le pipeline reprend.",
+  "pp.takeOverAsk":
+    "Arrêter cet agent ? Le ticket va dans la colonne pour intervention, son worktree et ses commits restent.",
+  "pp.takeOverYes": "Arrêter et reprendre la main",
+  "pp.waiting": "En attente dans la colonne de prise en charge",
+  "pp.waitingPaused": "Pris en charge à la reprise",
+  "pp.read": "lu {ago}",
   "pc.repoCount_one": "{n} dépôt",
   "pc.repoCount_other": "{n} dépôts",
   "pi.find": "Chercher les icônes",

@@ -26,9 +26,11 @@ const LINK = "text-accent-text bg-transparent border-0 p-0 cursor-default hover:
 const COLUMN = { busy: "pl.col.busy", review: "pl.col.review", input: "pl.col.input" } as const;
 
 /** A project's board pipeline in the right drawer: whether it runs or is paused (and why it holds), its agents against
- *  its maximum, pause and go on, the switch that pauses every pipeline, then each ticket it works on with its worker. */
+ *  its maximum, pause and go on, the switch that pauses every pipeline, each ticket it works on with its worker, then
+ *  the tickets waiting in its pick column as the runner last read them. */
 export function PipelinePanel({ project }: { project: string }) {
   const { t } = useT();
+  const ago = useAgo();
   const panel = useDerived(() => pipelinePanel(project));
   const name = useDerived(() => projectName(project));
   // stopping the running agents asks first, in place
@@ -64,23 +66,15 @@ export function PipelinePanel({ project }: { project: string }) {
         ) : null}
         {panel.on ? (
           confirm ? (
-            <div className="flex flex-col gap-2 rounded-xl border border-separator px-3.5 py-3 text-[13px]">
-              <span>{t("pp.stopAsk", { n: panel.running })}</span>
-              <div className="flex gap-2">
-                <button
-                  className="h-7.5 px-3 rounded-lg border-0 bg-late text-white font-medium cursor-default"
-                  onClick={() => {
-                    setConfirm(false);
-                    void pausePipeline(project, true, true);
-                  }}
-                >
-                  {t("pp.stopYes")}
-                </button>
-                <button className={GHOST} onClick={() => setConfirm(false)}>
-                  {t("pp.cancel")}
-                </button>
-              </div>
-            </div>
+            <Confirm
+              text={t("pp.stopAsk")}
+              yes={t("pp.stopYes")}
+              onYes={() => {
+                setConfirm(false);
+                void pausePipeline(project, true, true);
+              }}
+              onCancel={() => setConfirm(false)}
+            />
           ) : (
             <div className="flex flex-wrap items-center gap-2">
               {panel.all ? (
@@ -126,6 +120,65 @@ export function PipelinePanel({ project }: { project: string }) {
           </p>
         )}
       </section>
+
+      {panel.waiting?.tickets.length ? (
+        <section className="flex flex-col gap-1.5">
+          <div className="flex items-baseline gap-2">
+            <span className={LABEL}>{t(paused ? "pp.waitingPaused" : "pp.waiting")}</span>
+            <span className="flex-1" />
+            <span className="text-[11px] text-tertiary">{t("pp.read", { ago: ago(panel.waiting.at) })}</span>
+          </div>
+          <div className="flex flex-col border border-separator rounded-[10px]">
+            {panel.waiting.tickets.map(x => (
+              <div
+                key={x.id}
+                className="flex items-center gap-2.5 h-9 px-3 border-t border-separator first:border-t-0 text-[13px]"
+              >
+                <span className="flex-1 min-w-0 truncate">
+                  {x.number ? <span className="text-tertiary">#{x.number} </span> : null}
+                  {x.title}
+                </span>
+                {x.url ? (
+                  <button className={`${LINK} flex-none text-xs`} onClick={() => openPipelineLink(x.url)}>
+                    {t("pp.openTicket")}
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+/** An in-place question before something that stops an agent: what happens, the red button and Cancel. */
+function Confirm({
+  text,
+  yes,
+  onYes,
+  onCancel,
+}: {
+  text: string;
+  yes: string;
+  onYes: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useT();
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-separator px-3.5 py-3 text-[13px]">
+      <span>{text}</span>
+      <div className="flex gap-2">
+        <button
+          className="h-7.5 px-3 rounded-lg border-0 bg-late text-white font-medium cursor-default"
+          onClick={onYes}
+        >
+          {yes}
+        </button>
+        <button className={GHOST} onClick={onCancel}>
+          {t("pp.cancel")}
+        </button>
+      </div>
     </div>
   );
 }
@@ -139,6 +192,8 @@ function TicketRow({ worker }: { worker: Worker }) {
   const ticket = ticketOf(worker)!;
   const question = needOf(worker);
   const running = worker.state === "running";
+  // taking over stops the agent: asked first, in the row
+  const [confirm, setConfirm] = useState(false);
   // a done worker without its PR is not "done with a PR": the state says it needs a person
   const short = worker.state === "done" && !prsOf(worker).length ? t("pp.noPr") : state.short;
   return (
@@ -174,12 +229,23 @@ function TicketRow({ worker }: { worker: Worker }) {
               {l.repo ? t("orch.prIn", { repo: l.repo }) : t("pp.openPr")}
             </button>
           ))}
-          {running ? (
-            <button className={LINK} title={t("pp.takeOverHelp")} onClick={() => takeOver(worker)}>
+          {running && !confirm ? (
+            <button className={LINK} title={t("pp.takeOverHelp")} onClick={() => setConfirm(true)}>
               {t("pp.takeOver")}
             </button>
           ) : null}
         </span>
+        {running && confirm ? (
+          <Confirm
+            text={t("pp.takeOverAsk")}
+            yes={t("pp.takeOverYes")}
+            onYes={() => {
+              setConfirm(false);
+              void takeOver(worker);
+            }}
+            onCancel={() => setConfirm(false)}
+          />
+        ) : null}
       </div>
     </div>
   );
