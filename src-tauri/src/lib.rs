@@ -1934,7 +1934,11 @@ fn pipeline_repos(state: State<'_, App>, project: String, extra: Option<String>)
     Ok(out.into_iter().map(|(slug, path)| json!({"slug": slug, "path": path})).collect())
 }
 #[tauri::command]
-fn orch_message(app: AppHandle, key: String, text: String) -> Result<(), String> { orch::pipe_message(&app, &key, &text) }
+fn orch_message(app: AppHandle, key: String, text: String, task: Option<String>) -> Result<(), String> {
+    // the new task first: the round this message starts is reviewed against it
+    if let Some(t) = task { orch::retask(&app, &key, t)?; }
+    orch::pipe_message(&app, &key, &text)
+}
 #[tauri::command]
 fn orch_answer(app: AppHandle, key: String, answer: String) -> Option<orch::Worker> { orch::set_answer(&app, &key, answer) }
 #[tauri::command]
