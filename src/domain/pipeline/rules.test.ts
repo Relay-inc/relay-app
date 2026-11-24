@@ -15,6 +15,7 @@ import {
   RELAY_COMMENTS,
   RELAY_OPENINGS,
   checksOf,
+  pickedOf,
   picturesOf,
   withPictures,
   buildState,
@@ -598,6 +599,12 @@ test("reposFor: the project's checkouts but the ones switched off, each with its
     "its own checks, also empty, win over the old command",
   );
   assert.equal(checksOf({ ...P, checks: "make test" }, found[2]), "", "the old command was for its one checkout only");
+});
+
+test("pickedOf: the checkout from before, then the others picked by hand", () => {
+  assert.deepEqual(pickedOf(undefined), []);
+  assert.deepEqual(pickedOf({ repo: "" }), []);
+  assert.deepEqual(pickedOf({ repo: "/c/api", checkouts: ["/c/web", "/c/infra"] }), ["/c/api", "/c/web", "/c/infra"]);
 });
 
 test("needsSetup: a repo without a checkout, or a pipeline on that misses a column", () => {

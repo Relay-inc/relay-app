@@ -32,6 +32,7 @@ import {
   ticketOf,
   waitingIn,
   workersOf,
+  pickedOf,
 } from "../../domain/pipeline/rules";
 import type { Pipeline, Step, Ticket } from "../../domain/pipeline/types";
 import type { AnswerKind } from "../../domain/pipeline/rules";
@@ -349,7 +350,7 @@ async function runOne(project: string, p: Pipeline) {
   if (stalled(workersOf(allWorkers(), project))) return hold(project, "pl.stalled");
   hold(project, "");
   // no repo to build in: said once, the tickets stay where they are
-  if (fresh.length && !reposFor(await backend.pipelineRepos(project, p.repo), p).length)
+  if (fresh.length && !reposFor(await backend.pipelineRepos(project, pickedOf(p)), p).length)
     throw new Error(t("pl.noRepos"));
   for (const card of fresh) {
     if (room-- <= 0 || !startsNow(settings(), project)) return;
@@ -408,7 +409,7 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
     // ponytail: only at the start; a picture added later reaches a resumed worker as a link
     const pictures = view ? await backend.ticketPictures(b.prov.id, picturesOf(view)).catch(() => []) : [];
     const task = view ? withPictures(briefOf(view), pictures) : `Ticket #${card.number} "${card.title}"\n${url}`;
-    const repos = reposFor(await backend.pipelineRepos(project, b.p.repo), b.p);
+    const repos = reposFor(await backend.pipelineRepos(project, pickedOf(b.p)), b.p);
     if (!repos.length) throw new Error(t("pl.noRepos"));
     // paused while the ticket was read and judged: back to the pick column for when it goes on, one started by hand
     // to a person with why

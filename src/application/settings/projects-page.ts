@@ -1,4 +1,5 @@
 import { t } from "../../shared/i18n";
+import { pickedOf } from "../../domain/pipeline/rules";
 import { isSite } from "../../domain/workspace/rules";
 import type { IconKind } from "../../domain/workspace/types";
 import * as backend from "../../infrastructure/backend";
@@ -46,7 +47,7 @@ async function loadProjectsPage() {
   });
 }
 const findCheckouts = (project: string) =>
-  backend.pipelineRepos(project, st().settings.pipelines?.[project]?.repo ?? "").catch(() => []);
+  backend.pipelineRepos(project, pickedOf(st().settings.pipelines?.[project])).catch(() => []);
 /** The checkouts of one project again, after its repos or its hand-picked checkout changed. */
 export async function loadCheckouts(project: string) {
   const found = await findCheckouts(project);
