@@ -19,6 +19,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 - Cmd-V outside a field pastes into the composer on the Mac too: the Edit menu took the key before Relay saw it. (#521)
 ### Changed
 
+- A board pipeline PR follows the repo's own PR template when it has one (.github/, the root or docs/, or .github/PULL_REQUEST_TEMPLATE/): the agent fills in every section, n/a with the reason where it cannot, and Relay adds the ticket, the other repos, the checks, the review notes and the decisions after it. Without a template the description is as before.
 - The board pipeline has a branch to start from and a separate branch the PRs go to, so work can start from main and go to staging. Left empty, the PRs go to the branch the work started from, as before. The repo rows in its settings keep a long repo name and path on one line, the full path in the tooltip.
 
 ## [0.0.59] - 2026-11-23
