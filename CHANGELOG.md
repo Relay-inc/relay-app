@@ -14,9 +14,11 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+## [0.0.64] - 2026-11-24
+
 ### Fixed
 
-- The context meter of a new conversation shows the model's real window from the start, not 200k until its first turn ends (a long first turn, like a plan and its build, showed 200k throughout): Relay remembers the window each model reported
+- The context meter of a new conversation shows the model's real window from the start, not 200k until its first turn ends (a long first turn, like a plan and its build, showed 200k throughout): Relay remembers the window each model reported (#536)
 
 ## [0.0.63] - 2026-11-24
 
