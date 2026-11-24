@@ -42,6 +42,25 @@ export const runnable = (pipelines: Record<string, Pipeline> | undefined, all?: 
 export const startsNow = (s: { pipelines?: Record<string, Pipeline>; pipelinesPaused?: boolean }, project: string) =>
   ready(s.pipelines?.[project]) && !pausedOf(s.pipelines?.[project], s.pipelinesPaused);
 
+/** What an answer from the pipeline panel does with its ticket once the comment is on it: its worker picks it up
+ *  again now (it may start, there is room, it is not running), the ticket goes to the pick column for the pipeline to
+ *  take when it can (paused, full, or no worker yet), or it stays where it is (a hand-picked pipeline has no pick
+ *  column: Build with agent continues it). */
+export function afterAnswer(o: {
+  worker: boolean;
+  running: boolean;
+  starts: boolean;
+  room: boolean;
+  manual: boolean;
+}): "resume" | "pick" | "stay" {
+  if (o.running) return "stay";
+  if (o.worker && o.starts && o.room) return "resume";
+  return o.manual ? "stay" : "pick";
+}
+
+/** A plan the agent sent for approval (plan-first.md, skill.md): its questions start with this. */
+export const isPlan = (questions: string | null | undefined) => !!questions?.startsWith("Plan for approval:");
+
 /** A repo's checks: its own, else the pipeline's one command from before for the one checkout it had. */
 export const checksOf = (p: Pipeline, r: PipelineRepo) =>
   (p.repos?.[r.slug]?.checks ?? (r.path === p.repo ? p.checks : "") ?? "").trim();
@@ -260,9 +279,7 @@ export function preflightOf(answer: string): { clear: true } | { clear: false; q
  *  taking new tickets. A plan sent for approval and a run you stopped are not misses. */
 export const MISSES = 3;
 const missed = (w: Worker) =>
-  w.state === "done"
-    ? !prsOf(w).length
-    : w.state !== "stopped" && !w.report?.questions?.startsWith("Plan for approval:");
+  w.state === "done" ? !prsOf(w).length : w.state !== "stopped" && !isPlan(w.report?.questions);
 
 /** The pipeline's last MISSES ended runs all missed: something is off (the tickets, the repo, the checks) and new
  *  tickets would only fail the same way. A run that opens a PR, a ticket moved back or one you start yourself goes on. */
