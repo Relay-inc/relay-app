@@ -1412,6 +1412,9 @@ function handle(cmd: string, a: Args): unknown {
     case "meeting_record_cancel":
       meetingTicks = null;
       return null;
+    // the menu bar's recording line (tray.rs): nothing to draw here
+    case "tray_recording":
+      return null;
     case "pty_spawn": {
       const id = ++ptyId;
       const channel = typeof a.onData === "object" ? a.onData.id : Number(String(a.onData).split(":")[1]);

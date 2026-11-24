@@ -8,7 +8,9 @@ import {
   meetingRecordRetry,
   meetingRecordStart,
   meetingRecordStop,
+  onTrayRecording,
   pickPath,
+  trayRecording,
 } from "../../infrastructure/backend";
 import type { LiveLine } from "../../infrastructure/backend";
 export type { LiveLine };
@@ -250,4 +252,20 @@ export async function cancelRecording() {
   await meetingRecordCancel().catch(() => {});
   set({ phase: "idle", meeting: null });
 }
+/** The menu bar icon follows the recording: a red dot and the meeting on top while one runs, with Open meeting and Stop
+ *  recording, which only the window that records acts on. Called once per window at boot. */
+export function followTray() {
+  useRecordingStore.subscribe((now, before) => {
+    const title = (s: RecordingState) =>
+      s.phase === "recording" ? s.meeting?.title || t("wait.meetingUntitled") : null;
+    if (title(now) !== title(before)) void trayRecording(title(now)).catch(() => {});
+  });
+  void onTrayRecording(action => {
+    const { meeting, phase } = rec();
+    if (phase !== "recording" || !meeting) return;
+    if (action === "stop") void stopRecording();
+    else openMeetingView(meeting);
+  });
+}
+
 export const dismissRecordingError = () => set({ error: "", retry: "", meeting: null });

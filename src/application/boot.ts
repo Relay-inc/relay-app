@@ -14,7 +14,7 @@ import { openInvite, openServers } from "./settings/servers";
 import { MENU_COMMANDS, type CommandId } from "../domain/settings/shortcuts";
 import { noteChanged } from "./navigation/pages";
 import { loadSnapshot, pollSnapshot, project, refreshIcons, reloadIcons, checkFavicons } from "./workspace/vault";
-import { recordNow } from "./calendar/recording";
+import { followTray, recordNow } from "./calendar/recording";
 import { onboard, runSetup, takeSetup } from "./workspace/vault-setup";
 import { useConversationsStore } from "./conversations/store";
 import { saveChats, newChatHere } from "./conversations/chats";
@@ -290,6 +290,7 @@ function startPolls() {
   setInterval(pollSnapshot, 30000);
   backend.onNoteChanged(noteChanged); // which notes exist, and an open page merges a change made outside
   backend.onRemindersChanged(loadSnapshot);
+  followTray();
   backend.onRemoteChat(({ key, title, provider }) => {
     useConversationsStore.setState(draft => {
       draft.chats[key] ??= { key, project: null, title: title || t("chat.untitled"), at: chatTime(key), provider };
