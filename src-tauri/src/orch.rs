@@ -677,7 +677,7 @@ fn publish_one(app: &AppHandle, w: &Worker, r: &Report, t: &Tree, branch: &str, 
     let slug = super::gh_repo(&t.repo).ok_or("the repo has no GitHub origin")?;
     let x = |k: &str| w.ticket.as_ref().and_then(|x| x[k].as_str()).unwrap_or("").to_string();
     let title = match x("number").as_str() { "" => w.title.clone(), n => format!("#{n} {}", w.title) };
-    let body = pr_body(w, r, t, branch, others);
+    let body = pr_body(w, r, t, &slug, branch, others);
     let base = if t.base.is_empty() { "main" } else { t.base.as_str() };
     let out = super::gh(&app.state::<App>(), &["pr", "create", "-R", &slug, "--head", branch, "--base", base, "--title", &title, "--body", &body])?;
     out.lines().rev().find(|l| l.starts_with("https://")).map(String::from).ok_or_else(|| "gh opened no PR".into())
@@ -687,9 +687,9 @@ const PR_BODY_MAX: usize = 20_000;
 /// A PR's description: the agent's summary, or for a repo with a PR template the template as the agent filled it in,
 /// then Relay's own lines. Those go after the template, not into it: its sections are the repo's own and Relay cannot
 /// know where they fit, and after the cut agent text they are always there in full.
-fn pr_body(w: &Worker, r: &Report, t: &Tree, branch: &str, others: &[&str]) -> String {
+fn pr_body(w: &Worker, r: &Report, t: &Tree, slug: &str, branch: &str, others: &[&str]) -> String {
     let url = w.ticket.as_ref().and_then(|x| x["url"].as_str()).unwrap_or("");
-    let mut body = match r.pr_body.get(name(&t.repo)).filter(|_| pr_template(&t.worktree).is_some()) {
+    let mut body = match filled_for(&r.pr_body, t, slug, others.is_empty()).filter(|_| pr_template(&t.worktree).is_some()) {
         Some(filled) => format!("{}\n\n---", head_cut(filled, PR_BODY_MAX)),
         None => r.summary.clone(),
     };
@@ -699,6 +699,21 @@ fn pr_body(w: &Worker, r: &Report, t: &Tree, branch: &str, others: &[&str]) -> S
     if let Some(n) = &w.review_notes { body += &format!("\n\nFrom the automatic review, nothing blocking:\n\n{n}"); }
     if !w.decisions.is_empty() { body += &format!("\n\n## Decisions\n\n{}", decisions_md(&w.decisions)); }
     body + "\n\nBuilt by an agent from Relay's board pipeline."
+}
+/// The agent's filled template for this repo: its folder name as the brief lists it, in any case, its GitHub slug, or
+/// a key ending in `/<name>`. When it changed only this repo and gave one body, that one whatever its key.
+fn filled_for<'a>(bodies: &'a HashMap<String, String>, t: &Tree, slug: &str, only: bool) -> Option<&'a String> {
+    let n = name(&t.repo).to_ascii_lowercase();
+    let mine = |k: &str| { let k = k.trim().trim_end_matches('/').to_ascii_lowercase(); k == n || k.eq_ignore_ascii_case(slug) || k.ends_with(&format!("/{n}")) };
+    bodies.get(name(&t.repo)).or_else(|| bodies.iter().find(|(k, _)| mine(k)).map(|(_, v)| v)).or_else(|| bodies.values().next().filter(|_| only && bodies.len() == 1))
+}
+/// A new report's filled templates, with those of the earlier report for the repos it gives none for: a done after a
+/// failed round seldom repeats them, and the PR should not fall back to the summary for that.
+fn keep_bodies(mut new: HashMap<String, String>, old: Option<&Report>) -> HashMap<String, String> {
+    for (k, v) in old.map(|r| &r.pr_body).into_iter().flatten() {
+        if !new.keys().any(|n| n.eq_ignore_ascii_case(k)) { new.insert(k.clone(), v.clone()); }
+    }
+    new
 }
 /// The repo's PR template where GitHub looks for it, relative to the worktree: pull_request_template.md in .github/,
 /// the root or docs/ (any case), else the first .md in .github/PULL_REQUEST_TEMPLATE/. The org's .github repo is not
@@ -1005,7 +1020,7 @@ fn report(app: &AppHandle, key: &str, status: Option<String>, summary: Option<St
     let mut after = snapshot(&vault, &shared(app, &vault).files, &all.iter().map(|t| t.repo.as_str()).collect::<Vec<_>>());
     if let Some(s) = w.base.get("start") { after.insert("start".into(), s.clone()); }
     let flags = flags_of(&w.base, &after);
-    let r = Report { status: status.clone(), summary, questions, diff, flags, options, files, pr_body };
+    let r = Report { status: status.clone(), summary, questions, diff, flags, options, files, pr_body: keep_bodies(pr_body, w.report.as_ref()) };
     if w.ticket.is_some() {
         // the pipeline's worker: a done is validated first (it stays running meanwhile), then Relay pushes and opens
         // the PR; the webview moves the ticket when it sees the new state
@@ -1457,17 +1472,34 @@ mod tests {
         let mut r = Report { summary: "Planted the apple trees".into(), pr_body: [("web".to_string(), filled.to_string())].into(), ..Default::default() };
         let t = Tree { repo: "/c/web".into(), worktree: root.to_string_lossy().into(), checks: "make test".into(), ..Default::default() };
         let relay = |b: &str| ["Ticket: https://example.com/t/7", "The same ticket changed acme/api too, on branch `b`", "Checks passed: `make test`", "- a.ts:1: naming", "## Decisions", "plant the apple trees first", "Built by an agent from Relay's board pipeline."].iter().all(|l| b.contains(l));
-        let b = pr_body(&w, &r, &t, "b", &["acme/api"]);
+        let b = pr_body(&w, &r, &t, "acme/web", "b", &["acme/api"]);
         assert!(b.starts_with(filled) && !b.contains("Planted the apple trees") && relay(&b), "{b}");
         // the agent's text is cut, Relay's lines never are
         r.pr_body.insert("web".into(), "x".repeat(PR_BODY_MAX * 2));
-        let b = pr_body(&w, &r, &t, "b", &["acme/api"]);
+        let b = pr_body(&w, &r, &t, "acme/web", "b", &["acme/api"]);
         assert!(b.chars().count() < PR_BODY_MAX + 1000 && relay(&b));
         // without a template, or without a body for this repo, exactly as before
         let before = format!("Planted the apple trees\n\nTicket: https://example.com/t/7\n\nThe same ticket changed acme/api too, on branch `b`: merge them together.\n\nChecks passed: `make test`\n\nFrom the automatic review, nothing blocking:\n\nNotes:\n- a.ts:1: naming\n\n## Decisions\n\n{}\n\nBuilt by an agent from Relay's board pipeline.", decisions_md(&w.decisions));
-        assert_eq!(pr_body(&w, &r, &Tree { worktree: "/nowhere".into(), ..t.clone() }, "b", &["acme/api"]), before);
-        assert_eq!(pr_body(&w, &r, &Tree { repo: "/c/api".into(), ..t.clone() }, "b", &["acme/api"]), before);
+        assert_eq!(pr_body(&w, &r, &Tree { worktree: "/nowhere".into(), ..t.clone() }, "acme/web", "b", &["acme/api"]), before);
+        assert_eq!(pr_body(&w, &r, &Tree { repo: "/c/api".into(), ..t.clone() }, "acme/api", "b", &["acme/api"]), before);
         std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn the_filled_template_is_found_and_kept() {
+        let t = Tree { repo: "/c/web".into(), ..Default::default() };
+        let one = |k: &str| HashMap::from([(k.to_string(), "filled".to_string())]);
+        for k in ["web", "WEB", "acme/web-app", "Acme/Web-App", "acme/web", "Web/"] { assert_eq!(filled_for(&one(k), &t, "acme/web-app", false).map(String::as_str), Some("filled"), "{k}"); }
+        assert_eq!(filled_for(&one("frontend"), &t, "acme/web-app", false), None, "another repo's body, with other repos changed too");
+        assert_eq!(filled_for(&one("frontend"), &t, "acme/web-app", true).map(String::as_str), Some("filled"), "one repo changed, one body: whatever the key");
+        let two = HashMap::from([("api".to_string(), "a".to_string()), ("docs".to_string(), "d".to_string())]);
+        assert_eq!(filled_for(&two, &t, "acme/web-app", true), None, "two bodies, none of them this repo's");
+        // a second done without a body keeps the first one's, a new body replaces it (any case)
+        let first = Report { pr_body: HashMap::from([("web".to_string(), "v1".to_string()), ("api".to_string(), "a1".to_string())]), ..Default::default() };
+        assert_eq!(keep_bodies(HashMap::new(), Some(&first)), first.pr_body);
+        let again = keep_bodies(HashMap::from([("Web".to_string(), "v2".to_string())]), Some(&first));
+        assert_eq!(again, HashMap::from([("Web".to_string(), "v2".to_string()), ("api".to_string(), "a1".to_string())]));
+        assert!(keep_bodies(HashMap::new(), None).is_empty());
     }
 
     #[test]
