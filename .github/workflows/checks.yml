@@ -51,9 +51,12 @@ jobs:
       - run: rustup update stable --no-self-update
       # The runner image in the key: an image with a new MSVC left whisper.cpp's cached CMakeCache.txt pointing at the
       # old toolset's assembler, a path that no longer exists, and every Windows run failed until the cache changed.
+      # The runner's ImageVersion is a machine variable, which the env context in an expression does not see
+      - run: echo "IMAGE_VERSION=$ImageVersion" >> "$GITHUB_ENV"
+        shell: bash
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ env.ImageVersion }}
+          key: ${{ env.IMAGE_VERSION }}
       # relay-mobile is the phone app. On Windows the app's unit tests build but do not run yet (the ones that make a
       # symlink or read a Unix file mode are cfg(unix)), relay-server's unit tests run, its e2e tests build, and the update
       # test runs (spawn-and-exit and the data folder's lock). The other e2e tests need a shell, sh stand-ins for claude or
