@@ -3,6 +3,8 @@ import type { BoardProvider, BoardRef, Card, Column } from "../../domain/board/t
 import { colOf } from "../../domain/board/rules";
 import type { Worker } from "../../domain/orchestrator/types";
 import {
+  afterAnswer,
+  answerWhy,
   bare,
   briefOf,
   picturesOf,
@@ -24,6 +26,7 @@ import {
   runnable,
   stalled,
   startsNow,
+  stateSince,
   step,
   usedUp,
   ticketOf,
@@ -31,7 +34,9 @@ import {
   workersOf,
 } from "../../domain/pipeline/rules";
 import type { Pipeline, Step, Ticket } from "../../domain/pipeline/types";
+import type { AnswerKind } from "../../domain/pipeline/rules";
 import * as backend from "../../infrastructure/backend";
+import { storage } from "../../infrastructure/storage";
 import { isPrimary } from "../../infrastructure/window";
 import { t } from "../../shared/i18n";
 import { provider as providerOf } from "../../shared/plugins";
@@ -41,7 +46,7 @@ import { onOrchEvent, stopWorker } from "../orchestrator/orchestrator";
 import { useOrchestratorStore } from "../orchestrator/store";
 import { saveMainSettings, settings } from "../settings/settings";
 import { projectName } from "../workspace/vault";
-import { usePipelineStore } from "./store";
+import { usePipelineStore, type BouncedTicket } from "./store";
 
 // The board pipeline, while the app runs: every few minutes and when a pipeline worker changes, per switched-on
 // pipeline (settings.pipelines): put ended runs on the board, follow the PRs in review (one per repo a ticket changed),
@@ -120,7 +125,8 @@ export function pipelinePanel(project: string) {
   const s = settings();
   const p = s.pipelines?.[project];
   const tickets = panelTickets(allWorkers(), project);
-  const waiting = usePipelineStore.getState().waiting[project];
+  const { waiting: allWaiting, answered } = usePipelineStore.getState();
+  const waiting = allWaiting[project];
   return {
     linked: !!p && !!s.boards?.[project],
     on: ready(p),
@@ -130,12 +136,96 @@ export function pipelinePanel(project: string) {
     parallel: Math.max(1, p?.parallel ?? 1),
     holding: usePipelineStore.getState().holding[project] ?? "",
     tickets,
+    // since when each row is in its state: a run started by an answer in this session since that answer
+    since: Object.fromEntries(tickets.map(w => [w.key, stateSince(w, answered[ticketOf(w)!.card])])),
+    // answered and moved to the pick column, until the worker runs again: the panel shows them waiting there
+    toPick: tickets
+      .filter(w => w.state !== "running" && (answered[ticketOf(w)!.card] ?? 0) > (w.ended ?? 0))
+      .map(w => w.key),
+    // sent back before they started, the ones that got a worker since left out
+    bounced: p && !manual(p) ? bouncedOf(project).filter(e => !tickets.some(w => ticketOf(w)?.card === e.id)) : [],
     // a hand-picked pipeline reads no pick column. A ticket claimed since the board was read shows with its worker
     waiting:
       p && ready(p) && !manual(p) && waiting
         ? { at: waiting.at, tickets: waiting.tickets.filter(x => !tickets.some(w => ticketOf(w)?.card === x.id)) }
         : null,
   };
+}
+
+// what an answer without words puts on the ticket, so the ticket still shows what happened
+const NO_WORDS = { answer: "", changes: "", approve: "pp.approvedLine", retry: "pp.retryLine" } as const;
+// the comment already on a ticket, by card id, when what came after it failed: sending the same again skips the post
+const posted: Record<string, string> = {};
+
+/** An answer from the pipeline panel: the person's words as a comment on the ticket (the board stays the record),
+ *  then the ticket going again: its worker picks it up now when it may start and there is room, else the ticket
+ *  waits in the pick column (a hand-picked pipeline has none: it stays, Build with agent continues it). A ticket sent
+ *  back before it started (`card`) goes to the pick column for the pre-flight again. Resolves true when the comment
+ *  is on the ticket. On a failure it says why and resolves false, so the panel keeps what was typed. */
+export function answerTicket(
+  project: string,
+  to: { worker: Worker } | { card: BouncedTicket },
+  kind: AnswerKind,
+  text: string,
+): Promise<boolean> {
+  return serial(async () => {
+    const p = settings().pipelines?.[project];
+    if (!p) return false;
+    const b = await open(project, p);
+    if (!b.prov.detail?.act) throw new Error(t("pp.noComment"));
+    const worker = "worker" in to ? (useOrchestratorStore.getState().workers[to.worker.key] ?? to.worker) : null;
+    const id = worker ? ticketOf(worker)!.card : (to as { card: BouncedTicket }).card.id;
+    const words = text.trim() || (NO_WORDS[kind] ? t(NO_WORDS[kind]) : "");
+    if (!words) return false;
+    if (posted[id] !== words) {
+      await b.prov.detail.act(ctxOf(b.prov), b.ref, id, "comment", {
+        value: words,
+        files: [],
+        hidden: p.hidden !== false,
+      });
+      posted[id] = words;
+    }
+    const busy = workersOf(allWorkers(), project).filter(w => w.state === "running").length;
+    const spent = !!worker && usedUp(await backend.usageLimits().catch(() => []), "claude");
+    const next = afterAnswer({
+      worker: !!worker,
+      running: worker?.state === "running",
+      starts: startsNow(settings(), project),
+      room: busy < Math.max(1, p.parallel) && !spent,
+      manual: manual(p),
+    });
+    const name = projectName(project);
+    // the row's time and its "waiting in the pick column" count from this answer
+    const mark = () =>
+      usePipelineStore.setState(draft => {
+        draft.answered[id] = Date.now();
+      });
+    if (next === "resume") {
+      // the user's words go in the message itself: the tracker may not show the comment yet
+      await resume(b, id, worker!, answerWhy(kind, text));
+      mark();
+    } else if (next === "pick" && p.pick) {
+      await move(b, id, p.pick);
+      if (worker) mark();
+      toast(
+        t(!worker ? "pp.toPick" : startsNow(settings(), project) ? "pp.toPickFull" : "pp.toPickPaused", {
+          project: name,
+        }),
+      );
+    } else if (next === "stay") toast(t("pp.stayManual", { project: name }));
+    if (!worker) {
+      setBounced(
+        project,
+        bouncedOf(project).filter(e => e.id !== id),
+      );
+      if (next === "pick") runPipelines();
+    }
+    delete posted[id];
+    return true;
+  }).catch(e => {
+    toast(t("pl.error", { project: projectName(project), error: String((e as Error)?.message ?? e) }));
+    return false;
+  });
 }
 
 /** Pause a project's pipeline from its panel, or go on. `stop`: its running workers stop too (their tickets land with
@@ -242,6 +332,9 @@ async function runOne(project: string, p: Pipeline) {
   const mine = workersOf(allWorkers(), project);
   const col = (card: Card) => colOf(prov, { group }, card);
   await keepWaiting(b, project, waitingIn(cards, col, p, mine));
+  // a ticket sent back before it started is the panel's until it leaves the input column (answered, moved, closed)
+  const kept = bouncedOf(project).filter(e => cards.some(c => c.id === e.id && col(c) === p.input));
+  if (kept.length !== bouncedOf(project).length) setBounced(project, kept);
   const { fresh, resume: back } = picks(cards, col, p, mine);
   let room = Math.max(1, p.parallel) - mine.filter(w => w.state === "running").length;
   if (room <= 0 || (!fresh.length && !back.length)) return;
@@ -285,7 +378,8 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
     const view = await viewOf(b, card.id);
     if (!hand && view && bare(view)) {
       await move(b, card.id, b.p.input);
-      return await comment(b, card.id, t("pl.notReady", { column: nameOf(b, b.p.pick) }));
+      await comment(b, card.id, t("pl.notReady", { column: nameOf(b, b.p.pick) }));
+      return bounce(project, card, view.url, { why: "bare" });
     }
     // plan mode asks its questions with the plan, a skill judges the ticket itself, and a ticket you start yourself
     // is your call
@@ -296,7 +390,8 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
       if (verdict && !verdict.clear) {
         await move(b, card.id, b.p.input);
         const questions = verdict.questions.map(q => `- ${q}`).join("\n");
-        return await comment(b, card.id, t("pl.unclear", { questions, column: nameOf(b, b.p.pick) }));
+        await comment(b, card.id, t("pl.unclear", { questions, column: nameOf(b, b.p.pick) }));
+        return bounce(project, card, view.url, { why: "unclear", questions: verdict.questions });
       }
     }
     const url = view?.url || (await b.prov.url(ctx, b.ref, card.id));
@@ -340,9 +435,40 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
     await comment(b, card.id, t("pl.picked", { branch: w.branch ?? "" }));
   } catch (e) {
     // back in front of a person, with why: the pick column would only try it again
+    const error = String((e as Error)?.message ?? e);
     await move(b, card.id, b.p.input);
-    await comment(b, card.id, t("pl.startFailed", { error: String((e as Error)?.message ?? e) }));
+    await comment(b, card.id, t("pl.startFailed", { error }));
+    // one you started yourself you see go wrong, and a hand-picked pipeline reads no input column to clear it from
+    if (!hand)
+      bounce(project, card, await b.prov.url(ctx, b.ref, card.id).catch(() => ""), { why: "failed", reason: error });
   }
+}
+
+/** The tickets a pipeline sent back before they started, for the panel, saved so they outlive a restart. */
+function setBounced(project: string, list: BouncedTicket[]) {
+  usePipelineStore.setState(draft => {
+    draft.bounced[project] = list;
+  });
+  storage.set("pipelineBounced", usePipelineStore.getState().bounced);
+}
+const bouncedOf = (project: string) => usePipelineStore.getState().bounced[project] ?? [];
+function bounce(
+  project: string,
+  card: Card,
+  url: string,
+  x: Partial<Pick<BouncedTicket, "why" | "questions" | "reason">>,
+) {
+  const entry: BouncedTicket = {
+    id: card.id,
+    number: card.number,
+    title: card.title,
+    url,
+    why: x.why ?? "failed",
+    questions: x.questions ?? [],
+    reason: x.reason ?? "",
+    at: Date.now(),
+  };
+  setBounced(project, [...bouncedOf(project).filter(e => e.id !== card.id), entry]);
 }
 
 /** An ended run on the board: the move, a comment with what happened, and the mark so it happens once. */

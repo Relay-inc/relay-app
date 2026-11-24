@@ -51,6 +51,9 @@ function seedStorage() {
   localStorage.setItem("sel", JSON.stringify(query.get("sel") || "__wait"));
   localStorage.setItem("pvProject", "p1");
   localStorage.setItem("pvBoard", "f1");
+  // the pipeline panel's ticket sent back before it started, kept in the UI state
+  if (fixture === "pipeline-panel" || fixture === "pipeline-answer")
+    localStorage.setItem("pipelineBounced", JSON.stringify(orch.pipelineBounced));
   if (fixture === "linear") {
     localStorage.setItem("linearProject", integ.LINEAR_TEAM);
     localStorage.setItem("linearBoard", `cycle_${integ.LINEAR_TEAM}`);
@@ -202,10 +205,12 @@ const diceTools = [
     app: true,
   },
 ];
-// pipeline-panel: the board pipeline's three workers (fixtures/orchestrator.ts pipelineWorkers), on a used-up plan
+// pipeline-panel: the board pipeline's workers (fixtures/orchestrator.ts pipelineWorkers), on a used-up plan, and two
+// tickets in its pick column with its label, waiting for a worker. pipeline-answer: the same workers with room on the
+// plan and nothing waiting, so an answer from the panel starts its worker at once
+const pipePanel = fixture === "pipeline-panel" || fixture === "pipeline-answer";
 let workers = orchOn && !orchEmpty ? structuredClone(orch.workers) : [];
-if (fixture === "pipeline-panel") workers = structuredClone(orch.pipelineWorkers) as typeof workers;
-// and two tickets in its pick column with its label, waiting for a worker
+if (pipePanel) workers = structuredClone(orch.pipelineWorkers) as typeof workers;
 if (fixture === "pipeline-panel") integ.tagTasks([301, 311], "agent");
 
 // ---------- the event plugin: listeners by event, emitted synchronously (a real Tauri event is one task per event)
