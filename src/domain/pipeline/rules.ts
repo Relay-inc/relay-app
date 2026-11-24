@@ -27,6 +27,11 @@ export const manual = (p: Pipeline) => p.mode === "manual";
 export const ready = (p: Pipeline | undefined): p is Pipeline =>
   !!p?.on && (manual(p) || !!p.pick) && !!p.busy && !!p.review && !!p.input;
 
+/** Settings › Projects' Needs setup: a repo of the project without a checkout on this Mac, or a pipeline switched on
+ *  that misses a column it cannot run without. */
+export const needsSetup = (repos: string[], found: PipelineRepo[], p: Pipeline | undefined) =>
+  repos.some(slug => !found.some(r => r.slug === slug)) || (!!p?.on && !ready(p));
+
 /** A repo's checks: its own, else the pipeline's one command from before for the one checkout it had. */
 export const checksOf = (p: Pipeline, r: PipelineRepo) =>
   (p.repos?.[r.slug]?.checks ?? (r.path === p.repo ? p.checks : "") ?? "").trim();

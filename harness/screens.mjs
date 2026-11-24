@@ -309,10 +309,22 @@ const todayDay = async (variant, dark) => {
   await settle(page);
 };
 const settingsPage = async (tab, sub, fixture = "default", platform = "") => {
-  await page.setViewportSize({ width: 900, height: 700 });
+  // Projects is a list and the picked project side by side: the window's default size
+  await page.setViewportSize(tab === "Projects" ? { width: 1280, height: 800 } : { width: 900, height: 700 });
   await open(page, server.url, { path: "/settings.html", fixture, platform });
   await click(tab);
   if (sub) await click(sub);
+};
+/** Settings › Projects on a project (`name`) and its tab (General or Pipeline), `height` tall */
+const projectTab = async (tabName, { fixture = "default", name = "Northwind Portal", height = 800 } = {}) => {
+  await settingsPage("Projects", undefined, fixture);
+  await page.setViewportSize({ width: 1280, height });
+  await page
+    .getByRole("button", { name: new RegExp(`^${name}`) })
+    .first()
+    .click();
+  await page.getByRole("tab", { name: new RegExp(`^${tabName}`) }).click();
+  await settle(page);
 };
 /** Organisations and servers (main window) of `fixture`, `height` tall, on the list's item `name` (This Mac, a machine) */
 const serversItem = async (fixture, name, height = 1100) => {
@@ -1136,14 +1148,22 @@ const VIEWS = {
     await waitText("Website");
   },
   "settings-integration-github-projects": () => settingsPage("Integrations", "GitHub Projects", "ghprojects"),
-  // a project's board pipeline in Settings › Projects: its repos found on this Mac, each with its checks or switched off
+  // a project's Pipeline tab in Settings › Projects, whole: the switch, the ticket flow, the build and the review, each
+  // repo found on this Mac with its checks
   "settings-project-pipeline": async () => {
-    await page.setViewportSize({ width: 900, height: 1700 });
-    await open(page, server.url, { path: "/settings.html", fixture: "pipeline-label" });
-    await click("Projects");
-    await unfold("Northwind Portal");
+    await projectTab("Pipeline", { fixture: "pipeline-label", height: 1300 });
     await waitText("acme/northwind-api");
-    await intoView("Board pipeline");
+  },
+  // its General tab: identity, the repos with their checkouts on this Mac, the branches
+  "settings-project-general": async () => {
+    await projectTab("General", { fixture: "pipeline-label", height: 1000 });
+    await waitText("acme/northwind-api");
+  },
+  // the list filtered on Needs setup: a repo without a checkout here, or a pipeline on that misses a column
+  "settings-projects-setup": async () => {
+    await projectTab("General");
+    await button("Needs setup").click();
+    await settle(page);
   },
   // a project's Buddy pipelines in its title bar, the menu open: failed, running and passed, each with its last run (PR buddy)
   "buddy-menu": async () => {
@@ -1155,10 +1175,12 @@ const VIEWS = {
   // Buddy's page in Integrations (region, read-only token) and its Buddy project in Settings › Projects (PR buddy)
   "settings-integration-buddy": () => settingsPage("Integrations", "Buddy", "buddy"),
   "settings-project-buddy": async () => {
-    await settingsPage("Projects", undefined, "buddy");
-    await unfold("Northwind Portal");
+    await projectTab("General", { fixture: "buddy" });
     const field = page.getByRole("combobox", { name: "Buddy", exact: true }).first();
-    await page.waitForFunction(() => document.body.innerText.includes("Web shop · acme"));
+    await field.scrollIntoViewIfNeeded();
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll("select")].some(s => s.selectedOptions[0]?.text === "Web shop · acme"),
+    );
     await field.scrollIntoViewIfNeeded();
     await settle(page);
   },
@@ -3292,28 +3314,24 @@ const VIEWS = {
     await settle(page);
     await intoView("Switch accounts automatically");
   },
-  // the board pipeline of a project with a linked board, folded open in Settings › Projects
+  // the board pipeline of a project with a linked board, its Pipeline tab in Settings › Projects
   "settings-pipeline": async () => {
-    await settingsPage("Projects");
-    await unfold("Northwind Portal");
+    await projectTab("Pipeline");
     await intoView("Agents at once");
   },
-  // the same, its top: the per-project switch, the checkout and the branch
+  // the same, its top: the switch, how it picks up, the ticket flow
   "settings-pipeline-top": async () => {
-    await settingsPage("Projects");
-    await unfold("Northwind Portal");
-    await intoView("Board pipeline");
+    await projectTab("Pipeline");
+    await intoView("Ticket flow");
   },
   // the same: the skill the agent follows per ticket, above plan first
   "settings-pipeline-skill": async () => {
-    await settingsPage("Projects");
-    await unfold("Northwind Portal");
+    await projectTab("Pipeline");
     await intoView("Plan first");
   },
   // the same with a skill filled in: Plan first is gone, the skill decides that per ticket
   "settings-pipeline-skill-set": async () => {
-    await settingsPage("Projects");
-    await unfold("Northwind Portal");
+    await projectTab("Pipeline");
     await intoView("Skill");
     const field = page.getByPlaceholder("ticket-flow:develop");
     await field.fill("ticket-flow:develop");
@@ -3322,8 +3340,7 @@ const VIEWS = {
   },
   // the same: the validation before a PR (checks, review, rounds)
   "settings-pipeline-validation": async () => {
-    await settingsPage("Projects");
-    await unfold("Northwind Portal");
+    await projectTab("Pipeline");
     await intoView("Rounds");
   },
   // Settings › Plugins with the example plugin (its view found, one tool allowed), and its own page: how the server starts,

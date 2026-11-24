@@ -20,6 +20,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 ### Changed
 
 - The board pipeline has a branch to start from and a separate branch the PRs go to, so work can start from main and go to staging. Left empty, the PRs go to the branch the work started from, as before. The repo rows in its settings keep a long repo name and path on one line, the full path in the tooltip.
+- Settings › Projects is a list of projects with the picked one beside it, in two tabs: General (name and icon, the repos with their checkout on this Mac and whether agents may change them, the branches) and Pipeline (the switch, the ticket flow as steps, how the agent builds, the review). Search and filter the list on Pipeline on or Needs setup. The settings window opens larger, 1280×800.
 
 ## [0.0.59] - 2026-11-23
 

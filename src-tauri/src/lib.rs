@@ -3427,7 +3427,7 @@ fn open_settings(app: &AppHandle, tab: Option<&str>) {
     let title = tr(ui_lang_of(&app.state::<App>().settings.lock().unwrap()), "settings.title");
     tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("settings.html".into()))
         .initialization_script(format!("window.__relayTab = {};", json!(tab)))
-        .title(title).inner_size(900.0, 660.0).min_inner_size(720.0, 480.0)
+        .title(title).inner_size(1280.0, 800.0).min_inner_size(720.0, 480.0)
         .minimizable(false).maximizable(false).build().ok();
 }
 /// The settings button at the bottom of the sidebar: the same window as Relay › Settings…, on Updates when the
