@@ -14,6 +14,8 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+## [0.0.61] - 2026-11-24
+
 ### Added
 
 - A panel per board pipeline, from the pipeline button in a project's title bar (also on its board) or from a pipeline worker's page: every ticket it works on with where it is on the board, its agent's state and for how long, the branch, the PR links and what the agent asks, the tickets waiting in the pick column, plus whether the pipeline runs, how many agents run against its maximum and why it holds (plan used up, runs without a PR). Pause stops new tickets, picking tickets up again and feeding review comments back, while ended runs still land on the board and merges are still followed. Pause and stop agents also stops the running ones after a confirmation, Take over stops one agent after a confirmation and sends its ticket to a person, and one switch pauses every pipeline at once. (#523)
