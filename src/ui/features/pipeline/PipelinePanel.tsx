@@ -1,7 +1,7 @@
 import { useState, type ChangeEvent, type KeyboardEvent } from "react";
 import type { Worker } from "../../../domain/orchestrator/types";
 import { needOf } from "../../../domain/orchestrator/rules";
-import { columnOf, isPlan, prsOf, ticketOf } from "../../../domain/pipeline/rules";
+import { columnOf, isPlan, prsOf, ticketOf, type AnswerKind } from "../../../domain/pipeline/rules";
 import type { BouncedTicket } from "../../../application/pipeline/store";
 import {
   answerTicket,
@@ -120,6 +120,7 @@ export function PipelinePanel({ project }: { project: string }) {
                 project={project}
                 worker={worker}
                 toPick={panel.toPick.includes(worker.key)}
+                since={panel.since[worker.key] ?? worker.at}
               />
             ))}
           </div>
@@ -205,7 +206,17 @@ function Confirm({
 
 /** One ticket of the pipeline: its number and title (a click opens the worker's page), where it is on the board, its
  *  worker's state and for how long, the branch, what the agent asks, and open ticket, open PR and take over. */
-function TicketRow({ project, worker, toPick }: { project: string; worker: Worker; toPick: boolean }) {
+function TicketRow({
+  project,
+  worker,
+  toPick,
+  since,
+}: {
+  project: string;
+  worker: Worker;
+  toPick: boolean;
+  since: number; // when it got into its state
+}) {
   const { t } = useT();
   const ago = useAgo();
   const state = useStateText(worker);
@@ -242,7 +253,7 @@ function TicketRow({ project, worker, toPick }: { project: string; worker: Worke
         <span className="text-xs text-secondary truncate">
           {toPick ? t("pp.waiting") : t(COLUMN[columnOf(worker)])} ·{" "}
           <span className={nopr ? "text-soon" : state.color}>{short}</span>{" "}
-          <span className="text-tertiary">{ago(running ? worker.at : (worker.ended ?? worker.at))}</span>
+          <span className="text-tertiary">{ago(since)}</span>
         </span>
         {worker.branch ? <code className="font-mono text-[11px] text-tertiary truncate">{worker.branch}</code> : null}
         {question?.kind === "ask" && plan ? <PlanText text={question.question} /> : null}
@@ -283,9 +294,22 @@ function TicketRow({ project, worker, toPick }: { project: string; worker: Worke
           <AnswerBox
             required={kind === "answer"}
             placeholder={t(kind === "answer" ? "pp.answerPh" : kind === "approve" ? "pp.notePh" : "pp.retryPh")}
-            button={t(kind === "answer" ? "pp.answer" : kind === "approve" ? "pp.approve" : "pp.retry")}
             options={kind === "answer" && question?.kind === "ask" ? question.options : []}
-            onSend={text => answerTicket(project, { worker }, kind, text)}
+            actions={typed => {
+              const go = (k: AnswerKind) => (text: string) => answerTicket(project, { worker }, k, text);
+              // a plan with words typed could be a note or a change: the user says which
+              if (kind === "approve" && typed)
+                return [
+                  { label: t("pp.approveNote"), send: go("approve") },
+                  { label: t("pp.changes"), send: go("changes") },
+                ];
+              return [
+                {
+                  label: t(kind === "answer" ? "pp.answer" : kind === "approve" ? "pp.approve" : "pp.retry"),
+                  send: go(kind),
+                },
+              ];
+            }}
           />
         ) : null}
       </div>
@@ -328,9 +352,13 @@ function BouncedRow({ project, ticket }: { project: string; ticket: BouncedTicke
       <AnswerBox
         required={ticket.why !== "failed"}
         placeholder={t(ticket.why === "failed" ? "pp.retryPh" : "pp.answerPh")}
-        button={t("pp.answerStart")}
         options={[]}
-        onSend={text => answerTicket(project, { card: ticket }, ticket.why === "failed" ? "retry" : "answer", text)}
+        actions={() => [
+          {
+            label: t("pp.answerStart"),
+            send: text => answerTicket(project, { card: ticket }, ticket.why === "failed" ? "retry" : "answer", text),
+          },
+        ]}
       />
     </div>
   );
@@ -352,27 +380,31 @@ function PlanText({ text }: { text: string }) {
   );
 }
 
+/** What a button of the answer box does with the text. */
+type Action = { label: string; send: (text: string) => Promise<boolean> };
+
 /** The answer in a row: the options the agent offered as buttons, a field that grows with its text, and the send
- *  button (Cmd-Enter or Ctrl-Enter sends). What was typed stays when sending fails. */
+ *  buttons, which can differ once something is typed (`actions`, the first one primary, Cmd-Enter or Ctrl-Enter
+ *  sends with it). What was typed stays when sending fails. */
 function AnswerBox({
   required,
   placeholder,
-  button,
   options,
-  onSend,
+  actions,
 }: {
   required: boolean;
   placeholder: string;
-  button: string;
   options: string[];
-  onSend: (text: string) => Promise<boolean>;
+  actions: (typed: boolean) => Action[];
 }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-  const send = async (value: string) => {
+  const shown = actions(!!text.trim());
+  const send = async (value: string, given?: Action) => {
     if (sending || (required && !value.trim())) return;
+    const action = given ?? actions(!!value.trim())[0];
     setSending(true);
-    const ok = await onSend(value);
+    const ok = await action.send(value);
     setSending(false);
     if (ok) setText("");
   };
@@ -412,14 +444,17 @@ function AnswerBox({
         onChange={grow}
         onKeyDown={onKey}
       />
-      <div>
-        <button
-          className="h-7.5 px-3 rounded-lg border-0 bg-accent text-on-accent text-[13px] font-medium hover:bg-accent-hover disabled:opacity-50 cursor-default"
-          disabled={sending || (required && !text.trim())}
-          onClick={() => send(text)}
-        >
-          {button}
-        </button>
+      <div className="flex flex-wrap gap-2">
+        {shown.map((action, i) => (
+          <button
+            key={action.label}
+            className={`h-7.5 px-3 rounded-lg text-[13px] font-medium disabled:opacity-50 cursor-default ${i === 0 ? "border-0 bg-accent text-on-accent hover:bg-accent-hover" : "border border-separator-strong bg-transparent text-label hover:bg-fill"}`}
+            disabled={sending || (required && !text.trim())}
+            onClick={() => send(text, action)}
+          >
+            {action.label}
+          </button>
+        ))}
       </div>
     </div>
   );

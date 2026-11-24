@@ -527,6 +527,8 @@ export default {
   "pp.answerPh": "Je antwoord",
   "pp.answer": "Antwoorden en verdergaan",
   "pp.approve": "Goedkeuren",
+  "pp.approveNote": "Goedkeuren met deze opmerking",
+  "pp.changes": "Wijzigingen vragen",
   "pp.notePh": "Een opmerking of de wijzigingen die je wil (optioneel)",
   "pp.retry": "Opnieuw proberen",
   "pp.retryPh": "Wat er anders moet (optioneel)",

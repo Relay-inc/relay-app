@@ -528,6 +528,8 @@ export default {
   "pp.answerPh": "Deine Antwort",
   "pp.answer": "Antworten und weitermachen",
   "pp.approve": "Freigeben",
+  "pp.approveNote": "Mit dieser Notiz freigeben",
+  "pp.changes": "Änderungen anfragen",
   "pp.notePh": "Eine Notiz oder gewünschte Änderungen (optional)",
   "pp.retry": "Erneut versuchen",
   "pp.retryPh": "Was anders laufen soll (optional)",

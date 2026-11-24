@@ -536,6 +536,8 @@ export default {
   "pp.answerPh": "Votre réponse",
   "pp.answer": "Répondre et continuer",
   "pp.approve": "Valider",
+  "pp.approveNote": "Valider avec cette note",
+  "pp.changes": "Demander des changements",
   "pp.notePh": "Une note ou les changements voulus (facultatif)",
   "pp.retry": "Réessayer",
   "pp.retryPh": "Ce qu'il faut faire autrement (facultatif)",

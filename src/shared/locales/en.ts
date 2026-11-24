@@ -521,6 +521,8 @@ const en = {
   "pp.answerPh": "Your answer",
   "pp.answer": "Answer and continue",
   "pp.approve": "Approve",
+  "pp.approveNote": "Approve with this note",
+  "pp.changes": "Ask for changes",
   "pp.notePh": "A note or the changes you want (optional)",
   "pp.retry": "Try again",
   "pp.retryPh": "What to do differently (optional)",

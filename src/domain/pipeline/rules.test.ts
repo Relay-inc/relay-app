@@ -22,6 +22,8 @@ import {
   reposFor,
   runnable,
   afterAnswer,
+  answerWhy,
+  stateSince,
   isPlan,
   startsNow,
   waitingIn,
@@ -151,6 +153,22 @@ test("afterAnswer: the worker now when it may start and there is room, else the 
   assert.equal(afterAnswer({ ...go, running: true }), "stay", "a running worker is not started twice");
   assert.equal(isPlan("Plan for approval: x"), true);
   assert.equal(isPlan("Which colour?"), false);
+});
+
+test("answerWhy: what the answer means, then the user's own words when there are any", () => {
+  assert.equal(answerWhy("retry", "  "), "The user asked you to try again.");
+  const approve = answerWhy("approve", "One date per row.");
+  assert.match(approve, /^The user approved your plan: build it/);
+  assert.match(approve, /The user answered in Relay, in their own words:\nOne date per row\.$/);
+  assert.match(answerWhy("changes", "Per tree."), /rework the plan and report it for approval again/);
+  assert.doesNotMatch(answerWhy("changes", "Per tree."), /build it/);
+});
+
+test("stateSince: an ended run since its end, a run since the user's answer when that came after its start", () => {
+  assert.equal(stateSince({ state: "failed", at: 10, ended: 50 }), 50);
+  assert.equal(stateSince({ state: "running", at: 10, ended: null }), 10);
+  assert.equal(stateSince({ state: "running", at: 10, ended: null }, 80), 80);
+  assert.equal(stateSince({ state: "running", at: 90, ended: null }, 80), 90, "an older answer does not count");
 });
 
 test("startsNow: read at the moment of each start, the own pause, the global one, a pipeline switched off", () => {

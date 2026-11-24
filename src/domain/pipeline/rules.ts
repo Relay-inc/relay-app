@@ -58,6 +58,29 @@ export function afterAnswer(o: {
   return o.manual ? "stay" : "pick";
 }
 
+/** What the user can do from the panel's answer box: answer a question, approve a plan (with or without a note), ask
+ *  for changes to it, or have a run tried again. */
+export type AnswerKind = "answer" | "approve" | "changes" | "retry";
+const ANSWER_WHY: Record<AnswerKind, string> = {
+  answer: "The user answered your question.",
+  approve: "The user approved your plan: build it, with their note in mind when there is one.",
+  changes:
+    'The user asked for changes to your plan: rework the plan and report it for approval again (blocked, questions starting with "Plan for approval:"), do not build yet.',
+  retry: "The user asked you to try again.",
+};
+/** The `why` a worker gets when the user answered from the pipeline panel: what it means for the work, and the
+ *  user's own words as typed in Relay (not ticket text, so not marked untrusted), so they reach the worker even when
+ *  the tracker has not shown the comment yet. */
+export function answerWhy(kind: AnswerKind, text: string) {
+  const said = text.trim();
+  return said ? `${ANSWER_WHY[kind]}\n\nThe user answered in Relay, in their own words:\n${said}` : ANSWER_WHY[kind];
+}
+
+/** Since when a panel row is in its state: a run that ended since its end, one running since the user answered it in
+ *  this session since that answer, else since it started. */
+export const stateSince = (w: Pick<Worker, "state" | "at" | "ended">, answered = 0) =>
+  w.state === "running" ? Math.max(w.at, answered) : (w.ended ?? w.at);
+
 /** A plan the agent sent for approval (plan-first.md, skill.md): its questions start with this. */
 export const isPlan = (questions: string | null | undefined) => !!questions?.startsWith("Plan for approval:");
 

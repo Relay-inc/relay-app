@@ -4,6 +4,7 @@ import { colOf } from "../../domain/board/rules";
 import type { Worker } from "../../domain/orchestrator/types";
 import {
   afterAnswer,
+  answerWhy,
   bare,
   briefOf,
   picturesOf,
@@ -24,6 +25,7 @@ import {
   runnable,
   stalled,
   startsNow,
+  stateSince,
   step,
   usedUp,
   ticketOf,
@@ -31,6 +33,7 @@ import {
   workersOf,
 } from "../../domain/pipeline/rules";
 import type { Pipeline, Step, Ticket } from "../../domain/pipeline/types";
+import type { AnswerKind } from "../../domain/pipeline/rules";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
 import { isPrimary } from "../../infrastructure/window";
@@ -132,6 +135,8 @@ export function pipelinePanel(project: string) {
     parallel: Math.max(1, p?.parallel ?? 1),
     holding: usePipelineStore.getState().holding[project] ?? "",
     tickets,
+    // since when each row is in its state: a run started by an answer in this session since that answer
+    since: Object.fromEntries(tickets.map(w => [w.key, stateSince(w, answered[ticketOf(w)!.card])])),
     // answered and moved to the pick column, until the worker runs again: the panel shows them waiting there
     toPick: tickets
       .filter(w => w.state !== "running" && (answered[ticketOf(w)!.card] ?? 0) > (w.ended ?? 0))
@@ -146,13 +151,10 @@ export function pipelinePanel(project: string) {
   };
 }
 
-// what an answer without words puts on the ticket, so the ticket still shows what happened, and what the worker is told
-const NO_WORDS = { answer: "", approve: "pp.approvedLine", retry: "pp.retryLine" } as const;
-const WHY = {
-  answer: "The person answered you on the ticket.",
-  approve: "The person approved your plan on the ticket: build it, with their note when there is one.",
-  retry: "The person asked you to try again on the ticket.",
-};
+// what an answer without words puts on the ticket, so the ticket still shows what happened
+const NO_WORDS = { answer: "", changes: "", approve: "pp.approvedLine", retry: "pp.retryLine" } as const;
+// the comment already on a ticket, by card id, when what came after it failed: sending the same again skips the post
+const posted: Record<string, string> = {};
 
 /** An answer from the pipeline panel: the person's words as a comment on the ticket (the board stays the record),
  *  then the ticket going again: its worker picks it up now when it may start and there is room, else the ticket
@@ -162,7 +164,7 @@ const WHY = {
 export function answerTicket(
   project: string,
   to: { worker: Worker } | { card: BouncedTicket },
-  kind: "answer" | "approve" | "retry",
+  kind: AnswerKind,
   text: string,
 ): Promise<boolean> {
   return serial(async () => {
@@ -174,11 +176,14 @@ export function answerTicket(
     const id = worker ? ticketOf(worker)!.card : (to as { card: BouncedTicket }).card.id;
     const words = text.trim() || (NO_WORDS[kind] ? t(NO_WORDS[kind]) : "");
     if (!words) return false;
-    await b.prov.detail.act(ctxOf(b.prov), b.ref, id, "comment", {
-      value: words,
-      files: [],
-      hidden: p.hidden !== false,
-    });
+    if (posted[id] !== words) {
+      await b.prov.detail.act(ctxOf(b.prov), b.ref, id, "comment", {
+        value: words,
+        files: [],
+        hidden: p.hidden !== false,
+      });
+      posted[id] = words;
+    }
     const busy = workersOf(allWorkers(), project).filter(w => w.state === "running").length;
     const spent = !!worker && usedUp(await backend.usageLimits().catch(() => []), "claude");
     const next = afterAnswer({
@@ -189,13 +194,18 @@ export function answerTicket(
       manual: manual(p),
     });
     const name = projectName(project);
-    if (next === "resume") await resume(b, id, worker!, WHY[kind]);
-    else if (next === "pick" && p.pick) {
+    // the row's time and its "waiting in the pick column" count from this answer
+    const mark = () =>
+      usePipelineStore.setState(draft => {
+        draft.answered[id] = Date.now();
+      });
+    if (next === "resume") {
+      // the user's words go in the message itself: the tracker may not show the comment yet
+      await resume(b, id, worker!, answerWhy(kind, text));
+      mark();
+    } else if (next === "pick" && p.pick) {
       await move(b, id, p.pick);
-      if (worker)
-        usePipelineStore.setState(draft => {
-          draft.answered[id] = Date.now();
-        });
+      if (worker) mark();
       toast(
         t(!worker ? "pp.toPick" : startsNow(settings(), project) ? "pp.toPickFull" : "pp.toPickPaused", {
           project: name,
@@ -209,6 +219,7 @@ export function answerTicket(
       );
       if (next === "pick") runPipelines();
     }
+    delete posted[id];
     return true;
   }).catch(e => {
     toast(t("pl.error", { project: projectName(project), error: String((e as Error)?.message ?? e) }));
