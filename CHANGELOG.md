@@ -14,17 +14,21 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+## [0.0.60] - 2026-11-24
+
 ### Added
 
 - A meeting button in the title bar, next to New conversation, and Record a Meeting Now in the Conversation menu, start a recording from any view. While one runs the button shows a red dot and opens its meeting. You can rename the meeting while it records, in the title of its Meeting view; the new name is used for the transcript, the note and the summary. While it records, the menu bar icon shows a red dot and the meeting on top of its menu, with Open meeting and Stop recording (#512)
+- A Calendar layout for the Meetings and Threads collections, next to Table and Board: a month or a week, each note on the day of its `date:`, filters applied as in the table. Notes without a date are listed under the grid. (#433)
+
+### Changed
+
+- The board pipeline has a branch to start from and a separate branch the PRs go to, so work can start from main and go to staging. Left empty, the PRs go to the branch the work started from, as before. The repo rows in its settings keep a long repo name and path on one line, the full path in the tooltip. (#520)
+- Settings › Projects is a list of projects with the picked one beside it, in two tabs: General (name and icon, the repos with their checkout on this Mac and whether agents may change them, the branches) and Pipeline (the switch, the ticket flow as steps, how the agent builds, the review). Search and filter the list on Pipeline on or Needs setup. The settings window opens larger, 1280×800. (#524)
 
 ### Fixed
 
 - Cmd-V outside a field pastes into the composer on the Mac too: the Edit menu took the key before Relay saw it. (#521)
-### Changed
-
-- The board pipeline has a branch to start from and a separate branch the PRs go to, so work can start from main and go to staging. Left empty, the PRs go to the branch the work started from, as before. The repo rows in its settings keep a long repo name and path on one line, the full path in the tooltip.
-- Settings › Projects is a list of projects with the picked one beside it, in two tabs: General (name and icon, the repos with their checkout on this Mac and whether agents may change them, the branches) and Pipeline (the switch, the ticket flow as steps, how the agent builds, the review). Search and filter the list on Pipeline on or Needs setup. The settings window opens larger, 1280×800.
 
 ## [0.0.59] - 2026-11-23
 
