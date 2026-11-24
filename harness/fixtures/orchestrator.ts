@@ -184,6 +184,135 @@ const ticketed: Worker = {
 };
 export const workers: Worker[] = [running, done, silent, ticketed];
 
+// ?fixture=pipeline-panel: the board pipeline of Northwind Portal with three tickets: one building, one whose agent asks
+// a question (in the input column), and the one above with its PRs in review
+const pipelineTicket = (card: string, number: string, title: string) => ({
+  pipeline: "Northwind Portal",
+  provider: "productive",
+  project: "p1",
+  board: "f1",
+  card,
+  number,
+  title,
+  url: `https://app.productive.io/40001/tasks/${card}`,
+});
+const building = {
+  ...running,
+  key: "c:orch-w-p1",
+  project: "Northwind Portal",
+  title: "Plant the apple trees",
+  task: 'Ticket #415 "Plant the apple trees"',
+  branch: "relay/plant-the-apple-trees-p1",
+  model: undefined,
+  at: NOW - 12 * MIN,
+  step: { done: 2, total: 5, note: "Rows in the north field" },
+  decisions: [],
+  ticket: pipelineTicket("t15", "415", "Plant the apple trees"),
+  base_branch: "develop",
+  pr: null,
+  pr_error: null,
+  board: null,
+};
+const asking = {
+  ...building,
+  key: "c:orch-w-p2",
+  title: "Import the orchard map",
+  task: 'Ticket #414 "Import the orchard map"',
+  branch: "relay/import-the-orchard-map-p2",
+  state: "blocked",
+  step: null,
+  at: NOW - 70 * MIN,
+  ended: NOW - 25 * MIN,
+  report: {
+    status: "blocked",
+    summary: "The map importer reads both layers, nothing is written yet.",
+    questions: "The map has two layers for the north field. Import the newest one, or merge both?",
+    diff: null,
+    flags: [],
+    options: ["The newest one", "Merge both"],
+  },
+  ticket: pipelineTicket("t14", "414", "Import the orchard map"),
+  board: `blocked:${NOW - 25 * MIN}`,
+};
+// what the pipeline hands to a person, answered from the panel (PR pipeline-panel-answer): a plan for approval, a
+// failed run and a done without a PR, each landed in the input column
+const planning = {
+  ...asking,
+  key: "c:orch-w-p3",
+  title: "Prune the pear rows",
+  task: 'Ticket #416 "Prune the pear rows"',
+  branch: "relay/prune-the-pear-rows-p3",
+  at: NOW - 50 * MIN,
+  ended: NOW - 20 * MIN,
+  report: {
+    status: "blocked",
+    summary: "A plan for the pruning schedule, nothing built yet.",
+    questions:
+      "Plan for approval:\n\n1. Add a `pruneAfter` date to each row in the orchard model.\n2. Show the rows due this week on the dashboard.\n3. Tests for a row without a date and for a leap year.\n\nLeft out: the mobile view.\n\nOpen question: one date per row, or per tree?",
+    diff: null,
+    flags: [],
+    options: [],
+  },
+  ticket: pipelineTicket("t16", "416", "Prune the pear rows"),
+  board: `blocked:${NOW - 20 * MIN}`,
+};
+const failing = {
+  ...asking,
+  key: "c:orch-w-p4",
+  title: "Water the seedlings",
+  task: 'Ticket #417 "Water the seedlings"',
+  branch: "relay/water-the-seedlings-p4",
+  state: "failed",
+  at: NOW - 90 * MIN,
+  ended: NOW - 60 * MIN,
+  report: {
+    status: "failed",
+    summary: "The irrigation tests fail on a missing fixture file.",
+    questions: null,
+    diff: null,
+    flags: [],
+  },
+  ticket: pipelineTicket("t17", "417", "Water the seedlings"),
+  board: `failed:${NOW - 60 * MIN}`,
+};
+const nopr = {
+  ...asking,
+  key: "c:orch-w-p5",
+  title: "Label the crates",
+  task: 'Ticket #418 "Label the crates"',
+  branch: "relay/label-the-crates-p5",
+  state: "done",
+  at: NOW - 110 * MIN,
+  ended: NOW - 95 * MIN,
+  report: {
+    status: "done",
+    summary: "The crate labels already print the harvest date, nothing to change.",
+    questions: null,
+    diff: null,
+    flags: [],
+  },
+  ticket: pipelineTicket("t18", "418", "Label the crates"),
+  pr: null,
+  pr_error: "nothing to push",
+  board: `done:${NOW - 95 * MIN}`,
+};
+export const pipelineWorkers = [building, asking, ticketed, planning, failing, nopr];
+// a ticket the pre-flight sent back before any agent started (#305 in the input column), as the panel keeps it
+export const pipelineBounced = {
+  "Northwind Portal": [
+    {
+      id: "900105",
+      number: "305",
+      title: "Rate limit docs",
+      url: "https://app.productive.io/40001/tasks/900105",
+      why: "unclear",
+      questions: ["Which endpoints get a limit, all of them or only the public ones?", "Per user or per API key?"],
+      reason: "",
+      at: NOW - 40 * MIN,
+    },
+  ],
+};
+
 const REPORT = `[Relay] Report from worker ${done.key} (Beacon Billing, "Patch the balance sync"): done
 
 ${done.report!.summary}

@@ -465,7 +465,7 @@ export function settings(fixture: string) {
         input: "tl1",
         merged: "tl5",
         label: fixture === "pipeline" ? "" : "agent",
-        parallel: 1,
+        parallel: fixture === "pipeline-panel" || fixture === "pipeline-answer" ? 3 : 1,
         reviewer: "codex",
         rounds: 3,
       },
@@ -622,6 +622,8 @@ const linkedList: Linked[] = [
   meet("2026-09-30", "Atlas Logistics sync", "wrapped", [people[3]], ["Atlas Logistics"]),
   meet("2026-09-30", "Delmas Bakery opening hours", "wrapped", [people[2]], ["Delmas Bakery"]),
   meet("2026-09-22", "Delmas Bakery holiday banner", "wrapped", [people[1]], ["Delmas Bakery"]),
+  // no date: in the field nor the file name (the calendar's "No date", issue 423)
+  { p: "Calendar/Meetings/2026/Team retro.md", k: "Meeting", with: [people[2]], stage: "planned" },
   { p: "Calendar/Threads/Invoice export columns.md", k: "Thread", about: ["Northwind Portal"], daysAgo: 2 },
   { p: "Calendar/Threads/Portal hosting quote.md", k: "Thread", context: ["Northwind Portal"], daysAgo: 6 },
   { p: "Resources/Reference/Portal pricing notes.md", k: "Reference", about: ["Northwind Portal"], daysAgo: 0 },

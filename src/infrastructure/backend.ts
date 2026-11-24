@@ -466,7 +466,9 @@ export const orchDispatchTicket = (a: {
   plan: boolean;
   skill: string;
 }) => invoke<Worker>("orch_dispatch_ticket", a);
-export const orchMessage = (key: string, text: string) => invoke<void>("orch_message", { key, text });
+/** `task`: the worker's brief from now on, for a ticket that changed since it started (its review judges against it) */
+export const orchMessage = (key: string, text: string, task: string | null = null) =>
+  invoke<void>("orch_message", { key, text, task });
 export const orchAnswer = (key: string, answer: string) => invoke<Worker | null>("orch_answer", { key, answer });
 export const orchAskReport = (key: string) => invoke<void>("orch_ask_report", { key });
 export const orchRestart = (key: string) => invoke<Worker>("orch_restart", { key });
@@ -923,6 +925,11 @@ export const meetingImport = (
   return invoke<Recording>("meeting_import", { path, language, meeting, title, note, speaker, onProgress: channel });
 };
 export const meetingRecordCancel = () => invoke("meeting_record_cancel");
+/** The meeting being recorded, for the menu bar icon (tray.rs); null when none is. */
+export const trayRecording = (title: string | null) => invoke("tray_recording", { title });
+/** The menu bar's Stop recording or Open meeting. */
+export const onTrayRecording = (cb: (action: "stop" | "open") => void) =>
+  listen<"stop" | "open">("tray-recording", e => cb(e.payload));
 
 // ---------- events from the backend
 /** One normalised event of an agent process. */

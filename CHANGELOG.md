@@ -14,13 +14,34 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
-### Fixed
+### Added
 
-- Cmd-V outside a field pastes into the composer on the Mac too: the Edit menu took the key before Relay saw it. (#521)
+- A panel per board pipeline, from the pipeline button in a project's title bar (also on its board) or from a pipeline worker's page: every ticket it works on with where it is on the board, its agent's state and for how long, the branch, the PR links and what the agent asks, the tickets waiting in the pick column, plus whether the pipeline runs, how many agents run against its maximum and why it holds (plan used up, runs without a PR). Pause stops new tickets, picking tickets up again and feeding review comments back, while ended runs still land on the board and merges are still followed. Pause and stop agents also stops the running ones after a confirmation, Take over stops one agent after a confirmation and sends its ticket to a person, and one switch pauses every pipeline at once. (#523)
+- Answer what the board pipeline hands to a person right in its panel: a question (or one of the answers the agent offers), a plan to approve, a failed run or one without a PR to try again, and tickets the pipeline sent back before an agent started. The answer goes on the ticket as a comment and the ticket goes again: its agent picks it up at once when there is room, else the ticket waits in the pick column (a paused or full pipeline), and a hand-picked pipeline continues it with Build with agent. (#528)
+
 ### Changed
 
 - A board pipeline PR follows the repo's own PR template when it has one (.github/, the root or docs/, or .github/PULL_REQUEST_TEMPLATE/): the agent fills in every section, n/a with the reason where it cannot, and Relay adds the ticket, the other repos, the checks, the review notes and the decisions after it. Without a template the description is as before. (#525)
-- The board pipeline has a branch to start from and a separate branch the PRs go to, so work can start from main and go to staging. Left empty, the PRs go to the branch the work started from, as before. The repo rows in its settings keep a long repo name and path on one line, the full path in the tooltip.
+
+### Fixed
+
+- A board pipeline ticket whose description changed, or that got answers in its comments (with the agent's question they answer), before it went back to its agent (moved back to the pick column, or review comments on its PR) is now reviewed against the ticket as it reads then, answers included, not as it read at the start: the review no longer sends work back as off-ticket for following the new text. Relay's other comments on the ticket are left out. (#522)
+
+## [0.0.60] - 2026-11-24
+
+### Added
+
+- A meeting button in the title bar, next to New conversation, and Record a Meeting Now in the Conversation menu, start a recording from any view. While one runs the button shows a red dot and opens its meeting. You can rename the meeting while it records, in the title of its Meeting view; the new name is used for the transcript, the note and the summary. While it records, the menu bar icon shows a red dot and the meeting on top of its menu, with Open meeting and Stop recording (#512)
+- A Calendar layout for the Meetings and Threads collections, next to Table and Board: a month or a week, each note on the day of its `date:`, filters applied as in the table. Notes without a date are listed under the grid. (#433)
+
+### Changed
+
+- The board pipeline has a branch to start from and a separate branch the PRs go to, so work can start from main and go to staging. Left empty, the PRs go to the branch the work started from, as before. The repo rows in its settings keep a long repo name and path on one line, the full path in the tooltip. (#520)
+- Settings › Projects is a list of projects with the picked one beside it, in two tabs: General (name and icon, the repos with their checkout on this Mac and whether agents may change them, the branches) and Pipeline (the switch, the ticket flow as steps, how the agent builds, the review). Search and filter the list on Pipeline on or Needs setup. The settings window opens larger, 1280×800. (#524)
+
+### Fixed
+
+- Cmd-V outside a field pastes into the composer on the Mac too: the Edit menu took the key before Relay saw it. (#521)
 
 ## [0.0.59] - 2026-11-23
 
@@ -160,6 +181,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 - A typed page has a header made from its type: the type, where it belongs (Context › Project), and the type's fields, each with its editor. A link field only offers notes of its type (`with:` people, `about:` projects and contexts) and can create a missing one, like a new person in the context's People folder; an empty `context:` or `about:` shows as a slot to fill, and "Add property" offers the type's missing fields first. The right rail groups backlinks by relation, like "Meetings about this project".
 - A page can carry an emoji icon and a cover picture, saved as `icon:` and `cover:` in its frontmatter. Hover the header for Add icon and Add cover; the cover is copied into the attachments folder and shown as a banner above the title. The note's own icon wins over its project's icon, and a cover whose file is gone just isn't shown.
 - The Pages tree shows a page's icon in place of the file glyph, and a project row the emoji of its project note when it has one (else its project icon). Changing the icon in the page header updates the row right away. (#427)
+- The Meetings collection has a Calendar layout next to Table and Board: a month (Monday first) or a week, each meeting on its `date:` day with its stage, a click opens it, and the meetings without a date listed under the grid. Filters and the context apply as in the table, and a saved view keeps Calendar. Threads get it too. The collections' "today" is now the local date, so just after midnight a meeting of yesterday counts as over.
 
 ### Changed
 
@@ -194,7 +216,6 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 ### Fixed
 
 - A page's Changes panel scrolls again when a run's changes are longer than the panel: the open entry was squeezed to the panel's height and its lower diffs were cut off (#405)
-
 
 ## [0.0.47] - 2026-11-04
 

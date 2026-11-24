@@ -4,6 +4,10 @@ import type { Limits } from "../agents/types";
 import type { ProvLimits } from "../usage/types";
 import type { Pipeline, PipelineRepo, PrStatus, Step, Ticket } from "./types";
 import { fill, prompts, untrustedNote } from "../../shared/prompts.ts";
+import en from "../../shared/locales/en.ts";
+import nl from "../../shared/locales/nl.ts";
+import de from "../../shared/locales/de.ts";
+import fr from "../../shared/locales/fr.ts";
 
 export const EMPTY_PIPELINE: Pipeline = {
   on: false,
@@ -26,6 +30,68 @@ export const manual = (p: Pipeline) => p.mode === "manual";
  *  repos are found when it runs (see reposFor). */
 export const ready = (p: Pipeline | undefined): p is Pipeline =>
   !!p?.on && (manual(p) || !!p.pick) && !!p.busy && !!p.review && !!p.input;
+
+/** Paused, by its own pause or by the one for every pipeline (settings.pipelinesPaused). */
+export const pausedOf = (p: Pipeline | undefined, all?: boolean) => !!all || !!p?.paused;
+
+/** The pipelines a pass runs: the ready ones, each paused as it counts now, by its own pause or the global one. */
+export const runnable = (pipelines: Record<string, Pipeline> | undefined, all?: boolean): [string, Pipeline][] =>
+  Object.entries(pipelines ?? {}).flatMap(([project, p]) =>
+    ready(p) ? [[project, { ...p, paused: pausedOf(p, all) }] as [string, Pipeline]] : [],
+  );
+
+/** Whether a pass may start something for a project right now (claim a ticket, pick one up again, send review
+ *  comments): its pipeline still ready and not paused, read from the settings at that moment, so a pause pressed
+ *  while a pass runs stops it before its next start. */
+export const startsNow = (s: { pipelines?: Record<string, Pipeline>; pipelinesPaused?: boolean }, project: string) =>
+  ready(s.pipelines?.[project]) && !pausedOf(s.pipelines?.[project], s.pipelinesPaused);
+
+/** What an answer from the pipeline panel does with its ticket once the comment is on it: its worker picks it up
+ *  again now (it may start, there is room, it is not running), the ticket goes to the pick column for the pipeline to
+ *  take when it can (paused, full, or no worker yet), or it stays where it is (a hand-picked pipeline has no pick
+ *  column: Build with agent continues it). */
+export function afterAnswer(o: {
+  worker: boolean;
+  running: boolean;
+  starts: boolean;
+  room: boolean;
+  manual: boolean;
+}): "resume" | "pick" | "stay" {
+  if (o.running) return "stay";
+  if (o.worker && o.starts && o.room) return "resume";
+  return o.manual ? "stay" : "pick";
+}
+
+/** What the user can do from the panel's answer box: answer a question, approve a plan (with or without a note), ask
+ *  for changes to it, or have a run tried again. */
+export type AnswerKind = "answer" | "approve" | "changes" | "retry";
+const ANSWER_WHY: Record<AnswerKind, string> = {
+  answer: "The user answered your question.",
+  approve: "The user approved your plan: build it, with their note in mind when there is one.",
+  changes:
+    'The user asked for changes to your plan: rework the plan and report it for approval again (blocked, questions starting with "Plan for approval:"), do not build yet.',
+  retry: "The user asked you to try again.",
+};
+/** The `why` a worker gets when the user answered from the pipeline panel: what it means for the work, and the
+ *  user's own words as typed in Relay (not ticket text, so not marked untrusted), so they reach the worker even when
+ *  the tracker has not shown the comment yet. */
+export function answerWhy(kind: AnswerKind, text: string) {
+  const said = text.trim();
+  return said ? `${ANSWER_WHY[kind]}\n\nThe user answered in Relay, in their own words:\n${said}` : ANSWER_WHY[kind];
+}
+
+/** Since when a panel row is in its state: a run that ended since its end, one running since the user answered it in
+ *  this session since that answer, else since it started. */
+export const stateSince = (w: Pick<Worker, "state" | "at" | "ended">, answered = 0) =>
+  w.state === "running" ? Math.max(w.at, answered) : (w.ended ?? w.at);
+
+/** A plan the agent sent for approval (plan-first.md, skill.md): its questions start with this. */
+export const isPlan = (questions: string | null | undefined) => !!questions?.startsWith("Plan for approval:");
+
+/** Settings › Projects' Needs setup: a repo of the project without a checkout on this Mac, or a pipeline switched on
+ *  that misses a column it cannot run without. */
+export const needsSetup = (repos: string[], found: PipelineRepo[], p: Pipeline | undefined) =>
+  repos.some(slug => !found.some(r => r.slug === slug)) || (!!p?.on && !ready(p));
 
 /** A repo's checks: its own, else the pipeline's one command from before for the one checkout it had. */
 export const checksOf = (p: Pipeline, r: PipelineRepo) =>
@@ -68,8 +134,18 @@ export const workersOf = (workers: Worker[], project: string) => workers.filter(
 export const lastWorker = (workers: Worker[], card: string) => workers.filter(w => ticketOf(w)?.card === card).pop();
 
 /** The tickets to start on, best first: the ones in the pick column (with the label, when set) that have no running
- *  worker. `resume`: a ticket moved back after a worker ran on it, which that worker picks up again with its worktree. */
+ *  worker. `resume`: a ticket moved back after a worker ran on it, which that worker picks up again with its worktree.
+ *  None while the pipeline is paused. */
 export function picks(cards: Card[], col: (c: Card) => string, p: Pipeline, workers: Worker[]) {
+  return p.paused ? { fresh: [], resume: [] } : pickColumn(cards, col, p, workers);
+}
+
+/** The tickets waiting in the pick column with no worker yet, in pick order: what the pipeline starts on next, paused
+ *  or not (the pipeline panel lists them). */
+export const waitingIn = (cards: Card[], col: (c: Card) => string, p: Pipeline, workers: Worker[]) =>
+  pickColumn(cards, col, p, workers).fresh;
+
+function pickColumn(cards: Card[], col: (c: Card) => string, p: Pipeline, workers: Worker[]) {
   const label = p.label.trim().toLowerCase();
   const fresh: Card[] = [];
   const resume: { card: Card; worker: Worker }[] = [];
@@ -104,6 +180,18 @@ export function step(w: Worker): Step | null {
 /** A worker whose PRs wait for review: its done was put on the board, nothing came after. */
 export const inReview = (w: Worker) =>
   !!prsOf(w).length && !w.pr_error && w.state === "done" && w.board === `done:${w.ended}`;
+
+/** The pipeline panel's tickets: each ticket's last worker, newest first, the merged and closed ones left out. */
+export function panelTickets(workers: Worker[], project: string) {
+  const last = new Map<string, Worker>();
+  for (const w of workersOf(workers, project)) last.set(ticketOf(w)!.card, w);
+  return [...last.values()].filter(w => w.board !== "merged" && w.board !== "closed").sort((a, b) => b.at - a.at);
+}
+
+/** Where a worker's ticket is on the board, by what the pipeline last did with it: a run that ended stays in busy
+ *  until it lands. */
+export const columnOf = (w: Worker): "busy" | "review" | "input" =>
+  w.state === "running" || step(w) ? "busy" : inReview(w) ? "review" : "input";
 
 const bot = (login: string | undefined) => !login || login.endsWith("[bot]") || login.toLowerCase().includes("copilot");
 const after = (iso: string, since: number) => Date.parse(iso) > since;
@@ -165,6 +253,9 @@ export const bare = (v: CardView) =>
   !v.feed.some(f => htmlText(f.html)) &&
   !(v.files?.length || v.feed.some(f => f.files.length));
 
+/** A comment as a line of a brief. */
+const commentLine = (f: CardView["feed"][number]) => `- ${f.who} (${f.at}): ${htmlText(f.html)}`;
+
 /** The ticket as a brief: title, link, description, the comments (only the ones after `since`, for a worker that picks
  *  it up again) and the files' links. */
 export function briefOf(v: CardView, since?: number) {
@@ -173,11 +264,7 @@ export function briefOf(v: CardView, since?: number) {
   if (since == null) out.push("", "Description:", description || "(none)");
   const feed = v.feed.filter(f => f.html && (since == null || Date.parse(f.at) > since));
   if (feed.length)
-    out.push(
-      "",
-      since == null ? "Comments, oldest first:" : "New on the ticket:",
-      ...feed.map(f => `- ${f.who} (${f.at}): ${htmlText(f.html)}`),
-    );
+    out.push("", since == null ? "Comments, oldest first:" : "New on the ticket:", ...feed.map(commentLine));
   const files = [...(v.files ?? []), ...v.feed.flatMap(f => f.files)];
   if (files.length && since == null) out.push("", "Files:", ...files.map(f => `- ${f.name}: ${f.url}`));
   return out.join("\n");
@@ -189,11 +276,84 @@ export const picturesOf = (v: CardView): [string, string][] =>
     .filter(f => f.url && /\.(png|jpe?g|gif|webp)$/i.test(f.name))
     .map(f => [f.name, f.url]);
 
+const PICTURES = "\n\nThe ticket's pictures, saved on this Mac (open them with Read):\n";
 /** The brief with where the ticket's pictures were saved: the agent cannot open the tracker's links. */
 export const withPictures = (brief: string, paths: string[]) =>
-  paths.length
-    ? `${brief}\n\nThe ticket's pictures, saved on this Mac (open them with Read):\n${paths.map(p => `- ${p}`).join("\n")}`
-    : brief;
+  paths.length ? `${brief}${PICTURES}${paths.map(p => `- ${p}`).join("\n")}` : brief;
+
+/** The comments Relay itself puts on a ticket (runner.ts, comment()). */
+export const RELAY_COMMENTS = [
+  "pl.picked",
+  "pl.resumed",
+  "pl.startFailed",
+  "pl.notReady",
+  "pl.unclear",
+  "pl.pr",
+  "pl.prUpdated",
+  "pl.prPartial",
+  "pl.noPr",
+  "pl.blocked",
+  "pl.blockedManual",
+  "pl.failed",
+  "pl.feedback",
+  "pl.merged",
+  "pl.closed",
+  "pl.pausedBack",
+] as const;
+const flat = (s: string) => s.replace(/\s+/g, " ").trim();
+/** How each of them opens, in every language (the user may have switched since): its text up to the first
+ *  placeholder, taken from the strings themselves so a reworded one is still recognised. */
+export const RELAY_OPENINGS = [en, nl, de, fr].flatMap(l => RELAY_COMMENTS.map(k => flat(l[k].split("{")[0])));
+/** A comment Relay wrote: it is posted under the user's own account, so only its text tells. */
+export const byRelay = (text: string) => RELAY_OPENINGS.some(o => flat(text).startsWith(o));
+
+// spaces as one, line breaks kept: the questions are often a list
+const spaced = (s: string) => s.replace(/[^\S\n]+/g, " ").trim();
+// each language's Blocked comments as [opening, closing], the fixed text around {questions}, the closing up to its
+// first placeholder
+const BLOCKED = [en, nl, de, fr].flatMap(l =>
+  (["pl.blocked", "pl.blockedManual"] as const).map(k => {
+    const [open, close = ""] = l[k].split("{questions}");
+    return [spaced(open), spaced(close.split("{")[0])] as const;
+  }),
+);
+/** What the agent asked, out of Relay's Blocked comment: the text between its fixed opening and closing (all after
+ *  the opening when no closing is found). Null for any other comment. */
+export function askedIn(text: string) {
+  const t = spaced(text);
+  const mine = BLOCKED.filter(([open]) => t.startsWith(open));
+  if (!mine.length) return null;
+  // the two Blocked comments open the same way: the one whose closing is there
+  const [open, close] = mine.find(([o, c]) => c && t.lastIndexOf(c) > o.length) ?? mine[0];
+  const end = close ? t.lastIndexOf(close) : -1;
+  return t.slice(open.length, end > open.length ? end : undefined).trim();
+}
+
+/** The ticket as it reads now, for a worker that started on `task` at `since`: null when nothing changed. Built the
+ *  same way each time, so a pass with nothing new gives the same text and an answer already folded in counts once:
+ *  the brief with the comments from before the start, as at the start, then in a block of their own what people
+ *  wrote since (an answer on Blocked, a correction), with the questions of Relay's Blocked comments they answer. A
+ *  question nobody answered yet is no change. Relay's other comments stay out, they carry the agent's summary, which
+ *  the review must not read as what was asked. The pictures saved at the start stay. */
+export function retask(task: string, v: CardView, since: number) {
+  const lines = v.feed
+    .filter(f => Date.parse(f.at) > since && htmlText(f.html))
+    .flatMap(f => {
+      const text = htmlText(f.html);
+      const asked = askedIn(text);
+      if (asked != null) return [{ person: false, line: `- The agent asked (${f.at}): ${asked}` }];
+      return byRelay(text) ? [] : [{ person: true, line: commentLine(f) }];
+    });
+  const said = lines.slice(0, lines.map(l => l.person).lastIndexOf(true) + 1).map(l => l.line);
+  const at = task.lastIndexOf(PICTURES);
+  const now =
+    briefOf({ ...v, feed: v.feed.filter(f => Date.parse(f.at) <= since) }) +
+    (said.length
+      ? `\n\nQuestions and answers on the ticket since the agent started, oldest first:\n${said.join("\n")}`
+      : "") +
+    (at < 0 ? "" : task.slice(at));
+  return now === task ? null : now;
+}
 
 /** Before a ticket from the pick column gets a worker: one call without tools judges whether an agent can build it
  *  without asking anyone, so an unclear ticket goes back with questions instead of costing a whole run. */
@@ -223,9 +383,7 @@ export function preflightOf(answer: string): { clear: true } | { clear: false; q
  *  taking new tickets. A plan sent for approval and a run you stopped are not misses. */
 export const MISSES = 3;
 const missed = (w: Worker) =>
-  w.state === "done"
-    ? !prsOf(w).length
-    : w.state !== "stopped" && !w.report?.questions?.startsWith("Plan for approval:");
+  w.state === "done" ? !prsOf(w).length : w.state !== "stopped" && !isPlan(w.report?.questions);
 
 /** The pipeline's last MISSES ended runs all missed: something is off (the tickets, the repo, the checks) and new
  *  tickets would only fail the same way. A run that opens a PR, a ticket moved back or one you start yourself goes on. */

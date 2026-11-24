@@ -119,6 +119,11 @@ export function meetingPrompt(
 }
 
 // ---------- the briefing before a meeting: under `## Briefing` in the meeting's note, named after its day and title
+/** The meeting under a new title; an empty one keeps the old. */
+export const withTitle = (meeting: Meeting, title: string): Meeting => ({
+  ...meeting,
+  title: title.trim() || meeting.title,
+});
 /** The meeting note's name, as the vault names them: `YYYY-MM-DD Title`, without what a file name cannot hold. The
  *  prompts name it, so Today finds the note the conversation made. */
 export const meetingNoteName = (meeting: Meeting, timeZone?: string) =>
