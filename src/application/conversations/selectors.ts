@@ -201,6 +201,7 @@ export function chatBar(key: string) {
           repos: !!usePullRequestsStore.getState().repos[toolProject]?.length,
           active: tool ? (board ? ("board" as const) : key === PRS ? ("prs" as const) : ("" as const)) : ("" as const),
           git: settings().gitDrawer === true,
+          pipeline: !!settings().pipelines?.[toolProject] && !!settings().boards?.[toolProject],
           back: !!tool,
         }
       : null,

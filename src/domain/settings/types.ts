@@ -200,6 +200,7 @@ export type Settings = {
   integrations: Record<string, IntegrationConfig>;
   boards: Record<string, BoardRef>; // the board linked to a vault project
   pipelines?: Record<string, Pipeline>; // the board pipeline of a vault project (domain/pipeline)
+  pipelinesPaused?: boolean; // every board pipeline paused at once, whatever its own pause (Pipeline.paused)
   buddy?: Record<string, BuddyRef>; // the Buddy project linked to a vault project (domain/buddy)
   github: { on: boolean; owners: string };
   mail: MailCfg;
