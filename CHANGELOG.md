@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Added
+
+- A meeting button in the title bar, next to New conversation, and Record a Meeting Now in the Conversation menu, start a recording from any view. While one runs the button shows a red dot and opens its meeting. You can rename the meeting while it records, in the title of its Meeting view; the new name is used for the transcript, the note and the summary. While it records, the menu bar icon shows a red dot and the meeting on top of its menu, with Open meeting and Stop recording (#512)
+
 ### Fixed
 
 - Cmd-V outside a field pastes into the composer on the Mac too: the Edit menu took the key before Relay saw it. (#521)

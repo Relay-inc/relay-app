@@ -2169,6 +2169,7 @@ export default {
   "meet.notRecording": "Pas d'enregistrement. Les notes fonctionnent sans.",
   "meet.gone": "Cette réunion n'est plus dans votre agenda.",
   "meet.moreRecording": "Plus",
+  "meet.renameRecording": "Renommer la réunion",
   "meet.discardAsk": "Supprimer cet enregistrement ?",
   "meet.discard": "Supprimer",
   "meet.keep": "Garder l'enregistrement",
