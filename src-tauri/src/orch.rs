@@ -662,8 +662,8 @@ fn decisions_md(d: &[Decision]) -> String {
 fn publish(app: &AppHandle, w: &Worker, r: &Report) -> (Vec<Tree>, Option<String>) {
     let mut all = trees(w);
     let Some(branch) = w.branch.clone().filter(|_| !all.is_empty()) else { return (all, Some("no worktree".into())) };
-    if let Some(f) = r.flags.iter().find(|f| f.starts_with("branch ")) { return (all, Some(format!("{f} while it ran: not pushed"))); }
     let changed: Vec<usize> = (0..all.len()).filter(|&i| committed(&all[i])).collect();
+    if let Some(f) = moved_branch(&r.flags, &all, &changed) { return (all, Some(format!("{f} while it ran: not pushed"))); }
     if changed.is_empty() { return (all, Some("nothing committed on the branch".into())); }
     let many = all.len() > 1;
     let slugs: Vec<String> = changed.iter().map(|&i| super::gh_repo(&all[i].repo).unwrap_or_else(|| name(&all[i].repo).to_string())).collect();
@@ -680,6 +680,17 @@ fn publish(app: &AppHandle, w: &Worker, r: &Report) -> (Vec<Tree>, Option<String
         }
     }
     (all, (!errors.is_empty()).then(|| errors.join("; ")))
+}
+/// The moved protected branch that holds the push: one in a repo it pushes, where its work may have gone to that
+/// branch instead. In a repo it left alone only a tip the remote does not have holds it (the agent may have committed
+/// there), a pulled merge stays a note in the report. No fetch: a pull moves origin/<branch> too, a local commit does not.
+fn moved_branch<'a>(flags: &'a [String], all: &[Tree], changed: &[usize]) -> Option<&'a String> {
+    let many = all.len() > 1;
+    flags.iter().filter(|f| f.starts_with("branch ")).find(|f| !many || all.iter().enumerate().any(|(i, t)| {
+        let Some(b) = f.strip_prefix("branch ").and_then(|f| f.strip_suffix(&format!(" in {} moved", name(&t.repo)))) else { return false };
+        // without origin/<branch> it holds, the safe side
+        changed.contains(&i) || git(&t.repo, &["merge-base", "--is-ancestor", &format!("refs/heads/{b}"), &format!("refs/remotes/origin/{b}")]).is_none()
+    }))
 }
 /// One repo of `publish`: push, and the PR when it has none yet. `others`: the repos the same ticket changed too.
 fn publish_one(app: &AppHandle, w: &Worker, r: &Report, t: &Tree, branch: &str, others: &[&str]) -> Result<String, String> {
@@ -1456,6 +1467,18 @@ mod tests {
         sh(&made[0].repo, "git -c user.email=a@b -c user.name=a commit -q --allow-empty -m moved");
         assert_eq!(flags_of(&before, &snapshot("/v", &[], &repos)), ["branch main in backend moved"]);
         assert!(snapshot("/v", &[], &repos[..1]).contains_key("branch:main"), "one repo keeps the keys a running worker started with");
+        // only the frontend is pushed. The backend it left alone: a local commit on main (no origin/main) holds it, a pulled merge does not
+        let held = || moved_branch(&flags_of(&before, &snapshot("/v", &[], &repos)), &made, &[1]).cloned();
+        assert_eq!(held().as_deref(), Some("branch main in backend moved"));
+        sh(&made[0].repo, "git update-ref refs/remotes/origin/main $(git -c user.email=a@b -c user.name=a commit-tree 'HEAD^{tree}' -p HEAD -m merged) && git merge -q --ff-only origin/main");
+        assert_eq!(held(), None);
+        // a moved main in the frontend it pushes holds it, also when origin has it
+        sh(&made[1].repo, "git -c user.email=a@b -c user.name=a commit -q --allow-empty -m moved && git update-ref refs/remotes/origin/main HEAD");
+        assert_eq!(held().as_deref(), Some("branch main in frontend moved"));
+        // a local commit on top of the pulled backend main holds it again
+        sh(&made[0].repo, "git -c user.email=a@b -c user.name=a commit -q --allow-empty -m local");
+        assert_eq!(held().as_deref(), Some("branch main in backend moved"));
+        assert_eq!(moved_branch(&["branch main moved".into()], &made[..1], &[]).map(String::as_str), Some("branch main moved"), "one repo: as before");
         // a blocking review of the frontend goes back to the frontend's next review only
         let w = Worker { last_review: Some(LastReview { head: String::new(), blocking: vec!["- frontend/cart.ts:1: no total".into(), "- backend/A.php: x".into()], checked: vec![] }), ..Default::default() };
         assert_eq!(last_for(&w, &made[1], true).unwrap().blocking, ["- cart.ts:1: no total"]);
