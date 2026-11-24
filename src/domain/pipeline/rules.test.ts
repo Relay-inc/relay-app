@@ -1,10 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import en from "../../shared/locales/en.ts";
+import nl from "../../shared/locales/nl.ts";
+import de from "../../shared/locales/de.ts";
+import fr from "../../shared/locales/fr.ts";
 import type { Card, CardView } from "../board/types.ts";
 import type { Worker } from "../orchestrator/types.ts";
 import {
+  askedIn,
   bare,
   briefOf,
+  byRelay,
+  RELAY_COMMENTS,
+  RELAY_OPENINGS,
   checksOf,
   picturesOf,
   withPictures,
@@ -12,12 +21,23 @@ import {
   EMPTY_PIPELINE,
   htmlText,
   inReview,
+  panelTickets,
+  columnOf,
+  needsSetup,
   picks,
   pipelineAt,
   preflightOf,
   prsOf,
   ready,
   reposFor,
+  runnable,
+  afterAnswer,
+  answerWhy,
+  stateSince,
+  isPlan,
+  startsNow,
+  waitingIn,
+  retask,
   review,
   reviewAll,
   stalled,
@@ -104,6 +124,117 @@ test("picks: the pick column in board order, the label, running ones left alone,
     ["a"],
     "a merged ticket put back is new work",
   );
+});
+
+test("paused: no new tickets and nothing picked up again, also for one moved back", () => {
+  const cards = [card("a", "todo", 1), card("e", "todo", 2)];
+  const ws = [worker("e", "blocked")];
+  assert.deepEqual(
+    picks(cards, c => c.column, { ...P, paused: true }, ws),
+    { fresh: [], resume: [] },
+  );
+  assert.equal(picks(cards, c => c.column, P, ws).fresh.length, 1, "the same board unpaused picks");
+});
+
+test("the global pause holds every pipeline, each one's own pause stays its own", () => {
+  const cards = [card("a", "todo", 1)];
+  const all = { Acme: P, Northwind: { ...P, paused: true }, Off: { ...P, on: false } };
+  const held = runnable(all, true);
+  assert.deepEqual(
+    held.map(([project]) => project),
+    ["Acme", "Northwind"],
+    "a switched-off pipeline is not run at all",
+  );
+  for (const [, p] of held) assert.equal(picks(cards, c => c.column, p, []).fresh.length, 0);
+  const own = Object.fromEntries(runnable(all, false));
+  assert.equal(own.Acme.paused, false);
+  assert.equal(own.Northwind.paused, true);
+  assert.equal(all.Acme.paused, undefined, "the settings themselves are left alone");
+});
+
+test("afterAnswer: the worker now when it may start and there is room, else the pick column, hand-picked stays", () => {
+  const go = { worker: true, running: false, starts: true, room: true, manual: false };
+  assert.equal(afterAnswer(go), "resume");
+  assert.equal(afterAnswer({ ...go, starts: false }), "pick", "paused: the pipeline takes it when it goes on");
+  assert.equal(afterAnswer({ ...go, room: false }), "pick", "full: when an agent is free");
+  assert.equal(afterAnswer({ ...go, worker: false }), "pick", "never started: the pick column, the pre-flight again");
+  assert.equal(afterAnswer({ ...go, worker: false, manual: true }), "stay");
+  assert.equal(afterAnswer({ ...go, manual: true }), "resume", "hand-picked with room goes on at once too");
+  assert.equal(afterAnswer({ ...go, manual: true, room: false }), "stay", "no pick column to wait in");
+  assert.equal(afterAnswer({ ...go, running: true }), "stay", "a running worker is not started twice");
+  assert.equal(isPlan("Plan for approval: x"), true);
+  assert.equal(isPlan("Which colour?"), false);
+});
+
+test("answerWhy: what the answer means, then the user's own words when there are any", () => {
+  assert.equal(answerWhy("retry", "  "), "The user asked you to try again.");
+  const approve = answerWhy("approve", "One date per row.");
+  assert.match(approve, /^The user approved your plan: build it/);
+  assert.match(approve, /The user answered in Relay, in their own words:\nOne date per row\.$/);
+  assert.match(answerWhy("changes", "Per tree."), /rework the plan and report it for approval again/);
+  assert.doesNotMatch(answerWhy("changes", "Per tree."), /build it/);
+});
+
+test("stateSince: an ended run since its end, a run since the user's answer when that came after its start", () => {
+  assert.equal(stateSince({ state: "failed", at: 10, ended: 50 }), 50);
+  assert.equal(stateSince({ state: "running", at: 10, ended: null }), 10);
+  assert.equal(stateSince({ state: "running", at: 10, ended: null }, 80), 80);
+  assert.equal(stateSince({ state: "running", at: 90, ended: null }, 80), 90, "an older answer does not count");
+});
+
+test("startsNow: read at the moment of each start, the own pause, the global one, a pipeline switched off", () => {
+  assert.equal(startsNow({ pipelines: { Acme: P } }, "Acme"), true);
+  assert.equal(startsNow({ pipelines: { Acme: { ...P, paused: true } } }, "Acme"), false);
+  assert.equal(startsNow({ pipelines: { Acme: P }, pipelinesPaused: true }, "Acme"), false);
+  assert.equal(startsNow({ pipelines: { Acme: { ...P, on: false } } }, "Acme"), false);
+  assert.equal(startsNow({ pipelines: { Acme: P } }, "Northwind"), false, "no pipeline, nothing to start");
+});
+
+test("waitingIn: the pick column with the label and no worker yet, in pick order, also while paused", () => {
+  const cards = [
+    card("b", "todo", 2, ["agent"]),
+    card("a", "todo", 1, ["Agent"]),
+    card("c", "todo", 3),
+    card("d", "doing", 0, ["agent"]),
+    card("e", "todo", 4, ["agent"]),
+    card("f", "todo", 5, ["agent"]),
+    card("g", "todo", 6, ["agent"]),
+  ];
+  const ws = [worker("e", "blocked"), worker("f", "running"), worker("g", "done", { board: "merged" })];
+  const labelled = { ...P, label: "agent" };
+  assert.deepEqual(
+    waitingIn(cards, c => c.column, labelled, ws).map(c => c.id),
+    ["a", "b", "g"],
+    "moved back with a worker or running is not waiting, a merged one put back is",
+  );
+  assert.deepEqual(
+    waitingIn(cards, c => c.column, { ...labelled, paused: true }, ws).map(c => c.id),
+    ["a", "b", "g"],
+  );
+  assert.equal(waitingIn(cards, c => c.column, P, ws).length, 4, "without a label every card in the column");
+});
+
+test("panel: each ticket's last worker, newest first, finished ones left out, where each is on the board", () => {
+  const ws = [
+    worker("a", "failed", { key: "a1", at: 1 }),
+    worker("a", "blocked", {
+      key: "a2",
+      at: 5,
+      board: "blocked:100",
+      report: { questions: "Which colour?" } as Worker["report"],
+    }),
+    worker("b", "running", { key: "b1", at: 3 }),
+    worker("c", "done", { key: "c1", at: 4, pr: "https://x/pull/2", board: "done:100" }),
+    worker("d", "done", { key: "d1", at: 6, pr: "https://x/pull/3", board: "merged" }),
+    { ...worker("e", "running", { key: "e1" }), ticket: { pipeline: "Northwind", card: "e" } },
+  ];
+  const rows = panelTickets(ws, "Acme");
+  assert.deepEqual(
+    rows.map(w => w.key),
+    ["a2", "c1", "b1"],
+  );
+  assert.deepEqual(rows.map(columnOf), ["input", "review", "busy"]);
+  assert.equal(columnOf(worker("f", "done", { pr: "p" })), "busy", "ended but not landed yet");
 });
 
 test("step: each end once, done with a PR to review, the rest to a person", () => {
@@ -207,6 +338,94 @@ test("picturesOf: the ticket's and its comments' pictures; withPictures: their p
   ]);
   assert.equal(withPictures("brief", []), "brief");
   assert.match(withPictures("brief", ["/tmp/a.png"]), /^brief\n\n.*Read.*\n- \/tmp\/a\.png$/);
+});
+
+test("retask: the ticket as it reads now only when it or what people wrote on it changed since the start", () => {
+  const c = (ms: number, who: string, html: string) => ({ at: at(ms), who, html, change: "", files: [] });
+  const relay = c(150, "Ann", "<p>PR opened: https://g/pr/1</p><p>all done</p>");
+  const answer = c(170, "Ann", "<p>Pears, not apples</p>");
+  const asked = c(
+    160,
+    "Ann",
+    "<p>The agent needs input:</p><p>Apples or pears?</p><p>Answer here and move the ticket back to Todo to continue.</p>",
+  );
+  const v = (description: string, ...later: ReturnType<typeof c>[]) =>
+    ({
+      title: "Orchard",
+      number: "7",
+      url: "https://t/7",
+      description,
+      feed: [c(50, "Ann", "<p>north side first</p>"), ...later],
+      files: [],
+    }) as unknown as CardView;
+  const task = withPictures(briefOf(v("<p>Plant the apple trees</p>")), ["/tmp/a.png"]);
+  assert.equal(retask(task, v("<p>Plant the apple trees</p>"), 100), null, "unchanged: the task stays");
+  assert.equal(retask(task, v("<p>Plant the apple trees</p>", relay), 100), null, "Relay's own comment is no change");
+  const b = retask(task, v("<p>Plant the apple trees</p>", relay, answer), 100);
+  assert.ok(
+    b?.includes("Questions and answers on the ticket since the agent started") && b.includes("Pears, not apples"),
+    b ?? "",
+  );
+  assert.ok(!b.includes("all done") && b.endsWith("- /tmp/a.png"), "Relay's comment stays out, the pictures stay in");
+  assert.equal(
+    retask(b, v("<p>Plant the apple trees</p>", relay, answer), 100),
+    null,
+    "an answer folded in counts once",
+  );
+  const d = retask(b, v("<p>Plant the pear trees</p>", relay, answer), 100);
+  assert.ok(d?.includes("Plant the pear trees") && d.includes("north side first") && d.includes("Pears, not apples"));
+  // what the agent asked comes with the answer, in time order, without Relay's fixed text around it
+  assert.equal(
+    retask(task, v("<p>Plant the apple trees</p>", relay, asked), 100),
+    null,
+    "a question alone is no change",
+  );
+  const q = retask(task, v("<p>Plant the apple trees</p>", relay, asked, answer), 100);
+  const i = q?.indexOf(`- The agent asked (${at(160)}): Apples or pears?`) ?? -1;
+  assert.ok(i > 0 && q!.indexOf("Pears, not apples") > i, q ?? "");
+  assert.ok(!q!.includes("Answer here") && !q!.includes("needs input") && !q!.includes("all done"), q!);
+  assert.equal(retask(q!, v("<p>Plant the apple trees</p>", relay, asked, answer), 100), null, "a second pass");
+  const later = c(180, "Ann", "<p>The agent needs input:</p><p>Which row?</p>");
+  assert.equal(
+    retask(q!, v("<p>Plant the apple trees</p>", relay, asked, answer, later), 100),
+    null,
+    "a new question alone",
+  );
+});
+
+test("byRelay: every comment Relay puts on a ticket, in every language; a person's comment is kept", () => {
+  for (const l of [en, nl, de, fr])
+    for (const k of RELAY_COMMENTS) {
+      const text = l[k].replace(/\{\w+\}/g, "x");
+      assert.ok(byRelay(text), `${k}: ${text}`);
+    }
+  assert.ok(
+    RELAY_OPENINGS.every(o => o.length >= 4),
+    "an opening that is all placeholder would take every comment",
+  );
+  assert.ok(!byRelay("Pears, not apples") && !byRelay("PR looks fine to me"));
+  // the questions out of each language's Blocked comments, a person's comment is none
+  for (const l of [en, nl, de, fr])
+    for (const k of ["pl.blocked", "pl.blockedManual"] as const) {
+      const text = l[k].replace("{questions}", "- Apples or pears?\n- Which row?").replace(/\{\w+\}/g, "Todo");
+      assert.equal(askedIn(text), "- Apples or pears?\n- Which row?", `${k}: ${text}`);
+    }
+  assert.equal(askedIn("Pears, not apples"), null);
+  assert.equal(askedIn(en["pl.picked"]), null);
+  // a new comment in the runner must be added to RELAY_COMMENTS (the others are toasts and errors)
+  const runner = readFileSync(new URL("../../application/pipeline/runner.ts", import.meta.url), "utf8");
+  const toasts = [
+    "pl.error",
+    "pl.full",
+    "pl.noBoard",
+    "pl.noColumn",
+    "pl.noRepos",
+    "pl.usedUp",
+    "pl.stalled",
+    "pl.pausedStart",
+  ];
+  for (const k of new Set(runner.match(/"pl\.\w+"/g)!.map(m => m.slice(1, -1))))
+    assert.ok([...RELAY_COMMENTS, ...toasts].includes(k), k);
 });
 
 test("hand-picked: no pick column needed; the board's pipeline; what the ticket window offers", () => {
@@ -379,4 +598,15 @@ test("reposFor: the project's checkouts but the ones switched off, each with its
     "its own checks, also empty, win over the old command",
   );
   assert.equal(checksOf({ ...P, checks: "make test" }, found[2]), "", "the old command was for its one checkout only");
+});
+
+test("needsSetup: a repo without a checkout, or a pipeline on that misses a column", () => {
+  const found = [{ slug: "acme/web", path: "/code/web" }];
+  assert.equal(needsSetup([], [], undefined), false);
+  assert.equal(needsSetup(["acme/web"], found, undefined), false);
+  assert.equal(needsSetup(["acme/web", "acme/api"], found, undefined), true);
+  const on = { ...EMPTY_PIPELINE, on: true, pick: "1", busy: "2", review: "3", input: "4" };
+  assert.equal(needsSetup(["acme/web"], found, on), false);
+  assert.equal(needsSetup(["acme/web"], found, { ...on, input: "" }), true);
+  assert.equal(needsSetup(["acme/web"], found, { ...on, on: false, input: "" }), false);
 });

@@ -31,6 +31,7 @@ import type { AgentsStatus } from "../../domain/agents/types";
 import type { AgentUpdate, UpdateProgress, UpdatesStatus } from "../../domain/settings/updates";
 import type { BoardOpt } from "../../domain/board/types";
 import type { PluginTest } from "../../domain/plugins/types";
+import type { PipelineRepo } from "../../domain/pipeline/types";
 import type { ExtraVault, ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
 import { makeStore } from "../make-store";
 
@@ -71,6 +72,7 @@ export type SettingsState = {
     names: string[]; // every project, sorted
     projects: Pick<Project, "name" | "label" | "context" | "summary">[];
     repos: Record<string, string[]>;
+    checkouts: Record<string, PipelineRepo[]>; // per project the checkouts of its repos on this Mac
     message: Message | null;
     finding: boolean;
   };
@@ -203,7 +205,16 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     updating: "",
     agentMessages: {},
   },
-  projectsPage: { icons: null, loading: false, names: [], projects: [], repos: {}, message: null, finding: false },
+  projectsPage: {
+    icons: null,
+    loading: false,
+    names: [],
+    projects: [],
+    repos: {},
+    checkouts: {},
+    message: null,
+    finding: false,
+  },
   machinesPage: {
     checked: false,
     status: {},

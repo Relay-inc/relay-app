@@ -25,7 +25,16 @@ async function loadProjectsPage() {
     backend.projectRepos().catch(() => ({})),
   ]);
   const projects = snapshot.projects || [];
+  // the checkouts on this Mac of each project with repos, for the table and the Needs setup filter
+  const checkouts = Object.fromEntries(
+    await Promise.all(
+      Object.entries(repos)
+        .filter(([, list]) => list.length)
+        .map(async ([name]) => [name, await findCheckouts(name)] as const),
+    ),
+  );
   page({
+    checkouts,
     icons,
     repos,
     projects: projects.map(({ name, label, context, summary }) => ({ name, label, context, summary })),
@@ -34,6 +43,15 @@ async function loadProjectsPage() {
       .map(project => ({ name: String(project.name), shown: project.label || String(project.name) }))
       .sort((a, b) => a.shown.localeCompare(b.shown))
       .map(project => project.name),
+  });
+}
+const findCheckouts = (project: string) =>
+  backend.pipelineRepos(project, st().settings.pipelines?.[project]?.repo ?? "").catch(() => []);
+/** The checkouts of one project again, after its repos or its hand-picked checkout changed. */
+export async function loadCheckouts(project: string) {
+  const found = await findCheckouts(project);
+  useSettingsStore.setState(draft => {
+    draft.projectsPage.checkouts[project] = found;
   });
 }
 /** Called when the page shows: loads once, then follows icons-changed. */
@@ -62,6 +80,7 @@ export async function setRepos(project: string, repos: string[]) {
     await backend.setProjectRepos(project, repos);
     said("", true);
     page({ repos: await backend.projectRepos() });
+    await loadCheckouts(project);
   } catch (error) {
     said(String(error), false);
   }

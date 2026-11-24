@@ -2,6 +2,7 @@ import { joinable, meetingLanguage } from "../../../domain/calendar/rules";
 import { STEPS, serviceOf, type Step } from "../../../domain/calendar/meeting-view";
 import type { Meeting } from "../../../domain/calendar/types";
 import { joinMeeting, meetingProjectOf, timeOf } from "../../../application/calendar/calendar";
+import { renameRecording, useRecordingStore } from "../../../application/calendar/recording";
 import { saveLanguage } from "../../../application/calendar/meeting-view";
 import { projectChip } from "../../../application/today/today";
 import { Icon } from "../../components/Icon";
@@ -41,6 +42,11 @@ export function MeetingHeader({
   onStep: (step: Step) => void;
 }) {
   const { t, locale } = useT();
+  // while it records the title is editable, and the recording's meeting is the one with the latest title
+  const recording = useRecordingStore(s =>
+    s.phase === "recording" && s.meeting?.id === meeting.id ? s.meeting : null,
+  );
+  const title = (recording ?? meeting).title;
   const project = projectChip(meetingProjectOf(meeting));
   const day = new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short" }).format(
     new Date(meeting.start),
@@ -57,9 +63,30 @@ export function MeetingHeader({
   return (
     <div className="flex-none px-7 pt-4 pb-3.5 border-b border-separator">
       <div className="flex items-center gap-4">
-        <h1 className="flex-1 min-w-0 m-0 text-xl font-bold tracking-tight truncate select-text">
-          {meeting.title || t("wait.meetingUntitled")}
-        </h1>
+        {recording ? (
+          <input
+            key={recording.id}
+            className="flex-1 min-w-0 m-0 -mx-1.5 px-1.5 rounded-md bg-transparent text-xl font-bold tracking-tight truncate outline-none select-text hover:bg-fill focus:bg-fill-2"
+            aria-label={t("meet.renameRecording")}
+            title={t("meet.renameRecording")}
+            defaultValue={title}
+            onBlur={e => {
+              renameRecording(e.target.value);
+              e.target.value = useRecordingStore.getState().meeting?.title ?? "";
+            }}
+            onKeyDown={e => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") {
+                e.currentTarget.value = title;
+                e.currentTarget.blur();
+              }
+            }}
+          />
+        ) : (
+          <h1 className="flex-1 min-w-0 m-0 text-xl font-bold tracking-tight truncate select-text">
+            {meeting.title || t("wait.meetingUntitled")}
+          </h1>
+        )}
         <ol aria-label={t("meet.stage")} className="flex-none flex items-center gap-1.5 m-0 p-0 list-none">
           {STEPS.map((id, i) => {
             const current = i === at;

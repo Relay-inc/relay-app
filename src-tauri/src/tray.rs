@@ -1,5 +1,6 @@
 // The menu bar icon: overdue·today in the title, every reminder a submenu to tick off, push or drop,
-// like the SwiftBar plugin it replaces. Rebuilt only when what it shows changes: after every reminder
+// like the SwiftBar plugin it replaces. While a meeting records: a red dot in the title and the meeting on top, to
+// open or stop. Rebuilt only when what it shows changes: after every reminder
 // action, on each snapshot, when the settings change and every 5 minutes (a new day, edits by Claude).
 
 use super::{relay_config, reminders, rem_ctx, tr, ui_lang_of, vault_of, App};
@@ -15,6 +16,15 @@ use tauri::{AppHandle, Emitter, Manager};
 
 const ID: &str = "reminders";
 static SHOWN: Mutex<String> = Mutex::new(String::new());
+/// The meeting being recorded, by title; set by the window that records it (application/calendar/recording.ts).
+static RECORDING: Mutex<Option<String>> = Mutex::new(None);
+
+/// A recording started (its title), was renamed, or ended (None).
+#[tauri::command]
+pub fn tray_recording(app: AppHandle, title: Option<String>) {
+    *RECORDING.lock().unwrap() = title;
+    refresh(&app);
+}
 
 pub fn init(app: &AppHandle) -> tauri::Result<()> {
     // the black template icon macOS tints, the app icon elsewhere (a black one vanishes on a dark Windows taskbar)
@@ -32,11 +42,14 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
 }
 
 /// Menu ids of the tray, which the app-wide menu handler leaves alone.
-pub fn owns(id: &str) -> bool { id == "tray-open" || id == "tray-capture" || id.starts_with("rem|") }
+pub fn owns(id: &str) -> bool { id == "tray-open" || id == "tray-capture" || id.starts_with("tray-rec-") || id.starts_with("rem|") }
 
 fn on_menu(app: &AppHandle, id: &str) {
     if id == "tray-open" { super::windows::show_active(app); return; }
     if id == "tray-capture" { super::anywhere::open_capture(app); return; }
+    // the window that records does the stop (it has the title, the note and the speakers) and opens the meeting
+    if id == "tray-rec-stop" { app.emit("tray-recording", "stop").ok(); return; }
+    if id == "tray-rec-open" { super::windows::show_active(app); app.emit("tray-recording", "open").ok(); return; }
     let parts: Vec<&str> = id.split('|').collect();
     let ["rem", action, rid, rest @ ..] = parts.as_slice() else { return };
     if let Ok((file, log, _)) = rem_ctx(app) {
@@ -56,19 +69,21 @@ pub fn refresh(app: &AppHandle) {
         Err(_) => (vec![], ui_lang_of(&app.state::<App>().settings.lock().unwrap())),
     };
     let icons = { let v = vault_of(&app.state::<App>().settings.lock().unwrap()); relay_config::icon_files(v["vault"].as_str().unwrap_or("")) };
-    let key = format!("{today} {lang} {} {icons:?}", Value::from(rows.clone()));
+    let rec = RECORDING.lock().unwrap().clone();
+    let key = format!("{today} {lang} {} {icons:?} {rec:?}", Value::from(rows.clone()));
     { let mut shown = SHOWN.lock().unwrap(); if *shown == key { return; } *shown = key; }
     let n = |f: fn(i64) -> bool| rows.iter().filter(|r| f(days(r))).count();
     let (late, now) = (n(|d| d < 0), n(|d| d == 0));
-    let title = if late + now > 0 { (late + now).to_string() } else { String::new() };
+    let count = if late + now > 0 { (late + now).to_string() } else { String::new() };
+    let title = if rec.is_some() { format!("● {count}").trim_end().to_string() } else { count };
     tray.set_title(Some(&title)).ok();
     // Windows has no title next to a tray icon: the count goes in its tooltip
     #[cfg(not(target_os = "macos"))]
     tray.set_tooltip(Some(if title.is_empty() { "Relay".to_string() } else { format!("Relay ({title})") })).ok();
     #[cfg(target_os = "macos")]
-    if late > 0 { tray.with_inner_tray_icon(move |t| red_title(t.ns_status_item(), &title)).ok(); }
+    if late > 0 || rec.is_some() { tray.with_inner_tray_icon(move |t| red_title(t.ns_status_item(), &title)).ok(); }
     // muda builds on the main thread, which with_inner_tray_icon runs on
-    tray.with_inner_tray_icon(move |t| match build(&rows, lang, &icons) {
+    tray.with_inner_tray_icon(move |t| match build(&rows, lang, &icons, rec.as_deref()) {
         Ok(m) => t.set_menu(Some(Box::new(m))),
         Err(e) => eprintln!("tray menu: {e}"),
     }).ok();
@@ -96,10 +111,16 @@ const GROUPS: [(&str, fn(i64) -> bool); 5] = [("tray.late", |d| d < 0), ("tray.t
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 struct Look { at: (usize, Option<usize>), icon: Option<PathBuf>, folder: bool, subtitle: String, badge: String }
 
-fn build(rows: &[Value], lang: &str, icons: &BTreeMap<String, PathBuf>) -> muda::Result<Menu> {
+fn build(rows: &[Value], lang: &str, icons: &BTreeMap<String, PathBuf>, rec: Option<&str>) -> muda::Result<Menu> {
     let t = |k: &str| tr(lang, k);
     let menu = Menu::new();
     let mut looks = vec![];
+    if let Some(title) = rec {
+        menu.append(&MenuItem::new(format!("● {}: {title}", t("tray.recording")), false, None))?;
+        menu.append(&MenuItem::with_id("tray-rec-open", t("tray.rec_open"), true, None))?;
+        menu.append(&MenuItem::with_id("tray-rec-stop", t("tray.rec_stop"), true, None))?;
+        menu.append(&P::separator())?;
+    }
     menu.append(&MenuItem::with_id("tray-open", t("tray.open"), true, None))?;
     menu.append(&MenuItem::with_id("tray-capture", t("tray.capture"), true, None))?;
     menu.append(&P::separator())?;

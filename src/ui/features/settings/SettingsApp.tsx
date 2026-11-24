@@ -22,6 +22,8 @@ export function SettingsApp() {
   if (!vaultStatus) return null;
   const tab = picked;
   const page = (id: typeof tab) => (tab === id ? "contents" : "hidden");
+  // Projects is a list and the picked project side by side, the full width; the other pages a centred column
+  const wide = tab === "projects";
   // the window's line height is 1.4 (the body's is 1.5), set as a plain property: a leading-* utility would also set
   // --tw-leading, which every text-* below would then inherit
   return (
@@ -54,11 +56,17 @@ export function SettingsApp() {
           </button>
         </div>
       </nav>
-      <section className="min-w-0 flex-1 min-h-0 overflow-y-auto">
-        <div className="flex h-12 items-center border-b border-s-seam px-8 text-[13px] font-semibold">
+      <section className={`min-w-0 flex-1 min-h-0 ${wide ? "flex flex-col" : "overflow-y-auto"}`}>
+        <div className="flex h-12 flex-none items-center border-b border-s-seam px-8 text-[13px] font-semibold">
           {t(TABS.find(x => x[0] === tab)![1])}
         </div>
-        <div className="mx-auto grid max-w-150 grid-cols-1 content-start gap-7 px-8 pt-6 pb-10 [&>*]:min-w-0">
+        <div
+          className={
+            wide
+              ? "flex min-h-0 flex-1"
+              : "mx-auto grid max-w-150 grid-cols-1 content-start gap-7 px-8 pt-6 pb-10 [&>*]:min-w-0"
+          }
+        >
           <div className={page("general")}>
             <GeneralPage vaultStatus={vaultStatus} active={tab === "general"} />
           </div>

@@ -4,7 +4,12 @@
 
 /** A project's pipeline, settings.pipelines[vault project]. The columns are ids in the grouping `group`. */
 export type Pipeline = {
+  /** off: Relay leaves the board alone, also ended runs and PRs in review (see paused) */
   on: boolean;
+  /** paused from the pipeline panel: no new tickets and nothing picked up again (review comments on a PR wait too,
+   *  they would start the worker), while ended runs still land on the board and merges and closes are still followed.
+   *  Absent: not paused */
+  paused?: boolean;
   /** a checkout picked by hand, an absolute path: for a repo Relay does not find among the project's own (Settings ›
    *  Projects, GitHub repositories), or in place of the one it finds for that repo. Empty: only the project's own */
   repo: string;
