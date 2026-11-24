@@ -7,6 +7,13 @@ test("a comment becomes escaped HTML paragraphs", () => {
   assert.equal(toHtml("Hi <b>you</b>\nline two\n\nnext & last\n"), "<p>Hi &lt;b&gt;you&lt;/b&gt;<br>line two</p><p>next &amp; last</p>");
 });
 
+test("an agent's markdown summary becomes Productive's HTML, not raw asterisks", () => {
+  assert.equal(
+    toHtml("PR opened: https://example.com/pull/1\n\n**Result:** done\n\n- `a.ts`: fixed\n- tests <added>"),
+    '<p>PR opened: <a href="https://example.com/pull/1">https://example.com/pull/1</a></p><p><strong>Result:</strong> done</p><ul><li><code>a.ts</code>: fixed</li><li>tests &lt;added&gt;</li></ul>',
+  );
+});
+
 test("a file: the record, the bytes to S3 with the policy, then where they landed", async () => {
   const calls: any[] = [], ups: any[] = [];
   const answers = [{ data: { id: "9", attributes: { aws_policy: { url: "https://b.s3.amazonaws.com/", key: "up/9/a b.pdf", policy: "p", "x-amz-signature": "s", empty: null } } } }, {}];

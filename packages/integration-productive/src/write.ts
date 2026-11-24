@@ -1,16 +1,17 @@
 import type { Ctx } from "@relay/board-core";
+import { markdown } from "@relay/board-core/detail";
 
 // What the panel writes to Productive, kept apart from index.ts so tests/write.test.ts can run it without a webview.
 
-/** A comment as Productive stores it: HTML, here from plain text (paragraphs on blank lines, line breaks kept). */
 const esc = (s: string) => s.replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]!));
 // Productive's mention, as its own editor writes it in the comment's text (read from real comments): @[{json}]
 const token = (p: { id: string; name: string }) =>
   `@[${JSON.stringify({ type: "person", id: p.id, label: p.name, avatar_url: null, attachment_url: null, is_done: true }).replace(/[<>&]/g, ch => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`)}]`;
-/** A comment as escaped HTML paragraphs; every "@Name" of a person picked in the composer becomes Productive's
- *  mention, so that person is notified. */
+/** A comment as Productive stores it: HTML, from markdown (the agents' summaries are markdown; raw HTML stays text,
+ *  line breaks kept); every "@Name" of a person picked in the composer becomes Productive's mention, so that person
+ *  is notified. */
 export const toHtml = (s: string, mentions: { id: string; name: string }[] = []) => {
-  let html = s.trim().split(/\n{2,}/).map(p => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
+  let html = markdown(s.trim()).replace(/>\n+</g, "><").trim();
   // the longest name first: "Jan Tubeeckx" before "Jan"
   for (const p of [...mentions].sort((a, b) => b.name.length - a.name.length)) {
     const at = `@${esc(p.name)}`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
