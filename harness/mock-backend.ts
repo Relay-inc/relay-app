@@ -1258,8 +1258,8 @@ function handle(cmd: string, a: Args): unknown {
       const urls = w?.trees?.length ? w.trees.flatMap(t => (t.pr ? [t.pr] : [])) : w?.pr ? [w.pr] : [];
       return urls.map(url => ({ ...structuredClone(prStatus), url }));
     }
-    // the checkouts of a project's repos on this Mac (lib.rs pipeline_repos): Northwind Portal's two, and one picked by
-    // hand in place of the one found for its repo
+    // the checkouts of a project's repos on this Mac (lib.rs pipeline_repos): Northwind Portal's two, and the ones picked
+    // by hand in place of the one found for their repo
     case "pipeline_repos": {
       const found: Record<string, string> =
         a.project === "Northwind Portal"
@@ -1269,7 +1269,8 @@ function handle(cmd: string, a: Args): unknown {
               "acme/northwind-portal": "/Users/demo/code/northwind",
             }
           : {};
-      if (a.extra) found[a.extra === "/Users/demo/code/northwind" ? "acme/northwind-portal" : "acme/extra"] = a.extra;
+      for (const path of a.extra ?? [])
+        found[path === "/Users/demo/code/northwind" ? "acme/northwind-portal" : `acme/${path.split("/").pop()}`] = path;
       return Object.entries(found)
         .sort()
         .map(([slug, path]) => ({ slug, path }));

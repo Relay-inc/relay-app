@@ -1,6 +1,6 @@
 import type { Column } from "../../domain/board/types";
-import { EMPTY_PIPELINE } from "../../domain/pipeline/rules";
-import type { Pipeline, PipelineRepo } from "../../domain/pipeline/types";
+import { EMPTY_PIPELINE, pickedOf } from "../../domain/pipeline/rules";
+import type { Pipeline } from "../../domain/pipeline/types";
 import * as backend from "../../infrastructure/backend";
 import { provider as providerOf } from "../../shared/plugins";
 import { ctxOf } from "../board/ctx";
@@ -27,22 +27,36 @@ export function setPipelineRepo(project: string, slug: string, patch: { off?: bo
   return setPipeline(project, { repos: { ...p.repos, [slug]: { ...p.repos?.[slug], ...patch } } });
 }
 
-/** The checkouts on this Mac of the project's repos, with the one picked by hand. */
-export const pipelineRepos = (project: string, extra: string): Promise<PipelineRepo[]> =>
-  backend.pipelineRepos(project, extra);
-
 /** A checkout picked by hand in a folder dialog: for a repo Relay finds none of, in place of the one it finds, or of a
- *  repo not listed under the project. One per project: a new pick replaces the last. */
+ *  repo not listed under the project. Added to the ones picked before; one it replaces for the same repo, or a folder
+ *  that is no GitHub checkout, is dropped. */
 export async function pickPipelineRepo(project: string) {
   const folder = await backend.pickFolder();
   if (!folder) return;
-  await setPipeline(project, { repo: folder });
-  await loadCheckouts(project);
+  const p = pipelineOf(project);
+  const picked = [...pickedOf(p).filter(path => path !== folder), folder];
+  const used = new Set((await backend.pipelineRepos(project, picked)).map(r => r.path));
+  await keepPicked(
+    project,
+    p,
+    picked.filter(path => used.has(path)),
+  );
 }
 
-/** Drops the checkout picked by hand. */
-export async function clearPipelineRepo(project: string) {
-  await setPipeline(project, { repo: "" });
+/** Drops one checkout picked by hand. */
+export async function clearPipelineRepo(project: string, path: string) {
+  const p = pipelineOf(project);
+  await keepPicked(
+    project,
+    p,
+    pickedOf(p).filter(other => other !== path),
+  );
+}
+
+// `repo` stays while it is kept: its checks from before go by it (checksOf)
+async function keepPicked(project: string, p: Pipeline, picked: string[]) {
+  const repo = picked.includes(p.repo) ? p.repo : "";
+  await setPipeline(project, { repo, checkouts: picked.filter(path => path !== repo) });
   await loadCheckouts(project);
 }
 

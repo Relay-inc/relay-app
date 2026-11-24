@@ -337,8 +337,6 @@ function Repos({ name }: { name: string }) {
                     ) : (
                       <span className="text-xs text-s-warn">{t("pc.notFound")}</span>
                     )}
-                    {/* ponytail: one checkout picked by hand per project (Pipeline.repo); a pick for another repo
-                        replaces it. Per-repo overrides when someone needs two. */}
                     <button className={SMALL_BUTTON} title={t("pl.repoHelp")} onClick={() => pickPipelineRepo(name)}>
                       {checkout ? t("pc.change") : t("pc.pickFolder")}
                     </button>
@@ -362,7 +360,7 @@ function Repos({ name }: { name: string }) {
                     aria-label={t("pc.remove", { repo: slug })}
                     onClick={() =>
                       byHand
-                        ? clearPipelineRepo(name)
+                        ? clearPipelineRepo(name, checkout?.path ?? "")
                         : setRepos(
                             name,
                             synced.filter(x => x !== slug),

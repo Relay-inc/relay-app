@@ -97,6 +97,10 @@ export const needsSetup = (repos: string[], found: PipelineRepo[], p: Pipeline |
 export const checksOf = (p: Pipeline, r: PipelineRepo) =>
   (p.repos?.[r.slug]?.checks ?? (r.path === p.repo ? p.checks : "") ?? "").trim();
 
+/** The checkouts picked by hand: `repo` from before, then the rest; a later one wins for the same repo. */
+export const pickedOf = (p: Pick<Pipeline, "repo" | "checkouts"> | undefined) =>
+  [p?.repo ?? "", ...(p?.checkouts ?? [])].filter(Boolean);
+
 /** The repos a worker gets, of the checkouts found for the project: the ones not left out, each with its checks. */
 export const reposFor = (found: PipelineRepo[], p: Pipeline) =>
   found.filter(r => !p.repos?.[r.slug]?.off).map(r => ({ path: r.path, checks: checksOf(p, r) }));
