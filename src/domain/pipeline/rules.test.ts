@@ -21,6 +21,7 @@ import {
   EMPTY_PIPELINE,
   htmlText,
   inReview,
+  needsSetup,
   picks,
   pipelineAt,
   preflightOf,
@@ -468,4 +469,15 @@ test("reposFor: the project's checkouts but the ones switched off, each with its
     "its own checks, also empty, win over the old command",
   );
   assert.equal(checksOf({ ...P, checks: "make test" }, found[2]), "", "the old command was for its one checkout only");
+});
+
+test("needsSetup: a repo without a checkout, or a pipeline on that misses a column", () => {
+  const found = [{ slug: "acme/web", path: "/code/web" }];
+  assert.equal(needsSetup([], [], undefined), false);
+  assert.equal(needsSetup(["acme/web"], found, undefined), false);
+  assert.equal(needsSetup(["acme/web", "acme/api"], found, undefined), true);
+  const on = { ...EMPTY_PIPELINE, on: true, pick: "1", busy: "2", review: "3", input: "4" };
+  assert.equal(needsSetup(["acme/web"], found, on), false);
+  assert.equal(needsSetup(["acme/web"], found, { ...on, input: "" }), true);
+  assert.equal(needsSetup(["acme/web"], found, { ...on, on: false, input: "" }), false);
 });

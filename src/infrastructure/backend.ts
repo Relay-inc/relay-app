@@ -459,6 +459,8 @@ export const orchDispatchTicket = (a: {
   /** the checkouts the worker gets a worktree of, each with its checks */
   repos: { path: string; checks: string }[];
   base: string;
+  /** the branch the PRs go to; empty: `base` */
+  into: string;
   ticket: Ticket;
   validate: { checks: string; review: string; rounds: number };
   plan: boolean;
@@ -923,6 +925,11 @@ export const meetingImport = (
   return invoke<Recording>("meeting_import", { path, language, meeting, title, note, speaker, onProgress: channel });
 };
 export const meetingRecordCancel = () => invoke("meeting_record_cancel");
+/** The meeting being recorded, for the menu bar icon (tray.rs); null when none is. */
+export const trayRecording = (title: string | null) => invoke("tray_recording", { title });
+/** The menu bar's Stop recording or Open meeting. */
+export const onTrayRecording = (cb: (action: "stop" | "open") => void) =>
+  listen<"stop" | "open">("tray-recording", e => cb(e.payload));
 
 // ---------- events from the backend
 /** One normalised event of an agent process. */

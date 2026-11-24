@@ -136,12 +136,22 @@ function onEscape(e: KeyboardEvent) {
   }
 }
 // typing anywhere in an open conversation goes to the composer, focused or not: the key itself then lands there.
-// Cmd-V (Ctrl-V on Windows) too: the paste follows the focus, text or a picture
-function typesIntoComposer(e: KeyboardEvent) {
+// Ctrl-V on Windows too: the paste follows the focus, text or a picture
+function composerTakes(e: Event) {
   const { selected, projectPanel, quickAsk } = useNavigationStore.getState();
+  return !isView(selected) && !projectPanel && !quickAsk && !inField(e);
+}
+function typesIntoComposer(e: KeyboardEvent) {
   const isCharacter = e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.isComposing;
-  const pastes = isBinding(e, "mod+KeyV");
-  return (isCharacter || pastes) && !isView(selected) && !projectPanel && !quickAsk && !inField(e);
+  return (isCharacter || isBinding(e, "mod+KeyV")) && composerTakes(e);
+}
+// macOS: the Edit menu takes Cmd-V before the page sees a keydown (the window's webview is a child of the window, for
+// the Design drawer, and wry then passes key equivalents to the menu). WebKit asks the page before the menu's paste:
+// focus the composer and allow it, the paste then lands there
+function onBeforePaste(e: Event) {
+  if (!composerTakes(e)) return;
+  request("focus-composer");
+  e.preventDefault();
 }
 // the Mail view, experimental, as in Gmail and Keel: E archives, # or Delete deletes, Cmd-A ticks all, Esc unticks
 // before the app's Esc (each as Settings › Shortcuts has it). Whether it handled the key.
@@ -279,9 +289,11 @@ export function App() {
   useEffect(() => {
     window.addEventListener("keydown", onKey);
     document.addEventListener("click", onLink);
+    document.addEventListener("beforepaste", onBeforePaste);
     return () => {
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("click", onLink);
+      document.removeEventListener("beforepaste", onBeforePaste);
     };
   }, []);
 
