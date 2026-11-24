@@ -17,6 +17,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 ### Fixed
 
 - Cmd-V outside a field pastes into the composer on the Mac too: the Edit menu took the key before Relay saw it. (#521)
+- A board pipeline worker over several repos is pushed again when a protected branch moved only in a repo it did not change (someone merged there while it ran). The moved branch stays in its report, and one in a repo it changed still holds the push.
 ### Changed
 
 - The board pipeline has a branch to start from and a separate branch the PRs go to, so work can start from main and go to staging. Left empty, the PRs go to the branch the work started from, as before. The repo rows in its settings keep a long repo name and path on one line, the full path in the tooltip.

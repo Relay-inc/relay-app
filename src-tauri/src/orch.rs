@@ -645,8 +645,8 @@ fn decisions_md(d: &[Decision]) -> String {
 fn publish(app: &AppHandle, w: &Worker, r: &Report) -> (Vec<Tree>, Option<String>) {
     let mut all = trees(w);
     let Some(branch) = w.branch.clone().filter(|_| !all.is_empty()) else { return (all, Some("no worktree".into())) };
-    if let Some(f) = r.flags.iter().find(|f| f.starts_with("branch ")) { return (all, Some(format!("{f} while it ran: not pushed"))); }
     let changed: Vec<usize> = (0..all.len()).filter(|&i| committed(&all[i])).collect();
+    if let Some(f) = moved_branch(&r.flags, &all, &changed) { return (all, Some(format!("{f} while it ran: not pushed"))); }
     if changed.is_empty() { return (all, Some("nothing committed on the branch".into())); }
     let many = all.len() > 1;
     let slugs: Vec<String> = changed.iter().map(|&i| super::gh_repo(&all[i].repo).unwrap_or_else(|| name(&all[i].repo).to_string())).collect();
@@ -663,6 +663,12 @@ fn publish(app: &AppHandle, w: &Worker, r: &Report) -> (Vec<Tree>, Option<String
         }
     }
     (all, (!errors.is_empty()).then(|| errors.join("; ")))
+}
+/// The moved protected branch that holds the push: one in a repo it pushes, where its work may have gone to that
+/// branch instead. One in a repo it left alone (someone merged there meanwhile) stays a note in the report.
+fn moved_branch<'a>(flags: &'a [String], all: &[Tree], changed: &[usize]) -> Option<&'a String> {
+    let many = all.len() > 1;
+    flags.iter().filter(|f| f.starts_with("branch ")).find(|f| !many || changed.iter().any(|&i| f.ends_with(&format!(" in {} moved", name(&all[i].repo)))))
 }
 /// One repo of `publish`: push, and the PR when it has none yet. `others`: the repos the same ticket changed too.
 fn publish_one(app: &AppHandle, w: &Worker, r: &Report, t: &Tree, branch: &str, others: &[&str]) -> Result<String, String> {
@@ -1371,6 +1377,11 @@ mod tests {
         sh(&made[0].repo, "git -c user.email=a@b -c user.name=a commit -q --allow-empty -m moved");
         assert_eq!(flags_of(&before, &snapshot("/v", &[], &repos)), ["branch main in backend moved"]);
         assert!(snapshot("/v", &[], &repos[..1]).contains_key("branch:main"), "one repo keeps the keys a running worker started with");
+        // only the frontend is pushed: a moved main in the backend it left alone does not hold it, one in the frontend does
+        assert_eq!(moved_branch(&flags_of(&before, &snapshot("/v", &[], &repos)), &made, &[1]), None);
+        sh(&made[1].repo, "git -c user.email=a@b -c user.name=a commit -q --allow-empty -m moved");
+        assert_eq!(moved_branch(&flags_of(&before, &snapshot("/v", &[], &repos)), &made, &[1]).map(String::as_str), Some("branch main in frontend moved"));
+        assert_eq!(moved_branch(&["branch main moved".into()], &made[..1], &[]).map(String::as_str), Some("branch main moved"), "one repo: as before");
         // a blocking review of the frontend goes back to the frontend's next review only
         let w = Worker { last_review: Some(LastReview { head: String::new(), blocking: vec!["- frontend/cart.ts:1: no total".into(), "- backend/A.php: x".into()], checked: vec![] }), ..Default::default() };
         assert_eq!(last_for(&w, &made[1], true).unwrap().blocking, ["- cart.ts:1: no total"]);
