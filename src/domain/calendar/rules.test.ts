@@ -17,6 +17,7 @@ import {
   withEvent,
   meetingStage,
   meetingLanguage,
+  withTitle,
 } from "./rules.ts";
 import type { Chat, Item } from "../conversations/types";
 import type { Meeting } from "./types";
@@ -236,4 +237,10 @@ test("the prep asks for the fixed shape in the meeting's language, and hands an 
   assert.match(again, /<meeting>, <briefing>/);
   assert.equal((again.match(/<\/briefing>/g) ?? []).length, 1, "the briefing cannot close its own tag");
   assert.ok(again.indexOf("Er staat al een briefing") < again.indexOf("<briefing>\n"));
+});
+
+test("renaming a meeting keeps the old title for an empty one", () => {
+  const meeting = { ...at("x", 0), title: "Meeting 09:30" };
+  assert.equal(withTitle(meeting, "  Northwind sync ").title, "Northwind sync");
+  assert.equal(withTitle(meeting, "   ").title, "Meeting 09:30");
 });

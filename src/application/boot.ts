@@ -14,6 +14,7 @@ import { openInvite, openServers } from "./settings/servers";
 import { MENU_COMMANDS, type CommandId } from "../domain/settings/shortcuts";
 import { noteChanged } from "./navigation/pages";
 import { loadSnapshot, pollSnapshot, project, refreshIcons, reloadIcons, checkFavicons } from "./workspace/vault";
+import { followTray, recordNow } from "./calendar/recording";
 import { onboard, runSetup, takeSetup } from "./workspace/vault-setup";
 import { useConversationsStore } from "./conversations/store";
 import { saveChats, newChatHere } from "./conversations/chats";
@@ -141,13 +142,14 @@ function listenToBackend() {
 }
 
 // the Gesprek menu: Cmd-T in the current project, Cmd-Option-T general, Cmd-Shift-T the one closed last, Cmd-W closes
-// the open conversation, Set Up Vault runs the setup interview. Cmd-N (a new window) stays in the backend
+// the open conversation, Set Up Vault runs the setup interview, Record a Meeting Now starts one. Cmd-N (a new window) stays in the backend
 function onMenu(item: string) {
   if (item === "new-general") select(newChatHere(null));
   else if (item === "new-project") newHere();
   else if (item === "reopen-chat") void reopenLast();
   else if (item === "close-chat" && !isView(selected()) && !cs().chats[selected()]?.draft) closeChat(selected());
   else if (item === "run-setup") void runSetup();
+  else if (item === "record-now") void recordNow();
 }
 
 // the menu bar's items with a key (src-tauri/src/lib.rs build_menu), by their command in Settings › Shortcuts
@@ -288,6 +290,7 @@ function startPolls() {
   setInterval(pollSnapshot, 30000);
   backend.onNoteChanged(noteChanged); // which notes exist, and an open page merges a change made outside
   backend.onRemindersChanged(loadSnapshot);
+  followTray();
   backend.onRemoteChat(({ key, title, provider }) => {
     useConversationsStore.setState(draft => {
       draft.chats[key] ??= { key, project: null, title: title || t("chat.untitled"), at: chatTime(key), provider };
