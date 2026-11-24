@@ -3461,7 +3461,8 @@ const VIEWS = {
   "recording-meeting": async () => {
     await open(page, server.url, { fixture: "calendar" });
     await waitText("Daily standup");
-    await page.locator("section", { hasText: "Daily standup" }).last().getByRole("button", { name: "Record" }).click();
+    // the Now card's Record (Today's cards are no <section> since the redesign)
+    await page.getByRole("button", { name: "Record", exact: true }).first().click();
     await page.evaluate(() => window.__harness.recordingTick(754, 0.35, 0.25));
     await waitText("12:34");
   },
