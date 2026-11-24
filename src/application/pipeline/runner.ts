@@ -21,6 +21,7 @@ import {
   prsOf,
   ready,
   reposFor,
+  retask,
   reviewAll,
   runnable,
   stalled,
@@ -266,9 +267,9 @@ export const openPipelineLink = (url: string) => url.startsWith("https://") && b
 // what the backend answered, in the store now: its `orch` event comes later, and the next pass must not count a new
 // worker as missing (a second claim) or a worker sent feedback as still in review (the feedback twice)
 const adopt = (w: Worker | null) => w && onOrchEvent({ type: "worker", worker: w });
-async function sendWorker(w: Worker, text: string) {
-  await backend.orchMessage(w.key, text);
-  adopt({ ...w, state: "running", ended: null });
+async function sendWorker(w: Worker, text: string, task: string | null = null) {
+  await backend.orchMessage(w.key, text, task);
+  adopt({ ...w, task: task ?? w.task, state: "running", ended: null });
 }
 
 const allWorkers = () => Object.values(useOrchestratorStore.getState().workers).sort((a, b) => a.at - b.at);
@@ -316,8 +317,11 @@ async function runOne(project: string, p: Pipeline) {
       adopt(await backend.orchBoard(w.key, "closed"));
     } else if (startsNow(settings(), project)) {
       // review comments start the worker again: that waits while paused (also when paused during this pass), the
-      // comments are read again from the run's end once the pipeline goes on
-      await sendWorker(w, fill(prompts.pipeline.reviewComments, { pr: prsOf(w).join(", "), text: r.text }));
+      // comments are read again from the run's end once the pipeline goes on. The ticket text stays, unless someone
+      // changed the ticket meanwhile (a ticket that cannot be read stays too)
+      const view = await viewOf(b, id).catch(() => null);
+      const text = fill(prompts.pipeline.reviewComments, { pr: prsOf(w).join(", "), text: r.text });
+      await sendWorker(w, text, view && retask(w.task, view, w.at));
       await move(b, id, p.busy);
       await comment(b, id, t("pl.feedback"));
     }
@@ -356,9 +360,11 @@ async function runOne(project: string, p: Pipeline) {
 /** A ticket an agent ran on before: back to building, the agent gets what is new on it since. */
 async function resume(b: Board, id: string, worker: Worker, why: string) {
   await move(b, id, b.p.busy);
-  const view = b.prov.detail ? b.prov.detail.view(await b.prov.detail.fetch(ctxOf(b.prov), b.ref, id)) : null;
+  const view = await viewOf(b, id);
   const news = view ? briefOf(view, worker.ended ?? 0) : "";
-  await sendWorker(worker, fill(prompts.pipeline.resume, { why, news: news && untrusted("ticket", news) }));
+  // a changed ticket becomes its task, so the review judges the work against what is asked now
+  const task = view && retask(worker.task, view, worker.at);
+  await sendWorker(worker, fill(prompts.pipeline.resume, { why, news: news && untrusted("ticket", news) }), task);
   await comment(b, id, t("pl.resumed"));
 }
 
@@ -369,7 +375,7 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
   const ctx = ctxOf(b.prov);
   await move(b, card.id, b.p.busy);
   try {
-    const view = b.prov.detail ? b.prov.detail.view(await b.prov.detail.fetch(ctx, b.ref, card.id)) : null;
+    const view = await viewOf(b, card.id);
     if (!hand && view && bare(view)) {
       await move(b, card.id, b.p.input);
       await comment(b, card.id, t("pl.notReady", { column: nameOf(b, b.p.pick) }));
@@ -417,6 +423,7 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
       project,
       repos,
       base: b.p.base,
+      into: b.p.into ?? "",
       ticket,
       // the checks are per repo now, in `repos`
       validate: { checks: "", review: b.p.reviewer ?? "", rounds: b.p.rounds ?? 3 },
@@ -503,6 +510,9 @@ async function keepWaiting(b: Board, project: string, cards: Card[]) {
   });
 }
 
+/** The ticket's detail as the ticket window shows it, null for a provider without one. */
+const viewOf = async (b: Board, id: string) =>
+  b.prov.detail ? b.prov.detail.view(await b.prov.detail.fetch(ctxOf(b.prov), b.ref, id)) : null;
 const nameOf = (b: Board, id: string) => b.columns.find(c => c.id === id)?.name ?? id;
 // the providers move and comment by the card's id alone
 const move = (b: Board, id: string, to: string) => b.prov.move(ctxOf(b.prov), b.ref, { id } as Card, to, b.group);

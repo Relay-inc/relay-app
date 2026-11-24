@@ -4,6 +4,10 @@ import type { Limits } from "../agents/types";
 import type { ProvLimits } from "../usage/types";
 import type { Pipeline, PipelineRepo, PrStatus, Step, Ticket } from "./types";
 import { fill, prompts, untrustedNote } from "../../shared/prompts.ts";
+import en from "../../shared/locales/en.ts";
+import nl from "../../shared/locales/nl.ts";
+import de from "../../shared/locales/de.ts";
+import fr from "../../shared/locales/fr.ts";
 
 export const EMPTY_PIPELINE: Pipeline = {
   on: false,
@@ -83,6 +87,11 @@ export const stateSince = (w: Pick<Worker, "state" | "at" | "ended">, answered =
 
 /** A plan the agent sent for approval (plan-first.md, skill.md): its questions start with this. */
 export const isPlan = (questions: string | null | undefined) => !!questions?.startsWith("Plan for approval:");
+
+/** Settings › Projects' Needs setup: a repo of the project without a checkout on this Mac, or a pipeline switched on
+ *  that misses a column it cannot run without. */
+export const needsSetup = (repos: string[], found: PipelineRepo[], p: Pipeline | undefined) =>
+  repos.some(slug => !found.some(r => r.slug === slug)) || (!!p?.on && !ready(p));
 
 /** A repo's checks: its own, else the pipeline's one command from before for the one checkout it had. */
 export const checksOf = (p: Pipeline, r: PipelineRepo) =>
@@ -244,6 +253,9 @@ export const bare = (v: CardView) =>
   !v.feed.some(f => htmlText(f.html)) &&
   !(v.files?.length || v.feed.some(f => f.files.length));
 
+/** A comment as a line of a brief. */
+const commentLine = (f: CardView["feed"][number]) => `- ${f.who} (${f.at}): ${htmlText(f.html)}`;
+
 /** The ticket as a brief: title, link, description, the comments (only the ones after `since`, for a worker that picks
  *  it up again) and the files' links. */
 export function briefOf(v: CardView, since?: number) {
@@ -252,11 +264,7 @@ export function briefOf(v: CardView, since?: number) {
   if (since == null) out.push("", "Description:", description || "(none)");
   const feed = v.feed.filter(f => f.html && (since == null || Date.parse(f.at) > since));
   if (feed.length)
-    out.push(
-      "",
-      since == null ? "Comments, oldest first:" : "New on the ticket:",
-      ...feed.map(f => `- ${f.who} (${f.at}): ${htmlText(f.html)}`),
-    );
+    out.push("", since == null ? "Comments, oldest first:" : "New on the ticket:", ...feed.map(commentLine));
   const files = [...(v.files ?? []), ...v.feed.flatMap(f => f.files)];
   if (files.length && since == null) out.push("", "Files:", ...files.map(f => `- ${f.name}: ${f.url}`));
   return out.join("\n");
@@ -268,11 +276,84 @@ export const picturesOf = (v: CardView): [string, string][] =>
     .filter(f => f.url && /\.(png|jpe?g|gif|webp)$/i.test(f.name))
     .map(f => [f.name, f.url]);
 
+const PICTURES = "\n\nThe ticket's pictures, saved on this Mac (open them with Read):\n";
 /** The brief with where the ticket's pictures were saved: the agent cannot open the tracker's links. */
 export const withPictures = (brief: string, paths: string[]) =>
-  paths.length
-    ? `${brief}\n\nThe ticket's pictures, saved on this Mac (open them with Read):\n${paths.map(p => `- ${p}`).join("\n")}`
-    : brief;
+  paths.length ? `${brief}${PICTURES}${paths.map(p => `- ${p}`).join("\n")}` : brief;
+
+/** The comments Relay itself puts on a ticket (runner.ts, comment()). */
+export const RELAY_COMMENTS = [
+  "pl.picked",
+  "pl.resumed",
+  "pl.startFailed",
+  "pl.notReady",
+  "pl.unclear",
+  "pl.pr",
+  "pl.prUpdated",
+  "pl.prPartial",
+  "pl.noPr",
+  "pl.blocked",
+  "pl.blockedManual",
+  "pl.failed",
+  "pl.feedback",
+  "pl.merged",
+  "pl.closed",
+  "pl.pausedBack",
+] as const;
+const flat = (s: string) => s.replace(/\s+/g, " ").trim();
+/** How each of them opens, in every language (the user may have switched since): its text up to the first
+ *  placeholder, taken from the strings themselves so a reworded one is still recognised. */
+export const RELAY_OPENINGS = [en, nl, de, fr].flatMap(l => RELAY_COMMENTS.map(k => flat(l[k].split("{")[0])));
+/** A comment Relay wrote: it is posted under the user's own account, so only its text tells. */
+export const byRelay = (text: string) => RELAY_OPENINGS.some(o => flat(text).startsWith(o));
+
+// spaces as one, line breaks kept: the questions are often a list
+const spaced = (s: string) => s.replace(/[^\S\n]+/g, " ").trim();
+// each language's Blocked comments as [opening, closing], the fixed text around {questions}, the closing up to its
+// first placeholder
+const BLOCKED = [en, nl, de, fr].flatMap(l =>
+  (["pl.blocked", "pl.blockedManual"] as const).map(k => {
+    const [open, close = ""] = l[k].split("{questions}");
+    return [spaced(open), spaced(close.split("{")[0])] as const;
+  }),
+);
+/** What the agent asked, out of Relay's Blocked comment: the text between its fixed opening and closing (all after
+ *  the opening when no closing is found). Null for any other comment. */
+export function askedIn(text: string) {
+  const t = spaced(text);
+  const mine = BLOCKED.filter(([open]) => t.startsWith(open));
+  if (!mine.length) return null;
+  // the two Blocked comments open the same way: the one whose closing is there
+  const [open, close] = mine.find(([o, c]) => c && t.lastIndexOf(c) > o.length) ?? mine[0];
+  const end = close ? t.lastIndexOf(close) : -1;
+  return t.slice(open.length, end > open.length ? end : undefined).trim();
+}
+
+/** The ticket as it reads now, for a worker that started on `task` at `since`: null when nothing changed. Built the
+ *  same way each time, so a pass with nothing new gives the same text and an answer already folded in counts once:
+ *  the brief with the comments from before the start, as at the start, then in a block of their own what people
+ *  wrote since (an answer on Blocked, a correction), with the questions of Relay's Blocked comments they answer. A
+ *  question nobody answered yet is no change. Relay's other comments stay out, they carry the agent's summary, which
+ *  the review must not read as what was asked. The pictures saved at the start stay. */
+export function retask(task: string, v: CardView, since: number) {
+  const lines = v.feed
+    .filter(f => Date.parse(f.at) > since && htmlText(f.html))
+    .flatMap(f => {
+      const text = htmlText(f.html);
+      const asked = askedIn(text);
+      if (asked != null) return [{ person: false, line: `- The agent asked (${f.at}): ${asked}` }];
+      return byRelay(text) ? [] : [{ person: true, line: commentLine(f) }];
+    });
+  const said = lines.slice(0, lines.map(l => l.person).lastIndexOf(true) + 1).map(l => l.line);
+  const at = task.lastIndexOf(PICTURES);
+  const now =
+    briefOf({ ...v, feed: v.feed.filter(f => Date.parse(f.at) <= since) }) +
+    (said.length
+      ? `\n\nQuestions and answers on the ticket since the agent started, oldest first:\n${said.join("\n")}`
+      : "") +
+    (at < 0 ? "" : task.slice(at));
+  return now === task ? null : now;
+}
 
 /** Before a ticket from the pick column gets a worker: one call without tools judges whether an agent can build it
  *  without asking anyone, so an unclear ticket goes back with questions instead of costing a whole run. */
