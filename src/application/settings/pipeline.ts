@@ -5,6 +5,7 @@ import * as backend from "../../infrastructure/backend";
 import { provider as providerOf } from "../../shared/plugins";
 import { ctxOf } from "../board/ctx";
 import { useSettingsStore } from "./store";
+import { loadCheckouts } from "./projects-page";
 import { save } from "./window";
 
 // A project's board pipeline in Settings › Projects (domain/pipeline). Saved on every change, like the other fields there.
@@ -30,10 +31,19 @@ export function setPipelineRepo(project: string, slug: string, patch: { off?: bo
 export const pipelineRepos = (project: string, extra: string): Promise<PipelineRepo[]> =>
   backend.pipelineRepos(project, extra);
 
-/** A checkout beyond the project's repos, picked in a folder dialog. */
+/** A checkout picked by hand in a folder dialog: for a repo Relay finds none of, in place of the one it finds, or of a
+ *  repo not listed under the project. One per project: a new pick replaces the last. */
 export async function pickPipelineRepo(project: string) {
   const folder = await backend.pickFolder();
-  if (folder) await setPipeline(project, { repo: folder });
+  if (!folder) return;
+  await setPipeline(project, { repo: folder });
+  await loadCheckouts(project);
+}
+
+/** Drops the checkout picked by hand. */
+export async function clearPipelineRepo(project: string) {
+  await setPipeline(project, { repo: "" });
+  await loadCheckouts(project);
 }
 
 /** The linked board's groupings and the columns of one, for the column pickers. */
