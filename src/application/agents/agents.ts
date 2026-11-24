@@ -1,5 +1,13 @@
 import type { AgentEvent, PickKind } from "../../domain/agents/types";
-import { inheritedOf, knownCaps, knownTextOnly, picksOf, pickKey, seeDefaults } from "../../domain/agents/rules";
+import {
+  fencedAgent,
+  inheritedOf,
+  knownCaps,
+  knownTextOnly,
+  picksOf,
+  pickKey,
+  seeDefaults,
+} from "../../domain/agents/rules";
 import { isTerminal } from "../../domain/navigation/keys";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
@@ -26,12 +34,12 @@ export const loadAgents = () =>
     .catch(e => console.error(e));
 export const onAgents = () => as().status.providers.filter(x => x.on);
 export const agentOf = (id: string) => as().status.providers.find(x => x.id === id);
-/** A conversation's agent: its own, else the default. Terminal sessions are Claude Code's, and so is a conversation in
- *  another vault than the main one: its fence is made of Claude Code's permission rules (src-tauri `fence`). */
+/** A conversation's agent: its own, else the default. Terminal sessions are Claude Code's, and in another vault than
+ *  the main one only a fenced agent runs (`fencedAgent`). */
 export function chatAgent(chatKey: string) {
   const conversation = useConversationsStore.getState().chats[chatKey];
-  if (isTerminal(chatKey) || otherVaultOf(conversation)) return "claude";
-  return conversation?.provider || as().status.default || "claude";
+  if (isTerminal(chatKey)) return "claude";
+  return fencedAgent(conversation?.provider || as().status.default || "claude", !!otherVaultOf(conversation));
 }
 /** What a conversation's agent can do; before the providers are known, what the built-in ones are known for. */
 export const chatCaps = (chatKey: string) => agentOf(chatAgent(chatKey))?.caps ?? knownCaps(chatAgent(chatKey));

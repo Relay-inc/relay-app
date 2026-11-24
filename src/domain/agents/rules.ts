@@ -9,6 +9,12 @@ const KNOWN: Record<string, { caps: Pick<Caps, "picked" | "remote">; textOnly: s
   pi: { caps: { picked: false, remote: false }, textOnly: ["compact"] },
 };
 export const knownCaps = (id: string) => KNOWN[id]?.caps;
+/** The agents a conversation in another vault than the main one may run on: Claude Code keeps to the fence's rules,
+ *  Relay guards Codex (src-tauri `policy::FENCED_AGENTS`). The rest run in the main vault only. */
+export const FENCED_AGENTS = ["claude", "codex"];
+/** The agent a conversation runs on: the one it asks for, Claude Code where that one may not run. */
+export const fencedAgent = (id: string, otherVault: boolean) =>
+  otherVault && !FENCED_AGENTS.includes(id) ? "claude" : id;
 export const knownTextOnly = (id: string) => KNOWN[id]?.textOnly ?? [];
 // before the providers have answered, the composer offers Claude's models
 const FALLBACK: Record<PickKind, { id: string; label: string }[]> = {

@@ -1,6 +1,6 @@
 import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import type { FilingItem, InboxNote } from "../domain/inbox/rules";
-import { listen } from "@tauri-apps/api/event";
+import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
@@ -43,6 +43,8 @@ import type {
   SharedInfo,
   SharedInvite,
   SharedRole,
+  TeamMe,
+  TeamSso,
   SharedStatus,
 } from "../domain/settings/types";
 import type {
@@ -63,7 +65,7 @@ import type { Row as CollectionRow } from "../domain/collections/rules";
 import type { RailData } from "../domain/workspace/rail";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
 import type { OrchEvent, Worker } from "../domain/orchestrator/types";
-import type { PrStatus, Ticket } from "../domain/pipeline/types";
+import type { PipelineRepo, PrStatus, Ticket } from "../domain/pipeline/types";
 import type { SpeechModelInfo } from "../domain/settings/voice";
 import type { Recording } from "../domain/calendar/rules";
 import type { Plugin, PluginTest, PluginViewInfo, ToolResult } from "../domain/plugins/types";
@@ -109,6 +111,8 @@ export const uiLang = () => invoke<string>("ui_lang");
 /** The macOS locale in the UI language (nl-BE for nl), for dates and sorting. */
 export const uiLocale = () => invoke<string>("ui_locale");
 export const openSettingsWindow = (tab?: string) => invoke("open_settings_window", tab ? { tab } : {});
+/** Another Relay window (Ctrl-N on Windows, macOS has it in the menu bar). */
+export const newWindow = () => invoke("new_window");
 /** Relay's updates (src-tauri/src/updater.rs): the last check's answer, a new check, and installing what it found
  *  (restarts the app). */
 export const updatesStatus = () => invoke<UpdatesStatus>("updates_status");
@@ -123,6 +127,16 @@ export const openUrl = (url: string) => invoke("plugin:opener|open_url", { url }
  *  when left out. */
 export const notify = (key: string, title: string, body: string, slot?: string) =>
   invoke("notify", { key, title, body, ...(slot ? { slot } : {}) });
+
+/** The record nudge (src-tauri/src/notify.rs): shown with a meeting that started without a recording, null hides it. */
+export type Nudge = { id: string; title: string; time: string };
+export const recordNudge = (meeting: Nudge | null) => invoke("record_nudge", { meeting });
+export const recordNudgeNow = () => invoke<Nudge | null>("record_nudge_now");
+export const onRecordNudge = (cb: (meeting: Nudge) => void) => listen<Nudge>("record-nudge", e => cb(e.payload));
+/** Record or Skip in the nudge, to the main window, which keeps the recording. */
+export const answerRecordNudge = (id: string, record: boolean) => emitTo("main", "record-nudge-answer", { id, record });
+export const onRecordNudgeAnswer = (cb: (answer: { id: string; record: boolean }) => void) =>
+  listen<{ id: string; record: boolean }>("record-nudge-answer", e => cb(e.payload));
 
 // ---------- the vault
 export const vaultStatus = () => invoke<VaultStatus>("vault_status");
@@ -196,11 +210,11 @@ export type EmbedInfo = {
   missing?: boolean;
   path?: string; // absolute
   rel?: string; // in the workspace
-  kind?: "image" | "pdf" | "audio" | "note" | "file";
+  kind?: "image" | "pdf" | "audio" | "note" | "base" | "file";
   size?: number;
   pages?: number | null;
   thumb?: string | null; // a PDF's first page, as a data URL
-  text?: string; // a note's text
+  text?: string; // a note's or a base's text
 };
 export const embedInfo = (page: string, targets: string[]) => invoke<EmbedInfo[]>("embed_info", { page, targets });
 /** One file's answer when it was added to a page: where it is and what to embed it by, or too large (not copied). */
@@ -252,7 +266,8 @@ export const tidyApply = (workspace: string) => invoke<TidyPlan>("tidy_apply", {
 export const tidyUndo = (workspace: string) => invoke<number>("tidy_undo", { workspace });
 export const propertyValues = (folder: string, key: string) => invoke<string[]>("property_values", { folder, key });
 export const pickFolder = () => invoke<string | null>("pick_folder");
-export const pickPath = (folder: boolean, start: string) => invoke<string | null>("pick_path", { folder, start });
+export const pickPath = (folder: boolean, start: string, extensions?: string[]) =>
+  invoke<string | null>("pick_path", { folder, start, extensions });
 export const detectVault = (path: string) => invoke<VaultStatus>("detect_vault", { path });
 export const checkVault = (path: string, map: VaultMap) => invoke<VaultStatus>("check_vault", { path, map });
 /** The starter vault copied to ~/Relay (kept when it is already there), with its status. */
@@ -348,6 +363,8 @@ export const agentsStatus = () => invoke<AgentsStatus>("agents_status");
 export const agentCommands = (provider: string) => invoke<SlashCommand[]>("agent_commands", { provider });
 /** Every conversation key the backend has a session for (older versions' keys too). */
 export const chats = () => invoke<string[]>("chats");
+/** Sign the conversation's agent in on this Mac: resolves once the login in the browser is done. */
+export const agentLogin = (key: string) => invoke("agent_login", { key });
 export const chatProviders = () => invoke<Record<string, string>>("chat_providers");
 type SendArgs = {
   project: string;
@@ -439,8 +456,11 @@ export const orchDispatchTicket = (a: {
   title: string;
   task: string;
   project: string;
-  repo: string;
+  /** the checkouts the worker gets a worktree of, each with its checks */
+  repos: { path: string; checks: string }[];
   base: string;
+  /** the branch the PRs go to; empty: `base` */
+  into: string;
   ticket: Ticket;
   validate: { checks: string; review: string; rounds: number };
   plan: boolean;
@@ -450,7 +470,10 @@ export const orchMessage = (key: string, text: string) => invoke<void>("orch_mes
 export const orchAnswer = (key: string, answer: string) => invoke<Worker | null>("orch_answer", { key, answer });
 export const orchAskReport = (key: string) => invoke<void>("orch_ask_report", { key });
 export const orchRestart = (key: string) => invoke<Worker>("orch_restart", { key });
-export const orchPr = (key: string) => invoke<PrStatus>("orch_pr", { key });
+export const orchPr = (key: string) => invoke<PrStatus[]>("orch_pr", { key });
+/** The checkouts on this Mac of a project's repos, for its board pipeline; `extra` one picked by hand. */
+export const pipelineRepos = (project: string, extra: string) =>
+  invoke<PipelineRepo[]>("pipeline_repos", { project, extra });
 export const orchBoard = (key: string, mark: string) => invoke<Worker | null>("orch_board", { key, mark });
 
 // ---------- work machines (relay-server in the LAN)
@@ -493,7 +516,8 @@ export const machineUpdate = (id: string) => invoke<{ version: string }>("machin
 /** Where new conversations run without a pick ("" this Mac); the backend emits settings-changed. */
 export const setMachinesDefault = (id: string) => invoke("set_machines_default", { id });
 /** The vault folders that stay on this Mac, out of a machine's mirror. */
-export const setMachineMirror = (id: string, exclude: string[]) => invoke("set_machine_mirror", { id, exclude });
+export const setMachineMirror = (id: string, exclude: string[], every: number) =>
+  invoke("set_machine_mirror", { id, exclude, every });
 /** The last sync round of a machine's mirror, null before the first. */
 export const mirrorStatus = (id: string) => invoke<MirrorStatus | null>("mirror_status", { id });
 /** The deletes a machine's mirror holds back go through in its next round. */
@@ -711,6 +735,21 @@ export const sharedVaultHeld = (id: string, allow: boolean, paths: string[]) =>
   invoke("shared_vault_held", { id, allow, paths });
 /** The invite link that opened Relay, taken: the backend keeps it until then. */
 export const sharedVaultPendingInvite = () => invoke<string | null>("shared_vault_pending_invite");
+/** Team servers (src-tauri/src/team.rs): log in with a link (an invite in it, or the server's provider in the browser). */
+export const teamLogin = (link: string) =>
+  invoke<{ email: string; admin: boolean; name?: string }>("team_login", { link });
+/** What a team server says before this Mac logs in: the organisation's name ("" none) and its sign-in. */
+export const teamPeek = (link: string) => invoke<{ name?: string; sso: TeamSso | null }>("team_peek", { link });
+export const teamMe = (fp: string) => invoke<TeamMe>("team_me", { fp });
+export const teamOpen = (fp: string, id: string, folder: string) => invoke("team_open", { fp, id, folder });
+export const teamCreate = (fp: string, name: string, folder: string, nohistory: boolean) =>
+  invoke("team_create", { fp, name, folder, nohistory });
+/** An admin op: team_invite (answers with `link`), team_invite_revoke, team_member, team_overview, team_account, team_sso. */
+export const teamCall = <T = Record<string, unknown>>(fp: string, req: Record<string, unknown>) =>
+  invoke<T>("team_call", { fp, req });
+export const teamLink = (fp: string) => invoke<string>("team_link", { fp });
+export const teamLogout = (fp: string) => invoke("team_logout", { fp });
+export const ssoCancel = () => invoke("sso_cancel");
 /** A new invite link waits in the backend (`sharedVaultPendingInvite`): a ping, no payload. */
 export const onVaultInvite = (handler: () => void) => listen("vault-invite", () => handler());
 /** A note changed outside Relay (watch.rs): its page path, its text's hash ("" when it is gone), and whether it was a
@@ -868,6 +907,21 @@ export const meetingRecordRetry = (
   channel.onmessage = onProgress;
   return invoke<Recording>("meeting_record_retry", { folder, title, note, me, others, onProgress: channel });
 };
+/** Writes out an audio file recorded elsewhere as the recording of `meeting`, as `meetingRecordStop`; every line of the
+ *  transcript is `speaker`'s. */
+export const meetingImport = (
+  path: string,
+  language: string | undefined,
+  meeting: unknown, // kept beside the recording, as at `meetingRecordStart`
+  title: string,
+  note: string | null,
+  speaker: string,
+  onProgress: (done: number) => void,
+) => {
+  const channel = new Channel<number>();
+  channel.onmessage = onProgress;
+  return invoke<Recording>("meeting_import", { path, language, meeting, title, note, speaker, onProgress: channel });
+};
 export const meetingRecordCancel = () => invoke("meeting_record_cancel");
 
 // ---------- events from the backend
@@ -894,6 +948,10 @@ export const onUpdateProgress = (handler: (progress: UpdateProgress) => void) =>
   listen<UpdateProgress>("update-progress", e => handler(e.payload));
 /** The open settings window is asked to show a page (Relay › Check for Updates). */
 export const onSettingsGo = (handler: (tab: string) => void) => listen<string>("settings-go", e => handler(e.payload));
+/** The settings window asks the main window to show Organisations and servers, with `item` picked ("" as it was). */
+export const openServersInMain = (item: string) => emitTo("main", "open-servers", item);
+export const onOpenServers = (handler: (item: string) => void) =>
+  listenHere<string>("open-servers", e => handler(e.payload));
 /** An item of the app menu (new-project, new-general, reopen-chat, close-chat). */
 export const onMenu = (handler: (item: string) => void) => listenHere<string>("menu", e => handler(e.payload));
 export const onIconsChanged = (handler: () => void) => listen("icons-changed", () => handler());

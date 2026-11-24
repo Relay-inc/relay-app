@@ -9,7 +9,7 @@ import {
   askAboutPage,
   copyPagePath,
   revealPage,
-  followPageLink,
+  openNoteLink,
   loadPage,
   pagePath,
   pageProject,
@@ -22,11 +22,14 @@ import {
 import { useNavigationStore } from "../../../application/navigation/store";
 import { pageKey } from "../../../domain/navigation/keys";
 import { workspaceOf, workspaces } from "../../../application/navigation/workspaces";
-import { chatsOf } from "../../../application/conversations/selectors";
+import { chatBar, chatsOf } from "../../../application/conversations/selectors";
+import { goBack } from "../../../application/navigation/navigation";
+import { openNote } from "../../../application/workspace/vault";
+import { useKeyLabel } from "../../hooks/useKeyLabel";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useWorkspaceStore } from "../../../application/workspace/store";
 import { noteTitle } from "../../../domain/workspace/rules";
-import { frontmatterOf, withFrontmatter } from "../../../domain/workspace/properties";
+import { FRONTMATTER, frontmatterOf, withFrontmatter } from "../../../domain/workspace/properties";
 import { noteName } from "../../../domain/navigation/pages";
 import { clockTime } from "../../../shared/format";
 import { agoOf } from "./ago";
@@ -35,7 +38,6 @@ import { useT } from "../../hooks/useT";
 import { Markdown } from "../../components/Markdown";
 import { Icon } from "../../components/Icon";
 import { Note } from "../../components/Note";
-import { FRONTMATTER } from "./NoteDetail";
 import { PageEditor, type CommentsApi, type HeadWriter } from "./PageEditor";
 import { PageComments } from "./PageComments";
 import type { Peer } from "../../../application/workspace/coedit";
@@ -89,12 +91,23 @@ export function PageView({ target, className }: { target: string; className: str
   const scroller = useRef<HTMLDivElement>(null);
   const path = pagePath(target) || target;
   // the page's own workspace, not the one the sidebar shows
-  const workspace = useDerived(() => workspaces().find(w => w.folder === workspaceOf(pageKey(target)))?.name ?? "");
+  const own = () => workspaces().find(w => w.folder === workspaceOf(pageKey(target)));
+  const workspace = useDerived(() => own()?.name ?? "");
+  // a shared workspace this Mac only reads: its notes show, nothing on the page writes (docs/workspaces.md, Roles)
+  const reader = useDerived(() => !!own()?.reader);
   const project = useDerived(() => pageProject(path));
   const icon = useWorkspaceStore(s => (project ? s.icons[project.key] : undefined));
   // the project's conversations, newest first
   useConversationsStore(s => s.chats); // the count follows new and closed conversations
   const chats = project ? chatsOf(project.key) : [];
+  // what the page was opened from: "← its title" goes back to it (⌘[ and Esc too)
+  const back = useDerived(() => {
+    const key = useNavigationStore.getState().back?.key;
+    if (!key) return null;
+    const bar = chatBar(key);
+    return (bar.onView ? bar.heading : bar.title) || t("page.backDefault");
+  });
+  const backKey = useKeyLabel("app.back");
 
   const headRef = useRef<HeadWriter["current"]>(null);
   // the Ask Claude and More menus, under their buttons
@@ -149,6 +162,7 @@ export function PageView({ target, className }: { target: string; className: str
       ? [
           { id: "addchat", label: t("pages.addToChat"), icon: "talk" },
           { id: "reveal", label: t("pages.reveal"), icon: "folder" },
+          { id: "open", label: t("note.open"), icon: "out" },
           { id: "copy", label: t("pages.copyPath"), icon: "copy" },
           { id: "markdown", label: t(raw ? "page.hideMarkdown" : "page.showMarkdown"), icon: "term" },
         ]
@@ -162,6 +176,7 @@ export function PageView({ target, className }: { target: string; className: str
     if (id === "ask") void askAboutPage(path);
     else if (id === "addchat") void addToConversation(railNote(target).path, folder);
     else if (id === "reveal") void revealPage(path);
+    else if (id === "open") void openNote(target);
     else if (id === "copy") void copyPagePath(path);
     else if (id === "markdown") toggleShowMarkdown();
     else if (id.startsWith("act:"))
@@ -172,6 +187,20 @@ export function PageView({ target, className }: { target: string; className: str
     <div className={`${className} relative flex flex-col min-h-0`}>
       {/* app chrome is not text: no selection in the bar, like a native Mac app */}
       <div className="h-12 flex-none flex items-center gap-2 pl-4 pr-2.5 select-none" data-tauri-drag-region>
+        {back ? (
+          <>
+            <button
+              data-page-back
+              className="-ml-2 inline-flex items-center gap-1.5 h-7.5 max-w-60 pl-1.5 pr-2.5 rounded-lg text-[13px] font-medium text-secondary cursor-default hover:bg-fill-2 hover:text-label"
+              title={t("page.back", { title: back }) + ` (${backKey})`}
+              onClick={() => void goBack()}
+            >
+              <Icon name="left" className="glyph size-3.75 flex-none" />
+              <span className="truncate">{back}</span>
+            </button>
+            <span className="w-px h-4 bg-separator-strong" />
+          </>
+        ) : null}
         <Icon name="file" className="glyph size-3.75 text-tertiary" />
         <div title={path} className="flex-1 min-w-0 flex items-center gap-1.5 text-[13px] whitespace-nowrap">
           <span className="text-tertiary">{workspace}</span>
@@ -257,7 +286,7 @@ export function PageView({ target, className }: { target: string; className: str
         {about ? (
           <button
             className="ml-2 h-5.5 flex-none flex items-center gap-1.5 pl-1.5 pr-2 rounded-md border border-separator-strong text-xs text-accent-text"
-            onClick={() => void followPageLink(about, false)}
+            onClick={() => void openNoteLink(about)}
           >
             <span className="text-secondary">about:</span>
             <span className="size-3.5 grid place-items-center rounded-sm bg-accent-soft text-[9px] font-bold">
@@ -311,34 +340,39 @@ export function PageView({ target, className }: { target: string; className: str
             </div>
           ) : (
             <article className="w-full max-w-180 mx-auto pt-10 px-8 pb-16 flex flex-col gap-6">
-              <PageTop
-                page={target}
-                project={icon}
-                title={title}
-                yaml={frontmatterOf(head) ?? ""}
-                onChange={yaml => {
-                  const next = withFrontmatter(head, yaml);
-                  // through the editor: what is typed in the body goes along, one write, one hash check
-                  void (headRef.current ? headRef.current(next) : savePage(target, next + body));
-                }}
-              >
-                {project ? (
-                  <>
-                    <dt className="h-7 flex items-center pl-4 text-tertiary">{t("page.conversations")}</dt>
-                    <dd className="flex items-center px-2">
-                      <span className="inline-flex items-center gap-1.5 px-2 rounded-md border border-separator text-accent-text">
-                        <Icon name="chat" className="glyph size-3" />
-                        {chats.length
-                          ? t("page.latest", {
-                              n: chats.length,
-                              time: clockTime(new Date(chats[0].at).toISOString(), locale),
-                            })
-                          : 0}
-                      </span>
-                    </dd>
-                  </>
-                ) : null}
-              </PageTop>
+              {/* a reader's page: every field shown, none takes input */}
+              <fieldset disabled={reader} className="m-0 min-w-0 border-0 p-0">
+                <PageTop
+                  page={target}
+                  project={icon}
+                  title={title}
+                  yaml={frontmatterOf(head) ?? ""}
+                  readOnly={reader}
+                  onChange={yaml => {
+                    if (reader) return;
+                    const next = withFrontmatter(head, yaml);
+                    // through the editor: what is typed in the body goes along, one write, one hash check
+                    void (headRef.current ? headRef.current(next) : savePage(target, next + body));
+                  }}
+                >
+                  {project ? (
+                    <>
+                      <dt className="h-7 flex items-center pl-4 text-tertiary">{t("page.conversations")}</dt>
+                      <dd className="flex items-center px-2">
+                        <span className="inline-flex items-center gap-1.5 px-2 rounded-md border border-separator text-accent-text">
+                          <Icon name="chat" className="glyph size-3" />
+                          {chats.length
+                            ? t("page.latest", {
+                                n: chats.length,
+                                time: clockTime(new Date(chats[0].at).toISOString(), locale),
+                              })
+                            : 0}
+                        </span>
+                      </dd>
+                    </>
+                  ) : null}
+                </PageTop>
+              </fieldset>
               <div className="h-px bg-separator" />
               {picked ? (
                 <VersionDiff
@@ -351,9 +385,9 @@ export function PageView({ target, className }: { target: string; className: str
                     void loadPage(target);
                   }}
                 />
-              ) : page.text.length > EDIT_MAX ? (
+              ) : reader || page.text.length > EDIT_MAX ? (
                 <>
-                  <Note>{t("page.tooBig")}</Note>
+                  <Note>{t(reader ? "page.readOnly" : "page.tooBig")}</Note>
                   <PageBody text={body} />
                 </>
               ) : (

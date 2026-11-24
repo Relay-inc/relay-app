@@ -55,6 +55,23 @@ pub fn retry_cancel(app: AppHandle, key: String) {
     if q.iter().any(|r| r.key == key) { q.retain(|r| r.key != key); changed(&app, &q); }
 }
 
+/// What a conversation is asked when its refused turn goes on (prompts/conversation/usage-limit-resume.md, the page has the same).
+pub const RESUME: &str = agent_core::prompt::text(include_str!("../../prompts/conversation/usage-limit-resume.md"));
+
+/// A turn of `key` refused for its limit on `account`, while auto-switch has another account free: it goes on there
+/// right away instead of waiting for the reset. A conversation of the page through the page (its own message again
+/// when nothing happened yet), the orchestrator's through a turn of Relay. True when it moved. No loop: every refusal
+/// marks its account spent, and auto-switch only moves to one that is not.
+pub fn switched(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, account: &str, model: &str, fresh: bool) -> bool {
+    let st = app.state::<App>();
+    // a work machine's limits are its own login's, not this Mac's
+    if st.procs.lock().unwrap().get(key).is_some_and(|x| x.remote) { return false; }
+    if super::account_of(&st, p, key, model) == account { return false; }
+    if super::orch::is_orch(key) { super::orch::resume(app, key, model); }
+    else { app.emit("retry", json!({"type": "fire", "key": key, "fresh": fresh, "switched": true})).ok(); }
+    true
+}
+
 /// The latest reset of the windows that are full for `model`, epoch ms.
 fn reset_of(limits: &Value, model: &str) -> Option<i64> {
     agents::full(limits, model).filter_map(|w| chrono::DateTime::parse_from_rfc3339(w["resets"].as_str()?).ok()).map(|d| d.timestamp_millis()).max()
@@ -89,7 +106,7 @@ pub fn turn_end(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, accou
     if st.settings.lock().unwrap()["autoRetry"] != true || super::orch::is_orch(key) { return; }
     // a work machine's limits are its own login's, not this Mac's
     if st.procs.lock().unwrap().get(key).is_some_and(|x| x.remote) { return; }
-    // with auto-switch on and another account free, the next message moves there: nothing to wait for
+    // with auto-switch on and another account free, `switched` moved it there: nothing to wait for
     if super::account_of(&st, p, key, model) != account { return; }
     let (app, key, account, model) = (app.clone(), key.to_string(), account.to_string(), model.to_string());
     std::thread::spawn(move || {

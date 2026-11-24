@@ -64,7 +64,7 @@ export function BoardTicket({
   const startChat = () =>
     ticketChat(
       provider,
-      [`${number} ${view?.title ?? ""}`.trim(), view?.url].filter(Boolean).join("\n"),
+      { number: String(number), title: view?.title ?? "", url: view?.url, labels: view?.labels },
       project,
       view ? picturesOf(view) : [],
     );

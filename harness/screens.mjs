@@ -308,11 +308,54 @@ const todayDay = async (variant, dark) => {
   await page.mouse.move(900, 800);
   await settle(page);
 };
-const settingsPage = async (tab, sub, fixture = "default") => {
-  await page.setViewportSize({ width: 900, height: 700 });
-  await open(page, server.url, { path: "/settings.html", fixture });
+const settingsPage = async (tab, sub, fixture = "default", platform = "") => {
+  // Projects is a list and the picked project side by side: the window's default size
+  await page.setViewportSize(tab === "Projects" ? { width: 1280, height: 800 } : { width: 900, height: 700 });
+  await open(page, server.url, { path: "/settings.html", fixture, platform });
   await click(tab);
   if (sub) await click(sub);
+};
+/** Settings › Projects on a project (`name`) and its tab (General or Pipeline), `height` tall */
+const projectTab = async (tabName, { fixture = "default", name = "Northwind Portal", height = 800 } = {}) => {
+  await settingsPage("Projects", undefined, fixture);
+  await page.setViewportSize({ width: 1280, height });
+  await page
+    .getByRole("button", { name: new RegExp(`^${name}`) })
+    .first()
+    .click();
+  await page.getByRole("tab", { name: new RegExp(`^${tabName}`) }).click();
+  await settle(page);
+};
+/** Organisations and servers (main window) of `fixture`, `height` tall, on the list's item `name` (This Mac, a machine) */
+const serversItem = async (fixture, name, height = 1100) => {
+  await page.setViewportSize({ width: 1440, height });
+  await open(page, server.url, { fixture, sel: "__servers" });
+  await page
+    .getByRole("navigation", { name: "Organisations and servers" })
+    .getByRole("button", { name: new RegExp(`^${name}`) })
+    .first()
+    .click();
+  await settle(page);
+};
+/** the page of the fixture's machine "Server" (what Settings › Machines had for it) */
+const machinePage = (fixture, height = 1100) => serversItem(fixture, "Server", height);
+/** a workspace's page on Organisations and servers, `height` tall: found on This Mac or on one of the machines */
+const workspacePage = async (fixture, height = 1200, name = "Northwind") => {
+  await page.setViewportSize({ width: 1440, height });
+  await open(page, server.url, { fixture, sel: "__servers" });
+  const rows = page.getByRole("navigation", { name: "Organisations and servers" }).getByRole("button");
+  const pane = page.locator(".s-palette > section");
+  for (let i = 0; i < (await rows.count()); i++) {
+    await rows.nth(i).click();
+    await settle(page);
+    const row = pane.getByRole("button", { name: new RegExp(`^${name}`) }).locator("visible=true");
+    if (await row.count()) {
+      await row.first().click();
+      break;
+    }
+  }
+  await waitText(`Leave ${name}`);
+  await settle(page);
 };
 
 const VIEWS = {
@@ -356,47 +399,58 @@ const VIEWS = {
     await click("Install and restart");
     await waitText("55%");
   },
-  // Settings › Machines, a machine online, Add phone pressed: the QR and the line for the phone
+  // a machine's page on Organisations and servers, online, Add phone pressed: the QR and the line for the phone
   "settings-machines-phone": async () => {
-    await settingsPage("Machines", null, "phone");
+    await machinePage("phone");
     await click("Add phone");
     await waitText("Scan this with Relay on your phone");
     await page.getByText("ntfy.sh/relay-").scrollIntoViewIfNeeded();
   },
-  // Settings › Machines, pairing a machine for workspaces only: the line pasted, the checkbox ticked
+  // Add a server › A machine of your own › Pair, for workspaces only: the line pasted and recognised, the box ticked
   "settings-machines-pair-shared": async () => {
-    await settingsPage("Machines", null, "nomirror");
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await open(page, server.url, { fixture: "nomirror", sel: "__servers" });
+    await button("Add a server").click();
+    await button("Continue").click();
+    await button("I have the line").click();
     await page
-      .locator("#mcline")
+      .locator("#own-line")
       .fill(`relay://192.168.1.3:47800#fp=${"7c2e41a09b85d3f6".padEnd(64, "0")}&code=${"c".repeat(32)}`);
-    await page.locator("#mcname").fill("Team server");
-    await page.locator("#mcshared").check();
-    await intoView("Only for workspaces: no mirror of this Mac's vault");
+    await page.locator("#own-name").fill("Team server");
+    await page.getByLabel(/^Only for workspaces/).check();
+    await waitText("A pairing line for a machine of your own");
+    await settle(page);
   },
   // the same page further down: Team server, paired for workspaces only, says so where Server shows its mirror
   "settings-machines-shared-only": async () => {
-    await settingsPage("Machines", null, "nomirror");
+    await serversItem("nomirror", "Team server");
     await waitText("For workspaces only.");
     // the intro says "for workspaces only." too (text matches ignore case): the row's own words
     await intoView("For workspaces only. This Mac's Personal workspace");
   },
-  // Settings › Machines, a machine online whose mirror holds 9 deletes back: the first 5 listed, Restore and Delete
+  // a machine's page, online, whose mirror holds 9 deletes back: the first 5 listed, Restore and Delete
   "settings-machines-mirror-held": async () => {
-    await settingsPage("Machines", null, "mirror");
+    await machinePage("mirror");
     await waitText("9 deletions held");
     await intoView("Restore them");
   },
-  // Settings › Machines, a machine online with GitHub connected and three repos: clean, 2 commits not pushed, work
+  // a machine's page, online, its mirror set to sync every 15 minutes: the choice and what it means (#496)
+  "settings-machines-mirror-every": async () => {
+    await machinePage("every");
+    await waitText("How often it syncs");
+    await waitText("up to 15 minutes later");
+  },
+  // a machine's page, online, with GitHub connected and three repos: clean, 2 commits not pushed, work
   // not committed
   "settings-machines-github": async () => {
-    await settingsPage("Machines", null, "github");
+    await machinePage("github");
     await waitText("Connected as octo-demo");
     await waitText("2 commits not pushed");
     await intoView("Repos on Server");
   },
   // the same after Disconnect and Connect GitHub: the code to type on GitHub, waiting for it
   "settings-machines-github-code": async () => {
-    await settingsPage("Machines", null, "github");
+    await machinePage("github");
     await waitText("Connected as octo-demo");
     await button("Disconnect").click();
     await button("Disconnect").click();
@@ -427,7 +481,7 @@ const VIEWS = {
     await page.getByRole("button", { name: "Runs in", exact: true }).locator("visible=true").first().click();
     await waitText("Northwind");
   },
-  // the workspace Northwind picked there: no Runs on, and Claude Code is the only agent to pick
+  // the workspace Northwind picked there: no Runs on, and Claude Code and Codex are the agents to pick
   "composer-vault-picked": async () => {
     await open(page, server.url, { fixture: "shared" });
     await page.evaluate(() => window.__harness.emit("menu", "new-general"));
@@ -1039,12 +1093,26 @@ const VIEWS = {
   },
   "card-subtask-parent": async () => {
     await VIEWS["card-detail"]();
-    await page.locator(".ticket-window").getByRole("button", { name: /VAT column per rate/ }).click();
+    await page
+      .locator(".ticket-window")
+      .getByRole("button", { name: /VAT column per rate/ })
+      .click();
     await waitText("Subtask of #300");
   },
   // Start conversation on a ticket with a screenshot: the picture is attached in the new conversation's composer (#251)
   "ticket-chat-pictures": async () => {
     await VIEWS["card-detail"]();
+    await button("Start conversation").click();
+    await page.locator(".ticket-window").waitFor({ state: "detached" });
+    await settle(page);
+  },
+  // Start conversation on a ticket of a project with one checkout: the worktree branch and the PR rules are typed in
+  "ticket-chat-branch": async () => {
+    await open(page, server.url, { fixture: "ticket-branch" });
+    await click("Productive");
+    await waitText(markers.card);
+    await click(markers.card);
+    await waitText("Amount excl. VAT");
     await button("Start conversation").click();
     await page.locator(".ticket-window").waitFor({ state: "detached" });
     await settle(page);
@@ -1068,6 +1136,35 @@ const VIEWS = {
     await click("Current cycle");
     await waitText("Cycle 42");
   },
+  // an organization's GitHub project as a board, its Status options as columns, and its Integrations page (PR github-projects)
+  "board-github-projects": async () => {
+    await open(page, server.url, { fixture: "ghprojects" });
+    await click("GitHub Projects");
+    await waitText("GitHub Projects as board");
+  },
+  "board-github-projects-picker": async () => {
+    await VIEWS["board-github-projects"]();
+    await click("Billing roadmap");
+    await waitText("Website");
+  },
+  "settings-integration-github-projects": () => settingsPage("Integrations", "GitHub Projects", "ghprojects"),
+  // a project's Pipeline tab in Settings › Projects, whole: the switch, the ticket flow, the build and the review, each
+  // repo found on this Mac with its checks
+  "settings-project-pipeline": async () => {
+    await projectTab("Pipeline", { fixture: "pipeline-label", height: 1300 });
+    await waitText("acme/northwind-api");
+  },
+  // its General tab: identity, the repos with their checkouts on this Mac, the branches
+  "settings-project-general": async () => {
+    await projectTab("General", { fixture: "pipeline-label", height: 1000 });
+    await waitText("acme/northwind-api");
+  },
+  // the list filtered on Needs setup: a repo without a checkout here, or a pipeline on that misses a column
+  "settings-projects-setup": async () => {
+    await projectTab("General");
+    await button("Needs setup").click();
+    await settle(page);
+  },
   // a project's Buddy pipelines in its title bar, the menu open: failed, running and passed, each with its last run (PR buddy)
   "buddy-menu": async () => {
     await open(page, server.url, { fixture: "buddy", sel: keys.switchTo });
@@ -1078,10 +1175,12 @@ const VIEWS = {
   // Buddy's page in Integrations (region, read-only token) and its Buddy project in Settings › Projects (PR buddy)
   "settings-integration-buddy": () => settingsPage("Integrations", "Buddy", "buddy"),
   "settings-project-buddy": async () => {
-    await settingsPage("Projects", undefined, "buddy");
-    await unfold("Northwind Portal");
+    await projectTab("General", { fixture: "buddy" });
     const field = page.getByRole("combobox", { name: "Buddy", exact: true }).first();
-    await page.waitForFunction(() => document.body.innerText.includes("Web shop · acme"));
+    await field.scrollIntoViewIfNeeded();
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll("select")].some(s => s.selectedOptions[0]?.text === "Web shop · acme"),
+    );
     await field.scrollIntoViewIfNeeded();
     await settle(page);
   },
@@ -1143,6 +1242,36 @@ const VIEWS = {
   },
   usage: async () => {
     await VIEWS["usage-popover"]();
+    await page.getByRole("button", { name: "View details" }).click();
+    await waitText("All of Claude Code", 10000);
+    await settle(page);
+  },
+  // Antigravity in the Usage view: its plan's name and the note that it reports no limit windows (PR #513)
+  "usage-antigravity": async () => {
+    await open(page, server.url, { fixture: "antigravity" });
+    await page.getByRole("button", { name: /^Usage/ }).click();
+    await waitText("View details");
+    await page.getByRole("button", { name: "View details" }).click();
+    await waitText("All of Claude Code", 10000);
+    await intoView("Antigravity reports its plan");
+  },
+  // Settings › Agents › Antigravity: installed and on, the hint and the Ask option, auto first (PR #513)
+  "settings-agents-antigravity": async () => {
+    await settingsPage("Agents", undefined, "antigravity");
+    await unfold("Antigravity");
+    await intoView("Ask");
+  },
+  // Settings › Agents › Codex: the Approvals option, Codex's own reviewer first (PR #513)
+  "settings-agents-codex-approvals": async () => {
+    await settingsPage("Agents");
+    await unfold("Codex");
+    await intoView("Approvals");
+  },
+  // two Claude accounts, the first used up: each account's limits, the one in use marked
+  "usage-accounts": async () => {
+    await open(page, server.url, { fixture: "accounts" });
+    await page.getByRole("button", { name: /^Usage/ }).click();
+    await waitText("View details");
     await page.getByRole("button", { name: "View details" }).click();
     await waitText("All of Claude Code", 10000);
     await settle(page);
@@ -1454,6 +1583,30 @@ const VIEWS = {
     await waitText("Move to workspace");
     await settle(page);
   },
+  // a conversation's menu offers Mark as unread (PR #510)
+  "chat-unread-menu": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page
+      .getByRole("navigation")
+      .first()
+      .getByText("Billing sync double balances", { exact: true })
+      .first()
+      .click({ button: "right" });
+    await waitText("Mark as unread");
+    await settle(page);
+  },
+  // picked: the conversation is bold again in the sidebar until it is opened (PR #510)
+  "chat-marked-unread": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page
+      .getByRole("navigation")
+      .first()
+      .getByText("Billing sync double balances", { exact: true })
+      .first()
+      .click({ button: "right" });
+    await click("Mark as unread");
+    await settle(page);
+  },
   // a project moved to another workspace: what goes and what stays (PR workspace-migrate)
   "migrate-personal": async () => {
     await open(page, server.url, { fixture: "shared" });
@@ -1521,15 +1674,27 @@ const VIEWS = {
     await page.locator(".relay-drawer button[title='Close terminal']").last().hover();
     await settle(page, 500);
   },
-  // a vault note in the drawer: its frontmatter as properties, a callout, ruled headings, a task list and a table (#233)
-  "drawer-note": async () => {
+  // a [[link]] in a conversation opens the note as a page: "← <conversation>" in its bar goes back (⌘[, Esc)
+  "page-from-chat": async () => {
     await open(page, server.url, { sel: keys.long });
     await page.locator("a.vlink", { hasText: "Billing Spec" }).last().click();
+    await page.locator("[data-page-back]").waitFor();
     await waitText("Archive: old repo");
     await settle(page, 300);
   },
-  // a note of the team vault, linked from a conversation, in the drawer: its absolute path in the bar
-  "drawer-note-shared": async () => {
+  // Back: the conversation again, scrolled where it was when the link was clicked
+  "page-back": async () => {
+    await open(page, server.url, { sel: keys.long });
+    const link = page.locator("a.vlink", { hasText: "Billing Spec" }).nth(3);
+    await link.scrollIntoViewIfNeeded();
+    await settle(page, 200);
+    await link.click();
+    await page.locator("[data-page-back]").click();
+    await page.locator("#log").waitFor();
+    await settle(page, 400);
+  },
+  // a note of the team vault, linked from a conversation, as a page of that workspace (the sidebar stays on its own)
+  "page-from-chat-shared": async () => {
     await open(page, server.url, { fixture: "shared", sel: keys.long });
     await page.evaluate(key => {
       window.__harness.emitAgent(key, { type: "text", text: "The handbook is in [[Team Handbook]].", delta: true });
@@ -1537,14 +1702,36 @@ const VIEWS = {
     }, keys.long);
     await waitText("The handbook is in");
     await page.locator("a.vlink", { hasText: "Team Handbook" }).last().click();
+    await page.locator("[data-page-back]").waitFor();
     await waitText("Archive: old repo");
     await settle(page, 300);
   },
-  // the same note with its properties unfolded under the title (the doc panel design)
-  "drawer-note-properties": async () => {
-    await VIEWS["drawer-note"]();
-    await page.locator(".relay-drawer button[aria-expanded]").click();
+  // Experimental › Files off: no Pages tab, the note still opens as a page that can be edited
+  "page-from-chat-files-off": async () => {
+    await open(page, server.url, { fixture: "files-off", sel: keys.long });
+    await page.locator("a.vlink", { hasText: "Billing Spec" }).last().click();
+    await page.locator("[data-page-back]").waitFor();
+    await waitText("Archive: old repo");
     await settle(page, 300);
+  },
+  // the page's More menu: Open in default app, which the side panel had
+  "page-more-menu": async () => {
+    await VIEWS["page-from-chat"]();
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await waitText("Open in default app");
+    await settle(page);
+  },
+  // a [[link]] to a note that does not exist: a toast, not an empty page
+  "page-link-missing": async () => {
+    await open(page, server.url, { sel: keys.long });
+    await page.evaluate(() => {
+      const a = Object.assign(document.createElement("a"), { className: "vlink", textContent: "Nowhere" });
+      a.dataset.note = "Nowhere Note";
+      document.querySelector("#msgs")?.append(a);
+      a.click();
+    });
+    await waitText("No note named");
+    await settle(page, 200);
   },
   "drawer-notes": async () => {
     await VIEWS["project-tools"]();
@@ -1581,6 +1768,12 @@ const VIEWS = {
     await VIEWS.orchestrator();
     await intoView("Export invoices as CSV");
   },
+  // its page: a ticket over two repos, a pull request in each
+  "orchestrator-pipeline-worker": async () => {
+    await VIEWS.orchestrator();
+    await page.locator(".relay-drawer").getByText("Export invoices as CSV", { exact: true }).click();
+    await waitText("Pull request in northwind-api");
+  },
   "orchestrator-live": async () => {
     await VIEWS.orchestrator();
     await page.evaluate(() => window.__harness.orchLive());
@@ -1592,6 +1785,12 @@ const VIEWS = {
     await VIEWS.orchestrator();
     await page.locator(".relay-drawer").getByText("Patch the balance sync", { exact: true }).click();
     await waitText("read from git by Relay");
+  },
+  // a running worker's page with its decision trail
+  "orchestrator-worker-decisions": async () => {
+    await VIEWS.orchestrator();
+    await page.locator(".relay-drawer").getByText("Fix the login redirect", { exact: true }).click();
+    await waitText("Reverted the shared-config change");
   },
   "orchestrator-answered": async () => {
     await VIEWS["orchestrator-worker-page"]();
@@ -1670,13 +1869,12 @@ const VIEWS = {
     await settingsPage("Voice");
     await intoView("Whisper Large v3 Turbo");
   },
-  // Settings › Machines of the workspace's admin: Team server, paired for workspaces only, with the workspace under it: its
-  // last round (a conflict copy, two deletes held), the members open (this Mac, an admin, a member, an open invite), a
-  // new invite link made and the recovery key shown again
+  // a workspace's page on Organisations and servers for its admin (was Settings › Workspaces): Northwind on Team
+  // server, its last round (a conflict copy, two deletes held), its people (this Mac, an admin, a member, an open
+  // invite), a new invite link made and the recovery key shown again
   // a member left: the workspace's key changes once the remaining members' Relay can receive it (PR key rotation)
   "settings-shared-rekey": async () => {
-    await settingsPage("Machines", undefined, "shared-rekey");
-    await page.setViewportSize({ width: 900, height: 1000 });
+    await workspacePage("shared-rekey", 1000);
     await waitText("the key has not changed since");
     await page.getByText("the key has not changed since").scrollIntoViewIfNeeded();
     await settle(page);
@@ -1691,8 +1889,7 @@ const VIEWS = {
   },
   // an admin turns making the notes documents on (ticket 8b, opt-in per workspace)
   "settings-shared-docs": async () => {
-    await settingsPage("Machines", undefined, "shared");
-    await page.setViewportSize({ width: 900, height: 1000 });
+    await workspacePage("shared", 1000);
     await waitText("Notes as shared documents");
     await page.getByRole("switch").first().click();
     await page.getByText("Notes as shared documents").first().scrollIntoViewIfNeeded();
@@ -1700,9 +1897,7 @@ const VIEWS = {
   },
   // the member list's roles in Members, with Make admin / Make member for a list admin (PR member roles)
   "settings-shared-members": async () => {
-    await settingsPage("Machines", undefined, "shared");
-    await page.setViewportSize({ width: 900, height: 1200 });
-    await button("Members").first().click();
+    await workspacePage("shared");
     await waitText("Design laptop");
     await page.getByText("Design laptop").scrollIntoViewIfNeeded();
     await settle(page);
@@ -1717,9 +1912,7 @@ const VIEWS = {
   },
   // a member the server has and the list lacks: Not on the list, Add to list and why, no Make admin or Remove
   "settings-shared-unlisted": async () => {
-    await settingsPage("Machines", undefined, "shared-unlisted");
-    await page.setViewportSize({ width: 900, height: 1200 });
-    await button("Members").first().click();
+    await workspacePage("shared-unlisted");
     await waitText("Not on the list");
     await page.getByText("Design laptop").scrollIntoViewIfNeeded();
     await settle(page);
@@ -1732,23 +1925,274 @@ const VIEWS = {
     await page.getByText("Design laptop").scrollIntoViewIfNeeded();
     await settle(page);
   },
+  // a round on Windows left out files Windows cannot name, and a case clash: listed under the workspace (PR W4)
+  "settings-shared-names": async () => {
+    await workspacePage("shared-windows", 1000);
+    await waitText("not synced here");
+    await page.getByText("not synced here").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // Organisations and servers (PR servers-page), a page in the main window, fixture team: an organisation admin of
+  // relay.example.com. The Overview: counts, the server, the sign-in link, you, and what is still to set up
+  "servers-overview": async () => {
+    await open(page, server.url, { fixture: "team", sel: "__servers" });
+    await waitText("Sign-in link");
+    await settle(page);
+  },
+  // the workspace menu grouped by place: On this Mac, then the organisation by its name with who can read on its head
+  // and your role per row (PR menu-by-place)
+  "workspace-menu-places": async () => {
+    await open(page, server.url, { fixture: "team" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await waitText("On this Mac");
+    await settle(page);
+  },
+  // the same with a machine of your own keeping encrypted workspaces (fixture shared)
+  "workspace-menu-machine": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await waitText("On this Mac");
+    await settle(page);
+  },
+  // the organisation's name edited in place by an organisation admin (PR org-name)
+  "servers-org-name-edit": async () => {
+    await VIEWS["servers-overview"]();
+    await button("Edit").first().click();
+    await page.getByLabel("Organisation name").fill("Bluebird Studio Gent");
+    await settle(page);
+  },
+  // an organisation without a name yet (an older server, or nobody named it): the host, the building, Add a name
+  "servers-org-unnamed": async () => {
+    await open(page, server.url, { fixture: "team-unnamed", sel: "__servers" });
+    await waitText("Add a name");
+    await settle(page);
+  },
+  // the footer's workspace menu, with Organisations and servers… and Add a server… at the bottom
+  "servers-menu": async () => {
+    await open(page, server.url, { fixture: "team" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await waitText("Add a server…");
+    await settle(page);
+  },
+  // People: an open invite, the accounts (one turned off) with their workspaces as squares
+  "servers-people": async () => {
+    await VIEWS["servers-overview"]();
+    await page.getByRole("tab", { name: /^People/ }).click();
+    await waitText("kim@example.com");
+    await settle(page);
+  },
+  // New link on the open invite: withdrawn and made again for the same address, the new link to copy on its row
+  "servers-people-new-link": async () => {
+    await VIEWS["servers-people"]();
+    await button("New link").first().click();
+    await waitText("relay://relay.example.com");
+    await settle(page);
+  },
+  // Invite people: a new address and an existing account, two workspaces
+  "servers-invite": async () => {
+    await VIEWS["servers-people"]();
+    await button("Invite people").click();
+    await page.getByLabel("Email addresses").fill("nina@example.com, sam@example.com");
+    await page.getByRole("checkbox", { name: "Handbook", exact: true }).check();
+    await page.getByRole("checkbox", { name: "Research", exact: true }).check();
+    await waitText("What they get");
+    await settle(page);
+  },
+  // and created: the link for the new address, the existing account added
+  "servers-invited": async () => {
+    await VIEWS["servers-invite"]();
+    await button("Create 1 invite link").click();
+    await waitText("Existing account: added");
+    await settle(page);
+  },
+  // Workspaces: every workspace with members, admins, your role and whether it syncs here, New workspace… open
+  "servers-workspaces": async () => {
+    await VIEWS["servers-overview"]();
+    await page.getByRole("tab", { name: /^Workspaces/ }).click();
+    await button("New workspace…").click();
+    await page.getByRole("textbox", { name: "Name", exact: true }).fill("Proposals");
+    await page.getByRole("radio", { name: /Without history/ }).click();
+    await intoView("Create workspace");
+  },
+  // a workspace synced here: its page (members, history, sync, leave)
+  "servers-workspace": async () => {
+    await VIEWS["servers-overview"]();
+    await page.getByRole("tab", { name: /^Workspaces/ }).click();
+    await button("Open Handbook").click();
+    await waitText("sam@example.com");
+    await settle(page);
+  },
+  // a workspace the organisation admin is not in: its members, add an address
+  "servers-org-workspace": async () => {
+    await VIEWS["servers-overview"]();
+    await page.getByRole("tab", { name: /^Workspaces/ }).click();
+    await button("Open Finance").click();
+    await waitText("you manage it as organisation admin");
+    await settle(page);
+  },
+  // Sign-in with Microsoft Entra picked: the steps in the admin center, the fields, what the server needs
+  "servers-signin": async () => {
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await open(page, server.url, { fixture: "team", sel: "__servers" });
+    await page.getByRole("tab", { name: /^Sign-in/ }).click();
+    await page.getByRole("radio", { name: /Microsoft Entra/ }).click();
+    await page.getByLabel("Tenant ID").fill("11111111-2222-3333-4444-555555555555");
+    await waitText("Each account is tied to one person");
+    await settle(page);
+  },
+  // Server: what Relay knows, and what whoever runs the box does there (update, move, back up, restore)
+  "servers-server": async () => {
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await open(page, server.url, { fixture: "team", sel: "__servers" });
+    await page.getByRole("tab", { name: /^Server/ }).click();
+    await waitText("What the server keeps");
+    await settle(page);
+  },
+  // fixture team-member: a member's Overview, two tabs, their own workspaces and who can read
+  "servers-member": async () => {
+    await open(page, server.url, { fixture: "team-member", sel: "__servers" });
+    await waitText("Your workspaces");
+    await settle(page);
+  },
+  // Add a server (PR add-server): what it is for, side by side, fixed once set up
+  "servers-add": async () => {
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await open(page, server.url, { sel: "__servers" });
+    await waitText("What it is for");
+    await settle(page);
+  },
+  // A machine of your own, step 2: what it needs and the setup commands, compose as for an organisation server
+  "servers-add-own": async () => {
+    await VIEWS["servers-add"]();
+    await button("Continue").click();
+    await waitText("Kind of machine");
+    await settle(page);
+  },
+  // step 3: a pairing line pasted and recognised, what happens after pairing
+  "servers-add-pair": async () => {
+    await VIEWS["servers-add-own"]();
+    await button("I have the line").click();
+    await page
+      .locator("#own-line")
+      .fill(`relay://192.168.1.3:47800#fp=${"7c2e41a09b85d3f6".padEnd(64, "0")}&code=${"c".repeat(32)}`);
+    await page.locator("#own-name").fill("Office box");
+    await waitText("A pairing line for a machine of your own");
+    await settle(page);
+  },
+  // A server for an organisation, step 2: the values, who does what, who can read, what it needs. It stays in the
+  // list as being set up
+  "servers-add-org": async () => {
+    await VIEWS["servers-add"]();
+    await page.getByRole("radio", { name: /A server for an organisation/ }).click();
+    await button("Continue").click();
+    await page.getByLabel("Address the Macs use").fill("relay.example.com");
+    await page.getByLabel("First organisation admin").fill("alex@example.com");
+    await page.getByLabel("Where the Macs are").fill("192.168.1.0/24");
+    await waitText("Setting up, step 2 of 4");
+    await settle(page);
+  },
+  // step 3: the commands for the box, filled in
+  "servers-add-org-install": async () => {
+    await page.setViewportSize({ width: 1440, height: 1500 });
+    await VIEWS["servers-add-org"]();
+    await button("Continue").click();
+    await waitText("Make it a team server");
+    await settle(page);
+  },
+  // step 4: the link it printed, and when it does not connect unfolded
+  "servers-add-org-connect": async () => {
+    await VIEWS["servers-add-org-install"]();
+    await button("I have the link").click();
+    await page
+      .getByLabel("Link to the team server")
+      .fill(
+        `relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`,
+      );
+    await page.getByText("When it does not connect").click();
+    await waitText("Certificate does not match");
+    await button("Check this server").click();
+    await page.getByLabel("Organisation name").and(page.locator('[value="Bluebird Studio"]')).waitFor();
+    await settle(page);
+  },
+  // Join: an organisation's invite pasted, what it is and who can read before Log in
+  "servers-join": async () => {
+    await VIEWS["servers-add"]();
+    await page.getByRole("radio", { name: /Join a server someone else runs/ }).click();
+    await button("Continue").click();
+    await page
+      .getByLabel("Invite or pairing line")
+      .fill(
+        `relay://relay.example.com:47800#team&fp=${"7ea3".padEnd(64, "b")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`,
+      );
+    await waitText("Invite to an organisation");
+    await settle(page);
+  },
+  // Join after Check this server: the address and certificate first, the name the server gives itself second
+  "servers-join-checked": async () => {
+    await VIEWS["servers-join"]();
+    await button("Check this server").click();
+    await waitText("calls itself Bluebird Studio");
+    await settle(page);
+  },
+  // a server that calls itself like an organisation this Mac is in (another certificate): said before Log in
+  "servers-join-clash": async () => {
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await open(page, server.url, { fixture: "team", sel: "__servers" });
+    await button("Add a server").last().click();
+    await page.getByRole("radio", { name: /Join a server someone else runs/ }).click();
+    await button("Continue").click();
+    await page
+      .getByLabel("Invite or pairing line")
+      .fill(
+        `relay://relay.example.net:47800#team&fp=${"9c1d".padEnd(64, "e")}&invite=${"1".repeat(16)}&code=${"c".repeat(64)}`,
+      );
+    await button("Check this server").click();
+    await waitText("is also called Bluebird Studio");
+    await settle(page);
+  },
+  // This Mac: this Mac as a machine, and the encrypted workspaces it joined with a link
+  "servers-mac": async () => {
+    await serversItem("shared-member", "This Mac");
+    await waitText("This Mac as a machine");
+  },
+  // a machine of your own: online, its mirror, GitHub and repos, the workspaces it keeps
+  "servers-machine": async () => {
+    await machinePage("github", 1300);
+    await waitText("Connected as octo-demo");
+  },
+  // a machine of your own that speaks an older protocol: the compose update for its folder (PR add-server, one route)
+  "servers-machine-outdated": async () => {
+    await machinePage("machines");
+    await waitText("docker compose pull");
+  },
+  // A machine of your own on Unraid: the compose commands with Unraid's folder
+  "servers-add-own-unraid": async () => {
+    await VIEWS["servers-add-own"]();
+    await page.getByRole("radio", { name: "Unraid", exact: true }).click();
+    await waitText("/mnt/user/appdata/relay-server");
+    await settle(page);
+  },
+  // Settings: Organisations and servers is a row under the pages, Workspaces points there for organisations
+  "settings-servers-row": async () => {
+    await settingsPage("Agents", undefined, "machines");
+    await waitText("Organisations and servers");
+    await intoView("Agent access");
+  },
   "settings-shared-vaults": async () => {
-    await settingsPage("Machines", undefined, "shared");
-    await page.setViewportSize({ width: 900, height: 1600 });
+    await workspacePage("shared", 1600);
     await waitText("Put them back");
-    await button("Members").click();
     await waitText("Design laptop");
     await button("Invite…").click();
     await button("Create link").click();
     await waitText("Single use, valid until");
     await button("Show recovery key").click();
     await waitText("Keep this key in your password manager");
-    await intoView("Team server");
+    await intoView("Folder");
   },
-  // New workspace on this machine… under Team server, filled in and created: the form closes, the new workspace's row
-  // under the machine shows its recovery key
+  // New workspace on this machine… under Team server, filled in and created: the form closes, the new workspace's page
+  // opens on its recovery key
   "settings-shared-new": async () => {
-    await settingsPage("Machines", undefined, "shared");
+    await serversItem("shared", "Team server");
     await page.evaluate(() => (window.__harness.pickFolder = "/Users/me/Shared/Launch"));
     await button("New workspace on this machine…").click();
     await page.locator("#shared-name").fill("Launch");
@@ -1760,29 +2204,31 @@ const VIEWS = {
     await waitText("Keep this key in your password manager");
     await intoView("Keep this key in your password manager");
   },
-  // a member's Settings › Machines: no machine, the workspace they joined with a link under Workspaces
+  // a member's This Mac on Organisations and servers: no machine, the workspace they joined with a link
   "settings-shared-member": async () => {
-    await settingsPage("Machines", undefined, "shared-member");
-    await waitText("Put them back");
-    await intoView("Workspaces");
+    await serversItem("shared-member", "This Mac");
+    await waitText("Join a workspace with a link…");
+    await settle(page);
   },
-  // fixture shared-keeper: that member, made admin on the server, opens Members: the server shows under Machines,
-  // for workspaces only, with its workspace under it, an Update button and no Forget or New workspace
+  // fixture shared-keeper: that member, made admin on the server, opens the workspace's page: the server shows under
+  // Machines, for workspaces only, with an Update button and no Forget, and on Workspaces with no New workspace
   "settings-shared-keeper": async () => {
-    await settingsPage("Machines", undefined, "shared-keeper");
-    await page.setViewportSize({ width: 900, height: 1300 });
+    await workspacePage("shared-keeper", 1300);
     await waitText("Put them back");
-    await button("Members").click();
+    await page
+      .getByRole("navigation", { name: "Organisations and servers" })
+      .getByRole("button", { name: /^192\.168\.1\.2/ })
+      .click();
     await waitText("You keep this server");
     await waitText("Update to");
     await intoView("You keep this server");
   },
-  // Relay opened by an invite link: Machines with the join form under Workspaces, the link in it
+  // Relay opened by an invite link: Add a server › Join in the main window, the link in it and recognised
   "settings-shared-join": async () => {
-    await settingsPage("Machines", undefined, "shared-invite");
-    await page.setViewportSize({ width: 900, height: 1000 });
-    await waitText("Join a workspace");
-    await intoView("Join a workspace");
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await open(page, server.url, { fixture: "shared-invite" });
+    await waitText("Invite to an encrypted workspace");
+    await settle(page);
   },
   // the other vault folders under General: a path, Remove, and the project shown under another name (the main vault
   // has one)
@@ -1840,7 +2286,7 @@ const VIEWS = {
   // Settings › General, the Experimental section at the bottom with the Files switch off
   "settings-experimental": async () => {
     await settingsPage("General", undefined, "files-off");
-    await page.setViewportSize({ width: 900, height: 2400 });
+    await page.setViewportSize({ width: 900, height: 1350 });
     await page.getByText("Experimental", { exact: true }).scrollIntoViewIfNeeded();
     await settle(page);
   },
@@ -1858,12 +2304,14 @@ const VIEWS = {
     await page.locator('[data-page="CLAUDE.md"]').scrollIntoViewIfNeeded();
     await settle(page);
   },
-  // a member's Pages tab of the shared workspace: no System section, its CLAUDE.md nowhere
+  // a member's Pages tab of the shared workspace: no System section, its CLAUDE.md nowhere; the tree by type, without
+  // Show files, which is an admin's (issue 420)
   "pages-system-member": async () => {
     await open(page, server.url, { fixture: "shared-member" });
     await page.keyboard.press("Control+Digit3");
     await page.getByRole("tab", { name: /^Pages/ }).click();
-    await waitText("Folders");
+    await waitText("Today's note");
+    if (await page.locator("[data-show-files]").count()) throw new Error("a member sees Show files");
     await settle(page);
   },
   // a page open in Personal, its bar naming Personal (fixture shared, workspaces kept apart)
@@ -2006,29 +2454,42 @@ const VIEWS = {
     await waitText("New context");
     await settle(page);
   },
-  // the workspace check from the workspace menu: findings per context, Repair, Repair all
+  // the vault check from the workspace menu (issue 425): one list grouped by kind, health first, each group with its
+  // count, its action and its first three entries; Repair per row and Repair all
   "vault-check": async () => {
     await open(page, server.url);
     await page.getByRole("button", { name: /^Switch workspace/ }).click();
     await page.getByRole("button", { name: "Check workspace…" }).click();
-    await waitText("Repair all (4)");
-    await page.locator("[data-finding=context_mismatch] summary").click();
+    await waitText("Repair all (8)");
+    await page.locator("[data-kind=context_mismatch] summary").click();
+    await settle(page);
+  },
+  // on Windows without Git Bash, jq and Python: the check lists them under Missing on this computer (PR W4)
+  "vault-check-windows": async () => {
+    await open(page, server.url, { fixture: "windows" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await page.getByRole("button", { name: "Check workspace…" }).click();
+    await waitText("Missing on this computer");
+    await page.locator("[data-kind=missing_tool]").scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  "vault-check-dark": async () => {
+    await open(page, server.url, { fixture: "dark" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await page.getByRole("button", { name: "Check workspace…" }).click();
+    await waitText("Repair all (8)");
     await settle(page);
   },
   // Tidy structure (PR 365): the notes outside their home, and the dry run sheet over the check
   "vault-check-tidy": async () => {
     await VIEWS["vault-check"]();
-    await page.getByRole("tab", { name: /^Garden/ }).click();
     await page.getByRole("button", { name: "Tidy structure" }).click();
     await waitText("Dry run");
     await waitText("one Undo");
     await settle(page);
   },
   "vault-check-tidy-dark": async () => {
-    await open(page, server.url, { fixture: "dark" });
-    await page.getByRole("button", { name: /^Switch workspace/ }).click();
-    await page.getByRole("button", { name: "Check workspace…" }).click();
-    await page.getByRole("tab", { name: /^Garden/ }).click();
+    await VIEWS["vault-check-dark"]();
     await page.getByRole("button", { name: "Tidy structure" }).click();
     await waitText("one Undo");
     await settle(page);
@@ -2038,36 +2499,32 @@ const VIEWS = {
     await VIEWS["vault-check-tidy"]();
     await page.getByRole("button", { name: /^Apply \d+ moves$/ }).click();
     await waitText("moved to their home");
-    if (await page.locator("[data-garden=outside_home]").count()) throw new Error("the finding stays after Apply");
+    if (await page.locator("[data-kind=outside_home]").count()) throw new Error("the finding stays after Apply");
     await settle(page);
   },
-  // the Garden tab (PR 374, K10): one of each problem with its count and action; Tidy structure is the one filled button
+  // the garden's groups further down the same list (PR 374, K10): Review expands broken links in place
   "vault-check-garden": async () => {
     await VIEWS["vault-check"]();
-    await page.getByRole("tab", { name: /^Garden/ }).click();
-    await waitText("Notes outside their home");
-    await waitText("Meetings without a project");
-    await waitText("Unused attachments");
+    await page.locator("[data-kind=broken_link]").getByRole("button", { name: "Review" }).click();
+    await page.locator("[data-kind=no_type]").scrollIntoViewIfNeeded();
+    await waitText("Unlinked notes");
     await settle(page);
   },
   "vault-check-garden-dark": async () => {
-    await open(page, server.url, { fixture: "dark" });
-    await page.getByRole("button", { name: /^Switch workspace/ }).click();
-    await page.getByRole("button", { name: "Check workspace…" }).click();
-    await page.getByRole("tab", { name: /^Garden/ }).click();
-    await waitText("Notes outside their home");
+    await VIEWS["vault-check-dark"]();
+    await page.locator("[data-kind=no_type]").scrollIntoViewIfNeeded();
     await settle(page);
   },
-  // Ask Claude to fix properties: its dry run over the tab, one filled button
+  // Ask Claude to fix properties: the same dry run sheet, one filled button
   "vault-check-garden-ask": async () => {
-    await VIEWS["vault-check-garden"]();
+    await VIEWS["vault-check"]();
     await page.getByRole("button", { name: "Ask Claude to fix properties" }).click();
     await waitText("Dry run");
     await settle(page);
   },
   // Move to trash: the dry run of the unused attachments
   "vault-check-garden-trash": async () => {
-    await VIEWS["vault-check-garden"]();
+    await VIEWS["vault-check"]();
     await page.getByRole("button", { name: "Move to trash" }).click();
     await waitText("one Undo");
     await settle(page);
@@ -2075,26 +2532,25 @@ const VIEWS = {
   // after Repair all: what needs a person stays
   "vault-check-repaired": async () => {
     await VIEWS["vault-check"]();
-    await page.getByRole("button", { name: "Repair all (4)" }).click();
-    await waitText("Repaired 4 findings");
+    await page.getByRole("button", { name: "Repair all (8)" }).click();
+    await waitText("Repaired 8 findings");
     await settle(page);
   },
-  // a member of a shared workspace sees the findings, not the Repair buttons
-  "vault-check-member": async () => {
-    await open(page, server.url, { fixture: "shared-member" });
+  // a member of a shared workspace sees the findings, not Repair, Tidy structure or Move to trash
+  "vault-check-member": async (fixture = "shared-member") => {
+    await open(page, server.url, { fixture });
     await page.keyboard.press("Control+Digit3");
     await page.getByRole("tab", { name: /^Pages/ }).click();
     await page.getByText("Folders", { exact: true }).click({ button: "right" });
     await page.getByRole("button", { name: "Check workspace…" }).click();
     await waitText("Only an admin of this workspace can repair it.");
-    // the Tidy structure finding shows on the Garden tab, its button and so Apply do not
-    await page.getByRole("tab", { name: /^Garden/ }).click();
     await waitText("Only an admin can tidy the structure");
     await waitText("Only an admin can move files to the trash");
-    if (await page.getByRole("button", { name: "Tidy structure" }).count())
-      throw new Error("a member sees Tidy structure");
+    for (const name of ["Tidy structure", "Repair", /^Repair all/])
+      if (await page.getByRole("button", { name, exact: true }).count()) throw new Error(`a member sees ${name}`);
     await settle(page);
   },
+  "vault-check-member-dark": () => VIEWS["vault-check-member"]("shared-member-dark"),
   // a project unfolded to its folder, its note open in the drawer, and a top folder unfolded (PR workspace-pages)
   "pages-expanded": async () => {
     await open(page, server.url);
@@ -2189,6 +2645,62 @@ const VIEWS = {
   },
   "pages-recent-close-dark": async () => VIEWS["pages-recent-close"]("dark"),
   "pages-virtual-groups-dark": async () => VIEWS["pages-virtual-groups"]("linked-dark"),
+  // the Pages tab of a fresh vault (issue 420): no Folders, a project unfolded to its notes by type, one type group
+  // open, the typed notes of no context, and Unsorted (no type:) with its Tidy on hover, capped with Show all
+  "pages-by-type": async (fixture = "kb-unsorted") => {
+    await open(page, server.url, { fixture, typed: true });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Beacon Billing"]').click();
+    await page.locator('[data-type-group="Document"]').first().click();
+    await page.locator('[data-section="pages:unsorted"] [role="button"]').first().click();
+    if (await page.getByText("Folders", { exact: true }).count()) throw new Error("Folders shown by default");
+    await page.locator('[data-section="pages:unsorted"] [role="button"]').first().hover();
+    await waitText("Show all 13");
+    await settle(page);
+  },
+  "pages-by-type-dark": async () => VIEWS["pages-by-type"]("kb-unsorted-dark"),
+  // New page on a project with the files hidden: it asks for a type (the registry's, with a template)
+  "pages-by-type-new": async () => {
+    await open(page, server.url, { fixture: "kb", typed: true });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Beacon Billing"]').click({ button: "right" });
+    await waitText("Meeting");
+    await settle(page);
+  },
+  // Show files brings the Folders back, and the choice holds over a restart (a reload that keeps the UI state)
+  "pages-show-files": async () => {
+    await open(page, server.url, { fixture: "kb", typed: true, keep: true });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator("[data-show-files]").click();
+    await waitText("Folders");
+    await settle(page, 400);
+    await open(page, server.url, { fixture: "kb", typed: true, keep: true });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await waitText("Folders");
+    await page.getByText("Folders", { exact: true }).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // a note's icon: on its row in a type group too (issue 427): Launch checklist's 🚀 under Northwind Portal's Document,
+  // and the project row keeps its config picture (its note has no icon:)
+  "pages-by-type-icons": async () => {
+    await open(page, server.url, { fixture: "kb", typed: true });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"] img').click();
+    await page.locator('[data-type-group="Document"]').first().click();
+    const launch = page.locator('[data-page$="/Launch checklist.md"]', { hasText: "🚀" }).first();
+    await launch.waitFor({ timeout: 4000 });
+    if (await page.locator('[data-page$="/Brand notes.md"]', { hasText: "🚀" }).count())
+      throw new Error("an icon on a page without");
+    await launch.scrollIntoViewIfNeeded();
+    await settle(page, 300);
+  },
+  // Unsorted's Tidy opens the vault check
+  "pages-unsorted-tidy": async () => {
+    await VIEWS["pages-by-type"]();
+    await page.locator('[data-section="pages:unsorted"]').getByRole("button", { name: "Tidy", exact: true }).click();
+    await page.getByRole("dialog").first().waitFor();
+    await settle(page, 600);
+  },
   // a collection (K8, K9): the Meetings of a context as a table with the filter chip, the about: cell open on its
   // listbox; as a board by stage; the Projects board with a card in the air over the lane it sets
   "collection-table": async (fixture = "linked-collections") => {
@@ -2273,6 +2785,54 @@ const VIEWS = {
     await settle(page);
   },
   "project-auto-sections-dark": async () => VIEWS["project-auto-sections"]("linked-dark"),
+  // views inside a page (issue 421): Obsidian bases as tables, a fenced block of the page's meetings (`this`), an
+  // embedded .base file grouped by status, and a block outside the subset that offers Obsidian instead
+  "page-views": async (fixture = "linked-views") => {
+    await open(page, server.url, { fixture });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText("Every meeting about this project");
+    await page.locator(".cm-base").first().waitFor();
+    await page.locator(".cm-base-unsupported").waitFor();
+    await page.locator(".cm-base").first().scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  "page-views-dark": async () => VIEWS["page-views"]("linked-views-dark"),
+  // the rest of that page: the embedded .base grouped by status is a board, the formula block offers Obsidian
+  "page-views-board": async (fixture = "linked-views") => {
+    await VIEWS["page-views"](fixture);
+    await page
+      .locator(".cm-base")
+      .nth(1)
+      .evaluate(el => el.scrollIntoView({ block: "start" }));
+    await settle(page);
+  },
+  // a cell edited in the page's table: the date of a meeting, written into that note; the table re-sorts, the block's
+  // text stays as it was
+  "page-views-edit": async (fixture = "linked-views") => {
+    await VIEWS["page-views"](fixture);
+    const cell = page.locator('.cm-base [data-cell="date"]').nth(2);
+    await cell.locator("div").first().click();
+    await cell.locator("input").fill("2026-10-15");
+    await cell.locator("input").press("Enter");
+    await waitText("15 Oct");
+    await settle(page);
+  },
+  // / → View on an empty line of the page: a block of the page's meetings, drawn as their table at once
+  "page-views-slash": async (fixture = "linked-views") => {
+    await VIEWS["page-views"](fixture);
+    await page.getByText("Next: confirm the migration window").click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("/view");
+    await page.waitForFunction(() => document.querySelector(".cm-tooltip-autocomplete li"));
+    await settle(page);
+    await page.locator(".cm-tooltip-autocomplete li").first().click();
+    await page.locator(".cm-base").nth(2).waitFor();
+    await page.locator(".cm-base").nth(2).scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   // files inside a page (K4): a picture with its caption, a PDF card, an audio player and a section of another note, in
   // place of their markdown
   "page-embeds": async (fixture = "embeds") => {
@@ -2440,7 +3000,9 @@ const VIEWS = {
     const status = page.getByLabel("status", { exact: true });
     await status.fill("Someday");
     await status.press("Enter");
-    await page.waitForFunction(() => /\nstatus: Someday\n/.test(window.__harness.written() ?? ""), null, { timeout: 4000 });
+    await page.waitForFunction(() => /\nstatus: Someday\n/.test(window.__harness.written() ?? ""), null, {
+      timeout: 4000,
+    });
     await page.getByRole("combobox", { name: "Note type" }).selectOption("Project");
     await page.waitForFunction(() => /type: Project\n/.test(window.__harness.written() ?? ""), null, { timeout: 4000 });
     await page.getByRole("combobox", { name: "status", exact: true }).hover();
@@ -2481,8 +3043,7 @@ const VIEWS = {
       throw new Error(`Jane Doe made with ${JSON.stringify(made)}`);
     await settle(page, 300);
   },
-  "typed-person": async (fixture = "kb") =>
-    VIEWS["typed-meeting"](fixture, "Contexts/Agency/People/Tom Willems.md"),
+  "typed-person": async (fixture = "kb") => VIEWS["typed-meeting"](fixture, "Contexts/Agency/People/Tom Willems.md"),
   "typed-person-dark": async () => VIEWS["typed-person"]("kb-dark"),
   // a Project's rail groups the meetings that link to it through about:
   "typed-project": async (fixture = "kb") => {
@@ -2496,7 +3057,10 @@ const VIEWS = {
     VIEWS["typed-meeting"](fixture, "Contexts/Agency/Projects/Northwind Portal/Documents/Pricing sketch.md"),
   "typed-untyped-dark": async () => VIEWS["typed-untyped"]("kb-sketch-dark"),
   // page icons and covers (issue 424): a page with its own icon and a cover banner; `note` another page of fixture kb
-  "page-icon-cover": async (fixture = "kb", note = "Contexts/Agency/Projects/Northwind Portal/Documents/Launch checklist.md") => {
+  "page-icon-cover": async (
+    fixture = "kb",
+    note = "Contexts/Agency/Projects/Northwind Portal/Documents/Launch checklist.md",
+  ) => {
     await VIEWS["typed-meeting"](fixture, note);
     await page.locator("[data-page-cover] img").waitFor();
     await settle(page, 300);
@@ -2519,7 +3083,8 @@ const VIEWS = {
     await page.getByRole("textbox", { name: "Page icon" }).fill("ab");
     await page.keyboard.press("Enter");
     await waitText("Only one emoji");
-    if (/\nicon:/.test((await page.evaluate(() => window.__harness.written())) ?? "")) throw new Error("ab was written");
+    if (/\nicon:/.test((await page.evaluate(() => window.__harness.written())) ?? ""))
+      throw new Error("ab was written");
     await settle(page);
   },
   "page-icon-project-dark": async () => VIEWS["page-icon-project"]("kb-dark"),
@@ -2550,7 +3115,8 @@ const VIEWS = {
     await page.locator('[data-folder="Contexts/Agency/Projects/Northwind Portal/Documents"]').click();
     const launch = page.locator('[data-page$="/Launch checklist.md"]', { hasText: "🚀" }).first();
     await launch.click();
-    if (await page.locator('[data-page$="/Brand notes.md"]', { hasText: "🚀" }).count()) throw new Error("an icon on a page without");
+    if (await page.locator('[data-page$="/Brand notes.md"]', { hasText: "🚀" }).count())
+      throw new Error("an icon on a page without");
     await settle(page, 300);
   },
   "pages-tree-icons-dark": async () => VIEWS["pages-tree-icons"]("kb-dark"),
@@ -2563,7 +3129,8 @@ const VIEWS = {
     await page.getByRole("textbox", { name: "Page icon" }).fill("🧭");
     await page.keyboard.press("Enter");
     await page.locator('[data-project="Northwind Portal"]', { hasText: "🧭" }).waitFor({ timeout: 4000 });
-    if (await page.locator('[data-project="Northwind Portal"] img').count()) throw new Error("the config picture stayed");
+    if (await page.locator('[data-project="Northwind Portal"] img').count())
+      throw new Error("the config picture stayed");
     await settle(page, 300);
   },
   // Add cover from a file: copied into the attachments folder, cover: written, the banner above the title
@@ -2573,9 +3140,13 @@ const VIEWS = {
     await page.locator("h1").hover();
     await page.getByRole("button", { name: "Add cover" }).click();
     await page.getByRole("button", { name: "Choose image…" }).click();
-    await page.waitForFunction(() => /\ncover: "\[\[Kickoff banner\.png\]\]"\n/.test(window.__harness.written() ?? ""), null, {
-      timeout: 4000,
-    });
+    await page.waitForFunction(
+      () => /\ncover: "\[\[Kickoff banner\.png\]\]"\n/.test(window.__harness.written() ?? ""),
+      null,
+      {
+        timeout: 4000,
+      },
+    );
     await page.locator("[data-page-cover] img").waitFor();
     await settle(page);
   },
@@ -2619,14 +3190,32 @@ const VIEWS = {
     await page.locator(".cm-content").click();
     await page.keyboard.press("Meta+End");
     await page.keyboard.type("\n/");
-    await page.locator(".cm-tooltip-autocomplete").waitFor();
-    await settle(page);
+    await page.waitForFunction(() => document.querySelector(".cm-tooltip-autocomplete li"));
+    await settle(page); // past the menu's interactionDelay, when Enter picks instead of breaking the line
   },
   "editor-slash-menu-dark": async () => {
     await VIEWS["page-view-dark"]();
     await page.locator(".cm-content").click();
     await page.keyboard.press("Meta+End");
     await page.keyboard.type("\n/to");
+    await page.waitForFunction(() => document.querySelector(".cm-tooltip-autocomplete li"));
+    await settle(page); // past the menu's interactionDelay, when Enter picks instead of breaking the line
+  },
+  // /me: the registry's typed items (a type with a home and a template) next to the blocks
+  "editor-slash-typed": async () => {
+    await VIEWS["page-view"]();
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("\n/me");
+    await page.locator(".cm-tooltip-autocomplete").waitFor();
+    await settle(page);
+  },
+  // `/meeting Kickoff`: the title typed inline, the one item says what Enter does
+  "editor-slash-title": async () => {
+    await VIEWS["page-view"]();
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("\n/meeting Kickoff");
     await page.locator(".cm-tooltip-autocomplete").waitFor();
     await settle(page);
   },
@@ -2636,8 +3225,8 @@ const VIEWS = {
     await page.locator(".cm-content").click();
     await page.keyboard.press("Meta+End");
     await page.keyboard.type("\nSee [[Nor");
-    await page.locator(".cm-tooltip-autocomplete").waitFor();
-    await settle(page);
+    await page.waitForFunction(() => document.querySelector(".cm-tooltip-autocomplete li"));
+    await settle(page); // past the menu's interactionDelay, when Enter picks instead of breaking the line
   },
   // a table from the / menu, filled with Tab; Tab in the last cell adds a row
   "editor-table": async () => {
@@ -2645,7 +3234,7 @@ const VIEWS = {
     await page.locator(".cm-content").click();
     await page.keyboard.press("Meta+End");
     await page.keyboard.type("\n\n/table");
-    await page.locator(".cm-tooltip-autocomplete").waitFor();
+    await page.waitForFunction(() => document.querySelector(".cm-tooltip-autocomplete li"));
     // CodeMirror takes Enter as a pick only 75 ms after the list opened, by Date.now, which the harness pins: move it on
     await page.clock.setFixedTime(await page.evaluate(() => Date.now() + 1000));
     await page.keyboard.press("Enter");
@@ -2686,6 +3275,29 @@ const VIEWS = {
     await settingsPage("General");
     await intoView("Propose the day's time from conversations");
   },
+  // Windows (W10): dictation from any app switched on, its keys with Ctrl, no Accessibility to allow
+  "settings-voice-windows": async () => {
+    await settingsPage("Voice", undefined, "default", "windows");
+    for (const id of ["#voicechat", "#voicepaste"]) await page.locator(id).click();
+    await settle(page);
+  },
+  // the same keys in Settings › Shortcuts, with quick capture's Ctrl+Alt+N (W10)
+  "settings-shortcuts-windows": async () => {
+    await settingsPage("Voice", undefined, "default", "windows");
+    for (const id of ["#voicechat", "#voicepaste"]) await page.locator(id).click();
+    await click("Shortcuts");
+    await intoView("Paste in any app");
+  },
+  "settings-shortcuts-capture-windows": async () => {
+    await settingsPage("Shortcuts", undefined, "default", "windows");
+    await intoView("Quick capture");
+  },
+  // Settings › General › Permissions on Windows: the microphone only, no Accessibility (W7, W10)
+  "settings-permissions-windows": async () => {
+    await settingsPage("General", undefined, "default", "windows");
+    await scrollMain("bottom");
+    await settle(page);
+  },
   // Settings › General › Permissions: the mock has Full Disk Access missing (PR permissions-check)
   "settings-permissions": async () => {
     await settingsPage("General");
@@ -2716,28 +3328,32 @@ const VIEWS = {
     await unfold("Claude Code");
     await intoView("Switch accounts automatically");
   },
-  // the board pipeline of a project with a linked board, folded open in Settings › Projects
+  // the same, new conversations on the account with the most room: the choice and its hint
+  "settings-agent-most-room": async () => {
+    await settingsPage("Agents", undefined, "accounts");
+    await unfold("Claude Code");
+    await page.getByLabel("New conversations use").selectOption("most-room");
+    await settle(page);
+    await intoView("Switch accounts automatically");
+  },
+  // the board pipeline of a project with a linked board, its Pipeline tab in Settings › Projects
   "settings-pipeline": async () => {
-    await settingsPage("Projects");
-    await unfold("Northwind Portal");
+    await projectTab("Pipeline");
     await intoView("Agents at once");
   },
-  // the same, its top: the per-project switch, the checkout and the branch
+  // the same, its top: the switch, how it picks up, the ticket flow
   "settings-pipeline-top": async () => {
-    await settingsPage("Projects");
-    await unfold("Northwind Portal");
-    await intoView("Board pipeline");
+    await projectTab("Pipeline");
+    await intoView("Ticket flow");
   },
   // the same: the skill the agent follows per ticket, above plan first
   "settings-pipeline-skill": async () => {
-    await settingsPage("Projects");
-    await unfold("Northwind Portal");
+    await projectTab("Pipeline");
     await intoView("Plan first");
   },
   // the same with a skill filled in: Plan first is gone, the skill decides that per ticket
   "settings-pipeline-skill-set": async () => {
-    await settingsPage("Projects");
-    await unfold("Northwind Portal");
+    await projectTab("Pipeline");
     await intoView("Skill");
     const field = page.getByPlaceholder("ticket-flow:develop");
     await field.fill("ticket-flow:develop");
@@ -2746,8 +3362,7 @@ const VIEWS = {
   },
   // the same: the validation before a PR (checks, review, rounds)
   "settings-pipeline-validation": async () => {
-    await settingsPage("Projects");
-    await unfold("Northwind Portal");
+    await projectTab("Pipeline");
     await intoView("Rounds");
   },
   // Settings › Plugins with the example plugin (its view found, one tool allowed), and its own page: how the server starts,
@@ -2917,6 +3532,13 @@ const VIEWS = {
   "today-t3-dark": async () => todayDay("t3", true),
   "today-empty": async () => todayDay("empty", false),
   "today-empty-dark": async () => todayDay("empty", true),
+  // Upload recording on a meeting: an audio file picked (the mock's `pickFiles`), then the bar shows it transcribing
+  "meeting-upload": async () => {
+    await meetingBriefing("calendar", "Daily standup", true);
+    await page.evaluate(() => window.__harness.pickFiles.push("/Users/me/Downloads/standup-call.m4a"));
+    await click("Upload recording");
+    await waitText("transcribing 0%");
+  },
   "meeting-live": async () => meetingLive("calendar"),
   "meeting-briefing-dark": async () => meetingBriefing("calendar-dark", "Daily standup", true),
   "meeting-live-dark": async () => meetingLive("calendar-dark"),

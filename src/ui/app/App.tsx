@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { urlOk } from "../../shared/markdown";
-import { isView, MAIL } from "../../domain/navigation/views";
-import { noteKey } from "../../domain/navigation/keys";
+import { isView, MAIL, pageOf } from "../../domain/navigation/views";
 import { useNavigationStore } from "../../application/navigation/store";
 import { useConversationsStore } from "../../application/conversations/store";
 import { useWorkspaceStore } from "../../application/workspace/store";
@@ -13,15 +12,18 @@ import {
   openExternal,
   select,
   closeAgent,
+  goBack,
 } from "../../application/navigation/navigation";
 import { ORCH } from "../../domain/orchestrator/rules";
-import { closeDrawer, closeTicket, openDetail } from "../../application/navigation/panel";
+import { closeDrawer, closeTicket } from "../../application/navigation/panel";
 import { request } from "../../application/navigation/requests";
 import { toggleShowMarkdown } from "../../application/navigation/editor";
 import { isKey, mailExperimental, settings } from "../../application/settings/settings";
 import { switchToNth } from "../../application/navigation/workspaces";
-import { workspaceDigit } from "../../domain/settings/shortcuts";
-import { swapSidebarTab } from "../../application/navigation/pages";
+import { isBinding, workspaceDigit } from "../../domain/settings/shortcuts";
+import { isMac } from "../../shared/platform";
+import { menuKey } from "../../application/boot";
+import { openNoteLink, swapSidebarTab } from "../../application/navigation/pages";
 import { useMailStore } from "../../application/mail/store";
 import {
   clearMailSelection,
@@ -51,10 +53,10 @@ const closest = <T extends HTMLElement>(e: Event, match: (node: HTMLElement) => 
   e.composedPath().find((node): node is T => node instanceof HTMLElement && match(node));
 
 // ---------- the shortcuts that work anywhere in the main window, registered once
-// Esc closes the image, then the ticket window, a changed file's, a commit's or a file's window, then the right drawer, then a project's board or PRs, then stops the
-// running turn
+// Esc closes the image, then the ticket window, a changed file's, a commit's or a file's window, then the right drawer,
+// then a project's board or PRs, then goes back from a page to what opened it, then stops the running turn
 function onEscape(e: KeyboardEvent) {
-  const { zoom: zoomed, panel, drawer, tool, projectPanel, quickAsk, selected } = useNavigationStore.getState();
+  const { zoom: zoomed, panel, drawer, tool, projectPanel, quickAsk, selected, back } = useNavigationStore.getState();
   if (zoomed) {
     e.preventDefault();
     zoom("");
@@ -113,6 +115,19 @@ function onEscape(e: KeyboardEvent) {
     closeTool();
     return;
   }
+  // a page opened from a conversation or a view: back to it. Not from a field, nor when Esc was a popover's or took
+  // the editor's selection away (both call preventDefault), nor with text selected in the page
+  if (
+    back &&
+    pageOf(selected) &&
+    !e.defaultPrevented &&
+    !inField(e, "input, textarea, select") &&
+    document.getSelection()?.isCollapsed !== false
+  ) {
+    e.preventDefault();
+    void goBack();
+    return;
+  }
   // the search and the title are inputs: Esc in them is theirs (the composer is a textarea, Esc there stops the turn)
   const turnRunning = useConversationsStore.getState().status[selected] === "busy" && !projectPanel && !quickAsk;
   if (turnRunning && !inField(e, "input, select")) {
@@ -120,11 +135,23 @@ function onEscape(e: KeyboardEvent) {
     escStop();
   }
 }
-// typing anywhere in an open conversation goes to the composer, focused or not: the key itself then lands there
-function typesIntoComposer(e: KeyboardEvent) {
+// typing anywhere in an open conversation goes to the composer, focused or not: the key itself then lands there.
+// Ctrl-V on Windows too: the paste follows the focus, text or a picture
+function composerTakes(e: Event) {
   const { selected, projectPanel, quickAsk } = useNavigationStore.getState();
+  return !isView(selected) && !projectPanel && !quickAsk && !inField(e);
+}
+function typesIntoComposer(e: KeyboardEvent) {
   const isCharacter = e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.isComposing;
-  return isCharacter && !isView(selected) && !projectPanel && !quickAsk && !inField(e);
+  return (isCharacter || isBinding(e, "mod+KeyV")) && composerTakes(e);
+}
+// macOS: the Edit menu takes Cmd-V before the page sees a keydown (the window's webview is a child of the window, for
+// the Design drawer, and wry then passes key equivalents to the menu). WebKit asks the page before the menu's paste:
+// focus the composer and allow it, the paste then lands there
+function onBeforePaste(e: Event) {
+  if (!composerTakes(e)) return;
+  request("focus-composer");
+  e.preventDefault();
 }
 // the Mail view, experimental, as in Gmail and Keel: E archives, # or Delete deletes, Cmd-A ticks all, Esc unticks
 // before the app's Esc (each as Settings › Shortcuts has it). Whether it handled the key.
@@ -172,8 +199,20 @@ function stuckArrow(e: KeyboardEvent) {
     (e.key === "ArrowUp" && atStart)
   );
 }
+// Ctrl-C on Windows is copy too: with text selected it copies, the turn keeps running
+function copies(e: KeyboardEvent) {
+  if (!isBinding(e, "mod+KeyC")) return false;
+  const el = e.target;
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return el.selectionStart !== el.selectionEnd;
+  return document.getSelection()?.isCollapsed === false;
+}
 function onKey(e: KeyboardEvent) {
   if (stuckArrow(e)) {
+    e.preventDefault();
+    return;
+  }
+  // Windows has no menu bar: Ctrl-T, Ctrl-W, Ctrl-N and the like come here (macOS: the menu takes them first)
+  if (!isMac() && !e.defaultPrevented && menuKey(e)) {
     e.preventDefault();
     return;
   }
@@ -183,7 +222,7 @@ function onKey(e: KeyboardEvent) {
     // Cmd-K: a question that starts a general conversation in the background
     e.preventDefault();
     toggleQuickAsk();
-  } else if (isKey(e, "app.stop")) {
+  } else if (isKey(e, "app.stop") && !copies(e)) {
     // Ctrl-C like in the terminal: stops a running turn, otherwise clears what is typed
     e.preventDefault();
     ctrlC();
@@ -201,7 +240,12 @@ function onKey(e: KeyboardEvent) {
     // Cmd-.: the sidebar's other tab, Chats or Pages
     e.preventDefault();
     swapSidebarTab();
-  } else if (workspaceDigit(settings(), e)) {
+  } else if (isKey(e, "app.back") && useNavigationStore.getState().back) {
+    // ⌘[: a page back to the conversation or view it was opened from
+    e.preventDefault();
+    void goBack();
+  } else if (!e.defaultPrevented && workspaceDigit(settings(), e)) {
+    // (not when the editor took it: the meeting notes mark a line with Ctrl-1 to 3 on Windows)
     // ⌃1 to ⌃9 by default (Settings › Shortcuts): the workspace at that place in the footer's menu
     e.preventDefault();
     switchToNth(workspaceDigit(settings(), e));
@@ -213,11 +257,11 @@ function onKey(e: KeyboardEvent) {
 function onLink(e: MouseEvent) {
   // a component that handled the click itself (a picture that opens in the viewer window)
   if (e.defaultPrevented) return;
-  // a vault note named in markdown opens in the right drawer (shared/markdown.ts)
+  // a vault note named in markdown opens as a page (shared/markdown.ts)
   const noteLink = closest(e, node => !!node.dataset.note);
   if (noteLink) {
     e.preventDefault();
-    openDetail(noteKey(noteLink.dataset.note!));
+    void openNoteLink(noteLink.dataset.note!);
     return;
   }
   // a code block's copy button (shared/markdown.ts)
@@ -245,9 +289,11 @@ export function App() {
   useEffect(() => {
     window.addEventListener("keydown", onKey);
     document.addEventListener("click", onLink);
+    document.addEventListener("beforepaste", onBeforePaste);
     return () => {
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("click", onLink);
+      document.removeEventListener("beforepaste", onBeforePaste);
     };
   }, []);
 

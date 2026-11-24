@@ -1,6 +1,5 @@
 import type { VaultCount } from "../../../domain/usage/types";
-import { noteKey } from "../../../domain/navigation/keys";
-import { openDetail } from "../../../application/navigation/panel";
+import { openNoteLink } from "../../../application/navigation/pages";
 import { useUsageStore } from "../../../application/usage/store";
 import { num } from "../../../application/usage/usage";
 import { useT } from "../../hooks/useT";
@@ -12,7 +11,7 @@ const NOTE = "text-sm text-secondary";
 const STATS = ["read", "write", "edit", "search"] as const;
 
 /** The usage view's Vault tab: what the agents' tool calls did in this vault, this week and today, the notes they
- *  read and changed most, and the week per folder. A note opens in the drawer on a click. */
+ *  read and changed most, and the week per folder. A note opens as a page on a click. */
 export function VaultUsage() {
   const { t, locale } = useT();
   const vault = useUsageStore(s => s.tokens?.vault);
@@ -32,7 +31,7 @@ export function VaultUsage() {
               key={x.path}
               className="flex items-center gap-3 py-2 border-t border-separator first-of-type:border-t-0 text-left hover:text-accent-text"
               title={x.path}
-              onClick={() => openDetail(noteKey(x.path))}
+              onClick={() => void openNoteLink(x.path)}
             >
               <span className="flex-1 min-w-0 flex flex-col">
                 <span className="truncate text-sm">{x.path.slice(slash + 1).replace(/\.md$/, "")}</span>

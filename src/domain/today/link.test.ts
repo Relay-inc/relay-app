@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { byNumber, byTitle, numbersIn } from "./link.ts";
+import { alreadyLinked, byNumber, byTitle, movesToReview, numbersIn } from "./link.ts";
 
 const cards = [
   { id: "a", number: "212", title: "Update the estimate in the contract appendix" },
@@ -31,4 +31,22 @@ test("a PR on a card by title: most words shared and clearly the closest", () =>
   assert.equal(byTitle("Invoice export per sprint", cards)?.id, "c");
   assert.equal(byTitle("Refactor the login", cards), null);
   assert.equal(byTitle("Fix", cards), null, "too few words to say");
+});
+
+test("a card moves to review from in progress only, and never backwards or twice", () => {
+  const review = { id: "r", state: "doing" as const };
+  assert.equal(movesToReview({ state: "doing" }, "p", review), true);
+  assert.equal(movesToReview({ state: "doing" }, "r", review), false, "already there");
+  assert.equal(movesToReview({ state: "todo" }, "t", review), false);
+  assert.equal(movesToReview({ state: "done" }, "d", review), false);
+  assert.equal(movesToReview({}, "x", review), false, "a tracker without states");
+  assert.equal(movesToReview({ state: "doing" }, "p", { id: "t", state: "todo" }), false, "a step back");
+  assert.equal(movesToReview({ state: "doing" }, "p", { id: "d", state: "done" }), false);
+  assert.equal(movesToReview({ state: "doing" }, "p", undefined), false, "no review column set");
+});
+
+test("the first run of the review move records the PRs that have a ticket and nothing else", () => {
+  const links = { a: { card: "1" }, b: {}, c: { card: "3" } };
+  assert.deepEqual(alreadyLinked(links, ["a", "b", "d"]), ["a"]);
+  assert.deepEqual(alreadyLinked({}, ["a"]), []);
 });

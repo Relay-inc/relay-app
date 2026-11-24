@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Machine, SharedVault } from "../../../domain/settings/types";
+import type { Machine } from "../../../domain/settings/types";
 import { newerVersion, setupCommands } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
 import { forgetMachine, pairPhone, updateMachine } from "../../../application/settings/machines-page";
@@ -10,13 +10,12 @@ import { MachineGithub } from "./MachineGithub";
 import { MachineMirror } from "./MachineMirror";
 import { MachineRepos } from "./MachineRepos";
 import { CommandBlock } from "./MachineSetup";
-import { MachineVaults } from "./SharedVaults";
 import { StatusLine } from "./StatusLine";
 
 /** A paired machine on Settings › Machines: its name, address, whether it is online and its fingerprint, Forget (with
- *  how to revoke it on the machine), its mirror and last the workspaces it keeps. One for shared vaults only says so
- *  instead of a mirror: no mirror, phone or GitHub there. One this Mac keeps as a vault's admin (`auto`) has no Forget: it comes and goes with that role. */
-export function MachineRow({ machine, vaults }: { machine: Machine; vaults?: SharedVault[] }) {
+ *  how to revoke it on the machine), its mirror, GitHub and repos. The workspaces it keeps are on Settings › Workspaces.
+ *  One for shared vaults only says so instead of a mirror: no mirror, phone or GitHub there. One this Mac keeps as a vault's admin (`auto`) has no Forget: it comes and goes with that role. */
+export function MachineRow({ machine }: { machine: Machine }) {
   const { t, th } = useT();
   const status = useSettingsStore(s => s.machinesPage.status[machine.id]);
   const message = useSettingsStore(s => s.machinesPage.messages[machine.id]);
@@ -133,7 +132,6 @@ export function MachineRow({ machine, vaults }: { machine: Machine; vaults?: Sha
           {status.repos ? <MachineRepos machine={machine} /> : null}
         </>
       ) : null}
-      <MachineVaults machine={machine} vaults={vaults} />
     </div>
   );
 }

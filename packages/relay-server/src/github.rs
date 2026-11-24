@@ -36,7 +36,7 @@ fn base() -> String { var("RELAY_GITHUB_URL").unwrap_or_else(|| "https://github.
 fn api() -> String { var("RELAY_GITHUB_API").unwrap_or_else(|| "https://api.github.com".into()).trim_end_matches('/').into() }
 /// Where the repos are cloned: RELAY_SERVER_REPOS, else `~/repos` (a LaunchAgent on a Mac may not read ~/Documents).
 pub fn repos_dir() -> PathBuf {
-    var("RELAY_SERVER_REPOS").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("repos"))
+    var("RELAY_SERVER_REPOS").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(crate::home()).join("repos"))
 }
 
 /// What is sealed, and the RAM copy the helper reads.
@@ -46,7 +46,7 @@ struct Token { token: String, login: String, since: String }
 /// One request with curl (on a Mac and in the image, no HTTP client in this binary), its JSON answer. `stdin` carries
 /// what must stay off the command line, read by curl with `-d @-` or `-H @-`.
 fn curl(url: &str, args: &[&str], stdin: &str) -> Result<Value, String> {
-    let mut c = Command::new("curl").args(["-fsS", "-m", "15", "-H", "Accept: application/json"]).args(args).arg(url)
+    let mut c = crate::cmd("curl").args(["-fsS", "-m", "15", "-H", "Accept: application/json"]).args(args).arg(url)
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| format!("curl: {e}"))?;
     if let Some(mut i) = c.stdin.take() { i.write_all(stdin.as_bytes()).ok(); }
     let out = c.wait_with_output().map_err(|e| format!("curl: {e}"))?;
@@ -80,17 +80,25 @@ fn parse_poll(v: &Value) -> Poll {
 
 fn state(s: &str) -> Github { Github { state: s.into(), ..Default::default() } }
 fn email(login: &str) -> String { format!("{login}@users.noreply.github.com") }
-/// `date` here, in local time (no date crate in this binary).
+/// `date` here, in local time (no date crate in this binary), `+%Y-%m-%d` style. PowerShell's on Windows, where
+/// `date` is a cmd built-in that sets the clock.
 fn date(fmt: &str) -> String {
-    Command::new("date").arg(fmt).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default()
+    let mut c = if cfg!(windows) { let mut c = crate::cmd("powershell.exe"); c.args(["-NoProfile", "-NonInteractive", "-Command", &format!("Get-Date -UFormat '{}'", fmt.trim_start_matches('+'))]); c }
+        else { let mut c = Command::new("date"); c.arg(fmt); c };
+    c.stdin(Stdio::null()).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default()
 }
 
-/// A word for git's shell (a helper that starts with `!` runs through sh).
-fn sq(s: &str) -> String { format!("'{}'", s.replace('\'', r"'\''")) }
+/// A word for git's shell (a helper that starts with `!` runs through sh, on Windows the sh of Git for Windows). Forward
+/// slashes on Windows, which that sh and Windows both take, so no backslash ever meets a shell.
+fn sq(s: &str) -> String {
+    let s = if cfg!(windows) { s.replace('\\', "/") } else { s.to_string() };
+    format!("'{}'", s.replace('\'', r"'\''"))
+}
 /// The credential helper as git runs it: this binary (`--relay-server` when it is the Relay app) with the RAM copy's
-/// path, so it needs no running server. Git adds `get`, `store` or `erase`.
+/// path, so it needs no running server. Git adds `get`, `store` or `erase`. By its full path, so on Windows the
+/// `.exe` is found without the PATH, and `relay.exe` is the app.
 pub fn helper_cmd(exe: &Path, file: &Path) -> String {
-    let flag = if exe.file_name().is_some_and(|n| n == "relay-server") { "" } else { " --relay-server" };
+    let flag = if crate::upgrade::is_server(exe) { "" } else { " --relay-server" };
     format!("!{}{flag} git-credential {}", sq(&exe.to_string_lossy()), sq(&file.to_string_lossy()))
 }
 /// The environment for git: no credential helper but `helper` (no keychain, no prompt), the commit identity `who`
@@ -140,7 +148,7 @@ fn github_repo(url: &str) -> String {
 
 /// git in `dir` with `env`, never a prompt: its trimmed output, or its trimmed stderr as the error.
 fn git(dir: &Path, env: &[(String, String)], args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git").args(args).current_dir(dir).envs(env.iter().map(|(k, v)| (k, v))).env("GIT_TERMINAL_PROMPT", "0")
+    let out = crate::cmd("git").args(args).current_dir(dir).envs(env.iter().map(|(k, v)| (k, v))).env("GIT_TERMINAL_PROMPT", "0")
         .stdin(Stdio::null()).output().map_err(|e| format!("git: {e}"))?;
     if out.status.success() { return Ok(String::from_utf8_lossy(&out.stdout).trim().to_string()); }
     let e = String::from_utf8_lossy(&out.stderr).trim().to_string();
@@ -383,6 +391,9 @@ mod tests {
         let h = helper_cmd(Path::new("/opt/it's/relay-server"), Path::new("/w/abc/.github"));
         assert_eq!(h, r"!'/opt/it'\''s/relay-server' git-credential '/w/abc/.github'");
         assert!(helper_cmd(Path::new("/Applications/Relay.app/Contents/MacOS/relay"), Path::new("/w")).contains("relay' --relay-server git-credential"));
+        // Windows: relay-server.exe is the server, relay.exe the app
+        assert!(!helper_cmd(Path::new("C:/Relay/server/bin/relay-server.exe"), Path::new("C:/w")).contains("--relay-server"));
+        assert!(helper_cmd(Path::new("C:/Program Files/Relay/relay.exe"), Path::new("C:/w")).contains("relay.exe' --relay-server git-credential"));
         let env = git_env(Some(&h), Some(("Relay (box)", "octo@users.noreply.github.com")));
         let get = |k: &str| env.iter().find(|(x, _)| x == k).map(|(_, v)| v.as_str());
         assert_eq!(get("GIT_CONFIG_COUNT"), Some("4"));

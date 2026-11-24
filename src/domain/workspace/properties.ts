@@ -4,7 +4,7 @@ import { typeOf, type FieldKind, type Registry } from "../types/registry.ts";
 // A page's properties: its frontmatter as rows to edit. An edit rewrites only the lines of the key it touches, the
 // rest of the frontmatter (comments, quoting, order, keys Relay does not understand) stays byte for byte.
 
-const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
+export const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
 
 export type PropertyKind = "text" | "date" | "list" | "link" | "check" | "select" | "raw";
 export type PropertyValue = string | number | boolean | null | string[];

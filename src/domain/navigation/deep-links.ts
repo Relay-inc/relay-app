@@ -1,12 +1,15 @@
+import type { BoardRef } from "../board/types.ts";
 import type { Meeting } from "../calendar/types.ts";
 
 /** What a relay:// link asks for. `ask` only fills Cmd-K: a link from outside (any web page can open one) never sends
- *  a prompt by itself, the user presses Enter. `meeting` (from Keel) likewise only offers its action. */
+ *  a prompt by itself, the user presses Enter. `meeting` (from Keel) likewise only offers its action, and `ticket` only
+ *  opens the ticket window: Start working stays a click there. */
 export type MeetingLinkAct = "prep" | "record" | "note";
 export type DeepLink =
   | { kind: "ask"; text: string }
   | { kind: "open"; query: string }
-  | { kind: "meeting"; act: MeetingLinkAct; meeting: Meeting };
+  | { kind: "meeting"; act: MeetingLinkAct; meeting: Meeting }
+  | { kind: "ticket"; provider: string; id: string; project?: string };
 const ACTS: MeetingLinkAct[] = ["prep", "record", "note"];
 
 /** relay://ask opens Cmd-K, relay://ask?q=… with the question typed, relay://open?q=… the best matching project. */
@@ -22,8 +25,28 @@ export function parseLink(link: string): DeepLink | null {
   if (url.host === "ask") return { kind: "ask", text: query };
   if (url.host === "open") return { kind: "open", query };
   if (url.host === "meeting") return meetingLink(url.searchParams);
+  if (url.host === "ticket") return ticketLink(url.searchParams);
   return null;
 }
+
+/** relay://ticket?provider=productive&id=<task id>, and `project` (the tracker's project id) to tell apart two boards of
+ *  one tracker. */
+function ticketLink(p: URLSearchParams): DeepLink | null {
+  const provider = p.get("provider")?.trim();
+  const id = p.get("id")?.trim();
+  if (!provider || !id) return null;
+  return { kind: "ticket", provider, id, project: p.get("project")?.trim() || undefined };
+}
+
+/** The board a ticket link opens over: one linked to a vault project (settings.boards) on that tracker, the one in
+ *  `project` when the link names it. */
+export const boardOfLink = (
+  boards: Record<string, BoardRef> | undefined,
+  link: { provider: string; project?: string },
+) =>
+  Object.values(boards ?? {}).find(
+    ref => ref.provider === link.provider && (!link.project || ref.project === link.project),
+  );
 
 /** relay://meeting?do=prep|record|note&uid=…&start=…&end=… (unix seconds) and title, location, join, organizer and
  *  `with` per guest ("Name <mail>"): the meeting as the calendar feeds give it (id uid@start, src-tauri/src/calendar.rs),

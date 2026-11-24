@@ -14,6 +14,7 @@ import {
 } from "../../domain/board/rules";
 import { parsePresets, savePreset, type Facet, type Filters, type Preset } from "../../domain/board/filter";
 import { moveCard } from "../../domain/board/moves";
+import { branchName } from "../../domain/board/branch";
 import { storage } from "../../infrastructure/storage";
 import { saveMainSettings, settings } from "../settings/settings";
 import { PRS } from "../../domain/navigation/views";
@@ -384,22 +385,26 @@ export async function createCard(provider: BoardProvider, column: string, title:
 export const openBoardCard = (provider: BoardProvider, id: string) =>
   openCard(provider, refOf(provider, boardState(provider)), id);
 /** A card Cmd-K found: the ticket window opens over its tracker's board (whichever board that shows), it has no other place. */
-export async function openFoundCard(provider: BoardProvider, hit: Hit) {
+export async function openFoundCard(provider: BoardProvider, hit: Pick<Hit, "id" | "ref">) {
   await select(boardKey(provider.id));
   return openCard(provider, hit.ref, hit.id);
 }
+export type TicketText = { number: string; title: string; url?: string; labels?: string[] };
 /** "Start conversation" in the ticket window: a new conversation under the board's vault project (or `project`, a card
  *  under Today comes from a board that need not be on screen), with the card's number, title and link typed in its
- *  composer; the draft keeps its title. */
+ *  composer, and the team's branch for it: the agent works in a git worktree on <type>/<number>-<slug> (the branch is
+ *  reused when it exists) and the PR carries the number and the link. The draft keeps its title. */
 export async function ticketChat(
   provider: BoardProvider,
-  text: string,
-  project = linkedProject(provider),
+  ticket: TicketText,
+  project?: string,
   pictures: [string, string][] = [],
 ) {
-  const key = newChat(project || null);
   // remembered, so the ticket lists it under Linked
-  const card = useNavigationStore.getState().panel.modal;
+  const { modal: card, cardRefs } = useNavigationStore.getState().panel;
+  // the card's own board decides, it need not be the one on screen (a relay://ticket link opens any card)
+  project ||= projectOfRef(cardRefs[card]) || linkedProject(provider);
+  const key = newChat(project || null);
   if (card) {
     useBoardStore.setState(draft => {
       draft.ticketChats[card] = [...(draft.ticketChats[card] ?? []), key];
@@ -408,10 +413,22 @@ export async function ticketChat(
   }
   closeTicket();
   await select(key);
-  typeInto(key, text);
+  typeInto(key, await ticketBrief(key, ticket, project));
   // the ticket's pictures as attached images: the agent cannot open the tracker's links.
   // ponytail: lands in the composer that is open when the download ends, switch away within that second and it goes there
   if (pictures.length) await attachPaths(await backend.ticketPictures(provider.id, pictures).catch(() => []));
+}
+
+// the ticket as typed in, and the branch to work on: the agent makes the worktree itself (as it does in any
+// conversation, Relay removes it when the conversation closes). Without a checkout on this Mac, or without a project,
+// only the ticket; with several the agent asks which first.
+async function ticketBrief(key: string, ticket: TicketText, project: string) {
+  const head = [`${ticket.number} ${ticket.title}`.trim(), ticket.url].filter(Boolean).join("\n");
+  const repos = project ? await backend.gitRepos(key, project).catch(() => []) : [];
+  if (!repos.length) return head;
+  const branch = branchName(ticket.number, ticket.title, ticket.labels);
+  const vars = { branch, number: ticket.number, url: ticket.url ?? "", repos: repos.map(repo => repo.name).join(", ") };
+  return `${head}\n\n${t(repos.length > 1 ? "ticket.branchAsk" : "ticket.branch", vars)}`;
 }
 
 // ---------- which vault project a board belongs to: a vault project has at most one board
@@ -421,7 +438,10 @@ export const vaultProjects = (): [string, string][] =>
     .getState()
     .snap.projects.map((project): [string, string] => [project.name, projectLabel(project.name)])
     .sort((a, b) => a[1].localeCompare(b[1], currentLocale()));
-/** The vault project the board is linked to, "" when none. */
+/** The vault project a board is linked to, "" when none. */
+export const projectOfRef = (ref: BoardRef | undefined) =>
+  (ref && Object.entries(settings().boards || {}).find(([, linked]) => sameRef(linked, ref))?.[0]) || "";
+/** The vault project the board on screen is linked to, "" when none. */
 export const linkedProject = (provider: BoardProvider) =>
   Object.entries(settings().boards || {}).find(([, ref]) => sameRef(ref, refOf(provider, boardState(provider))))?.[0] ??
   "";

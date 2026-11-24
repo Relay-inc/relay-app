@@ -3,6 +3,7 @@
 // what Obsidian reads.
 
 import { formatTable, newTable } from "./tables.ts";
+import { typeOf, type NoteType, type Registry } from "../types/registry.ts";
 
 export type BlockKind =
   | "text"
@@ -18,10 +19,32 @@ export type BlockKind =
   | "table"
   | "divider"
   | "link"
-  | "file";
+  | "file"
+  | "view";
 
 /** A new table: three columns, a header and two rows, empty; the caret goes in the first header cell. */
 const NEW_TABLE = formatTable(newTable(["", "", ""], 2)).join("\n");
+
+/** A new view (issue 421): an Obsidian base of the meetings about the page it is in, newest first. */
+export const NEW_VIEW = [
+  "```base",
+  "filters:",
+  "  and:",
+  '    - type == "Meeting"',
+  "    - about.contains(this)",
+  "views:",
+  "  - type: table",
+  "    name: Meetings",
+  "    order:",
+  "      - file.name",
+  "      - date",
+  "      - with",
+  "    sort:",
+  "      - property: date",
+  "        direction: DESC",
+  "```",
+  "",
+].join("\n");
 
 /** What a / item puts on its (empty) line, and where the cursor goes in it. */
 export const SLASH: { kind: BlockKind; insert: string; caret: number }[] = [
@@ -37,7 +60,20 @@ export const SLASH: { kind: BlockKind; insert: string; caret: number }[] = [
   { kind: "table", insert: NEW_TABLE, caret: 2 },
   { kind: "divider", insert: "---\n", caret: 4 },
   { kind: "link", insert: "[[", caret: 2 },
+  { kind: "view", insert: NEW_VIEW, caret: NEW_VIEW.length },
 ];
+
+/** The / items of the registry: a type with a home and a template makes a note there (a type without a home has no item). */
+export const typedSlash = (registry: Registry) => registry.types.filter(t => t.home && t.template);
+
+/** The note a typed title already names, a person met before: it is linked, not made again. `rows` are the workspace's
+ *  notes (path, title, `type:`). */
+export const existingNote = (
+  rows: { p: string; t: string; k: string }[],
+  registry: Registry,
+  type: NoteType,
+  title: string,
+) => rows.find(r => typeOf(registry, r.k)?.name === type.name && r.t.toLowerCase() === title.trim().toLowerCase())?.p;
 
 // a line's block marker: a heading's #s, a to-do's or list's mark, a quote's >
 const MARKER = /^(\s*)(#{1,6} |[-*+] \[[ xX]\] |[-*+] |\d+[.)] |> ?)?/;

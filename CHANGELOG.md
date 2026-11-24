@@ -3,18 +3,159 @@
 Every PR adds a line under **Unreleased**, in the group that fits (Added, Changed, Fixed, Removed). CI fails a PR
 that doesn't touch this file; the `skip-changelog` label opts out (docs, CI, refactors nobody notices).
 
-To release: move Unreleased under a new version heading with the date, then set that version in `package.json` and
+To release: move Unreleased under a new version heading with the date, then set that version in `package.json`,
 the root `Cargo.toml` (`[workspace.package]`, the app and relay-server read it there, `tauri.conf.json` reads it from
-`package.json`). Once that is on main, run `scripts/release.sh` on a Mac, on main: it builds Relay and publishes it as
+`package.json`) and the image tag in `deploy/relay-server/compose.yml`. Once that is on main, run `scripts/release.sh` on a Mac, on main: it builds Relay and publishes it as
 GitHub release `v<version>` with this version's section as its notes, then pushes relay-server's image and attaches
-its Linux binaries (`scripts/push-server-image.sh`). Nothing of a release runs in GitHub Actions, only the checks of
-a PR. Versions follow
+its Linux binaries (`scripts/push-server-image.sh`). The Windows installer is built on a Windows machine with
+`scripts/release-windows.ps1`, not in GitHub Actions: `RELAY_WINDOWS_SETUP=/path/to/Relay_<version>_x64-setup.exe`
+makes the script add it to the release (docs/development.md › Releasing for Windows). Versions follow
 [semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
 
+### Fixed
+
+- Cmd-V outside a field pastes into the composer on the Mac too: the Edit menu took the key before Relay saw it. (#521)
+### Changed
+
+- The board pipeline has a branch to start from and a separate branch the PRs go to, so work can start from main and go to staging. Left empty, the PRs go to the branch the work started from, as before. The repo rows in its settings keep a long repo name and path on one line, the full path in the tooltip.
+- Settings › Projects is a list of projects with the picked one beside it, in two tabs: General (name and icon, the repos with their checkout on this Mac and whether agents may change them, the branches) and Pipeline (the switch, the ticket flow as steps, how the agent builds, the review). Search and filter the list on Pipeline on or Needs setup. The settings window opens larger, 1280×800.
+
+## [0.0.59] - 2026-11-23
+
+### Changed
+
+- The board pipeline builds in every repo of its project: a ticket that needs the backend and the frontend gets a worktree of each, on one branch, and a PR in each repo the agent changed, with the checks of that repo. Settings › Projects lists the project's repos found on this Mac, each with its own checks and a switch to keep agents out of it; the single checkout is now an optional extra. A ticket moves on once all its PRs are merged, and goes to a person when a repo it changed got no PR. (#517)
+- Pasting with Cmd-V (Ctrl-V on Windows) in a conversation while the composer is not focused now pastes into the composer, as typing already did. (#518)
+
+## [0.0.58] - 2026-11-21
+
 ### Added
 
+- Antigravity as an agent: conversations run on Google's Antigravity CLI (`agy`) with the login it has, next to Claude Code, Codex, OpenCode and Pi. Edits and commands ask on a card first, a conversation continues in the terminal, and the Usage view shows the plan and the tokens of the conversations Relay ran. Switch it on in Settings › Agents. It runs in the main vault only, and Antigravity does not report how much of the plan is left. (#513)
+
+### Changed
+
+- Codex asks less: a command that needs more than its sandbox (the network, a folder outside the vault) is now weighed by Codex's own reviewer instead of put on a card. Settings › Agents › Codex › Approvals brings the cards back. In a workspace every approval still reaches you. (#513)
+
+## [0.0.57] - 2026-11-21
+
+### Added
+
+- Claude in Chrome in Relay's conversations: when it is on by default for the account (`/chrome` › Enabled by default, `claudeInChromeDefaultEnabled`), a conversation gets the browser tools like the terminal does. Not in a shared vault, where the browser's logins are yours, and not on a work machine. (#514)
+- Upload recording on a meeting: pick an audio file recorded elsewhere (phone, Zoom or Teams download, voice memo) and Relay transcribes and summarises it as if it had recorded it. The transcript names its one voice Speaker. (#511)
+- Mark as unread in a conversation's menu in the sidebar: the conversation turns bold again and shows under Agents waiting on you in Today until you open it. On an unread one the item reads Mark as read. (#510)
+
+## [0.0.56] - 2026-11-17
+
+### Added
+
+- Relay for Intel Macs, next to the one for Apple silicon, and it updates itself like that one. Dictation there has Whisper only: Parakeet and the other ONNX models have no build of their runtime for Intel Macs. (#507)
+- Start working on a card, or Start conversation in its ticket window, now also tells the agent to work in a git worktree on the team's branch (`fix/417-decimal-quantities`, `feat/…` unless the card says bug or fix), to reuse that branch when it exists, to start the PR title with the ticket number and to put the ticket link in the PR body. A project with several repos asks which one first. (#506)
+- When a PR of yours that is not a draft is linked to a card that is in progress, Relay moves the card to the PR open column of the project's pipeline settings, once per PR. Nothing moves without that column set. (#506)
+- `relay://ticket?provider=productive&id=<task id>` opens that ticket in Relay, with Start conversation one click away. Work never starts from the link itself. (#506)
+- Agents in a conversation can carry a Productive ticket through the flow: look a ticket up by its number, list the statuses it can move to, move it, assign it, edit its title and description, add subtasks and mark what blocks what. Each change asks first. Comments an agent posts are now hidden from the client by default on client projects. (#503)
+
+### Changed
+
+- "The account with the most room" (Settings › Agents › New conversations use) now weighs what is left of an account's limits against the time until they reset, instead of taking the least used one. An account with 20% left shortly before its reset goes first, since that room is lost otherwise, and one that would run out long before its reset goes last. The tightest of the session and weekly limits decides (#509).
+
+## [0.0.55] - 2026-11-16
+
+### Added
+
+- A meeting that starts while nothing records gets a small window at the top right, "Meeting started, not recording", with Skip and Record. It stays above every app and next to a full-screen call until one of the two is clicked, the meeting ends, or a recording starts some other way. A notification would vanish after a few seconds and is hidden while the screen is shared. (#501)
+- A worker now logs its decisions as it goes (what it chose, why, where the evidence is, how it turned out). The trail shows on its page, and a board pipeline's PR description lists it under Decisions. (#450)
+- A turn Claude Code refuses because it is not signed in shows a card with a Sign in button instead of "Not logged in · Please run /login": the button starts Claude Code's own login for the account that conversation runs on and opens the sign-in page in your browser. A conversation on a work machine says to sign in on that machine. (#499)
+
+### Fixed
+
+- A subagent's commands and messages no longer show up in the conversation while it runs, mixed in with Claude's own steps. They stay in the agents column and on the subagent's page, as they already did after reopening the conversation (#500).
+
+## [0.0.54] - 2026-11-15
+
+### Added
+
+- Settings › Agents › "New conversations use" has a choice "The account with the most room": with several Claude accounts, each new conversation starts on the signed-in account whose plan limits are least used for its model. A conversation stays on the account it started on, so nothing is read again on another account. Switching automatically still moves it when that account runs out (#495).
+- A machine's mirror can sync every 5, 15, 30 or 60 minutes instead of all the time: How often it syncs, on the machine's page under Mirror this Mac. With an interval a change reaches the other side up to that much later; changing a mirror setting or settling held deletions syncs at once (#496).
+
+### Fixed
+
+- The mirror no longer rewrites its record of the last sync after a round that changed nothing. With a mirror on, that wrote the whole record to disk every few seconds, megabytes for a large vault (#496).
+
+## [0.0.53] - 2026-11-13
+
+### Added
+
+- The workspace menu at the bottom left groups the workspaces by where they live: On this Mac, each machine of your own with the encrypted workspaces it keeps, another server's encrypted workspaces under its address, and each organisation under its name. Who can read them shows once on the group (Only you, Encrypted, "<name> can read"), each row says your role in a shared workspace or its note count, and ⌃1 to ⌃9 follow the menu's order (#492).
+
+- An organisation has a name, kept on its server, so every Mac shows the same one: on Organisations and servers (its title and square, the list, "<name> can read"), and on its workspaces' pages. An organisation admin names it in place on Overview, or when connecting under Add a server, and `relay-server team <email> --name "<name>"` sets it on the box. A name is one line of visible text: characters that hide or reorder text are refused. Before you log in, Join and the connect step show the server's address and certificate first, and Check this server asks it the name it gives itself ("calls itself …", and a warning when another organisation you are in has that name). Relay contacts the server only on that click. A server without a name shows its address as before (#491).
+
+- Add a server on Organisations and servers: first what the server is for (a machine of your own, a server for an organisation, or one someone else runs), side by side with who can read it, then its steps. A machine of your own with Docker (Linux, Unraid or a Mac) is set up with Docker Compose, like an organisation server: the commands fetch `compose.yml`, pin this Relay's version in `.env` and pair with `docker compose exec`, and a machine's update command sets the new version there. A second Mac can still be a machine with the Relay app. An organisation server gets its requirements, who does what, the commands for the box with your values filled in (also to copy as text for whoever runs it), and the link to log in. Setting one up stays in the list until it is connected. Join takes any line in one field and says what it is before anything happens: an organisation's invite or sign-in link, an invite to an encrypted workspace, or a pairing line. A folded table under each field explains why it does not connect. This Mac and each machine have a page there with what Settings › Machines and Workspaces showed. Settings › Machines and Workspaces are gone, where conversations run and the agents' access to knowledge workspaces moved to Settings › Agents, and an invite link that opens Relay goes to Join (#490).
+
+- Organisations and servers, a page in the main window, opened from the bottom of the workspace menu (Organisations and servers…, Add a server…) or from a row under the pages in Settings. It lists this Mac, your machines and your organisations. An organisation has Overview (people, invites and workspaces at a glance, the sign-in link, and what is still to set up), People (accounts, open invites with New link, which withdraws one and makes a fresh link with the same roles, and Invite people: several addresses with an organisation role and a role per workspace in one go), Workspaces (every workspace with its admins and your role, New workspace… with the choice of history explained), Sign-in (invite links, Google or Microsoft Entra, with the steps in the provider's console) and Server (update, back up and restore, as commands for whoever runs the box). A member sees Overview and Workspaces. Team workspaces show "<server> can read" in ochre. Settings › Organisation and the team servers in Settings › Workspaces moved there (#489).
+
+- Teams on a trusted server: `relay-server team you@example.com` sets up a team server, where an account is an email address and a device logs in with an invite link or the organisation's Google or Microsoft Entra sign-in. The server keeps each workspace's key and reads it, so Relay marks those workspaces "Server reads along". Settings › Workspaces lists each team server's workspaces with Sync here…, makes one (also without history: no names on changes) and invites an address as admin, member or reader. A reader's Mac only pulls and its pages open read-only, and the server refuses its writes. Settings › Organisation lets an organisation admin turn accounts off (their devices are out at once), make organisation admins and set the sign-in. A personal server works as before (#475).
+- Conversations can search the team workspaces without history this Mac syncs with `relay knowledge.search query=…`, also from a conversation fenced to another workspace. It returns passages only: the note's path, the workspace, the matching line and a score, at most 20, never an author or a time and never your own vault, and only for a conversation the Relay app runs. Settings › Workspaces › Agent access can make it ask or switch it off (#475).
+- Relay installs on Windows x64 with `Relay_<version>_x64-setup.exe`: for the current user without admin rights, with `relay://` links, `relay` in cmd and PowerShell, and an uninstall that removes it all. Relay on Windows updates itself like on the Mac. The installer is built on a Windows machine with `scripts/release-windows.ps1` and added to a release by `scripts/release.sh`, not built in GitHub Actions. It is not code-signed yet, so Windows shows a SmartScreen warning when it is opened: More info, then Run anyway (#479)
+- Relay compiles for Windows, and every PR is checked on macOS and Windows. It does not work on Windows yet: conversations and the `relay` command report that local sockets are not supported, and the login PATH, the `.claude` link of a vault, Whisper and this computer as a work machine are missing there (#451)
+- A new vault and a new team workspace start with an `AGENTS.md` next to `CLAUDE.md`, so Codex and OpenCode load the same rules as Claude Code (it points at `CLAUDE.md` and `System/rules/`, nothing is copied). Checking a vault reports a missing `AGENTS.md` and repairs it on request, an existing vault never gets one unasked (#452).
+- Conversations and the `relay` command run on Windows: local sockets are named pipes open to the user only, `relay` from an agent is traced to its conversation as on macOS, agents, plugins and their children run in a Job Object that ends them together, and the PATH is read from Windows' stored PATH (#454)
+- Secrets (integration tokens, plugin secrets, mail passwords, calendar addresses) are kept in Credential Manager on Windows. On the Mac they stay in the keychain as before (#457)
+- Vaults on Windows: `.claude` links to `System/` as a directory junction (no admin rights needed), a workspace round there leaves out files whose names Windows cannot hold and lists them on the workspace's page in Settings › Workspaces with the case clashes every computer skips, and the vault check lists Git Bash, jq and Python 3 when the vault's hooks or project index need them and they are missing (#458)
+- On Windows, Relay has the normal title bar, a sidebar in the theme's colour that follows light and dark, Ctrl where macOS has ⌘ in every shortcut and its label (Settings › Shortcuts included), toasts for a finished turn or a waiting card, and a `relay://` link or a second start goes to the window that is already open (#459)
+- A recipe to run relay-server for a team on a Linux box with Docker: `deploy/relay-server/compose.yml` on the published image with a healthcheck (`relay-server health`), `backup.sh` to back up and restore the server with its certificate, so paired Macs keep trusting it on a new box, and a guide in `docs/relay-server.md` from opening the port to the first pairing, updates and what the server keeps (#467).
+- On Windows, recording a meeting takes the microphone and what the computer plays, transcribes it with the ONNX models and keeps the audio as .wav. A microphone switched off in Windows' privacy settings is said before the recording starts, and Settings › Permissions shows it (#470)
+- On Windows, Whisper works for dictation and meetings, on the processor: download it in Settings › Voice like on the Mac (#471)
+- On Windows, dictating into any app works: the shortcut records wherever the cursor is, the text is pasted with Ctrl+V into the window that was in front, and the clipboard is put back after. Its keys there are Ctrl+Space in Relay, Ctrl+Shift+Space for a new conversation, Ctrl+Alt+Space to paste and Ctrl+Alt+N for quick capture, changeable in Settings › Shortcuts. A microphone switched off in Windows' privacy settings is said in the pill and the composer (#472)
+- On Windows, the Design drawer works: Google's sign-in popup opens and closes by itself, and an agent's snapshot of the drawer comes back as a picture (#473)
+- A Windows PC can be a work machine: Settings › Machines › This Mac as a machine registers a scheduled task that runs Relay's server at logon, and relay-server itself builds and runs on Windows, updates by starting the new version (one server at a time) and keeps its working copy on disk in a folder only the user may open, since Windows has no RAM disk (#474)
+
+### Changed
+
+- Settings has its own Workspaces and Organisation tabs. Workspaces lists every workspace of this Mac with its server and role, and opens a page per workspace with its folder, members, invites, sync and Leave. Organisation shows only for an organisation admin of a team server. Machines keeps pairing, updates, the mirror, GitHub and the repos. An invite link and the workspace switcher open Workspaces (#480)
+- Codex runs in team workspaces and other vault folders next to Claude Code. Relay declines a Codex permission request for a path outside the workspace (or into another vault, Relay's data or Claude's config) before it becomes a card, and keeps Codex in its sandbox and asking there. OpenCode and Pi stay in the main vault. (#456)
+- Codex in a team workspace can no longer change `.claude`, `CLAUDE.md`, `AGENTS.md` or its own config there without asking, and starts without the MCP servers, plugins and apps of your own Codex config. A workspace needs Codex 0.163 or newer. (#468)
+- Codex in a team workspace no longer reads your files outside it: only the workspace, the system's and Homebrew's programs, git's own config and the temp folder. A workspace's `.codex` and `.agents` no longer sync, what synced before stays where it is. (#469)
+
+### Fixed
+
+- Vaults and workspaces on Windows: Claude Code's fence was written in a path form Claude Code never matches there, and a vault folder with `\` in its path (every Windows path) was refused on save. The fence now uses the `/c/Users/...` form Claude Code compares against, a vault on a drive letter is accepted, and one on a network share is refused (#478)
+- Workspaces on Windows: Relay's guard for Codex read paths the macOS way, so a path with `\`, a drive letter, another case or `%USERPROFILE%` got past it or a workspace's own files were refused, and its system programs were the Mac's. A workspace's policy is now found however its folder is written, and Codex's permission profile there reads Windows' folders and git's config under the profile folder (#476, #477)
+- The Pi agent was only declared as a dependency of the macOS build, so a build for any other system failed on it (#451)
+
+## [0.0.52] - 2026-11-11
+
+### Changed
+
+- With **Switch accounts automatically** on, a conversation refused for its usage limit now moves to the next account with room and goes on right away, instead of waiting for the next message (#487). The orchestrator and its workers move too: a worker no longer reports as ended without a report.
+- Usage shows the limits of every account of an agent, with the one in use marked, instead of only that one (#487).
+
+### Fixed
+
+- The first message after a conversation moved to another account (or restarted for an effort switch) no longer fails with "broker: no socket": the old process's broker removed the new one's socket on its way out (#487).
+- A subagent that ran in the foreground no longer shows as running, with its clock ticking, for 15 minutes after it handed back (#486).
+
+## [0.0.51] - 2026-11-11
+
+### Fixed
+
+- A conversation no longer loses its transcript when two Claude accounts share one transcript folder (a symlinked `projects` in the account's config folder): continuing it emptied the file, and the next message answered "No conversation found". A transcript that moves between accounts is now written through a temp file, so it is the old one or the new one, never a half.
+
+## [0.0.50] - 2026-11-10
+
+### Added
+
+- GitHub Projects as a board: pick one of your own or your organizations' projects per vault project, its Status field makes the columns. Drag a card to change its status, New task adds a draft item, a click opens the issue or pull request on GitHub. Set it up with a token under Settings › Integrations › GitHub Projects (#483).
+
+## [0.0.49] - 2026-11-08
+
+### Added
+
+- Views inside a page can be edited and inserted: a cell of a page's base table writes that note's property (the block's text stays the same), a base grouped by a property shows as a board whose cards move between lanes, / → View inserts a table of the page's meetings, and new projects from the starter vault's template come with one.
+- Views inside a page: an Obsidian base, as a fenced `base` block or an embedded `![[x.base]]`, shows in the page as a table of the notes it lists, with `this` as the page it is in, so a project page can list its own meetings and Obsidian shows the same view. A base that uses more than Relay reads (formulas, other view types, functions outside the subset) shows Open in Obsidian instead.
+- Type `/meeting Kickoff` (or any note type with a home in the type registry) in a page to make that note from its template in its home, with the page's project as `about:` and today's date, link it where you typed and open it (Back returns to the page); one Undo takes the link out and moves the note to the trash, and a title that names an existing note of that type links it instead.
 - Note types live in one registry, `.relay/types.json` in the vault: each type's fields, required keys, home, template and collection columns. Tidy, Collections, new notes and the Properties panel read it (a field with a fixed list of values, like a project's `status`, gets a select that marks a value outside the list), Relay writes it out as the Claude rule `System/rules/vault/types.md`, and the starter vault's hook checks notes against it.
 - A typed page has a header made from its type: the type, where it belongs (Context › Project), and the type's fields, each with its editor. A link field only offers notes of its type (`with:` people, `about:` projects and contexts) and can create a missing one, like a new person in the context's People folder; an empty `context:` or `about:` shows as a slot to fill, and "Add property" offers the type's missing fields first. The right rail groups backlinks by relation, like "Meetings about this project".
 - A page can carry an emoji icon and a cover picture, saved as `icon:` and `cover:` in its frontmatter. Hover the header for Add icon and Add cover; the cover is copied into the attachments folder and shown as a banner above the title. The note's own icon wins over its project's icon, and a cover whose file is gone just isn't shown.
@@ -23,6 +164,9 @@ a PR. Versions follow
 
 ### Changed
 
+- A note always opens as a page in the middle, wherever you click it: a [[link]] in a conversation, a tool call's file, the Files drawer, a meeting's note, a scratch note's related notes, Usage, ⌘-click in the editor, ⌘↵ in ⌘K and a note made with `/meeting`. The page's bar shows "← the conversation" you came from, and that button, ⌘[ or Esc goes back to it where you were scrolled, with its drawer open again. Pages work with Experimental › Files off too (the switch only hides the Pages tab), a link to a note that doesn't exist says so instead of opening an empty page, and the page's More menu has Open in default app.
+- The Vault check is one list instead of the Health and Garden tabs: every finding sits under its kind (health first), each group with its count, its action and its first three paths, and Tidy structure, Ask Claude and Move to trash share one dry run sheet. Orphans are now called Unlinked notes, so they no longer read like the rules for missing folders.
+- The Pages tab shows a vault by type: contexts, their projects, and per project or context its notes in a group per type, with the typed notes of no context under No context and the notes without a `type:` under Unsorted, newest first, with Tidy. Folders hide behind Show files at the bottom (kept per workspace; an admin's). New page on a project or context asks for the type and puts the note in the type's home with `about:` set, and a note dropped onto a project gets `about:` without moving.
 - Relay stays responsive when many notes change at once, like after a git pull or a long Claude run: the notes list and the related notes are refreshed once per burst instead of once per note, and the note list is read off the main thread. (#415)
 - Less CPU and no UI stalls while a terminal conversation is open: the list of running sessions is read at most every 2.5 seconds instead of with every poll, and the polls for questions, subagents, the sidebar and sending a message no longer run on the UI thread. The vault is scanned once per refresh instead of once per project, and `claude --version` is not run again for every message. (#414)
 
@@ -34,6 +178,7 @@ a PR. Versions follow
 
 ### Removed
 
+- The read-only note panel in the right drawer: notes open as pages instead.
 - The one-time move of old scratch notes from `.relay/notes` into the Inbox is gone: the Inbox and a project's notes drawer no longer scan for them or show the move banner. Notes still left in `.relay/notes` stay on disk but Relay no longer shows them. (#426)
 
 ## [0.0.48] - 2026-11-05

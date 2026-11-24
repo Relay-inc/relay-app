@@ -1,5 +1,5 @@
 // Google Calendar, read-only, through each calendar's secret iCal address: no OAuth. The address is the secret
-// (whoever has it reads the calendar), so it lives in the macOS keychain (service relay-calendar, account the
+// (whoever has it reads the calendar), so it lives in the keychain (secrets.rs, service relay-calendar, account the
 // calendar's email), goes to curl over stdin and never reaches the webview. settings.json only keeps
 // `calendar.feeds[].email`. The webview asks for the meetings of the day and shows them under Today, the ones about to
 // start on top, with a banner 5 minutes before (src/domain/calendar/rules.ts).
@@ -31,19 +31,15 @@ pub fn feeds(s: &Value) -> Vec<String> {
 fn email_ok(e: &str) -> bool {
     e.len() < 100 && e.contains('@') && e.chars().all(|c| c.is_ascii_alphanumeric() || "@._+-".contains(c))
 }
-/// A Google secret iCal address: under PREFIX, ends in .ics, nothing curl or `security -i` reads as syntax.
+/// A Google secret iCal address: under PREFIX, ends in .ics, nothing curl reads as syntax.
 fn url_ok(u: &str) -> bool {
     u.starts_with(PREFIX) && u.ends_with(".ics") && u.len() < 400 && u.chars().all(|c| c.is_ascii_alphanumeric() || "%@._/:-".contains(c))
 }
 
 // ---------- keychain
 
-fn secret(email: &str) -> Option<String> {
-    let o = Command::new("/usr/bin/security").args(["find-generic-password", "-s", SERVICE, "-a", email, "-w"]).output().ok()?;
-    let t = String::from_utf8_lossy(&o.stdout).trim().to_string();
-    (o.status.success() && !t.is_empty()).then_some(t)
-}
-fn forget(email: &str) { Command::new("/usr/bin/security").args(["delete-generic-password", "-s", SERVICE, "-a", email]).output().ok(); }
+fn secret(email: &str) -> Option<String> { crate::secrets::get(SERVICE, email) }
+fn forget(email: &str) { crate::secrets::delete(SERVICE, email).ok(); }
 
 /// Settings › Calendar: save a calendar's secret address and try it, the number of meetings in the next 7 days back.
 /// An address that does not load is not saved. An empty address removes the calendar's entry.
@@ -56,10 +52,7 @@ pub fn connect(email: &str, url: &str) -> Result<usize, String> {
     // tried before it is saved: a mistyped address for a calendar already set up leaves the working one in place
     let now = Utc::now();
     let count = meetings(&fetch(url)?, email, now, now + Duration::days(7)).len();
-    let mut ch = Command::new("/usr/bin/security").arg("-i").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(|e| e.to_string())?;
-    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s {SERVICE} -a {email} -w {url}").map_err(|e| e.to_string())?;
-    ch.wait().map_err(|e| e.to_string())?;
-    if secret(email).as_deref() != Some(url) { return Err(super::trc("err.cal_keychain")); }
+    crate::secrets::set(SERVICE, email, url).map_err(|_| super::trc("err.cal_keychain"))?;
     Ok(count)
 }
 

@@ -34,7 +34,7 @@ export function projectLabel(
 /** A website value: the favicon run fetches it and replaces it with the file. */
 export const isSite = (value: string) => value.includes(".") && !/\s/.test(value) && !value.startsWith("icons/");
 
-// ---------- vault notes named in a conversation open in the right panel. Only notes that exist link: the vault's
+// ---------- vault notes named in a conversation open as a page. Only notes that exist link: the vault's
 // paths (vault_notes, refreshed with the snapshot) and their names for [[wikilinks]].
 export type NotesIndex = { root: string; paths: Set<string>; names: Set<string> };
 export const EMPTY_NOTES: NotesIndex = { root: "", paths: new Set(), names: new Set() };
@@ -71,25 +71,7 @@ export const needsFavicon = (
   return !icon || (isSite(icon.value) && !icon.img && tried?.[project.name] !== icon.value);
 };
 
-// ---------- a note's frontmatter as properties, the way Obsidian lists them: one row per key that has a value
-const unquote = (value: string) => value.trim().replace(/^(["'])(.*)\1$/, "$2");
-/** The frontmatter's keys with their values: `key: value`, a `- item` list under it or an inline `[a, b]`. Keys
- *  without a value are left out, nested maps read as plain text. */
-export function noteProperties(yaml: string): [string, string[]][] {
-  const rows: [string, string[]][] = [];
-  for (const line of yaml.split("\n")) {
-    const pair = /^([^\s:#-][^:]*):(?:\s+(.*))?$/.exec(line);
-    const item = /^\s*-\s+(.*)$/.exec(line);
-    if (pair) {
-      const value = (pair[2] ?? "").trim();
-      const list = /^\[(.*)\]$/.exec(value);
-      rows.push([pair[1].trim(), list ? list[1].split(",").map(unquote) : [unquote(value)]]);
-    } else if (item && rows.length) rows[rows.length - 1][1].push(unquote(item[1]));
-  }
-  return rows.map(([key, values]): [string, string[]] => [key, values.filter(Boolean)]).filter(([, v]) => v.length);
-}
-
-// ---------- a note read in the drawer: its title, and the notes it links to
+// ---------- a note read as a page: its title, and the note a link names
 /** The note's title and the body under it: a leading `# heading` is the title, else the file name made readable
  *  (`route-middleware-sees-rendered-refusals` → "Route middleware sees rendered refusals"). */
 export function noteTitle(path: string, body: string): { title: string; body: string } {
@@ -99,19 +81,14 @@ export function noteTitle(path: string, body: string): { title: string; body: st
   const words = /^[a-z0-9_-]+$/.test(name) ? name.replace(/[-_]+/g, " ") : name;
   return { title: words.charAt(0).toUpperCase() + words.slice(1), body };
 }
-/** The existing notes a note's [[wikilinks]] name, once each and without itself, with the folder each is in. */
-export function noteLinks(index: NotesIndex, vault: string, self: string, text: string) {
-  const links = new Map<string, { target: string; label: string; folder: string }>();
-  for (const [, inner] of text.matchAll(/\[\[([^\]\n]+)\]\]/g)) {
-    const target = inner.replace(/[#|].*$/, "").trim();
-    const md = relativeNote(target, [index.root, vault]);
-    const path = index.paths.has(md)
-      ? md
-      : md.includes("/")
-        ? inShared(index, md)
-        : [...index.paths].find(p => p.endsWith("/" + md));
-    if (!path || path === self || links.has(path)) continue;
-    links.set(path, { target, label: inner.split("|").pop()!.trim(), folder: path.split("/").slice(-2, -1)[0] ?? "" });
-  }
-  return [...links.values()];
+/** The note a link names, as a page opens it: the main vault's by its relative path, another workspace's by its
+ *  absolute one; "" when no note has that name. A name or the end of a path is looked for in every workspace, `here`
+ *  first (the workspace shown: "" for the main vault, else its folder), as written, then ignoring case. */
+export function resolveNote(index: NotesIndex, vault: string, target: string, here = "") {
+  const path = relativeNote(target, [index.root, vault]);
+  if (index.paths.has(path)) return path;
+  const inHere = (p: string) => (here ? p.startsWith(here + "/") : !p.startsWith("/"));
+  const all = [...index.paths].sort((a, b) => Number(inHere(b)) - Number(inHere(a)));
+  const lower = "/" + path.toLowerCase();
+  return all.find(p => p.endsWith("/" + path)) ?? all.find(p => ("/" + p.toLowerCase()).endsWith(lower)) ?? "";
 }

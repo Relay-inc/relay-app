@@ -1,5 +1,5 @@
 import { activeWorkspace, chatVault, vaultChoices } from "../../domain/conversations/rules";
-import { opened, panelItem } from "../../domain/navigation/keys";
+import { opened } from "../../domain/navigation/keys";
 import { isSystemPage } from "../../domain/navigation/pages";
 import { WAIT } from "../../domain/navigation/views";
 import { isOrchKey } from "../../domain/orchestrator/rules";
@@ -11,13 +11,16 @@ import { useWorkspaceStore } from "../workspace/store";
 import { loadSnapshot, vaultName } from "../workspace/vault";
 import { pickVault } from "../workspace/vault-setup";
 import { useNavigationStore } from "./store";
+import { workspacePlaces, type Place } from "../../domain/settings/servers";
+import type { SharedRole } from "../../domain/settings/types";
 import { storage } from "../../infrastructure/storage";
 import { select, toast } from "./navigation";
 import { projectVault, shownUnder } from "./migrate";
 
 // The workspaces: every vault here (the main one, the folders added, the shared ones), one of them shown in the sidebar.
 /** A workspace in the footer's menu: `notes` counted from the notes index, `team` for one shared on a relay-server,
- *  `live` when that one's live channel is connected (else it syncs every 10 s). */
+ *  `live` when that one's live channel is connected (else it syncs every 10 s), `reader` when this Mac only reads it,
+ *  `role` this Mac's role in a shared one ("" not shared), `place` the menu's group it is in. */
 export type Workspace = {
   folder: string;
   name: string;
@@ -25,7 +28,10 @@ export type Workspace = {
   notes: number;
   team: boolean;
   live: boolean;
+  reader: boolean;
+  role: SharedRole | "";
   active: boolean;
+  place: Place;
 };
 
 export const activeFolder = () => activeWorkspace(settings(), useNavigationStore.getState().sidebar.workspace);
@@ -42,30 +48,45 @@ const notesIn = (folder: string, main: boolean) =>
       : path.startsWith(folder + "/") && !isSystemPage(path.slice(folder.length + 1)),
   ).length;
 
-/** Every workspace, the main one first, in the order ⌃1 to ⌃9 pick them. */
+// the workspaces by place (domain/settings/servers.ts), the order of the menu and of ⌃1 to ⌃9
+const places = () =>
+  workspacePlaces(
+    vaultChoices(settings()).map(choice => choice.folder),
+    settings(),
+  );
+/** Every workspace, grouped by place with the main one first, in the order ⌃1 to ⌃9 pick them. */
 export function workspaces(): Workspace[] {
   const active = activeFolder();
   const shared = settings().sharedVaults ?? [];
-  const live = useWorkspaceStore.getState().live;
-  return vaultChoices(settings()).map(choice => {
-    const name = vaultName(choice.folder);
-    const team = shared.find(vault => vault.folder === choice.folder);
-    return {
-      folder: choice.folder,
-      name,
-      initials: initials(name),
-      notes: notesIn(choice.folder, choice.main),
-      team: !!team,
-      live: !!team && !!live[team.id],
-      active: choice.folder === active,
-    };
-  });
+  const { live, readers } = useWorkspaceStore.getState();
+  const main = settings().vault;
+  return places().flatMap(({ folders, ...place }) =>
+    folders.map(folder => {
+      const choice = { folder, main: folder === main };
+      const name = vaultName(choice.folder);
+      const team = shared.find(vault => vault.folder === choice.folder);
+      return {
+        folder: choice.folder,
+        name,
+        initials: initials(name),
+        notes: notesIn(choice.folder, choice.main),
+        team: !!team,
+        live: !!team && !!live[team.id],
+        // the last round's word, before it the role the settings keep
+        reader: !!team && (readers[team.id] ?? team.role === "reader"),
+        role: team?.role ?? "",
+        active: choice.folder === active,
+        place,
+      };
+    }),
+  );
 }
 /** The shared vaults' live channels, as the backend reports them: now and on every change. */
 export function watchLive() {
-  const set = (status: Record<string, { live?: boolean }>) =>
+  const set = (status: Record<string, { live?: boolean; reader?: boolean }>) =>
     useWorkspaceStore.setState(draft => {
       draft.live = Object.fromEntries(Object.entries(status).map(([id, s]) => [id, !!s.live]));
+      draft.readers = Object.fromEntries(Object.entries(status).map(([id, s]) => [id, !!s.reader]));
     });
   void backend.sharedVaultsStatus().then(set);
   void backend.onSharedVaults(set);
@@ -99,23 +120,17 @@ export function workspaceOf(key: string): string {
 }
 // what was open in each workspace when the sidebar left it, to come back to; not kept over a restart
 const lastOpen: Record<string, string> = {};
-// The workspaces stay apart: what is open (a page, a conversation, a project's board, a note in the drawer) belongs to
+// The workspaces stay apart: what is open (a page, a conversation, a project's board) belongs to
 // the workspace it was opened in. Leaving that workspace puts it away; coming to one opens what was open there, else
 // Today when what is open belongs to another. What every workspace shares stays when the new one had nothing open.
 function leave(from: string, to: string) {
-  const { selected, tool, drawer, panel } = useNavigationStore.getState();
+  const { selected, tool } = useNavigationStore.getState();
   const owner = tool ? shownUnder(projectVault(tool.project)) : workspaceOf(selected);
   if (owner === from) lastOpen[from] = selected;
   const back = lastOpen[to] ?? "";
   delete lastOpen[to];
   if (owner !== to && back && workspaceOf(back) === to) return void select(back);
-  if (owner && owner !== to) return void select(WAIT);
-  const note = drawer === "detail" ? panelItem(panel.open) : null;
-  if (note?.kind === "note" && noteFolder(note.target) !== to)
-    useNavigationStore.setState(draft => {
-      draft.drawer = "";
-      draft.panel.open = "";
-    });
+  if (owner && owner !== to) select(WAIT);
 }
 /** Keep the workspaces apart whichever way the sidebar changes workspace: the menu, ⌃1 to ⌃9, another Relay window. */
 export function keepWorkspacesApart() {
@@ -130,7 +145,7 @@ export function keepWorkspacesApart() {
 }
 /** ⌃1 to ⌃9: the workspace at that place, if there is one. */
 export function switchToNth(n: number) {
-  const folder = vaultChoices(settings())[n - 1]?.folder;
+  const folder = places().flatMap(place => place.folders)[n - 1];
   if (folder) switchWorkspace(folder);
 }
 /** Open a folder as workspace…: a picked vault folder is added to the other vault folders and shown. The backend keeps a
@@ -150,5 +165,5 @@ export async function openFolderAsWorkspace() {
   await loadSnapshot();
 }
 /** New workspace from template… and Workspace settings: the settings window, where workspaces are made and kept. A
- *  shared one is under Machines, the main vault and the folders added under General. */
-export const openWorkspaceSettings = (page: "general" | "machines") => backend.openSettingsWindow(page);
+ *  shared one is under Workspaces, the main vault and the folders added under General. */
+export const openWorkspaceSettings = (page: "general") => backend.openSettingsWindow(page);

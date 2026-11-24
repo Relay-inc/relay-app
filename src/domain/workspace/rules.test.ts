@@ -1,29 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { noteKnown, noteLinks, noteProperties, noteTitle, notesIndex } from "./rules.ts";
-
-test("noteProperties: values, lists, inline lists and quotes, empty keys left out", () => {
-  const yaml = [
-    "type: Initiative",
-    'context: "[[Personal]]"',
-    "parent:",
-    "aliases:",
-    '  - "claude-ui"',
-    "  - relay",
-    "tags: [a, 'b']",
-    "cover:",
-    "laatst: 2026-10-15",
-    "fase: dagelijks: in gebruik",
-  ].join("\n");
-  assert.deepEqual(noteProperties(yaml), [
-    ["type", ["Initiative"]],
-    ["context", ["[[Personal]]"]],
-    ["aliases", ["claude-ui", "relay"]],
-    ["tags", ["a", "b"]],
-    ["laatst", ["2026-10-15"]],
-    ["fase", ["dagelijks: in gebruik"]],
-  ]);
-});
+import { noteKnown, noteTitle, notesIndex, resolveNote } from "./rules.ts";
 
 test("noteTitle: a leading heading is the title, else the file name made readable", () => {
   assert.deepEqual(noteTitle("Contexts/Relay/Relay.md", "# Relay\n\nBody"), { title: "Relay", body: "\nBody" });
@@ -34,13 +11,19 @@ test("noteTitle: a leading heading is the title, else the file name made readabl
   assert.equal(noteTitle("Calendar/Plan - Brain view.md", "Body").title, "Plan - Brain view");
 });
 
-test("noteLinks: existing notes once, by path or name, not the note itself", () => {
-  const index = notesIndex("/v", ["A/Docs/Spec.md", "B/Plan.md", "Self.md"]);
-  const text = "[[Spec]] and [[Spec|the spec]], [[B/Plan]], [[Missing]], [[Self]]";
-  assert.deepEqual(noteLinks(index, "/v", "Self.md", text), [
-    { target: "Spec", label: "Spec", folder: "Docs" },
-    { target: "B/Plan", label: "B/Plan", folder: "B" },
-  ]);
+test("resolveNote: a link's note by path, by name in any workspace (the one shown first), else nothing", () => {
+  const index = notesIndex("/v", ["A/Docs/Spec.md", "B/Plan.md", "/team/Docs/Spec.md", "/team/People/Sofie Claes.md"]);
+  assert.equal(resolveNote(index, "/v", "B/Plan"), "B/Plan.md");
+  assert.equal(resolveNote(index, "/v", "/v/B/Plan.md"), "B/Plan.md", "an absolute path in the main vault");
+  assert.equal(resolveNote(index, "/v", "Spec"), "A/Docs/Spec.md", "the main vault shown: its note");
+  assert.equal(resolveNote(index, "/v", "Spec", "/team"), "/team/Docs/Spec.md", "another workspace shown: its note");
+  assert.equal(resolveNote(index, "/v", "Sofie Claes"), "/team/People/Sofie Claes.md", "only in another workspace");
+  assert.equal(resolveNote(index, "/v", "sofie claes.md"), "/team/People/Sofie Claes.md", "case aside");
+  assert.equal(resolveNote(index, "/v", "People/Sofie Claes"), "/team/People/Sofie Claes.md", "a path inside it");
+  assert.equal(resolveNote(index, "/v", "Missing"), "");
+  assert.equal(resolveNote(index, "/v", "Docs/Spec"), "A/Docs/Spec.md", "the end of a path");
+  assert.equal(resolveNote(index, "/v", "C/Plan"), "");
+  assert.equal(resolveNote(index, "/v", "/elsewhere/Plan.md"), "", "an absolute path outside the workspaces");
 });
 
 test("a shared vault's notes: known by name, by its path and by a path inside it", () => {
@@ -49,8 +32,4 @@ test("a shared vault's notes: known by name, by its path and by a path inside it
   assert.ok(noteKnown(index, "/v", "/team/Calendar/Standup.md"));
   assert.ok(noteKnown(index, "/v", "Contexts/Work/Projects/Northwind"), "a path-style link in a team note");
   assert.ok(!noteKnown(index, "/v", "Contexts/Work/Projects/Other"));
-  assert.deepEqual(
-    noteLinks(index, "/v", "Mine.md", "[[Calendar/Standup]] and [[Northwind|the project]]").map(link => link.label),
-    ["Calendar/Standup", "the project"],
-  );
 });

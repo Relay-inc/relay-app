@@ -6,11 +6,13 @@ export function Switch({
   id,
   on,
   label,
+  disabled = false,
   onToggle,
 }: {
   id: string;
   on: boolean;
   label?: string; // the accessible name when no <label> points at it
+  disabled?: boolean;
   onToggle: (on: boolean) => void;
 }) {
   const ref = useRef<HTMLInputElement>(null);
@@ -25,8 +27,9 @@ export function Switch({
       id={id}
       aria-label={label}
       defaultChecked={on}
+      disabled={disabled}
       onChange={e => onToggle(e.target.checked)}
-      className="relative m-0 h-5 w-8 flex-none cursor-default appearance-none rounded-full bg-fill-2 transition-colors duration-150 ease-out after:absolute after:top-0.5 after:left-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-[0_1px_2px_rgba(0,0,0,.25)] after:transition-transform after:duration-150 after:ease-out checked:bg-accent checked:after:translate-x-3 focus-visible:ring-3 ring-s-ring focus-visible:outline-none"
+      className="relative m-0 h-5 w-8 flex-none cursor-default appearance-none rounded-full bg-fill-2 transition-colors duration-150 ease-out after:absolute after:top-0.5 after:left-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-[0_1px_2px_rgba(0,0,0,.25)] after:transition-transform after:duration-150 after:ease-out checked:bg-accent checked:after:translate-x-3 focus-visible:ring-3 ring-s-ring focus-visible:outline-none disabled:opacity-50"
     />
   );
 }

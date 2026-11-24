@@ -15,11 +15,9 @@ use serde::Serialize;
 use serde_json::Value;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
-use transcribe_rs::onnx::canary::CanaryModel;
-use transcribe_rs::onnx::cohere::CohereModel;
-use transcribe_rs::onnx::moonshine::{MoonshineModel, MoonshineVariant};
-use transcribe_rs::onnx::parakeet::ParakeetModel;
-use transcribe_rs::onnx::Quantization;
+#[cfg(onnx)]
+use transcribe_rs::onnx::{canary::CanaryModel, cohere::CohereModel, moonshine::{MoonshineModel, MoonshineVariant}, parakeet::ParakeetModel, Quantization};
+#[cfg(feature = "whisper")]
 use transcribe_rs::whisper_cpp::WhisperEngine;
 use transcribe_rs::{SpeechModel, TranscribeOptions};
 
@@ -28,30 +26,49 @@ const HOST: &str = "https://blob.handy.computer"; // Handy's model mirror (MIT, 
 
 /// A model Settings › Voice offers. `auto`: it hears the language itself; without it the language is passed.
 struct Model { id: &'static str, file: &'static str, sha256: &'static str, mb: u32, langs: &'static [&'static str], auto: bool }
+#[cfg(onnx)]
 const EU: &[&str] = &["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"];
 // Whisper knows ~99; these are the ones the language picker can name
 const WHISPER: &[&str] = &["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk", "zh", "ja", "ko", "vi", "ar"];
 const MODELS: &[Model] = &[
+    #[cfg(onnx)]
     Model { id: "parakeet-v3", file: "parakeet-v3-int8.tar.gz", sha256: "43d37191602727524a7d8c6da0eef11c4ba24320f5b4730f1a2497befc2efa77", mb: 456, langs: EU, auto: true },
+    #[cfg(onnx)]
     Model { id: "parakeet-v2", file: "parakeet-v2-int8.tar.gz", sha256: "ac9b9429984dd565b25097337a887bb7f0f8ac393573661c651f0e7d31563991", mb: 451, langs: &["en"], auto: true },
+    #[cfg(onnx)]
     Model { id: "canary-1b-v2", file: "canary-1b-v2.tar.gz", sha256: "02305b2a25f9cf3e7deaffa7f94df00efa44f442cd55c101c2cb9c000f904666", mb: 691, langs: EU, auto: false },
+    #[cfg(onnx)]
     Model { id: "cohere", file: "cohere-int8.tar.gz", sha256: "ea2257d52434f3644574f187dcdcf666e302cd11b92866116ab8e14cd9c887f0", mb: 1708, langs: &["en", "fr", "de", "it", "es", "pt", "el", "nl", "pl", "zh", "ja", "ko", "vi", "ar"], auto: true },
     Model { id: "whisper-turbo", file: "ggml-large-v3-turbo-q5_0.bin", sha256: "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2", mb: 574, langs: WHISPER, auto: true },
+    #[cfg(onnx)]
     Model { id: "moonshine-base", file: "moonshine-base.tar.gz", sha256: "04bf6ab012cfceebd4ac7cf88c1b31d027bbdd3cd704649b692e2e935236b7e8", mb: 55, langs: &["en"], auto: true },
 ];
+// first in MODELS: Settings › Voice falls back to the first model listed, as picked() does to this one
+#[cfg(onnx)]
 const DEFAULT: &str = "parakeet-v3";
+#[cfg(not(onnx))]
+const DEFAULT: &str = "whisper-turbo"; // an Intel Mac, see Cargo.toml
 
 fn model(id: &str) -> Result<&'static Model, String> { MODELS.iter().find(|m| m.id == id).ok_or_else(|| format!("unknown model {id}")) }
 
 fn load(m: &Model, dir: &Path) -> Result<Box<dyn SpeechModel>, String> {
+    #[cfg(onnx)]
     let int8 = &Quantization::Int8;
     let e = |e: transcribe_rs::TranscribeError| e.to_string();
     Ok(match m.id {
+        #[cfg(onnx)]
         "parakeet-v3" | "parakeet-v2" => Box::new(ParakeetModel::load(dir, int8).map_err(e)?),
+        #[cfg(onnx)]
         "canary-1b-v2" => Box::new(CanaryModel::load(dir, int8).map_err(e)?),
+        #[cfg(onnx)]
         "cohere" => Box::new(CohereModel::load(dir, int8).map_err(e)?),
-        "whisper-turbo" => Box::new(WhisperEngine::load(&dir.join(m.file)).map_err(e)?), // whisper.cpp on Metal
-        _ => Box::new(MoonshineModel::load(dir, MoonshineVariant::Base, &Quantization::default()).map_err(e)?),
+        #[cfg(onnx)]
+        "moonshine-base" => Box::new(MoonshineModel::load(dir, MoonshineVariant::Base, &Quantization::default()).map_err(e)?),
+        #[cfg(feature = "whisper")]
+        "whisper-turbo" => Box::new(WhisperEngine::load(&dir.join(m.file)).map_err(e)?), // whisper.cpp, Metal on a Mac, the CPU on Windows
+        #[cfg(not(feature = "whisper"))]
+        "whisper-turbo" => return Err("this build has no Whisper".into()),
+        id => return Err(format!("unknown model {id}")),
     })
 }
 
@@ -127,7 +144,8 @@ pub(crate) fn with_meeting_model<T>(app: &AppHandle, language: Option<String>, f
 
 /// Err("model") when the model a meeting uses is not downloaded, so no recording starts that cannot be transcribed.
 pub(crate) fn meeting_model_ready(app: &AppHandle) -> Result<(), String> {
-    if installed(&models_dir(app)?.join(picked(app, true)?.0.id)) { Ok(()) } else { Err("model".into()) }
+    let m = picked(app, true)?.0;
+    if installed(&models_dir(app)?.join(m.id)) { Ok(()) } else { Err("model".into()) }
 }
 
 #[derive(Serialize)]
@@ -145,8 +163,8 @@ pub fn dictation_models(app: AppHandle, state: State<Dictation>) -> Result<Vec<M
 #[tauri::command]
 pub fn dictation_model(app: AppHandle) -> Result<bool, String> { Ok(installed(&models_dir(&app)?.join(picked(&app, false)?.0.id))) }
 
-/// Downloads a model (`id`, or the picked one), checks and unpacks it, reporting 0..1 on `on_progress`. curl, shasum
-/// and tar are on every Mac.
+/// Downloads a model (`id`, or the picked one), checks and unpacks it, reporting 0..1 on `on_progress`. curl and tar
+/// are on every Mac and in Windows 10 and later.
 #[tauri::command]
 pub async fn dictation_download(app: AppHandle, state: State<'_, Dictation>, id: Option<String>, on_progress: Channel<f64>) -> Result<(), String> {
     let m = match id { Some(id) => model(&id)?, None => picked(&app, false)?.0 };
@@ -173,8 +191,7 @@ fn download(m: &Model, models: &Path, progress: &Channel<f64>) -> Result<(), Str
     };
     let result = (|| {
         if !ok { return Err("download failed".to_string()); }
-        let sum = run(Command::new("shasum").args(["-a", "256"]).arg(&part))?;
-        if !String::from_utf8_lossy(&sum.stdout).starts_with(m.sha256) { return Err("the download is damaged (checksum differs)".into()); }
+        if sha256(&part)? != m.sha256 { return Err("the download is damaged (checksum differs)".into()); }
         // the archive holds one folder, named as Handy names it: unpacked aside, then moved under the model's id
         std::fs::remove_dir_all(&unpack).ok();
         std::fs::create_dir_all(&unpack).map_err(|e| e.to_string())?;
@@ -195,6 +212,14 @@ fn download(m: &Model, models: &Path, progress: &Channel<f64>) -> Result<(), Str
     std::fs::remove_dir_all(&unpack).ok();
     if result.is_ok() { progress.send(1.0).ok(); }
     result
+}
+
+/// The file's SHA-256 as lowercase hex, read in chunks (a model is up to 1.7 GB).
+fn sha256(path: &Path) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut std::fs::File::open(path).map_err(|e| e.to_string())?, &mut hasher).map_err(|e| e.to_string())?;
+    Ok(hasher.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }
 
 /// Removes a downloaded model, unloading it when it is the one in use.
@@ -220,6 +245,8 @@ pub(crate) fn start(app: &AppHandle, level: Box<dyn Fn(f32) + Send>) -> Result<(
     let (m, _) = picked(app, false)?;
     let dir = models_dir(app)?.join(m.id);
     if !installed(&dir) { return Err("model".into()); }
+    // switched off in Windows' privacy settings: say so (meeting.rs, the same answer) instead of recording silence
+    if super::permissions::microphone_off() { return Err("microphone".into()); }
     let mut rec = state.rec.lock().unwrap();
     if rec.is_some() { return Ok(()); }
     let loaded = state.loaded.clone();
@@ -324,7 +351,17 @@ pub fn dictation_cancel(state: State<Dictation>) {
 
 #[cfg(test)]
 mod tests {
-    use super::resample;
+    use super::{resample, sha256};
+    #[test]
+    fn sha256_of_a_known_file() {
+        let path = std::env::temp_dir().join(format!("relay-sha256-{}", std::process::id()));
+        std::fs::write(&path, b"abc").unwrap();
+        let sum = sha256(&path);
+        std::fs::remove_file(&path).ok();
+        // FIPS 180-2's example for "abc"
+        assert_eq!(sum.unwrap(), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+        assert!(sha256(std::path::Path::new("/no/such/file")).is_err());
+    }
     #[test]
     fn resample_keeps_duration_and_shape() {
         let second: Vec<f32> = (0..48_000).map(|i| (i as f32 / 48_000.0 * 440.0 * std::f32::consts::TAU).sin()).collect();

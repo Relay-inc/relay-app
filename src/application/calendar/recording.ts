@@ -2,11 +2,13 @@ import { t } from "../../shared/i18n";
 import type { Meeting } from "../../domain/calendar/types";
 import { voiceOf } from "../../domain/settings/voice";
 import {
+  meetingImport,
   meetingKept,
   meetingRecordCancel,
   meetingRecordRetry,
   meetingRecordStart,
   meetingRecordStop,
+  pickPath,
 } from "../../infrastructure/backend";
 import type { LiveLine } from "../../infrastructure/backend";
 export type { LiveLine };
@@ -105,9 +107,39 @@ export async function startRecording(id: string, fallback?: Meeting) {
     );
     set({ system, why: why ?? "" });
   } catch (e) {
-    // nothing recorded yet: a missing model is caught before the microphone opens
-    set({ phase: "idle", meeting: null, error: e === "model" ? t("rec.noModelStart") : String(e) });
+    // nothing recorded yet: a missing model is caught before the microphone opens, a microphone Windows keeps from
+    // Relay when it opens
+    const error = e === "model" ? t("rec.noModelStart") : e === "microphone" ? t("rec.micOff") : String(e);
+    set({ phase: "idle", meeting: null, error });
   }
+}
+
+// what afconvert reads on the Mac (the audio of mp4 and mov too); Windows has no converter but for WAV
+const AUDIO = /Windows/i.test(navigator.userAgent)
+  ? ["wav"]
+  : ["m4a", "mp3", "wav", "aac", "caf", "aif", "aiff", "mp4", "mov"];
+
+/** Attaches an audio file recorded elsewhere to the meeting: picked here, then transcribed and summarised as a recording
+ *  of Relay's own, its lines all one neutral speaker (it is no microphone). Nothing while a recording or save runs. */
+export async function importRecording(meeting: Meeting) {
+  if (rec().phase !== "idle") return;
+  const path = await pickPath(false, "", AUDIO).catch(() => null);
+  if (!path || rec().phase !== "idle") return;
+  set({ meeting });
+  await save(async (title, note, _me, _others, onProgress) => {
+    const text = (await meetingNote(meeting).catch(() => null))?.text ?? null;
+    const language = meetingLanguage(text, voiceOf(settings().voice).language);
+    const { id, start, end, people, join } = meeting;
+    return meetingImport(
+      path,
+      language,
+      { id, title, start, end, people, join },
+      title,
+      note,
+      t("rec.speaker"),
+      onProgress,
+    );
+  });
 }
 
 /** A meeting that is not in the calendar: recorded now, named after the time it started, nobody invited. */
@@ -167,6 +199,7 @@ async function save(write: typeof meetingRecordStop, folder = "") {
     error: "",
     retry: "",
   });
+  const had = new Set(rec().kept);
   let recording: Recording;
   try {
     // the transcript names the meeting's note: the one it has (renamed or not), else the one attachRecording makes
@@ -177,11 +210,13 @@ async function save(write: typeof meetingRecordStop, folder = "") {
     set({ phase: "idle", meeting: null });
     loadKept();
   } catch (e) {
-    // the backend kept the recording and says where after the reason: the newest one, unless it was a retry
+    // the backend kept the recording and says where after the reason
     await loadKept();
     set({
       phase: "idle",
-      retry: folder || rec().kept[0] || "",
+      // the one this save kept (an import is named by the meeting's start, so not always the newest), unless it was a
+      // retry or nothing was kept (an import of a file that could not be read)
+      retry: folder || rec().kept.find(k => !had.has(k)) || "",
       error: String(e).startsWith("model") ? t("rec.noModel") : String(e),
     });
     return;

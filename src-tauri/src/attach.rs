@@ -92,13 +92,14 @@ pub fn resolve(files: &[String], note_dir: &str, target: &str) -> Option<String>
     })
 }
 
-/// What an embed shows: "image", "pdf", "audio", "note" or "file".
+/// What an embed shows: "image", "pdf", "audio", "note", "base" (an Obsidian base, drawn as its view) or "file".
 pub fn kind_of(path: &str) -> &'static str {
     match path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).as_deref() {
         Some("png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "avif" | "heic" | "bmp") => "image",
         Some("pdf") => "pdf",
         Some("m4a" | "mp3" | "wav" | "aac" | "ogg" | "flac" | "opus") => "audio",
         Some("md") => "note",
+        Some("base") => "base",
         _ => "file",
     }
 }
@@ -182,7 +183,7 @@ pub fn info(root: &Path, note_rel: &str, targets: &[String]) -> Vec<Value> {
                 out["thumb"] = json!(pdf_thumb(&abs, size, modified));
             }
             // an embedded note is read whole: its heading is found in the page (domain/workspace/embeds.ts)
-            "note" if size <= 1_000_000 => out["text"] = json!(std::fs::read_to_string(&abs).unwrap_or_default()),
+            "note" | "base" if size <= 1_000_000 => out["text"] = json!(std::fs::read_to_string(&abs).unwrap_or_default()),
             _ => {}
         }
         out
@@ -323,7 +324,7 @@ mod tests {
 
     #[test]
     fn what_an_embed_shows_follows_its_extension() {
-        for (p, k) in [("a.PNG", "image"), ("a.pdf", "pdf"), ("a.m4a", "audio"), ("a.md", "note"), ("a.zip", "file"), ("a", "file")] {
+        for (p, k) in [("a.PNG", "image"), ("a.pdf", "pdf"), ("a.m4a", "audio"), ("a.md", "note"), ("Meetings.base", "base"), ("a.zip", "file"), ("a", "file")] {
             assert_eq!(kind_of(p), k, "{p}");
         }
     }

@@ -47,7 +47,7 @@ const RUNS: &[&str] = &["terminal", "command", "tool", "fileloc", "inetloc", "we
 #[derive(Clone, Debug, PartialEq)]
 pub struct Account { pub email: String, pub keychain_service: String, pub keychain_account: String, pub host: String, pub port: u16 }
 
-/// A keychain name as it goes to `security` as its own argv entry: never an option, never a control char.
+/// A keychain name: never an option, never a control char (it went to `security` as an argv entry before secrets.rs).
 fn key_ok(s: &str) -> bool { (1..=128).contains(&s.chars().count()) && !s.starts_with('-') && !s.chars().any(char::is_control) }
 fn email_ok(s: &str) -> bool {
     s.len() <= 254 && !s.starts_with('-') && s.chars().all(|c| c.is_ascii_graphic() && c != '"' && c != '\\')
@@ -127,17 +127,12 @@ fn quoted(s: &str) -> Result<String, Fail> {
 async fn keychain(a: &Account) -> Result<String, Fail> {
     let (svc, acc) = (a.keychain_service.clone(), a.keychain_account.clone());
     if !key_ok(&svc) || !key_ok(&acc) { return Err(user("invalid keychain entry name")); }
-    // `security` can show an approval dialog, never hold the account's lock on it forever
-    let read = tokio::task::spawn_blocking(move || std::process::Command::new("/usr/bin/security")
-        .args(["find-generic-password", "-s", &svc, "-a", &acc, "-w"]).stderr(std::process::Stdio::null()).output());
-    let out = timeout(KEYCHAIN_WAIT, read).await.map_err(|_| user("Keychain access was not approved in time"))?
-        .map_err(|e| user(e.to_string()))?.map_err(|e| user(e.to_string()))?;
+    // the keychain can show an approval dialog, never hold the account's lock on it forever
+    let read = tokio::task::spawn_blocking(move || crate::secrets::get(&svc, &acc));
     // ponytail: the password is a plain String, not zeroized on drop
-    let pw = String::from_utf8(out.stdout).unwrap_or_default().trim_end_matches(['\r', '\n']).to_string();
-    if !out.status.success() || pw.is_empty() {
-        return Err(user(format!("No password in the keychain for service \"{}\", account \"{}\"", a.keychain_service, a.keychain_account)));
-    }
-    Ok(pw)
+    timeout(KEYCHAIN_WAIT, read).await.map_err(|_| user("Keychain access was not approved in time"))?
+        .map_err(|e| user(e.to_string()))?
+        .ok_or_else(|| user(format!("No password in the keychain for service \"{}\", account \"{}\"", a.keychain_service, a.keychain_account)))
 }
 
 async fn connect(a: &Account, pw: &str) -> Result<Conn, Fail> {

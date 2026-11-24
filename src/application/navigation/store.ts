@@ -1,7 +1,7 @@
 import type { BoardRef } from "../../domain/board/types";
 import type { Folder } from "../../domain/navigation/sidebar-folders";
 import type { Touch } from "../../domain/graph/types";
-import { WAIT, type Drawer, type Tool, type Toast } from "../../domain/navigation/views";
+import { WAIT, type Back, type Drawer, type Tool, type Toast } from "../../domain/navigation/views";
 import { storage } from "../../infrastructure/storage";
 import { isPrimary } from "../../infrastructure/window";
 import { makeStore } from "../make-store";
@@ -20,10 +20,10 @@ type NavigationState = {
   quickText: string; // what Cmd-K opens with typed (a relay://ask link), "" for an empty field
   lastProject: string | null; // the vault project last shown, so its linked board opens with the board view
   update: string; // the Relay version the last update check found, "" for none: a dot on the settings button
-  // The details: a vault note ("note:…") in the right drawer. A PR and a mail open next to their list, a card in the
-  // ticket window over the board.
+  // a page opened from a conversation or a view: what Back goes to (backAfter), null when there is none
+  back: Back | null;
+  // The details: a PR and a mail open next to their list, a card in the ticket window over the board.
   panel: {
-    open: string; // the key of the note shown in the drawer, "" for none
     modal: string; // the card key shown in the ticket window over the board, "" for none
     prOpen: string; // the PR key shown in the Pull requests view, "" for none
     mailOpen: string; // the mail key shown in the Mail view, "" for none
@@ -47,6 +47,7 @@ type NavigationState = {
     // window saves whole from its own copy
     workspace: string;
     pagesOpen: Set<string>; // the Pages tab's unfolded folders and projects, by path; kept over a restart
+    pagesFiles: Record<string, boolean>; // per workspace folder: its Pages tab shows the folders (Show files); kept
     touches: Touch[]; // the notes conversations read and wrote this week, for the Pages tab's Recent
     recentRemoved: Record<string, Record<string, number>>; // per workspace root: the notes taken off Recent, when; kept over a restart
     tab: "chats" | "pages"; // the sidebar's tab, kept here for the same reason as `workspace`
@@ -66,8 +67,8 @@ export const useNavigationStore = makeStore<NavigationState>(() => ({
   quickText: "",
   lastProject: null,
   update: "",
+  back: null,
   panel: {
-    open: "",
     modal: "",
     prOpen: "",
     mailOpen: "",
@@ -88,6 +89,7 @@ export const useNavigationStore = makeStore<NavigationState>(() => ({
     editing: "",
     workspace: storage.get<string>("workspace", ""),
     pagesOpen: new Set(storage.get<string[]>("pagesOpen", [])),
+    pagesFiles: storage.get<Record<string, boolean>>("pagesFiles", {}),
     touches: [],
     recentRemoved: storage.get<Record<string, Record<string, number>>>("recentRemoved", {}),
     tab: storage.get<"chats" | "pages">("sidebarTab", "chats"),

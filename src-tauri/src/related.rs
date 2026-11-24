@@ -343,15 +343,17 @@ pub fn linked(dir: &Path, root: &str) -> Result<Value, String> {
 pub fn collection(dir: &Path, root: &str) -> Result<Value, String> {
     with(dir, root, |c| {
         let mut st = c.prepare(
-            "SELECT m.path, m.title, m.kind, d.mtime, m.refs, m.props FROM meta m JOIN docs d ON d.path = m.path ORDER BY m.path",
+            "SELECT m.path, m.title, m.kind, d.mtime, m.refs, m.props, m.links, m.tags FROM meta m JOIN docs d ON d.path = m.path ORDER BY m.path",
         )?;
-        let rows = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, i64>(3)?, r.get::<_, Option<String>>(4)?, r.get::<_, Option<String>>(5)?)))?;
+        let rows = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, i64>(3)?, r.get::<_, Option<String>>(4)?, r.get::<_, Option<String>>(5)?, r.get::<_, Option<String>>(6)?, r.get::<_, Option<String>>(7)?)))?;
         let mut out = vec![];
+        let lines = |s: Option<String>| s.map(|s| s.lines().filter(|l| !l.is_empty()).map(String::from).collect::<Vec<_>>()).unwrap_or_default();
         for row in rows {
-            let (p, t, k, at, refs, props) = row?;
+            let (p, t, k, at, refs, props, links, tags) = row?;
             let refs: Value = refs.and_then(|r| serde_json::from_str(&r).ok()).unwrap_or(Value::Null);
             let props: Value = props.and_then(|r| serde_json::from_str(&r).ok()).unwrap_or_else(|| json!({}));
-            out.push(json!({"p": p, "t": t, "k": k, "at": at, "date": refs["date"], "stage": refs["stage"], "props": props}));
+            // links and tags: what a page's base view filters on (file.hasLink, file.hasTag; issue 421)
+            out.push(json!({"p": p, "t": t, "k": k, "at": at, "date": refs["date"], "stage": refs["stage"], "props": props, "links": lines(links), "tags": lines(tags)}));
         }
         Ok(Value::from(out))
     })
@@ -652,6 +654,25 @@ pub fn find(dir: &Path, root: &str, query: &str) -> Result<Value, String> {
     })
 }
 
+/// The passages of `root` that match `text` as word prefixes (as ⌘K's content), best first, at most `limit`:
+/// [{path, passage, score}], the score bm25 turned positive (higher is better). Only what the note says and where it
+/// is: no title, no mtime, nothing the index knows about who or when (`relay knowledge.search`, actions.rs).
+pub fn passages(dir: &Path, root: &str, text: &str, limit: usize) -> Result<Vec<Value>, String> {
+    let terms = terms(text);
+    if terms.is_empty() || limit == 0 { return Ok(vec![]); }
+    with(dir, root, |c| {
+        let mut st = c.prepare("SELECT path, body, bm25(docs, 0, 0, 5.0, 1.0) AS s FROM docs WHERE docs MATCH ?1 ORDER BY s LIMIT ?2")?;
+        let rows = st.query_map(params![fts("body", &terms), limit as i64], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, f64>(2)?)))?;
+        let mut out = vec![];
+        for r in rows {
+            let (path, body, s) = r?;
+            let Some((_, before, hit, after)) = hit_line(&body, &terms) else { continue };
+            out.push(json!({"path": path, "passage": format!("{before}{hit}{after}"), "score": -s}));
+        }
+        Ok(out)
+    })
+}
+
 /// When each note of `root` last changed, {path: seconds}, for a folder sorted by modified.
 pub fn times(dir: &Path, root: &str) -> Result<Value, String> {
     with(dir, root, |c| {
@@ -697,7 +718,7 @@ mod tests {
         fs::create_dir_all(d.join("Calendar/Meetings/2026")).unwrap();
         let v = vault::canon(d.to_str().unwrap());
         let db = d.join("index");
-        fs::write(d.join("Calendar/Meetings/2026/2026-10-08 Sync.md"), "---\ntype: Meeting\ncontext: \"[[Agency]]\"\nabout: \"[[Northwind Portal]]\"\n---\n## Summary\nx\n").unwrap();
+        fs::write(d.join("Calendar/Meetings/2026/2026-10-08 Sync.md"), "---\ntype: Meeting\ncontext: \"[[Agency]]\"\ntags: [client]\nabout: \"[[Northwind Portal]]\"\n---\n## Summary\nWith [[Sofie Claes]].\n").unwrap();
         fs::write(d.join("Loose.md"), "just text").unwrap();
         let rows = collection(&db, &v).unwrap();
         let rows = rows.as_array().unwrap();
@@ -705,6 +726,7 @@ mod tests {
         assert_eq!((sync["k"].as_str(), sync["date"].as_str(), sync["stage"].as_str()), (Some("Meeting"), Some("2026-10-08"), Some("wrapped")));
         assert_eq!(sync["props"]["about"], json!(["Northwind Portal"]));
         assert_eq!(sync["props"]["context"], json!(["Agency"]));
+        assert_eq!((&sync["links"], &sync["tags"]), (&json!(["Agency", "Northwind Portal", "Sofie Claes"]), &json!(["client"])));
         assert_eq!(rows.iter().find(|r| r["p"] == "Loose.md").unwrap()["k"], "");
         fs::remove_dir_all(&d).ok();
     }

@@ -84,7 +84,7 @@ def scan(root, names, show=False):
 
 def structure(root):
     problems = []
-    for need in ("CLAUDE.md", "System/rules/core/work-state.md", "System/reminders.md", "System/settings.json", ".relay/config.json"):
+    for need in ("CLAUDE.md", "AGENTS.md", "System/rules/core/work-state.md", "System/reminders.md", "System/settings.json", ".relay/config.json"):
         if not os.path.isfile(os.path.join(root, need)):
             problems.append(f"missing {need}")
     hooks = os.path.join(root, "System", "hooks")

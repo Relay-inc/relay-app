@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 /// Every agent provider, in the order of the settings and the composer. A new one is one line here and one in
 /// src/agents/index.ts.
-pub static PROVIDERS: &[&dyn AgentProvider] = &[&agent_claude::PROVIDER, &agent_codex::PROVIDER, &agent_opencode::PROVIDER, &agent_pi::PROVIDER];
+pub static PROVIDERS: &[&dyn AgentProvider] = &[&agent_claude::PROVIDER, &agent_codex::PROVIDER, &agent_opencode::PROVIDER, &agent_pi::PROVIDER, &agent_antigravity::PROVIDER];
 /// The provider of everything from before the providers: sessions.json strings, old pending files, `t:<sid>`.
 pub const FIRST: &str = "claude";
 
@@ -30,7 +30,8 @@ pub fn migrate(v: &mut Value) {
         if !c["on"].is_boolean() { c["on"] = json!(p.id() == FIRST); }
         if !c["bin"].is_string() { c["bin"] = json!(""); }
         if p.caps().accounts {
-            // accounts: the extra logins as {name, dir}; active: the one new conversations start on ("" the CLI's own);
+            // accounts: the extra logins as {name, dir}; active: the one new conversations start on ("" the CLI's own,
+            // MOST_ROOM whichever has the most room then);
             // auto: move to the next account when one's limits are used up
             // a blank name (older builds saved one) becomes the folder's, so check() still passes
             let list: Vec<Value> = c["accounts"].as_array().into_iter().flatten()
@@ -38,7 +39,7 @@ pub fn migrate(v: &mut Value) {
                 .map(|mut a| { if a["name"].as_str().unwrap_or("").trim().is_empty() {
                     a["name"] = json!(a["dir"].as_str().unwrap_or("").trim_end_matches('/').rsplit('/').next().unwrap_or("").trim_start_matches('.'));
                 } a }).collect();
-            let active = c["active"].as_str().filter(|d| list.iter().any(|a| a["dir"] == *d)).unwrap_or("").to_string();
+            let active = c["active"].as_str().filter(|d| (*d == MOST_ROOM && !list.is_empty()) || list.iter().any(|a| a["dir"] == *d)).unwrap_or("").to_string();
             (c["accounts"], c["active"]) = (json!(list), json!(active));
             if !c["auto"].is_boolean() { c["auto"] = json!(false); }
         }
@@ -89,6 +90,16 @@ pub fn accounts(s: &Value, p: &dyn AgentProvider) -> Vec<String> {
     let extra = c["accounts"].as_array().into_iter().flatten().filter_map(|a| a["dir"].as_str()).map(String::from);
     std::iter::once(String::new()).chain(extra.filter(|_| p.caps().accounts)).collect()
 }
+/// `active` when a new conversation starts on the account with the most room then, not on one fixed account. Never a
+/// folder: those are absolute paths (`check`).
+pub const MOST_ROOM: &str = "most-room";
+/// The account with the most room: of the `ready` (signed-in) accounts the one with the highest `room` ([`room`]:
+/// what is left of its limits against the time left to use it), the first listed on a tie. One whose limits were
+/// not read yet (None) comes after every read one with room and before a full one. The first listed when none is ready.
+pub fn most_room(list: &[String], room: impl Fn(&str) -> Option<f64>, ready: impl Fn(&str) -> bool) -> String {
+    let rank = |a: &str| match room(a) { Some(r) if r > 0.0 => -r, Some(_) => 1.0, None => 0.0 };
+    list.iter().filter(|a| ready(a)).min_by(|x, y| rank(x).total_cmp(&rank(y))).or(list.first()).cloned().unwrap_or_default()
+}
 /// The account a conversation runs on: `cur` (its own, or the active one for a new conversation), also when it left
 /// the list (its transcript is still there); with `auto` and `cur` used up, the next listed account after it that is
 /// not and is `ready` (signed in), round the list, else `cur`.
@@ -104,10 +115,32 @@ pub fn pick_account(list: &[String], cur: &str, auto: bool, spent: impl Fn(&str)
 pub fn used_up(limits: &Value, model: &str) -> bool { full(limits, model).next().is_some() }
 /// The windows of `limits` at 100% that apply to `model`, as in [`used_up`].
 pub fn full<'a>(limits: &'a Value, model: &str) -> impl Iterator<Item = &'a Value> {
+    applies(limits, model).filter(|w| w["pct"].as_f64().is_some_and(|x| x >= 100.0))
+}
+/// The windows of `limits` that count for `model`: the unnamed ones, and a model's own when `model` is that model.
+fn applies<'a>(limits: &'a Value, model: &str) -> impl Iterator<Item = &'a Value> {
     let model = model.to_lowercase();
     limits["windows"].as_array().into_iter().flatten()
         .filter(move |w| w["name"].as_str().is_none_or(|n| !model.is_empty() && model.contains(&n.to_lowercase())))
-        .filter(|w| w["pct"].as_f64().is_some_and(|x| x >= 100.0))
+}
+/// The least of a window that still counts as time left, as a share of its length (15 minutes of a session, 8 hours
+/// of a week): closer to the reset the room does not grow further, so a sliver left just before a reset never beats
+/// an account that is on pace.
+const LEAST_LEFT: f64 = 0.05;
+/// How much room `limits` leave for `model` at `now` (epoch ms), against the time left to use it. Per window that
+/// counts: the share still unused over the share of the window still to run, and the tightest window decides. 1 is
+/// on pace (half used at half time, or untouched). Above 1 more is left than there is time for: 20% unused shortly
+/// before the reset scores 4, room that is lost when nobody uses it. Below 1 it runs out before its reset. A window
+/// that names no reset (not started) counts its whole length. 0 with a full window, None for limits that did not read.
+/// ponytail: lengths by window id, a session five hours and every other window a week; a third length gets its own arm
+pub fn room(limits: &Value, model: &str, now: i64) -> Option<f64> {
+    // no window that counts (a provider without one): on pace
+    (limits["ok"] == true).then(|| applies(limits, model).filter_map(|w| {
+        let unused = (100.0 - w["pct"].as_f64()?).max(0.0) / 100.0;
+        let span = if w["id"] == "session" { 5.0 * 3_600_000.0 } else { 7.0 * 86_400_000.0 };
+        let left = w["resets"].as_str().and_then(|r| chrono::DateTime::parse_from_rfc3339(r).ok()).map_or(span, |d| (d.timestamp_millis() - now) as f64);
+        Some(unused / (left / span).clamp(LEAST_LEFT, 1.0))
+    }).reduce(f64::min).unwrap_or(1.0))
 }
 /// Limits read without a login: the account was never signed in (an expired token the CLI refreshes itself).
 pub fn no_login(limits: &Value) -> bool { limits["ok"] == false && limits["reason"] == "no-login" }
@@ -169,7 +202,7 @@ mod tests {
     fn settings_fill_in_claude() {
         let mut v = json!({});
         migrate(&mut v);
-        assert_eq!(v["agents"], json!({"default": "claude", "providers": {"claude": {"on": true, "bin": "", "accounts": [], "active": "", "auto": false}, "codex": {"on": false, "bin": ""}, "opencode": {"on": false, "bin": ""}, "pi": {"on": false, "bin": ""}}}));
+        assert_eq!(v["agents"], json!({"default": "claude", "providers": {"claude": {"on": true, "bin": "", "accounts": [], "active": "", "auto": false}, "codex": {"on": false, "bin": ""}, "opencode": {"on": false, "bin": ""}, "pi": {"on": false, "bin": ""}, "antigravity": {"on": false, "bin": ""}}}));
         assert!(check(&v).is_ok());
         for bad in [json!([{"name": "Work", "dir": "relative"}]), json!([{"name": "  ", "dir": "/h/.claude-work"}]),
                     json!([{"name": "A", "dir": "/h/w"}, {"name": "B", "dir": "/h/w/"}]), json!([{"name": "Own", "dir": format!("{}/.claude/", crate::home())}])] {
@@ -199,6 +232,57 @@ mod tests {
         assert!(!used_up(&opus_week, "sonnet") && !used_up(&opus_week, ""));
         assert!(used_up(&json!({"windows": [w(Value::Null, 100.0)]}), "sonnet"));
         assert!(no_login(&json!({"ok": false, "reason": "no-login"})) && !no_login(&json!({"ok": false, "reason": "expired"})));
+    }
+    #[test]
+    fn a_new_conversation_takes_the_account_with_the_most_room() {
+        let l: Vec<String> = ["", "/a", "/b"].map(String::from).to_vec();
+        let ok = |_: &str| true;
+        let room = |m: &'static [(&'static str, Option<f64>)]| move |a: &str| m.iter().find(|(k, _)| *k == a).and_then(|(_, v)| *v);
+        assert_eq!(most_room(&l, room(&[("", Some(0.2)), ("/a", Some(4.0)), ("/b", Some(1.0))]), ok), "/a");
+        // a tie keeps the list's order
+        assert_eq!(most_room(&l, room(&[("", Some(1.0)), ("/a", Some(1.0)), ("/b", Some(1.0))]), ok), "");
+        // not read yet: after one with room, before a full one
+        assert_eq!(most_room(&l, room(&[("", Some(0.01)), ("/b", Some(0.0))]), ok), "");
+        assert_eq!(most_room(&l, room(&[("", Some(0.0)), ("/b", Some(0.0))]), ok), "/a");
+        // never one that is not signed in; none ready: the first listed
+        assert_eq!(most_room(&l, room(&[("", Some(0.2)), ("/a", Some(1.0)), ("/b", Some(0.1))]), |a| a != "/a"), "");
+        assert_eq!(most_room(&l, room(&[]), |_| false), "");
+        // the setting survives a migrate with accounts, and falls back to the CLI's own without any
+        let mut v = json!({"agents": {"providers": {"claude": {"accounts": [{"name": "Work", "dir": "/h/w"}], "active": MOST_ROOM}}}});
+        migrate(&mut v);
+        assert!(check(&v).is_ok());
+        assert_eq!(v["agents"]["providers"]["claude"]["active"], MOST_ROOM);
+        v["agents"]["providers"]["claude"]["accounts"] = json!([]);
+        migrate(&mut v);
+        assert_eq!(v["agents"]["providers"]["claude"]["active"], "");
+    }
+    #[test]
+    fn room_is_what_is_left_against_the_time_left() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-11-17T12:00:00Z").unwrap().timestamp_millis();
+        let at = |min: i64| json!(chrono::DateTime::from_timestamp_millis(now + min * 60_000).unwrap().to_rfc3339());
+        let one = |id: &str, pct: f64, resets: Value| json!({"ok": true, "windows": [{"id": id, "name": null, "pct": pct, "resets": resets}]});
+        let near = |x: Option<f64>, want: f64| assert!((x.unwrap() - want).abs() < 1e-9, "{x:?} is not {want}");
+        // on pace: half used at half time, and untouched, with or without a reset named
+        near(room(&one("session", 50.0, at(150)), "", now), 1.0);
+        near(room(&one("session", 0.0, Value::Null), "", now), 1.0);
+        near(room(&one("weekly", 0.0, at(7 * 24 * 60)), "", now), 1.0);
+        // 20% unused ten minutes before the reset: room that is lost otherwise, above an untouched account
+        near(room(&one("session", 80.0, at(10)), "", now), 4.0);
+        // the same 20% with four hours to go runs out early
+        near(room(&one("session", 80.0, at(240)), "", now), 0.25);
+        // a sliver before the reset stays under on pace, a reset already past counts as about to
+        near(room(&one("session", 97.0, at(5)), "", now), 0.6);
+        near(room(&one("session", 80.0, at(-5)), "", now), 4.0);
+        // a week: 40% unused with a day to go
+        near(room(&one("weekly", 60.0, at(24 * 60)), "", now), 2.8);
+        // the tightest window that counts for the model decides, a full one leaves none
+        let w = |id: &str, name: Value, pct: f64, min: i64| json!({"id": id, "name": name, "pct": pct, "resets": at(min)});
+        let limits = json!({"ok": true, "windows": [w("session", Value::Null, 50.0, 150), w("weekly", Value::Null, 10.0, 7 * 24 * 60), w("weekly:Opus", json!("Opus"), 100.0, 60)]});
+        near(room(&limits, "sonnet", now), 0.9);
+        near(room(&limits, "", now), 0.9);
+        near(room(&limits, "claude-opus-5-5", now), 0.0);
+        near(room(&json!({"ok": true, "windows": []}), "", now), 1.0);
+        assert_eq!(room(&json!({"ok": false, "reason": "expired"}), "", now), None);
     }
     #[test]
     fn accounts_switch_only_when_used_up() {

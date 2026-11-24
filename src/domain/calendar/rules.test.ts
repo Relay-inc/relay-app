@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   soon,
   bannerDue,
+  nudgeDue,
   minutesLeft,
   meetingDay,
   meetingPrompt,
@@ -34,6 +35,17 @@ const at = (id: string, minutes: number, from = now): Meeting => ({
 });
 const ids = (list: Meeting[]) => list.map(meeting => meeting.id);
 const list = [at("started-long-ago", -11), at("just-started", -10), at("in-5", 5), at("in-30", 30), at("in-31", 31)];
+
+test("the record nudge asks for the meeting that started last, until it ends or is answered", () => {
+  const ended = { ...at("ended", -90) };
+  const noEnd = { ...at("no-end", -5), end: "" };
+  const all = [ended, at("earlier", -30), at("later", -2), at("in-5", 5), noEnd];
+  assert.equal(nudgeDue(all, now, new Set())?.id, "later");
+  assert.equal(nudgeDue(all, now, new Set(["later"]))?.id, "no-end"); // no end: 10 minutes
+  assert.equal(nudgeDue(all, now, new Set(["later", "no-end"]))?.id, "earlier");
+  assert.equal(nudgeDue(all, now, new Set(["later", "no-end", "earlier"])), null); // ended and future ones never
+  assert.equal(nudgeDue([at("starts-now", 0)], now, new Set())?.id, "starts-now");
+});
 
 test("waiting shows a meeting from half an hour before until 10 minutes after its start", () => {
   assert.deepEqual(ids(soon(list, now)), ["just-started", "in-5", "in-30"]);

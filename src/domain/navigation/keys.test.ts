@@ -9,7 +9,6 @@ import {
   pageKey,
   prKey,
   mailKey,
-  noteKey,
   cardKey,
   chatTime,
   termSid,
@@ -42,7 +41,6 @@ test("panel keys round-trip", () => {
     account: "k@example.com",
     id: "17",
   });
-  assert.deepEqual(panelItem(noteKey("Contexts/A/B.md")), { kind: "note", target: "Contexts/A/B.md" });
   assert.deepEqual(panelItem(cardKey("productive", "123:4")), { kind: "card", provider: "productive", id: "123:4" });
   assert.equal(panelItem(""), null);
 });

@@ -9,15 +9,29 @@
 
 use crate::channel::Rooms;
 use crate::{clients, device_name, now, save_clients, write_private, Client, CLIENTS};
+use relay_remote::docs::READ_ONLY;
 use relay_remote::members;
 use relay_remote::vault::{epoch, split, MAX_EPOCH, MAX_RECORD};
 use relay_remote::{sync, tls};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::{fs, io};
+
+/// What tells a record file's version apart without reading it: inode, size and modification time.
+#[cfg(unix)]
+fn stamp(m: &fs::Metadata) -> (u64, u64, i64, i64) {
+    use std::os::unix::fs::MetadataExt;
+    (m.ino(), m.len(), m.mtime(), m.mtime_nsec())
+}
+// ponytail: no inode on Windows (std's file index is unstable), so a record replaced by one of the same size within
+// NTFS's 100 ns clock tick lists from the cache. Every write renames a new file in, which gets its own time
+#[cfg(not(unix))]
+fn stamp(m: &fs::Metadata) -> (u64, u64, i64, i64) {
+    let t = m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).unwrap_or_default();
+    (0, m.len(), t.as_secs() as i64, t.subsec_nanos() as i64)
+}
 
 /// How long an invite link works, and how many wrong proofs drop it.
 const INVITE_SECS: u64 = 24 * 3600;
@@ -29,7 +43,7 @@ const MAX_WRAPPED: usize = 256 << 10;
 
 /// A member's publication (relay_remote::vault::Keys::publication), all opaque here: `pk` its X25519 public key a
 /// rotated vault key is sealed to, `id` its Ed25519 identity, `sig` the identity's signature, `mac` `<epoch>:<hex>`.
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Default)]
 /// `imac`: proof made with the invite link it joined with, `via` that invite's id (an admin adds it to the member list).
 pub(crate) struct Member { pub fp: String, pub name: String, pub role: String, pub added: u64,
     #[serde(default)] pk: String, #[serde(default)] id: String, #[serde(default)] sig: String, #[serde(default)] mac: String,
@@ -138,6 +152,24 @@ impl Vaults {
     pub(crate) fn with<T>(&self, id: &str, fp: &str, f: impl FnOnce(&mut Vault, &str) -> Result<T, String>) -> Result<T, String> {
         self.locked(id, |v| { let role = v.role(fp).ok_or("no such vault")?.to_string(); f(v, &role) })
     }
+    /// The same for a write: a reader is refused (`READ_ONLY`, docs/workspaces.md, Roles).
+    pub(crate) fn writing<T>(&self, id: &str, fp: &str, f: impl FnOnce(&mut Vault, &str) -> Result<T, String>) -> Result<T, String> {
+        self.with(id, fp, |v, role| if role == "reader" { Err(READ_ONLY.into()) } else { f(v, role) })
+    }
+    /// A team workspace's members (team.rs `apply`): `list` (fingerprint, name, role) replaces what vault.json has, kept
+    /// as it is when nothing changed. Returns the fingerprints that are out now.
+    pub(crate) fn set_members(&self, id: &str, list: &[(String, String, String)]) -> Result<Vec<String>, String> {
+        self.locked(id, |v| {
+            let gone: Vec<String> = v.members.iter().filter(|m| !list.iter().any(|(fp, ..)| *fp == m.fp)).map(|m| m.fp.clone()).collect();
+            let next: Vec<Member> = list.iter().map(|(fp, name, role)| {
+                let added = v.members.iter().find(|m| &m.fp == fp).map_or(now(), |m| m.added);
+                Member { fp: fp.clone(), name: name.clone(), role: role.clone(), added, ..Default::default() }
+            }).collect();
+            let same = next.len() == v.members.len() && next.iter().all(|n| v.members.iter().any(|m| m.fp == n.fp && m.name == n.name && m.role == n.role));
+            if !same { v.members = next; save(&self.data, v)?; }
+            Ok(gone)
+        })
+    }
     /// A read: the caller must be a member now, the blobs it reads are each written whole (temp file and rename).
     pub(crate) fn member(&self, id: &str, fp: &str) -> Result<Vault, String> {
         let v = if hex(id, 16) { load(&self.data, id) } else { None };
@@ -183,7 +215,7 @@ impl Vaults {
         })
     }
     pub fn invite_revoke(&self, fp: &str, id: &str, invite: &str) -> Result<(), String> {
-        self.with(id, fp, |v, me| {
+        self.writing(id, fp, |v, me| {
             if me != "admin" { return Err("only an admin can revoke an invite".into()); }
             v.invites.retain(|i| i.id != invite);
             save(&self.data, v)
@@ -277,7 +309,7 @@ impl Vaults {
     /// member without one could read nothing new). In one step, so an interrupted rotation never half happens. Open
     /// invites go: they carry the keys up to the old epoch.
     pub fn rotate(&self, fp: &str, id: &str, next: u64, keys: &serde_json::Map<String, Value>, entry: Option<&Value>) -> Result<Value, String> {
-        self.with(id, fp, |v, me| {
+        self.writing(id, fp, |v, me| {
             if me != "admin" { return Err("only an admin can change the key".into()); }
             if next != v.epoch as u64 + 1 || next > MAX_EPOCH as u64 { return Err(format!("the key is at epoch {} here", v.epoch)); }
             // with a member list: the `rekey` entry goes on it in the same write, and the keys are for its members
@@ -388,7 +420,7 @@ impl Vaults {
             // a write's temp file is no record
             let Some(name) = e.file_name().to_str().filter(|n| hex(n, 64)).map(String::from) else { continue };
             let (p, Ok(m)) = (e.path(), e.metadata()) else { continue };
-            let stamp = (m.ino(), m.len(), m.mtime(), m.mtime_nsec());
+            let stamp = stamp(&m);
             if let Some((s, v)) = seen.get(&name).filter(|(s, _)| *s == stamp) { out.push(v.clone()); listed.insert(name, (*s, v.clone())); continue; }
             let v = match fs::read(&p) {
                 Ok(b) => json!({"name": name, "etag": sync::sha256_hex(&b), "size": b.len(), "meta": split(&b).map(|(m, _)| tls::hex(m)).unwrap_or_default(), "e": split(&b).and(epoch(&b)).unwrap_or(0)}),
@@ -414,7 +446,7 @@ impl Vaults {
         if !hex(name, 64) { return Err("bad name".into()); }
         if record.len() as u64 > MAX_RECORD || split(record).is_none() { return Err("not a record".into()); }
         let expect = expect.ok_or("expect missing")?;
-        self.with(id, fp, |v, _| {
+        self.writing(id, fp, |v, _| {
             // only under the current key: a Relay that has not fetched the new one fetches it and writes again
             match epoch(record).unwrap_or(0).cmp(&v.epoch) {
                 std::cmp::Ordering::Less => return Err("key changed".into()),
@@ -432,7 +464,7 @@ impl Vaults {
     pub fn delete(&self, fp: &str, id: &str, name: &str, expect: Option<&str>) -> Result<(), String> {
         if !hex(name, 64) { return Err("bad name".into()); }
         let expect = expect.ok_or("expect missing")?;
-        self.with(id, fp, |_, _| {
+        self.writing(id, fp, |_, _| {
             if self.bound(id, name) { return Err(BOUND.into()); }
             let p = self.blobs(id).join(name);
             if etag_at(&p)? != expect { return Err("changed meanwhile".into()); }

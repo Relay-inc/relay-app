@@ -1,8 +1,9 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-keeper|shared-live|shared-live-dark, ?sel=<selection key> (what the window
-// opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|plugins|plugins-dark|shared|shared-invite|shared-member|shared-member-dark|shared-keeper|shared-live|shared-live-dark, ?sel=<selection key> (what the window
+// opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened),
+// ?platform=windows (the app as it runs on Windows).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
 import * as embeds from "./fixtures/embeds";
@@ -16,8 +17,10 @@ import * as files from "./fixtures/files";
 import * as kb from "./fixtures/kb";
 import * as inbox from "./fixtures/inbox";
 import * as coll from "./fixtures/collections";
+import * as views from "./fixtures/views";
 import * as Y from "yjs";
 import { SHIPPED } from "../src/domain/types/registry";
+import { vaultChoices } from "../src/domain/conversations/rules";
 // the example plugin's real view: the harness serves it from a blob, where the app has the relay-plugin:// scheme
 import diceView from "../packages/plugin-example/view.html?raw";
 
@@ -26,6 +29,13 @@ type Call = { cmd: string; args: Args; at: number };
 
 const query = new URLSearchParams(location.search);
 const fixture = query.get("fixture") || "default";
+// ?platform=windows: the app as WebView2 on Windows runs it, whose user agent names Windows (src/shared/platform.ts):
+// Ctrl keys and their labels, no menu bar, an opaque sidebar
+if (query.get("platform") === "windows")
+  Object.defineProperty(navigator, "userAgent", {
+    value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0 Edg/142.0",
+    configurable: true,
+  });
 const onboarding = fixture === "onboarding";
 const isSettingsWindow = location.pathname.endsWith("settings.html");
 
@@ -45,6 +55,10 @@ function seedStorage() {
     localStorage.setItem("linearProject", integ.LINEAR_TEAM);
     localStorage.setItem("linearBoard", `cycle_${integ.LINEAR_TEAM}`);
   }
+  if (fixture === "ghprojects") {
+    localStorage.setItem("github-projectsProject", "beacon");
+    localStorage.setItem("github-projectsBoard", integ.GH_PROJECT);
+  }
 }
 seedStorage();
 
@@ -63,7 +77,8 @@ settings = { ...settings, experimental: { files: fixture !== "files-off" } };
 // shared-invite: the same, opened by an invite link (shared_vault_pending_invite); shared-member: a Mac that joined
 // the vault with a link, its server not one of its machines; shared-keeper: that member, made admin on the server,
 // which Members (shared_vault_info) finds: the backend then keeps the server under Machines
-const member = fixture === "shared-member" || fixture === "shared-keeper";
+// shared-member-dark: shared-member in the dark theme (the vault check's member view, issue 425)
+const member = fixture === "shared-member" || fixture === "shared-member-dark" || fixture === "shared-keeper";
 // shared-rekey: someone left the vault, and the key change waits for a member whose Relay has no public key yet
 // shared-live (-dark): "shared", and a page of the side vault is a shared document two mock peers edit (ticket 9)
 const live = fixture === "shared-live" || fixture === "shared-live-dark";
@@ -73,8 +88,26 @@ const shared =
   fixture === "shared-invite" ||
   fixture === "shared-rekey" ||
   fixture === "shared-unlisted" ||
+  fixture === "shared-windows" ||
   member ||
   live;
+// team: a team server, this account an organisation admin there, Handbook synced here (fixtures/vault.ts team)
+// team-member: the same server, this account a member there and not an organisation admin (no team_overview)
+// team-unnamed: the team fixture on a server whose organisation has no name yet (the host shows)
+const teamFixture = fixture === "team" || fixture === "team-member" || fixture === "team-unnamed";
+const teamMember = fixture === "team-member";
+const orgName = fixture === "team-unnamed" ? "" : vault.ORG_NAME;
+if (teamFixture)
+  settings = {
+    ...settings,
+    teams: [{ ...structuredClone(vault.team), admin: !teamMember, name: orgName }],
+    sharedVaults: structuredClone(vault.teamVaults),
+  };
+let teamMe = { ...structuredClone(vault.teamMe), admin: !teamMember, name: orgName };
+let teamAccounts = structuredClone(vault.teamAccounts);
+let teamOverview = structuredClone(vault.teamOverview);
+let teamInviteSeq = 20;
+teamOverview.invites[0].expires = Math.floor(Date.now() / 1000) + 6 * 86400;
 if (shared)
   settings = {
     ...settings,
@@ -89,6 +122,13 @@ if (fixture === "buddy")
     integrations: { ...settings.integrations, buddy: { on: true, host: "api.eu.buddy.works" } },
     buddy: { [vault.projectNames[0]]: { workspace: "acme", project: "web-shop" } },
   };
+// the Pages tab with its folders shown in every workspace, as the views from before issue 420 expect; ?typed=1 opens
+// on the tree by type, the app's default (a fresh vault)
+if (!query.get("typed") && !onboarding)
+  localStorage.setItem(
+    "pagesFiles",
+    JSON.stringify(Object.fromEntries(vaultChoices(settings).map(choice => [choice.folder, true]))),
+  );
 let vaultOk = !onboarding;
 let pending = [...conv.pending];
 const gitRepos = structuredClone(fixture === "git-long" ? git.longRepos : git.repos);
@@ -121,6 +161,10 @@ for (const s of Object.values(sharedStatus).slice(0, 1)) {
     .map(m => m.fp)
     .filter(fp => fixture !== "shared-unlisted" || fp !== vault.sharedMembers[2].fp);
 }
+// shared-windows: a round on Windows left out two files Windows cannot name and a pair that differs in case only
+if (fixture === "shared-windows")
+  for (const s of Object.values(sharedStatus))
+    Object.assign(s, { names: ["Notes/Q&A: pricing.md", "Notes/aux.md", "Notes/Plan.md", "Notes/plan.md"], held: [] });
 if (fixture === "shared-rekey")
   for (const s of Object.values(sharedStatus))
     Object.assign(s, {
@@ -305,14 +349,18 @@ function handle(cmd: string, a: Args): unknown {
         },
         { id: "opencode", name: "OpenCode", on: false, installed: "1.1.6", latest: "1.19.0", command: null },
         { id: "pi", name: "Pi", on: false, installed: null, latest: null, command: null },
+        { id: "antigravity", name: "Antigravity", on: false, installed: null, latest: null, command: null },
       ];
     case "agent_update":
       return new Promise(resolve => setTimeout(() => resolve(null), 400));
+    // the sign-in card: the login in the browser takes a moment
+    case "agent_login":
+      return new Promise(resolve => setTimeout(() => resolve(null), 1500));
     // work machines (fixture "machines": one that speaks an older protocol, "phone", "nomirror" and shared: online)
     case "machine_status":
       // shared-keeper: a server older than this Relay, so its row offers the update
       if (fixture === "shared-keeper") return { ok: true, version: "0.0.3", os: "linux", host: "server", update: true };
-      if (fixture === "phone" || fixture === "mirror" || fixture === "nomirror" || shared)
+      if (fixture === "phone" || fixture === "mirror" || fixture === "every" || fixture === "nomirror" || shared)
         return { ok: true, version: "0.0.14", os: "linux", host: "server", update: true };
       if (fixture === "github")
         return { ok: true, version: "0.0.25", os: "linux", host: "server", update: true, repos: true };
@@ -383,10 +431,8 @@ function handle(cmd: string, a: Args): unknown {
       return new Promise(resolve =>
         setTimeout(() => resolve({ branch: "relay/server", dir: `/Users/demo/Code/${a.name}` }), 600),
       );
-    case "host_status": // fixture "github": a development build, This Mac cannot be a machine
-      return fixture === "github"
-        ? { supported: false, on: false, running: false, ram: false, fingerprint: "", clients: [] }
-        : null;
+    case "host_status": // fixture "github": a development build, This Mac cannot be a machine; else switched off
+      return { supported: fixture !== "github", on: false, running: false, ram: false, fingerprint: "", clients: [] };
     // shared vaults on a relay-server (src-tauri/src/shared_vaults.rs), fixture "shared"
     case "shared_vaults_status":
       return structuredClone(sharedStatus);
@@ -438,6 +484,19 @@ function handle(cmd: string, a: Args): unknown {
     case "shared_vault_info": {
       const v = (settings.sharedVaults ?? []).find((x: { id: string }) => x.id === a.id);
       if (!v) return Promise.reject(`no workspace ${a.id}`);
+      if (v.team)
+        return {
+          vault: {
+            id: v.id,
+            name: v.name,
+            role: v.role,
+            members: [],
+            invites: [],
+            team: true,
+            accounts: structuredClone(teamAccounts),
+          },
+          me: vault.SHARED_ME,
+        };
       if (fixture === "shared-keeper" && v.role !== "admin") {
         v.role = "admin";
         settings.machines = [...(settings.machines ?? []), structuredClone(vault.keeperMachine)];
@@ -447,6 +506,98 @@ function handle(cmd: string, a: Args): unknown {
         vault: { id: v.id, name: v.name, role: v.role, members: structuredClone(sharedMembers), invites },
         me: vault.SHARED_ME,
       };
+    }
+    // team servers (src-tauri/src/team.rs)
+    case "team_login":
+      settings.teams = [structuredClone(vault.team)];
+      return { email: vault.team.email, admin: true, name: vault.ORG_NAME };
+    // what a team server says before logging in: its organisation's name, no sign-in
+    case "team_peek":
+      return { team: true, name: vault.ORG_NAME, sso: null };
+    case "team_me":
+      return structuredClone(teamMe);
+    case "team_link":
+      return vault.teamLink();
+    case "team_open":
+    case "team_create": {
+      const w = teamMe.workspaces.find(x => x.id === a.id) ?? {
+        id: hex(16, teamMe.workspaces.length + 9),
+        name: a.name,
+        role: "admin",
+        nohistory: !!a.nohistory,
+        here: null,
+      };
+      if (!teamMe.workspaces.includes(w)) teamMe.workspaces.push(w);
+      w.here = a.folder;
+      const { here: _, ...rest } = w;
+      settings.sharedVaults = [
+        ...(settings.sharedVaults ?? []),
+        { ...rest, host: vault.team.host, port: vault.team.port, fp: vault.TEAM_FP, folder: a.folder, team: true },
+      ];
+      return null;
+    }
+    case "team_logout":
+      settings.teams = [];
+      settings.sharedVaults = (settings.sharedVaults ?? []).filter((x: { team?: boolean }) => !x.team);
+      return null;
+    case "sso_cancel":
+      return null;
+    case "team_call": {
+      const r = a.req;
+      if (r.op === "team_overview") {
+        if (teamMember) return Promise.reject("only an organisation admin sees the whole server");
+        return structuredClone(teamOverview);
+      }
+      // as relay-server's team.rs: an account made when there is none, the role in `vault`, and a link for one device
+      if (r.op === "team_invite") {
+        if (!teamAccounts.some(x => x.email === r.email) && r.vault)
+          teamAccounts = [...teamAccounts, { email: r.email, role: r.role }];
+        const id = hex(16, ++teamInviteSeq);
+        if (!teamOverview.accounts.some(x => x.email === r.email))
+          teamOverview.accounts.push({ email: r.email, admin: !!r.admin, off: false, devices: 0 });
+        const w = teamOverview.workspaces.find(x => x.id === r.vault);
+        if (w) w.members = { ...w.members, [r.email]: r.role };
+        const expires = Math.floor(Date.now() / 1000) + 7 * 86400;
+        teamOverview.invites.push({ id, email: r.email, expires });
+        return { invite: id, code: "c".repeat(64), email: r.email, expires, link: vault.teamLink(id) };
+      }
+      if (r.op === "team_member") {
+        teamAccounts = r.role
+          ? teamAccounts.map(x => (x.email === r.email ? { ...x, role: r.role } : x))
+          : teamAccounts.filter(x => x.email !== r.email);
+        const w = teamOverview.workspaces.find(x => x.id === r.vault);
+        if (w) {
+          const members: Record<string, string> = { ...w.members };
+          if (r.role) members[r.email] = r.role;
+          else delete members[r.email];
+          w.members = members;
+        }
+        return {};
+      }
+      if (r.op === "team_account") {
+        teamOverview.accounts = teamOverview.accounts.map(x =>
+          x.email === r.email
+            ? { ...x, ...("admin" in r ? { admin: r.admin } : {}), ...("off" in r ? { off: r.off } : {}) }
+            : x,
+        );
+        return {};
+      }
+      if (r.op === "team_name") {
+        teamMe = { ...teamMe, name: r.name };
+        settings.teams = (settings.teams ?? []).map((x: { fp: string }) =>
+          x.fp === a.fp ? { ...x, name: r.name } : x,
+        );
+        return { name: r.name };
+      }
+      if (r.op === "team_sso") {
+        teamOverview = { ...teamOverview, sso: r.sso };
+        return {};
+      }
+      if (r.op === "team_invite_revoke") {
+        teamOverview = { ...teamOverview, invites: teamOverview.invites.filter(i => i.id !== r.invite) };
+        return {};
+      }
+      return Promise.reject(`unknown ${r.op}`);
     }
     case "shared_vault_invite_revoke":
       sharedInvites = sharedInvites.filter(i => i.id !== a.invite);
@@ -480,7 +631,7 @@ function handle(cmd: string, a: Args): unknown {
       return structuredClone(settings);
     case "set_settings":
       // the shared vaults are the backend's own: what the window sends for them is ignored
-      settings = { ...structuredClone(a.settings), sharedVaults: settings.sharedVaults };
+      settings = { ...structuredClone(a.settings), sharedVaults: settings.sharedVaults, teams: settings.teams };
       if (settings.vault) vaultOk = true;
       return structuredClone(settings);
     case "ui_lang":
@@ -498,8 +649,8 @@ function handle(cmd: string, a: Args): unknown {
       return { ...vault.vaultStatus(true), vault: "/Users/me/Relay" };
     case "pick_folder":
       return harness.pickFolder;
-    case "pick_path":
-      return null;
+    case "pick_path": // an audio file (the meeting's Upload recording) is the first of `pickFiles`
+      return a.extensions ? (harness.pickFiles[0] ?? null) : null;
     // files attached by their path (src-tauri/src/files.rs)
     case "pick_files":
       return [...harness.pickFiles];
@@ -519,7 +670,7 @@ function handle(cmd: string, a: Args): unknown {
     }
     // files inside a page (src-tauri/src/attach.rs)
     case "embed_info":
-      return embeds.info(a.targets as string[]);
+      return (a.targets as string[]).map(t => views.baseInfo(t) ?? embeds.info([t])[0]);
     case "attach_dest":
       return "Attachments/2026";
     case "attach_save":
@@ -604,12 +755,30 @@ function handle(cmd: string, a: Args): unknown {
       return null;
     // the workspace check: a few of each kind, gone once repaired
     case "vault_check":
-      return VAULT_FINDINGS.filter(f => !repaired.has(f.id));
+      // fixture windows: a Windows computer without Git Bash, jq and Python (vaultcheck.rs missing_tools)
+      return [
+        ...VAULT_FINDINGS,
+        ...(fixture === "windows"
+          ? ["python", "bash", "jq"].map(t =>
+              finding("missing_tool", t === "python" ? "System/scripts/build-index.py" : "System/hooks", t, [], false),
+            )
+          : []),
+      ].filter(f => !repaired.has(f.id));
     case "vault_garden":
       return gardenFindings();
     case "garden_about":
       gardenDone.add(String(a.path));
       aboutSet.push([String(a.path), String(a.project)]);
+      {
+        // the note's about: set, as lib.rs `garden_about` writes it: the Pages tab's tree by type moves it (issue 420)
+        const path = String(a.path);
+        const about = `about: "[[${a.project}]]"`;
+        const text = textOfNote(path);
+        const next = text.startsWith("---\n")
+          ? `---\n${about}\n${text.slice(4).replace(/^about:.*\n/m, "")}`
+          : `---\n${about}\n---\n${text}`;
+        written.set(path, { text: next, hash: `h${Date.now()}` });
+      }
       return null;
     case "garden_ask": {
       const paths = (a.paths as string[]).slice(0, 20);
@@ -908,6 +1077,7 @@ function handle(cmd: string, a: Args): unknown {
 
     // agents and conversations
     case "agents_status":
+      if (fixture === "antigravity") return integ.agentsStatusAntigravity;
       return fixture === "models" ? integ.agentsStatusManyModels : integ.agentsStatus;
     case "agent_commands":
       return integ.agentCommands(a.provider);
@@ -955,6 +1125,7 @@ function handle(cmd: string, a: Args): unknown {
       return null;
     // the Git drawer: Beacon Billing's two checkouts, staged, discarded and committed in memory
     case "git_repos":
+      if (fixture === "ticket-branch" && a.project === "Northwind Portal") return [git.northwind];
       return a.project === "Beacon Billing" ? structuredClone(gitRepos) : [];
     case "git_log":
       return git.log(a.repo, a.all);
@@ -1006,14 +1177,25 @@ function handle(cmd: string, a: Args): unknown {
     }
     // the board pipeline: a worker on a ticket, a follow-up, its PR (open, nothing new), what it did on the board
     case "orch_dispatch_ticket": {
+      const n = workers.length;
+      const trees = (a.repos as { path: string; checks: string }[]).map(r => ({
+        repo: r.path,
+        worktree: `${r.path}-relay-t${n}`,
+        start: "a1b2c3d",
+        base: a.base || "main",
+        checks: r.checks,
+        pr: null,
+        pr_error: null,
+      }));
       const worker = {
-        key: `c:orch-w-t${workers.length}`,
+        key: `c:orch-w-t${n}`,
         project: a.project,
         title: a.title,
         task: a.task,
-        repo: a.repo,
-        worktree: `${a.repo}-relay-t${workers.length}`,
-        branch: `relay/ticket-t${workers.length}`,
+        repo: trees[0]?.repo ?? null,
+        worktree: trees[0]?.worktree ?? null,
+        branch: `relay/ticket-t${n}`,
+        trees,
         state: "running",
         at: Date.now(),
         ended: null,
@@ -1061,8 +1243,28 @@ function handle(cmd: string, a: Args): unknown {
       setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
       return structuredClone(worker);
     }
-    case "orch_pr":
-      return structuredClone(prStatus);
+    // one status per PR of the worker, as gh reads each
+    case "orch_pr": {
+      const w = workers.find(x => x.key === a.key);
+      const urls = w?.trees?.length ? w.trees.flatMap(t => (t.pr ? [t.pr] : [])) : w?.pr ? [w.pr] : [];
+      return urls.map(url => ({ ...structuredClone(prStatus), url }));
+    }
+    // the checkouts of a project's repos on this Mac (lib.rs pipeline_repos): Northwind Portal's two, and one picked by
+    // hand in place of the one found for its repo
+    case "pipeline_repos": {
+      const found: Record<string, string> =
+        a.project === "Northwind Portal"
+          ? {
+              "acme/northwind-api": "/Users/demo/code/northwind-api",
+              "acme/northwind-infra": "/Users/demo/Documents/Clients/Northwind Holdings/northwind-infrastructure",
+              "acme/northwind-portal": "/Users/demo/code/northwind",
+            }
+          : {};
+      if (a.extra) found[a.extra === "/Users/demo/code/northwind" ? "acme/northwind-portal" : "acme/extra"] = a.extra;
+      return Object.entries(found)
+        .sort()
+        .map(([slug, path]) => ({ slug, path }));
+    }
     case "orch_board": {
       const worker = workers.find(w => w.key === a.key);
       if (worker) worker.board = a.mark;
@@ -1122,7 +1324,7 @@ function handle(cmd: string, a: Args): unknown {
       // file), on top of what the harness seeded
       if (keepState) {
         const seeded = Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage.getItem(key) ?? ""]));
-        const kept = ["pagesOpen", "pagesSort", "railClosed", "recentRemoved"].flatMap(k => {
+        const kept = ["pagesOpen", "pagesSort", "pagesFiles", "railClosed", "recentRemoved"].flatMap(k => {
           const v = sessionStorage.getItem(`mockUi:${k}`);
           return v == null ? [] : [[k, v]];
         });
@@ -1153,6 +1355,8 @@ function handle(cmd: string, a: Args): unknown {
       return a.state;
     case "active_window":
       return "main";
+    case "new_window":
+      return null;
     case "ui_state_set":
       localStorage.setItem(a.key, a.value);
       if (keepState) sessionStorage.setItem(`mockUi:${a.key}`, a.value);
@@ -1161,7 +1365,14 @@ function handle(cmd: string, a: Args): unknown {
       return structuredClone(voiceModels);
     case "dictation_model":
     case "permissions":
-      return { microphone: "ok", accessibility: "ok", fullDisk: "missing", systemAudio: null, notifications: null };
+      // mic-off: the microphone switched off in Windows' privacy settings (src-tauri/src/permissions.rs)
+      return {
+        microphone: fixture === "mic-off" ? "missing" : "ok",
+        accessibility: "ok",
+        fullDisk: "missing",
+        systemAudio: null,
+        notifications: null,
+      };
     case "permissions_open":
       return null;
     case "dictation_access":
@@ -1181,6 +1392,7 @@ function handle(cmd: string, a: Args): unknown {
       dictationLevels = null;
       return null;
     case "meeting_record_start":
+      if (fixture === "mic-off") return Promise.reject("microphone");
       meetingTicks = { channel: channelId(a.onTick), index: 0 };
       return { system: true, why: null };
     case "meeting_record_stop":
@@ -1195,6 +1407,8 @@ function handle(cmd: string, a: Args): unknown {
     case "meeting_record_retry": // in the kept-recording fixture it never ends, to look at the saving state
       if (fixture === "kept-recording") return new Promise(() => {});
       return { audio: null, transcript: "Attachments/2026-09-30 1526 Meeting.md", seconds: 60 };
+    case "meeting_import": // never ends, to look at the saving state
+      return new Promise(() => {});
     case "meeting_record_cancel":
       meetingTicks = null;
       return null;
@@ -1319,9 +1533,13 @@ function handle(cmd: string, a: Args): unknown {
       return [...phoneShared];
     case "notify":
     case "open_settings_window":
+    case "record_nudge":
       return null;
+    case "record_nudge_now":
+      return { id: "weekly@1", title: "Weekly sync with the design team about the onboarding flow", time: "10:00" };
     case "usage_limits":
-      return integ.usageLimits;
+      if (fixture === "antigravity") return integ.usageLimitsAntigravity;
+      return fixture.startsWith("accounts") ? integ.usageLimitsAccounts : integ.usageLimits;
     case "usage_tokens":
       return integ.usageTokens();
 
@@ -1342,7 +1560,9 @@ function handle(cmd: string, a: Args): unknown {
     case "note_types":
       return SHIPPED;
     case "notes_collection":
-      return pageList().map(path => collectionRow(path, textOfNote(path)));
+      // the main vault's notes; another workspace's are not indexed here
+      if (a.folder && a.folder !== vault.VAULT) return [];
+      return [...new Set(pageList())].map(path => collectionRow(path, textOfNote(path)));
     case "views_list":
       return savedViews();
     case "view_save": {
@@ -1462,7 +1682,10 @@ function handle(cmd: string, a: Args): unknown {
     case "github_status":
       return "lena";
     case "github_prs":
-      return integ.prs;
+      // review-move: the PR on ticket #312 is ready for review, so its card moves on
+      return fixture === "review-move"
+        ? { ...integ.prs, mine: integ.prs.mine.map(pr => (pr.number === 420 ? { ...pr, draft: false } : pr)) }
+        : integ.prs;
     case "github_pr":
       return integ.prDetail(a.repo, a.number);
     case "mail_list":
@@ -1708,6 +1931,7 @@ function handle(cmd: string, a: Args): unknown {
       return (
         a.provider === "productive" ||
         (fixture === "linear" && a.provider === "linear") ||
+        (fixture === "ghprojects" && a.provider === "github-projects") ||
         (fixture === "buddy" && a.provider === "buddy")
       );
     case "integration_mcp":
@@ -1716,6 +1940,7 @@ function handle(cmd: string, a: Args): unknown {
       return null;
     case "integration_call":
       if (fixture === "linear" && a.provider === "linear") return integ.linear(a.body);
+      if (fixture === "ghprojects" && a.provider === "github-projects") return integ.githubProjects(a.body);
       if (fixture === "buddy" && a.provider === "buddy") return integ.buddy(a.path);
       if (a.provider !== "productive") throw new Error(`${a.provider} is not set up in the harness`);
       return integ.productive(a.method, a.path, a.body);
@@ -1912,8 +2137,13 @@ const gardenFindings = () => {
     ...f("no_type", left(GARDEN_TYPELESS)),
   ];
 };
+// one of every health kind (issue 425)
 const VAULT_FINDINGS = [
+  finding("claude_link", "", ".claude"),
+  finding("missing_file", "", "AGENTS.md"),
   finding("missing_file", "", "System/rules/core/team.md"),
+  finding("context_note", "Studio", "Contexts/Studio/Studio.md"),
+  finding("context_heading", "Studio", "Contexts/Personal/State/work-state.md"),
   finding("orphan_rule", "", "System/rules/gone/context.md", ["Contexts/Gone"], false),
   finding("context_rule", "Agency", "System/rules/agency/context.md"),
   finding("card_fields", "Agency", "Contexts/Agency/Projects/Beacon Billing/Beacon Billing.md", ["status", "last"]),
@@ -1928,11 +2158,16 @@ const trashed = new Map<string, string[]>();
 const linkedOn = fixture.startsWith("linked");
 // fixture embeds (K4): the Northwind Portal page holds a picture, a PDF, an audio file and a section of another note
 const embedsOn = fixture.startsWith("embeds");
+// fixture linked-views (issue 421): the Northwind Portal page holds views inside it (Obsidian bases)
+const viewsOn = fixture.startsWith("linked-views");
 // fixture kb (K5, K1): notes with content to search, templates, favourites
 const kbOn = fixture.startsWith("kb");
 const changesOn = fixture.startsWith("kb-changes");
 // kb-sketch (-dark): the same notes without a feed, and the one note that has no type: (Fix properties)
-const sketchOn = changesOn || fixture.startsWith("kb-sketch");
+// kb-unsorted: the sketch and a dozen more notes without a type, for the Pages tab's Unsorted (issue 420)
+const unsortedOn = fixture.startsWith("kb-unsorted");
+const unsortedPaths = unsortedOn ? Array.from({ length: 12 }, (_, i) => `Inbox/Loose note ${i + 1}.md`) : [];
+const sketchOn = changesOn || fixture.startsWith("kb-sketch") || unsortedOn;
 // kb-tables (-dark): one more note, holding the tables the table editing is tried on
 const tablesOn = fixture.startsWith("kb-tables");
 const keepState = query.get("keep") === "1";
@@ -1945,6 +2180,7 @@ const pageList = () =>
         ...vault.notes,
         ...kb.paths,
         ...(sketchOn ? [kb.untyped.path] : []),
+        ...unsortedPaths,
         ...(tablesOn ? [kb.tables.path] : []),
         ...(inboxOn ? inbox.paths : []),
       ]
@@ -1994,7 +2230,18 @@ function collectionRow(path: string, text: string) {
         : /\n## Briefing\n[^\n#]*\S/.test(`\n${body}`)
           ? "briefed"
           : "planned";
-  return { p: path, t: stem, k: kind, at: Math.floor(NOW_S - 3 * 86400), date, stage, props };
+  const links = [...text.matchAll(/\[\[([^\]|#\n]+)/g)].map(x => x[1].trim());
+  return {
+    p: path,
+    t: stem,
+    k: kind,
+    at: Math.floor(NOW_S - 3 * 86400),
+    date,
+    stage,
+    props,
+    links,
+    tags: props.tags ?? [],
+  };
 }
 const pageRel = (p: unknown) => String(p).replace(vault.VAULT, "").replace(/^\//, "");
 // shared-live: the Mac's document of the page, which the editor and the mock peers share, and the cursors sent
@@ -2052,8 +2299,8 @@ function threadsOf(all: Comment[]) {
 }
 
 const written = new Map<string, { text: string; hash: string }>(
-  fixture.startsWith("linked-collections")
-    ? Object.entries(coll.texts).map(([path, text]) => [path, { text, hash: "h0" }])
+  fixture.startsWith("linked-collections") || viewsOn
+    ? Object.entries(viewsOn ? views.texts : coll.texts).map(([path, text]) => [path, { text, hash: "h0" }])
     : embedsOn
       ? Object.entries(embeds.texts).map(([path, text]) => [path, { text, hash: "h0" }])
       : kbOn
@@ -2074,6 +2321,7 @@ type Change = {
 };
 let changes: Change[] = changesOn ? kb.seedChanges(fixture.startsWith("kb-changes-long")) : [];
 if (sketchOn) written.set(kb.untyped.path, { text: kb.untyped.text, hash: "h0" });
+for (const path of unsortedPaths) written.set(path, { text: "Jotted down, no type yet.\n", hash: "h0" });
 if (tablesOn) written.set(kb.tables.path, { text: kb.tables.text, hash: "h0" });
 if (changesOn) {
   for (const e of changes)

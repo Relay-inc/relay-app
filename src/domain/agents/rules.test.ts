@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { inheritedOf, knownCaps, knownTextOnly, picksOf, seeDefaults } from "./rules.ts";
+import { fencedAgent, inheritedOf, knownCaps, knownTextOnly, picksOf, seeDefaults } from "./rules.ts";
 import type { AgentsStatus } from "./types";
 
 // Cmd-K sends with its destination's picks (Lit's quick-send.test.ts): picks are per provider, a stale one is the default
@@ -49,4 +49,12 @@ test("what is known of the built-in providers before the status arrives", () => 
   assert.deepEqual(knownTextOnly("codex"), ["compact", "review"]);
   assert.deepEqual(knownTextOnly("pi"), ["compact"]);
   assert.deepEqual(knownTextOnly("claude"), []);
+});
+
+test("another vault than the main one runs on Claude Code or Codex, the rest fall back to Claude Code", () => {
+  assert.deepEqual(
+    ["claude", "codex", "opencode", "pi"].map(id => fencedAgent(id, true)),
+    ["claude", "codex", "claude", "claude"],
+  );
+  assert.equal(fencedAgent("opencode", false), "opencode");
 });

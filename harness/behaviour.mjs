@@ -1233,13 +1233,14 @@ const SCENARIOS = {
     await page.evaluate(() => window.__harness.setFiles(false));
     await settle(page);
     s.check("off again: no tabs", (await tabs()) === 0);
+    // the switch only hides the Pages tab: an open page stays, notes open as pages with it off too
     s.check(
-      "off again: the page is gone",
-      !(await page
+      "off again: the open page stays",
+      await page
         .getByRole("button", { name: /History|Geschiedenis/ })
         .first()
         .isVisible()
-        .catch(() => false)),
+        .catch(() => false),
     );
   },
 
@@ -2037,6 +2038,45 @@ const SCENARIOS = {
     s.fact("card send", sends[0]?.args ?? null);
   },
 
+  // Start conversation names the team's branch: a worktree on <type>/<number>-<slug>, the PR title with the number and
+  // the ticket link in the PR body. A relay://ticket link opens the same ticket window and starts nothing by itself.
+  async ticketBranch(s) {
+    await s.load({ fixture: "ticket-branch" });
+    const { page } = s;
+    const sendsBefore = (await s.calls("send")).length;
+    await page.evaluate(() => window.__harness.deepLink("relay://ticket?provider=productive&id=900100&project=p1"));
+    s.check("the link opens the ticket window", await waitText(page, "Amount excl. VAT"));
+    await settle(page, 300);
+    s.check("the link starts no conversation", Object.keys(await s.chatChanges()).length === 0);
+    s.check("the link sends nothing", (await s.calls("send")).length === sendsBefore);
+    await click(button(page, "Start conversation"), 400);
+    const created = Object.entries(await s.chatChanges()).filter(([, c]) => c !== "removed");
+    s.check("a conversation under the linked project", created.length === 1 && created[0][1].project === "Northwind Portal");
+    const typed = (await composerValue(page)) ?? "";
+    s.check("the composer names the branch", typed.includes("feat/300-invoice-export-csv"));
+    s.check("the composer asks for the number in the PR title and the link in its body", /PR title/.test(typed) && /PR body/.test(typed));
+    s.fact("composer", typed);
+    await page.evaluate(() => window.__harness.deepLink("relay://ticket?provider=productive&id=900100&project=nope"));
+    s.check("a board that is not linked says so", await waitText(page, "is linked to a project in Relay"));
+  },
+
+  // A PR of yours that Relay links to a ticket in progress moves the ticket to the pipeline's review column, once, and
+  // only when the PR is not a draft (the PRs on #312 are drafts in the default fixture)
+  async reviewMove(s) {
+    // the move happens while the page loads, so every call since the page opened counts, not only those after load()
+    const moves = async () =>
+      (await s.page.evaluate(() => window.__harness.calls))
+        .filter(c => c.cmd === "integration_call" && c.args.method === "PATCH" && String(c.args.path).startsWith("/tasks/"))
+        .map(c => c.args);
+    await s.load({ fixture: "review-move" });
+    await settle(s.page, 1500);
+    s.check("the card moved to the review column once", (await moves()).length === 1 && JSON.stringify((await moves())[0].body).includes("tl4"));
+    s.fact("moves", await moves());
+    await s.load({ fixture: "default" });
+    await settle(s.page, 1500);
+    s.check("a draft moves nothing", (await moves()).length === 0);
+  },
+
   async boardNewTask(s) {
     await s.load();
     const { page } = s;
@@ -2741,17 +2781,20 @@ const SCENARIOS = {
     );
     s.check("↵ on a content match puts the cursor on its line", !!line && active.includes("Retry-After"));
     s.fact("line asked, line under the cursor", [line, active]);
-    // ⌘↵: beside the conversation, which stays
+    // ⌘↵: the page view too (no side panel any more), with Back to the conversation
     await s.load({ ...kb, sel: s.keys.switchTo });
     await page.keyboard.press("Meta+k");
     await settle(page, 300);
+    s.check("the hint no longer offers ⌘↵ beside the chat", !(await hasText(page, "beside the chat")));
     await page.keyboard.type("retry-after");
     await waitText(page, "Content matches");
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Meta+Enter");
     await settle(page, 500);
-    s.check("⌘↵ leaves the conversation open", (await s.local(["sel"])).sel === s.keys.switchTo);
-    s.check("⌘↵ shows the note beside it", await waitText(page, "429 with Retry-After"));
+    s.check("⌘↵ opens the note as a page", String((await s.local(["sel"])).sel).startsWith("page:"));
+    s.check("the page shows the note", await waitText(page, "429 with Retry-After"));
+    s.check("no side panel", (await page.locator(".relay-drawer").count()) === 0);
+    s.check("its bar goes back to the conversation", (await page.locator("[data-page-back]").count()) === 1);
     // ⌘O is the same switcher
     await s.load(kb);
     await page.keyboard.press("Meta+o");
@@ -2932,7 +2975,10 @@ const SCENARIOS = {
     const panel = page.locator('aside[aria-label="Changes"]');
     const list = panel.locator(".overflow-y-auto");
     const last = panel.getByText("Capture from \u201cStart the security audit\u201d chat");
-    s.check("the panel's list is taller than the panel", (await list.evaluate(e => e.scrollHeight > e.clientHeight * 2)) === true);
+    s.check(
+      "the panel's list is taller than the panel",
+      (await list.evaluate(e => e.scrollHeight > e.clientHeight * 2)) === true,
+    );
     await wheelAt(panel.locator("[data-file]").first());
     s.check("the wheel over a diff scrolls the list", (await top(list)) > 0);
     for (let i = 0; i < 12; i++) await wheelAt(list, 800);
@@ -3150,24 +3196,22 @@ const SCENARIOS = {
     s.check("and the run is in the feed", await waitText(page, "Added type: Document"));
   },
 
-  // issue 374 (K10): the Garden tab of the vault check. One of each problem with its count; a project picked on a meeting
-  // writes about: and the row goes; Move to trash is a dry run, then one Undo; Ask Claude is a dry run too and its run is
+  // issue 374 (K10), one list since issue 425: the garden's groups of the vault check. One of each problem with its
+  // count; a project picked on a meeting writes about: and the row goes; Move to trash is a dry run, then one Undo; Ask Claude is a dry run too and its run is
   // one entry in the feed; one filled button at a time, also with a sheet open
   async vaultGarden(s) {
     await s.load({ fixture: "kb-sketch" });
     const { page } = s;
     await click(page.getByRole("button", { name: /^Switch workspace/ }));
     await click(button(page, "Check workspace…"), 300);
-    await click(page.getByRole("tab", { name: /^Garden/ }), 300);
-    const count = async kind => Number((await page.locator(`[data-garden=${kind}] span`).first().textContent()) ?? 0);
+    const count = async kind => Number((await page.locator(`[data-kind=${kind}] span`).first().textContent()) ?? 0);
     const counts = [];
     for (const kind of ["outside_home", "no_project", "broken_link", "orphan", "unused_attachment", "no_type"])
       counts.push(await count(kind));
     s.check("each finding shows its count", counts.join(",") === "10,3,2,4,3,3");
-    s.check("the tab counts them all", (await page.getByRole("tab", { name: /^Garden\s*25$/ }).count()) === 1);
     const primary = () =>
       page.locator('[role=dialog][aria-label^="Check"] .btn-primary').locator("visible=true").count();
-    s.check("one filled button: Tidy structure", (await primary()) === 1);
+    s.check("one filled button: Repair all", (await primary()) === 1);
     // a project picked on a meeting
     const meeting = "Calendar/Meetings/2026/2026-10-30 Call Sofie planning Q1.md";
     await page
@@ -3193,7 +3237,7 @@ const SCENARIOS = {
     s.check("with the sheet open the Apply button is the only filled one", (await primary()) === 1);
     await click(button(page, "Move 3 files to trash"), 500);
     s.check("three files went to the trash", (await s.calls("trash_path")).length === 3);
-    s.check("the dialog stays open", (await page.getByRole("tab", { name: /^Garden/ }).count()) === 1);
+    s.check("the dialog stays open", (await page.locator("[data-kind=outside_home]").count()) === 1);
     await click(button(page, "Undo"), 400);
     s.check(
       "one Undo, clicked above the open dialog, puts all three back",
@@ -3217,7 +3261,7 @@ const SCENARIOS = {
       "Claude is asked once for the 3 notes",
       asked.length === 1 && asked[0].action === "properties" && asked[0].paths.length === 3,
     );
-    s.check("the row is gone", (await page.locator("[data-garden=no_type]").count()) === 0);
+    s.check("the row is gone", (await page.locator("[data-kind=no_type]").count()) === 0);
     await click(button(page, "Close"), 300);
     await openBilling(s);
     s.check(
@@ -3227,8 +3271,7 @@ const SCENARIOS = {
     // a broken link opens its note at the line
     await click(page.getByRole("button", { name: /^Switch workspace/ }));
     await click(button(page, "Check workspace…"), 300);
-    await click(page.getByRole("tab", { name: /^Garden/ }), 300);
-    await click(page.locator("[data-garden=broken_link]").getByRole("button", { name: "Review" }), 200);
+    await click(page.locator("[data-kind=broken_link]").getByRole("button", { name: "Review" }), 200);
     s.check("Review lists the links with their line", await hasText(page, "Northwind Portal.md:12"));
   },
 
@@ -3506,6 +3549,105 @@ const SCENARIOS = {
     s.check("after a restart it is still folded", (await page.locator("[data-rail]").count()) === 0);
     await click(button(page, "Show right rail"));
     s.check("Show right rail brings it back", (await page.locator("[data-rail]").count()) === 1);
+  },
+
+  // /meeting Kickoff on a project's page: the note made with the title and the project, its link in the page, one Undo
+  // takes the link out and the file to .trash/
+  async slashTypedNote(s) {
+    await s.load({ fixture: "kb" });
+    const { page } = s;
+    await click(page.getByRole("tab", { name: /^Pages/ }));
+    await click(page.locator('[data-project="Northwind Portal"]'));
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("\n/meeting Kickoff");
+    await page.locator(".cm-tooltip-autocomplete").waitFor();
+    await page.clock.setFixedTime(await page.evaluate(() => Date.now() + 1000)); // CodeMirror's 75 ms before Enter picks
+    await page.keyboard.press("Enter");
+    await settle(page, 400);
+    const made = await s.calls("new_from_template");
+    s.check(
+      "the title and the project go to the one creation path",
+      made.length === 1 && made[0].args.title === "Kickoff" && made[0].args.about === "Northwind Portal",
+    );
+    const sel = String((await s.local(["sel"])).sel);
+    s.check("the new note opens as a page", sel.startsWith("page:") && sel.endsWith("Kickoff.md"));
+    s.check("no side panel", (await page.locator(".relay-drawer").count()) === 0);
+    s.fact("sel", sel);
+    const text = () => page.locator(".cm-content").innerText();
+    // Back: the page it was made from, with the link in it
+    await click(page.locator("[data-page-back]"));
+    await settle(page, 400);
+    s.check(
+      "Back returns to the page it was made from",
+      String((await s.local(["sel"])).sel) === "page:Contexts/Agency/Projects/Northwind Portal/Northwind Portal.md",
+    );
+    s.check("the link is in the page", (await text()).includes("2026-10-01 Northwind Portal Kickoff"));
+    s.check("that page has no Back of its own", (await page.locator("[data-page-back]").count()) === 0);
+    await click(button(page, "Undo"));
+    await settle(page, 400);
+    const trashed = await s.calls("trash_path");
+    s.check("Undo trashes the new note", trashed.length === 1 && trashed[0].args.target.endsWith("Kickoff.md"));
+    s.check("Undo takes the link out", !(await text()).includes("Northwind Portal Kickoff"));
+  },
+
+  // a [[link]] in a conversation opens the page view; "← <conversation>", ⌘[ and Esc go back to the conversation at
+  // the same scroll, with the drawer it had; Files off changes none of it, and the page can be edited
+  async pageBack(s) {
+    for (const fixture of ["default", "files-off"]) {
+      await s.load({ fixture });
+      await s.load({ fixture, sel: s.keys.long });
+      const { page } = s;
+      const pre = `${fixture}: `;
+      await click(page.getByRole("button", { name: "Terminal", exact: true }).first()).catch(() => {});
+      await settle(page, 300);
+      const drawer = await page.evaluate(() => document.querySelector(".relay-app")?.getAttribute("data-drawer") ?? "");
+      const link = page.locator("a.vlink", { hasText: "Billing Spec" }).nth(3);
+      await link.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      const top = await page.evaluate(() => document.querySelector("#log").scrollTop);
+      await link.click();
+      await page.locator("[data-page-back]").waitFor();
+      await settle(page, 300);
+      s.check(pre + "the link opens the page view", String((await s.local(["sel"])).sel).startsWith("page:"));
+      s.check(pre + "no side panel", (await page.locator(".relay-drawer h2", { hasText: "Details" }).count()) === 0);
+      s.check(
+        pre + "Back names the conversation",
+        (await page.locator("[data-page-back]").innerText()).includes("Billing sync double balances"),
+      );
+      // the page can be edited: a typed word is saved
+      await page.locator(".cm-content").click();
+      await page.keyboard.press("Meta+End");
+      await page.keyboard.type(" edited");
+      await page.keyboard.press("Meta+s");
+      await settle(page, 400);
+      s.check(pre + "the page saves", (await s.calls("write_note")).some(c => c.args.text.includes(" edited")));
+      // a link in the page opens another page: Back still goes to the conversation (one level)
+      await page.locator(".cm-content [data-link]", { hasText: "Portal Architecture" }).first().click();
+      await settle(page, 400);
+      s.check(pre + "a link in the page opens the next page", String((await s.local(["sel"])).sel).includes("Portal"));
+      s.check(
+        pre + "Back still names the conversation",
+        (await page.locator("[data-page-back]").innerText()).includes("Billing sync double balances"),
+      );
+      await page.keyboard.press("Meta+BracketLeft");
+      await page.locator("#log").waitFor();
+      await settle(page, 500);
+      s.check(pre + "⌘[ goes back to the conversation", (await s.local(["sel"])).sel === s.keys.long);
+      const after = await page.evaluate(() => document.querySelector("#log").scrollTop);
+      s.check(pre + "at the same scroll", Math.abs(after - top) < 4);
+      s.fact(pre + "scroll before, after", [top, after]);
+      const again = await page.evaluate(() => document.querySelector(".relay-app")?.getAttribute("data-drawer") ?? "");
+      s.check(pre + "the drawer as it was", again === drawer);
+      s.fact(pre + "drawer", drawer);
+      // Esc with nothing else to close does the same
+      await page.locator("a.vlink", { hasText: "Billing Spec" }).last().click();
+      await page.locator("[data-page-back]").waitFor();
+      await page.locator("body").click({ position: { x: 900, y: 60 } });
+      await page.keyboard.press("Escape");
+      await settle(page, 400);
+      s.check(pre + "Esc goes back too", (await s.local(["sel"])).sel === s.keys.long);
+    }
   },
 
   // New ▸ from template on a folder and Today's note in the Pages tab: a Meeting in a project is saved in its home

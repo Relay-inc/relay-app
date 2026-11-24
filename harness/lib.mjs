@@ -70,7 +70,16 @@ export async function newPage(browser, { scale = 2, fixedTime = true } = {}) {
 export async function open(
   page,
   base,
-  { path = "/", fixture = "default", sel = "", link = "", window = "", keep = false } = {},
+  {
+    path = "/",
+    fixture = "default",
+    sel = "",
+    link = "",
+    window = "",
+    keep = false,
+    typed = false,
+    platform = "",
+  } = {},
 ) {
   const q = new URLSearchParams({
     fixture,
@@ -78,6 +87,8 @@ export async function open(
     ...(link ? { link } : {}),
     ...(window ? { window } : {}),
     ...(keep ? { keep: "1" } : {}),
+    ...(typed ? { typed: "1" } : {}),
+    ...(platform ? { platform } : {}),
   });
   await page.goto(`${base}${path}?${q}`);
   await page.waitForFunction(() => window.__harness, null, { timeout: 15000 });

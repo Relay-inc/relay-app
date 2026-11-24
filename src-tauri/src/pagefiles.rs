@@ -667,6 +667,7 @@ mod tests {
         assert!(restore(&roots, &s(&v), ".trash/A 1.md", ".git/x.md").is_err());
     }
 
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn a_trash_that_is_a_link_is_refused() {
         let v = vault("binlink");
@@ -678,6 +679,7 @@ mod tests {
         assert_eq!(fs::read_dir(&out).unwrap().count(), 0);
     }
 
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn refuses_outside_hidden_and_links() {
         let v = vault("refuse");
@@ -714,6 +716,7 @@ mod tests {
         assert!(v.join("A.md").is_file() && !v.join("B.md").exists());
     }
 
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn a_failed_write_puts_everything_back_and_leaves_no_temporary_file() {
         use std::os::unix::fs::PermissionsExt;

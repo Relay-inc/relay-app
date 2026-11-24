@@ -34,6 +34,15 @@ impl Sink for TauriSink {
     fn permission(&self, req: &pending::Request) {
         let mut r = req.clone();
         (r.project, r.provider, r.relay) = (self.key.clone(), self.p.id().into(), true);
+        // Relay's fence for an agent whose CLI does not read the rules (policy::guard): a deny, never a card
+        let st = self.app.state::<App>();
+        let vault = Some(self.vault.clone()).filter(|v| !v.is_empty())
+            .or_else(|| st.sids.lock().unwrap().get(&self.key).map(|s| s.vault.clone()).filter(|v| !v.is_empty()))
+            .or_else(|| crate::need_vault(&st).ok()).unwrap_or_default();
+        if let Some(line) = crate::policy::guard(&self.app, &st, self.p, &vault).and_then(|g| crate::policy::screen(&g, self.p, &r)) {
+            self.with_proc(|x| { use std::io::Write; writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).ok() });
+            return;
+        }
         pending::write(&self.pending, &r).ok();
     }
     fn committed(&self, repos: Vec<PathBuf>) {
@@ -47,8 +56,10 @@ impl Sink for TauriSink {
     }
     fn after_turn(&self, end: &TurnEnd) {
         let (model, limited, hint, fresh) = retry_args(end);
+        // refused for its limit with another account free: it goes on there, a worker has not ended
+        let moved = limited && !end.replay && retry::switched(&self.app, &self.key, self.p, &self.account, model, fresh);
         retry::turn_end(&self.app, &self.key, self.p, &self.account, model, limited, hint, fresh);
-        if orch::is_worker(&self.key) { orch::turn_end(&self.app, &self.key, end.last); }
+        if orch::is_worker(&self.key) && !moved { orch::turn_end(&self.app, &self.key, end.last); }
         if !end.replay && orch::is_orch(&self.key) { orch::flush(&self.app, &self.key); } // what Relay queued while the turn ran
     }
     fn closed(&self, exited: bool) {

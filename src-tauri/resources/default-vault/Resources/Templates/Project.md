@@ -20,4 +20,22 @@ aliases: []
 
 ## Open
 
+## Meetings
+```base
+filters:
+  and:
+    - type == "Meeting"
+    - about.contains(this)
+views:
+  - type: table
+    name: Meetings
+    order:
+      - file.name
+      - date
+      - with
+    sort:
+      - property: date
+        direction: DESC
+```
+
 ## Decisions

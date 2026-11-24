@@ -8,7 +8,7 @@ import { columnLabel } from "./labels";
 const ROW = 38; // px: h-9.5, the windowing's step
 const OVERSCAN = 8;
 // a column's width: the title takes what is left, the rest by what they hold
-const WIDTH: Record<Column["kind"], string> = {
+export const WIDTH: Record<Column["kind"], string> = {
   title: "minmax(12rem, 1fr)",
   date: "5.5rem",
   stage: "9.5rem",

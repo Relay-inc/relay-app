@@ -24,6 +24,18 @@ export const bannerDue = (list: Meeting[], now: number, sent: ReadonlySet<string
     const left = Date.parse(meeting.start) - now;
     return left > 0 && left <= BANNER && !sent.has(meeting.id);
   });
+/** In progress: started and not ended yet (10 minutes after the start for an event without a usable end). */
+export const started = (list: Meeting[], now: number) =>
+  list.filter(meeting => {
+    const start = Date.parse(meeting.start);
+    const end = Date.parse(meeting.end) || start + LATE;
+    return start <= now && now < end;
+  });
+/** The meeting to ask to record: in progress and not answered yet, the one that started last. */
+export const nudgeDue = (list: Meeting[], now: number, answered: ReadonlySet<string>) =>
+  started(list, now)
+    .filter(meeting => !answered.has(meeting.id))
+    .sort((a, b) => Date.parse(b.start) - Date.parse(a.start))[0] ?? null;
 /** Whole minutes to the start, rounded up; 0 once it started. */
 export const minutesLeft = (meeting: Meeting, now: number) =>
   Math.max(0, Math.ceil((Date.parse(meeting.start) - now) / MIN));

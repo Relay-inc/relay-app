@@ -1,8 +1,10 @@
-// Dictation from any app (Settings › Voice): two shortcuts registered with macOS, so they record wherever the cursor
-// is, held or tapped as the mode says. One starts a new conversation in Relay with what was said (the main window
-// comes forward, src/application/boot.ts sends it); the other pastes the text (dictation.rs) into the app in front: the clipboard is kept aside, the text put on it, ⌘V sent, and the clipboard put back. Sending ⌘V needs
-// Accessibility; without it the text stays on the clipboard to paste by hand. A small pill at the bottom of the screen
-// (overlay.html) shows the level and the transcribing; it never takes the focus, so the app in front keeps it.
+// Dictation from any app (Settings › Voice): two shortcuts registered with the system (macOS or Windows), so they record
+// wherever the cursor is, held or tapped as the mode says. One starts a new conversation in Relay with what was said (the
+// main window comes forward, src/application/boot.ts sends it), the other pastes the text (dictation.rs) into the app in
+// front: the clipboard is kept aside, the text put on it, ⌘V (Ctrl+V on Windows) sent, and the clipboard put back.
+// Sending ⌘V needs Accessibility on the Mac, without it the text stays on the clipboard to paste by hand. Windows asks
+// for nothing. A small pill at the bottom of the screen (overlay.html) shows the level and the transcribing. It never
+// takes the focus, so the app in front keeps it.
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -12,9 +14,20 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 const PILL: &str = "dictation-pill";
 const CAPTURE: &str = "capture";
-/// Quick capture's key (Settings › Shortcuts, `app.capture`) as the Mac writes it for global-hotkey. ⌘⇧N is Finder's New
-/// Folder and every browser's private window, so a key registered for the whole Mac must not be it: ⌃⌥⌘N is nobody's.
-const CAPTURE_KEY: &str = "ctrl+alt+meta+KeyN";
+/// The keys until Settings sets others, in global-hotkey's spelling: the two dictation shortcuts (as voice.ts'
+/// DEFAULT_SHORTCUTS) and quick capture (`app.capture` in shortcuts.ts). ⌘⇧N is Finder's New Folder and every
+/// browser's private window, so a key registered for the whole Mac must not be it: ⌃⌥⌘N is nobody's. Windows keeps
+/// every Win key for itself, opens the window menu with Alt+Space and switches the keyboard with Alt+Shift, so Ctrl
+/// takes their place there.
+/// ponytail: Ctrl+Alt is AltGr on many European layouts, so Ctrl+Alt+N or Ctrl+Alt+Space may be a character there.
+/// Settings › Shortcuts changes the key, a layout check would pick another default.
+#[derive(Debug, PartialEq)]
+struct Keys { chat: &'static str, paste: &'static str, capture: &'static str }
+const fn keys(windows: bool) -> Keys {
+    if windows { Keys { chat: "ctrl+shift+Space", paste: "ctrl+alt+Space", capture: "ctrl+alt+KeyN" } }
+    else { Keys { chat: "alt+shift+Space", paste: "ctrl+alt+Space", capture: "ctrl+alt+super+KeyN" } }
+}
+const KEYS: Keys = keys(cfg!(windows));
 // when the shortcut went down while nothing recorded: a release after 400 ms ends a held recording
 static PRESSED: Mutex<Option<Instant>> = Mutex::new(None);
 // where the running recording's text goes
@@ -35,13 +48,13 @@ fn wanted(settings: &Value) -> (Vec<(String, Target)>, String) {
             (shortcut.replace("meta", "super"), target)
         })
     };
-    let list = [one("chatOn", "chatShortcut", "alt+shift+Space", Target::Chat), one("pasteOn", "pasteShortcut", "ctrl+alt+Space", Target::Paste)];
+    let list = [one("chatOn", "chatShortcut", KEYS.chat, Target::Chat), one("pasteOn", "pasteShortcut", KEYS.paste, Target::Paste)];
     (list.into_iter().flatten().collect(), voice["mode"].as_str().unwrap_or("both").to_string())
 }
 
 /// The shortcut that opens quick capture, in global-hotkey's spelling.
 fn capture_shortcut(settings: &Value) -> String {
-    settings["shortcuts"]["app.capture"][0].as_str().filter(|s| !s.is_empty()).unwrap_or(CAPTURE_KEY).replace("meta", "super")
+    settings["shortcuts"]["app.capture"][0].as_str().filter(|s| !s.is_empty()).map_or(KEYS.capture.into(), |s| s.replace("meta", "super"))
 }
 
 /// Quick capture: its small window, made once and kept hidden; every call brings it forward (over a full-screen app too)
@@ -84,6 +97,7 @@ pub fn apply(app: &AppHandle) {
                 ShortcutState::Pressed if !super::dictation::recording(app) => {
                     *PRESSED.lock().unwrap() = Some(Instant::now());
                     *TARGET.lock().unwrap() = target;
+                    os::remember();
                     start(app);
                 }
                 ShortcutState::Pressed if mode != "hold" => finish(app),
@@ -165,24 +179,24 @@ fn finish(app: &AppHandle) {
             a.emit_to(w, "dictated-chat", text).ok();
         }
         Ok(text) => {
-            let pasted = mac::trusted();
+            let pasted = os::trusted();
             let b = a.clone();
-            a.run_on_main_thread(move || mac::paste(&b, text, pasted)).ok();
+            a.run_on_main_thread(move || os::paste(&b, text, pasted)).ok();
             if pasted { pill(&a, json!({ "phase": "hidden" })) } else { pill_for(&a, json!({ "phase": "copied" })) }
         }
         Err(e) => pill_for(&a, json!({ "phase": "error", "error": e })),
     });
 }
 
-/// Whether Relay may send keys to other apps (System Settings › Privacy & Security › Accessibility).
+/// Whether Relay may send keys to other apps (System Settings › Privacy & Security › Accessibility). Always on Windows.
 #[tauri::command]
-pub fn dictation_access() -> bool { mac::trusted() }
+pub fn dictation_access() -> bool { os::trusted() }
 /// Asks macOS for Accessibility: its dialog, which opens the pane. Answers whether it is already allowed.
 #[tauri::command]
-pub fn dictation_ask_access() -> bool { mac::ask() }
+pub fn dictation_ask_access() -> bool { os::ask() }
 
 #[cfg(target_os = "macos")]
-mod mac {
+mod os {
     use objc2::rc::Retained;
     use objc2::runtime::ProtocolObject;
     use objc2_app_kit::{NSPasteboard, NSPasteboardItem, NSPasteboardTypeString};
@@ -214,6 +228,8 @@ mod mac {
     const COMMAND: u64 = 0x0010_0000; // kCGEventFlagMaskCommand
 
     pub fn trusted() -> bool { unsafe { AXIsProcessTrusted() } }
+    /// Nothing to keep: the pill never takes the focus and macOS gives it back to the app in front.
+    pub fn remember() {}
     pub fn ask() -> bool {
         unsafe {
             let key: &NSString = &*(kAXTrustedCheckOptionPrompt as *const NSString);
@@ -275,16 +291,137 @@ mod mac {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-mod mac {
-    pub fn trusted() -> bool { false }
-    pub fn ask() -> bool { false }
-    pub fn paste(_: &tauri::AppHandle, _: String, _: bool) {}
+/// Windows: Ctrl+V through SendInput, which needs no permission. The window in front when the shortcut went down gets
+/// the focus back first (the pill never takes it, but a click elsewhere meanwhile would), and the clipboard is saved
+/// and restored with every format that is plain memory.
+#[cfg(windows)]
+mod os {
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+    use tauri::{AppHandle, Manager};
+    use windows_sys::Win32::Foundation::{GlobalFree, HWND};
+    use windows_sys::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, EnumClipboardFormats, GetClipboardData, GetClipboardSequenceNumber, OpenClipboard, SetClipboardData};
+    use windows_sys::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE};
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT, VK_V};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, IsWindow, SetForegroundWindow};
+
+    const CF_UNICODETEXT: u32 = 13;
+    // the window in front when the shortcut went down, as an address (HWND is a pointer, not Send)
+    static FRONT: Mutex<usize> = Mutex::new(0);
+
+    pub fn trusted() -> bool { true }
+    pub fn ask() -> bool { true }
+    pub fn remember() { *FRONT.lock().unwrap() = unsafe { GetForegroundWindow() } as usize; }
+
+    /// Puts `text` on the clipboard, brings the remembered window back, sends Ctrl+V and puts the clipboard back once
+    /// the app read it, unless something else was copied meanwhile. Waits on a thread of its own, not the main one.
+    pub fn paste(app: &AppHandle, text: String, _: bool) {
+        // the clipboard's owner: the pill, which is there while it transcribes
+        let owner = app.get_webview_window(super::PILL).and_then(|w| w.hwnd().ok()).map_or(0, |h| h.0 as usize);
+        let front = std::mem::take(&mut *FRONT.lock().unwrap());
+        std::thread::spawn(move || {
+            let owner = owner as HWND;
+            let Some(saved) = with_clipboard(owner, || unsafe {
+                let saved = save();
+                EmptyClipboard();
+                put(CF_UNICODETEXT, &text.encode_utf16().chain(Some(0)).flat_map(u16::to_le_bytes).collect::<Vec<_>>());
+                saved
+            }) else { return eprintln!("dictation: the clipboard is busy, nothing pasted") };
+            let ours = unsafe { GetClipboardSequenceNumber() };
+            let front = front as HWND;
+            if !front.is_null() && unsafe { IsWindow(front) != 0 && GetForegroundWindow() != front } {
+                // ponytail: Windows refuses this unless Relay may take the foreground (it got the last input, the
+                // hotkey), else the text goes where the focus is now. AttachThreadInput is the next step if that bites.
+                unsafe { SetForegroundWindow(front) };
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            released();
+            control_v();
+            std::thread::sleep(Duration::from_millis(400));
+            if unsafe { GetClipboardSequenceNumber() } == ours {
+                with_clipboard(owner, || unsafe {
+                    EmptyClipboard();
+                    for (format, bytes) in &saved { put(*format, bytes); }
+                });
+            }
+        });
+    }
+
+    /// Runs `f` with the clipboard open, trying for half a second while another app holds it.
+    fn with_clipboard<T>(owner: HWND, f: impl FnOnce() -> T) -> Option<T> {
+        for _ in 0..50 {
+            if unsafe { OpenClipboard(owner) } != 0 {
+                let out = f();
+                unsafe { CloseClipboard() };
+                return Some(out);
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        None
+    }
+
+    /// Every format on the clipboard whose data is plain memory, as bytes. The clipboard is open.
+    unsafe fn save() -> Vec<(u32, Vec<u8>)> {
+        let mut saved = vec![];
+        let mut format = EnumClipboardFormats(0);
+        while format != 0 {
+            let handle = if super::plain_memory(format) { GetClipboardData(format) } else { std::ptr::null_mut() };
+            let data = if handle.is_null() { std::ptr::null_mut() } else { GlobalLock(handle) };
+            if !data.is_null() {
+                saved.push((format, std::slice::from_raw_parts(data as *const u8, GlobalSize(handle)).to_vec()));
+                GlobalUnlock(handle);
+            }
+            format = EnumClipboardFormats(format);
+        }
+        saved
+    }
+    /// One format onto the open clipboard, which owns the memory after.
+    unsafe fn put(format: u32, bytes: &[u8]) {
+        let handle = GlobalAlloc(GMEM_MOVEABLE, bytes.len().max(1));
+        let data = if handle.is_null() { return } else { GlobalLock(handle) };
+        if data.is_null() { GlobalFree(handle); return; }
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), data as *mut u8, bytes.len());
+        GlobalUnlock(handle);
+        if SetClipboardData(format, handle).is_null() { GlobalFree(handle); }
+    }
+
+    /// Waits up to a second for the shortcut's modifiers to come up: Ctrl+V with Alt or Shift still held would be
+    /// another key.
+    fn released() {
+        let start = Instant::now();
+        let down = || [VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN].iter().any(|k| unsafe { GetAsyncKeyState(*k as i32) } < 0);
+        while down() && start.elapsed() < Duration::from_secs(1) { std::thread::sleep(Duration::from_millis(20)); }
+    }
+    fn control_v() {
+        let key = |vk, up: bool| INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: vk, dwFlags: if up { KEYEVENTF_KEYUP } else { 0 }, ..Default::default() } },
+        };
+        let keys = [key(VK_CONTROL, false), key(VK_V, false), key(VK_V, true), key(VK_CONTROL, true)];
+        unsafe { SendInput(keys.len() as u32, keys.as_ptr(), std::mem::size_of::<INPUT>() as i32) };
+    }
 }
 
+/// Whether a clipboard format holds plain memory (an HGLOBAL), so a copy of its bytes restores it. GDI handles
+/// (bitmaps, metafiles, palettes, a program's private GDI objects) and owner-drawn formats do not: they are left
+/// out, and Windows makes CF_BITMAP from CF_DIB again.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn plain_memory(format: u32) -> bool {
+    // CF_BITMAP, CF_METAFILEPICT, CF_PALETTE, CF_ENHMETAFILE, CF_OWNERDISPLAY, CF_DSPBITMAP, CF_DSPMETAFILEPICT,
+    // CF_DSPENHMETAFILE, then CF_GDIOBJFIRST to CF_GDIOBJLAST
+    !matches!(format, 2 | 3 | 9 | 14 | 0x80 | 0x82 | 0x83 | 0x8E) && !(0x300..=0x3FF).contains(&format)
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+mod os {
+    pub fn trusted() -> bool { false }
+    pub fn ask() -> bool { false }
+    pub fn remember() {}
+    pub fn paste(_: &tauri::AppHandle, _: String, _: bool) {}
+}
 #[cfg(test)]
 mod tests {
-    use super::{capture_shortcut, wanted, Target};
+    use super::{capture_shortcut, keys, wanted, Target, KEYS};
     use serde_json::json;
 
     #[test]
@@ -299,8 +436,29 @@ mod tests {
     #[test]
     fn the_capture_key_parses_and_a_saved_one_wins() {
         assert!(capture_shortcut(&json!({})).parse::<tauri_plugin_global_shortcut::Shortcut>().is_ok());
-        assert_eq!(capture_shortcut(&json!({})), "ctrl+alt+super+KeyN");
+        assert_eq!(capture_shortcut(&json!({})), KEYS.capture);
         assert_eq!(capture_shortcut(&json!({"shortcuts": {"app.capture": ["shift+meta+KeyJ"]}})), "shift+super+KeyJ");
-        assert_eq!(capture_shortcut(&json!({"shortcuts": {"app.capture": [""]}})), "ctrl+alt+super+KeyN");
+        assert_eq!(capture_shortcut(&json!({"shortcuts": {"app.capture": [""]}})), KEYS.capture);
+    }
+    #[test]
+    fn each_platform_has_its_own_defaults_and_windows_none_of_its_own_keys() {
+        assert_eq!(keys(false), super::Keys { chat: "alt+shift+Space", paste: "ctrl+alt+Space", capture: "ctrl+alt+super+KeyN" });
+        for windows in [false, true] {
+            let k = keys(windows);
+            let all = [k.chat, k.paste, k.capture];
+            for key in all { assert!(key.parse::<tauri_plugin_global_shortcut::Shortcut>().is_ok(), "{key}"); }
+            assert!(all[0] != all[1] && all[1] != all[2] && all[0] != all[2]);
+            if windows {
+                // no Win key, no Alt+Space (the window menu), no Alt+Shift (the keyboard switch)
+                for key in all { assert!(!key.contains("super") && !key.starts_with("alt+"), "{key}"); }
+            }
+        }
+    }
+    #[test]
+    fn only_plain_memory_formats_are_kept_aside() {
+        // CF_TEXT, CF_DIB, CF_UNICODETEXT, CF_HDROP, a registered format such as HTML Format
+        for format in [1, 8, 13, 15, 0xC0FF] { assert!(super::plain_memory(format), "{format}"); }
+        // CF_BITMAP, CF_ENHMETAFILE, CF_OWNERDISPLAY, private GDI objects
+        for format in [2, 14, 0x80, 0x300, 0x3FF] { assert!(!super::plain_memory(format), "{format}"); }
     }
 }

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type { Key } from "../../../shared/i18n";
+import { isMac } from "../../../shared/platform";
 import {
   loadPermissions,
   openPermission,
@@ -14,7 +15,8 @@ import { StatusLine } from "./StatusLine";
 
 const LEVEL = { ok: "ok", missing: "warn", ask: "off" } as const;
 
-/** What macOS lets Relay do, one row each: its state when macOS tells it, and a button to its pane in System Settings. */
+/** What macOS lets Relay do, one row each: its state when macOS tells it, and a button to its pane in System Settings.
+ *  On Windows only the microphone asks, the rest has no switch there. */
 export function PermissionsSection({ active }: { active: boolean }) {
   const { t } = useT();
   const states = usePermissionsStore(s => s.states);
@@ -27,14 +29,14 @@ export function PermissionsSection({ active }: { active: boolean }) {
   }, [active]);
 
   return (
-    <Section title={t("perm.title")} desc={t("perm.help")} rows>
-      {PERMISSIONS.map(which => {
+    <Section title={t("perm.title")} desc={t(isMac() ? "perm.help" : "perm.helpWin")} rows>
+      {(isMac() ? PERMISSIONS : (["microphone"] as const)).map(which => {
         const state = states[which];
         return (
           <Field key={which} label={t(`perm.${which}` as Key)} hint={t(`perm.${which}Help` as Key)}>
             {state && <StatusLine level={LEVEL[state]}>{t(`perm.state.${state}` as Key)}</StatusLine>}
             <button className={buttonClass()} onClick={() => openPermission(which)}>
-              {t("perm.open")}
+              {t(isMac() ? "perm.open" : "perm.openWin")}
             </button>
           </Field>
         );

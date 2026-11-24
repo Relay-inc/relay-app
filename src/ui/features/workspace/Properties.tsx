@@ -1,5 +1,7 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
-import { followPageLink, propertyValues, workspacePaths } from "../../../application/navigation/pages";
+import { openNoteLink, propertyValues, workspacePaths } from "../../../application/navigation/pages";
+import { noteKnown } from "../../../application/workspace/vault";
+import { noteOf } from "../../../shared/markdown";
 import {
   moveProperty,
   readProperties,
@@ -17,7 +19,6 @@ import type { TypeField } from "../../../domain/types/registry";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
-import { PropertyValue } from "./NoteDetail";
 
 const FIELD =
   "h-7 w-full min-w-0 px-2 rounded-md bg-transparent text-label outline-none hover:bg-fill-2 focus:bg-fill-2 placeholder:text-tertiary";
@@ -188,7 +189,7 @@ export function Field({ row, set }: { row: Property; set: (value: Value) => void
             className="size-6 flex-none grid place-items-center rounded-md text-accent-text hover:bg-fill-2"
             title={t("props.open")}
             aria-label={`${t("props.open")}: ${name}`}
-            onClick={() => void followPageLink(name.split("|")[0], false)}
+            onClick={() => void openNoteLink(name.split("|")[0])}
           >
             <Icon name="right" className="glyph size-3" />
           </button>
@@ -433,4 +434,24 @@ function ReadOnly({ yaml, children }: { yaml: string; children?: ReactNode }) {
       {children}
     </dl>
   );
+}
+
+/** A property's [[link]] as its label, the rest as written. */
+const linkLabel = (value: string) =>
+  value.replace(/\[\[([^\]\n]+)\]\]/g, (_, inner: string) => inner.split("|").pop()!.trim());
+
+/** A property's value: a [[link]] in it opens the note when it exists, the rest as written. */
+function PropertyValue({ value }: { value: string }) {
+  return value.split(/(\[\[[^\]\n]+\]\])/).map((part, i) => {
+    const link = /^\[\[([^\]\n]+)\]\]$/.exec(part);
+    if (!link) return part;
+    const target = noteOf(link[1]);
+    return noteKnown(target) ? (
+      <a key={i} className="vlink text-accent cursor-pointer" href="#" data-note={target}>
+        {linkLabel(part)}
+      </a>
+    ) : (
+      linkLabel(part)
+    );
+  });
 }

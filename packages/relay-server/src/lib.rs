@@ -22,6 +22,8 @@ pub mod github;
 pub mod mirror;
 #[cfg(target_os = "macos")]
 pub mod ramdisk;
+pub mod oidc;
+pub mod team;
 pub mod upgrade;
 pub mod vaults;
 
@@ -31,7 +33,8 @@ use relay_remote::tls::{self, Acceptor, Identity};
 use serde_json::{json, Value};
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
-use std::os::unix::net::UnixStream;
+// a Unix socket, a named pipe on Windows (relay_remote::sock)
+use relay_remote::sock::UnixStream;
 use std::path::{Path, PathBuf};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -48,11 +51,30 @@ pub const GRACE_SECS: u64 = 24 * 3600;
 
 pub fn now() -> u64 { SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0) }
 
-/// The data folder: RELAY_SERVER_DATA, else the platform's application data folder.
+/// The user's home folder: HOME on macOS and Linux, the profile folder on Windows (no HOME there).
+pub fn home() -> String {
+    if cfg!(windows) { std::env::home_dir().map(|h| h.to_string_lossy().into_owned()).unwrap_or_default() } else { std::env::var("HOME").unwrap_or_default() }
+}
+
+/// A command that opens no console window on Windows: relay-server runs there inside the Relay app, which has none,
+/// and every console program it starts (git, curl) would flash one up.
+pub fn cmd(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
+    #[allow(unused_mut)]
+    let mut c = std::process::Command::new(program);
+    #[cfg(windows)]
+    std::os::windows::process::CommandExt::creation_flags(&mut c, agent_core::job::NO_WINDOW);
+    c
+}
+
+/// The data folder: RELAY_SERVER_DATA, else the platform's application data folder (`%LOCALAPPDATA%\Relay\server` on
+/// Windows, never the roaming profile: a working copy and keys have no business on a domain's file server).
 pub fn data_dir() -> PathBuf {
     if let Some(d) = std::env::var_os("RELAY_SERVER_DATA") { return d.into(); }
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = home();
     if cfg!(target_os = "macos") { return PathBuf::from(home).join("Library/Application Support/relay-server"); }
+    if cfg!(windows) {
+        return std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(&home).join("AppData").join("Local")).join("Relay").join("server");
+    }
     std::env::var_os("XDG_DATA_HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(&home).join(".local/share")).join("relay-server")
 }
 
@@ -87,7 +109,11 @@ const VAULT_OPS: &[&str] = &["pair", "vault_info", "vault_invite", "vault_invite
 /// Never a conversation, the mirror, a phone, GitHub or a vault of its own.
 const KEEPER_OPS: &[&str] = &["info", "update"];
 /// Whether a vault-only device may ask `op`: from its memberships now, so a promotion or a demotion counts at once.
-pub(crate) fn vaults_only_may(data: &Path, fp: &str, op: &str) -> bool { VAULT_OPS.contains(&op) || (KEEPER_OPS.contains(&op) && vaults::keeps(data, fp)) }
+/// On a team server (team.rs) its accounts' ops too, and the server is kept by its organisation admins.
+pub(crate) fn vaults_only_may(data: &Path, fp: &str, op: &str) -> bool {
+    if team::is_team(data) { return VAULT_OPS.contains(&op) || team::OPS.contains(&op) || (KEEPER_OPS.contains(&op) && team::keeps(data, fp)); }
+    VAULT_OPS.contains(&op) || (KEEPER_OPS.contains(&op) && vaults::keeps(data, fp))
+}
 /// Held around every read-modify-write of clients.json in this process (pair, a vault's join and leave).
 static CLIENTS: Mutex<()> = Mutex::new(());
 
@@ -136,17 +162,54 @@ fn open_pairing_for(data: &Path, parent: Option<&str>) -> io::Result<String> {
     Ok(secret)
 }
 
+/// A file only this user reads: mode 0600, on Windows the data folder's DACL (private_dir) covers it.
 pub(crate) fn write_private(path: &Path, text: &str) -> io::Result<()> {
-    use std::os::unix::fs::OpenOptionsExt;
     if let Some(d) = path.parent() { fs::create_dir_all(d)?; }
     let tmp = path.with_extension("tmp");
-    let mut f = fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp)?;
+    let mut o = fs::OpenOptions::new();
+    o.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut o, 0o600);
+    let mut f = o.open(&tmp)?;
     f.write_all(text.as_bytes())?;
     fs::rename(tmp, path)
 }
 
+/// Windows: `dir` (made when missing) for this user only, a protected DACL with one entry: full control for the user,
+/// inherited by every file and folder in it. Neither another user nor the profile's other entries (SYSTEM,
+/// Administrators) keep access. On macOS and Linux the files' own modes do this (write_private, 0700 folders).
+#[cfg(windows)]
+pub fn private_dir(dir: &Path) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Authorization::{ConvertStringSecurityDescriptorToSecurityDescriptorW, SetNamedSecurityInfoW, SDDL_REVISION_1, SE_FILE_OBJECT};
+    use windows_sys::Win32::Security::{GetSecurityDescriptorDacl, ACL, DACL_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR};
+    fs::create_dir_all(dir)?;
+    let sddl: Vec<u16> = dacl_sddl(&relay_remote::sock::user_sid()?).encode_utf16().chain(Some(0)).collect();
+    let path: Vec<u16> = dir.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut sd: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
+    // SAFETY: plain Win32 calls, `sd` is freed below, `acl` points into it and is used before that
+    unsafe {
+        if ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.as_ptr(), SDDL_REVISION_1, &mut sd, std::ptr::null_mut()) == 0 { return Err(io::Error::last_os_error()); }
+        let (mut present, mut acl, mut defaulted) = (0, std::ptr::null_mut::<ACL>(), 0);
+        let r = if GetSecurityDescriptorDacl(sd, &mut present, &mut acl, &mut defaulted) == 0 { Err(io::Error::last_os_error()) } else {
+            match SetNamedSecurityInfoW(path.as_ptr(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION, std::ptr::null_mut(), std::ptr::null_mut(), acl, std::ptr::null()) {
+                0 => Ok(()),
+                e => Err(io::Error::from_raw_os_error(e as i32)),
+            }
+        };
+        LocalFree(sd.cast());
+        r
+    }
+}
+/// The DACL private_dir sets: full access for `sid`, inherited by files (OI) and folders (CI), protected (P) from what
+/// the parent folder grants.
+#[cfg(any(windows, test))]
+fn dacl_sddl(sid: &str) -> String { format!("D:P(A;OICI;FA;;;{sid})") }
+
 // ---------- this machine, as the app needs it to build commands
 
+#[cfg(unix)]
 pub fn login_path() -> String {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
     let out = std::process::Command::new(&shell).args(["-lc", "printf %s \"$PATH\""]).stdin(std::process::Stdio::null()).output().ok()
@@ -156,21 +219,29 @@ pub fn login_path() -> String {
     let local = format!("{}/.local/bin", std::env::var("HOME").unwrap_or_default());
     if path.split(':').any(|d| d == local) { path } else { format!("{local}:{path}") }
 }
+/// Windows: the stored PATH of this machine and user, as the app reads it, with `claude`'s own folder first.
+#[cfg(windows)]
+pub fn login_path() -> String {
+    let path = agent_core::stored_path().unwrap_or_else(|| std::env::var("PATH").unwrap_or_default());
+    let local = Path::new(&home()).join(".local").join("bin").to_string_lossy().into_owned();
+    if path.split(';').any(|d| d.eq_ignore_ascii_case(&local)) { path } else { format!("{local};{path}") }
+}
 fn hostname() -> String {
+    if cfg!(windows) { return std::env::var("COMPUTERNAME").ok().filter(|h| !h.is_empty()).unwrap_or_else(|| "relay-server".into()); }
     // /etc/hostname on Linux (a slim install has no `hostname`), the command on a Mac
     fs::read_to_string("/etc/hostname").ok().map(|h| h.trim().to_string()).filter(|h| !h.is_empty())
         .or_else(|| std::process::Command::new("hostname").arg("-s").output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).filter(|h| !h.is_empty()))
         .unwrap_or_else(|| "relay-server".into())
 }
 pub fn info(data: &Path, path: &str) -> Info {
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = home();
     let claude = std::env::var("RELAY_CLAUDE").ok().filter(|c| !c.is_empty()).unwrap_or_else(|| {
-        let def = format!("{home}/.local/bin/claude");
+        let def = if cfg!(windows) { Path::new(&home).join(".local").join("bin").join("claude.exe").to_string_lossy().into_owned() } else { format!("{home}/.local/bin/claude") };
         if Path::new(&def).is_file() { def } else { agent_core::which("claude", path).unwrap_or(def) }
     });
     Info { host: hostname(), os: std::env::consts::OS.into(), version: env!("CARGO_PKG_VERSION").into(), proto: PROTO, home, path: path.into(), claude,
         pending: data.join("pending").to_string_lossy().into(),
-        arch: std::env::consts::ARCH.into(), update: upgrade::CAN, repos: github::repos_dir().to_string_lossy().into(), ..Default::default() }
+        arch: std::env::consts::ARCH.into(), update: upgrade::can(), repos: github::repos_dir().to_string_lossy().into(), ..Default::default() }
 }
 
 // ---------- serving
@@ -232,14 +303,22 @@ impl Server {
         let peer = tcp.peer_addr().map(|a| a.to_string()).unwrap_or_default();
         // inside the handshake: a known device, or any device while a pairing code or a vault's invite is open (it may
         // then only pair or join)
-        let data = self.data.clone();
-        let allow: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(move |fp: &str| clients(&data).iter().any(|c| c.fp == fp) || pairing(&data).is_some() || vaults::invite_open(&data));
+        // and the server's own certificate, for `relay-server health` (it may only ask that)
+        let (data, own) = (self.data.clone(), self.fp.clone());
+        let allow: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(move |fp: &str| fp == own || clients(&data).iter().any(|c| c.fp == fp) || pairing(&data).is_some() || vaults::invite_open(&data) || team::open(&data));
         let (duplex, fp) = self.acceptor.accept(tcp, HANDSHAKE, allow).map_err(|e| io::Error::other(format!("{peer}: {e}")))?;
         let (r, mut w) = duplex.split();
         let mut r = BufReader::new(r);
         let req = proto::read_json(&mut r, MAX_LINE)?;
         let me = clients(&self.data).into_iter().find(|c| c.fp == fp);
         let op = req["op"].as_str().unwrap_or("");
+        if fp == self.fp { return reply(&mut w, if op == "health" { Ok(json!({"version": upgrade::VERSION})) } else { Err("only health with the server's own certificate".into()) }); }
+        // a team server (team.rs): its accounts' ops, never a shared vault's end-to-end ones or a pairing; a personal
+        // server none of the team's
+        let team = team::is_team(&self.data);
+        if team && team::NOT_HERE.contains(&op) { return reply(&mut w, Err(format!("{op:?} is not for a team server"))); }
+        if !team && (team::OPS.contains(&op) || team::OPEN_OPS.contains(&op)) { return reply(&mut w, Err("this is not a team server".into())); }
+        if team && team::OPEN_OPS.contains(&op) { return reply(&mut w, team::op(&self.vaults, &self.fp, &fp, op, &req)); }
         if me.is_none() && op != "pair" && op != "vault_join" { return reply(&mut w, Err("not paired".into())); }
         if me.as_ref().is_some_and(|c| c.vaults_only) && !vaults_only_may(&self.data, &fp, op) { return reply(&mut w, Err(format!("{op:?} is not allowed from a device that only shares vaults"))); }
         let my_name = me.as_ref().map(|c| c.name.clone()).unwrap_or_default();
@@ -343,7 +422,8 @@ impl Server {
             "share" => self.share(ns, &req, r, w),
             // shared vaults (vaults.rs): only ciphertext passes here, by member
             "vault_create" => reply(&mut w, self.vaults.create(&fp, &my_name, s("name"))),
-            "vault_info" => reply(&mut w, self.vaults.info(&fp, s("vault"))),
+            "vault_info" => reply(&mut w, self.vaults.info(&fp, s("vault")).map(|mut v| { if team { team::annotate(&self.data, &mut v["vault"]); } v })),
+            op if team::OPS.contains(&op) => reply(&mut w, team::op(&self.vaults, &self.fp, &fp, op, &req)),
             "vault_invite" => reply(&mut w, self.vaults.invite(&fp, s("vault"), s("role"), s("wrapped"), req["epoch"].as_u64().unwrap_or(0))),
             "vault_invite_revoke" => reply(&mut w, self.vaults.invite_revoke(&fp, s("vault"), s("invite")).map(|_| json!({}))),
             "vault_join" => {
@@ -684,7 +764,7 @@ pub(crate) fn percent(s: &str) -> String {
 
 /// One notification to an ntfy topic, with curl (on a Mac and in the image): no HTTP client in this binary for it.
 fn notify(url: &str, text: &str, click: &str) {
-    let ok = std::process::Command::new("curl").args(["-fsS", "-m", "10", "-H", "Title: Relay", "-H", &format!("Click: {click}"), "-d", text, url])
+    let ok = cmd("curl").args(["-fsS", "-m", "10", "-H", "Title: Relay", "-H", &format!("Click: {click}"), "-d", text, url])
         .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok_and(|s| s.success());
     if !ok { eprintln!("relay-server: a notification to {url} failed"); }
 }
@@ -773,6 +853,14 @@ pub fn lan_ip() -> Option<String> {
 }
 
 /// For `relay-server pair`: open a code and the line to paste in Relay.
+/// A team server's link for the invite `inv` (team::init): this machine's address as `pair_line` finds it.
+pub fn team_link(data: &Path, host: Option<String>, port: Option<u16>, inv: &Value) -> io::Result<String> {
+    let port = port.or_else(|| fs::read_to_string(data.join("serve.json")).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok())
+        .and_then(|v| v["port"].as_u64()).map(|p| p as u16)).unwrap_or(proto::PORT);
+    let host = host.or_else(lan_ip).ok_or_else(|| io::Error::other("no LAN address found, pass --host"))?;
+    let s = |k: &str| inv[k].as_str().unwrap_or_default().to_string();
+    Ok(relay_remote::team::Link { host, port, fp: identity(data)?.fingerprint(), invite: Some((s("invite"), s("code"))) }.format())
+}
 pub fn pair_line(data: &Path, host: Option<String>, port: Option<u16>) -> io::Result<String> {
     let port = port.or_else(|| fs::read_to_string(data.join("serve.json")).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok())
         .and_then(|v| v["port"].as_u64()).map(|p| p as u16)).unwrap_or(proto::PORT);
@@ -802,16 +890,84 @@ pub fn launch_agent(args: &[String]) -> String {
 "#)
 }
 
+/// The name of the scheduled task that runs relay-server at logon on Windows, the LaunchAgent's counterpart.
+pub const TASK_NAME: &str = "Relay server";
+
+/// A Task Scheduler task that runs `exe args` when `user` (`DOMAIN\user`) logs on, restarts it when it fails, never
+/// stops it for a time limit or on battery, and runs one at a time. As the user, without elevation, so no window
+/// and no admin rights: a GUI program (the Relay app) or relay-server.exe started by the task shows nothing.
+/// `version` goes in the description, so a new Relay reads as a change. For `schtasks /Create /XML`, which wants UTF-16.
+pub fn task_xml(exe: &str, args: &str, user: &str, version: &str) -> String {
+    let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+    let (exe, args, user) = (esc(exe), esc(args), esc(user));
+    format!(r#"<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo><Description>Relay {version}: runs Relay conversations from other computers on this one</Description></RegistrationInfo>
+  <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>{user}</UserId></LogonTrigger></Triggers>
+  <Principals><Principal id="Author"><UserId>{user}</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+    <RestartOnFailure><Interval>PT1M</Interval><Count>999</Count></RestartOnFailure>
+  </Settings>
+  <Actions Context="Author"><Exec><Command>{exe}</Command><Arguments>{args}</Arguments></Exec></Actions>
+</Task>
+"#)
+}
+/// The user a task runs as: `DOMAIN\user` from the environment, as Windows sets it at logon.
+pub fn task_user() -> String {
+    let v = |k: &str| std::env::var(k).unwrap_or_default();
+    if v("USERDOMAIN").is_empty() { v("USERNAME") } else { format!("{}\\{}", v("USERDOMAIN"), v("USERNAME")) }
+}
+
 /// A service definition that keeps `relay-server serve` running and restarts it: a LaunchAgent on a Mac (the working
-/// copy on a RAM disk), a systemd user unit on Linux, with the steps to install it.
+/// copy on a RAM disk), a systemd user unit on Linux, a scheduled task on Windows, with the steps to install it.
 pub fn service_file() -> String {
     let exe = std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| "relay-server".into());
+    if cfg!(windows) {
+        let xml = task_xml(&exe, "serve", &task_user(), env!("CARGO_PKG_VERSION"));
+        return format!("{xml}<!-- In PowerShell:\n     relay-server service | Out-File -Encoding Unicode relay-server.xml\n     schtasks /Create /TN \"{TASK_NAME}\" /XML relay-server.xml /F\n     schtasks /Run /TN \"{TASK_NAME}\" -->\n");
+    }
     if cfg!(target_os = "macos") {
         let agent = launch_agent(&[exe, "serve".into(), "--ram-disk".into()]);
         format!("# ~/Library/LaunchAgents/{LAUNCH_LABEL}.plist, then:\n#   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/{LAUNCH_LABEL}.plist\n\n{agent}")
     } else {
         format!("# ~/.config/systemd/user/relay-server.service, then:\n#   systemctl --user enable --now relay-server\n#   loginctl enable-linger $USER   (keeps it running without a login)\n\
 [Unit]\nDescription=Relay server\nAfter=network-online.target\n\n[Service]\nExecStart={exe} serve\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n")
+    }
+}
+
+#[cfg(test)]
+mod windows_tests {
+    use super::*;
+    #[test]
+    fn the_scheduled_task_runs_at_logon_restarts_and_never_times_out() {
+        let x = task_xml(r"C:\Users\a&b\AppData\Local\Relay\relay.exe", "--relay-server serve", r"PC\a&b", "1.2.3");
+        assert!(x.starts_with(r#"<?xml version="1.0" encoding="UTF-16"?>"#));
+        assert!(x.contains(r"<Command>C:\Users\a&amp;b\AppData\Local\Relay\relay.exe</Command><Arguments>--relay-server serve</Arguments>"));
+        assert!(x.contains(r"<LogonTrigger><Enabled>true</Enabled><UserId>PC\a&amp;b</UserId></LogonTrigger>"));
+        assert!(x.contains("<RunLevel>LeastPrivilege</RunLevel>") && x.contains("<LogonType>InteractiveToken</LogonType>"));
+        assert!(x.contains("<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>"), "Task Scheduler stops a task after 72 hours otherwise");
+        assert!(x.contains("<RestartOnFailure><Interval>PT1M</Interval><Count>999</Count></RestartOnFailure>"));
+        assert!(x.contains("<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>") && x.contains("<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>"));
+        assert!(x.contains("<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>") && x.contains("<Hidden>false</Hidden>"));
+        assert!(x.contains("Relay 1.2.3:"), "a new version reads as a change");
+    }
+    #[test]
+    fn the_private_folder_is_the_users_alone() {
+        assert_eq!(dacl_sddl("S-1-5-21-1-2-3-1001"), "D:P(A;OICI;FA;;;S-1-5-21-1-2-3-1001)");
     }
 }
 

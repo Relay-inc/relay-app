@@ -12,6 +12,7 @@ import {
 } from "../../../domain/workspace/format.ts";
 import { TURN_INTO, turnInto, type BlockKind } from "../../../domain/workspace/blocks.ts";
 import { linkAt } from "./livePreview.ts";
+import { bindingLabel } from "../../../domain/settings/shortcuts.ts";
 
 // Styling a page without writing markdown: a toolbar over a selection (bold, italic, strikethrough, code, link, Turn
 // into), ⌘B ⌘I ⇧⌘X ⌘E and ⌘K on a selection, a popover to change a link's address, and `[] ` becoming a to-do. Each of
@@ -32,10 +33,10 @@ export type FormatWords = {
 };
 
 const MARKS: { mark: Mark; key: string; label: keyof FormatWords; face: string; keys: string }[] = [
-  { mark: "**", key: "Mod-b", label: "bold", face: "B", keys: "⌘B" },
-  { mark: "*", key: "Mod-i", label: "italic", face: "I", keys: "⌘I" },
-  { mark: "~~", key: "Mod-Shift-x", label: "strike", face: "S", keys: "⇧⌘X" },
-  { mark: "`", key: "Mod-e", label: "code", face: "</>", keys: "⌘E" },
+  { mark: "**", key: "Mod-b", label: "bold", face: "B", keys: bindingLabel("mod+KeyB") },
+  { mark: "*", key: "Mod-i", label: "italic", face: "I", keys: bindingLabel("mod+KeyI") },
+  { mark: "~~", key: "Mod-Shift-x", label: "strike", face: "S", keys: bindingLabel("shift+mod+KeyX") },
+  { mark: "`", key: "Mod-e", label: "code", face: "</>", keys: bindingLabel("mod+KeyE") },
 ];
 const SVG = "http://www.w3.org/2000/svg";
 
@@ -92,7 +93,7 @@ function floating(words: FormatWords) {
           this.buttons.set(m.mark, b);
         }
         const link = el("button", "cm-format-link");
-        link.title = `${words.link} ⌘K`;
+        link.title = `${words.link} ${bindingLabel("mod+KeyK")}`;
         link.setAttribute("aria-label", words.link);
         const svg = document.createElementNS(SVG, "svg");
         svg.setAttribute("viewBox", "0 0 16 16");

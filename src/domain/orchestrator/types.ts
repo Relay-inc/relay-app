@@ -31,6 +31,8 @@ export type Worker = {
   answer?: string | null; // what dispatch asked for (fable, opus, sonnet, haiku), "" for the CLI default
   /** its own progress from its `step` tool, while it works: steps done of its plan, the one it is on */
   step?: { done: number; total: number; note: string | null } | null;
+  /** its `decision` trail over its whole life, oldest first: what it chose, why, a pointer to the evidence, the result */
+  decisions?: { at: number; decision: string; why: string; evidence: string | null; result: string | null }[];
   /** a board pipeline's worker: its ticket (domain/pipeline Ticket), the branch its PR goes to, the PR or why there is
    *  none, and what the pipeline last did on the board for it */
   ticket?: unknown;
@@ -44,6 +46,19 @@ export type Worker = {
   review_notes?: string | null;
   /** why a running worker looks stuck (a card nobody answered, no output for a long while), from the backend */
   stalled?: string | null;
+  /** a pipeline worker's repos, each in its own worktree on `branch`, with its PR or why it has none; `repo`,
+   *  `worktree` and `pr` are the first one's. Absent or empty for others and for pipeline workers from before */
+  trees?: WorkerTree[];
+};
+/** One repo of a pipeline worker (orch.rs Tree). */
+export type WorkerTree = {
+  repo: string;
+  worktree: string;
+  start: string;
+  base: string;
+  checks: string;
+  pr: string | null;
+  pr_error: string | null;
 };
 /** The backend's `orch` event: a worker made or changed, or a user turn Relay wrote into a conversation itself. */
 export type OrchEvent = { type: "worker"; worker: Worker } | { type: "sent"; key: string; text: string };

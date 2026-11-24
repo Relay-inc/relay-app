@@ -39,7 +39,7 @@ pub const RELAY_TOOL: &str = "Bash(relay *)";
 
 /// The relay-orch tools of the orchestrator's coordinator and of its workers, without a card (src-tauri orch.rs).
 pub const ORCH_COORD_TOOLS: [&str; 4] = ["mcp__relay-orch__dispatch", "mcp__relay-orch__workers", "mcp__relay-orch__message", "mcp__relay-orch__stop"];
-pub const ORCH_WORKER_TOOLS: [&str; 2] = ["mcp__relay-orch__step", "mcp__relay-orch__report"];
+pub const ORCH_WORKER_TOOLS: [&str; 3] = ["mcp__relay-orch__step", "mcp__relay-orch__decision", "mcp__relay-orch__report"];
 
 pub struct Claude;
 pub static PROVIDER: Claude = Claude;
@@ -88,6 +88,15 @@ fn mode_set(env: &Env) -> bool {
         || ["settings.json", "settings.local.json"].iter().filter_map(|f| mode(format!("{}/.claude/{f}", env.vault)))
             .any(|m| m != "auto" && m != "bypassPermissions")
 }
+/// Claude in Chrome turned on by default for the account (`claudeInChromeDefaultEnabled` in its `.claude.json`, which
+/// sits in the config folder of an account and next to ~/.claude for the default one). `-p` ignores that setting, so
+/// the spawn passes `--chrome` itself.
+fn chrome_on(env: &Env) -> bool {
+    let a = account(env);
+    let f = if a.is_empty() { format!("{}/.claude.json", env.home) } else { format!("{a}/.claude.json") };
+    std::fs::read_to_string(f).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok())
+        .is_some_and(|v| v["claudeInChromeDefaultEnabled"] == true)
+}
 /// The vault's transcript folder on the env's account.
 pub fn transcripts(env: &Env) -> String { transcripts_in(&config_dir(env.home, account(env)), env.vault) }
 /// The config folder a session lives in: of the accounts that have its transcript, the one written last (a
@@ -99,13 +108,18 @@ fn session_dir(env: &Env, sid: &str) -> String {
 }
 pub fn transcripts_of(env: &Env, sid: &str) -> String { transcripts_in(&session_dir(env, sid), env.vault) }
 /// A session continued on another account: its latest transcript goes along (over an older copy from an earlier
-/// move), so `--resume` finds it there. The copy in the old account stays as it was.
+/// move), so `--resume` finds it there. The copy in the old account stays as it was. Accounts that share one
+/// transcript folder (a symlinked `projects`) have nothing to carry: copying a file onto itself would empty it.
 fn carry(env: &Env, sid: &str) -> Result<(), String> {
     let to = transcripts(env);
     let from = transcripts_of(env, sid);
     if to.is_empty() || from == to || !Path::new(&format!("{from}/{sid}.jsonl")).is_file() { return Ok(()); }
-    std::fs::create_dir_all(&to).and_then(|_| std::fs::copy(format!("{from}/{sid}.jsonl"), format!("{to}/{sid}.jsonl")))
-        .map(|_| ()).map_err(|e| format!("claude: moving the conversation to the other account: {e}"))
+    let err = |e: std::io::Error| format!("claude: moving the conversation to the other account: {e}");
+    std::fs::create_dir_all(&to).map_err(err)?;
+    if std::fs::canonicalize(&from).map_err(err)? == std::fs::canonicalize(&to).map_err(err)? { return Ok(()); }
+    // through a temp file and a rename: the transcript there is the old one or the new one, never a half
+    let tmp = format!("{to}/{sid}.jsonl.carry");
+    std::fs::copy(format!("{from}/{sid}.jsonl"), &tmp).and_then(|_| std::fs::rename(&tmp, format!("{to}/{sid}.jsonl"))).map_err(err)
 }
 
 /// One `claude -p` call that answers once, no conversation: the title, a review, a text, a page's website, a capture.
@@ -172,6 +186,12 @@ impl AgentProvider for Claude {
     }
     fn npm_package(&self) -> Option<&'static str> { Some("@anthropic-ai/claude-code") }
     fn self_update(&self) -> &'static [&'static str] { &["update"] }
+    fn login(&self, env: &Env) -> Option<Command> {
+        let mut cmd = Command::new(env.bin);
+        cmd.args(["auth", "login"]).env("PATH", env.path).env_remove("ANTHROPIC_API_KEY");
+        on_account(&mut cmd, account(env));
+        Some(cmd)
+    }
     fn default_bin(&self, home: &str) -> String { format!("{home}/.local/bin/claude") }
     fn detect(&self, env: &Env) -> Detect {
         let installed = Path::new(env.bin).is_file();
@@ -237,6 +257,9 @@ impl AgentProvider for Claude {
         if !mcp["mcpServers"].as_object().is_some_and(|m| m.is_empty()) { cmd.arg("--mcp-config").arg(mcp.to_string()); }
         // grants.fenced, set by the app in a shared vault: only the servers above, none of the user's own or claude.ai's
         if fenced { cmd.arg("--strict-mcp-config"); }
+        // Claude in Chrome as the account has it, except in a shared vault (the browser holds the user's own logins)
+        // and on a work machine (its Chrome is not this Mac's, and this reads this Mac's setting)
+        if !fenced && !env.grants.machine && chrome_on(env) { cmd.arg("--chrome"); }
         let ask = strs("ask");
         let mut settings: serde_json::Map<String, Value> = if fenced { serde_json::from_str(fenced_settings()).unwrap() } else { Default::default() };
         if !ask.is_empty() { settings.insert("permissions".into(), json!({"ask": ask})); }
@@ -421,6 +444,25 @@ mod tests {
         std::fs::remove_dir_all(&d).ok();
     }
     #[test]
+    fn chrome_follows_the_account_setting() {
+        let d = std::env::temp_dir().join(format!("relay-chrome-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let p = PathBuf::from("/tmp/pending");
+        let l = Launch { key: "c:1", name: "x", model: "", effort: "", resume: None, fork: None, turn: None };
+        let chrome = |grants: &Grants| {
+            let e = Env { home: d.to_str().unwrap(), grants, ..env(&p) };
+            PROVIDER.command(&e, &l).unwrap().get_args().any(|a| a == "--chrome")
+        };
+        assert!(!chrome(&NO_GRANTS), "no .claude.json: off");
+        std::fs::write(d.join(".claude.json"), json!({"claudeInChromeDefaultEnabled": false}).to_string()).unwrap();
+        assert!(!chrome(&NO_GRANTS), "turned off: off");
+        std::fs::write(d.join(".claude.json"), json!({"claudeInChromeDefaultEnabled": true}).to_string()).unwrap();
+        assert!(chrome(&NO_GRANTS), "turned on: --chrome");
+        assert!(!chrome(&Grants { fenced: true, ..Default::default() }), "never in a shared vault");
+        assert!(!chrome(&Grants { machine: true, ..Default::default() }), "never on a work machine");
+        std::fs::remove_dir_all(&d).ok();
+    }
+    #[test]
     fn spawn_args_stay_as_before() {
         let p = PathBuf::from("/tmp/pending");
         let l = Launch { key: "c:1", name: "Algemeen: x", model: "opus", effort: "high", resume: Some("abc-1"), fork: Some("def"), turn: None };
@@ -530,6 +572,38 @@ mod tests {
         let opts = json!({"account": "/Users/me/.claude-work"});
         let work = Env { opts: &opts, ..env(&p) };
         assert_eq!(PROVIDER.terminal(&work, Terminal::New("x")).unwrap(), "cd '/Users/me/my vault' && CLAUDE_CONFIG_DIR='/Users/me/.claude-work' claude -n 'x'");
+    }
+    #[cfg(unix)]
+    #[test]
+    fn the_login_runs_on_the_conversations_account() {
+        let p = std::env::temp_dir();
+        let c = PROVIDER.login(&env(&p)).unwrap();
+        assert_eq!(c.get_args().collect::<Vec<_>>(), ["auth", "login"]);
+        assert!(c.get_envs().any(|(k, v)| k == "CLAUDE_CONFIG_DIR" && v.is_none()));
+        let opts = json!({"account": "/Users/me/.claude-work"});
+        let work = Env { opts: &opts, ..env(&p) };
+        assert!(PROVIDER.login(&work).unwrap().get_envs().any(|(k, v)| k == "CLAUDE_CONFIG_DIR" && v.is_some_and(|v| v == "/Users/me/.claude-work")));
+    }
+
+    #[test]
+    fn accounts_sharing_one_transcript_folder_keep_the_transcript() {
+        let root = std::env::temp_dir().join(format!("relay-acct-link-{}", std::process::id()));
+        let (own, work) = (root.join("own"), root.join("work"));
+        let (home, vault) = (root.to_string_lossy().to_string(), "/v".to_string());
+        std::fs::create_dir_all(root.join(".claude/projects/-v")).unwrap();
+        std::fs::create_dir_all(&work).unwrap();
+        std::os::unix::fs::symlink(root.join(".claude/projects"), work.join("projects")).unwrap();
+        std::fs::write(root.join(".claude/projects/-v/ab-1.jsonl"), "{}\n").unwrap();
+        let accounts = json!([{"name": "Work", "dir": work.to_string_lossy()}]);
+        // on either account, whichever folder the session is found in
+        for account in [json!(""), json!(work.to_string_lossy())] {
+            let opts = json!({"account": account, "accounts": accounts});
+            let env = Env { home: &home, vault: &vault, path: "/usr/bin", bin: "/bin/claude", pending: &own, grants: &NO_GRANTS, opts: &opts };
+            let l = Launch { key: "c:1", name: "x", model: "", effort: "", resume: Some("ab-1"), fork: None, turn: None };
+            PROVIDER.command(&env, &l).unwrap();
+            assert_eq!(std::fs::read_to_string(root.join(".claude/projects/-v/ab-1.jsonl")).unwrap(), "{}\n");
+        }
+        let _ = std::fs::remove_dir_all(&root);
     }
     #[test]
     fn a_conversation_moves_to_another_account() {

@@ -13,17 +13,28 @@ pub(crate) fn is_spent(st: &App, p: &dyn AgentProvider, account: &str, model: &s
 pub(crate) fn is_ready(st: &App, p: &dyn AgentProvider, account: &str) -> bool {
     !st.limits.lock().unwrap().get(&limit_key(p, account)).is_some_and(|(_, v)| agents::no_login(v))
 }
-/// The account a conversation runs on: its session's, else the active one; with auto-switch on and that one used up
-/// for `model`, the next signed-in one that is not. Reads what the limits last said, never asks (no network in a send).
+/// How much room an account has for `model` now ([`agents::room`]): none once a turn was refused on it, else by what
+/// its limits last said (None: not read, or they did not read).
+fn room(st: &App, p: &dyn AgentProvider, account: &str, model: &str) -> Option<f64> {
+    let k = limit_key(p, account);
+    if st.spent.lock().unwrap().contains(&k) { return Some(0.0); }
+    st.limits.lock().unwrap().get(&k).and_then(|(_, v)| agents::room(v, model, agent_core::usage::now_ms()))
+}
+/// The account a conversation runs on: its session's, else the active one (with "most room": the signed-in account
+/// with the most left of its limits for `model` against the time to their reset, so a conversation keeps the account
+/// it started on); with auto-switch on
+/// and that one used up for `model`, the next signed-in one that is not. Reads what the limits last said, never asks
+/// (no network in a send).
 /// ponytail: the limits are at most 5 minutes old (the webview's poll); a refused turn marks an account at once
 pub(crate) fn account_of(st: &App, p: &dyn AgentProvider, key: &str, model: &str) -> String {
     if !p.caps().accounts { return String::new(); }
     let own = st.sids.lock().unwrap().get(key).filter(|x| x.provider == p.id()).map(|x| x.account.clone());
-    let (list, cur, auto) = {
+    let (list, active, auto) = {
         let s = st.settings.lock().unwrap();
         let c = &s["agents"]["providers"][p.id()];
-        (agents::accounts(&s, p), own.unwrap_or_else(|| c["active"].as_str().unwrap_or("").into()), c["auto"] == true)
+        (agents::accounts(&s, p), c["active"].as_str().unwrap_or("").to_string(), c["auto"] == true)
     };
+    let cur = own.unwrap_or_else(|| if active == agents::MOST_ROOM { agents::most_room(&list, |a| room(st, p, a, model), |a| is_ready(st, p, a)) } else { active });
     agents::pick_account(&list, &cur, auto, |a| is_spent(st, p, a, model), |a| is_ready(st, p, a))
 }
 

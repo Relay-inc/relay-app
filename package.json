@@ -1,7 +1,7 @@
 {
   "name": "relay",
   "private": true,
-  "version": "0.0.48",
+  "version": "0.0.59",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -22,12 +22,14 @@
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.15",
     "@hugeicons/core-free-icons": "^4.3.5",
+    "@relay/agent-antigravity": "workspace:*",
     "@relay/agent-claude": "workspace:*",
     "@relay/agent-codex": "workspace:*",
     "@relay/agent-core": "workspace:*",
     "@relay/agent-opencode": "workspace:*",
     "@relay/agent-pi": "workspace:*",
     "@relay/board-core": "workspace:*",
+    "@relay/integration-github-projects": "workspace:*",
     "@relay/integration-linear": "workspace:*",
     "@relay/integration-productive": "workspace:*",
     "@relay/integration-trello": "workspace:*",

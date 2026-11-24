@@ -90,6 +90,11 @@ export const markSeen = (key: string) =>
     draft.unseen.delete(key);
     draft.routeChoice = draft.routeChoice?.key === key ? draft.routeChoice : null;
   });
+/** Back to unread from the sidebar menu: bold again until it is opened. */
+export const markUnseen = (key: string) =>
+  useConversationsStore.setState(draft => {
+    draft.unseen.add(key);
+  });
 /** The orchestrator's coordinator as a conversation: general, Claude's, never closed (application/orchestrator). */
 export function ensureCoordinatorChat() {
   useConversationsStore.setState(draft => {

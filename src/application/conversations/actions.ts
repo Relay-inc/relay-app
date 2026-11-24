@@ -336,6 +336,8 @@ const stopChat = () => {
   });
 };
 /** The send button: send, or stop the running turn. */
+/** Sign the conversation's agent in: the backend runs the agent's own login and answers once it is done. */
+export const signIn = (key: string) => backend.agentLogin(key);
 export const sendOrStop = () => (cs().status[selected()] === "busy" ? stopChat() : sendMsg());
 /** The agent of the open conversation, before it starts. */
 export function setAgent(id: string) {

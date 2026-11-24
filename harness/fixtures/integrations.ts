@@ -642,6 +642,39 @@ export const usageLimits = [
   },
   { provider: "codex", limits: { ok: false, reason: "unavailable" }, accounts: null },
 ];
+// fixture accounts: Claude Code with a second account, the first one used up and auto-switch on the second
+const fullFirst = {
+  ok: true,
+  plan: "Max",
+  windows: [
+    { id: "five_hour", label: "limit.session", name: null, pct: 100, resets: iso(NOW + 3 * HOUR) },
+    { id: "seven_day", label: "limit.weekly", name: null, pct: 64, resets: iso(NOW + 3 * DAY) },
+  ],
+};
+const roomySecond = {
+  ok: true,
+  plan: "Max",
+  windows: [
+    { id: "five_hour", label: "limit.session", name: null, pct: 17, resets: iso(NOW + 5 * HOUR) },
+    { id: "seven_day", label: "limit.weekly", name: null, pct: 15, resets: iso(NOW + 5 * DAY) },
+  ],
+};
+export const usageLimitsAccounts = [
+  {
+    provider: "claude",
+    limits: roomySecond,
+    active: "/Users/ann/.claude-work",
+    accounts: [
+      { dir: "", name: null, limits: fullFirst },
+      { dir: "/Users/ann/.claude-work", name: "Work", limits: roomySecond },
+    ],
+  },
+  usageLimits[1],
+];
+export const usageLimitsAntigravity = [
+  ...usageLimits,
+  { provider: "antigravity", limits: { ok: true, plan: "Antigravity Starter Quota", windows: [] }, accounts: null },
+];
 export function usageTokens() {
   const today = tally(182_000, 64_000, 4_100_000, 310_000, 18.4);
   const week = tally(1_240_000, 402_000, 31_800_000, 2_050_000, 131.7);
@@ -817,9 +850,39 @@ export const agentsStatus = {
       bin: "",
       defaultBin: "/opt/homebrew/bin/pi",
     },
+    {
+      id: "antigravity",
+      name: "Antigravity",
+      on: false,
+      caps: caps(false),
+      textOnly: [],
+      detect: { installed: false, bin: "/Users/me/.local/bin/agy", version: null, loggedIn: null, note: null },
+      models: [],
+      efforts: [],
+      bin: "",
+      defaultBin: "/Users/me/.local/bin/agy",
+    },
   ],
 };
 /** agents_status of fixture `models`: Claude with 40 models, so the composer's model pick gets its filter field. */
+// fixture antigravity: Antigravity installed and switched on, its plan known and no limit windows (PR #513)
+export const agentsStatusAntigravity = {
+  ...agentsStatus,
+  providers: agentsStatus.providers.map(p =>
+    p.id === "antigravity"
+      ? {
+          ...p,
+          on: true,
+          caps: { ...caps(false), permissions: true, terminal: true, limits: true, effort: false },
+          detect: { installed: true, bin: "/Users/me/.local/bin/agy", version: "1.5.13", loggedIn: null, note: null },
+          models: choices([
+            ["gemini-3.8-flash-high", "Gemini 3.8 Flash (High)"],
+            ["gemini-3.8-flash-low", "Gemini 3.8 Flash (Low)"],
+          ]),
+        }
+      : p,
+  ),
+};
 export const agentsStatusManyModels = {
   ...agentsStatus,
   providers: agentsStatus.providers.map(p =>
@@ -865,10 +928,13 @@ const act = (ext: string, id: string, about: string, write: boolean, def: string
   default: def,
 });
 export const actions = [
-  act("productive", "list_tasks", "List the open tasks of a board.", false, "auto"),
-  act("productive", "create_task", "Create a task on a board.", true, "ask"),
-  act("productive", "comment", "Comment on a task.", true, "ask"),
-  act("productive", "add_time", "Book time on a service.", true, "ask"),
+  act("productive", "search", "Search tasks by text (title or number), up to 20. Closed tasks are included, see 'closed'.", false, "auto"),
+  act("productive", "task", "Read one task by id, or by number with the project id.", false, "auto"),
+  act("productive", "statuses", "The workflow statuses a task of a project can move to.", false, "auto"),
+  act("productive", "create_task", "Create a task in a project's task list.", true, "ask"),
+  act("productive", "move", "Set a task's workflow status, and/or move it to another task list.", true, "ask"),
+  act("productive", "comment", "Comment on a task. Hidden from the client by default on client projects.", true, "ask"),
+  act("productive", "add_time", "Book time on a service for you.", true, "ask"),
   act(
     "mail",
     "search",
@@ -884,6 +950,13 @@ export const actions = [
   act("reminders", "add", "Add a reminder to the vault.", true, "auto"),
   act("reminders", "done", "Mark a reminder done (a repeating one moves on).", true, "auto"),
   act("reminders", "push", "Move a reminder to another date.", true, "auto"),
+  act(
+    "knowledge",
+    "search",
+    "Search the knowledge workspaces (team workspaces without history) for passages, read-only: path, workspace, the matching line, score.",
+    false,
+    "auto",
+  ),
 ];
 export const actionConfig = (): Record<string, unknown> => ({ productive: { "*": "ask", add_time: "auto" } });
 
@@ -1051,6 +1124,69 @@ export function linear(body: unknown): unknown {
     return { data: { issues: { nodes: LINEAR_ISSUES, pageInfo: { hasNextPage: false, endCursor: null } } } };
   if (op === "Viewer") return { data: { viewer: { id: "v1", name: "Demo User", displayName: "demo" } } };
   throw new Error(`Linear query ${op} is not set up in the harness`);
+}
+
+// ---------- GitHub Projects (fixture "ghprojects"): the user and one organization, its roadmap project with a Status
+// field, and the items on it (issues, a pull request, a draft). `githubProjects` answers by the query's operation name.
+export const GH_PROJECT = "PVT_kwDOBeacon01";
+const GH_OPTIONS = ["Todo", "In Progress", "In Review", "Done"].map((name, i) => ({ id: `0a0b0c0${i + 1}`, name }));
+const GH_ITEMS = [
+  ["Issue", 482, "GitHub Projects as board", "In Progress", "Jana Vos", ["enhancement"]],
+  ["Issue", 471, "Export invoices as UBL", "Todo", "Tom Peeters", []],
+  ["PullRequest", 488, "Retry failed Peppol deliveries", "In Review", "Jana Vos", ["backend"]],
+  ["Issue", 465, "Show the VAT number on the credit note", "Done", null, []],
+  ["DraftIssue", 0, "Payment reminder after 14 days", null, null, []],
+  ["Issue", 479, "Archive paid invoices after a year", "Todo", null, ["idea"]],
+].map(([type, number, title, status, who, labels], i) => ({
+  id: `PVTI_lADOBeacon0${i + 1}`,
+  isArchived: false,
+  updatedAt: "2026-11-09T09:00:00Z",
+  fieldValueByName: status ? { optionId: GH_OPTIONS.find(o => o.name === status)!.id } : null,
+  content: {
+    __typename: type,
+    title,
+    ...(type === "DraftIssue"
+      ? {}
+      : {
+          number,
+          url: `https://github.com/beacon/billing/${type === "PullRequest" ? "pull" : "issues"}/${number}`,
+          state: "OPEN",
+          labels: { nodes: (labels as string[]).map(name => ({ name })) },
+        }),
+    assignees: { nodes: who ? [{ login: String(who).split(" ")[0].toLowerCase(), name: who }] : [] },
+  },
+}));
+export function githubProjects(body: unknown): unknown {
+  const q = String((body as { query?: string })?.query ?? "");
+  const op = q.match(/^\s*(?:query|mutation)\s+(\w+)/)?.[1];
+  const projects = (nodes: [string, string][]) => ({ nodes: nodes.map(([id, title]) => ({ id, title, closed: false })) });
+  if (op === "Boards")
+    return {
+      data: {
+        viewer: {
+          login: "demo",
+          name: "Demo User",
+          projectsV2: projects([["PVT_kwDOPersonal1", "Side projects"]]),
+          organizations: {
+            nodes: [{ login: "beacon", name: "Beacon", projectsV2: projects([[GH_PROJECT, "Billing roadmap"], ["PVT_kwDOBeacon02", "Website"]]) }],
+          },
+        },
+      },
+    };
+  if (op === "Fields")
+    return {
+      data: {
+        node: {
+          url: "https://github.com/orgs/beacon/projects/1",
+          fields: { nodes: [{}, { id: "PVTSSF_lADOBeaconSt", name: "Status", options: GH_OPTIONS }] },
+        },
+      },
+    };
+  if (op === "Items") return { data: { node: { items: { nodes: GH_ITEMS, pageInfo: { hasNextPage: false, endCursor: null } } } } };
+  if (op === "Move") return { data: { updateProjectV2ItemFieldValue: { projectV2Item: { id: "x" } } } };
+  if (op === "Clear") return { data: { clearProjectV2ItemFieldValue: { projectV2Item: { id: "x" } } } };
+  if (op === "Create") return { data: { addProjectV2DraftIssue: { projectItem: { id: "PVTI_lADOBeaconNew" } } } };
+  throw new Error(`GitHub Projects query ${op} is not set up in the harness`);
 }
 
 // ---------- Buddy (fixture "buddy"): one linked project, three pipelines, read-only GETs as packages/integration-buddy allows them

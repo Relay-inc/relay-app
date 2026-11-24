@@ -1,8 +1,12 @@
-import { parseLink, unhandled } from "../domain/navigation/deep-links";
+import { boardOfLink, parseLink, unhandled } from "../domain/navigation/deep-links";
 import * as backend from "../infrastructure/backend";
 import { session } from "../infrastructure/storage";
 import { isActive, isPrimary } from "../infrastructure/window";
-import { openProject, quickProjects, toggleQuickAsk } from "./navigation/navigation";
+import { t } from "../shared/i18n";
+import { provider } from "../shared/plugins";
+import { settings } from "./settings/settings";
+import { openFoundCard } from "./board/board";
+import { openProject, quickProjects, toast, toggleQuickAsk } from "./navigation/navigation";
 import { openMeetingView } from "./calendar/meeting-view";
 import { useCalendarStore } from "./calendar/store";
 
@@ -20,6 +24,13 @@ function handleLink(link: string) {
     // Relay's own copy when the calendar has it, else the meeting as the link gives it: its view, where Prep, Record and
     // Start notes are one click each (recording never starts from a link alone)
     void openMeetingView(useCalendarStore.getState().list.find(x => x.id === parsed.meeting.id) ?? parsed.meeting);
+  } else if (parsed?.kind === "ticket") {
+    // the ticket window over the board linked to a vault project, where Start conversation is one click (work never
+    // starts from a link alone)
+    const tracker = provider(parsed.provider);
+    const ref = boardOfLink(settings().boards, parsed);
+    if (tracker && ref) void openFoundCard(tracker, { id: parsed.id, ref });
+    else toast(t("link.noBoard", { tracker: parsed.provider }));
   }
 }
 

@@ -1,0 +1,8 @@
+{ "data": { "node": { "items": { "nodes": [
+  { "id": "PVTI_1", "isArchived": false, "updatedAt": "2026-11-09T10:00:00Z", "fieldValueByName": { "optionId": "aa02" },
+    "content": { "__typename": "Issue", "number": 482, "title": "Github Projects as board?", "url": "https://github.com/acme/app/issues/482", "state": "OPEN",
+      "assignees": { "nodes": [{ "login": "octo", "name": "Octo Cat" }] }, "labels": { "nodes": [{ "name": "idea" }] } } },
+  { "id": "PVTI_2", "isArchived": false, "updatedAt": "2026-11-08T10:00:00Z", "fieldValueByName": null,
+    "content": { "__typename": "DraftIssue", "title": "Write the release notes", "assignees": { "nodes": [] } } },
+  { "id": "PVTI_3", "isArchived": true, "fieldValueByName": { "optionId": "aa03" }, "content": { "__typename": "Issue", "number": 1, "title": "Gone" } }
+], "pageInfo": { "hasNextPage": true, "endCursor": "c1" } } } } }

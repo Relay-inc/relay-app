@@ -3,7 +3,7 @@ import { readProperties, setProperty, type PropertyValue } from "../../../domain
 import { DECOR_KEYS } from "../../../domain/workspace/decor";
 import { headerOf, type Header, type Slot } from "../../../domain/types/header";
 import { activeFolder } from "../../../application/navigation/workspaces";
-import { followPageLink } from "../../../application/navigation/pages";
+import { openNoteLink } from "../../../application/navigation/pages";
 import { toast } from "../../../application/navigation/navigation";
 import { loadTemplates } from "../../../application/navigation/kb";
 import { loadRows } from "../../../application/collections/collections";
@@ -120,7 +120,7 @@ function TypeLine({
         {crumbs.map((name, i) => (
           <span key={name} className="contents">
             {i ? <Icon name="right" className="glyph size-3 flex-none text-tertiary" /> : null}
-            <button className="truncate hover:text-accent-text" onClick={() => void followPageLink(name, false)}>
+            <button className="truncate hover:text-accent-text" onClick={() => void openNoteLink(name)}>
               {name}
             </button>
           </span>
@@ -204,7 +204,7 @@ function LinkSlot({
         <button
           key={name}
           className="h-6 px-2 rounded-md bg-fill-2 text-accent-text truncate max-w-full hover:underline"
-          onClick={() => void followPageLink(name, false)}
+          onClick={() => void openNoteLink(name)}
         >
           {name}
         </button>

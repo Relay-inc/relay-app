@@ -4,9 +4,8 @@ import type { Meeting } from "../../../domain/calendar/types";
 import { meetingProjectOf } from "../../../application/calendar/calendar";
 import { changeBriefing, toggleBriefingTask } from "../../../application/calendar/meeting-view";
 import { openMailThread } from "../../../application/mail/mail";
-import { openDetail } from "../../../application/navigation/panel";
+import { openNoteLink } from "../../../application/navigation/pages";
 import { projectChip } from "../../../application/today/today";
-import { noteKey } from "../../../domain/navigation/keys";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
 import { initials } from "../today/parts";
@@ -80,7 +79,7 @@ export function BriefingBlocks({ meeting, shaped }: { meeting: Meeting; shaped: 
                   {person.link ? (
                     <button
                       className="text-left font-medium text-accent-text cursor-pointer hover:underline"
-                      onClick={() => void openDetail(noteKey(person.name))}
+                      onClick={() => void openNoteLink(person.name)}
                     >
                       {person.name}
                     </button>
@@ -110,7 +109,7 @@ export function BriefingBlocks({ meeting, shaped }: { meeting: Meeting; shaped: 
                 {t("meet.brief.from")}{" "}
                 <button
                   className="text-accent-text cursor-pointer hover:underline"
-                  onClick={() => void openDetail(noteKey(shaped.since.from))}
+                  onClick={() => void openNoteLink(shaped.since.from)}
                 >
                   {shaped.since.from}
                 </button>

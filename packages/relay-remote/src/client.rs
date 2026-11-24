@@ -49,7 +49,13 @@ pub struct VaultRef { pub id: String, pub name: String }
 /// A shared vault in full: its members and, for an admin, the invites still open.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
-pub struct VaultInfo { pub id: String, pub name: String, pub role: String, pub members: Vec<Member>, pub invites: Vec<Invite> }
+/// On a team server (docs/workspaces.md, Teams) also `team`, `nohistory` and its members by email (`accounts`).
+pub struct VaultInfo { pub id: String, pub name: String, pub role: String, pub members: Vec<Member>, pub invites: Vec<Invite>,
+    pub team: bool, pub nohistory: bool, pub accounts: Vec<Account> }
+/// A member of a team workspace: its account's email and its role there.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Account { pub email: String, pub role: String }
 /// A device in a shared vault: its name, its certificate's fingerprint, its role and when it was added (unix seconds).
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]

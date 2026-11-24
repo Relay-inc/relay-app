@@ -1,0 +1,9 @@
+[package]
+name = "agent-antigravity"
+version = "0.1.0"
+edition = "2021"
+description = "Google Antigravity CLI as an agent provider: agy acp (Agent Client Protocol) behind its bridge, permission cards, its own session log, usage"
+
+[dependencies]
+agent-core.workspace = true
+serde_json.workspace = true

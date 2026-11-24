@@ -75,6 +75,7 @@ pub fn read(roots: &[String], path: &str) -> Result<String, String> {
 mod tests {
     use super::*;
 
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn lists_reads_and_stays_inside_the_roots() {
         let path = std::env::var("PATH").unwrap();

@@ -390,12 +390,13 @@ export function settings(fixture: string) {
   const onboarding = fixture === "onboarding";
   // a paired work machine that speaks an older protocol (Settings › Machines); phone: the same machine online; github:
   // online, connected to GitHub, with three repos (machineGit). mirror: online, its mirror holding deletes back.
-  // nomirror: online, next to a second one paired for workspaces only
+  // nomirror: online, next to a second one paired for workspaces only. every: online, its mirror set to every 15 minutes
   const machines =
     fixture === "machines" ||
     fixture === "phone" ||
     fixture === "github" ||
     fixture === "mirror" ||
+    fixture === "every" ||
     fixture === "nomirror"
       ? {
           machines: [
@@ -405,7 +406,7 @@ export function settings(fixture: string) {
               host: "192.168.1.2",
               port: 47800,
               fp: "0f9534960dd3570a".padEnd(64, "0"),
-              mirror: { exclude: [] },
+              mirror: { exclude: [], ...(fixture === "every" ? { every: 15 } : {}) },
             },
             ...(fixture === "nomirror"
               ? [
@@ -428,15 +429,20 @@ export function settings(fixture: string) {
     vaults: {},
     projects: { "Beacon Billing": { label: "Beacon" } },
     overrides: {},
-    // linear: a Linear team with cycles next to Productive, Beacon Billing on its current cycle
+    // linear: a Linear team with cycles next to Productive, Beacon Billing on its current cycle; ghprojects: the same
+    // with an organization's GitHub project
     integrations: {
       productive: { on: true, org: "40001", user: "70001" },
       ...(fixture === "linear" ? { linear: { on: true, done: false } } : {}),
+      ...(fixture === "ghprojects" ? { "github-projects": { on: true } } : {}),
     },
     boards: {
       "Northwind Portal": { provider: "productive", project: "p1", board: "f1" },
       ...(fixture === "linear"
         ? { "Beacon Billing": { provider: "linear", project: LINEAR_TEAM, board: `cycle_${LINEAR_TEAM}` } }
+        : {}),
+      ...(fixture === "ghprojects"
+        ? { "Beacon Billing": { provider: "github-projects", project: "beacon", board: "PVT_kwDOBeacon01" } }
         : {}),
     },
     // off: a running pipeline would move the board's cards in every view
@@ -444,7 +450,13 @@ export function settings(fixture: string) {
       "Northwind Portal": {
         on: fixture.startsWith("pipeline"),
         mode: fixture === "pipeline-manual" ? "manual" : "auto",
-        repo: "/Users/demo/code/northwind",
+        repo: "",
+        // its repos as pipeline_repos finds them (mock-backend.ts): each with its checks, the infrastructure kept out
+        repos: {
+          "acme/northwind-api": { checks: "composer install -q && vendor/bin/phpstan && vendor/bin/phpunit" },
+          "acme/northwind-infra": { off: true },
+          "acme/northwind-portal": { checks: "pnpm install && pnpm lint && pnpm test" },
+        },
         base: "develop",
         group: "list",
         pick: "tl2",
@@ -454,7 +466,6 @@ export function settings(fixture: string) {
         merged: "tl5",
         label: fixture === "pipeline" ? "" : "agent",
         parallel: 1,
-        checks: "composer install -q && vendor/bin/phpstan && vendor/bin/phpunit",
         reviewer: "codex",
         rounds: 3,
       },
@@ -518,6 +529,7 @@ export function settings(fixture: string) {
         codex: { on: true, bin: "", sandbox: "workspace-write" },
         opencode: { on: false, bin: "" },
         pi: { on: false, bin: "" },
+        antigravity: { on: fixture === "antigravity", bin: "" },
       },
     },
   };
@@ -675,3 +687,82 @@ export const FLAT_NOTE = "Contexts/Agency/Projects/Delmas Bakery.md";
 /** For collections.ts: the fixture's projects and linked notes, as the notes they are. */
 export const projectsList = P;
 export const linkedEntries = linkedList;
+
+/** team: a team server this Mac is logged in to as an organisation admin (src-tauri/src/team.rs). Handbook syncs here,
+ *  Sales notes and Research (without history) are the account's other workspaces there. */
+export const TEAM_FP = "7ea3".padEnd(64, "b");
+export const ORG_NAME = "Bluebird Studio";
+export const team = {
+  host: "relay.example.com",
+  port: 47800,
+  fp: TEAM_FP,
+  email: "alex@example.com",
+  admin: true,
+  name: ORG_NAME,
+};
+export const teamVaults = [
+  {
+    id: "1123456789abcdef",
+    name: "Handbook",
+    host: "relay.example.com",
+    port: 47800,
+    fp: TEAM_FP,
+    folder: "/Users/me/Team/Handbook",
+    role: "admin",
+    team: true,
+  },
+];
+export const teamMe = {
+  email: "alex@example.com",
+  admin: true,
+  name: ORG_NAME,
+  workspaces: [
+    { id: "1123456789abcdef", name: "Handbook", role: "admin", nohistory: false, here: "/Users/me/Team/Handbook" },
+    { id: "2123456789abcdef", name: "Sales notes", role: "member", nohistory: false, here: null },
+    { id: "3123456789abcdef", name: "Research", role: "reader", nohistory: true, here: null },
+  ],
+};
+export const teamAccounts = [
+  { email: "alex@example.com", role: "admin" },
+  { email: "sam@example.com", role: "member" },
+  { email: "jo@example.com", role: "reader" },
+];
+export const teamOverview = {
+  accounts: [
+    { email: "alex@example.com", admin: true, off: false, devices: 2 },
+    { email: "sam@example.com", admin: false, off: false, devices: 1 },
+    { email: "jo@example.com", admin: false, off: false, devices: 1 },
+    { email: "kim@example.com", admin: false, off: true, devices: 0 },
+  ],
+  workspaces: [
+    {
+      id: "1123456789abcdef",
+      name: "Handbook",
+      nohistory: false,
+      members: { "alex@example.com": "admin", "sam@example.com": "member", "jo@example.com": "reader" },
+    },
+    {
+      id: "2123456789abcdef",
+      name: "Sales notes",
+      nohistory: false,
+      members: { "alex@example.com": "member", "sam@example.com": "admin" },
+    },
+    {
+      id: "3123456789abcdef",
+      name: "Research",
+      nohistory: true,
+      members: { "alex@example.com": "reader", "jo@example.com": "admin" },
+    },
+    // an organisation admin sees it without being in it
+    {
+      id: "4123456789abcdef",
+      name: "Finance",
+      nohistory: false,
+      members: { "sam@example.com": "admin", "jo@example.com": "member" },
+    },
+  ],
+  invites: [{ id: "a1b2c3d4e5f60718", email: "lee@example.com", expires: 0 }],
+  sso: null as null | { issuer: string; client: string; domains: string[] },
+};
+export const teamLink = (invite = "") =>
+  `relay://relay.example.com:47800#team&fp=${TEAM_FP}${invite ? `&invite=${invite}&code=${"c".repeat(64)}` : ""}`;

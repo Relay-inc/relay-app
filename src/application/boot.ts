@@ -1,14 +1,6 @@
 import { reloadChanges } from "./navigation/changes";
 import { inboxChanged } from "./inbox/inbox";
-import {
-  opened,
-  chatTime,
-  isLegacyGeneral,
-  isMailKey,
-  LEGACY_BOARD,
-  isTerminal,
-  boardKey,
-} from "../domain/navigation/keys";
+import { opened, chatTime, isLegacyGeneral, LEGACY_BOARD, isTerminal, boardKey } from "../domain/navigation/keys";
 import { finishPendingPreps } from "./calendar/prep";
 import { WAIT, PRS, MAIL, isView, pluginIdOf } from "../domain/navigation/views";
 import { shownPlugins } from "../domain/plugins/rules";
@@ -17,7 +9,9 @@ import * as backend from "../infrastructure/backend";
 import { storage } from "../infrastructure/storage";
 import { t } from "../shared/i18n";
 import { applyTheme } from "../infrastructure/window";
-import { ghOn, initLanguage, mailOn, setSettingsState, settings } from "./settings/settings";
+import { ghOn, initLanguage, isKey, mailOn, setSettingsState, settings } from "./settings/settings";
+import { openInvite, openServers } from "./settings/servers";
+import { MENU_COMMANDS, type CommandId } from "../domain/settings/shortcuts";
 import { noteChanged } from "./navigation/pages";
 import { loadSnapshot, pollSnapshot, project, refreshIcons, reloadIcons, checkFavicons } from "./workspace/vault";
 import { onboard, runSetup, takeSetup } from "./workspace/vault-setup";
@@ -34,13 +28,13 @@ import { watchDesign } from "./design/design";
 import { loadAgents, sawDefaults } from "./agents/agents";
 import { useNavigationStore } from "./navigation/store";
 import { select, newHere, watchUpdate } from "./navigation/navigation";
-import { closeDrawer } from "./navigation/panel";
 import { useBoardStore } from "./board/store";
 import { checkBoards, resetBoard } from "./board/board";
 import { loadPrs, resetPrs, loadProjectRepos, askRepo } from "./pull-requests/prs";
 import { loadMails, resetMail, mailLinkClicked } from "./mail/mail";
 import { startUsage, reloadUsage } from "./usage/usage";
 import { loadMeetings, tick } from "./calendar/calendar";
+import { listenToNudge, nudgeTick } from "./calendar/nudge";
 import { loadTodayCards } from "./today/today";
 import { loadTodayTime } from "./time/time";
 import { listenToLinks } from "./deep-links";
@@ -90,7 +84,6 @@ async function settingsChanged(next: Settings) {
   }
   if (mailChanged) {
     resetMail();
-    if (isMailKey(useNavigationStore.getState().panel.open)) closeDrawer();
     if (!mailOn() && selected() === MAIL) select(WAIT);
     loadMails();
   }
@@ -115,6 +108,8 @@ export async function boot() {
   loadPhoneShared();
   await pickStartView();
   listenToLinks();
+  // an invite link that launched Relay: Add a server › Join with it
+  void openInvite();
   startPolls();
   if (takeSetup()) void runSetup();
 }
@@ -126,6 +121,10 @@ function listenToBackend() {
   backend.onOpenChat(select);
   backend.onMailLink(mailLinkClicked);
   backend.onSettingsChanged(settingsChanged);
+  // Settings › Organisations and servers: the page opens here
+  // ("join": an invite link that opened Relay, which the backend keeps)
+  backend.onOpenServers(item => (item === "join" ? void openInvite() : openServers(item)));
+  backend.onVaultInvite(() => void openInvite());
   backend.onMenu(onMenu);
   watchUpdate();
   backend.onOrch(event => {
@@ -149,6 +148,24 @@ function onMenu(item: string) {
   else if (item === "reopen-chat") void reopenLast();
   else if (item === "close-chat" && !isView(selected()) && !cs().chats[selected()]?.draft) closeChat(selected());
   else if (item === "run-setup") void runSetup();
+}
+
+// the menu bar's items with a key (src-tauri/src/lib.rs build_menu), by their command in Settings › Shortcuts
+const MENU_ITEMS: Partial<Record<CommandId, string>> = {
+  "app.newProject": "new-project",
+  "app.newGeneral": "new-general",
+  "app.reopenChat": "reopen-chat",
+  "app.closeChat": "close-chat",
+};
+/** A Windows window has no menu bar: the main window hands its keys here and they do what the menu item does on
+ *  macOS. Whether the key was one of them. */
+export function menuKey(e: KeyboardEvent) {
+  const id = MENU_COMMANDS.find(command => isKey(e, command));
+  if (!id) return false;
+  if (id === "app.newWindow") void backend.newWindow();
+  else if (id === "app.settings") void backend.openSettingsWindow();
+  else onMenu(MENU_ITEMS[id] ?? "");
+  return true;
 }
 
 async function loadSettingsAndVault() {
@@ -291,6 +308,8 @@ function startPolls() {
   setInterval(loadTodayCards, 5 * 60000); // the user's cards under Today
   setInterval(loadTodayTime, 5 * 60000); // the day's time to book
   setInterval(tick, 30000);
+  void listenToNudge(); // a meeting that started without a recording: a window that asks to record it
+  setInterval(nudgeTick, 30000);
   runPipelines(); // the board pipelines: ended runs on the board, PRs in review, new tickets
   setInterval(runPipelines, 5 * 60000);
 }

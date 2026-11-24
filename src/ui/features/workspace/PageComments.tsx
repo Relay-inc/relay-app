@@ -17,6 +17,8 @@ import { agoOf } from "./ago";
 import { useT } from "../../hooks/useT";
 import { Note } from "../../components/Note";
 import type { CommentsApi } from "./PageEditor";
+import { bindingLabel } from "../../../domain/settings/shortcuts";
+import { modKey } from "../../../shared/platform";
 
 /** A page's comments beside it (ticket 11), in the place of its history: the open threads in the order of their text,
  *  each with its quote, replies, Reply, Resolve and Delete (one's own); then the resolved ones, folded. A selection in
@@ -90,7 +92,7 @@ export function PageComments({
         <button
           className="h-7 px-2.5 rounded-md border border-separator text-[13px] text-label hover:bg-fill disabled:opacity-40"
           disabled={!hasSelection}
-          title={t("page.commentHint")}
+          title={t("page.commentHint", { key: bindingLabel("alt+mod+KeyM") })}
           onClick={() => setDraft(api.current?.selection() ?? null)}
         >
           {t("page.comment")}
@@ -131,7 +133,9 @@ export function PageComments({
         </div>
       ) : (
         <div className="flex flex-col gap-2 px-3 pb-3">
-          {!threads.length && !draft ? <Note>{t("page.commentHint")}</Note> : null}
+          {!threads.length && !draft ? (
+            <Note>{t("page.commentHint", { key: bindingLabel("alt+mod+KeyM") })}</Note>
+          ) : null}
           {data.kind === "file" && threads.length ? (
             <p className="px-1 text-xs text-tertiary">{t("page.commentsHere")}</p>
           ) : null}
@@ -302,10 +306,10 @@ function Composer({
           if (matches.length && ["ArrowDown", "ArrowUp"].includes(e.key)) {
             e.preventDefault();
             setHi(i => (i + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);
-          } else if (matches.length && !e.metaKey && (e.key === "Enter" || e.key === "Tab")) {
+          } else if (matches.length && !modKey(e) && (e.key === "Enter" || e.key === "Tab")) {
             e.preventDefault();
             pick(matches[hi] ?? matches[0]);
-          } else if (e.key === "Enter" && e.metaKey) go();
+          } else if (e.key === "Enter" && modKey(e)) go();
           else if (e.key === "Escape") onCancel();
         }}
       />

@@ -1,8 +1,7 @@
 import { useState } from "react";
 import type { Item } from "../../../domain/conversations/types";
-import { noteKey } from "../../../domain/navigation/keys";
 import { notePath } from "../../../application/workspace/vault";
-import { openDetail } from "../../../application/navigation/panel";
+import { openNoteLink } from "../../../application/navigation/pages";
 import { zoom } from "../../../application/navigation/navigation";
 import { useDerived } from "../../hooks/useDerived";
 import { Icon } from "../../components/Icon";
@@ -70,7 +69,7 @@ export function ToolStep({ item }: { item: Item }) {
       ) : note ? (
         <button
           className={`${cls} w-full text-left cursor-pointer hover:underline`}
-          onClick={() => openDetail(noteKey(note))}
+          onClick={() => void openNoteLink(note)}
         >
           {line}
         </button>

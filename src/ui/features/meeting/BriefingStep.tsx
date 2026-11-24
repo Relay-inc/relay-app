@@ -3,7 +3,7 @@ import { briefingIn, prepChatOf, joinable } from "../../../domain/calendar/rules
 import type { Meeting } from "../../../domain/calendar/types";
 import { chatAbout, joinMeeting, meetingChat, meetingProjectOf, timeOf } from "../../../application/calendar/calendar";
 import { loadMeetingNote, saveBriefing, toggleBriefingTask } from "../../../application/calendar/meeting-view";
-import { startRecording, useRecordingStore } from "../../../application/calendar/recording";
+import { importRecording, startRecording, useRecordingStore } from "../../../application/calendar/recording";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useWorkspaceStore } from "../../../application/workspace/store";
 import { markdownHtml } from "../../../shared/markdown";
@@ -14,6 +14,7 @@ import { Icon } from "../../components/Icon";
 import { agent } from "../../../shared/plugins";
 import { useT } from "../../hooks/useT";
 import { OUTLINE, PRIMARY } from "./buttons";
+import { bindingLabel } from "../../../domain/settings/shortcuts";
 
 /** The briefing as the design draws it: its markdown, whose `- [ ]` lists are real checkboxes that write back. */
 function BriefingBody({ text, onTick }: { text: string; onTick: (n: number) => void }) {
@@ -104,6 +105,9 @@ export function BriefingStep({
             </button>
           ) : null}
           {record}
+          <button className={OUTLINE} disabled={busy} onClick={() => importRecording(meeting)}>
+            {t("rec.upload")}
+          </button>
           <button className={OUTLINE} onClick={onStart}>
             {t("meet.startNotes")}
           </button>
@@ -133,7 +137,7 @@ export function BriefingStep({
                   </button>
                   <button className={PRIMARY} onClick={save}>
                     {t("today.saveBriefing")}
-                    <span className="font-mono text-[11px] opacity-75">⌘↵</span>
+                    <span className="font-mono text-[11px] opacity-75">{bindingLabel("mod+Enter")}</span>
                   </button>
                 </div>
                 <textarea

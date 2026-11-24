@@ -69,7 +69,8 @@ export function setTitle(title: string) {
 export const setPageLang = (lang: string) => {
   document.documentElement.lang = lang;
 };
-export const closeWindow = () => window.close();
+/** Closes this window through Tauri: window.close() is ignored by the webview for a window the page did not open. */
+export const closeWindow = () => void getCurrentWindow().close();
 /** The browser's language, when the backend cannot say. */
 export const navigatorLang = () => navigator.language.slice(0, 2);
 

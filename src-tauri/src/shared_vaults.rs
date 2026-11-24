@@ -22,9 +22,11 @@ static APP: std::sync::OnceLock<AppHandle> = std::sync::OnceLock::new();
 fn b64(b: &[u8]) -> String { base64::engine::general_purpose::STANDARD.encode(b) }
 
 /// A shared vault as the settings keep it: the server it lives on (pinned by its fingerprint), its folder here and this
-/// device's role there ("admin" or "member").
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct Shared { pub id: String, pub name: String, pub host: String, pub port: u16, pub fp: String, pub folder: String, #[serde(default)] pub role: String }
+/// device's role there ("admin" or "member", on a team server also "reader"). `team`: on a team server (team.rs), whose
+/// key the server keeps; `nohistory`: a team workspace made without history (docs/workspaces.md, Teams).
+#[derive(Clone, Debug, PartialEq, Default, serde::Serialize, serde::Deserialize)]
+pub struct Shared { pub id: String, pub name: String, pub host: String, pub port: u16, pub fp: String, pub folder: String, #[serde(default)] pub role: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")] pub team: bool, #[serde(default, skip_serializing_if = "std::ops::Not::not")] pub nohistory: bool }
 
 /// The shared vaults in the settings; an entry that does not read, or whose id is not one, is left out.
 pub fn list(s: &Value) -> Vec<Shared> {
@@ -38,7 +40,7 @@ pub fn valid_id(id: &str) -> bool { id.len() == 16 && id.chars().all(|c| c.is_as
 /// An `auto` one goes again once this Mac is admin of no vault there. A machine the user paired is never touched.
 /// Whether the machines changed.
 pub fn keepers(s: &mut Value) -> bool {
-    let admin: Vec<Shared> = list(s).into_iter().filter(|v| v.role == "admin").collect();
+    let admin: Vec<Shared> = list(s).into_iter().filter(|v| v.role == "admin" && !v.team).collect();
     let same = |m: &Value, v: &Shared| m["fp"].as_str().is_some_and(|f| f.eq_ignore_ascii_case(&v.fp));
     if !s["machines"].is_array() { s["machines"] = Value::Array(vec![]); }
     let ms = s["machines"].as_array_mut().unwrap();
@@ -66,8 +68,13 @@ pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter()
 /// `docs`: an admin turned on making the workspace's notes documents (the member list says so); `admin`: this Mac is
 /// an admin of the list (it may turn that on or off, and make members admins); `admins`: the list's admins and `listed`
 /// all its members, None when the workspace has no list yet.
+/// `names`: files the last round left out for their name (sync::Report::names), to rename where they were made.
 pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub bad: usize, pub live: bool,
-    pub warnings: Vec<String>, pub changed: Vec<Changed>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>> }
+    pub names: Vec<String>,
+    pub warnings: Vec<String>, pub changed: Vec<Changed>, pub rekeying: bool, pub docs: bool, pub admin: bool, pub admins: Option<Vec<String>>, pub listed: Option<Vec<String>> ,
+    /// `reader`: this Mac only reads the workspace (its rounds only pull), `unsent` changes in the folder here a reader's
+    /// round left out
+    pub reader: bool, pub unsent: usize }
 #[derive(Clone, serde::Serialize)]
 pub struct Changed { pub fp: String, pub name: String }
 
@@ -83,7 +90,7 @@ fn key_path(data: &Path, id: &str) -> PathBuf { data.join(format!("shared-{id}.k
 /// The vault's keys (relay_remote::vault::Keys: every epoch's, this member's secret, its pins), written whole: a temp
 /// file 0600 renamed over the old one, so a crash never leaves half a key file.
 pub fn save_key(data: &Path, id: &str, keys: &Keys) -> Result<(), String> {
-    use std::os::unix::fs::OpenOptionsExt;
+    use crate::platform::OpenOptionsExt;
     let (p, tmp) = (key_path(data, id), data.join(format!(".shared-{id}.key.tmp")));
     std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp)
         .and_then(|mut f| std::io::Write::write_all(&mut f, keys.format().as_bytes()).and_then(|_| f.sync_all()))
@@ -92,6 +99,9 @@ pub fn save_key(data: &Path, id: &str, keys: &Keys) -> Result<(), String> {
 pub fn load_key(data: &Path, id: &str) -> Result<Keys, String> {
     std::fs::read_to_string(key_path(data, id)).ok().and_then(|k| Keys::parse(&k)).ok_or_else(|| format!("the key of workspace {id} is missing on this Mac"))
 }
+/// The knowledge workspaces: the team workspaces without history this Mac is a member of (docs/workspaces.md, Teams).
+/// Nothing else, never the user's own vault.
+pub fn knowledge(s: &Value) -> Vec<Shared> { list(s).into_iter().filter(|v| v.team && v.nohistory).collect() }
 /// Where a round keeps what it deletes or mostly empties here: <data>/shared-trash/<id>/<round's minute>/<path>.
 fn trash(data: &Path, id: &str) -> PathBuf { data.join("shared-trash").join(id) }
 const TRASH_DAYS: i64 = 30;
@@ -113,9 +123,12 @@ pub fn client(v: &Shared, me: &Identity) -> Client { Client::new(&v.host, v.port
 /// follows a symlink: one the user made in the folder would otherwise take a member's writes out of it. A link to a
 /// folder with a name `fold` cannot match as APFS does (not plain ASCII) is refused: a member's `MÉTA/settings.json`
 /// would otherwise pass for another file than `Méta/settings.json` and land in it.
+/// Codex's own config folders (`.codex`: config, rules, hooks, `.agents`: skills) never go either, at any depth, as
+/// `.claude`. One that synced before stays on every Mac and on the server as it is, only no longer sent or fetched:
+/// a round drops it from its base without deleting it on either side (`sync::run`).
 pub fn filter(folder: &Path) -> Result<Filter, String> {
     let mut f = Filter::vault_default();
-    f.names.push(".claude".into());
+    f.names.extend([".claude", ".codex", ".agents"].map(String::from));
     f.no_links = true;
     let link = std::fs::read_link(folder.join(".claude")).ok();
     let target = link.clone().and_then(|t| {
@@ -124,8 +137,11 @@ pub fn filter(folder: &Path) -> Result<Filter, String> {
         real.strip_prefix(&root).ok().map(|r| r.to_string_lossy().into_owned())
     });
     // a link that does not resolve guards nothing it points at: only `System` (a join's first round) is guarded anyway
+    // (on Windows the link is a junction, which holds the absolute path of this folder's System)
+    let own_system = |l: &Path| l.as_os_str() == "System"
+        || (cfg!(windows) && l.file_name().is_some_and(|n| n == "System") && l.parent().and_then(|p| std::fs::canonicalize(p).ok()) == std::fs::canonicalize(folder).ok());
     if let (Some(l), None) = (&link, &target) {
-        if l.as_os_str() != "System" { return Err(format!(".claude links to {:?}, which is not in the workspace: fix the link to sync this workspace", l)); }
+        if !own_system(l) { return Err(format!(".claude links to {:?}, which is not in the workspace: fix the link to sync this workspace", l)); }
     }
     if let Some(t) = target.as_deref().filter(|t| !t.chars().all(|c| c.is_ascii_alphanumeric() || " ._-/".contains(c))) {
         return Err(format!(".claude links to {t:?}: give that folder a name of plain letters and digits to sync this workspace"));
@@ -173,8 +189,8 @@ pub fn index_shared(app: &AppHandle, folder: &str) {
     if crate::index_script(own.clone(), Some(script.clone())).is_some_and(|s| s == own) { return; }
     let Ok(code) = std::fs::read(&script) else { return };
     if std::fs::read(&own).ok().as_deref() != Some(&code[..]) { let _ = sync::write_atomic(&own, &code, None); }
-    let path = app.state::<crate::App>().path.clone();
-    match std::process::Command::new("python3").arg(&script).env("VAULT", folder).env("PATH", path).output() {
+    let Some(mut python) = crate::platform::python(&app.state::<crate::App>().path) else { return eprintln!("build-index {folder}: no Python 3 on this computer") };
+    match python.arg(&script).env("VAULT", folder).output() {
         Ok(o) if o.status.success() => {}
         Ok(o) => eprintln!("build-index {folder}: {}", String::from_utf8_lossy(&o.stderr).trim()),
         Err(e) => eprintln!("build-index {folder}: {e}"),
@@ -255,7 +271,7 @@ impl Hub {
                         st.errors.extend(k.errors.into_iter().map(|e| format!("key: {e}")));
                         st.warnings = k.warnings;
                         st.rekeying = k.rekeying;
-                        (st.docs, st.admin, st.admins, st.listed) = (k.docs, k.admin, k.admins, k.listed);
+                        (st.docs, st.admin, st.admins, st.listed, st.reader) = (k.docs, k.admin, k.admins, k.listed, k.reader);
                         st.changed = k.changed.into_iter().map(|(fp, name)| Changed { fp, name }).collect();
                     }
                     Err(e) => st.errors.push(format!("key: {e}")),
@@ -263,6 +279,9 @@ impl Hub {
                 // the documents: every log the server has further, the notes they changed written out; a note that is a
                 // document stays out of the file rounds, so it never has two writers (docs/workspaces.md, Documents)
                 let docs = self.docs(data, v, me, load_key(data, &v.id).unwrap_or_else(|_| key.clone()));
+                docs.set_read_only(st.reader);
+                // a workspace without history: its conflict copies carry the minute alone, no Mac's name
+                let name = if v.nohistory { "" } else { name };
                 let has_docs = match docs.sync() {
                     Ok(_) => true,
                     // a relay-server from before documents: none there, nothing to say every round
@@ -298,12 +317,14 @@ impl Hub {
                 let to = trash(data, &v.id).join(&stamp);
                 let keep = |p: &str, d: &[u8]| sync::write_atomic(&to.join(p), d, None);
                 let guard = Guard { allow_deletes: false, allowed: &allowed, moved: &moved, keep: &keep };
-                let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, &mut one.walker, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
+                // a reader's round only takes what the server has: what changed here stays here, said once (`unsent`)
+                let mode = if st.reader { Mode::Pull } else { Mode::TwoWay };
+                let (next, r) = sync::run(mode, Path::new(&v.folder), &base, &mut one.walker, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
                 // ponytail: any error keeps the whole list for the next round, which only looks again
                 if looked && r.errors.is_empty() { docs.forget_let_go(&let_go.into_iter().filter(|p| !f.prefixes.contains(p)).collect::<Vec<_>>()); }
                 // files still under an older key, sealed again under the newest
                 // ponytail: 100 a round, a big workspace takes a few rounds after a rotation
-                if r.errors.is_empty() { remote.reseal(100); }
+                if r.errors.is_empty() && !st.reader { remote.reseal(100); }
                 // a record written with a member list this Mac's does not hold: held back from it, or a fork
                 for w in remote.list_warnings() { if !st.warnings.contains(&w) { st.warnings.push(w); } }
                 // a round that failed (the server out of reach) keeps what the user let through for the next one
@@ -320,7 +341,7 @@ impl Hub {
                 // the next round plans against this base: one not written is an error, not a quiet success
                 if next != base { if let Err(e) = write_base(data, &v.id, &next) { st.errors.push(format!("base: {e}")); } }
                 st = Status { pushed: r.pushed.len() + r.deleted_remote.len(), pulled: r.pulled.len() + r.deleted_local.len(),
-                    conflicts: r.conflicts, errors: [r.errors, st.errors].concat(), held: r.held, bad: remote.bad().len(), ..st };
+                    conflicts: r.conflicts, errors: [r.errors, st.errors].concat(), held: r.held, names: r.names, bad: remote.bad().len(), unsent: r.unsent.len(), ..st };
             }
         }
         // still under the vault's lock: a leave waiting for this round removes the status after it
@@ -335,6 +356,7 @@ impl Hub {
     /// A note of vault `id` (in `folder`, `path` relative) changed on disk, by `by` ("claude", "disk", "relay"): taken
     /// into its document when it is one (Docs::absorb), on a thread of its own (it sends).
     pub fn absorb(&self, id: &str, folder: &str, path: &str, by: &str) {
+        if self.status.lock().unwrap().get(id).is_some_and(|s| s.reader) { return; }
         let Some(docs) = self.docs.lock().unwrap().get(id).cloned() else { return };
         let (folder, path, by) = (folder.to_string(), path.to_string(), by.to_string());
         std::thread::spawn(move || { if let Ok(f) = filter(Path::new(&folder)) { docs.absorb(Path::new(&folder), &f, &path, &by).ok(); } });
@@ -566,9 +588,11 @@ pub fn member_names_now(state: &crate::App, id: &str) -> std::collections::BTree
     client(&v, &state.machines.id).vault_info(&v.id).map(|i| i.members.into_iter().map(|m| (m.fp, m.name)).collect()).unwrap_or_default()
 }
 /// A member's name from `names` (member_names) for a fingerprint in full or its first 16 hex (how an author and a
-/// mention name one); the first 8 hex when the member list has nobody of that fingerprint.
+/// mention name one); the first 8 hex when the member list has nobody of that fingerprint. No names at all (a team
+/// workspace without history lists no devices): no name either.
 pub fn name_of(names: &std::collections::BTreeMap<String, String>, fp: &str) -> String {
     let short = |x: &str| x.chars().take(16).collect::<String>();
+    if names.is_empty() { return String::new(); }
     names.iter().find(|(f, _)| !fp.is_empty() && short(f) == short(fp)).map(|(_, n)| n.clone()).unwrap_or_else(|| fp.chars().take(8).collect())
 }
 /// Vault `id`'s members as the server lists them: fingerprint → name (who an update in a document's history is by).
@@ -581,7 +605,7 @@ async fn on_hub<T: Send + 'static>(app: &AppHandle, f: impl FnOnce(&Hub, &Path) 
     tauri::async_runtime::spawn_blocking(move || f(&a.state::<crate::App>().shared, &crate::data_dir(&a))).await.map_err(|e| e.to_string())
 }
 /// Where a new vault may go: its real path, checked against the other vaults and the folders no vault may touch.
-fn new_folder(app: &AppHandle, state: &St<'_>, folder: &str, empty: bool) -> Result<String, String> {
+pub(crate) fn new_folder(app: &AppHandle, state: &St<'_>, folder: &str, empty: bool) -> Result<String, String> {
     let folder = real_path(folder)?;
     let s = state.settings.lock().unwrap().clone();
     let protected = agents_claude(app, state).map(|eb| crate::policy::protected(app, &eb)).unwrap_or_default();
@@ -592,7 +616,7 @@ fn agents_claude(app: &AppHandle, state: &St<'_>) -> Option<crate::EnvBuf> { cra
 
 /// A vault added to the settings (or replaced, by id): the agents here stop under the vault lock and the change is
 /// written before it is let go (policy::hold_for_vault), then saved and told to both windows; its first round runs.
-fn add(app: &AppHandle, state: &crate::App, v: &Shared) -> Result<(), String> {
+pub(crate) fn add(app: &AppHandle, state: &crate::App, v: &Shared) -> Result<(), String> {
     let entry = serde_json::to_value(v).map_err(|e| e.to_string())?;
     {
         let _gate = crate::policy::hold_for_vault(app);
@@ -657,7 +681,7 @@ pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String,
     save_key(&data, &r.id, &key)?;
     // the member list before anything else reaches the server: its first entry, by this Mac (docs/workspaces.md)
     let (vid, c) = (r.id.clone(), client(&Shared { id: r.id.clone(), name: String::new(), host: m["host"].as_str().unwrap_or("").into(), port: m["port"].as_u64().unwrap_or(0) as u16,
-        fp: m["fp"].as_str().unwrap_or("").into(), folder: String::new(), role: String::new() }, &state.machines.id));
+        fp: m["fp"].as_str().unwrap_or("").into(), ..Default::default() }, &state.machines.id));
     let (k2, me) = (key.clone(), state.machines.id.fingerprint());
     tauri::async_runtime::spawn_blocking(move || c.sealed(&vid, k2).start(&|k| save_key(&data, &vid, k)).map_err(|e| {
         // nothing left behind: the workspace on the server (its only member leaving takes it along) and the key file
@@ -666,7 +690,7 @@ pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String,
         e
     })).await.map_err(|e| e.to_string())??;
     let v = Shared { id: r.id.clone(), name: r.name, host: m["host"].as_str().unwrap_or("").into(), port: m["port"].as_u64().unwrap_or(0) as u16,
-        fp: m["fp"].as_str().unwrap_or("").into(), folder: at, role: "admin".into() };
+        fp: m["fp"].as_str().unwrap_or("").into(), folder: at, role: "admin".into(), ..Default::default() };
     add(&app, &state, &v)?;
     Ok(serde_json::json!({"id": r.id, "recovery": key.recovery()}))
 }
@@ -693,8 +717,8 @@ pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, fold
     on_hub(&app, move |hub, data| hub.forget(data, &vid)).await?;
     save_key(&crate::data_dir(&app), &joined.id, &key)?;
     // `.claude -> System` as in a vault Relay makes, before the first round: the rules load from the synced System/
-    std::os::unix::fs::symlink("System", Path::new(&folder).join(".claude")).ok();
-    let v = Shared { id: joined.id.clone(), name: joined.name.clone(), host: line.host, port: line.port, fp: line.fp, folder, role: joined.role };
+    crate::platform::dir_link("System", Path::new(&folder).join(".claude")).ok();
+    let v = Shared { id: joined.id.clone(), name: joined.name.clone(), host: line.host, port: line.port, fp: line.fp, folder, role: joined.role, ..Default::default() };
     add(&app, &state, &v)?;
     Ok(serde_json::json!({"id": joined.id, "name": joined.name}))
 }
@@ -809,15 +833,22 @@ pub async fn shared_vault_remove(app: AppHandle, state: St<'_>, id: String, fp: 
     // the server's removal alone; with no key here (a vault that lost it) only the server's
     let (data, a) = (crate::data_dir(&app), app.clone());
     let gone = on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || match load_key(&data, &v.id) {
+        // a team workspace: its server takes this account out (an admin removes others in Settings, by email)
+        _ if v.team => if who == c.me() { crate::team::leave(&c, &v) } else { Err("remove a member of a team workspace by its email".into()) },
         Ok(k) => c.sealed(&v.id, k).remove(&who, &|k| save_key(&data, &v.id, k)),
         Err(_) => c.vault_remove(&v.id, &who),
     })).await;
     if fp != me { return gone; }
     // leaving: what the server says when this Mac is out already does not keep the vault here
     if let Err(e) = gone { if !left_already(&e) { return Err(e); } }
-    // out of the settings first: a round that starts now sees it gone (Hub::round's `listed`), one running ends first
-    change(&app, &state, |all| { all.retain(|x| x["id"] != id.as_str()); true })?;
-    on_hub(&app, move |hub, data| hub.forget(data, &id)).await
+    forget_here(&app, &state, &id).await
+}
+/// Workspace `id` out of the settings first (a round that starts now sees it gone, Hub::round's `listed`, one running
+/// ends first), then its key and sync state. The folder stays as it is.
+pub(crate) async fn forget_here(app: &AppHandle, state: &crate::App, id: &str) -> Result<(), String> {
+    change(app, state, |all| { all.retain(|x| x["id"] != id); true })?;
+    let id = id.to_string();
+    on_hub(app, move |hub, data| hub.forget(data, &id)).await
 }
 /// Whether a server error means this Mac is no member any more: removed, the vault gone, or the device unpaired.
 fn left_already(e: &str) -> bool { ["no such vault", "not paired", "not a member", "CertificateUnknown", "certificate unknown"].iter().any(|x| e.contains(x)) }
@@ -864,7 +895,7 @@ mod tests {
         assert_eq!(hub.one("v").lock().unwrap().moved, [("c.md".to_string(), "h".to_string())]);
         assert_eq!(hub.one("v").lock().unwrap().allowed, ["a.md"]);
         // a round that fails (no key here) still uses up the moves
-        let v = Shared { id: "v".into(), name: "V".into(), host: "127.0.0.1".into(), port: 1, fp: String::new(), folder: data.join("f").to_string_lossy().into(), role: String::new() };
+        let v = Shared { id: "v".into(), name: "V".into(), host: "127.0.0.1".into(), port: 1, fp: String::new(), folder: data.join("f").to_string_lossy().into(), ..Default::default() };
         let me = relay_remote::tls::Identity::generate().unwrap();
         let st = hub.round(&data, &v, &me, "mac", &|| true).unwrap();
         assert!(!st.errors.is_empty());
@@ -904,6 +935,7 @@ mod tests {
         assert!(keepers(&mut s));
         assert_eq!(s["machines"], json!([mine]));
     }
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn a_members_settings_and_hooks_never_sync() {
         let tmp = std::env::temp_dir().join(format!("relay-shared-filter-{}", std::process::id()));
@@ -916,6 +948,10 @@ mod tests {
         for p in ["System/rules/core/memory.md", "System/reminders.md", "Notes/settings.json", "System/conflicts/rules/core/memory (conflict m s).md"] { assert!(!f.skips(p, false), "{p}"); }
         // generated on each Mac from the cards, never synced
         for p in ["System/rules/core/work-state.md", "System/index/repos.json"] { assert!(f.skips(p, false), "{p}"); }
+        // Codex's config, rules, hooks and skills, at the root, in a subfolder and by case, as .claude
+        for p in [".codex/config.toml", ".codex/hooks.json", ".agents/skills/a/SKILL.md", "Notes/.codex/config.toml", "Notes/.agents/skills/a/x.sh", ".Codex/config.toml"] { assert!(f.skips(p, false), "{p}"); }
+        assert!(f.skips(".codex", true) && f.skips(".agents", true));
+        for p in ["Notes/codex.md", "Notes/agents/a.md", "AGENTS.md"] { assert!(!f.skips(p, false), "{p}"); }
         // a rule's conflict copy goes out of rules/, which loads into every conversation; a note's stays beside it
         assert_eq!(conflict_copy(&f, "System/rules/core/memory.md", "m", "s"), "System/conflicts/rules/core/memory (conflict m s).md");
         assert_eq!(conflict_copy(&f, "Notes/a.md", "m", "s"), "Notes/a (conflict m s).md");
@@ -953,6 +989,7 @@ mod tests {
         assert!(f.skips(".claude/settings.json", false) && f.skips("System/settings.json", false));
         std::fs::remove_dir_all(&tmp).ok();
     }
+    #[cfg(unix)] // a symlink or a Unix file mode, which a Windows test cannot make or read
     #[test]
     fn a_new_folder_by_its_real_path() {
         let tmp = std::fs::canonicalize(std::env::temp_dir()).unwrap().join(format!("relay-shared-real-{}", std::process::id()));

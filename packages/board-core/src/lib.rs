@@ -1,7 +1,7 @@
 //! The backend half of the board contract (see README, "Integrations"). An integration crate exports one
 //! `Provider`: where its API lives, which calls the webview may make, how the secrets are sent and how an
 //! error reads. The app (src-tauri/src/providers.rs) registers it and does the rest: the secrets live in the
-//! macOS keychain under `vault-app.<id>`, go to `security` and curl over stdin and never reach a webview,
+//! keychain under `vault-app.<id>` (Credential Manager on Windows), go to curl over stdin and never reach a webview,
 //! and the config is settings.json `integrations.<id>`. Nothing in here is specific to one tracker.
 
 use serde_json::Value;
@@ -81,16 +81,21 @@ pub struct Action {
     pub default: Policy,
     /// the request, from the provider's config and the arguments, or why the arguments do not do
     pub build: fn(cfg: &Value, args: &Value) -> Result<Req, String>,
+    /// a second request that needs the first one's answer (a lookup): None when the first answer is the result
+    pub then: Option<fn(cfg: &Value, args: &Value, first: &Value) -> Result<Option<Req>, String>>,
     /// the answer as the agent gets it: only what it needs, the APIs answer with a lot
     pub out: fn(&Value) -> Value,
 }
 pub const fn read(id: &'static str, about: &'static str, args: &'static [(&'static str, &'static str)],
                   build: fn(&Value, &Value) -> Result<Req, String>, out: fn(&Value) -> Value) -> Action {
-    Action { id, about, args, write: false, default: Policy::Auto, build, out }
+    Action { id, about, args, write: false, default: Policy::Auto, build, then: None, out }
 }
 pub const fn write(id: &'static str, about: &'static str, args: &'static [(&'static str, &'static str)],
                    build: fn(&Value, &Value) -> Result<Req, String>, out: fn(&Value) -> Value) -> Action {
-    Action { id, about, args, write: true, default: Policy::Ask, build, out }
+    Action { id, about, args, write: true, default: Policy::Ask, build, then: None, out }
+}
+impl Action {
+    pub const fn then(self, f: fn(&Value, &Value, &Value) -> Result<Option<Req>, String>) -> Action { Action { then: Some(f), ..self } }
 }
 
 /// The arguments against an action's `args`: an object, every required one there, nothing else.

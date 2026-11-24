@@ -18,6 +18,7 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
+import { modKey } from "../../../shared/platform.ts";
 
 // A live preview over the markdown text, set like a document (Notion): headings, emphasis, code, links, [[wikilinks]],
 // lists, to-dos, quotes and callouts show formatted and their markdown is never shown, not even on the line the cursor
@@ -391,8 +392,8 @@ const hiddenDelete = (forward: boolean) => (view: EditorView) => {
   return true;
 };
 
-/** The live preview; `follow` opens a [[link]] (as a page, or in the drawer with ⌘). */
-export function livePreview(follow: (link: string, drawer: boolean) => void) {
+/** The live preview; `follow` opens a [[link]] as a page. */
+export function livePreview(follow: (link: string) => void) {
   return [
     preview,
     EditorView.atomicRanges.of(view => view.plugin(preview)?.atomic ?? Decoration.none),
@@ -430,10 +431,10 @@ export function livePreview(follow: (link: string, drawer: boolean) => void) {
           return true;
         }
         const link = el.closest<HTMLElement>("[data-link]");
-        // with the markdown shown a link is text being edited: a click puts the cursor in it, ⌘-click follows
-        if (link && (!view.state.facet(showMarkdown) || e.metaKey)) {
+        // with the markdown shown a link is text being edited: a click puts the cursor in it, ⌘-click (Ctrl on Windows) follows
+        if (link && (!view.state.facet(showMarkdown) || modKey(e))) {
           e.preventDefault();
-          follow(link.dataset.link!, e.metaKey);
+          follow(link.dataset.link!);
           return true;
         }
         return false;

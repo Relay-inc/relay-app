@@ -20,3 +20,8 @@ x25519-dalek = { version = "2", features = ["static_secrets"] }
 yrs = "0.28"
 # a document's change on disk measured line by line (docs.rs, merge3): Myers in linear space
 similar = "2"
+
+# Windows: local sockets as named pipes (src/sock.rs), the broker's agent in a Job Object (agent-core's job.rs)
+[target.'cfg(windows)'.dependencies]
+agent-core.workspace = true
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Pipes", "Win32_System_Threading"] }

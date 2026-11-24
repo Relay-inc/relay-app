@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { cancelRecording, stopRecording, useRecordingStore } from "../../../application/calendar/recording";
 import { backToToday } from "../../../application/calendar/meeting-view";
-import { openDetail } from "../../../application/navigation/panel";
-import { noteKey } from "../../../domain/navigation/keys";
+import { openNoteLink } from "../../../application/navigation/pages";
 import { othersLabel } from "../../../domain/calendar/meeting-view";
 import type { Meeting } from "../../../domain/calendar/types";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
+import { isMac } from "../../../shared/platform";
 import { clock } from "../conversations/RecordingBar";
 import { Menu } from "./Menu";
 
@@ -36,9 +36,9 @@ export function MeetingBar({ meeting, note }: { meeting: Meeting; note: { path: 
   const [confirm, setConfirm] = useState(false);
   const file = note?.path.split("/").pop();
   const tip = !system
-    ? t("rec.noSystem", { why: why || "?" })
+    ? t(isMac() ? "rec.noSystem" : "rec.noSystemWin", { why: why || "?" })
     : !heard && secs >= 15
-      ? t("rec.silentMac")
+      ? t(isMac() ? "rec.silentMac" : "rec.silentWin")
       : t("rec.consent");
   return (
     <div
@@ -119,7 +119,7 @@ export function MeetingBar({ meeting, note }: { meeting: Meeting; note: { path: 
       ) : note && file ? (
         <button
           className="max-w-1/2 truncate text-xs text-secondary cursor-pointer hover:text-label"
-          onClick={() => openDetail(noteKey(note.path))}
+          onClick={() => void openNoteLink(note.path)}
         >
           {t("meet.noteFile", { file })}
         </button>

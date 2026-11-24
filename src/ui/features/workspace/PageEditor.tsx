@@ -13,7 +13,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirro
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import {
   adoptPage,
-  followPageLink,
+  openNoteLink,
   loadPage,
   LINE,
   onHeading,
@@ -32,8 +32,13 @@ import { yAnchor, ySpan } from "../../../application/workspace/anchors";
 import { findQuote, type Span } from "../../../domain/workspace/comments";
 import { useT } from "../../hooks/useT";
 import { livePreview, showMarkdown } from "./livePreview";
+import { baseBlocks } from "./baseBlocks";
 import { formatting, type FormatWords } from "./formatting";
 import { useEditorStore } from "../../../application/navigation/editor";
+import { loadTypes, registryOf } from "../../../application/types/types";
+import { loadRows } from "../../../application/collections/collections";
+import { activeFolder } from "../../../application/navigation/workspaces";
+import { existingTyped, newTypedNote } from "../../../application/navigation/kb";
 import { blockEditing, type BlockWords } from "./blocks";
 import { attachEditing, embeds, pickAndEmbed } from "./embeds";
 import { fileDrop } from "./fileDrop";
@@ -205,6 +210,11 @@ function Editor(props: {
   useEffect(() => {
     hooks.current = props.comments;
   });
+  // the / menu's typed items and whether a typed title names a note already
+  useEffect(() => {
+    void loadTypes(activeFolder());
+    void loadRows();
+  }, []);
   const label = t("page.editor");
   const [by] = useState(() => ({
     relay: t("page.updatedLinks"),
@@ -234,6 +244,11 @@ function Editor(props: {
       deleteColumn: t("table.deleteColumn"),
     },
     handle: t("block.handle"),
+    typed: {
+      ask: type => t("slash.ask", { type }),
+      create: (type, title) => t("slash.create", { type, title }),
+      link: (type, title) => t("slash.link", { type, title }),
+    },
   }));
   const [format] = useState<FormatWords>(() => ({
     toolbar: t("fmt.toolbar"),
@@ -313,14 +328,20 @@ function Editor(props: {
           EditorView.lineWrapping,
           markdown({ base: markdownLanguage }),
           mode.current.of(showMarkdown.of(rawNow.current)),
-          livePreview((link, drawer) => void followPageLink(link, drawer)),
+          livePreview(link => void openNoteLink(link)),
           formatting(format),
           embeds(page),
+          baseBlocks(page),
           attachEditing(page),
           blockEditing(
             words,
             () => workspacePaths(),
             (v, at) => pickAndEmbed(page, v, at),
+            {
+              types: () => registryOf(activeFolder()),
+              existing: existingTyped,
+              make: (type, title, link) => newTypedNote(type, title, page, link),
+            },
           ), // before the keymap below: Tab in a table moves between cells
           keymap.of([
             { key: "Mod-Alt-m", run: () => (hooks.current?.onKey(), true) },
@@ -336,7 +357,8 @@ function Editor(props: {
               },
             },
             indentWithTab,
-            ...defaultKeymap,
+            // ⌘[ goes back from the page (the app's key), not outdent: ⇧⇥ does that
+            ...defaultKeymap.filter(binding => binding.key !== "Mod-["),
             ...historyKeymap,
           ]),
           outsideMarks,

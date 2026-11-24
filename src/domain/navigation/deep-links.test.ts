@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseLink, unhandled } from "./deep-links.ts";
+import { boardOfLink, parseLink, unhandled } from "./deep-links.ts";
 
 test("an ask link only carries the text for Cmd-K", () => {
   assert.deepEqual(parseLink("relay://ask?q=%20Hoe%20staat%20Relay%3F%20"), { kind: "ask", text: "Hoe staat Relay?" });
@@ -45,4 +45,34 @@ test("other links do nothing", () => {
 test("a reload does not handle the launch link again", () => {
   assert.deepEqual(unhandled(["relay://ask?q=a"], ["relay://ask?q=a"]), []);
   assert.deepEqual(unhandled(["relay://ask?q=a"], []), ["relay://ask?q=a"]);
+});
+
+test("a ticket link names the tracker and the task, the project is optional", () => {
+  assert.deepEqual(parseLink("relay://ticket?provider=productive&id=123&project=9"), {
+    kind: "ticket",
+    provider: "productive",
+    id: "123",
+    project: "9",
+  });
+  assert.deepEqual(parseLink("relay://ticket?provider=productive&id=123"), {
+    kind: "ticket",
+    provider: "productive",
+    id: "123",
+    project: undefined,
+  });
+  assert.equal(parseLink("relay://ticket?provider=productive"), null);
+  assert.equal(parseLink("relay://ticket?id=1"), null);
+});
+
+test("a ticket link opens over a linked board of its tracker, the named project first", () => {
+  const boards = {
+    Orchard: { provider: "productive", project: "8", board: "b1" },
+    Harbor: { provider: "productive", project: "9", board: "b2" },
+    Shop: { provider: "trello", project: "", board: "t1" },
+  };
+  assert.equal(boardOfLink(boards, { provider: "productive", project: "9" })?.board, "b2");
+  assert.equal(boardOfLink(boards, { provider: "productive" })?.board, "b1");
+  assert.equal(boardOfLink(boards, { provider: "productive", project: "7" }), undefined);
+  assert.equal(boardOfLink(boards, { provider: "linear" }), undefined);
+  assert.equal(boardOfLink(undefined, { provider: "productive" }), undefined);
 });

@@ -1,0 +1,16 @@
+{
+  "name": "@relay/integration-github-projects",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The GitHub Projects board: provider, response mapping, strings and glyph",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test --experimental-strip-types tests/*.test.ts"
+  },
+  "dependencies": {
+    "@relay/board-core": "workspace:*"
+  }
+}
