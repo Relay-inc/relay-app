@@ -15,12 +15,15 @@ import {
   RELAY_COMMENTS,
   RELAY_OPENINGS,
   checksOf,
+  pickedOf,
   picturesOf,
   withPictures,
   buildState,
   EMPTY_PIPELINE,
   htmlText,
   inReview,
+  panelTickets,
+  columnOf,
   needsSetup,
   picks,
   pipelineAt,
@@ -28,6 +31,13 @@ import {
   prsOf,
   ready,
   reposFor,
+  runnable,
+  afterAnswer,
+  answerWhy,
+  stateSince,
+  isPlan,
+  startsNow,
+  waitingIn,
   retask,
   review,
   reviewAll,
@@ -115,6 +125,117 @@ test("picks: the pick column in board order, the label, running ones left alone,
     ["a"],
     "a merged ticket put back is new work",
   );
+});
+
+test("paused: no new tickets and nothing picked up again, also for one moved back", () => {
+  const cards = [card("a", "todo", 1), card("e", "todo", 2)];
+  const ws = [worker("e", "blocked")];
+  assert.deepEqual(
+    picks(cards, c => c.column, { ...P, paused: true }, ws),
+    { fresh: [], resume: [] },
+  );
+  assert.equal(picks(cards, c => c.column, P, ws).fresh.length, 1, "the same board unpaused picks");
+});
+
+test("the global pause holds every pipeline, each one's own pause stays its own", () => {
+  const cards = [card("a", "todo", 1)];
+  const all = { Acme: P, Northwind: { ...P, paused: true }, Off: { ...P, on: false } };
+  const held = runnable(all, true);
+  assert.deepEqual(
+    held.map(([project]) => project),
+    ["Acme", "Northwind"],
+    "a switched-off pipeline is not run at all",
+  );
+  for (const [, p] of held) assert.equal(picks(cards, c => c.column, p, []).fresh.length, 0);
+  const own = Object.fromEntries(runnable(all, false));
+  assert.equal(own.Acme.paused, false);
+  assert.equal(own.Northwind.paused, true);
+  assert.equal(all.Acme.paused, undefined, "the settings themselves are left alone");
+});
+
+test("afterAnswer: the worker now when it may start and there is room, else the pick column, hand-picked stays", () => {
+  const go = { worker: true, running: false, starts: true, room: true, manual: false };
+  assert.equal(afterAnswer(go), "resume");
+  assert.equal(afterAnswer({ ...go, starts: false }), "pick", "paused: the pipeline takes it when it goes on");
+  assert.equal(afterAnswer({ ...go, room: false }), "pick", "full: when an agent is free");
+  assert.equal(afterAnswer({ ...go, worker: false }), "pick", "never started: the pick column, the pre-flight again");
+  assert.equal(afterAnswer({ ...go, worker: false, manual: true }), "stay");
+  assert.equal(afterAnswer({ ...go, manual: true }), "resume", "hand-picked with room goes on at once too");
+  assert.equal(afterAnswer({ ...go, manual: true, room: false }), "stay", "no pick column to wait in");
+  assert.equal(afterAnswer({ ...go, running: true }), "stay", "a running worker is not started twice");
+  assert.equal(isPlan("Plan for approval: x"), true);
+  assert.equal(isPlan("Which colour?"), false);
+});
+
+test("answerWhy: what the answer means, then the user's own words when there are any", () => {
+  assert.equal(answerWhy("retry", "  "), "The user asked you to try again.");
+  const approve = answerWhy("approve", "One date per row.");
+  assert.match(approve, /^The user approved your plan: build it/);
+  assert.match(approve, /The user answered in Relay, in their own words:\nOne date per row\.$/);
+  assert.match(answerWhy("changes", "Per tree."), /rework the plan and report it for approval again/);
+  assert.doesNotMatch(answerWhy("changes", "Per tree."), /build it/);
+});
+
+test("stateSince: an ended run since its end, a run since the user's answer when that came after its start", () => {
+  assert.equal(stateSince({ state: "failed", at: 10, ended: 50 }), 50);
+  assert.equal(stateSince({ state: "running", at: 10, ended: null }), 10);
+  assert.equal(stateSince({ state: "running", at: 10, ended: null }, 80), 80);
+  assert.equal(stateSince({ state: "running", at: 90, ended: null }, 80), 90, "an older answer does not count");
+});
+
+test("startsNow: read at the moment of each start, the own pause, the global one, a pipeline switched off", () => {
+  assert.equal(startsNow({ pipelines: { Acme: P } }, "Acme"), true);
+  assert.equal(startsNow({ pipelines: { Acme: { ...P, paused: true } } }, "Acme"), false);
+  assert.equal(startsNow({ pipelines: { Acme: P }, pipelinesPaused: true }, "Acme"), false);
+  assert.equal(startsNow({ pipelines: { Acme: { ...P, on: false } } }, "Acme"), false);
+  assert.equal(startsNow({ pipelines: { Acme: P } }, "Northwind"), false, "no pipeline, nothing to start");
+});
+
+test("waitingIn: the pick column with the label and no worker yet, in pick order, also while paused", () => {
+  const cards = [
+    card("b", "todo", 2, ["agent"]),
+    card("a", "todo", 1, ["Agent"]),
+    card("c", "todo", 3),
+    card("d", "doing", 0, ["agent"]),
+    card("e", "todo", 4, ["agent"]),
+    card("f", "todo", 5, ["agent"]),
+    card("g", "todo", 6, ["agent"]),
+  ];
+  const ws = [worker("e", "blocked"), worker("f", "running"), worker("g", "done", { board: "merged" })];
+  const labelled = { ...P, label: "agent" };
+  assert.deepEqual(
+    waitingIn(cards, c => c.column, labelled, ws).map(c => c.id),
+    ["a", "b", "g"],
+    "moved back with a worker or running is not waiting, a merged one put back is",
+  );
+  assert.deepEqual(
+    waitingIn(cards, c => c.column, { ...labelled, paused: true }, ws).map(c => c.id),
+    ["a", "b", "g"],
+  );
+  assert.equal(waitingIn(cards, c => c.column, P, ws).length, 4, "without a label every card in the column");
+});
+
+test("panel: each ticket's last worker, newest first, finished ones left out, where each is on the board", () => {
+  const ws = [
+    worker("a", "failed", { key: "a1", at: 1 }),
+    worker("a", "blocked", {
+      key: "a2",
+      at: 5,
+      board: "blocked:100",
+      report: { questions: "Which colour?" } as Worker["report"],
+    }),
+    worker("b", "running", { key: "b1", at: 3 }),
+    worker("c", "done", { key: "c1", at: 4, pr: "https://x/pull/2", board: "done:100" }),
+    worker("d", "done", { key: "d1", at: 6, pr: "https://x/pull/3", board: "merged" }),
+    { ...worker("e", "running", { key: "e1" }), ticket: { pipeline: "Northwind", card: "e" } },
+  ];
+  const rows = panelTickets(ws, "Acme");
+  assert.deepEqual(
+    rows.map(w => w.key),
+    ["a2", "c1", "b1"],
+  );
+  assert.deepEqual(rows.map(columnOf), ["input", "review", "busy"]);
+  assert.equal(columnOf(worker("f", "done", { pr: "p" })), "busy", "ended but not landed yet");
 });
 
 test("step: each end once, done with a PR to review, the rest to a person", () => {
@@ -294,7 +415,16 @@ test("byRelay: every comment Relay puts on a ticket, in every language; a person
   assert.equal(askedIn(en["pl.picked"]), null);
   // a new comment in the runner must be added to RELAY_COMMENTS (the others are toasts and errors)
   const runner = readFileSync(new URL("../../application/pipeline/runner.ts", import.meta.url), "utf8");
-  const toasts = ["pl.error", "pl.full", "pl.noBoard", "pl.noColumn", "pl.noRepos", "pl.usedUp", "pl.stalled"];
+  const toasts = [
+    "pl.error",
+    "pl.full",
+    "pl.noBoard",
+    "pl.noColumn",
+    "pl.noRepos",
+    "pl.usedUp",
+    "pl.stalled",
+    "pl.pausedStart",
+  ];
   for (const k of new Set(runner.match(/"pl\.\w+"/g)!.map(m => m.slice(1, -1))))
     assert.ok([...RELAY_COMMENTS, ...toasts].includes(k), k);
 });
@@ -469,6 +599,12 @@ test("reposFor: the project's checkouts but the ones switched off, each with its
     "its own checks, also empty, win over the old command",
   );
   assert.equal(checksOf({ ...P, checks: "make test" }, found[2]), "", "the old command was for its one checkout only");
+});
+
+test("pickedOf: the checkout from before, then the others picked by hand", () => {
+  assert.deepEqual(pickedOf(undefined), []);
+  assert.deepEqual(pickedOf({ repo: "" }), []);
+  assert.deepEqual(pickedOf({ repo: "/c/api", checkouts: ["/c/web", "/c/infra"] }), ["/c/api", "/c/web", "/c/infra"]);
 });
 
 test("needsSetup: a repo without a checkout, or a pipeline on that misses a column", () => {

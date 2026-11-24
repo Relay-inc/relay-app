@@ -1921,14 +1921,14 @@ async fn orch_dispatch_ticket(app: AppHandle, title: String, task: String, proje
     tauri::async_runtime::spawn_blocking(move || orch::dispatch_ticket(&app, title, task, project, model, orch::Pipe { repos, base, into, ticket, validate: validate.unwrap_or_default(), plan: plan.unwrap_or(false), skill: skill.unwrap_or_default() })).await.map_err(|e| e.to_string())?
 }
 /// The checkouts a project's board pipeline builds in, as {slug, path} by slug: the project's linked repos that have a
-/// checkout on this Mac (as the Git drawer finds them), and `extra`, a checkout picked by hand, in place of the one
-/// found for its repo. One without a GitHub origin is left out: it could get no PR.
+/// checkout on this Mac (as the Git drawer finds them), and `extra`, checkouts picked by hand, each in place of the one
+/// found for its repo (a later one wins). One without a GitHub origin is left out: it could get no PR.
 #[tauri::command]
-fn pipeline_repos(state: State<'_, App>, project: String, extra: Option<String>) -> Result<Vec<Value>, String> {
+fn pipeline_repos(state: State<'_, App>, project: String, extra: Option<Vec<String>>) -> Result<Vec<Value>, String> {
     let vault = need_vault(&state)?;
     let linked = repo_projects(&vault);
     let mut found: HashMap<String, String> = repo_checkouts(&vault).into_iter().filter(|(r, _)| linked.get(r).is_some_and(|p| p == &project)).map(|(r, (d, _))| (r, d)).collect();
-    if let Some((r, d)) = extra.filter(|e| !e.is_empty()).and_then(|e| Some((gh_repo(&e)?, e))) { found.insert(r, d); }
+    for e in extra.unwrap_or_default() { if let Some(r) = gh_repo(&e) { found.insert(r, e); } }
     let mut out: Vec<(String, String)> = found.into_iter().collect();
     out.sort();
     Ok(out.into_iter().map(|(slug, path)| json!({"slug": slug, "path": path})).collect())

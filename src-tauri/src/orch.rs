@@ -50,6 +50,9 @@ pub struct Report {
     /// what Relay read from git per file: path, lines added, lines removed
     #[serde(default)]
     pub files: Vec<(String, u32, u32)>,
+    /// a pipeline worker's done: per repo name, the repo's PR template filled in for the PR (see pr_body)
+    #[serde(default)]
+    pub pr_body: HashMap<String, String>,
 }
 
 /// A worker's own progress on its task, from its `step` tool: steps done of its plan, and the one it is on.
@@ -249,7 +252,8 @@ pub fn tool_list(coord: bool) -> Value {
             json!({"status": {"type": "string", "enum": ["done", "blocked", "failed"]},
                    "summary": {"type": "string", "maxLength": 4000, "description": "What changed, where, what is left"},
                    "questions": {"type": "string", "maxLength": 2000, "description": "For blocked (or done with a decision left): what the user has to decide"},
-                   "options": {"type": "array", "maxItems": 4, "items": {"type": "string", "maxLength": 60}, "description": "With questions: the answers you would accept, a few words each, best first. The user picks one or writes their own."}}), &["status", "summary"])]});
+                   "options": {"type": "array", "maxItems": 4, "items": {"type": "string", "maxLength": 60}, "description": "With questions: the answers you would accept, a few words each, best first. The user picks one or writes their own."},
+                   "pr_body": {"type": "object", "additionalProperties": {"type": "string", "maxLength": PR_BODY_MAX}, "description": "Only when your brief lists PR templates: per repo name, its template filled in for your change"}}), &["status", "summary"])]});
     }
     json!({"tools": [
         tool("dispatch", "Start a worker: a new conversation in the vault that does one task and reports back. Returns its key.",
@@ -305,7 +309,8 @@ fn call(app: &AppHandle, key: &str, name: &str, a: &Value) -> Value {
         (false, "decision") => decision(app, key, s("decision"), s("why"), s("evidence"), s("result")).unwrap_or_else(fail),
         (false, "report") => {
             let options = a["options"].as_array().map(|o| o.iter().filter_map(|v| v.as_str().map(str::trim).filter(|v| !v.is_empty()).map(String::from)).take(4).collect()).unwrap_or_default();
-            report(app, key, s("status"), s("summary"), s("questions"), options).unwrap_or_else(fail)
+            let pr_body = a["pr_body"].as_object().into_iter().flatten().filter_map(|(k, v)| Some((k.trim().to_string(), v.as_str()?.trim().to_string())).filter(|(_, v)| !v.is_empty())).collect();
+            report(app, key, s("status"), s("summary"), s("questions"), options, pr_body).unwrap_or_else(fail)
         }
         _ => fail(format!("unknown tool {name}")),
     }
@@ -657,8 +662,8 @@ fn decisions_md(d: &[Decision]) -> String {
 fn publish(app: &AppHandle, w: &Worker, r: &Report) -> (Vec<Tree>, Option<String>) {
     let mut all = trees(w);
     let Some(branch) = w.branch.clone().filter(|_| !all.is_empty()) else { return (all, Some("no worktree".into())) };
-    if let Some(f) = r.flags.iter().find(|f| f.starts_with("branch ")) { return (all, Some(format!("{f} while it ran: not pushed"))); }
     let changed: Vec<usize> = (0..all.len()).filter(|&i| committed(&all[i])).collect();
+    if let Some(f) = moved_branch(&r.flags, &all, &changed) { return (all, Some(format!("{f} while it ran: not pushed"))); }
     if changed.is_empty() { return (all, Some("nothing committed on the branch".into())); }
     let many = all.len() > 1;
     let slugs: Vec<String> = changed.iter().map(|&i| super::gh_repo(&all[i].repo).unwrap_or_else(|| name(&all[i].repo).to_string())).collect();
@@ -676,6 +681,17 @@ fn publish(app: &AppHandle, w: &Worker, r: &Report) -> (Vec<Tree>, Option<String
     }
     (all, (!errors.is_empty()).then(|| errors.join("; ")))
 }
+/// The moved protected branch that holds the push: one in a repo it pushes, where its work may have gone to that
+/// branch instead. In a repo it left alone only a tip the remote does not have holds it (the agent may have committed
+/// there), a pulled merge stays a note in the report. No fetch: a pull moves origin/<branch> too, a local commit does not.
+fn moved_branch<'a>(flags: &'a [String], all: &[Tree], changed: &[usize]) -> Option<&'a String> {
+    let many = all.len() > 1;
+    flags.iter().filter(|f| f.starts_with("branch ")).find(|f| !many || all.iter().enumerate().any(|(i, t)| {
+        let Some(b) = f.strip_prefix("branch ").and_then(|f| f.strip_suffix(&format!(" in {} moved", name(&t.repo)))) else { return false };
+        // without origin/<branch> it holds, the safe side
+        changed.contains(&i) || git(&t.repo, &["merge-base", "--is-ancestor", &format!("refs/heads/{b}"), &format!("refs/remotes/origin/{b}")]).is_none()
+    }))
+}
 /// One repo of `publish`: push, and the PR when it has none yet. `others`: the repos the same ticket changed too.
 fn publish_one(app: &AppHandle, w: &Worker, r: &Report, t: &Tree, branch: &str, others: &[&str]) -> Result<String, String> {
     // with lease: the worker may have rebased between two runs, someone else's push to the branch is never overwritten
@@ -684,16 +700,57 @@ fn publish_one(app: &AppHandle, w: &Worker, r: &Report, t: &Tree, branch: &str, 
     let slug = super::gh_repo(&t.repo).ok_or("the repo has no GitHub origin")?;
     let x = |k: &str| w.ticket.as_ref().and_then(|x| x[k].as_str()).unwrap_or("").to_string();
     let title = match x("number").as_str() { "" => w.title.clone(), n => format!("#{n} {}", w.title) };
-    let mut body = r.summary.clone();
-    if !x("url").is_empty() { body += &format!("\n\nTicket: {}", x("url")); }
+    let body = pr_body(w, r, t, &slug, branch, others);
+    let base = if t.base.is_empty() { "main" } else { t.base.as_str() };
+    let out = super::gh(&app.state::<App>(), &["pr", "create", "-R", &slug, "--head", branch, "--base", base, "--title", &title, "--body", &body])?;
+    out.lines().rev().find(|l| l.starts_with("https://")).map(String::from).ok_or_else(|| "gh opened no PR".into())
+}
+/// The agent's filled PR template in a PR description, its start: GitHub takes 65536 characters, Relay's lines follow.
+const PR_BODY_MAX: usize = 20_000;
+/// A PR's description: the agent's summary, or for a repo with a PR template the template as the agent filled it in,
+/// then Relay's own lines. Those go after the template, not into it: its sections are the repo's own and Relay cannot
+/// know where they fit, and after the cut agent text they are always there in full.
+fn pr_body(w: &Worker, r: &Report, t: &Tree, slug: &str, branch: &str, others: &[&str]) -> String {
+    let url = w.ticket.as_ref().and_then(|x| x["url"].as_str()).unwrap_or("");
+    let mut body = match filled_for(&r.pr_body, t, slug, others.is_empty()).filter(|_| pr_template(&t.worktree).is_some()) {
+        Some(filled) => format!("{}\n\n---", head_cut(filled, PR_BODY_MAX)),
+        None => r.summary.clone(),
+    };
+    if !url.is_empty() { body += &format!("\n\nTicket: {url}"); }
     if !others.is_empty() { body += &format!("\n\nThe same ticket changed {} too, on branch `{branch}`: merge them together.", others.join(", ")); }
     if !t.checks.trim().is_empty() { body += &format!("\n\nChecks passed: `{}`", t.checks.trim()); }
     if let Some(n) = &w.review_notes { body += &format!("\n\nFrom the automatic review, nothing blocking:\n\n{n}"); }
     if !w.decisions.is_empty() { body += &format!("\n\n## Decisions\n\n{}", decisions_md(&w.decisions)); }
-    body += "\n\nBuilt by an agent from Relay's board pipeline.";
-    let base = if t.base.is_empty() { "main" } else { t.base.as_str() };
-    let out = super::gh(&app.state::<App>(), &["pr", "create", "-R", &slug, "--head", branch, "--base", base, "--title", &title, "--body", &body])?;
-    out.lines().rev().find(|l| l.starts_with("https://")).map(String::from).ok_or_else(|| "gh opened no PR".into())
+    body + "\n\nBuilt by an agent from Relay's board pipeline."
+}
+/// The agent's filled template for this repo: its folder name as the brief lists it, in any case, its GitHub slug, or
+/// a key ending in `/<name>`. When it changed only this repo and gave one body, that one whatever its key.
+fn filled_for<'a>(bodies: &'a HashMap<String, String>, t: &Tree, slug: &str, only: bool) -> Option<&'a String> {
+    let n = name(&t.repo).to_ascii_lowercase();
+    let mine = |k: &str| { let k = k.trim().trim_end_matches('/').to_ascii_lowercase(); k == n || k.eq_ignore_ascii_case(slug) || k.ends_with(&format!("/{n}")) };
+    bodies.get(name(&t.repo)).or_else(|| bodies.iter().find(|(k, _)| mine(k)).map(|(_, v)| v)).or_else(|| bodies.values().next().filter(|_| only && bodies.len() == 1))
+}
+/// A new report's filled templates, with those of the earlier report for the repos it gives none for: a done after a
+/// failed round seldom repeats them, and the PR should not fall back to the summary for that.
+fn keep_bodies(mut new: HashMap<String, String>, old: Option<&Report>) -> HashMap<String, String> {
+    for (k, v) in old.map(|r| &r.pr_body).into_iter().flatten() {
+        if !new.keys().any(|n| n.eq_ignore_ascii_case(k)) { new.insert(k.clone(), v.clone()); }
+    }
+    new
+}
+/// The repo's PR template where GitHub looks for it, relative to the worktree: pull_request_template.md in .github/,
+/// the root or docs/ (any case), else the first .md in .github/PULL_REQUEST_TEMPLATE/. The org's .github repo is not
+/// asked: that is a network call per repo at every start, for a fallback few repos rely on.
+fn pr_template(worktree: &str) -> Option<String> {
+    let ls = |d: &str| {
+        let mut v: Vec<String> = std::fs::read_dir(std::path::Path::new(worktree).join(d)).into_iter().flatten().flatten().filter_map(|e| e.file_name().into_string().ok()).collect();
+        v.sort();
+        v
+    };
+    let find = |d: &str, n: &str| ls(d).into_iter().find(|e| e.eq_ignore_ascii_case(n)).map(|e| if d.is_empty() { e } else { format!("{d}/{e}") });
+    if let Some(f) = [".github", "", "docs"].iter().find_map(|d| find(d, "pull_request_template.md")) { return Some(f); }
+    let dir = find(".github", "pull_request_template")?;
+    ls(&dir).into_iter().find(|e| e.to_ascii_lowercase().ends_with(".md")).map(|e| format!("{dir}/{e}"))
 }
 
 /// A pipeline worker's PRs as the board needs them, one per repo with a PR: its URL, state (OPEN, MERGED, CLOSED), the
@@ -867,6 +924,9 @@ fn pipe_brief(p: &Pipe, made: &[Tree]) -> String {
             checked.iter().map(|t| format!("- {}: `{}`", name(&t.repo), t.checks.trim())).collect::<Vec<_>>().join("\n")),
     }
     if p.validate.review != "off" { brief += "Then another agent reviews your diff. A failed check or a blocking review finding comes back to you as the next message: fix it, commit, report done again.\n"; }
+    // the agent reads each template itself in its worktree, the brief only says where
+    let templates: Vec<String> = made.iter().filter_map(|t| pr_template(&t.worktree).map(|f| format!("- {}: {f}", name(&t.repo)))).collect();
+    if !templates.is_empty() { brief += &prompt::fill(PR_TEMPLATE_RULE, &[("templates", &templates.join("\n"))]); brief += "\n"; }
     if let Some(skill) = skill {
         brief += &prompt::fill(SKILL_RULE, &[("skill", &skill)]);
         brief += "\n";
@@ -889,6 +949,9 @@ const SKILL_RULE: &str = prompt::text(include_str!("../../prompts/pipeline/skill
 
 /// A pipeline with a skill and Relay's review on: one review of the diff, Relay's.
 const SKILL_REVIEW_RULE: &str = prompt::text(include_str!("../../prompts/pipeline/skill-review.md"));
+
+/// A pipeline whose repos have a PR template: the agent fills it in per repo, Relay makes it the PR's description.
+const PR_TEMPLATE_RULE: &str = prompt::text(include_str!("../../prompts/pipeline/pr-template.md"));
 
 /// A pipeline with "plan first": a person approves the approach before any code.
 const PLAN_RULE: &str = prompt::text(include_str!("../../prompts/pipeline/plan-first.md"));
@@ -972,7 +1035,7 @@ fn decision(app: &AppHandle, key: &str, decision: Option<String>, why: Option<St
 }
 
 fn asks(q: &Option<String>) -> bool { q.as_deref().is_some_and(|q| !q.trim().is_empty()) }
-fn report(app: &AppHandle, key: &str, status: Option<String>, summary: Option<String>, questions: Option<String>, options: Vec<String>) -> Result<Value, String> {
+fn report(app: &AppHandle, key: &str, status: Option<String>, summary: Option<String>, questions: Option<String>, options: Vec<String>, pr_body: HashMap<String, String>) -> Result<Value, String> {
     let status = status.filter(|s| ["done", "blocked", "failed"].contains(&s.as_str())).ok_or("status must be done, blocked or failed")?;
     let summary = summary.ok_or("summary is required")?;
     let st = app.state::<App>();
@@ -985,7 +1048,7 @@ fn report(app: &AppHandle, key: &str, status: Option<String>, summary: Option<St
     let mut after = snapshot(&vault, &shared(app, &vault).files, &all.iter().map(|t| t.repo.as_str()).collect::<Vec<_>>());
     if let Some(s) = w.base.get("start") { after.insert("start".into(), s.clone()); }
     let flags = flags_of(&w.base, &after);
-    let r = Report { status: status.clone(), summary, questions, diff, flags, options, files };
+    let r = Report { status: status.clone(), summary, questions, diff, flags, options, files, pr_body: keep_bodies(pr_body, w.report.as_ref()) };
     if w.ticket.is_some() {
         // the pipeline's worker: a done is validated first (it stays running meanwhile), then Relay pushes and opens
         // the PR; the webview moves the ticket when it sees the new state
@@ -1404,6 +1467,18 @@ mod tests {
         sh(&made[0].repo, "git -c user.email=a@b -c user.name=a commit -q --allow-empty -m moved");
         assert_eq!(flags_of(&before, &snapshot("/v", &[], &repos)), ["branch main in backend moved"]);
         assert!(snapshot("/v", &[], &repos[..1]).contains_key("branch:main"), "one repo keeps the keys a running worker started with");
+        // only the frontend is pushed. The backend it left alone: a local commit on main (no origin/main) holds it, a pulled merge does not
+        let held = || moved_branch(&flags_of(&before, &snapshot("/v", &[], &repos)), &made, &[1]).cloned();
+        assert_eq!(held().as_deref(), Some("branch main in backend moved"));
+        sh(&made[0].repo, "git update-ref refs/remotes/origin/main $(git -c user.email=a@b -c user.name=a commit-tree 'HEAD^{tree}' -p HEAD -m merged) && git merge -q --ff-only origin/main");
+        assert_eq!(held(), None);
+        // a moved main in the frontend it pushes holds it, also when origin has it
+        sh(&made[1].repo, "git -c user.email=a@b -c user.name=a commit -q --allow-empty -m moved && git update-ref refs/remotes/origin/main HEAD");
+        assert_eq!(held().as_deref(), Some("branch main in frontend moved"));
+        // a local commit on top of the pulled backend main holds it again
+        sh(&made[0].repo, "git -c user.email=a@b -c user.name=a commit -q --allow-empty -m local");
+        assert_eq!(held().as_deref(), Some("branch main in backend moved"));
+        assert_eq!(moved_branch(&["branch main moved".into()], &made[..1], &[]).map(String::as_str), Some("branch main moved"), "one repo: as before");
         // a blocking review of the frontend goes back to the frontend's next review only
         let w = Worker { last_review: Some(LastReview { head: String::new(), blocking: vec!["- frontend/cart.ts:1: no total".into(), "- backend/A.php: x".into()], checked: vec![] }), ..Default::default() };
         assert_eq!(last_for(&w, &made[1], true).unwrap().blocking, ["- cart.ts:1: no total"]);
@@ -1411,6 +1486,76 @@ mod tests {
         drop_trees(&made, "relay/cart-total-t1");
         for t in &made { assert!(!std::path::Path::new(&t.worktree).exists() && git(&t.repo, &["rev-parse", "--verify", "-q", "relay/cart-total-t1"]).is_none()); }
         std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn pr_template_where_github_looks() {
+        let root = std::env::temp_dir().join(format!("relay-orch-tpl-{}", std::process::id()));
+        std::fs::remove_dir_all(&root).ok();
+        let r = root.to_string_lossy().to_string();
+        let put = |p: &str| { let f = root.join(p); std::fs::create_dir_all(f.parent().unwrap()).unwrap(); std::fs::write(f, "## What changes\n").unwrap(); };
+        assert_eq!(pr_template(&r), None, "no folder at all");
+        put("README.md");
+        put(".github/workflows/ci.yml");
+        assert_eq!(pr_template(&r), None, "no template");
+        put(".github/PULL_REQUEST_TEMPLATE/feature.md");
+        put(".github/PULL_REQUEST_TEMPLATE/bug.md");
+        assert_eq!(pr_template(&r).as_deref(), Some(".github/PULL_REQUEST_TEMPLATE/bug.md"), "the first of several");
+        put("docs/pull_request_template.md");
+        assert_eq!(pr_template(&r).as_deref(), Some("docs/pull_request_template.md"));
+        put("PULL_REQUEST_TEMPLATE.md");
+        assert_eq!(pr_template(&r).as_deref(), Some("PULL_REQUEST_TEMPLATE.md"), "any case, the root before docs/");
+        put(".github/Pull_Request_Template.md");
+        assert_eq!(pr_template(&r).as_deref(), Some(".github/Pull_Request_Template.md"), ".github/ first");
+        // the brief points at it under the repo's name
+        let made = [Tree { repo: "/c/web".into(), worktree: r.clone(), ..Default::default() }];
+        let pipe = Pipe { repos: vec![], base: None, into: None, ticket: json!({}), validate: Validate { review: "off".into(), ..Default::default() }, plan: false, skill: String::new() };
+        let b = pipe_brief(&pipe, &made);
+        assert!(b.contains("- web: .github/Pull_Request_Template.md") && b.contains("`pr_body`") && !b.contains("{{"), "{b}");
+        assert!(!pipe_brief(&pipe, &[Tree { worktree: "/nowhere".into(), ..made[0].clone() }]).contains("pr_body"), "no template, no rule");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn pr_body_follows_the_template_and_keeps_relays_lines() {
+        let root = std::env::temp_dir().join(format!("relay-orch-body-{}", std::process::id()));
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::create_dir_all(root.join(".github")).unwrap();
+        std::fs::write(root.join(".github/pull_request_template.md"), "## What changes\n## Screenshots\n").unwrap();
+        let w = Worker { ticket: Some(json!({"url": "https://example.com/t/7"})), review_notes: Some("Notes:\n- a.ts:1: naming".into()),
+            decisions: vec![Decision { decision: "plant the apple trees first".into(), why: "smaller".into(), ..Default::default() }], ..Default::default() };
+        let filled = "## What changes\nApple trees planted.\n## Screenshots\nn/a: the app could not run here";
+        let mut r = Report { summary: "Planted the apple trees".into(), pr_body: [("web".to_string(), filled.to_string())].into(), ..Default::default() };
+        let t = Tree { repo: "/c/web".into(), worktree: root.to_string_lossy().into(), checks: "make test".into(), ..Default::default() };
+        let relay = |b: &str| ["Ticket: https://example.com/t/7", "The same ticket changed acme/api too, on branch `b`", "Checks passed: `make test`", "- a.ts:1: naming", "## Decisions", "plant the apple trees first", "Built by an agent from Relay's board pipeline."].iter().all(|l| b.contains(l));
+        let b = pr_body(&w, &r, &t, "acme/web", "b", &["acme/api"]);
+        assert!(b.starts_with(filled) && !b.contains("Planted the apple trees") && relay(&b), "{b}");
+        // the agent's text is cut, Relay's lines never are
+        r.pr_body.insert("web".into(), "x".repeat(PR_BODY_MAX * 2));
+        let b = pr_body(&w, &r, &t, "acme/web", "b", &["acme/api"]);
+        assert!(b.chars().count() < PR_BODY_MAX + 1000 && relay(&b));
+        // without a template, or without a body for this repo, exactly as before
+        let before = format!("Planted the apple trees\n\nTicket: https://example.com/t/7\n\nThe same ticket changed acme/api too, on branch `b`: merge them together.\n\nChecks passed: `make test`\n\nFrom the automatic review, nothing blocking:\n\nNotes:\n- a.ts:1: naming\n\n## Decisions\n\n{}\n\nBuilt by an agent from Relay's board pipeline.", decisions_md(&w.decisions));
+        assert_eq!(pr_body(&w, &r, &Tree { worktree: "/nowhere".into(), ..t.clone() }, "acme/web", "b", &["acme/api"]), before);
+        assert_eq!(pr_body(&w, &r, &Tree { repo: "/c/api".into(), ..t.clone() }, "acme/api", "b", &["acme/api"]), before);
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn the_filled_template_is_found_and_kept() {
+        let t = Tree { repo: "/c/web".into(), ..Default::default() };
+        let one = |k: &str| HashMap::from([(k.to_string(), "filled".to_string())]);
+        for k in ["web", "WEB", "acme/web-app", "Acme/Web-App", "acme/web", "Web/"] { assert_eq!(filled_for(&one(k), &t, "acme/web-app", false).map(String::as_str), Some("filled"), "{k}"); }
+        assert_eq!(filled_for(&one("frontend"), &t, "acme/web-app", false), None, "another repo's body, with other repos changed too");
+        assert_eq!(filled_for(&one("frontend"), &t, "acme/web-app", true).map(String::as_str), Some("filled"), "one repo changed, one body: whatever the key");
+        let two = HashMap::from([("api".to_string(), "a".to_string()), ("docs".to_string(), "d".to_string())]);
+        assert_eq!(filled_for(&two, &t, "acme/web-app", true), None, "two bodies, none of them this repo's");
+        // a second done without a body keeps the first one's, a new body replaces it (any case)
+        let first = Report { pr_body: HashMap::from([("web".to_string(), "v1".to_string()), ("api".to_string(), "a1".to_string())]), ..Default::default() };
+        assert_eq!(keep_bodies(HashMap::new(), Some(&first)), first.pr_body);
+        let again = keep_bodies(HashMap::from([("Web".to_string(), "v2".to_string())]), Some(&first));
+        assert_eq!(again, HashMap::from([("Web".to_string(), "v2".to_string()), ("api".to_string(), "a1".to_string())]));
+        assert!(keep_bodies(HashMap::new(), None).is_empty());
     }
 
     #[test]
@@ -1439,6 +1584,7 @@ mod tests {
         assert!(heads[3].1.contains("git diff def HEAD") && heads[3].1.contains("- a:1: ok") && !heads[2].1.contains("since"));
         for (head, claims) in heads { assert!(!head.contains("{{") && !claims.contains("{{")); }
         assert!(!review_prompt().contains("{{") && prompt::fill(PIPE_RULES, &[("untrusted", "x")]).contains(" x "));
+        assert!(!prompt::fill(PR_TEMPLATE_RULE, &[("templates", "- web: docs/pull_request_template.md")]).contains("{{"));
         for fixed in [PLAN_RULE, SKILL_REVIEW_RULE, crate::CAPTURE_PROMPT, agent_core::envelope::HINT] { assert!(!fixed.contains("{{") && !fixed.ends_with('\n')); }
         assert!(!agent_core::envelope::wrap("P", "C", "x").contains("{{"));
     }

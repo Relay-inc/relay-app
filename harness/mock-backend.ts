@@ -51,6 +51,9 @@ function seedStorage() {
   localStorage.setItem("sel", JSON.stringify(query.get("sel") || "__wait"));
   localStorage.setItem("pvProject", "p1");
   localStorage.setItem("pvBoard", "f1");
+  // the pipeline panel's ticket sent back before it started, kept in the UI state
+  if (fixture === "pipeline-panel" || fixture === "pipeline-answer")
+    localStorage.setItem("pipelineBounced", JSON.stringify(orch.pipelineBounced));
   if (fixture === "linear") {
     localStorage.setItem("linearProject", integ.LINEAR_TEAM);
     localStorage.setItem("linearBoard", `cycle_${integ.LINEAR_TEAM}`);
@@ -202,7 +205,13 @@ const diceTools = [
     app: true,
   },
 ];
+// pipeline-panel: the board pipeline's workers (fixtures/orchestrator.ts pipelineWorkers), on a used-up plan, and two
+// tickets in its pick column with its label, waiting for a worker. pipeline-answer: the same workers with room on the
+// plan and nothing waiting, so an answer from the panel starts its worker at once
+const pipePanel = fixture === "pipeline-panel" || fixture === "pipeline-answer";
 let workers = orchOn && !orchEmpty ? structuredClone(orch.workers) : [];
+if (pipePanel) workers = structuredClone(orch.pipelineWorkers) as typeof workers;
+if (fixture === "pipeline-panel") integ.tagTasks([301, 311], "agent");
 
 // ---------- the event plugin: listeners by event, emitted synchronously (a real Tauri event is one task per event)
 const listeners = new Map<string, Set<number>>();
@@ -1250,8 +1259,8 @@ function handle(cmd: string, a: Args): unknown {
       const urls = w?.trees?.length ? w.trees.flatMap(t => (t.pr ? [t.pr] : [])) : w?.pr ? [w.pr] : [];
       return urls.map(url => ({ ...structuredClone(prStatus), url }));
     }
-    // the checkouts of a project's repos on this Mac (lib.rs pipeline_repos): Northwind Portal's two, and one picked by
-    // hand in place of the one found for its repo
+    // the checkouts of a project's repos on this Mac (lib.rs pipeline_repos): Northwind Portal's two, and the ones picked
+    // by hand in place of the one found for their repo
     case "pipeline_repos": {
       const found: Record<string, string> =
         a.project === "Northwind Portal"
@@ -1261,7 +1270,8 @@ function handle(cmd: string, a: Args): unknown {
               "acme/northwind-portal": "/Users/demo/code/northwind",
             }
           : {};
-      if (a.extra) found[a.extra === "/Users/demo/code/northwind" ? "acme/northwind-portal" : "acme/extra"] = a.extra;
+      for (const path of a.extra ?? [])
+        found[path === "/Users/demo/code/northwind" ? "acme/northwind-portal" : `acme/${path.split("/").pop()}`] = path;
       return Object.entries(found)
         .sort()
         .map(([slug, path]) => ({ slug, path }));
@@ -1546,6 +1556,13 @@ function handle(cmd: string, a: Args): unknown {
       return { id: "weekly@1", title: "Weekly sync with the design team about the onboarding flow", time: "10:00" };
     case "usage_limits":
       if (fixture === "antigravity") return integ.usageLimitsAntigravity;
+      // the pipeline panel's hold: Claude's session window at 100%
+      if (fixture === "pipeline-panel")
+        return integ.usageLimits.map(p =>
+          p.provider === "claude" && p.limits.ok
+            ? { ...p, limits: { ...p.limits, windows: p.limits.windows.map((w, i) => (i ? w : { ...w, pct: 100 })) } }
+            : p,
+        );
       return fixture.startsWith("accounts") ? integ.usageLimitsAccounts : integ.usageLimits;
     case "usage_tokens":
       return integ.usageTokens();

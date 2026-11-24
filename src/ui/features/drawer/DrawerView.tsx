@@ -13,6 +13,7 @@ import { GitPanel } from "../git/GitPanel";
 import { FilesPanel } from "../files/FilesPanel";
 import { DesignPanel } from "../design/DesignPanel";
 import { AgentsColumn } from "../agents/AgentsColumn";
+import { PipelinePanel } from "../pipeline/PipelinePanel";
 import "../../styles/navigation.css";
 
 const TITLES = {
@@ -23,9 +24,10 @@ const TITLES = {
   git: "drawer.git",
   files: "drawer.files",
   agents: "agents.column",
+  pipeline: "pl.title",
 } as const;
 
-/** The right drawer, open on demand: one of the project's tools (terminals, notes), the
+/** The right drawer, open on demand: one of the project's tools (terminals, notes, its board pipeline), the
  *  project's git repos or its folders, or the orchestrator's workers next to its coordinator. */
 export function DrawerView({ className, drawer }: { className: string; drawer: Exclude<Drawer, ""> }) {
   const { t } = useT();
@@ -57,7 +59,7 @@ export function DrawerView({ className, drawer }: { className: string; drawer: E
           )}
         </div>
         <div
-          className={`min-w-(--drawer-w) ${drawer === "workers" || drawer === "agents" ? "overflow-y-auto pt-2.5 px-3 pb-4" : "flex-1 min-h-0 flex flex-col p-3"}`}
+          className={`min-w-(--drawer-w) ${drawer === "workers" || drawer === "agents" || drawer === "pipeline" ? "overflow-y-auto pt-2.5 px-3 pb-4" : "flex-1 min-h-0 flex flex-col p-3"}`}
         >
           {drawer === "terminal" ? <TerminalsPanel project={toolProject} /> : null}
           {drawer === "notes" ? <ScratchPanel project={toolProject} /> : null}
@@ -66,6 +68,7 @@ export function DrawerView({ className, drawer }: { className: string; drawer: E
           {drawer === "git" ? <GitPanel /> : null}
           {drawer === "files" ? <FilesPanel /> : null}
           {drawer === "agents" ? <AgentsColumn /> : null}
+          {drawer === "pipeline" ? <PipelinePanel project={toolProject} /> : null}
         </div>
       </div>
     </aside>

@@ -473,8 +473,8 @@ export const orchAnswer = (key: string, answer: string) => invoke<Worker | null>
 export const orchAskReport = (key: string) => invoke<void>("orch_ask_report", { key });
 export const orchRestart = (key: string) => invoke<Worker>("orch_restart", { key });
 export const orchPr = (key: string) => invoke<PrStatus[]>("orch_pr", { key });
-/** The checkouts on this Mac of a project's repos, for its board pipeline; `extra` one picked by hand. */
-export const pipelineRepos = (project: string, extra: string) =>
+/** The checkouts on this Mac of a project's repos, for its board pipeline; `extra` the ones picked by hand. */
+export const pipelineRepos = (project: string, extra: string[]) =>
   invoke<PipelineRepo[]>("pipeline_repos", { project, extra });
 export const orchBoard = (key: string, mark: string) => invoke<Worker | null>("orch_board", { key, mark });
 

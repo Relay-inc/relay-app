@@ -19,6 +19,7 @@ export type BarTools = {
   repos: boolean; // the project has repos; without them the button offers to link one
   active: "" | "board" | "prs"; // the project's board or PRs is what the centre shows
   git: boolean; // the Git drawer is switched on (Settings › General)
+  pipeline: boolean; // the project has a board pipeline: its panel's button shows
 };
 
 /** The title bar of the centre column: the project (or the view), the conversation's title, a view's own
@@ -68,7 +69,7 @@ export function ChatBar({
   onOpenTerminal: (external: boolean) => void;
   onOpenBoard: () => void;
   onOpenPrs: () => void;
-  onToggleDrawer: (tool: "terminal" | "notes" | "design" | "git" | "files") => void;
+  onToggleDrawer: (tool: "terminal" | "notes" | "design" | "git" | "files" | "pipeline") => void;
   onShowInGraph?: () => void;
 }) {
   const { t } = useT();
@@ -213,6 +214,14 @@ export function ChatBar({
             />
           ) : null}
           <BuddyButton project={tools.project} />
+          {tools.pipeline ? (
+            <ToolButton
+              on={drawer === "pipeline"}
+              label={t("pl.title")}
+              onClick={() => onToggleDrawer("pipeline")}
+              icon={<Icon name="workflow" className="glyph size-4" />}
+            />
+          ) : null}
           {/* the project's git repos, with the worktrees of the open conversation: only a conversation has them; its
               folders as a tree next to them */}
           {(renamable && tools.git
