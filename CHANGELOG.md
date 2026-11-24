@@ -16,7 +16,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Fixed
 
-- Comments Relay posts on a Productive task (an agent's PR summary, or one you write) show their markdown as formatting: bold, code, lists and links instead of raw `**` and backticks
+- Comments Relay posts on a Productive task (an agent's PR summary, or one you write) show their markdown as formatting: bold, code, lists and links instead of raw `**` and backticks (#534)
 
 ## [0.0.62] - 2026-11-24
 
