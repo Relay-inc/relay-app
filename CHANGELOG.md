@@ -16,6 +16,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Fixed
 
+- Closing "A recording from … was never transcribed" no longer brings it back on the next view: the close button asks once, then Discard throws the recording away for good. A meeting recorded by mistake can be removed with Delete meeting in the Meeting view's "…" menu: its note, transcript and audio go to the workspace's trash (#531).
 - Settings › Projects: picking a checkout by hand for a second repo no longer clears the one picked for the first; each repo keeps its own (#532).
 
 ## [0.0.61] - 2026-11-24

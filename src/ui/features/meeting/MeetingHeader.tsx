@@ -3,7 +3,7 @@ import { STEPS, serviceOf, type Step } from "../../../domain/calendar/meeting-vi
 import type { Meeting } from "../../../domain/calendar/types";
 import { joinMeeting, meetingProjectOf, timeOf } from "../../../application/calendar/calendar";
 import { renameRecording, useRecordingStore } from "../../../application/calendar/recording";
-import { saveLanguage } from "../../../application/calendar/meeting-view";
+import { deleteMeeting, saveLanguage } from "../../../application/calendar/meeting-view";
 import { projectChip } from "../../../application/today/today";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
@@ -176,6 +176,26 @@ export function MeetingHeader({
             {reached === "live" ? t("meet.backTo", { service: serviceOf(meeting.join) }) : t("wait.meetingJoin")}
           </button>
         ) : null}
+        {recording ? null : (
+          <Menu
+            label={t("meet.more")}
+            right
+            className="grid place-items-center size-7 rounded-lg text-secondary cursor-pointer hover:bg-fill"
+            trigger={<Icon name="more" className="glyph size-4" />}
+          >
+            {close => (
+              <button
+                className="flex items-center gap-2 w-full h-7 px-2.5 rounded-md text-left text-[13px] text-late cursor-pointer hover:bg-fill"
+                onClick={() => {
+                  close();
+                  void deleteMeeting(meeting);
+                }}
+              >
+                {t("meet.delete")}
+              </button>
+            )}
+          </Menu>
+        )}
       </div>
     </div>
   );

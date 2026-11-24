@@ -16,9 +16,10 @@ import { cleanNotes, newMeetingNote, notesIn, toggleTask, withNotes } from "../.
 import type { Meeting } from "../../domain/calendar/types";
 import { digestOf } from "../../domain/today/day";
 import * as backend from "../../infrastructure/backend";
-import { select } from "../navigation/navigation";
+import { select, toast } from "../navigation/navigation";
 import { useWorkspaceStore } from "../workspace/store";
-import { meetingNote, meetingProjectOf } from "./calendar";
+import { recordingFilesIn } from "../../domain/calendar/wrapup";
+import { loadDayNotes, meetingNote, meetingProjectOf } from "./calendar";
 import { useRecordingStore } from "./recording";
 import { useCalendarStore } from "./store";
 
@@ -72,6 +73,29 @@ export async function loadMeetingNote(meeting: Meeting, again = false) {
 }
 /** Back to Today (Esc, and the view's back button). */
 export const backToToday = () => select(WAIT);
+
+/** Deletes the meeting (one recorded by mistake): its note, the audio and transcripts the note links, into the
+ *  workspace's .trash/; then back to Today. The calendar's event stays where it is. */
+export async function deleteMeeting(meeting: Meeting) {
+  const note = await meetingNote(meeting).catch(() => null);
+  if (note) {
+    // a recording already gone (removed by hand) does not keep the note
+    for (const path of recordingFilesIn(note.text)) await backend.trashPath(path).catch(() => {});
+    try {
+      await backend.trashPath(note.path);
+    } catch (e) {
+      return toast(String(e));
+    }
+  }
+  set(draft => {
+    delete draft.opened[meeting.id];
+    delete draft.digests[meeting.id];
+    if (draft.note?.id === meeting.id) draft.note = null;
+  });
+  base.delete(meeting.id);
+  await backToToday();
+  void loadDayNotes();
+}
 
 /** The meeting's note, made in the vault's meeting-note shape when it has none. */
 export async function noteFor(meeting: Meeting) {

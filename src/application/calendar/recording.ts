@@ -4,6 +4,7 @@ import { voiceOf } from "../../domain/settings/voice";
 import {
   meetingImport,
   meetingKept,
+  meetingKeptDiscard,
   meetingRecordCancel,
   meetingRecordRetry,
   meetingRecordStart,
@@ -188,7 +189,12 @@ export async function loadKept() {
 // the meetings of the kept recordings (their meeting.json), so a retry starts the summary like a normal save
 let keptMeetings: Record<string, Meeting> = {};
 
-export const hideKept = () => set({ kept: [] });
+/** Throws a kept recording away for good (the bar's Discard): only hiding it would bring it back with the next
+ *  `loadKept`. */
+export async function discardKept(folder: string) {
+  await meetingKeptDiscard(folder).catch(e => toast(String(e)));
+  await loadKept();
+}
 
 /** When a kept recording started, from its folder's name (20261029-152600). */
 export const keptStart = (folder: string) => {

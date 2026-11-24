@@ -3591,6 +3591,37 @@ const VIEWS = {
     await click("Transcribe");
     await waitText("Keep the laptop open");
   },
+  // the bar's close button asks once before it throws the kept recording away; then the bar is gone for good
+  "recording-kept-discard": async () => {
+    await open(page, server.url, { fixture: "kept-recording" });
+    await waitText("was never transcribed");
+    await page.getByRole("button", { name: "Throw this recording away" }).click();
+    await waitText("Discard");
+  },
+  "recording-kept-discarded": async () => {
+    await open(page, server.url, { fixture: "kept-recording" });
+    await waitText("was never transcribed");
+    await page.getByRole("button", { name: "Throw this recording away" }).click();
+    await click("Discard");
+    await page.getByText("was never transcribed").waitFor({ state: "detached" });
+    await settle(page);
+  },
+  // the meeting view's "…": Delete meeting, for one recorded by mistake
+  "meeting-delete-menu": async () => {
+    await meetingBriefing("calendar", "Daily standup", true);
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await waitText("Delete meeting");
+  },
+  // Delete meeting: the note goes to the workspace's .trash/ and the view goes back to Today
+  "meeting-deleted": async () => {
+    await meetingBriefing("calendar", "Daily standup", true);
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await click("Delete meeting");
+    await waitText("Thursday 1 October");
+    const trashed = await page.evaluate(() => window.__harness.calls.filter(c => c.cmd === "trash_path").length);
+    if (!trashed) throw new Error("no trash_path call");
+    await settle(page);
+  },
   // dictation started in a conversation, then on to Reminders: the sidebar's row links back to it (#103)
   "recording-dictation": async () => {
     await open(page, server.url, { sel: keys.switchTo });

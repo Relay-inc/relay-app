@@ -283,6 +283,16 @@ pub fn meeting_kept(app: AppHandle, state: State<MeetingRec>) -> Result<Vec<Valu
     Ok(kept(&root, busy.as_deref()).into_iter().map(|f| json!({ "meeting": read_meta(&root.join(&f)), "folder": f })).collect())
 }
 
+/// Throws away a recording a failure kept, `folder` one of `meeting_kept`'s: the bar's Discard.
+#[tauri::command]
+pub fn meeting_kept_discard(app: AppHandle, state: State<MeetingRec>, folder: String) -> Result<(), String> {
+    let dir = recordings(&app)?.join(&folder);
+    // only a folder this app made (its name is a start time, no path), and not the one being recorded
+    if started(&dir).is_none() || !dir.join("me.wav").is_file() { return Err("no kept recording".into()); }
+    if state.session.lock().unwrap().as_ref().is_some_and(|s| s.dir == dir) { return Err("still recording".into()); }
+    std::fs::remove_dir_all(dir).map_err(|e| e.to_string())
+}
+
 const META: &str = "meeting.json";
 /// The meeting a recording is of, with its language, next to the audio.
 fn write_meta(dir: &Path, meeting: &Value, language: Option<&str>) -> Result<(), String> {
