@@ -1,15 +1,15 @@
 {
-  "version": "0.0.62",
-  "notes": "### Fixed\n\n- Closing \"A recording from … was never transcribed\" no longer brings it back on the next view: the close button asks once, then Discard throws the recording away for good. A meeting recorded by mistake can be removed with Delete meeting in the Meeting view's \"…\" menu: its note, transcript and audio go to the workspace's trash (#531).\n- Settings › Projects: picking a checkout by hand for a second repo no longer clears the one picked for the first; each repo keeps its own (#532).",
-  "pub_date": "2026-11-24T20:01:06.548Z",
+  "version": "0.0.63",
+  "notes": "### Fixed\n\n- Comments Relay posts on a Productive task (an agent's PR summary, or one you write) show their markdown as formatting: bold, code, lists and links instead of raw `**` and backticks (#534)",
+  "pub_date": "2026-11-24T21:09:34.248Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWm1jUXZ6Y2pPRXFEMEk1cmRpaHN0RHU4bHIwSi9jYVowOERqQTlEbFprSHpyVzNEUCthVmgrc3RNajZOTDhIanBKTm10aFM4Z01SamdEVThxMnZ2cUEwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NTUwMDM4CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC42MgovcXh5MWNzeVNvRnVpL0cxRWFkTjdtK0IvcHRMdVAwWXl3ZThQSjFRSklxbEk2MU0ycXNhalkyOEMyUjNoWFRxQ0hnMjAyZ3VOVnRUOTkwWmZ3elhBQT09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/788647631"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWml1RmZhbmJqQjB2aWljdEhSNDdIOExGRm5QUVd3SHVIcjdHQTFhcFNXL0gzcXZxQStHd21Bc3JHZ1lVM0c3by8rcWxJTWxXVWdJbjlTNGZvT2Zjcnc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NTU0MTExCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC42Mwpwd1drZ2ZXVVZVWGdEVVhPaWx0OEFDa1FOQ2ZYdnRFQUhPNXdXRFdORGVIMEU2MndRTy9BTFBSMVVQaXFpSGRuVEF3c2FwMm5BRm9DTDNBSS9zL29DQT09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/788865031"
     },
     "darwin-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnZMSnNBYUdVbC9BektjbGxYVXhseFY0amYzcWRhSG5rbHRKVkxmYlFBMDQ0bnJvRXkvOUd3eVorazBuNWNOMmZiclEvb3Q2UTNWaXVhdFlUV2pSaXdRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NTUwMzIwCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC42MgpYeVY0U2YzMTA0U1lhblArb0IyYTYrTkgrNWdUQm8wVUVBQTJRdUJuMTJvMFd3M2pyNHJISDdCNmJFN2psYnBnMm1Za3JRQk9XVFc2MWpDY0NKUkJBdz09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/788647633"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnN5VWJXV2hFSmY1bFpRRlZMWGZWTlVSQTY0UzZOV256eTB4L1NYajRJVG1WaU5jcTljUzM0aHlsN3N1T2g1S3A0SDRSYmtzclJuY01aMUJpaGh3WkEwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NTU0NDEyCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC42Mwpyb2hwaWRxMUtJbExyOHlkaTM5K2kwMWJZNHVkZm1YbWwvSnBZU0NaL05yRGFwaEwyOXh3dkdLemw0NDVxekt5V3lvbTBacXllNDhOaW51VFlNK01DUT09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/788865029"
     }
   }
 }
