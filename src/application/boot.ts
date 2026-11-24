@@ -21,7 +21,7 @@ import { saveChats, newChatHere } from "./conversations/chats";
 import { chatFromDictation } from "./conversations/dictation";
 import { listenToPill } from "./conversations/pill";
 import { terminalOf } from "./conversations/selectors";
-import { onAgentEvent } from "./conversations/events";
+import { onAgentEvent, sawModel } from "./conversations/events";
 import { ensureHistory, tailTerm, tailOutside } from "./conversations/history";
 import { pollPending, pollAgents, pollSubs, agentsStale, fetchAgents, setSessions } from "./conversations/polls";
 import { closeChat, reopenLast } from "./conversations/actions";
@@ -116,9 +116,11 @@ export async function boot() {
 }
 
 function listenToBackend() {
-  backend.onAgent((key, event, provider) =>
-    event.type === "resolved" ? sawDefaults(provider, event) : onAgentEvent(key, event, provider),
-  );
+  backend.onAgent((key, event, provider) => {
+    if (event.type !== "resolved") return onAgentEvent(key, event, provider);
+    sawDefaults(provider, event);
+    sawModel(key, event.model, provider);
+  });
   backend.onOpenChat(select);
   backend.onMailLink(mailLinkClicked);
   backend.onSettingsChanged(settingsChanged);

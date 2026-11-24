@@ -59,6 +59,13 @@ export function applyContext(context: ContextUse | undefined, event: AgentEvent)
   if (event.type === "compacted") return event.post_tokens == null ? undefined : { used: event.post_tokens, window };
   return event.type === "reset" ? undefined : context;
 }
+/** The window each model reported, after `event` of a conversation running on `model`: the same object unless the
+ *  event names a window the model had not. A turn names its window only in its result, so a conversation's meter
+ *  takes what its model reported before until then. */
+export const learnWindow = (windows: Record<string, number>, model: string | undefined, event: AgentEvent) =>
+  event.type === "context" && event.window && model && windows[model] !== event.window
+    ? { ...windows, [model]: event.window }
+    : windows;
 const compactedText = (e: EventOf<"compacted">, t: Translate) =>
   t(e.trigger === "auto" ? "compact.auto" : "compact.done") +
   (e.pre_tokens != null && e.post_tokens != null ? ` · ${ktokens(e.pre_tokens)} → ${ktokens(e.post_tokens)}` : "");

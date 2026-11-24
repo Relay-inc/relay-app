@@ -1,6 +1,7 @@
 import { t } from "../../shared/i18n";
 import type { AgentEvent } from "../../domain/agents/types";
-import { applyAgentEvent, type Effect } from "../../domain/conversations/events";
+import { storage } from "../../infrastructure/storage";
+import { applyAgentEvent, learnWindow, type Effect } from "../../domain/conversations/events";
 import { WAIT } from "../../domain/navigation/views";
 import * as backend from "../../infrastructure/backend";
 import { isActive, isFocused } from "../../infrastructure/window";
@@ -68,8 +69,19 @@ export function flush() {
   buffered = [];
   apply(events);
 }
+// the model each conversation's process runs on, and the window each model last reported (stored as `windows`)
+const models = new Map<string, string>();
+let windows = storage.get<Record<string, number>>("windows", {});
+/** A `resolved` event: the model a conversation runs on. Its meter takes the window that model reported before,
+ *  which this turn only names when it ends. */
+export function sawModel(key: string, model: string, provider: string) {
+  models.set(key, model);
+  if (windows[model]) onAgentEvent(key, { type: "context", window: windows[model] }, provider);
+}
 /** The backend's `agent` event for one conversation. */
 export function onAgentEvent(key: string, event: AgentEvent, provider = "claude") {
+  const learned = learnWindow(windows, models.get(key), event);
+  if (learned !== windows) storage.set("windows", (windows = learned));
   if ((event.type === "text" || event.type === "thinking") && event.delta) {
     buffered.push([key, event, provider]);
     frame ||= requestAnimationFrame(flush);

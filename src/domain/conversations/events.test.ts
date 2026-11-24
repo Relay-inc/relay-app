@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { produce, enableMapSet } from "immer";
-import { applyAgentEvent, contextOf, toItems, type EventEnv } from "./events.ts";
+import { applyAgentEvent, contextOf, learnWindow, toItems, type EventEnv } from "./events.ts";
 import { initialConversations, type ConversationsState } from "./state.ts";
 
 enableMapSet();
@@ -388,4 +388,14 @@ test("a message sent while a turn Claude started itself runs waits for its echo"
   const { next } = run(more, { type: "picked", text: "and now?" }, { type: "turn_end", ok: true });
   assert.equal(next.status["c:1"], "idle");
   assert.equal(next.messages["c:1"][1].text, "and now?");
+});
+
+test("a model's window is learned from the context event that names it", () => {
+  const windows = { "claude-haiku-5-5": 200_000 };
+  const learned = learnWindow(windows, "claude-opus-5-5", { type: "context", window: 1_000_000 });
+  assert.deepEqual(learned, { "claude-haiku-5-5": 200_000, "claude-opus-5-5": 1_000_000 });
+  // nothing new: the same object, so nothing is stored
+  assert.equal(learnWindow(learned, "claude-opus-5-5", { type: "context", window: 1_000_000 }), learned);
+  assert.equal(learnWindow(learned, "claude-opus-5-5", { type: "context", used: 9_000 }), learned);
+  assert.equal(learnWindow(learned, undefined, { type: "context", window: 200_000 }), learned);
 });
