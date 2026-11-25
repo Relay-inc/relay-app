@@ -6,7 +6,7 @@
 export type Pipeline = {
   /** off: Relay leaves the board alone, also ended runs and PRs in review (see paused) */
   on: boolean;
-  /** paused from the pipeline panel: no new tickets and nothing picked up again (review comments on a PR wait too,
+  /** paused from the pipeline's conversation: no new tickets and nothing picked up again (review comments on a PR wait too,
    *  they would start the worker), while ended runs still land on the board and merges and closes are still followed.
    *  Absent: not paused */
   paused?: boolean;

@@ -68,6 +68,7 @@ import { OrchestratorEmpty } from "../orchestrator/OrchestratorEmpty";
 import { OrchestratorBack } from "../orchestrator/OrchestratorBack";
 import { AgentsToggle } from "../agents/AgentsToggle";
 import { PipeReset } from "../pipeline/PipeReset";
+import { PipePause } from "../pipeline/PipePause";
 import { AgentPage } from "../agents/AgentPage";
 import { AgentBack } from "../agents/AgentBack";
 import { chatWidth, column } from "./layout";
@@ -192,7 +193,10 @@ export function ConversationsView({ className }: { className: string }) {
         ) : selected === MAIL ? (
           <MailReload />
         ) : bar.pipe ? (
-          <PipeReset project={bar.pipe} />
+          <>
+            <PipeReset project={bar.pipe} />
+            <PipePause project={bar.pipe} />
+          </>
         ) : hasSubagents ? (
           <AgentsToggle />
         ) : null
@@ -204,10 +208,8 @@ export function ConversationsView({ className }: { className: string }) {
       // a project without repos sends you to the settings to link one
       onOpenPrs={() => (bar.tools?.repos ? openTool(bar.tools.project, PRS) : openSettings())}
       onToggleDrawer={toggleDrawer}
-      // the pipeline's conversation, where the user follows it, and from inside it its panel next to it
-      onOpenPipeline={() =>
-        bar.tools && (bar.tools.pipeOpen ? toggleDrawer("pipeline") : select(pipeKey(bar.tools.project)))
-      }
+      // the pipeline's conversation, where the user follows it
+      onOpenPipeline={() => bar.tools && select(pipeKey(bar.tools.project))}
       onShowInGraph={bar.renamable && !bar.session ? () => showInGraph(selected) : undefined}
     />
   );

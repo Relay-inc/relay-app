@@ -196,8 +196,8 @@ export function buildTicket(ref: BoardRef, card: Pick<Card, "id" | "title" | "nu
   }).catch(e => toast(t("pl.error", { project: "", error: String((e as Error)?.message ?? e) })));
 }
 
-/** What the pipeline panel shows for a project: its pipeline (undefined without one) and whether it runs, its own and
- *  the global pause, its workers running against its maximum, why it holds, and its tickets. */
+/** A project's pipeline as its conversation's facts and tools read it: whether it has one and runs, its own and the
+ *  global pause, its workers running against its maximum, why it holds, and its tickets. */
 export function pipelinePanel(project: string) {
   const s = settings();
   const p = s.pipelines?.[project];
@@ -245,18 +245,18 @@ export const postedWords = (kind: AnswerKind, text: string) => text.trim() || (N
 // the comment already on a ticket, by card id, when what came after it failed: sending the same again skips the post
 const posted: Record<string, string> = {};
 
-/** An answer from the pipeline panel: the person's words as a comment on the ticket (the board stays the record),
- *  then the ticket going again: its worker picks it up now when it may start and there is room, else the ticket
+/** An answer from the pipeline's conversation: the person's words as a comment on the ticket (the board stays the
+ *  record), then the ticket going again: its worker picks it up now when it may start and there is room, else the ticket
  *  waits in the pick column (a hand-picked pipeline has none: it stays, Build with agent continues it). A ticket sent
  *  back before it started (`card`) goes to the pick column for the pre-flight again. Resolves true when the comment
- *  is on the ticket. On a failure it says why and resolves false, so the panel keeps what was typed. `say`: where
- *  what happened is said, a toast for the panel, the tool's answer for the pipeline's conversation. */
+ *  is on the ticket. On a failure it says why and resolves false. `say`: where what happened is said, the tool's
+ *  answer to the conversation. */
 export function answerTicket(
   project: string,
   to: { worker: Worker } | { card: BouncedTicket },
   kind: AnswerKind,
   text: string,
-  say: (text: string) => void = toast,
+  say: (text: string) => void,
 ): Promise<boolean> {
   return serial(async () => {
     const p = settings().pipelines?.[project];
@@ -327,7 +327,7 @@ export function answerTicket(
   });
 }
 
-/** Pause a project's pipeline from its panel, or go on. `stop`: its running workers stop too (their tickets land with
+/** Pause a project's pipeline from its conversation, or go on. `stop`: its running workers stop too (their tickets land with
  *  a person), else they finish their step. Going on starts a pass at once. Resolves with why it failed, else "". */
 export async function pausePipeline(project: string, paused: boolean, stop = false) {
   const s = settings();
