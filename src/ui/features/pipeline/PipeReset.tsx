@@ -14,13 +14,11 @@ export function PipeReset({ project }: { project: string }) {
         <Icon name="refresh" className="glyph size-4" />
       </button>
     );
+  // the bar is narrow: the two buttons only, what Start over does is in their tooltip
   return (
-    <span className="flex items-center gap-2 text-[13px] text-secondary">
-      <span className="max-w-64 truncate" title={t("po.resetHelp")}>
-        {t("po.resetHelp")}
-      </span>
+    <span className="flex flex-none items-center gap-1.5 text-[13px]" title={t("po.resetHelp")}>
       <button
-        className="h-7 px-2.5 rounded-lg border-0 bg-accent text-on-accent font-medium cursor-default"
+        className="h-7 px-2.5 rounded-lg border-0 bg-accent text-on-accent font-medium whitespace-nowrap cursor-default"
         onClick={() => {
           setAsking(false);
           void resetPipeline(project);
@@ -29,7 +27,7 @@ export function PipeReset({ project }: { project: string }) {
         {t("po.resetYes")}
       </button>
       <button
-        className="h-7 px-2.5 rounded-lg border-0 bg-transparent text-secondary hover:bg-fill-2 cursor-default"
+        className="h-7 px-2.5 rounded-lg border-0 bg-transparent text-secondary whitespace-nowrap hover:bg-fill-2 cursor-default"
         onClick={() => setAsking(false)}
       >
         {t("pp.cancel")}

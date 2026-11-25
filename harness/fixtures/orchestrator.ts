@@ -300,6 +300,7 @@ const nopr = {
   board: `done:${NOW - 95 * MIN}`,
 };
 export const pipelineWorkers = [building, asking, ticketed, planning, failing, nopr];
+export const pipeOrchWorkers = [building, asking, failing, nopr];
 // a ticket the pre-flight sent back before any agent started (#305 in the input column), as the panel keeps it
 export const pipelineBounced = {
   "Northwind Portal": [
@@ -315,6 +316,57 @@ export const pipelineBounced = {
     },
   ],
 };
+
+// ?fixture=pipeline-orch: the pipeline's own conversation (orch.rs pipe_key) as it reads after a pass: Relay's facts
+// (one ticket waiting with a question and options, one stuck, one a person took to review), the user's answer, the
+// coordinator's reply. The ticket rows' workers are pipelineWorkers above
+export const PIPE = "c:orch:Northwind Portal";
+const t = (n: string) => `https://app.productive.io/40001/tasks/${n}`;
+const DIGEST = `[Relay] Pipeline Northwind Portal: 1 waiting on you, 1 stuck, 1 done by Relay, 1 running.
+
+Waiting on you:
+- #414, in Input: the agent asks. [ticket](${t("900100")}) · [agent](relay://worker?key=${asking.key})
+<ticket>
+Import the orchard map
+Column on the board: Input
+Question: ${asking.report.questions}
+Options: ${asking.report.options.join(" | ")}
+</ticket>
+
+Stuck:
+- #417, in Input: the run failed. [ticket](${t("900108")}) · [agent](relay://worker?key=${failing.key})
+<ticket>
+Water the seedlings
+Column on the board: Input
+The agent's summary: ${failing.report.summary}
+</ticket>
+
+Done by Relay:
+- #418: a person moved it to Review, Relay follows its PR now
+
+Running:
+- #415, in Busy: its agent builds (step 2 of 5). [ticket](${t("900102")}) · [agent](relay://worker?key=${building.key})
+<ticket>
+Plant the apple trees
+Column on the board: Busy
+The agent's step: Rows in the north field
+</ticket>`;
+export const PIPE_MARKER = "Next step is yours";
+export function pipeHistory(key: string): Ev[] | null {
+  if (key !== PIPE) return null;
+  return [
+    time(NOW - 24 * MIN),
+    user(DIGEST),
+    ai(
+      `**Waiting on you**\n- [#414 Import the orchard map](${t("900100")}): the map has two layers for the north field. Import the newest one, or merge both? ([agent](relay://worker?key=${asking.key}))\n\n**Stuck**\n- [#417 Water the seedlings](${t("900108")}): the irrigation tests fail on a missing fixture file. ([agent](relay://worker?key=${failing.key}))\n\n**Relay did**\n- #418 Label the crates: someone moved it to Review, Relay follows its PR now.\n\n**Running**\n- [#415 Plant the apple trees](${t("900102")}), step 2 of 5.`,
+    ),
+    time(NOW - 6 * MIN),
+    user("414: merge both layers, the newest wins where they overlap"),
+    ai(
+      `Done on #414 Import the orchard map: posted on the ticket as a comment: "merge both layers, the newest wins where they overlap". Its agent picks the ticket up again. ${PIPE_MARKER} on #417: try it again, or take it over?`,
+    ),
+  ];
+}
 
 const REPORT = `[Relay] Report from worker ${done.key} (Beacon Billing, "Patch the balance sync"): done
 
