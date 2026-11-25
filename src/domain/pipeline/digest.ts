@@ -209,7 +209,7 @@ function rowText(r: DigestRow) {
 /** The facts for the pipeline's conversation: a first line that says it all folded, then what waits on the user, what
  *  is stuck, what Relay did by itself this pass (`did`, Relay's own lines, made with plain and safeRef) and what runs.
  *  A part without lines is left out. Relay's lines hold only what Relay decides (numbers, fixed words, counts, its
- *  own verbs, the project through plain); every other outside text is in the ticket's untrusted block. */
+ *  own verbs, the project through plain). Every other outside text is in the ticket's untrusted block. */
 export function digestText(project: string, rows: DigestRow[], did: string[], d: Pick<DigestIn, "holding" | "paused">) {
   const of = (g: DigestRow["group"]) => rows.filter(r => r.group === g);
   const counts = [

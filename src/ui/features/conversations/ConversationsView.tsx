@@ -204,7 +204,7 @@ export function ConversationsView({ className }: { className: string }) {
       // a project without repos sends you to the settings to link one
       onOpenPrs={() => (bar.tools?.repos ? openTool(bar.tools.project, PRS) : openSettings())}
       onToggleDrawer={toggleDrawer}
-      // the pipeline's conversation, where the user follows it; from inside it, its panel next to it
+      // the pipeline's conversation, where the user follows it, and from inside it its panel next to it
       onOpenPipeline={() =>
         bar.tools && (bar.tools.pipeOpen ? toggleDrawer("pipeline") : select(pipeKey(bar.tools.project)))
       }

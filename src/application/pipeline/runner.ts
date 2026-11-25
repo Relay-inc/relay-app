@@ -89,7 +89,7 @@ function hold(project: string, why: "" | "pl.usedUp" | "pl.stalled") {
     });
 }
 
-// Relay's own steps in the current pass, per project, for its digest; and the self-steps already taken, once per worker
+// Relay's own steps in the current pass, per project, for its digest, and the self-steps already taken, once per worker
 // ponytail: in memory, a restart may retry a push or ask for a report once more
 const did: Record<string, string[]> = {};
 const tried = new Set<string>();
