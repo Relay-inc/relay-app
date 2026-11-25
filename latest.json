@@ -1,15 +1,15 @@
 {
-  "version": "0.0.64",
-  "notes": "### Fixed\n\n- The context meter of a new conversation shows the model's real window from the start, not 200k until its first turn ends (a long first turn, like a plan and its build, showed 200k throughout): Relay remembers the window each model reported (#536)",
-  "pub_date": "2026-11-24T22:12:07.244Z",
+  "version": "0.0.65",
+  "notes": "### Added\n\n- Each board pipeline has its own conversation, on top of its project in the sidebar with a count of what waits on you. After every pass in which something changed it tells you which tickets wait on you (the agent's question and its options), which are stuck and why, what Relay did by itself and what runs, each with a link to the ticket and to its agent's conversation. Answer there and it acts on the ticket you name, through the same steps as the panel: answer, approve or change a plan, try again, take over, pause, or make a new ticket. It never acts on what a ticket says, only in a turn you started, taking over, stopping agents and new tickets ask you on a card first, and it cannot merge. The title bar's pipeline button opens this conversation, and from inside it the panel. Start over gives a fresh conversation with the pipeline as it is now (#539)\n- A push or PR that failed on something passing is tried once more, and an agent of the pipeline that ended its turn without a report is asked for one, before its ticket goes to a person (#539)\n\n### Changed\n\n- The conversations of a pipeline's agents are no longer rows in the sidebar: open one from a link in the pipeline's conversation, the workers view or search (#539)\n\n### Fixed\n\n- The pipeline panel shows each ticket where it is on the board, not where its agent last left it: a ticket a person moved on (reviewed, pushed, merged) says so with its column and offers no answer, which would have started the agent on finished work. A ticket a person took to the review column gets its PR followed (found on the agent's branch), and one moved to merged or done leaves the panel (#538)",
+  "pub_date": "2026-11-25T11:01:56.082Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnNPNWROVTR6aDVmUWhkdjhUZHVXNlZBMklNWmJKSG9wc3lEekMwWjd5SytQcDBuS0h5cUNBK2V6alVHcnhaT2RKSnRTbVdiL2hwV3d1MWw5YmNZdEFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NTU3OTA0CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC42NApDMUlPVXVodTZJL1NsRXFFNWVnenY5WlVTTGNXVm5EbXFPdUx3bm5XbW1URDBtUithbHg4RU11bFc5eU9aMUIyem5MYWhqSWViQzRRaWsxYlJqbG1EZz09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/789054626"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWmkvRXRMaUV2UGNmOW55VFFEUytxbnE1RExNMDd3dlQ2M2pad3ZiekQxOU1vMVN0R3ZNOFRXcytEVm5IZEgrbXF4b2xpNTM3M2hrcS9VcFNzRng0b0EwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NjA0MTA4CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC42NQo3OFFCa1Z2Wk5TRy9EdGJTaE9RNEpZUnE1aURCbG9sZ0daOTg2ZkU4R1h0UVc5N0ZRaEswMFU1L1pxbjVPZWlGSUxzc3VpZzFBTVNiZ2V6Wjk1WldCUT09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/791189822"
     },
     "darwin-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWmdvSjhuNXYzNlRRbVovNjdNeHVHYlhKZHBTci9ycFFNcTdXMUVZd0ROK3JWWkI5RExYdmRVb3UwVmwxenEvcDRFY2U3S0wxZlhUK3YyWWVIK3Z1SGdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NTU4MTkxCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC42NAoxZTRmaDMwNENGZEJYM29mNFVNdFFCYjhaNXpQY2FSWGF4ZmVLK0xlbUlNbEJzU0Q4WXRwMXlrU2tGbm1PZVV4SU4zaFVtZ2dOOVZsdnlzOUErdndEQT09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/789054627"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnNjdmJVeTdwcVJEUUUzR05hcVRrZzEyZmQvWWlmaXlUaGExbE9MRUFFdWhmS0R0a09iVFdkTzRtTTVkMDVRTGZwdTZYejAra0E3MGR2bm1KbndjVmdvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NjA0Mzc4CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC42NQprRzRUWlVGRUx2eDdxQ0tKN2NqbmNKbVZZd2xyenBTcnVHRWFFN1NUdndIeWJZWTdvZkFzck1XTmdFMUQvQWdoYjZrdFFsQnRDSjlmeXFCOHc5UVVCQT09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/791189817"
     }
   }
 }
