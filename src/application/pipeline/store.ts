@@ -21,6 +21,10 @@ type PipelineState = {
   holding: Record<string, "" | "pl.usedUp" | "pl.stalled">;
   waiting: Record<string, { at: number; tickets: WaitingTicket[] }>;
   bounced: Record<string, BouncedTicket[]>;
+  /** where each ticket with a pipeline worker is on the board, as the runner last read it, kept up to date with the
+   *  runner's own moves: card id to column id ("" when the ticket was not on the board), the board's column names,
+   *  and when it was read. The panel shows a ticket by this, not by what its worker last reported */
+  columns: Record<string, { at: number; of: Record<string, string>; names: Record<string, string> }>;
   /** a ticket answered from the panel and moved to the pick column for its worker, by card id: when (the row says it
    *  waits there until the worker runs again) */
   answered: Record<string, number>;
@@ -29,6 +33,7 @@ type PipelineState = {
 export const usePipelineStore = makeStore<PipelineState>(() => ({
   holding: {},
   waiting: {},
+  columns: {},
   answered: {},
   bounced: storage.get<Record<string, BouncedTicket[]>>("pipelineBounced", {}),
 }));

@@ -526,6 +526,10 @@ const en = {
   "pp.tickets": "Tickets",
   "pp.empty": "No tickets in the pipeline right now.",
   "pp.noPr": "No PR",
+  "pp.moved": "Moved by a person to {column}",
+  "pp.gone": "No longer on the board",
+  "pp.movedOn":
+    "Someone moved this ticket out of {column} on the board, so nothing was sent: the agent would start on work that is done.",
   "pp.openTicket": "Open ticket",
   "pp.openPr": "Open PR",
   "pp.takeOver": "Take over",

@@ -1,4 +1,4 @@
-import type { BoardRef, Card, CardView } from "../board/types";
+import type { BoardRef, Card, CardView, Column } from "../board/types";
 import type { Worker } from "../orchestrator/types";
 import type { Limits } from "../agents/types";
 import type { ProvLimits } from "../usage/types";
@@ -196,6 +196,30 @@ export function panelTickets(workers: Worker[], project: string) {
  *  until it lands. */
 export const columnOf = (w: Worker): "busy" | "review" | "input" =>
   w.state === "running" || step(w) ? "busy" : inReview(w) ? "review" : "input";
+
+/** Where a worker's ticket shows in the pipeline panel: the column the pipeline put it in (columnOf), and whether a
+ *  person moved it since, by the board as the runner last read it (`column`: its id there, "" when the ticket was not
+ *  on the board). Undefined while the board was not read yet: then only the worker tells. */
+export function placeOf(w: Worker, p: Pick<Pipeline, "busy" | "review" | "input">, column?: string) {
+  const col = columnOf(w);
+  return { col, moved: column != null && column !== p[col] };
+}
+
+/** The panel's answer box, options, Approve and Try again: only for a ticket in the input column where the pipeline
+ *  put it. Answering one a person moved on would start an agent on a ticket that is already done. */
+export const answerable = (place: ReturnType<typeof placeOf>) => place.col === "input" && !place.moved;
+
+/** What a person's move on the board means for a worker that is not running and whose end is on the board (`column`:
+ *  where its ticket is now). In the merged column, or a done column the pipeline does not use: "merged", it leaves
+ *  the panel and is not picked up again. In the review column without Relay following a PR there (blocked, failed,
+ *  done without a PR or with one missing): "adopt", the PR the person pushed or opened on its branch is followed from
+ *  now on. Null otherwise. */
+export function boardMove(w: Worker, p: Pipeline, column: Column | undefined): "merged" | "adopt" | null {
+  if (!column || w.state === "running" || step(w) || w.board === "merged" || w.board === "closed") return null;
+  const own = [p.pick, p.busy, p.review, p.input].includes(column.id);
+  if ((p.merged && column.id === p.merged) || (column.state === "done" && !own)) return "merged";
+  return column.id === p.review && !inReview(w) ? "adopt" : null;
+}
 
 const bot = (login: string | undefined) => !login || login.endsWith("[bot]") || login.toLowerCase().includes("copilot");
 const after = (iso: string, since: number) => Date.parse(iso) > since;

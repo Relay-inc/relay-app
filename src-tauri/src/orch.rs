@@ -774,6 +774,37 @@ pub fn pr_status(app: &AppHandle, key: &str) -> Result<Value, String> {
     }
     Ok(Value::Array(out))
 }
+/// A ticket a person took to review themselves (pushed the agent's branch, opened the PR): the PR on the worker's
+/// branch in each of its repos, found with gh, becomes its PR as if Relay had opened it, and the worker a done whose
+/// end is on the board (`done:<ended>`, the mark `land` sets), so the review loop follows it as any other: merged,
+/// closed, comments back to the worker. Its end becomes now: what was said on a PR before Relay followed it, the
+/// person who took it on has seen. None when no repo has a PR on the branch, or the worker runs again.
+pub fn adopt(app: &AppHandle, key: &str) -> Result<Option<Worker>, String> {
+    let w = load(app).into_iter().find(|w| w.key == key).ok_or_else(|| format!("no worker {key}"))?;
+    let branch = w.branch.clone().ok_or("no branch")?;
+    let st = app.state::<App>();
+    let mut all = trees(&w);
+    for t in all.iter_mut() {
+        let Some(slug) = super::gh_repo(&t.repo) else { continue };
+        let out = super::gh(&st, &["pr", "list", "-R", &slug, "--head", &branch, "--state", "all", "--json", "url,state"])?;
+        if let Some(pr) = pr_on_branch(&out) { t.pr = Some(pr); t.pr_error = None; }
+    }
+    let Some(pr) = all.iter().find_map(|t| t.pr.clone()) else { return Ok(None) };
+    let at = now();
+    Ok(update(app, key, |x| {
+        if x.state == "running" { return; }
+        x.state = "done".into(); x.ended = Some(at); x.board = Some(format!("done:{at}"));
+        x.pr = Some(pr); x.pr_error = None;
+        if !x.trees.is_empty() { x.trees = all; }
+    }).filter(|x| x.state == "done"))
+}
+/// The PR of `gh pr list --json url,state` to follow: an open one, else a merged one, else the newest (gh lists newest
+/// first). A closed PR next to a newer open one on the same branch is history.
+fn pr_on_branch(json: &str) -> Option<String> {
+    let list: Vec<Value> = serde_json::from_str(json).ok()?;
+    let url = |v: &Value| v["url"].as_str().map(String::from);
+    ["OPEN", "MERGED"].iter().find_map(|s| list.iter().find(|v| v["state"] == *s).and_then(url)).or_else(|| list.first().and_then(url))
+}
 /// What the pipeline did on the board for a worker, kept so it does each step once.
 pub fn set_board(app: &AppHandle, key: &str, mark: String) -> Option<Worker> { update(app, key, |w| w.board = Some(mark)) }
 
@@ -1225,6 +1256,17 @@ fn radix36(mut n: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_pr_followed_on_a_branch_is_open_then_merged_then_newest() {
+        let u = |n: u32, s: &str| format!(r#"{{"url":"https://github.com/acme/web/pull/{n}","state":"{s}"}}"#);
+        let pr = |n: u32| Some(format!("https://github.com/acme/web/pull/{n}"));
+        assert_eq!(pr_on_branch(&format!("[{},{}]", u(3, "CLOSED"), u(2, "OPEN"))), pr(2));
+        assert_eq!(pr_on_branch(&format!("[{},{}]", u(3, "CLOSED"), u(2, "MERGED"))), pr(2));
+        assert_eq!(pr_on_branch(&format!("[{},{}]", u(3, "CLOSED"), u(2, "CLOSED"))), pr(3));
+        assert_eq!(pr_on_branch("[]"), None);
+        assert_eq!(pr_on_branch("not json"), None);
+    }
 
     #[test]
     fn a_huge_diff_does_not_cut_the_claims() {

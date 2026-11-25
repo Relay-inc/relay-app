@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Fixed
+
+- The pipeline panel shows each ticket where it is on the board, not where its agent last left it: a ticket a person moved on (reviewed, pushed, merged) says so with its column and offers no answer, which would have started the agent on finished work. A ticket a person took to the review column gets its PR followed (found on the agent's branch), and one moved to merged or done leaves the panel
+
 ## [0.0.64] - 2026-11-24
 
 ### Fixed

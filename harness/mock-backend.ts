@@ -1282,6 +1282,20 @@ function handle(cmd: string, a: Args): unknown {
       if (worker) setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
       return worker ? structuredClone(worker) : null;
     }
+    // a ticket a person took to review (orch.rs adopt): "Label the crates" has the PR the person opened on its branch
+    case "orch_adopt": {
+      const worker = workers.find(w => w.key === a.key && w.key === "c:orch-w-p5");
+      if (!worker) return null;
+      Object.assign(worker, {
+        state: "done",
+        ended: Date.now(),
+        board: `done:${Date.now()}`,
+        pr: "https://github.com/acme/northwind/pull/92",
+        pr_error: null,
+      });
+      setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
+      return structuredClone(worker);
+    }
     case "history_sid": {
       const items = conv.terminalHistory(a.sid);
       return (a.from ?? 0) === 0 ? { items, next: items.length ? 4096 : 0 } : { items: [], next: a.from };

@@ -477,6 +477,9 @@ export const orchPr = (key: string) => invoke<PrStatus[]>("orch_pr", { key });
 export const pipelineRepos = (project: string, extra: string[]) =>
   invoke<PipelineRepo[]>("pipeline_repos", { project, extra });
 export const orchBoard = (key: string, mark: string) => invoke<Worker | null>("orch_board", { key, mark });
+/** A ticket a person took to review: the PRs on the worker's branch become its own and its done is on the board, so
+ *  the review loop follows them. Null when no repo has a PR on that branch. */
+export const orchAdopt = (key: string) => invoke<Worker | null>("orch_adopt", { key });
 
 // ---------- work machines (relay-server in the LAN)
 /** The machine each conversation runs on, by conversation key. */

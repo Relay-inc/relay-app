@@ -5,7 +5,7 @@ import en from "../../shared/locales/en.ts";
 import nl from "../../shared/locales/nl.ts";
 import de from "../../shared/locales/de.ts";
 import fr from "../../shared/locales/fr.ts";
-import type { Card, CardView } from "../board/types.ts";
+import type { Card, CardView, Column } from "../board/types.ts";
 import type { Worker } from "../orchestrator/types.ts";
 import {
   askedIn,
@@ -34,6 +34,9 @@ import {
   runnable,
   afterAnswer,
   answerWhy,
+  answerable,
+  boardMove,
+  placeOf,
   stateSince,
   isPlan,
   startsNow,
@@ -236,6 +239,42 @@ test("panel: each ticket's last worker, newest first, finished ones left out, wh
   );
   assert.deepEqual(rows.map(columnOf), ["input", "review", "busy"]);
   assert.equal(columnOf(worker("f", "done", { pr: "p" })), "busy", "ended but not landed yet");
+});
+
+test("the board over the worker: a ticket a person moved on shows where it is, without actions", () => {
+  const P2 = { ...P, merged: "shipped" };
+  const column = (id: string, state?: Column["state"]): Column => ({ id, name: id, placement: 0, state });
+  const blocked = worker("a", "blocked", { board: "blocked:100", report: { questions: "Which?" } as Worker["report"] });
+  const prError = worker("b", "done", { pr: "https://x/pull/1", pr_error: "web: push failed", board: "done:100" });
+  const failed = worker("c", "failed", { board: "failed:100" });
+  const reviewing = worker("d", "done", { pr: "https://x/pull/2", board: "done:100" });
+
+  // blocked, then reviewed and pushed by a person: in review, no answer box, its PR is looked up
+  assert.deepEqual(placeOf(blocked, P2, "rev"), { col: "input", moved: true });
+  assert.equal(answerable(placeOf(blocked, P2, "rev")), false);
+  assert.equal(boardMove(blocked, P2, column("rev")), "adopt");
+  // done with one repo's PR missing, the person opened it: the same
+  assert.equal(answerable(placeOf(prError, P2, "rev")), false);
+  assert.equal(boardMove(prError, P2, column("rev")), "adopt");
+  // failed, then finished and merged by a person, or put in a done column the pipeline does not use: through
+  assert.equal(placeOf(failed, P2, "shipped").moved, true);
+  assert.equal(boardMove(failed, P2, column("shipped")), "merged");
+  assert.equal(boardMove(failed, P2, column("closed", "done")), "merged");
+  // still in the input column: unchanged, the answer box shows and nothing is adopted
+  assert.deepEqual(placeOf(blocked, P2, "help"), { col: "input", moved: false });
+  assert.equal(answerable(placeOf(blocked, P2, "help")), true);
+  assert.equal(boardMove(blocked, P2, column("help")), null);
+  // the board not read yet: by the worker, as before
+  assert.deepEqual(placeOf(blocked, P2, undefined), { col: "input", moved: false });
+  assert.equal(answerable(placeOf(blocked, P2)), true);
+  assert.equal(boardMove(blocked, P2, undefined), null);
+  // gone from the board: moved on, no actions
+  assert.equal(answerable(placeOf(blocked, P2, "")), false);
+  // Relay's own PR in review stays as it is, a running or not yet landed worker is left alone
+  assert.equal(placeOf(reviewing, P2, "rev").moved, false);
+  assert.equal(boardMove(reviewing, P2, column("rev")), null);
+  assert.equal(boardMove(worker("e", "running"), P2, column("shipped")), null);
+  assert.equal(boardMove(worker("f", "blocked"), P2, column("rev")), null, "its end is not on the board yet");
 });
 
 test("step: each end once, done with a PR to review, the rest to a person", () => {

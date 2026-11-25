@@ -6,6 +6,9 @@ import {
   afterAnswer,
   answerWhy,
   bare,
+  boardMove,
+  EMPTY_PIPELINE,
+  placeOf,
   briefOf,
   picturesOf,
   withPictures,
@@ -126,8 +129,9 @@ export function pipelinePanel(project: string) {
   const s = settings();
   const p = s.pipelines?.[project];
   const tickets = panelTickets(allWorkers(), project);
-  const { waiting: allWaiting, answered } = usePipelineStore.getState();
+  const { waiting: allWaiting, answered, columns } = usePipelineStore.getState();
   const waiting = allWaiting[project];
+  const board = columns[project];
   return {
     linked: !!p && !!s.boards?.[project],
     on: ready(p),
@@ -137,6 +141,14 @@ export function pipelinePanel(project: string) {
     parallel: Math.max(1, p?.parallel ?? 1),
     holding: usePipelineStore.getState().holding[project] ?? "",
     tickets,
+    // where each row's ticket is: the column the pipeline put it in, whether a person moved it since and the name of
+    // the column it is in on the board ("" while the board was not read yet, or when it is not on the board)
+    places: Object.fromEntries(
+      tickets.map(w => {
+        const column = board?.of[ticketOf(w)!.card];
+        return [w.key, { ...placeOf(w, p ?? EMPTY_PIPELINE, column), name: board?.names[column ?? ""] ?? "" }];
+      }),
+    ),
     // since when each row is in its state: a run started by an answer in this session since that answer
     since: Object.fromEntries(tickets.map(w => [w.key, stateSince(w, answered[ticketOf(w)!.card])])),
     // answered and moved to the pick column, until the worker runs again: the panel shows them waiting there
@@ -178,6 +190,15 @@ export function answerTicket(
     const id = worker ? ticketOf(worker)!.card : (to as { card: BouncedTicket }).card.id;
     const words = text.trim() || (NO_WORDS[kind] ? t(NO_WORDS[kind]) : "");
     if (!words) return false;
+    // read fresh, the panel's board can be minutes old: an answer on a ticket a person moved on (reviewed, merged)
+    // would start an agent on work that is done
+    const card = (await b.prov.cards(ctxOf(b.prov), b.ref)).find(c => c.id === id);
+    const now = card ? colOf(b.prov, { group: b.group }, card) : "";
+    placed(b, id, now);
+    if (now !== p.input) {
+      toast(t("pp.movedOn", { column: nameOf(b, p.input) }));
+      return false;
+    }
     if (posted[id] !== words) {
       await b.prov.detail.act(ctxOf(b.prov), b.ref, id, "comment", {
         value: words,
@@ -275,7 +296,7 @@ async function sendWorker(w: Worker, text: string, task: string | null = null) {
 
 const allWorkers = () => Object.values(useOrchestratorStore.getState().workers).sort((a, b) => a.at - b.at);
 
-type Board = { prov: BoardProvider; ref: BoardRef; group: string; columns: Column[]; p: Pipeline };
+type Board = { project: string; prov: BoardProvider; ref: BoardRef; group: string; columns: Column[]; p: Pipeline };
 
 /** A pipeline's board, its columns checked. */
 async function open(project: string, p: Pipeline): Promise<Board> {
@@ -288,7 +309,7 @@ async function open(project: string, p: Pipeline): Promise<Board> {
   const columns = await prov.columns(ctx, ref, group);
   for (const id of [p.pick, p.busy, p.review, p.input, p.merged].filter(Boolean))
     if (!columns.some(c => c.id === id)) throw new Error(t("pl.noColumn"));
-  return { prov, ref, group, columns, p };
+  return { project, prov, ref, group, columns, p };
 }
 
 async function runOne(project: string, p: Pipeline) {
@@ -300,6 +321,21 @@ async function runOne(project: string, p: Pipeline) {
   for (const w of workersOf(allWorkers(), project)) {
     const s = step(w);
     if (s) await land(b, w, s);
+  }
+  // the board once per pass, also for a hand-picked pipeline: where each worker's ticket really is, for the panel and
+  // for what a person did with it. The runner's own moves after this read are kept in the store too (move), so the
+  // pick column below reads a ticket it just moved where it put it
+  const cards = await prov.cards(ctx, ref);
+  const read = (card: Card) => colOf(prov, { group }, card);
+  keepColumns(b, cards, read);
+  const col = (card: Card) => usePipelineStore.getState().columns[project]?.of[card.id] ?? read(card);
+  // tickets a person took on from the agent: merged or done, the worker is through; in review, its PR is followed
+  for (const w of panelTickets(allWorkers(), project)) {
+    const column = b.columns.find(c => c.id === usePipelineStore.getState().columns[project]?.of[ticketOf(w)!.card]);
+    const what = boardMove(w, p, column);
+    if (what === "merged") adopt(await backend.orchBoard(w.key, "merged"));
+    // no PR on its branch yet: asked again next pass
+    else if (what === "adopt") adopt(await backend.orchAdopt(w.key).catch(() => null));
   }
   // PRs in review: merged, closed, or comments for the worker
   for (const w of workersOf(allWorkers(), project).filter(inReview)) {
@@ -329,9 +365,7 @@ async function runOne(project: string, p: Pipeline) {
   }
   // the pick column: tickets moved back go to their worker again, new ones get a worker while there is room
   if (manual(p)) return;
-  const cards = await prov.cards(ctx, ref);
   const mine = workersOf(allWorkers(), project);
-  const col = (card: Card) => colOf(prov, { group }, card);
   await keepWaiting(b, project, waitingIn(cards, col, p, mine));
   // a ticket sent back before it started is the panel's until it leaves the input column (answered, moved, closed)
   const kept = bouncedOf(project).filter(e => cards.some(c => c.id === e.id && col(c) === p.input));
@@ -511,12 +545,34 @@ async function keepWaiting(b: Board, project: string, cards: Card[]) {
   });
 }
 
+/** Where each ticket with a pipeline worker is on the board, for the panel: "" for one that is not on it. */
+function keepColumns(b: Board, cards: Card[], col: (c: Card) => string) {
+  const at = new Map(cards.map(c => [c.id, col(c)]));
+  const of = Object.fromEntries(
+    workersOf(allWorkers(), b.project).map(w => [ticketOf(w)!.card, at.get(ticketOf(w)!.card) ?? ""]),
+  );
+  const names = Object.fromEntries(b.columns.map(c => [c.id, c.name]));
+  usePipelineStore.setState(draft => {
+    draft.columns[b.project] = { at: Date.now(), of, names };
+  });
+}
+/** A ticket's column as Relay just found or put it, once the board was read for the panel. */
+function placed(b: Board, id: string, column: string) {
+  if (usePipelineStore.getState().columns[b.project])
+    usePipelineStore.setState(draft => {
+      draft.columns[b.project].of[id] = column;
+    });
+}
+
 /** The ticket's detail as the ticket window shows it, null for a provider without one. */
 const viewOf = async (b: Board, id: string) =>
   b.prov.detail ? b.prov.detail.view(await b.prov.detail.fetch(ctxOf(b.prov), b.ref, id)) : null;
 const nameOf = (b: Board, id: string) => b.columns.find(c => c.id === id)?.name ?? id;
 // the providers move and comment by the card's id alone
-const move = (b: Board, id: string, to: string) => b.prov.move(ctxOf(b.prov), b.ref, { id } as Card, to, b.group);
+async function move(b: Board, id: string, to: string) {
+  await b.prov.move(ctxOf(b.prov), b.ref, { id } as Card, to, b.group);
+  placed(b, id, to);
+}
 async function comment(b: Board, id: string, value: string) {
   if (value && b.prov.detail?.act)
     await b.prov.detail.act(ctxOf(b.prov), b.ref, id, "comment", { value, files: [], hidden: b.p.hidden !== false });

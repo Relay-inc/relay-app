@@ -153,10 +153,10 @@ const ticketed: Worker = {
     provider: "productive",
     project: "p1",
     board: "f1",
-    card: "t12",
+    card: "900103",
     number: "412",
     title: "Export invoices as CSV",
-    url: "https://app.productive.io/40001/tasks/t12",
+    url: "https://app.productive.io/40001/tasks/900103",
   },
   base_branch: "develop",
   pr: "https://github.com/acme/northwind/pull/88",
@@ -185,7 +185,8 @@ const ticketed: Worker = {
 export const workers: Worker[] = [running, done, silent, ticketed];
 
 // ?fixture=pipeline-panel: the board pipeline of Northwind Portal with three tickets: one building, one whose agent asks
-// a question (in the input column), and the one above with its PRs in review
+// a question (in the input column), and the one above with its PRs in review. Each card is a task of the Productive
+// board (fixtures/integrations.ts), in the column the panel reads it in
 const pipelineTicket = (card: string, number: string, title: string) => ({
   pipeline: "Northwind Portal",
   provider: "productive",
@@ -207,7 +208,7 @@ const building = {
   at: NOW - 12 * MIN,
   step: { done: 2, total: 5, note: "Rows in the north field" },
   decisions: [],
-  ticket: pipelineTicket("t15", "415", "Plant the apple trees"),
+  ticket: pipelineTicket("900102", "415", "Plant the apple trees"),
   base_branch: "develop",
   pr: null,
   pr_error: null,
@@ -231,11 +232,13 @@ const asking = {
     flags: [],
     options: ["The newest one", "Merge both"],
   },
-  ticket: pipelineTicket("t14", "414", "Import the orchard map"),
+  ticket: pipelineTicket("900100", "414", "Import the orchard map"),
   board: `blocked:${NOW - 25 * MIN}`,
 };
 // what the pipeline hands to a person, answered from the panel (PR pipeline-panel-answer): a plan for approval, a
-// failed run and a done without a PR, each landed in the input column
+// failed run and a done without a PR, each landed in the input column. A person took the last two on since: they are
+// in the Review column now, the done one with a PR the person opened on its branch (orch_adopt finds it), the failed
+// one without a PR yet
 const planning = {
   ...asking,
   key: "c:orch-w-p3",
@@ -253,7 +256,7 @@ const planning = {
     flags: [],
     options: [],
   },
-  ticket: pipelineTicket("t16", "416", "Prune the pear rows"),
+  ticket: pipelineTicket("900110", "416", "Prune the pear rows"),
   board: `blocked:${NOW - 20 * MIN}`,
 };
 const failing = {
@@ -272,7 +275,7 @@ const failing = {
     diff: null,
     flags: [],
   },
-  ticket: pipelineTicket("t17", "417", "Water the seedlings"),
+  ticket: pipelineTicket("900108", "417", "Water the seedlings"),
   board: `failed:${NOW - 60 * MIN}`,
 };
 const nopr = {
@@ -291,7 +294,7 @@ const nopr = {
     diff: null,
     flags: [],
   },
-  ticket: pipelineTicket("t18", "418", "Label the crates"),
+  ticket: pipelineTicket("900113", "418", "Label the crates"),
   pr: null,
   pr_error: "nothing to push",
   board: `done:${NOW - 95 * MIN}`,

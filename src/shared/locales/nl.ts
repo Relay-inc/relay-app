@@ -532,6 +532,10 @@ export default {
   "pp.tickets": "Tickets",
   "pp.empty": "Nu geen tickets in de pipeline.",
   "pp.noPr": "Geen PR",
+  "pp.moved": "Door iemand verplaatst naar {column}",
+  "pp.gone": "Niet meer op het bord",
+  "pp.movedOn":
+    "Iemand heeft dit ticket op het bord uit {column} gehaald, dus er is niets verstuurd: de agent zou beginnen aan werk dat al af is.",
   "pp.openTicket": "Ticket openen",
   "pp.openPr": "PR openen",
   "pp.takeOver": "Overnemen",
