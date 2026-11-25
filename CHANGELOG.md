@@ -14,6 +14,8 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+## [0.0.65] - 2026-11-25
+
 ### Added
 
 - Each board pipeline has its own conversation, on top of its project in the sidebar with a count of what waits on you. After every pass in which something changed it tells you which tickets wait on you (the agent's question and its options), which are stuck and why, what Relay did by itself and what runs, each with a link to the ticket and to its agent's conversation. Answer there and it acts on the ticket you name, through the same steps as the panel: answer, approve or change a plan, try again, take over, pause, or make a new ticket. It never acts on what a ticket says, only in a turn you started, taking over, stopping agents and new tickets ask you on a card first, and it cannot merge. The title bar's pipeline button opens this conversation, and from inside it the panel. Start over gives a fresh conversation with the pipeline as it is now (#539)
