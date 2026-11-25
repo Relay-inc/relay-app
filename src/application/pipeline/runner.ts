@@ -46,6 +46,7 @@ import { isPrimary } from "../../infrastructure/window";
 import { t } from "../../shared/i18n";
 import { provider as providerOf } from "../../shared/plugins";
 import { ctxOf } from "../board/ctx";
+import { ensurePipeChats } from "../conversations/chats";
 import { toast } from "../navigation/navigation";
 import { onOrchEvent, stopWorker } from "../orchestrator/orchestrator";
 import { useOrchestratorStore } from "../orchestrator/store";
@@ -89,7 +90,10 @@ export function runPipelines() {
   queued = true;
   return serial(async () => {
     queued = false;
-    for (const [project, p] of runnable(settings().pipelines, settings().pipelinesPaused)) {
+    const pipelines = runnable(settings().pipelines, settings().pipelinesPaused);
+    // each pipeline's conversation, where the user follows it, made once its pipeline runs
+    ensurePipeChats(pipelines.map(([project]) => project));
+    for (const [project, p] of pipelines) {
       try {
         await runOne(project, p);
         delete lastError[project];

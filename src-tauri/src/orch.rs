@@ -16,6 +16,9 @@ use super::{data_dir, need_vault, pipe_reply, spawn_or_get, App};
 
 pub const COORD: &str = "c:orch";
 const WORKER_PREFIX: &str = "c:orch-w-";
+/// A board pipeline's own coordinator, one per vault project with a pipeline: this and the project. The user follows
+/// that pipeline there, COORD stays for the workers the user starts through it.
+const PIPE_PREFIX: &str = "c:orch:";
 /// Every turn Relay itself writes starts with this, so the webview draws it as Relay's, not the user's.
 pub const PREFIX: &str = "[Relay] ";
 /// Workers running at once, unless settings.orch.max says otherwise.
@@ -195,7 +198,11 @@ pub struct Validate {
 }
 
 pub fn is_worker(key: &str) -> bool { key.starts_with(WORKER_PREFIX) }
-pub fn is_orch(key: &str) -> bool { key == COORD || is_worker(key) }
+pub fn pipe_key(project: &str) -> String { format!("{PIPE_PREFIX}{project}") }
+/// The vault project of a pipeline's coordinator, None for any other conversation.
+pub fn pipe_project(key: &str) -> Option<&str> { key.strip_prefix(PIPE_PREFIX).filter(|p| !p.is_empty()) }
+pub fn is_coord(key: &str) -> bool { key == COORD || pipe_project(key).is_some() }
+pub fn is_orch(key: &str) -> bool { is_coord(key) || is_worker(key) }
 fn now() -> i64 { chrono::Utc::now().timestamp_millis() }
 
 fn file(app: &AppHandle) -> PathBuf { data_dir(app).join("orch.json") }
@@ -222,23 +229,31 @@ const COORD_PROMPT: &str = prompt::text(include_str!("../../prompts/orchestrator
 
 const WORKER_PROMPT: &str = prompt::text(include_str!("../../prompts/orchestrator/worker.md"));
 
+const PIPE_PROMPT: &str = prompt::text(include_str!("../../prompts/orchestrator/pipeline.md"));
+
 /// The extra start flags of a coordinator or worker: role, its system prompt and its tools. Permissions are the
 /// user's own, as in any other conversation: no extra asks or denies.
 pub fn flags(grants: &mut agent_core::Grants, key: &str, vault: &str, shared: &Shared) {
     if !is_orch(key) { return; }
-    let coord = key == COORD;
-    grants.orch = Some(if coord { "coordinator" } else { "worker" }.into());
-    grants.system = Some(prompt::fill(if coord { COORD_PROMPT } else { WORKER_PROMPT }, &[("shared", &shared.listed(vault))]));
+    let role = role(key);
+    grants.orch = Some(role.into());
+    grants.system = Some(match pipe_project(key) {
+        Some(p) => prompt::fill(PIPE_PROMPT, &[("project", p), ("untrusted", &prompt::untrusted_note(&["ticket"]))]),
+        None => prompt::fill(if role == "coordinator" { COORD_PROMPT } else { WORKER_PROMPT }, &[("shared", &shared.listed(vault))]),
+    });
 }
+/// What an orchestrator conversation is, for its tools: "coordinator", "pipeline" (a pipeline's coordinator) or "worker".
+fn role(key: &str) -> &'static str { if key == COORD { "coordinator" } else if pipe_project(key).is_some() { "pipeline" } else { "worker" } }
 
 // ---------- the relay-orch MCP server
 
 fn tool(name: &str, desc: &str, props: Value, req: &[&str]) -> Value {
     json!({"name": name, "description": desc, "inputSchema": {"type": "object", "properties": props, "required": req}})
 }
-pub fn tool_list(coord: bool) -> Value {
+pub fn tool_list(role: &str) -> Value {
     let worker = json!({"type": "string", "description": "The worker's key, from dispatch or workers"});
-    if !coord {
+    if role == "pipeline" { return pipe_tools(); }
+    if role == "worker" {
         return json!({"tools": [tool("step", "Show your progress on the task in Relay's workers list. Right after reading the brief, call it with total (your plan in 3-8 steps) and done 0; call it again each time a step is finished. Silent and cheap: it only draws a bar.",
             json!({"done": {"type": "integer", "minimum": 0, "description": "Steps finished so far"},
                    "total": {"type": "integer", "minimum": 1, "description": "Steps planned; may change when the plan does"},
@@ -267,19 +282,24 @@ pub fn tool_list(coord: bool) -> Value {
         tool("stop", "Stop a running worker.", json!({"worker": worker}), &["worker"]),
     ]})
 }
+/// A pipeline coordinator's tools (phase 2 fills them in).
+fn pipe_tools() -> Value { json!({"tools": []}) }
+fn pipe_call(_app: &AppHandle, _key: &str, _project: &str, name: &str, _a: &Value) -> Value { fail(format!("unknown tool {name}")) }
+/// How a coordinator's conversation is named for its process.
+pub fn coord_name(key: &str) -> String { pipe_project(key).map_or_else(|| "Orchestrator".to_string(), |p| format!("Pipeline: {p}")) }
+
 fn text(t: impl Into<String>) -> Value { json!({"content": [{"type": "text", "text": t.into()}]}) }
 fn fail(t: impl Into<String>) -> Value { json!({"content": [{"type": "text", "text": t.into()}], "isError": true}) }
 
 /// A relay-orch message from conversation `key`: JSON-RPC answered inline, a tool call off the reader thread.
 pub fn control(app: &AppHandle, key: &str, pid: u32, rid: Value, m: &Value) {
-    let coord = key == COORD;
     let id = m.get("id").filter(|v| !v.is_null()).cloned();
     let result = |r: Value| json!({"jsonrpc": "2.0", "id": id, "result": r});
     let reply = match (id.is_some(), m["method"].as_str().unwrap_or("")) {
         (false, _) => json!({"jsonrpc": "2.0", "result": {}, "id": 0}),
         (_, "initialize") => result(json!({"protocolVersion": m["params"]["protocolVersion"], "capabilities": {"tools": {}}, "serverInfo": {"name": "relay-orch", "version": "1"}})),
         (_, "ping") => result(json!({})),
-        (_, "tools/list") => result(tool_list(coord)),
+        (_, "tools/list") => result(tool_list(role(key))),
         (_, "tools/call") => {
             let (app, key, name, args) = (app.clone(), key.to_string(), m["params"]["name"].as_str().unwrap_or("").to_string(), m["params"]["arguments"].clone());
             tauri::async_runtime::spawn(async move {
@@ -295,6 +315,7 @@ pub fn control(app: &AppHandle, key: &str, pid: u32, rid: Value, m: &Value) {
 }
 
 fn call(app: &AppHandle, key: &str, name: &str, a: &Value) -> Value {
+    if let Some(project) = pipe_project(key) { return pipe_call(app, key, project, name, a); }
     let s = |k: &str| a[k].as_str().map(str::trim).filter(|v| !v.is_empty()).map(String::from);
     match (key == COORD, name) {
         (true, "dispatch") => dispatch(app, s("title"), s("task"), s("project"), s("repo"), s("model")).unwrap_or_else(fail),
@@ -826,8 +847,10 @@ fn holder<'a>(all: &'a [Worker], me: Option<&str>, repo: Option<&str>, project: 
 /// Kept in orch-tainted.json too, so a coordinator whose process ended starts restricted again (see send).
 /// Not to be called while holding the procs lock.
 pub fn tainted(app: &AppHandle, key: &str) -> bool {
-    app.state::<App>().procs.lock().unwrap().get(key).is_some_and(|p| p.tainted) || marked(app).iter().any(|k| k == key)
+    born_tainted(key) || app.state::<App>().procs.lock().unwrap().get(key).is_some_and(|p| p.tainted) || marked(app).iter().any(|k| k == key)
 }
+/// A pipeline's coordinator reads ticket text in every digest: restricted always, also before its first one.
+fn born_tainted(key: &str) -> bool { pipe_project(key).is_some() }
 fn marked(app: &AppHandle) -> Vec<String> {
     crate::util::read_json(data_dir(app).join("orch-tainted.json"))
 }
@@ -1125,7 +1148,7 @@ pub fn turn_end(app: &AppHandle, key: &str, last: &str) {
 /// A turn of `key` refused for its limit goes on on another account (retry::switched): Relay asks it to continue,
 /// through the queue, on the model it ran with.
 pub fn resume(app: &AppHandle, key: &str, model: &str) {
-    let name = if key == COORD { "Orchestrator".to_string() } else {
+    let name = if is_coord(key) { coord_name(key) } else {
         load(app).into_iter().find(|w| w.key == key).map_or_else(|| key.to_string(), |w| format!("{}: {}", w.project.as_deref().unwrap_or("Algemeen"), w.title))
     };
     if let Err(e) = inject(app, key, &name, crate::retry::RESUME, model, false) { eprintln!("orch: {key}: {e}"); }
@@ -1285,6 +1308,12 @@ mod tests {
     #[test]
     fn keys_and_flags() {
         assert!(is_orch(COORD) && !is_worker(COORD) && is_worker("c:orch-w-abc") && !is_orch("c:abc"));
+        let pipe = pipe_key("Acme Web");
+        assert_eq!((pipe.as_str(), pipe_project(&pipe), pipe_project(COORD), pipe_project("c:orch-w-abc")), ("c:orch:Acme Web", Some("Acme Web"), None, None));
+        assert!(is_orch(&pipe) && is_coord(&pipe) && !is_worker(&pipe) && !is_coord("c:orch-w-abc") && pipe_project("c:orch:").is_none());
+        assert_eq!((role(COORD), role(&pipe), role("c:orch-w-1")), ("coordinator", "pipeline", "worker"));
+        assert_eq!((coord_name(COORD).as_str(), coord_name(&pipe).as_str()), ("Orchestrator", "Pipeline: Acme Web"));
+        assert!(born_tainted(&pipe) && !born_tainted(COORD) && !born_tainted("c:orch-w-1"), "a pipeline's coordinator reads ticket text, always");
         let sh = Shared { files: vec!["/v/Brain/work-state.md".into(), "/v/reminders.md".into()], dirs: vec!["/v/Brain/index".into()] };
         let mut o = agent_core::Grants::default();
         flags(&mut o, "c:abc", "/v", &sh);
@@ -1298,6 +1327,11 @@ mod tests {
         assert_eq!((o.orch.as_deref(), o.mail), (Some("worker"), true));
         assert!(o.deny.is_empty(), "a worker too");
         assert!(!o.system.unwrap().contains("{{"));
+        let mut o = agent_core::Grants::default();
+        flags(&mut o, &pipe_key("Acme Web"), "/v", &sh);
+        let system = o.system.unwrap();
+        assert_eq!(o.orch.as_deref(), Some("pipeline"));
+        assert!(system.contains("\"Acme Web\"") && system.contains("<ticket>") && !system.contains("work-state"), "its own prompt, not the coordinator's");
     }
 
     #[test]
@@ -1314,9 +1348,9 @@ mod tests {
 
     #[test]
     fn tools_per_role() {
-        let names = |c| tool_list(c)["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect::<Vec<_>>();
-        assert_eq!(names(true), ["dispatch", "workers", "message", "stop"]);
-        assert_eq!(names(false), ["step", "decision", "report"]);
+        let names = |r| tool_list(r)["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+        assert_eq!(names("coordinator"), ["dispatch", "workers", "message", "stop"]);
+        assert_eq!(names("worker"), ["step", "decision", "report"]);
         assert_eq!(agent_claude::ORCH_WORKER_TOOLS.map(|t| t.rsplit("__").next().unwrap()), ["step", "decision", "report"]);
         assert_eq!(agent_claude::ORCH_COORD_TOOLS.map(|t| t.rsplit("__").next().unwrap()), ["dispatch", "workers", "message", "stop"]);
     }
@@ -1617,7 +1651,7 @@ mod tests {
     #[test]
     fn prompts_render_without_placeholders() {
         let sh = Shared { files: vec!["/v/Brain/work-state.md".into()], dirs: vec![] };
-        for key in [COORD, "c:orch-w-1"] {
+        for key in [COORD, "c:orch-w-1", "c:orch:Acme Web"] {
             let mut o = agent_core::Grants::default();
             flags(&mut o, key, "/v", &sh);
             assert!(!o.system.unwrap().contains("{{"), "{key}");

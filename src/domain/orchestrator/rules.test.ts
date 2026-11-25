@@ -12,8 +12,12 @@ import {
   reportKey,
   workerName,
   ensureCoordinator,
+  ensurePipeChat,
   ensureWorkerChat,
+  isCoordKey,
   isOrchKey,
+  pipeKey,
+  pipeProject,
   isRelayTurn,
   lastTurnIs,
   relayText,
@@ -79,6 +83,29 @@ test("the coordinator is general, Claude's, never a draft and never closed", () 
   const empty: Record<string, Chat> = {};
   ensureCoordinator(empty);
   assert.equal(empty[ORCH].at, 0);
+});
+
+test("a pipeline's conversation: its own key per project, permanent, under its project", () => {
+  const key = pipeKey("Acme Web");
+  assert.equal(key, "c:orch:Acme Web");
+  assert.equal(pipeProject(key), "Acme Web");
+  assert.equal(pipeProject(ORCH), null);
+  assert.equal(pipeProject("c:orch-w-abc"), null);
+  assert.equal(pipeProject("c:orch:"), null);
+  assert.ok(isOrchKey(key) && isCoordKey(key) && isCoordKey(ORCH) && !isCoordKey("c:orch-w-abc"));
+  const chats: Record<string, Chat> = { [key]: { key, project: "Acme Web", title: "Pipeline", at: 5, closed: 9 } };
+  assert.equal(ensurePipeChat(chats, "Acme Web"), true, "a closed one comes back");
+  assert.deepEqual(chats[key], {
+    key,
+    project: "Acme Web",
+    title: "Pipeline",
+    at: 5,
+    draft: false,
+    provider: "claude",
+  });
+  assert.equal(ensurePipeChat(chats, "Acme Web"), false);
+  assert.equal(ensurePipeChat(chats, "Northwind"), true);
+  assert.equal(chats[pipeKey("Northwind")].at, 0);
 });
 
 test("board: newest first, running counted", () => {

@@ -14,7 +14,7 @@ import { outgoing, planSend, refusesImages, sendRequest } from "../../domain/con
 import { fileName } from "../../domain/conversations/files";
 import { WAIT } from "../../domain/navigation/views";
 import { isTerminal, termSid } from "../../domain/navigation/keys";
-import { ORCH } from "../../domain/orchestrator/rules";
+import { ORCH, isCoordKey } from "../../domain/orchestrator/rules";
 import type { Settings } from "../../domain/settings/types";
 import { repoWorkOf } from "../../domain/settings/machines";
 import * as backend from "../../infrastructure/backend";
@@ -314,7 +314,7 @@ export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = [], 
   const images = to ? toImgs : drafts().attached;
   const files = to ? toFiles : drafts().files;
   if (cs().chats[key]) startConversation(key, text, files);
-  if (cs().chats[key] && text && isFirst && key !== ORCH) generateTitle(key, cs().chats[key].title, text);
+  if (cs().chats[key] && text && isFirst && !isCoordKey(key)) generateTitle(key, cs().chats[key].title, text);
   if (!to)
     setDrafts(draft => {
       draft.attached = [];
@@ -586,7 +586,7 @@ const worktreeNote = (removed: number, kept: number) =>
   (removed ? ` · ${tn("toast.worktreesRemoved", removed)}` : "") +
   (kept ? ` · ${tn("toast.worktreesKept", kept)}` : "");
 export async function closeChat(key: string) {
-  if (cs().closing.has(key) || key === ORCH) return; // the coordinator is permanent
+  if (cs().closing.has(key) || isCoordKey(key)) return; // the coordinators are permanent
   const title = isTerminal(key) ? terminalOf(key)?.title : label(key);
   if (cs().retries[key]) backend.retryCancel(key);
   const worktrees = await hide(key);
