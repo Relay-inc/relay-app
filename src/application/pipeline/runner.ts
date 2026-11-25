@@ -6,6 +6,7 @@ import {
   afterAnswer,
   answerWhy,
   bare,
+  adoptDue,
   boardMove,
   EMPTY_PIPELINE,
   placeOf,
@@ -68,6 +69,9 @@ const serial = <T>(fn: () => Promise<T>): Promise<T> => {
 };
 let queued = false;
 const lastError: Record<string, string> = {};
+// when a ticket a person took to review was last looked up without finding its PR, by worker key. In memory: a
+// restart may ask once more
+const lookedUp: Record<string, number> = {};
 // why a pipeline takes no new tickets right now, so it is said once and not every five minutes, and the pipeline
 // panel shows it as long as it holds
 function hold(project: string, why: "" | "pl.usedUp" | "pl.stalled") {
@@ -334,8 +338,13 @@ async function runOne(project: string, p: Pipeline) {
     const column = b.columns.find(c => c.id === usePipelineStore.getState().columns[project]?.of[ticketOf(w)!.card]);
     const what = boardMove(w, p, column);
     if (what === "merged") adopt(await backend.orchBoard(w.key, "merged"));
-    // no PR on its branch yet: asked again next pass
-    else if (what === "adopt") adopt(await backend.orchAdopt(w.key).catch(() => null));
+    else if (what === "adopt" && adoptDue(lookedUp[w.key], Date.now())) {
+      const found = await backend.orchAdopt(w.key).catch(() => null);
+      // no PR on its branch yet: asked again after a while, not every pass
+      if (found) delete lookedUp[w.key];
+      else lookedUp[w.key] = Date.now();
+      adopt(found);
+    }
   }
   // PRs in review: merged, closed, or comments for the worker
   for (const w of workersOf(allWorkers(), project).filter(inReview)) {

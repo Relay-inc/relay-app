@@ -221,6 +221,12 @@ export function boardMove(w: Worker, p: Pipeline, column: Column | undefined): "
   return column.id === p.review && !inReview(w) ? "adopt" : null;
 }
 
+/** How long a ticket a person took to review waits before its branch is asked for a PR again, after a lookup found
+ *  none: each lookup is a gh call per repo. */
+export const ADOPT_EVERY = 30 * 60_000;
+/** Whether to look for that PR now: never looked (this session), or the last empty lookup is ADOPT_EVERY ago. */
+export const adoptDue = (last: number | undefined, now: number) => last == null || now - last >= ADOPT_EVERY;
+
 const bot = (login: string | undefined) => !login || login.endsWith("[bot]") || login.toLowerCase().includes("copilot");
 const after = (iso: string, since: number) => Date.parse(iso) > since;
 

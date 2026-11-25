@@ -786,7 +786,7 @@ pub fn adopt(app: &AppHandle, key: &str) -> Result<Option<Worker>, String> {
     let mut all = trees(&w);
     for t in all.iter_mut() {
         let Some(slug) = super::gh_repo(&t.repo) else { continue };
-        let out = super::gh(&st, &["pr", "list", "-R", &slug, "--head", &branch, "--state", "all", "--json", "url,state"])?;
+        let out = super::gh(&st, &["pr", "list", "-R", &slug, "--head", &branch, "--state", "all", "--json", "url,state,isCrossRepository"])?;
         if let Some(pr) = pr_on_branch(&out) { t.pr = Some(pr); t.pr_error = None; }
     }
     let Some(pr) = all.iter().find_map(|t| t.pr.clone()) else { return Ok(None) };
@@ -798,10 +798,12 @@ pub fn adopt(app: &AppHandle, key: &str) -> Result<Option<Worker>, String> {
         if !x.trees.is_empty() { x.trees = all; }
     }).filter(|x| x.state == "done"))
 }
-/// The PR of `gh pr list --json url,state` to follow: an open one, else a merged one, else the newest (gh lists newest
-/// first). A closed PR next to a newer open one on the same branch is history.
+/// The PR of `gh pr list --json url,state,isCrossRepository` to follow: an open one, else a merged one, else the
+/// newest (gh lists newest first). A closed PR next to a newer open one on the same branch is history. Only PRs whose
+/// branch lives in the repo itself: `--head` also matches a fork's branch of the same name, and following an
+/// outsider's PR would hand their comments to the agent and let their merge or close move the ticket.
 fn pr_on_branch(json: &str) -> Option<String> {
-    let list: Vec<Value> = serde_json::from_str(json).ok()?;
+    let list: Vec<Value> = serde_json::from_str::<Vec<Value>>(json).ok()?.into_iter().filter(|v| v["isCrossRepository"] == false).collect();
     let url = |v: &Value| v["url"].as_str().map(String::from);
     ["OPEN", "MERGED"].iter().find_map(|s| list.iter().find(|v| v["state"] == *s).and_then(url)).or_else(|| list.first().and_then(url))
 }
@@ -1259,11 +1261,14 @@ mod tests {
 
     #[test]
     fn the_pr_followed_on_a_branch_is_open_then_merged_then_newest() {
-        let u = |n: u32, s: &str| format!(r#"{{"url":"https://github.com/acme/web/pull/{n}","state":"{s}"}}"#);
+        let u = |n: u32, s: &str| format!(r#"{{"url":"https://github.com/acme/web/pull/{n}","state":"{s}","isCrossRepository":false}}"#);
+        let fork = |n: u32| format!(r#"{{"url":"https://github.com/acme/web/pull/{n}","state":"OPEN","isCrossRepository":true}}"#);
         let pr = |n: u32| Some(format!("https://github.com/acme/web/pull/{n}"));
         assert_eq!(pr_on_branch(&format!("[{},{}]", u(3, "CLOSED"), u(2, "OPEN"))), pr(2));
         assert_eq!(pr_on_branch(&format!("[{},{}]", u(3, "CLOSED"), u(2, "MERGED"))), pr(2));
         assert_eq!(pr_on_branch(&format!("[{},{}]", u(3, "CLOSED"), u(2, "CLOSED"))), pr(3));
+        assert_eq!(pr_on_branch(&format!("[{},{}]", fork(4), u(2, "CLOSED"))), pr(2), "a fork's branch of the same name is not ours");
+        assert_eq!(pr_on_branch(&format!("[{}]", fork(4))), None);
         assert_eq!(pr_on_branch("[]"), None);
         assert_eq!(pr_on_branch("not json"), None);
     }

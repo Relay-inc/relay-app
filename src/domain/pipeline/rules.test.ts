@@ -35,6 +35,8 @@ import {
   afterAnswer,
   answerWhy,
   answerable,
+  adoptDue,
+  ADOPT_EVERY,
   boardMove,
   placeOf,
   stateSince,
@@ -275,6 +277,12 @@ test("the board over the worker: a ticket a person moved on shows where it is, w
   assert.equal(boardMove(reviewing, P2, column("rev")), null);
   assert.equal(boardMove(worker("e", "running"), P2, column("shipped")), null);
   assert.equal(boardMove(worker("f", "blocked"), P2, column("rev")), null, "its end is not on the board yet");
+});
+
+test("adoptDue: the first lookup at once, after one that found nothing only every ADOPT_EVERY", () => {
+  assert.equal(adoptDue(undefined, 1000), true);
+  assert.equal(adoptDue(1000, 1000 + ADOPT_EVERY - 1), false);
+  assert.equal(adoptDue(1000, 1000 + ADOPT_EVERY), true);
 });
 
 test("step: each end once, done with a PR to review, the rest to a person", () => {
