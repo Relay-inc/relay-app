@@ -1299,6 +1299,13 @@ function handle(cmd: string, a: Args): unknown {
     // a pipeline conversation's tool call, answered by the runner (orch.rs pipe_webview): kept in pipelineCalls
     case "orch_pipe_done":
       return null;
+    // a push tried once more (orch.rs republish): it fails again here
+    case "orch_republish":
+      return Promise.reject("git push of the branch failed");
+    // the runner's digest into a pipeline's conversation, as the backend's queue delivers it (orch.rs pipe_say)
+    case "orch_pipe_say":
+      setTimeout(() => emit("orch", { type: "sent", key: `c:orch:${a.project}`, text: `[Relay] ${a.text}` }), 0);
+      return null;
     case "history_sid": {
       const items = conv.terminalHistory(a.sid);
       return (a.from ?? 0) === 0 ? { items, next: items.length ? 4096 : 0 } : { items: [], next: a.from };

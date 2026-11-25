@@ -13,6 +13,7 @@ import {
   select,
   closeAgent,
   goBack,
+  openWorker,
 } from "../../application/navigation/navigation";
 import { ORCH } from "../../domain/orchestrator/rules";
 import { closeDrawer, closeTicket } from "../../application/navigation/panel";
@@ -262,6 +263,13 @@ function onLink(e: MouseEvent) {
   if (noteLink) {
     e.preventDefault();
     void openNoteLink(noteLink.dataset.note!);
+    return;
+  }
+  // a pipeline agent's conversation, linked from its pipeline's conversation (shared/markdown.ts)
+  const workerLink = closest(e, node => !!node.dataset.worker);
+  if (workerLink) {
+    e.preventDefault();
+    void openWorker(workerLink.dataset.worker!);
     return;
   }
   // a code block's copy button (shared/markdown.ts)

@@ -181,6 +181,14 @@ export function step(w: Worker): Step | null {
   return { mark, to: "input", kind: "failed" };
 }
 
+/** A done whose push or PR failed on something passing (the network, GitHub): worth one more try. Not one that fails
+ *  for a reason a retry does not change: nothing committed or to push, a protected branch moved, no worktree, no
+ *  GitHub origin. */
+export const pushAgain = (w: Worker) =>
+  w.state === "done" &&
+  !!w.pr_error &&
+  !/nothing committed|nothing to push|not pushed|no worktree|no GitHub origin/i.test(w.pr_error);
+
 /** A worker whose PRs wait for review: its done was put on the board, nothing came after. */
 export const inReview = (w: Worker) =>
   !!prsOf(w).length && !w.pr_error && w.state === "done" && w.board === `done:${w.ended}`;

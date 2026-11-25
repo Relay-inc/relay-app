@@ -480,6 +480,10 @@ export const orchBoard = (key: string, mark: string) => invoke<Worker | null>("o
 /** A ticket a person took to review: the PRs on the worker's branch become its own and its done is on the board, so
  *  the review loop follows them. Null when no repo has a PR on that branch. */
 export const orchAdopt = (key: string) => invoke<Worker | null>("orch_adopt", { key });
+/** A done whose push failed, pushed once more (orch.rs republish): the worker with its PR, rejects when it failed again. */
+export const orchRepublish = (key: string) => invoke<Worker>("orch_republish", { key });
+/** The runner's facts after a pass, into the pipeline's conversation as Relay's turn (orch.rs pipe_say). */
+export const orchPipeSay = (project: string, text: string) => invoke<void>("orch_pipe_say", { project, text });
 /** A pipeline conversation's tool call, done by the runner (orch.rs pipe_webview): what it answers the model. */
 export const orchPipeDone = (id: number, ok: boolean, text: string) => invoke<void>("orch_pipe_done", { id, ok, text });
 export const onPipeTool = (handler: (call: PipeToolCall) => void) =>

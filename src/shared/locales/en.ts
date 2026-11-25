@@ -425,6 +425,8 @@ const en = {
   "pc.repos": "Repositories",
   "pc.reposHelp":
     "Their open pull requests show under this project. Agents only change repos with a checkout on this Mac.",
+  "pc.waits_one": "{n} ticket waits on you",
+  "pc.waits_other": "{n} tickets wait on you",
   "pl.title": "Board pipeline",
   "pl.help":
     "Relay picks tickets from the board, an agent builds each in a worktree of every repo it needs, Relay opens a PR per repo and moves the ticket on. Checked every 5 minutes while Relay runs.",

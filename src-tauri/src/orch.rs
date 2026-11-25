@@ -291,6 +291,7 @@ const PIPE_ACTIONS: [&str; 4] = ["answer", "take_over", "pause", "create_ticket"
 fn pipe_tools() -> Value {
     let ticket = json!({"type": "string", "description": "The ticket's number as Relay's facts give it, or its agent's worker key"});
     json!({"tools": [
+        tool("tickets", "The pipeline's state now, as Relay's facts give it after a pass: per ticket its column and state, the agent's question and options, and its links.", json!({}), &[]),
         tool("answer", "Pass the user's answer on to a ticket that waits on them: their answer to the agent's question, their approval of its plan (with their note, if any), changes they want to the plan, or a new try. Their words go on the ticket as a comment and the agent picks the ticket up again. Only what the user said, in their words.",
             json!({"ticket": ticket, "kind": {"type": "string", "enum": ["answer", "approve", "changes", "retry"], "description": "answer: to the agent's question. approve: the plan as it is. changes: rework the plan. retry: try the run again"},
                    "text": {"type": "string", "maxLength": 4000, "description": "The user's words. Required for answer and changes"}}), &["ticket", "kind"]),
@@ -303,7 +304,7 @@ fn pipe_tools() -> Value {
     ]})
 }
 fn pipe_call(app: &AppHandle, key: &str, project: &str, name: &str, a: &Value) -> Value {
-    if !PIPE_ACTIONS.contains(&name) { return fail(format!("unknown tool {name}")); }
+    if name != "tickets" && !PIPE_ACTIONS.contains(&name) { return fail(format!("unknown tool {name}")); }
     if let Err(e) = gate(key, name) { return fail(e); }
     pipe_webview(app, project, name, a).map(text).unwrap_or_else(fail)
 }
@@ -342,6 +343,12 @@ fn pipe_webview(app: &AppHandle, project: &str, tool: &str, args: &Value) -> Res
 #[tauri::command]
 pub fn orch_pipe_done(id: u64, ok: bool, text: String) {
     if let Some(tx) = PIPE_WAIT.lock().unwrap().as_mut().and_then(|m| m.remove(&id)) { tx.send(if ok { Ok(text) } else { Err(text) }).ok(); }
+}
+/// Relay writes a turn into a pipeline's coordinator (the runner's digest), starting it when it does not run. Always
+/// as a stranger's text: the digest carries ticket text.
+pub fn pipe_say(app: &AppHandle, project: &str, t: &str) -> Result<(), String> {
+    let key = pipe_key(project);
+    inject(app, &key, &coord_name(&key), &format!("{PREFIX}{t}"), "", true)
 }
 /// How a coordinator's conversation is named for its process.
 pub fn coord_name(key: &str) -> String { pipe_project(key).map_or_else(|| "Orchestrator".to_string(), |p| format!("Pipeline: {p}")) }
@@ -886,6 +893,20 @@ fn pr_on_branch(json: &str) -> Option<String> {
     let url = |v: &Value| v["url"].as_str().map(String::from);
     ["OPEN", "MERGED"].iter().find_map(|s| list.iter().find(|v| v["state"] == *s).and_then(url)).or_else(|| list.first().and_then(url))
 }
+/// A pipeline worker's done whose push or PR failed on something passing: pushed and PR'd again, the runner's one
+/// retry. Gone through, its end becomes now so the board lands it again, in review. Failed again, it stays as it was:
+/// the ticket already went to a person with why, and once is enough.
+pub fn republish(app: &AppHandle, key: &str) -> Result<Worker, String> {
+    let w = load(app).into_iter().find(|w| w.key == key).ok_or_else(|| format!("no worker {key}"))?;
+    if w.state != "done" || w.pr_error.is_none() { return Err("nothing to push again".into()); }
+    let r = w.report.clone().unwrap_or(Report { status: "done".into(), ..Default::default() });
+    let (done, err) = publish(app, &w, &r);
+    if let Some(e) = err { return Err(e); }
+    let pr = done.iter().find_map(|t| t.pr.clone()).or(w.pr.clone());
+    let kept = if w.trees.is_empty() { vec![] } else { done };
+    let at = now();
+    update(app, key, |x| if x.state == "done" { x.ended = Some(at); x.pr = pr; x.pr_error = None; x.trees = kept; }).ok_or_else(|| format!("no worker {key}"))
+}
 /// What the pipeline did on the board for a worker, kept so it does each step once.
 pub fn set_board(app: &AppHandle, key: &str, mark: String) -> Option<Worker> { update(app, key, |w| w.board = Some(mark)) }
 
@@ -1396,6 +1417,7 @@ mod tests {
     fn a_pipeline_coordinator_acts_only_in_a_turn_the_user_started() {
         let key = pipe_key("Acme Gate");
         for name in PIPE_ACTIONS { assert!(gate(&key, name).is_err(), "{name}: no turn seen since the start is the user's"); }
+        assert!(gate(&key, "tickets").is_ok(), "reading is fine in any turn");
         turn_started(&key, true);
         for name in PIPE_ACTIONS { assert!(gate(&key, name).is_ok(), "{name} in the user's turn"); }
         turn_started(&key, false);
@@ -1424,8 +1446,9 @@ mod tests {
         let names = |r| tool_list(r)["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect::<Vec<_>>();
         assert_eq!(names("coordinator"), ["dispatch", "workers", "message", "stop"]);
         assert_eq!(names("worker"), ["step", "decision", "report"]);
-        assert_eq!(names("pipeline"), PIPE_ACTIONS);
-        assert_eq!(agent_claude::ORCH_PIPE_TOOLS.map(|t| t.rsplit("__").next().unwrap()), PIPE_ACTIONS);
+        assert_eq!(names("pipeline")[1..], PIPE_ACTIONS);
+        assert_eq!(names("pipeline")[0], "tickets", "reading the state needs no turn of the user");
+        assert_eq!(agent_claude::ORCH_PIPE_TOOLS.map(|t| t.rsplit("__").next().unwrap()), names("pipeline").as_slice());
         assert_eq!(agent_claude::ORCH_WORKER_TOOLS.map(|t| t.rsplit("__").next().unwrap()), ["step", "decision", "report"]);
         assert_eq!(agent_claude::ORCH_COORD_TOOLS.map(|t| t.rsplit("__").next().unwrap()), ["dispatch", "workers", "message", "stop"]);
     }

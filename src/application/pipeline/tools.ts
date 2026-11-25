@@ -1,7 +1,7 @@
 import { ticketByRef, type AnswerKind } from "../../domain/pipeline/rules";
 import type { PipeToolCall } from "../../domain/pipeline/types";
 import * as backend from "../../infrastructure/backend";
-import { answerTicket, createTicket, pausePipeline, pipelinePanel, takeOver } from "./runner";
+import { answerTicket, createTicket, pausePipeline, pipelineFacts, pipelinePanel, takeOver } from "./runner";
 
 // The tools of a pipeline's conversation (src-tauri orch.rs pipe_call): run here with the functions the pipeline panel
 // uses, so the board has one set of rules. The backend already refused an action in a turn Relay started. What comes
@@ -20,6 +20,7 @@ async function run({ project, tool, args }: PipeToolCall): Promise<string> {
       );
     return found;
   };
+  if (tool === "tickets") return pipelineFacts(project);
   if (tool === "answer") {
     const kind = args.kind as AnswerKind;
     if (!KINDS.includes(kind)) throw new Error(`kind must be one of ${KINDS.join(", ")}`);

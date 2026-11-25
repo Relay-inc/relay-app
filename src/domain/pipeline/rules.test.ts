@@ -49,6 +49,7 @@ import {
   stalled,
   step,
   ticketByRef,
+  pushAgain,
   usedUp,
 } from "./rules.ts";
 import type { PrStatus } from "./types.ts";
@@ -677,4 +678,19 @@ test("the pipeline's conversation names a ticket by its number or its agent, one
   assert.deepEqual(ticketByRef([a, b], bounced, " 305 "), { card: bounced[0] });
   assert.equal(ticketByRef([a, b], bounced, "999"), undefined, "not in this pipeline");
   assert.equal(ticketByRef([a, numbered("414", "failed")], [], "414"), undefined, "two match: none is picked");
+});
+
+test("a push is tried once more only when it failed on something passing", () => {
+  const done = (pr_error: string) => worker("1", "done", { pr_error });
+  assert.equal(pushAgain(done("git push of relay/x failed")), true);
+  assert.equal(pushAgain(done("HTTP 502 from GitHub")), true);
+  for (const e of [
+    "nothing committed on the branch",
+    "nothing to push",
+    "branch main moved while it ran: not pushed",
+    "no worktree",
+    "the repo has no GitHub origin",
+  ])
+    assert.equal(pushAgain(done(e)), false, e);
+  assert.equal(pushAgain(worker("1", "failed", { pr_error: "git push of x failed" })), false);
 });
