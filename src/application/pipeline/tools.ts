@@ -12,8 +12,8 @@ import {
   takeOver,
 } from "./runner";
 
-// The tools of a pipeline's conversation (src-tauri orch.rs pipe_call): run here with the functions the pipeline panel
-// uses, so the board has one set of rules. The backend already refused an action in a turn Relay started or on a ticket
+// The tools of a pipeline's conversation (src-tauri orch.rs pipe_call): run here with the runner's own functions, so
+// the board has one set of rules. The backend already refused an action in a turn Relay started or on a ticket
 // the user's message does not name, and had the user click a card where one is needed. What comes
 // back is for the model, in English like the backend's own tool answers, and says exactly what was done, so the reply
 // to the user shows it.

@@ -3,7 +3,7 @@ import { needOf, workerName } from "../../../domain/orchestrator/rules";
 import { useOrchestratorStore } from "../../../application/orchestrator/store";
 import { stopWorker } from "../../../application/orchestrator/orchestrator";
 import { openPipelineLink } from "../../../application/pipeline/runner";
-import { openDrawer, select } from "../../../application/navigation/navigation";
+import { select } from "../../../application/navigation/navigation";
 import { projectName } from "../../../application/workspace/vault";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
@@ -98,13 +98,6 @@ function Page({ worker }: { worker: Worker }) {
               </button>
             ))}
             {worker.pr_error ? <span className="text-late">{worker.pr_error}</span> : null}
-            {/* the project's pipeline panel, every ticket it works on: the worker's page is under that project */}
-            <button
-              className="text-accent-text bg-transparent border-0 p-0 cursor-default hover:underline"
-              onClick={() => openDrawer("pipeline")}
-            >
-              {t("pl.title")}
-            </button>
           </span>
         ) : null}
       </div>
@@ -212,7 +205,7 @@ function Page({ worker }: { worker: Worker }) {
 }
 
 /** A worker's PR links: one per repo with a PR, named by the repo's folder when it has several. */
-export function prLinks(w: Worker) {
+function prLinks(w: Worker) {
   const trees = w.trees ?? [];
   if (!trees.length) return w.pr ? [{ url: w.pr, base: w.base_branch ?? "", repo: "" }] : [];
   return trees.flatMap(x =>

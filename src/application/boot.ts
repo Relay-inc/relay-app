@@ -90,6 +90,8 @@ async function settingsChanged(next: Settings) {
     loadMails();
   }
   if (calendarChanged) loadMeetings();
+  // every pipeline going on again from Settings › Projects: a pass now, not in five minutes
+  if (was.pipelinesPaused && !next.pipelinesPaused) runPipelines();
   if (pluginDown(selected())) select(WAIT);
   checkBoards().then(() => {
     if (boardDown(selected())) select(WAIT);

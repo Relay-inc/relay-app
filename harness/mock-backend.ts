@@ -58,9 +58,6 @@ function seedStorage() {
   localStorage.setItem("sel", JSON.stringify(query.get("sel") || "__wait"));
   localStorage.setItem("pvProject", "p1");
   localStorage.setItem("pvBoard", "f1");
-  // the pipeline panel's ticket sent back before it started, kept in the UI state
-  if (fixture === "pipeline-panel" || fixture === "pipeline-answer")
-    localStorage.setItem("pipelineBounced", JSON.stringify(orch.pipelineBounced));
   if (fixture === "linear") {
     localStorage.setItem("linearProject", integ.LINEAR_TEAM);
     localStorage.setItem("linearBoard", `cycle_${integ.LINEAR_TEAM}`);
@@ -212,17 +209,11 @@ const diceTools = [
     app: true,
   },
 ];
-// pipeline-panel: the board pipeline's workers (fixtures/orchestrator.ts pipelineWorkers), on a used-up plan, and two
-// tickets in its pick column with its label, waiting for a worker. pipeline-answer: the same workers with room on the
-// plan and nothing waiting, so an answer from the panel starts its worker at once
-const pipePanel = fixture === "pipeline-panel" || fixture === "pipeline-answer";
 // pipeline-orch: the pipeline's conversation (PR pipeline-orch), four of those workers, on the used-up plan so the
 // runner starts nothing while the screenshot is taken
 const pipeOrch = fixture === "pipeline-orch";
 let workers = orchOn && !orchEmpty ? structuredClone(orch.workers) : [];
-if (pipePanel) workers = structuredClone(orch.pipelineWorkers) as typeof workers;
 if (pipeOrch) workers = structuredClone(orch.pipeOrchWorkers) as typeof workers;
-if (fixture === "pipeline-panel") integ.tagTasks([301, 311], "agent");
 
 // ---------- the event plugin: listeners by event, emitted synchronously (a real Tauri event is one task per event)
 const listeners = new Map<string, Set<number>>();
@@ -1592,8 +1583,8 @@ function handle(cmd: string, a: Args): unknown {
       return { id: "weekly@1", title: "Weekly sync with the design team about the onboarding flow", time: "10:00" };
     case "usage_limits":
       if (fixture === "antigravity") return integ.usageLimitsAntigravity;
-      // the pipeline panel's hold: Claude's session window at 100%
-      if (fixture === "pipeline-panel" || pipeOrch)
+      // the pipeline's hold: Claude's session window at 100%
+      if (pipeOrch)
         return integ.usageLimits.map(p =>
           p.provider === "claude" && p.limits.ok
             ? { ...p, limits: { ...p.limits, windows: p.limits.windows.map((w, i) => (i ? w : { ...w, pct: 100 })) } }

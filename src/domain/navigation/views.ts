@@ -46,7 +46,7 @@ export const meetingOf = (key: string) => {
 };
 /** What the right drawer shows, "" while it is closed: one of the project's tools, the open conversation's changes,
  *  or the orchestrator's workers. */
-export type Drawer = "" | "terminal" | "notes" | "design" | "workers" | "git" | "files" | "agents" | "pipeline";
+export type Drawer = "" | "terminal" | "notes" | "design" | "workers" | "git" | "files" | "agents";
 /** A project's board or PRs opened from its title bar: whose they are, and the conversation to go back to. */
 export type Tool = { project: string; back: string };
 /** `detail`: a second, quieter line; a toast with one is a refusal and shows the red mark. */

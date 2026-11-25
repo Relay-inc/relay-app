@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Changed
+
+- The Board pipeline panel is gone, the pipeline's conversation does its work. Its title bar has Pause and Resume next to the board button (the tooltip says whether the pipeline runs, is paused or is paused with all pipelines), Pause all pipelines moved to Settings › Projects › Pipeline, and stopping agents or taking a ticket over is asked of the conversation. The title bar's pipeline button still opens the conversation from the project's other conversations and its board
+
 ## [0.0.65] - 2026-11-25
 
 ### Added
