@@ -1,4 +1,4 @@
-import type { BoardRef, Card, CardView } from "../board/types";
+import type { BoardRef, Card, CardView, Column } from "../board/types";
 import type { Worker } from "../orchestrator/types";
 import type { Limits } from "../agents/types";
 import type { ProvLimits } from "../usage/types";
@@ -181,9 +181,29 @@ export function step(w: Worker): Step | null {
   return { mark, to: "input", kind: "failed" };
 }
 
+/** A done whose push or PR failed on something passing (the network, GitHub): worth one more try. Not one that fails
+ *  for a reason a retry does not change: nothing committed or to push, a protected branch moved, no worktree, no
+ *  GitHub origin. */
+export const pushAgain = (w: Worker) =>
+  w.state === "done" &&
+  !!w.pr_error &&
+  !/nothing committed|nothing to push|not pushed|no worktree|no GitHub origin/i.test(w.pr_error);
+
 /** A worker whose PRs wait for review: its done was put on the board, nothing came after. */
 export const inReview = (w: Worker) =>
   !!prsOf(w).length && !w.pr_error && w.state === "done" && w.board === `done:${w.ended}`;
+
+/** The ticket a pipeline's conversation means (`ref`: its agent's worker key, or its number with or without "#"),
+ *  among the tickets the pipeline has a worker for and the ones it sent back before they started. Undefined when no
+ *  ticket or more than one matches: the conversation acts on one ticket it can name. */
+export function ticketByRef<B extends { number: string }>(workers: Worker[], bounced: B[], ref: string) {
+  const r = ref.trim().replace(/^#/, "");
+  const hits = [
+    ...workers.filter(w => w.key === r || ticketOf(w)?.number === r).map(worker => ({ worker })),
+    ...bounced.filter(b => b.number === r).map(card => ({ card })),
+  ];
+  return hits.length === 1 ? hits[0] : undefined;
+}
 
 /** The pipeline panel's tickets: each ticket's last worker, newest first, the merged and closed ones left out. */
 export function panelTickets(workers: Worker[], project: string) {
@@ -196,6 +216,36 @@ export function panelTickets(workers: Worker[], project: string) {
  *  until it lands. */
 export const columnOf = (w: Worker): "busy" | "review" | "input" =>
   w.state === "running" || step(w) ? "busy" : inReview(w) ? "review" : "input";
+
+/** Where a worker's ticket shows in the pipeline panel: the column the pipeline put it in (columnOf), and whether a
+ *  person moved it since, by the board as the runner last read it (`column`: its id there, "" when the ticket was not
+ *  on the board). Undefined while the board was not read yet: then only the worker tells. */
+export function placeOf(w: Worker, p: Pick<Pipeline, "busy" | "review" | "input">, column?: string) {
+  const col = columnOf(w);
+  return { col, moved: column != null && column !== p[col] };
+}
+
+/** The panel's answer box, options, Approve and Try again: only for a ticket in the input column where the pipeline
+ *  put it. Answering one a person moved on would start an agent on a ticket that is already done. */
+export const answerable = (place: ReturnType<typeof placeOf>) => place.col === "input" && !place.moved;
+
+/** What a person's move on the board means for a worker that is not running and whose end is on the board (`column`:
+ *  where its ticket is now). In the merged column, or a done column the pipeline does not use: "merged", it leaves
+ *  the panel and is not picked up again. In the review column without Relay following a PR there (blocked, failed,
+ *  done without a PR or with one missing): "adopt", the PR the person pushed or opened on its branch is followed from
+ *  now on. Null otherwise. */
+export function boardMove(w: Worker, p: Pipeline, column: Column | undefined): "merged" | "adopt" | null {
+  if (!column || w.state === "running" || step(w) || w.board === "merged" || w.board === "closed") return null;
+  const own = [p.pick, p.busy, p.review, p.input].includes(column.id);
+  if ((p.merged && column.id === p.merged) || (column.state === "done" && !own)) return "merged";
+  return column.id === p.review && !inReview(w) ? "adopt" : null;
+}
+
+/** How long a ticket a person took to review waits before its branch is asked for a PR again, after a lookup found
+ *  none: each lookup is a gh call per repo. */
+export const ADOPT_EVERY = 30 * 60_000;
+/** Whether to look for that PR now: never looked (this session), or the last empty lookup is ADOPT_EVERY ago. */
+export const adoptDue = (last: number | undefined, now: number) => last == null || now - last >= ADOPT_EVERY;
 
 const bot = (login: string | undefined) => !login || login.endsWith("[bot]") || login.toLowerCase().includes("copilot");
 const after = (iso: string, since: number) => Date.parse(iso) > since;

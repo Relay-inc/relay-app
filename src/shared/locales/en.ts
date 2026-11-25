@@ -425,6 +425,14 @@ const en = {
   "pc.repos": "Repositories",
   "pc.reposHelp":
     "Their open pull requests show under this project. Agents only change repos with a checkout on this Mac.",
+  "po.open": "The pipeline's conversation",
+  "po.panel": "The pipeline's panel",
+  "po.reset": "Start over",
+  "po.resetHelp": "A fresh conversation with the pipeline as it is now. The pipeline runs on.",
+  "po.resetYes": "Start over",
+  "po.resetNote": "Started over: the pipeline as it is now follows.",
+  "po.waits_one": "{n} ticket waits on you",
+  "po.waits_other": "{n} tickets wait on you",
   "pl.title": "Board pipeline",
   "pl.help":
     "Relay picks tickets from the board, an agent builds each in a worktree of every repo it needs, Relay opens a PR per repo and moves the ticket on. Checked every 5 minutes while Relay runs.",
@@ -526,6 +534,10 @@ const en = {
   "pp.tickets": "Tickets",
   "pp.empty": "No tickets in the pipeline right now.",
   "pp.noPr": "No PR",
+  "pp.moved": "Moved by a person to {column}",
+  "pp.gone": "No longer on the board",
+  "pp.movedOn":
+    "Someone moved this ticket out of {column} on the board, so nothing was sent: the agent would start on work that is done.",
   "pp.openTicket": "Open ticket",
   "pp.openPr": "Open PR",
   "pp.takeOver": "Take over",

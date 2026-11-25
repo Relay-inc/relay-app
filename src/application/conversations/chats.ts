@@ -2,7 +2,7 @@ import { newChatKey } from "../../domain/navigation/keys";
 import type { PrepRun } from "../../domain/calendar/briefing";
 import { activeWorkspace, chatsToStore, newChatEntry, pickedVault } from "../../domain/conversations/rules";
 import { useNavigationStore } from "../navigation/store";
-import { ensureCoordinator, ensureWorkerChat } from "../../domain/orchestrator/rules";
+import { ensureCoordinator, ensurePipeChat, ensureWorkerChat } from "../../domain/orchestrator/rules";
 import type { Worker } from "../../domain/orchestrator/types";
 import { storage } from "../../infrastructure/storage";
 import { useConversationsStore } from "./store";
@@ -101,6 +101,14 @@ export function ensureCoordinatorChat() {
     ensureCoordinator(draft.chats);
   });
   saveChats();
+}
+/** The conversation of each project's board pipeline, under that project (application/pipeline). */
+export function ensurePipeChats(projects: string[]) {
+  let changed = false;
+  useConversationsStore.setState(draft => {
+    for (const project of projects) changed = ensurePipeChat(draft.chats, project) || changed;
+  });
+  if (changed) saveChats();
 }
 /** A conversation under its project for each worker the app did not know yet. */
 export function adoptWorkers(workers: Worker[]) {

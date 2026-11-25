@@ -188,6 +188,8 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
     let machine = if orch::is_orch(&project) { Some(String::new()) } else { machine };
     // the project the agent is told about: the line in front of the message (agent_core::envelope)
     // a shared vault's project by its name in that vault, not by the "Name (folder)" it shows under
+    // the user's own words, before the envelope: a pipeline coordinator acts only on a ticket they name (orch.rs gate)
+    let said = text.clone();
     let told = told.filter(|t| !t.is_empty()).map(|t| if about.as_deref() == Some(t.as_str()) { crate::project_home(state, &t).map_or(t, |(_, n)| n) } else { t });
     let text = match told { Some(t) => agent_core::envelope::wrap(&t, context.as_deref().unwrap_or(""), &text), None => text };
     // pasted images, only the types the webview allows, for a provider that takes them
@@ -237,6 +239,8 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
     }
     let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
     let x = procs.get_mut(&project).unwrap();
+    // the user starts this turn, unless one runs: a pipeline coordinator acts only in the user's own turn (orch.rs gate)
+    if !x.turns.busy() { orch::turn_started(&project, Some(&said)); }
     writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
     x.sent();
     Ok(())
@@ -273,6 +277,7 @@ pub(crate) fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, 
     let x = procs.get_mut(key).unwrap();
     if taint && !x.tainted { x.mark_tainted(); }
     let line = p.input(&Turn { text: text.to_string(), images: vec![] }).ok_or_else(|| format!("{}: no input", p.id()))?;
+    orch::turn_started(key, None); // Relay starts this turn, not the user
     writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
     x.sent();
     Ok(true)

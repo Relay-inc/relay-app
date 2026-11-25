@@ -6,6 +6,10 @@ import {
   afterAnswer,
   answerWhy,
   bare,
+  adoptDue,
+  boardMove,
+  EMPTY_PIPELINE,
+  placeOf,
   briefOf,
   picturesOf,
   withPictures,
@@ -19,6 +23,7 @@ import {
   PREFLIGHT_PROMPT,
   preflightOf,
   prsOf,
+  pushAgain,
   ready,
   reposFor,
   retask,
@@ -39,9 +44,14 @@ import type { AnswerKind } from "../../domain/pipeline/rules";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
 import { isPrimary } from "../../infrastructure/window";
-import { t } from "../../shared/i18n";
+import { t, tn } from "../../shared/i18n";
+import { digestRows, digestSig, digestText, safeRef, waiting } from "../../domain/pipeline/digest";
+import { pipeKey } from "../../domain/orchestrator/rules";
+import { notify } from "../conversations/events";
 import { provider as providerOf } from "../../shared/plugins";
 import { ctxOf } from "../board/ctx";
+import { ensurePipeChats } from "../conversations/chats";
+import { useConversationsStore } from "../conversations/store";
 import { toast } from "../navigation/navigation";
 import { onOrchEvent, stopWorker } from "../orchestrator/orchestrator";
 import { useOrchestratorStore } from "../orchestrator/store";
@@ -65,6 +75,9 @@ const serial = <T>(fn: () => Promise<T>): Promise<T> => {
 };
 let queued = false;
 const lastError: Record<string, string> = {};
+// when a ticket a person took to review was last looked up without finding its PR, by worker key. In memory: a
+// restart may ask once more
+const lookedUp: Record<string, number> = {};
 // why a pipeline takes no new tickets right now, so it is said once and not every five minutes, and the pipeline
 // panel shows it as long as it holds
 function hold(project: string, why: "" | "pl.usedUp" | "pl.stalled") {
@@ -76,16 +89,79 @@ function hold(project: string, why: "" | "pl.usedUp" | "pl.stalled") {
     });
 }
 
+// Relay's own steps in the current pass, per project, for its digest, and the self-steps already taken, once per worker
+// ponytail: in memory, a restart may retry a push or ask for a report once more
+const did: Record<string, string[]> = {};
+const tried = new Set<string>();
+const note = (project: string, line: string) => (did[project] ??= []).push(line);
+// Relay's own lines in the digest: a ticket by its number (or its agent), no column names or other outside text
+// (domain/pipeline/digest.ts digestText)
+const refOf = (w: Worker) => (safeRef(ticketOf(w)?.number) ? `#${safeRef(ticketOf(w)?.number)}` : w.key);
+// what the last digest per project said (digestSig) and what waited on the user in it, kept so a restart sends nothing
+// that is not new
+const said = storage.get<Record<string, { sig: string; waits: string[] }>>("pipelineDigest", {});
+
+/** After a pass: the pipeline's facts to its conversation when something changed or Relay did a step of its own, and
+ *  a banner when a ticket waits on the user that did not before. */
+async function digest(project: string) {
+  const panel = pipelinePanel(project);
+  const lines = did[project] ?? [];
+  delete did[project];
+  const d = { ...panel, paused: panel.paused || panel.all };
+  const rows = digestRows(d);
+  const sig = digestSig(rows, d);
+  const last = said[project];
+  // the first pass of a pipeline without tickets is no news
+  if (!lines.length && (sig === last?.sig || (!last && !rows.length))) return;
+  await backend.orchPipeSay(project, digestText(projectName(project), rows, lines, d));
+  const waits = waiting(rows);
+  said[project] = { sig, waits: waits.map(r => r.ref) };
+  storage.set("pipelineDigest", said);
+  if (waits.some(r => !last?.waits.includes(r.ref))) void notify(pipeKey(project), tn("po.waits", waits.length));
+}
+/** The reset button of a pipeline's conversation: a fresh conversation whose first turn is the pipeline as it is now.
+ *  The pipeline runs on, and the next digest compares with this state. */
+export async function resetPipeline(project: string) {
+  const key = pipeKey(project);
+  const panel = pipelinePanel(project);
+  const d = { ...panel, paused: panel.paused || panel.all };
+  const rows = digestRows(d);
+  useConversationsStore.setState(draft => {
+    draft.messages[key] = [{ kind: "note", text: t("po.resetNote") }];
+    delete draft.sidOf[key];
+    draft.status[key] = "idle";
+    draft.queued[key] = 0;
+  });
+  await backend.orchPipeReset(project, digestText(projectName(project), rows, [], d));
+  said[project] = { sig: digestSig(rows, d), waits: waiting(rows).map(r => r.ref) };
+  storage.set("pipelineDigest", said);
+}
+/** How many of a pipeline's tickets wait on the user now, for its row in the sidebar. */
+export function pipelineWaits(project: string) {
+  const panel = pipelinePanel(project);
+  return waiting(digestRows({ ...panel, paused: panel.paused || panel.all })).length;
+}
+/** The pipeline's facts as they are now, for its conversation's `tickets` tool. */
+export function pipelineFacts(project: string) {
+  const panel = pipelinePanel(project);
+  const d = { ...panel, paused: panel.paused || panel.all };
+  return digestText(projectName(project), digestRows(d), [], d);
+}
+
 /** One pass over every pipeline. Calls while one waits to start make no second one. */
 export function runPipelines() {
   if (queued || !isPrimary()) return; // the main window runs them, once for the app
   queued = true;
   return serial(async () => {
     queued = false;
-    for (const [project, p] of runnable(settings().pipelines, settings().pipelinesPaused)) {
+    const pipelines = runnable(settings().pipelines, settings().pipelinesPaused);
+    // each pipeline's conversation, where the user follows it, made once its pipeline runs
+    ensurePipeChats(pipelines.map(([project]) => project));
+    for (const [project, p] of pipelines) {
       try {
         await runOne(project, p);
         delete lastError[project];
+        await digest(project);
       } catch (e) {
         const msg = String((e as Error)?.message ?? e);
         // once per new error, not every five minutes
@@ -126,8 +202,9 @@ export function pipelinePanel(project: string) {
   const s = settings();
   const p = s.pipelines?.[project];
   const tickets = panelTickets(allWorkers(), project);
-  const { waiting: allWaiting, answered } = usePipelineStore.getState();
+  const { waiting: allWaiting, answered, columns } = usePipelineStore.getState();
   const waiting = allWaiting[project];
+  const board = columns[project];
   return {
     linked: !!p && !!s.boards?.[project],
     on: ready(p),
@@ -137,6 +214,14 @@ export function pipelinePanel(project: string) {
     parallel: Math.max(1, p?.parallel ?? 1),
     holding: usePipelineStore.getState().holding[project] ?? "",
     tickets,
+    // where each row's ticket is: the column the pipeline put it in, whether a person moved it since and the name of
+    // the column it is in on the board ("" while the board was not read yet, or when it is not on the board)
+    places: Object.fromEntries(
+      tickets.map(w => {
+        const column = board?.of[ticketOf(w)!.card];
+        return [w.key, { ...placeOf(w, p ?? EMPTY_PIPELINE, column), name: board?.names[column ?? ""] ?? "" }];
+      }),
+    ),
     // since when each row is in its state: a run started by an answer in this session since that answer
     since: Object.fromEntries(tickets.map(w => [w.key, stateSince(w, answered[ticketOf(w)!.card])])),
     // answered and moved to the pick column, until the worker runs again: the panel shows them waiting there
@@ -155,6 +240,8 @@ export function pipelinePanel(project: string) {
 
 // what an answer without words puts on the ticket, so the ticket still shows what happened
 const NO_WORDS = { answer: "", changes: "", approve: "pp.approvedLine", retry: "pp.retryLine" } as const;
+/** What an answer puts on its ticket: the person's words, else the line that says what happened ("" when it needs words). */
+export const postedWords = (kind: AnswerKind, text: string) => text.trim() || (NO_WORDS[kind] ? t(NO_WORDS[kind]) : "");
 // the comment already on a ticket, by card id, when what came after it failed: sending the same again skips the post
 const posted: Record<string, string> = {};
 
@@ -162,12 +249,14 @@ const posted: Record<string, string> = {};
  *  then the ticket going again: its worker picks it up now when it may start and there is room, else the ticket
  *  waits in the pick column (a hand-picked pipeline has none: it stays, Build with agent continues it). A ticket sent
  *  back before it started (`card`) goes to the pick column for the pre-flight again. Resolves true when the comment
- *  is on the ticket. On a failure it says why and resolves false, so the panel keeps what was typed. */
+ *  is on the ticket. On a failure it says why and resolves false, so the panel keeps what was typed. `say`: where
+ *  what happened is said, a toast for the panel, the tool's answer for the pipeline's conversation. */
 export function answerTicket(
   project: string,
   to: { worker: Worker } | { card: BouncedTicket },
   kind: AnswerKind,
   text: string,
+  say: (text: string) => void = toast,
 ): Promise<boolean> {
   return serial(async () => {
     const p = settings().pipelines?.[project];
@@ -176,8 +265,17 @@ export function answerTicket(
     if (!b.prov.detail?.act) throw new Error(t("pp.noComment"));
     const worker = "worker" in to ? (useOrchestratorStore.getState().workers[to.worker.key] ?? to.worker) : null;
     const id = worker ? ticketOf(worker)!.card : (to as { card: BouncedTicket }).card.id;
-    const words = text.trim() || (NO_WORDS[kind] ? t(NO_WORDS[kind]) : "");
+    const words = postedWords(kind, text);
     if (!words) return false;
+    // read fresh, the panel's board can be minutes old: an answer on a ticket a person moved on (reviewed, merged)
+    // would start an agent on work that is done
+    const card = (await b.prov.cards(ctxOf(b.prov), b.ref)).find(c => c.id === id);
+    const now = card ? colOf(b.prov, { group: b.group }, card) : "";
+    placed(b, id, now);
+    if (now !== p.input) {
+      say(t("pp.movedOn", { column: nameOf(b, p.input) }));
+      return false;
+    }
     if (posted[id] !== words) {
       await b.prov.detail.act(ctxOf(b.prov), b.ref, id, "comment", {
         value: words,
@@ -208,12 +306,12 @@ export function answerTicket(
     } else if (next === "pick" && p.pick) {
       await move(b, id, p.pick);
       if (worker) mark();
-      toast(
+      say(
         t(!worker ? "pp.toPick" : startsNow(settings(), project) ? "pp.toPickFull" : "pp.toPickPaused", {
           project: name,
         }),
       );
-    } else if (next === "stay") toast(t("pp.stayManual", { project: name }));
+    } else if (next === "stay") say(t("pp.stayManual", { project: name }));
     if (!worker) {
       setBounced(
         project,
@@ -224,19 +322,22 @@ export function answerTicket(
     delete posted[id];
     return true;
   }).catch(e => {
-    toast(t("pl.error", { project: projectName(project), error: String((e as Error)?.message ?? e) }));
+    say(t("pl.error", { project: projectName(project), error: String((e as Error)?.message ?? e) }));
     return false;
   });
 }
 
 /** Pause a project's pipeline from its panel, or go on. `stop`: its running workers stop too (their tickets land with
- *  a person), else they finish their step. Going on starts a pass at once. */
+ *  a person), else they finish their step. Going on starts a pass at once. Resolves with why it failed, else "". */
 export async function pausePipeline(project: string, paused: boolean, stop = false) {
   const s = settings();
   const p = s.pipelines?.[project];
-  if (!p) return;
+  if (!p) return "no pipeline";
   const failed = await saveMainSettings({ ...s, pipelines: { ...s.pipelines, [project]: { ...p, paused } } });
-  if (failed) return toast(failed);
+  if (failed) {
+    toast(failed);
+    return failed;
+  }
   if (stop)
     await Promise.all(
       workersOf(allWorkers(), project)
@@ -244,6 +345,7 @@ export async function pausePipeline(project: string, paused: boolean, stop = fal
         .map(w => takeOver(w)),
     );
   if (!paused) runPipelines();
+  return "";
 }
 
 /** Pause every pipeline at once, or go on (each one's own pause stays as it was). */
@@ -251,6 +353,21 @@ export async function pauseAllPipelines(paused: boolean) {
   const failed = await saveMainSettings({ ...settings(), pipelinesPaused: paused });
   if (failed) return toast(failed);
   if (!paused) runPipelines();
+}
+
+/** A new ticket on a pipeline's board, asked for in its conversation: in the pick column when `start` (an agent builds
+ *  it, a hand-picked pipeline has none), else in the board's first column. Its number, link and column. */
+export function createTicket(project: string, title: string, description: string, start: boolean) {
+  return serial(async () => {
+    const p = settings().pipelines?.[project];
+    if (!p) throw new Error("this project has no pipeline");
+    const b = await open(project, p);
+    if (!b.prov.create) throw new Error(`${b.prov.name} boards cannot get a new ticket from Relay`);
+    const column = start && !manual(p) ? p.pick : (b.columns[0]?.id ?? p.pick);
+    const card = await b.prov.create(ctxOf(b.prov), b.ref, { title, description, column, group: b.group || undefined });
+    const url = await b.prov.url(ctxOf(b.prov), b.ref, card.id).catch(() => "");
+    return { number: card.number, url, column: nameOf(b, column) };
+  });
 }
 
 /** A person takes a ticket over from its worker: the worker stops, and its stopped run lands the ticket in the input
@@ -275,7 +392,7 @@ async function sendWorker(w: Worker, text: string, task: string | null = null) {
 
 const allWorkers = () => Object.values(useOrchestratorStore.getState().workers).sort((a, b) => a.at - b.at);
 
-type Board = { prov: BoardProvider; ref: BoardRef; group: string; columns: Column[]; p: Pipeline };
+type Board = { project: string; prov: BoardProvider; ref: BoardRef; group: string; columns: Column[]; p: Pipeline };
 
 /** A pipeline's board, its columns checked. */
 async function open(project: string, p: Pipeline): Promise<Board> {
@@ -288,7 +405,7 @@ async function open(project: string, p: Pipeline): Promise<Board> {
   const columns = await prov.columns(ctx, ref, group);
   for (const id of [p.pick, p.busy, p.review, p.input, p.merged].filter(Boolean))
     if (!columns.some(c => c.id === id)) throw new Error(t("pl.noColumn"));
-  return { prov, ref, group, columns, p };
+  return { project, prov, ref, group, columns, p };
 }
 
 async function runOne(project: string, p: Pipeline) {
@@ -296,10 +413,57 @@ async function runOne(project: string, p: Pipeline) {
   const { prov, ref, group } = b;
   const ctx = ctxOf(prov);
 
-  // runs that ended: their ticket to review or to a person
+  // runs that ended: their ticket to review or to a person. First Relay's own steps on a fact it found itself, once
+  // per worker: a push that failed on something passing goes once more, an agent that ended its turn without a report
+  // is asked for one
   for (const w of workersOf(allWorkers(), project)) {
     const s = step(w);
-    if (s) await land(b, w, s);
+    if (!s) continue;
+    if (pushAgain(w) && !tried.has(`push:${w.key}`)) {
+      tried.add(`push:${w.key}`);
+      const again = await backend.orchRepublish(w.key).catch(() => null);
+      note(
+        project,
+        `${refOf(w)}: its push failed, Relay tried once more: ${again ? "it went through" : "it failed again"}`,
+      );
+      const next = again && step(again);
+      if (next) {
+        adopt(again);
+        await land(b, again, next);
+        continue;
+      }
+    }
+    if (w.state === "silent" && !tried.has(`report:${w.key}`)) {
+      tried.add(`report:${w.key}`);
+      await backend.orchAskReport(w.key);
+      adopt({ ...w, state: "running", ended: null });
+      note(project, `${refOf(w)}: its agent ended its turn without a report, Relay asked it for one`);
+      continue;
+    }
+    await land(b, w, s);
+  }
+  // the board once per pass, also for a hand-picked pipeline: where each worker's ticket really is, for the panel and
+  // for what a person did with it. The runner's own moves after this read are kept in the store too (move), so the
+  // pick column below reads a ticket it just moved where it put it
+  const cards = await prov.cards(ctx, ref);
+  const read = (card: Card) => colOf(prov, { group }, card);
+  keepColumns(b, cards, read);
+  const col = (card: Card) => usePipelineStore.getState().columns[project]?.of[card.id] ?? read(card);
+  // tickets a person took on from the agent: merged or done, the worker is through; in review, its PR is followed
+  for (const w of panelTickets(allWorkers(), project)) {
+    const column = b.columns.find(c => c.id === usePipelineStore.getState().columns[project]?.of[ticketOf(w)!.card]);
+    const what = boardMove(w, p, column);
+    if (what === "merged") {
+      adopt(await backend.orchBoard(w.key, "merged"));
+      note(project, `${refOf(w)}: a person moved it to a done column, Relay closed it in the pipeline`);
+    } else if (what === "adopt" && adoptDue(lookedUp[w.key], Date.now())) {
+      const found = await backend.orchAdopt(w.key).catch(() => null);
+      // no PR on its branch yet: asked again after a while, not every pass
+      if (found) delete lookedUp[w.key];
+      else lookedUp[w.key] = Date.now();
+      adopt(found);
+      if (found) note(project, `${refOf(w)}: a person moved it to Review, Relay follows its PR now`);
+    }
   }
   // PRs in review: merged, closed, or comments for the worker
   for (const w of workersOf(allWorkers(), project).filter(inReview)) {
@@ -312,10 +476,12 @@ async function runOne(project: string, p: Pipeline) {
       if (p.merged) await move(b, id, p.merged);
       await comment(b, id, t("pl.merged", { pr: links }));
       adopt(await backend.orchBoard(w.key, "merged"));
+      note(project, `${refOf(w)}: its PR was merged${p.merged ? `, Relay moved it to the merged column` : ""}`);
     } else if (r.kind === "closed") {
       await move(b, id, p.input);
       await comment(b, id, t("pl.closed", { pr: links }));
       adopt(await backend.orchBoard(w.key, "closed"));
+      note(project, `${refOf(w)}: its PR was closed without a merge, Relay moved it to Input`);
     } else if (startsNow(settings(), project)) {
       // review comments start the worker again: that waits while paused (also when paused during this pass), the
       // comments are read again from the run's end once the pipeline goes on. The ticket text stays, unless someone
@@ -325,13 +491,12 @@ async function runOne(project: string, p: Pipeline) {
       await sendWorker(w, text, view && retask(w.task, view, w.at));
       await move(b, id, p.busy);
       await comment(b, id, t("pl.feedback"));
+      note(project, `${refOf(w)}: review comments on its PR, Relay sent them to its agent`);
     }
   }
   // the pick column: tickets moved back go to their worker again, new ones get a worker while there is room
   if (manual(p)) return;
-  const cards = await prov.cards(ctx, ref);
   const mine = workersOf(allWorkers(), project);
-  const col = (card: Card) => colOf(prov, { group }, card);
   await keepWaiting(b, project, waitingIn(cards, col, p, mine));
   // a ticket sent back before it started is the panel's until it leaves the input column (answered, moved, closed)
   const kept = bouncedOf(project).filter(e => cards.some(c => c.id === e.id && col(c) === p.input));
@@ -345,6 +510,7 @@ async function runOne(project: string, p: Pipeline) {
   for (const { card, worker } of back) {
     if (room-- <= 0 || !startsNow(settings(), project)) return;
     await resume(b, card.id, worker, "The ticket was moved back to the pick column on the board.");
+    note(project, `${refOf(worker)}: moved back to the pick column, its agent picks it up again`);
   }
   // runs keep ending without a PR: tickets moved back still go on (a person looked at them), new ones wait
   if (stalled(workersOf(allWorkers(), project))) return hold(project, "pl.stalled");
@@ -434,6 +600,7 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
     });
     adopt(w);
     await comment(b, card.id, t("pl.picked", { branch: w.branch ?? "" }));
+    if (!hand) note(project, `${refOf(w)}: picked up from the pick column, an agent started on it`);
   } catch (e) {
     // back in front of a person, with why: the pick column would only try it again
     const error = String((e as Error)?.message ?? e);
@@ -511,12 +678,34 @@ async function keepWaiting(b: Board, project: string, cards: Card[]) {
   });
 }
 
+/** Where each ticket with a pipeline worker is on the board, for the panel: "" for one that is not on it. */
+function keepColumns(b: Board, cards: Card[], col: (c: Card) => string) {
+  const at = new Map(cards.map(c => [c.id, col(c)]));
+  const of = Object.fromEntries(
+    workersOf(allWorkers(), b.project).map(w => [ticketOf(w)!.card, at.get(ticketOf(w)!.card) ?? ""]),
+  );
+  const names = Object.fromEntries(b.columns.map(c => [c.id, c.name]));
+  usePipelineStore.setState(draft => {
+    draft.columns[b.project] = { at: Date.now(), of, names };
+  });
+}
+/** A ticket's column as Relay just found or put it, once the board was read for the panel. */
+function placed(b: Board, id: string, column: string) {
+  if (usePipelineStore.getState().columns[b.project])
+    usePipelineStore.setState(draft => {
+      draft.columns[b.project].of[id] = column;
+    });
+}
+
 /** The ticket's detail as the ticket window shows it, null for a provider without one. */
 const viewOf = async (b: Board, id: string) =>
   b.prov.detail ? b.prov.detail.view(await b.prov.detail.fetch(ctxOf(b.prov), b.ref, id)) : null;
 const nameOf = (b: Board, id: string) => b.columns.find(c => c.id === id)?.name ?? id;
 // the providers move and comment by the card's id alone
-const move = (b: Board, id: string, to: string) => b.prov.move(ctxOf(b.prov), b.ref, { id } as Card, to, b.group);
+async function move(b: Board, id: string, to: string) {
+  await b.prov.move(ctxOf(b.prov), b.ref, { id } as Card, to, b.group);
+  placed(b, id, to);
+}
 async function comment(b: Board, id: string, value: string) {
   if (value && b.prov.detail?.act)
     await b.prov.detail.act(ctxOf(b.prov), b.ref, id, "comment", { value, files: [], hidden: b.p.hidden !== false });

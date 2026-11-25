@@ -3,6 +3,7 @@ import type { AgentEvent } from "../../domain/agents/types";
 import { storage } from "../../infrastructure/storage";
 import { applyAgentEvent, learnWindow, type Effect } from "../../domain/conversations/events";
 import { WAIT } from "../../domain/navigation/views";
+import { isRelayTurn, pipeProject } from "../../domain/orchestrator/rules";
 import * as backend from "../../infrastructure/backend";
 import { isActive, isFocused } from "../../infrastructure/window";
 import { useNavigationStore } from "../navigation/store";
@@ -34,11 +35,19 @@ export async function notify(key: string, body: string) {
   );
 }
 
+// a pipeline's conversation answering Relay's digest: the digest gave its own banner when a ticket waits on the user
+const digestReply = (key: string) =>
+  !!pipeProject(key) &&
+  isRelayTurn(
+    [...(useConversationsStore.getState().messages[key] ?? [])].reverse().find(i => i.kind === "me")?.text ?? "",
+  );
+
 function run(effects: Effect[]) {
   const once = new Set<string>();
   for (const effect of effects) {
-    if (effect.kind === "notify") notify(effect.key, effect.body);
-    else if (!once.has(effect.kind)) {
+    if (effect.kind === "notify") {
+      if (!digestReply(effect.key)) notify(effect.key, effect.body);
+    } else if (!once.has(effect.kind)) {
       once.add(effect.kind);
       if (effect.kind === "save-chats") saveChats();
       else if (effect.kind === "snapshot") loadSnapshot();

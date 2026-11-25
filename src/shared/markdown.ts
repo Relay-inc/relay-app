@@ -5,6 +5,8 @@ import { esc } from "./html";
 import { highlightHtml } from "./highlight";
 
 // ---------- safe markdown: Claude's text never becomes live HTML in a window that can approve actions
+/** relay://worker?key=…, the in-app link to a worker's conversation (domain/pipeline/digest.ts workerLink). */
+const WORKER_LINK = /^relay:\/\/worker\?key=(c:orch-w-[a-z0-9]+)$/;
 /** Links that may open: the web and mail. */
 export const urlOk = (url: string) => /^(https?:|mailto:)/i.test(url);
 // ---------- vault notes: a markdown link without a scheme, a [[wikilink]] or a `path.md:12` becomes a link when the note
@@ -82,6 +84,9 @@ marked.use({
     link({ href, tokens }) {
       const inner = this.parser.parseInline(tokens);
       if (urlOk(href)) return `<a href="${esc(href)}" target="_blank" rel="noreferrer">${inner}</a>`;
+      // a pipeline agent's conversation, linked from its pipeline's conversation: opens in the app (ui/app, data-worker)
+      const worker = WORKER_LINK.exec(href)?.[1];
+      if (worker) return `<a class="vlink" data-worker="${esc(worker)}">${inner}</a>`;
       return !/^[a-z][\w+.-]*:|^#/i.test(href) && noteOf(href) ? noteA(noteOf(href), inner) : inner;
     },
   },

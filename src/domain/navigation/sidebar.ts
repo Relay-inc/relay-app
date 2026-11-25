@@ -28,6 +28,7 @@ export type ConvRow = {
   vault?: string; // a general conversation in another vault than the main one: that vault's name, a hint after the title
   work?: boolean; // Today's work in progress (domain/today/work.ts): opens Today on it, not draggable, no menu
   icon?: string; // a work row's icon: a review, a mail, a meeting
+  pipe?: { waits: number; title: string }; // its project's pipeline conversation, on top: what waits on the user
 };
 /** A folder with its conversations, under a project or Algemeen (`project` ""). Shut, it shows its count. */
 export type FolderBlock = {

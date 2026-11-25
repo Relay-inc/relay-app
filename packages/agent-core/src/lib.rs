@@ -108,7 +108,7 @@ pub struct Grants {
     pub design: bool,
     /// Runs on a work machine: the mode comes with the machine's mirrored settings.
     pub machine: bool,
-    /// The orchestrator's role, "coordinator" or "worker": the relay-orch tools.
+    /// The orchestrator's role, "coordinator", "pipeline" (a board pipeline's coordinator) or "worker": the relay-orch tools.
     pub orch: Option<String>,
     /// Appended to the system prompt (after [`envelope::HINT`]).
     pub system: Option<String>,

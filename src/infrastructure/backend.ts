@@ -65,7 +65,7 @@ import type { Row as CollectionRow } from "../domain/collections/rules";
 import type { RailData } from "../domain/workspace/rail";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
 import type { OrchEvent, Worker } from "../domain/orchestrator/types";
-import type { PipelineRepo, PrStatus, Ticket } from "../domain/pipeline/types";
+import type { PipelineRepo, PipeToolCall, PrStatus, Ticket } from "../domain/pipeline/types";
 import type { SpeechModelInfo } from "../domain/settings/voice";
 import type { Recording } from "../domain/calendar/rules";
 import type { Plugin, PluginTest, PluginViewInfo, ToolResult } from "../domain/plugins/types";
@@ -477,6 +477,19 @@ export const orchPr = (key: string) => invoke<PrStatus[]>("orch_pr", { key });
 export const pipelineRepos = (project: string, extra: string[]) =>
   invoke<PipelineRepo[]>("pipeline_repos", { project, extra });
 export const orchBoard = (key: string, mark: string) => invoke<Worker | null>("orch_board", { key, mark });
+/** A ticket a person took to review: the PRs on the worker's branch become its own and its done is on the board, so
+ *  the review loop follows them. Null when no repo has a PR on that branch. */
+export const orchAdopt = (key: string) => invoke<Worker | null>("orch_adopt", { key });
+/** A done whose push failed, pushed once more (orch.rs republish): the worker with its PR, rejects when it failed again. */
+export const orchRepublish = (key: string) => invoke<Worker>("orch_republish", { key });
+/** The runner's facts after a pass, into the pipeline's conversation as Relay's turn (orch.rs pipe_say). */
+export const orchPipeSay = (project: string, text: string) => invoke<void>("orch_pipe_say", { project, text });
+/** A pipeline's conversation starts over, `text` its first turn (orch.rs pipe_reset). */
+export const orchPipeReset = (project: string, text: string) => invoke<void>("orch_pipe_reset", { project, text });
+/** A pipeline conversation's tool call, done by the runner (orch.rs pipe_webview): what it answers the model. */
+export const orchPipeDone = (id: number, ok: boolean, text: string) => invoke<void>("orch_pipe_done", { id, ok, text });
+export const onPipeTool = (handler: (call: PipeToolCall) => void) =>
+  listenHere<PipeToolCall>("pipe-tool", e => handler(e.payload));
 
 // ---------- work machines (relay-server in the LAN)
 /** The machine each conversation runs on, by conversation key. */

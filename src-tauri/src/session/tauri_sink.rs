@@ -60,6 +60,7 @@ impl Sink for TauriSink {
         let moved = limited && !end.replay && retry::switched(&self.app, &self.key, self.p, &self.account, model, fresh);
         retry::turn_end(&self.app, &self.key, self.p, &self.account, model, limited, hint, fresh);
         if orch::is_worker(&self.key) && !moved { orch::turn_end(&self.app, &self.key, end.last); }
+        orch::turn_ended(&self.key); // a pipeline coordinator's actions need the user's next turn
         if !end.replay && orch::is_orch(&self.key) { orch::flush(&self.app, &self.key); } // what Relay queued while the turn ran
     }
     fn closed(&self, exited: bool) {

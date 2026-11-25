@@ -46,7 +46,14 @@ function seedStorage() {
   localStorage.clear();
   if (isSettingsWindow && prefsTab) localStorage.setItem("prefsTab", prefsTab);
   if (onboarding) return;
-  const chats = Object.fromEntries(conv.conversations.map(c => [c.key, { ...c }]));
+  const chats: Record<string, object> = Object.fromEntries(conv.conversations.map(c => [c.key, { ...c }]));
+  // pipeline-orch: the pipeline's conversation, and its workers' conversations as a run of the app made them (the
+  // sidebar lists none of them as rows)
+  if (fixture === "pipeline-orch") {
+    chats[orch.PIPE] = { key: orch.PIPE, project: "Northwind Portal", title: "Pipeline", at: Date.now(), provider: "claude" };
+    for (const w of orch.pipeOrchWorkers)
+      chats[w.key] = { key: w.key, project: w.project, title: w.title, at: w.at, provider: "claude", orch: true };
+  }
   localStorage.setItem("chats", JSON.stringify(chats));
   localStorage.setItem("sel", JSON.stringify(query.get("sel") || "__wait"));
   localStorage.setItem("pvProject", "p1");
@@ -209,8 +216,12 @@ const diceTools = [
 // tickets in its pick column with its label, waiting for a worker. pipeline-answer: the same workers with room on the
 // plan and nothing waiting, so an answer from the panel starts its worker at once
 const pipePanel = fixture === "pipeline-panel" || fixture === "pipeline-answer";
+// pipeline-orch: the pipeline's conversation (PR pipeline-orch), four of those workers, on the used-up plan so the
+// runner starts nothing while the screenshot is taken
+const pipeOrch = fixture === "pipeline-orch";
 let workers = orchOn && !orchEmpty ? structuredClone(orch.workers) : [];
 if (pipePanel) workers = structuredClone(orch.pipelineWorkers) as typeof workers;
+if (pipeOrch) workers = structuredClone(orch.pipeOrchWorkers) as typeof workers;
 if (fixture === "pipeline-panel") integ.tagTasks([301, 311], "agent");
 
 // ---------- the event plugin: listeners by event, emitted synchronously (a real Tauri event is one task per event)
@@ -1173,7 +1184,7 @@ function handle(cmd: string, a: Args): unknown {
       return a.project === conv.SWITCH_KEY ? { removed: 1, kept: 0 } : { removed: 0, kept: 0 };
     case "history":
       if ((orchEmpty || orchClosed) && a.project === orch.ORCH) return [];
-      return (orchOn && orch.history(a.project)) || conv.history(a.project);
+      return (orchOn && orch.history(a.project)) || (pipeOrch && orch.pipeHistory(a.project)) || conv.history(a.project);
     // the orchestrator: its workers, and Stop, which reports the new state as an `orch` event
     case "orch_workers":
       harness.workersRead = true;
@@ -1282,6 +1293,31 @@ function handle(cmd: string, a: Args): unknown {
       if (worker) setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
       return worker ? structuredClone(worker) : null;
     }
+    // a ticket a person took to review (orch.rs adopt): "Label the crates" has the PR the person opened on its branch
+    case "orch_adopt": {
+      const worker = workers.find(w => w.key === a.key && w.key === "c:orch-w-p5");
+      if (!worker) return null;
+      Object.assign(worker, {
+        state: "done",
+        ended: Date.now(),
+        board: `done:${Date.now()}`,
+        pr: "https://github.com/acme/northwind/pull/92",
+        pr_error: null,
+      });
+      setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
+      return structuredClone(worker);
+    }
+    // a pipeline conversation's tool call, answered by the runner (orch.rs pipe_webview): kept in pipelineCalls
+    case "orch_pipe_done":
+      return null;
+    // a push tried once more (orch.rs republish): it fails again here
+    case "orch_republish":
+      return Promise.reject("git push of the branch failed");
+    // the runner's digest into a pipeline's conversation (orch.rs pipe_say) and its reset: kept in pipelineCalls, not
+    // delivered, so a screenshot shows the fixture's conversation as it is
+    case "orch_pipe_say":
+    case "orch_pipe_reset":
+      return null;
     case "history_sid": {
       const items = conv.terminalHistory(a.sid);
       return (a.from ?? 0) === 0 ? { items, next: items.length ? 4096 : 0 } : { items: [], next: a.from };
@@ -1557,7 +1593,7 @@ function handle(cmd: string, a: Args): unknown {
     case "usage_limits":
       if (fixture === "antigravity") return integ.usageLimitsAntigravity;
       // the pipeline panel's hold: Claude's session window at 100%
-      if (fixture === "pipeline-panel")
+      if (fixture === "pipeline-panel" || pipeOrch)
         return integ.usageLimits.map(p =>
           p.provider === "claude" && p.limits.ok
             ? { ...p, limits: { ...p.limits, windows: p.limits.windows.map((w, i) => (i ? w : { ...w, pct: 100 })) } }

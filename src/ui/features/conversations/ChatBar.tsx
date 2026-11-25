@@ -19,7 +19,8 @@ export type BarTools = {
   repos: boolean; // the project has repos; without them the button offers to link one
   active: "" | "board" | "prs"; // the project's board or PRs is what the centre shows
   git: boolean; // the Git drawer is switched on (Settings › General)
-  pipeline: boolean; // the project has a board pipeline: its panel's button shows
+  pipeline: boolean; // the project has a board pipeline: its button shows
+  pipeOpen: boolean; // the pipeline's conversation is the one open: its button shows the panel next to it
 };
 
 /** The title bar of the centre column: the project (or the view), the conversation's title, a view's own
@@ -47,6 +48,7 @@ export function ChatBar({
   onOpenBoard,
   onOpenPrs,
   onToggleDrawer,
+  onOpenPipeline,
   onShowInGraph,
 }: {
   heading: string;
@@ -70,6 +72,7 @@ export function ChatBar({
   onOpenBoard: () => void;
   onOpenPrs: () => void;
   onToggleDrawer: (tool: "terminal" | "notes" | "design" | "git" | "files" | "pipeline") => void;
+  onOpenPipeline: () => void;
   onShowInGraph?: () => void;
 }) {
   const { t } = useT();
@@ -217,8 +220,8 @@ export function ChatBar({
           {tools.pipeline ? (
             <ToolButton
               on={drawer === "pipeline"}
-              label={t("pl.title")}
-              onClick={() => onToggleDrawer("pipeline")}
+              label={t(tools.pipeOpen ? "po.panel" : "po.open")}
+              onClick={onOpenPipeline}
               icon={<Icon name="workflow" className="glyph size-4" />}
             />
           ) : null}

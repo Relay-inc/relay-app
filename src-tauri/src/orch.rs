@@ -16,6 +16,9 @@ use super::{data_dir, need_vault, pipe_reply, spawn_or_get, App};
 
 pub const COORD: &str = "c:orch";
 const WORKER_PREFIX: &str = "c:orch-w-";
+/// A board pipeline's own coordinator, one per vault project with a pipeline: this and the project. The user follows
+/// that pipeline there, COORD stays for the workers the user starts through it.
+const PIPE_PREFIX: &str = "c:orch:";
 /// Every turn Relay itself writes starts with this, so the webview draws it as Relay's, not the user's.
 pub const PREFIX: &str = "[Relay] ";
 /// Workers running at once, unless settings.orch.max says otherwise.
@@ -195,7 +198,11 @@ pub struct Validate {
 }
 
 pub fn is_worker(key: &str) -> bool { key.starts_with(WORKER_PREFIX) }
-pub fn is_orch(key: &str) -> bool { key == COORD || is_worker(key) }
+pub fn pipe_key(project: &str) -> String { format!("{PIPE_PREFIX}{project}") }
+/// The vault project of a pipeline's coordinator, None for any other conversation.
+pub fn pipe_project(key: &str) -> Option<&str> { key.strip_prefix(PIPE_PREFIX).filter(|p| !p.is_empty()) }
+pub fn is_coord(key: &str) -> bool { key == COORD || pipe_project(key).is_some() }
+pub fn is_orch(key: &str) -> bool { is_coord(key) || is_worker(key) }
 fn now() -> i64 { chrono::Utc::now().timestamp_millis() }
 
 fn file(app: &AppHandle) -> PathBuf { data_dir(app).join("orch.json") }
@@ -222,23 +229,31 @@ const COORD_PROMPT: &str = prompt::text(include_str!("../../prompts/orchestrator
 
 const WORKER_PROMPT: &str = prompt::text(include_str!("../../prompts/orchestrator/worker.md"));
 
+const PIPE_PROMPT: &str = prompt::text(include_str!("../../prompts/orchestrator/pipeline.md"));
+
 /// The extra start flags of a coordinator or worker: role, its system prompt and its tools. Permissions are the
 /// user's own, as in any other conversation: no extra asks or denies.
 pub fn flags(grants: &mut agent_core::Grants, key: &str, vault: &str, shared: &Shared) {
     if !is_orch(key) { return; }
-    let coord = key == COORD;
-    grants.orch = Some(if coord { "coordinator" } else { "worker" }.into());
-    grants.system = Some(prompt::fill(if coord { COORD_PROMPT } else { WORKER_PROMPT }, &[("shared", &shared.listed(vault))]));
+    let role = role(key);
+    grants.orch = Some(role.into());
+    grants.system = Some(match pipe_project(key) {
+        Some(p) => prompt::fill(PIPE_PROMPT, &[("project", p), ("untrusted", &prompt::untrusted_note(&["ticket"]))]),
+        None => prompt::fill(if role == "coordinator" { COORD_PROMPT } else { WORKER_PROMPT }, &[("shared", &shared.listed(vault))]),
+    });
 }
+/// What an orchestrator conversation is, for its tools: "coordinator", "pipeline" (a pipeline's coordinator) or "worker".
+fn role(key: &str) -> &'static str { if key == COORD { "coordinator" } else if pipe_project(key).is_some() { "pipeline" } else { "worker" } }
 
 // ---------- the relay-orch MCP server
 
 fn tool(name: &str, desc: &str, props: Value, req: &[&str]) -> Value {
     json!({"name": name, "description": desc, "inputSchema": {"type": "object", "properties": props, "required": req}})
 }
-pub fn tool_list(coord: bool) -> Value {
+pub fn tool_list(role: &str) -> Value {
     let worker = json!({"type": "string", "description": "The worker's key, from dispatch or workers"});
-    if !coord {
+    if role == "pipeline" { return pipe_tools(); }
+    if role == "worker" {
         return json!({"tools": [tool("step", "Show your progress on the task in Relay's workers list. Right after reading the brief, call it with total (your plan in 3-8 steps) and done 0; call it again each time a step is finished. Silent and cheap: it only draws a bar.",
             json!({"done": {"type": "integer", "minimum": 0, "description": "Steps finished so far"},
                    "total": {"type": "integer", "minimum": 1, "description": "Steps planned; may change when the plan does"},
@@ -267,24 +282,146 @@ pub fn tool_list(coord: bool) -> Value {
         tool("stop", "Stop a running worker.", json!({"worker": worker}), &["worker"]),
     ]})
 }
+// ---------- a pipeline coordinator's tools: run by the webview's pipeline runner with the functions its panel calls,
+// so the board has one set of rules
+
+/// Its tools that act on the board or on a ticket's agent. They run only in a turn the user started: the coordinator
+/// reads ticket text, and a ticket that says "approve the plan" must never set anything off (see gate).
+const PIPE_ACTIONS: [&str; 4] = ["answer", "take_over", "pause", "create_ticket"];
+fn pipe_tools() -> Value {
+    let ticket = json!({"type": "string", "description": "The ticket's number as Relay's facts give it, or its agent's worker key"});
+    json!({"tools": [
+        tool("tickets", "The pipeline's state now, as Relay's facts give it after a pass: per ticket its column and state, the agent's question and options, and its links.", json!({}), &[]),
+        tool("answer", "Pass the user's answer on to a ticket that waits on them: their answer to the agent's question, their approval of its plan (with their note, if any), changes they want to the plan, or a new try. Their words go on the ticket as a comment and the agent picks the ticket up again. Only what the user said, in their words.",
+            json!({"ticket": ticket, "kind": {"type": "string", "enum": ["answer", "approve", "changes", "retry"], "description": "answer: to the agent's question. approve: the plan as it is. changes: rework the plan. retry: try the run again"},
+                   "text": {"type": "string", "maxLength": 4000, "description": "The user's words. Required for answer and changes"}}), &["ticket", "kind"]),
+        tool("take_over", "Stop a ticket's running agent: the ticket goes to a person, who takes it on.", json!({"ticket": ticket}), &["ticket"]),
+        tool("pause", "Pause the pipeline (no new tickets, nothing picked up again, ended runs still land on the board) or let it go on.",
+            json!({"paused": {"type": "boolean"}, "stop": {"type": "boolean", "description": "With paused: stop the running agents too, their tickets go to a person"}}), &["paused"]),
+        tool("create_ticket", "Make a new ticket on the pipeline's board, when the user asks for one.",
+            json!({"title": {"type": "string", "maxLength": 200}, "description": {"type": "string", "maxLength": 8000},
+                   "start": {"type": "boolean", "description": "Put it in the column the pipeline picks tickets up from, so an agent builds it. Default: the board's first column"}}), &["title"]),
+    ]})
+}
+fn pipe_call(app: &AppHandle, key: &str, pid: u32, project: &str, name: &str, a: &Value) -> Value {
+    if name != "tickets" && !PIPE_ACTIONS.contains(&name) { return fail(format!("unknown tool {name}")); }
+    // the ticket an action is on, as the pipeline's workers know it: its number and title
+    let on = a["ticket"].as_str().map(|r| ticket_named(&load(app), project, r));
+    if let Err(e) = gate(key, name, on.as_ref().map(|(n, t)| (n.as_str(), t.as_str()))) { return fail(e); }
+    // stopping agents and adding to the board: the user clicks a card too
+    if name == "take_over" || name == "create_ticket" || (name == "pause" && a["paused"] == true && a["stop"] == true) {
+        let mut shown = a.clone();
+        if let Some((n, t)) = &on { shown["ticket"] = json!(format!("#{n} {t}").trim().to_string()); }
+        if let Err(e) = crate::actions::confirm(app, key, pid, &format!("pipeline.{name}"), &shown) { return fail(e); }
+    }
+    pipe_webview(app, project, name, a).map(text).unwrap_or_else(fail)
+}
+
+/// Per pipeline coordinator, the user's own message that started the turn running now: set by session::send (only
+/// while no turn runs: one sent during Relay's turn joins that turn), taken away when a turn ends and when Relay
+/// starts one (spawn_or_get). In memory: after a restart nothing is the user's until they write again.
+static USER_TURN: std::sync::Mutex<Option<HashMap<String, String>>> = std::sync::Mutex::new(None);
+pub fn turn_started(key: &str, said: Option<&str>) {
+    if pipe_project(key).is_none() { return; }
+    let mut m = USER_TURN.lock().unwrap();
+    let m = m.get_or_insert_with(HashMap::new);
+    match said { Some(s) => { m.insert(key.into(), s.into()); } None => { m.remove(key); } }
+}
+pub fn turn_ended(key: &str) { turn_started(key, None); }
+/// A pipeline coordinator's action is refused here, at the tool, whatever the prompt says: in a turn the user did not
+/// start, and on a ticket (`on`: its number and title) their message does not name. Inside the user's turn the
+/// coordinator has read ticket text too, which must not steer it to another ticket than the one the user meant.
+fn gate(key: &str, name: &str, on: Option<(&str, &str)>) -> Result<(), String> {
+    if !PIPE_ACTIONS.contains(&name) { return Ok(()); }
+    let said = USER_TURN.lock().unwrap().as_ref().and_then(|m| m.get(key).cloned());
+    let Some(said) = said else {
+        return Err(format!("Relay started this turn, not the user: {name} only runs in a turn the user started. Tell the user what you would do, they can ask for it."));
+    };
+    match on {
+        Some((n, t)) if !named(&said, n, t) => Err(format!("The user's latest message does not name ticket #{n} (by its number or its title): {name} only acts on the ticket the user names. Ask the user which ticket they mean.")),
+        _ => Ok(()),
+    }
+}
+/// A tool's ticket (its number or its worker key) as the pipeline's workers know it: its number and title. A ticket
+/// sent back before it started has no worker: then the number as given.
+fn ticket_named(all: &[Worker], project: &str, r: &str) -> (String, String) {
+    let r = r.trim().trim_start_matches('#');
+    let t = |w: &Worker, k: &str| w.ticket.as_ref().and_then(|x| x[k].as_str()).unwrap_or("").to_string();
+    all.iter().rev().filter(|w| w.ticket.as_ref().is_some_and(|x| x["pipeline"] == project))
+        .find(|w| w.key == r || t(w, "number") == r).map_or_else(|| (r.to_string(), String::new()), |w| (t(w, "number"), t(w, "title")))
+}
+/// The user's message names the ticket: its number on its own ("#12", "12:", not "112"), or its title.
+fn named(said: &str, number: &str, title: &str) -> bool {
+    let alnum = |c: Option<char>| c.is_some_and(char::is_alphanumeric);
+    let by_number = !number.is_empty() && said.match_indices(number).any(|(i, _)| !alnum(said[..i].chars().last()) && !alnum(said[i + number.len()..].chars().next()));
+    let title = title.trim().to_lowercase();
+    by_number || (title.chars().count() >= 4 && said.to_lowercase().contains(&title))
+}
+
+static PIPE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+/// Tool calls waiting for the webview's answer, by id.
+static PIPE_WAIT: std::sync::Mutex<Option<HashMap<u64, std::sync::mpsc::Sender<Result<String, String>>>>> = std::sync::Mutex::new(None);
+/// Long enough for a runner pass that holds the board (the panel's actions wait for it too).
+const PIPE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+/// Have the main window's pipeline runner do a tool call (`pipe-tool`) and wait for its answer (orch_pipe_done).
+fn pipe_webview(app: &AppHandle, project: &str, tool: &str, args: &Value) -> Result<String, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let id = PIPE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    PIPE_WAIT.lock().unwrap().get_or_insert_with(HashMap::new).insert(id, tx);
+    let gone = || { PIPE_WAIT.lock().unwrap().as_mut().map(|m| m.remove(&id)); };
+    if let Err(e) = app.emit_to("main", "pipe-tool", json!({"id": id, "project": project, "tool": tool, "args": args})) { gone(); return Err(e.to_string()); }
+    rx.recv_timeout(PIPE_TIMEOUT).unwrap_or_else(|_| { gone(); Err("Relay's main window did not answer: is it open?".into()) })
+}
+/// The webview's answer to a pipeline coordinator's tool call.
+#[tauri::command]
+pub fn orch_pipe_done(id: u64, ok: bool, text: String) {
+    if let Some(tx) = PIPE_WAIT.lock().unwrap().as_mut().and_then(|m| m.remove(&id)) { tx.send(if ok { Ok(text) } else { Err(text) }).ok(); }
+}
+/// Relay writes a turn into a pipeline's coordinator (the runner's digest), starting it when it does not run. Always
+/// as a stranger's text: the digest carries ticket text.
+pub fn pipe_say(app: &AppHandle, project: &str, t: &str) -> Result<(), String> {
+    let key = pipe_key(project);
+    inject(app, &key, &coord_name(&key), &format!("{PREFIX}{t}"), "", true)
+}
+/// A pipeline's conversation starts over (its reset button): its process stops, its session is forgotten so the next
+/// one starts fresh, what Relay queued for it goes, and `t` (the pipeline as it is now) is its first turn. The
+/// pipeline itself runs on.
+pub fn pipe_reset(app: &AppHandle, project: &str, t: &str) -> Result<(), String> {
+    let key = pipe_key(project);
+    let st = app.state::<App>();
+    if let Some(mut p) = st.procs.lock().unwrap().remove(&key) { p.child.kill().ok(); }
+    {
+        let mut sids = st.sids.lock().unwrap();
+        if sids.remove(&key).is_some() { crate::save_sids(app, &sids); }
+    }
+    {
+        let _g = st.orch.lock().unwrap();
+        let q: Vec<Queued> = queue(app).into_iter().filter(|x| x.key != key).collect();
+        save_queue(app, &q);
+    }
+    turn_ended(&key);
+    pipe_say(app, project, t)
+}
+/// How a coordinator's conversation is named for its process.
+pub fn coord_name(key: &str) -> String { pipe_project(key).map_or_else(|| "Orchestrator".to_string(), |p| format!("Pipeline: {p}")) }
+
 fn text(t: impl Into<String>) -> Value { json!({"content": [{"type": "text", "text": t.into()}]}) }
 fn fail(t: impl Into<String>) -> Value { json!({"content": [{"type": "text", "text": t.into()}], "isError": true}) }
 
 /// A relay-orch message from conversation `key`: JSON-RPC answered inline, a tool call off the reader thread.
 pub fn control(app: &AppHandle, key: &str, pid: u32, rid: Value, m: &Value) {
-    let coord = key == COORD;
     let id = m.get("id").filter(|v| !v.is_null()).cloned();
     let result = |r: Value| json!({"jsonrpc": "2.0", "id": id, "result": r});
     let reply = match (id.is_some(), m["method"].as_str().unwrap_or("")) {
         (false, _) => json!({"jsonrpc": "2.0", "result": {}, "id": 0}),
         (_, "initialize") => result(json!({"protocolVersion": m["params"]["protocolVersion"], "capabilities": {"tools": {}}, "serverInfo": {"name": "relay-orch", "version": "1"}})),
         (_, "ping") => result(json!({})),
-        (_, "tools/list") => result(tool_list(coord)),
+        (_, "tools/list") => result(tool_list(role(key))),
         (_, "tools/call") => {
             let (app, key, name, args) = (app.clone(), key.to_string(), m["params"]["name"].as_str().unwrap_or("").to_string(), m["params"]["arguments"].clone());
             tauri::async_runtime::spawn(async move {
                 let (a, k) = (app.clone(), key.clone());
-                let res = tauri::async_runtime::spawn_blocking(move || call(&a, &k, &name, &args)).await.unwrap_or_else(|e| fail(e.to_string()));
+                let res = tauri::async_runtime::spawn_blocking(move || call(&a, &k, pid, &name, &args)).await.unwrap_or_else(|e| fail(e.to_string()));
                 pipe_reply(&app, &key, pid, &rid, Ok(json!({"jsonrpc": "2.0", "id": id, "result": res})));
             });
             return;
@@ -294,7 +431,8 @@ pub fn control(app: &AppHandle, key: &str, pid: u32, rid: Value, m: &Value) {
     pipe_reply(app, key, pid, &rid, Ok(reply));
 }
 
-fn call(app: &AppHandle, key: &str, name: &str, a: &Value) -> Value {
+fn call(app: &AppHandle, key: &str, pid: u32, name: &str, a: &Value) -> Value {
+    if let Some(project) = pipe_project(key) { return pipe_call(app, key, pid, project, name, a); }
     let s = |k: &str| a[k].as_str().map(str::trim).filter(|v| !v.is_empty()).map(String::from);
     match (key == COORD, name) {
         (true, "dispatch") => dispatch(app, s("title"), s("task"), s("project"), s("repo"), s("model")).unwrap_or_else(fail),
@@ -774,6 +912,53 @@ pub fn pr_status(app: &AppHandle, key: &str) -> Result<Value, String> {
     }
     Ok(Value::Array(out))
 }
+/// A ticket a person took to review themselves (pushed the agent's branch, opened the PR): the PR on the worker's
+/// branch in each of its repos, found with gh, becomes its PR as if Relay had opened it, and the worker a done whose
+/// end is on the board (`done:<ended>`, the mark `land` sets), so the review loop follows it as any other: merged,
+/// closed, comments back to the worker. Its end becomes now: what was said on a PR before Relay followed it, the
+/// person who took it on has seen. None when no repo has a PR on the branch, or the worker runs again.
+pub fn adopt(app: &AppHandle, key: &str) -> Result<Option<Worker>, String> {
+    let w = load(app).into_iter().find(|w| w.key == key).ok_or_else(|| format!("no worker {key}"))?;
+    let branch = w.branch.clone().ok_or("no branch")?;
+    let st = app.state::<App>();
+    let mut all = trees(&w);
+    for t in all.iter_mut() {
+        let Some(slug) = super::gh_repo(&t.repo) else { continue };
+        let out = super::gh(&st, &["pr", "list", "-R", &slug, "--head", &branch, "--state", "all", "--json", "url,state,isCrossRepository"])?;
+        if let Some(pr) = pr_on_branch(&out) { t.pr = Some(pr); t.pr_error = None; }
+    }
+    let Some(pr) = all.iter().find_map(|t| t.pr.clone()) else { return Ok(None) };
+    let at = now();
+    Ok(update(app, key, |x| {
+        if x.state == "running" { return; }
+        x.state = "done".into(); x.ended = Some(at); x.board = Some(format!("done:{at}"));
+        x.pr = Some(pr); x.pr_error = None;
+        if !x.trees.is_empty() { x.trees = all; }
+    }).filter(|x| x.state == "done"))
+}
+/// The PR of `gh pr list --json url,state,isCrossRepository` to follow: an open one, else a merged one, else the
+/// newest (gh lists newest first). A closed PR next to a newer open one on the same branch is history. Only PRs whose
+/// branch lives in the repo itself: `--head` also matches a fork's branch of the same name, and following an
+/// outsider's PR would hand their comments to the agent and let their merge or close move the ticket.
+fn pr_on_branch(json: &str) -> Option<String> {
+    let list: Vec<Value> = serde_json::from_str::<Vec<Value>>(json).ok()?.into_iter().filter(|v| v["isCrossRepository"] == false).collect();
+    let url = |v: &Value| v["url"].as_str().map(String::from);
+    ["OPEN", "MERGED"].iter().find_map(|s| list.iter().find(|v| v["state"] == *s).and_then(url)).or_else(|| list.first().and_then(url))
+}
+/// A pipeline worker's done whose push or PR failed on something passing: pushed and PR'd again, the runner's one
+/// retry. Gone through, its end becomes now so the board lands it again, in review. Failed again, it stays as it was:
+/// the ticket already went to a person with why, and once is enough.
+pub fn republish(app: &AppHandle, key: &str) -> Result<Worker, String> {
+    let w = load(app).into_iter().find(|w| w.key == key).ok_or_else(|| format!("no worker {key}"))?;
+    if w.state != "done" || w.pr_error.is_none() { return Err("nothing to push again".into()); }
+    let r = w.report.clone().unwrap_or(Report { status: "done".into(), ..Default::default() });
+    let (done, err) = publish(app, &w, &r);
+    if let Some(e) = err { return Err(e); }
+    let pr = done.iter().find_map(|t| t.pr.clone()).or(w.pr.clone());
+    let kept = if w.trees.is_empty() { vec![] } else { done };
+    let at = now();
+    update(app, key, |x| if x.state == "done" { x.ended = Some(at); x.pr = pr; x.pr_error = None; x.trees = kept; }).ok_or_else(|| format!("no worker {key}"))
+}
 /// What the pipeline did on the board for a worker, kept so it does each step once.
 pub fn set_board(app: &AppHandle, key: &str, mark: String) -> Option<Worker> { update(app, key, |w| w.board = Some(mark)) }
 
@@ -793,8 +978,10 @@ fn holder<'a>(all: &'a [Worker], me: Option<&str>, repo: Option<&str>, project: 
 /// Kept in orch-tainted.json too, so a coordinator whose process ended starts restricted again (see send).
 /// Not to be called while holding the procs lock.
 pub fn tainted(app: &AppHandle, key: &str) -> bool {
-    app.state::<App>().procs.lock().unwrap().get(key).is_some_and(|p| p.tainted) || marked(app).iter().any(|k| k == key)
+    born_tainted(key) || app.state::<App>().procs.lock().unwrap().get(key).is_some_and(|p| p.tainted) || marked(app).iter().any(|k| k == key)
 }
+/// A pipeline's coordinator reads ticket text in every digest: restricted always, also before its first one.
+fn born_tainted(key: &str) -> bool { pipe_project(key).is_some() }
 fn marked(app: &AppHandle) -> Vec<String> {
     crate::util::read_json(data_dir(app).join("orch-tainted.json"))
 }
@@ -1092,7 +1279,7 @@ pub fn turn_end(app: &AppHandle, key: &str, last: &str) {
 /// A turn of `key` refused for its limit goes on on another account (retry::switched): Relay asks it to continue,
 /// through the queue, on the model it ran with.
 pub fn resume(app: &AppHandle, key: &str, model: &str) {
-    let name = if key == COORD { "Orchestrator".to_string() } else {
+    let name = if is_coord(key) { coord_name(key) } else {
         load(app).into_iter().find(|w| w.key == key).map_or_else(|| key.to_string(), |w| format!("{}: {}", w.project.as_deref().unwrap_or("Algemeen"), w.title))
     };
     if let Err(e) = inject(app, key, &name, crate::retry::RESUME, model, false) { eprintln!("orch: {key}: {e}"); }
@@ -1227,6 +1414,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_pr_followed_on_a_branch_is_open_then_merged_then_newest() {
+        let u = |n: u32, s: &str| format!(r#"{{"url":"https://github.com/acme/web/pull/{n}","state":"{s}","isCrossRepository":false}}"#);
+        let fork = |n: u32| format!(r#"{{"url":"https://github.com/acme/web/pull/{n}","state":"OPEN","isCrossRepository":true}}"#);
+        let pr = |n: u32| Some(format!("https://github.com/acme/web/pull/{n}"));
+        assert_eq!(pr_on_branch(&format!("[{},{}]", u(3, "CLOSED"), u(2, "OPEN"))), pr(2));
+        assert_eq!(pr_on_branch(&format!("[{},{}]", u(3, "CLOSED"), u(2, "MERGED"))), pr(2));
+        assert_eq!(pr_on_branch(&format!("[{},{}]", u(3, "CLOSED"), u(2, "CLOSED"))), pr(3));
+        assert_eq!(pr_on_branch(&format!("[{},{}]", fork(4), u(2, "CLOSED"))), pr(2), "a fork's branch of the same name is not ours");
+        assert_eq!(pr_on_branch(&format!("[{}]", fork(4))), None);
+        assert_eq!(pr_on_branch("[]"), None);
+        assert_eq!(pr_on_branch("not json"), None);
+    }
+
+    #[test]
     fn a_huge_diff_does_not_cut_the_claims() {
         let (head, claims) = ("ticket\n\n", "Not fixed: rule\n\n- x:1: earlier blocking");
         let (text, cut) = write_text(head, claims, &"+x\n".repeat(30_000));
@@ -1238,6 +1439,12 @@ mod tests {
     #[test]
     fn keys_and_flags() {
         assert!(is_orch(COORD) && !is_worker(COORD) && is_worker("c:orch-w-abc") && !is_orch("c:abc"));
+        let pipe = pipe_key("Acme Web");
+        assert_eq!((pipe.as_str(), pipe_project(&pipe), pipe_project(COORD), pipe_project("c:orch-w-abc")), ("c:orch:Acme Web", Some("Acme Web"), None, None));
+        assert!(is_orch(&pipe) && is_coord(&pipe) && !is_worker(&pipe) && !is_coord("c:orch-w-abc") && pipe_project("c:orch:").is_none());
+        assert_eq!((role(COORD), role(&pipe), role("c:orch-w-1")), ("coordinator", "pipeline", "worker"));
+        assert_eq!((coord_name(COORD).as_str(), coord_name(&pipe).as_str()), ("Orchestrator", "Pipeline: Acme Web"));
+        assert!(born_tainted(&pipe) && !born_tainted(COORD) && !born_tainted("c:orch-w-1"), "a pipeline's coordinator reads ticket text, always");
         let sh = Shared { files: vec!["/v/Brain/work-state.md".into(), "/v/reminders.md".into()], dirs: vec!["/v/Brain/index".into()] };
         let mut o = agent_core::Grants::default();
         flags(&mut o, "c:abc", "/v", &sh);
@@ -1251,6 +1458,50 @@ mod tests {
         assert_eq!((o.orch.as_deref(), o.mail), (Some("worker"), true));
         assert!(o.deny.is_empty(), "a worker too");
         assert!(!o.system.unwrap().contains("{{"));
+        let mut o = agent_core::Grants::default();
+        flags(&mut o, &pipe_key("Acme Web"), "/v", &sh);
+        let system = o.system.unwrap();
+        assert_eq!(o.orch.as_deref(), Some("pipeline"));
+        assert!(system.contains("\"Acme Web\"") && system.contains("<ticket>") && !system.contains("work-state"), "its own prompt, not the coordinator's");
+    }
+
+    #[test]
+    fn a_pipeline_coordinator_acts_only_in_a_turn_the_user_started() {
+        let key = pipe_key("Acme Gate");
+        for name in PIPE_ACTIONS { assert!(gate(&key, name, None).is_err(), "{name}: no turn seen since the start is the user's"); }
+        assert!(gate(&key, "tickets", None).is_ok(), "reading is fine in any turn");
+        turn_started(&key, Some("pause the pipeline"));
+        for name in PIPE_ACTIONS { assert!(gate(&key, name, None).is_ok(), "{name} in the user's turn"); }
+        turn_started(&key, None);
+        let refused = gate(&key, "answer", Some(("12", ""))).unwrap_err();
+        assert!(refused.starts_with("Relay started this turn"), "{refused}");
+        assert!(gate(&key, "pause", None).is_err() && gate(&key, "create_ticket", None).is_err() && gate(&key, "take_over", None).is_err());
+        turn_started(COORD, Some("anything"));
+        assert!(gate(&pipe_key("Northwind Gate"), "answer", None).is_err(), "one pipeline's user turn is not another's");
+        // the user's turn ends: a turn the CLI starts after it is nobody's
+        turn_started(&key, Some("pause it"));
+        turn_ended(&key);
+        assert!(gate(&key, "pause", None).is_err(), "after the turn ended");
+        assert!(!pipe_tools()["tools"].as_array().unwrap().iter().any(|t| t["name"].as_str().unwrap().contains("merge")), "merging is never a tool");
+    }
+
+    #[test]
+    fn a_pipeline_coordinator_acts_only_on_the_ticket_the_user_names() {
+        let key = pipe_key("Acme Named");
+        turn_started(&key, Some("answer #12: pears"));
+        assert!(gate(&key, "answer", Some(("12", "Plant the trees"))).is_ok());
+        let refused = gate(&key, "answer", Some(("13", "Water the seedlings"))).unwrap_err();
+        assert!(refused.contains("does not name ticket #13") && refused.contains("Ask the user"), "{refused}");
+        assert!(gate(&key, "take_over", Some(("112", ""))).is_err(), "12 is not 112");
+        turn_started(&key, Some("Stop the agent on water the seedlings please"));
+        assert!(gate(&key, "take_over", Some(("13", "Water the seedlings"))).is_ok(), "by its title, in any case");
+        assert!(gate(&key, "pause", None).is_ok(), "pausing names no ticket");
+        assert!(named("1.9: we deliver a dump", "1.9", "") && named("#414, the newest", "414", "") && !named("4140", "414", "") && !named("about it", "x", "it"));
+        let w = |key: &str, pipeline: &str, number: &str| Worker { key: key.into(), ticket: Some(json!({"pipeline": pipeline, "number": number, "title": format!("T{number}")})), ..Default::default() };
+        let all = [w("c:orch-w-a", "Acme", "12"), w("c:orch-w-b", "Other", "13"), w("c:orch-w-c", "Acme", "14")];
+        assert_eq!(ticket_named(&all, "Acme", "c:orch-w-c"), ("14".to_string(), "T14".to_string()), "a worker key gives its ticket's number");
+        assert_eq!(ticket_named(&all, "Acme", "#12"), ("12".to_string(), "T12".to_string()));
+        assert_eq!(ticket_named(&all, "Acme", "13"), ("13".to_string(), String::new()), "another pipeline's ticket is not this one's");
     }
 
     #[test]
@@ -1267,9 +1518,12 @@ mod tests {
 
     #[test]
     fn tools_per_role() {
-        let names = |c| tool_list(c)["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect::<Vec<_>>();
-        assert_eq!(names(true), ["dispatch", "workers", "message", "stop"]);
-        assert_eq!(names(false), ["step", "decision", "report"]);
+        let names = |r| tool_list(r)["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+        assert_eq!(names("coordinator"), ["dispatch", "workers", "message", "stop"]);
+        assert_eq!(names("worker"), ["step", "decision", "report"]);
+        assert_eq!(names("pipeline")[1..], PIPE_ACTIONS);
+        assert_eq!(names("pipeline")[0], "tickets", "reading the state needs no turn of the user");
+        assert_eq!(agent_claude::ORCH_PIPE_TOOLS.map(|t| t.rsplit("__").next().unwrap()), names("pipeline").as_slice());
         assert_eq!(agent_claude::ORCH_WORKER_TOOLS.map(|t| t.rsplit("__").next().unwrap()), ["step", "decision", "report"]);
         assert_eq!(agent_claude::ORCH_COORD_TOOLS.map(|t| t.rsplit("__").next().unwrap()), ["dispatch", "workers", "message", "stop"]);
     }
@@ -1570,7 +1824,7 @@ mod tests {
     #[test]
     fn prompts_render_without_placeholders() {
         let sh = Shared { files: vec!["/v/Brain/work-state.md".into()], dirs: vec![] };
-        for key in [COORD, "c:orch-w-1"] {
+        for key in [COORD, "c:orch-w-1", "c:orch:Acme Web"] {
             let mut o = agent_core::Grants::default();
             flags(&mut o, key, "/v", &sh);
             assert!(!o.system.unwrap().contains("{{"), "{key}");

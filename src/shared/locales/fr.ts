@@ -433,6 +433,14 @@ export default {
   "pc.repos": "Dépôts",
   "pc.reposHelp":
     "Leurs pull requests ouvertes s'affichent sous ce projet. Les agents ne modifient que les dépôts qui ont un checkout sur ce Mac.",
+  "po.open": "La conversation du pipeline",
+  "po.panel": "Le panneau du pipeline",
+  "po.reset": "Recommencer",
+  "po.resetHelp": "Une nouvelle conversation avec le pipeline tel qu'il est maintenant. Le pipeline continue.",
+  "po.resetYes": "Recommencer",
+  "po.resetNote": "Recommencé : l'état du pipeline suit.",
+  "po.waits_one": "{n} ticket vous attend",
+  "po.waits_other": "{n} tickets vous attendent",
   "pl.title": "Pipeline du tableau",
   "pl.help":
     "Relay prend les tickets du tableau, un agent construit chacun dans un worktree de chaque dépôt nécessaire, Relay ouvre une PR par dépôt et fait avancer le ticket. Vérifié toutes les 5 minutes tant que Relay tourne.",
@@ -539,6 +547,10 @@ export default {
   "pp.tickets": "Tickets",
   "pp.empty": "Aucun ticket dans le pipeline pour l'instant.",
   "pp.noPr": "Pas de PR",
+  "pp.moved": "Déplacé par quelqu'un vers {column}",
+  "pp.gone": "N'est plus sur le tableau",
+  "pp.movedOn":
+    "Quelqu'un a sorti ce ticket de {column} sur le tableau, rien n'a donc été envoyé : l'agent commencerait un travail déjà terminé.",
   "pp.openTicket": "Ouvrir le ticket",
   "pp.openPr": "Ouvrir la PR",
   "pp.takeOver": "Reprendre la main",

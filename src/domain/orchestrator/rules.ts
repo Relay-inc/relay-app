@@ -8,11 +8,19 @@ import type { Worker } from "./types";
 /** The coordinator's conversation key: one, permanent. */
 export const ORCH = "c:orch";
 const WORKER_PREFIX = "c:orch-w-";
+// a board pipeline's own coordinator: one per vault project with a pipeline (orch.rs pipe_key)
+const PIPE_PREFIX = "c:orch:";
+/** The conversation of a project's board pipeline. */
+export const pipeKey = (project: string) => `${PIPE_PREFIX}${project}`;
+/** The vault project of a pipeline's conversation, null for any other key. */
+export const pipeProject = (key: string) => (key.startsWith(PIPE_PREFIX) && key.slice(PIPE_PREFIX.length)) || null;
+/** The coordinator or a pipeline's conversation: permanent, never closed or retitled. */
+export const isCoordKey = (key: string) => key === ORCH || !!pipeProject(key);
 /** What Relay puts in front of a turn it writes itself: a worker's brief, a report into the coordinator. */
 export const RELAY_PREFIX = "[Relay] ";
 
-/** The coordinator or one of its workers: in this version they only run on this Mac. */
-export const isOrchKey = (key: string) => key === ORCH || key.startsWith(WORKER_PREFIX);
+/** A coordinator or one of its workers: in this version they only run on this Mac. */
+export const isOrchKey = (key: string) => isCoordKey(key) || key.startsWith(WORKER_PREFIX);
 /** A turn Relay wrote, not the user: shown as its own block, live and from the transcript. */
 export const isRelayTurn = (text: string) => text.startsWith(RELAY_PREFIX);
 export const relayText = (text: string) => (isRelayTurn(text) ? text.slice(RELAY_PREFIX.length) : text);
@@ -132,6 +140,29 @@ export function ensureCoordinator(chats: Record<string, Chat>) {
   };
   delete chats[ORCH].closed;
 }
+
+/** A project's pipeline conversation, under that project, made when it is new. True when it was. */
+export function ensurePipeChat(chats: Record<string, Chat>, project: string): boolean {
+  const key = pipeKey(project);
+  if (chats[key] && !chats[key].closed) return false;
+  chats[key] = {
+    ...chats[key],
+    key,
+    project,
+    title: "Pipeline",
+    at: chats[key]?.at ?? 0,
+    draft: false,
+    provider: "claude",
+  };
+  delete chats[key].closed;
+  return true;
+}
+
+/** Whether a conversation is a row of the sidebar's project list: not a pipeline's conversation (it has its own row
+ *  on top of its project) and not a pipeline's worker (reached from links in that conversation, the workers view and
+ *  search). */
+export const listedInSidebar = (chat: Pick<Chat, "key">, workers: Record<string, Pick<Worker, "ticket">>) =>
+  !pipeProject(chat.key) && !workers[chat.key]?.ticket;
 
 /** A worker's conversation, made when it is new. One adopted from the backend's list before the app knew it was a worker
  *  gets the worker's project and title; a known worker keeps what the user changed. True when something changed. */

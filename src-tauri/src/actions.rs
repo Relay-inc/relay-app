@@ -89,6 +89,12 @@ pub fn gate(app: &AppHandle, key: &str, pid: u32, action: String, args: &Value) 
         Policy::Ask => ask(app, &|| !app.state::<crate::App>().procs.lock().unwrap().get(key).is_some_and(|p| p.child.id() == pid), key, &provider, &action, args),
     }
 }
+/// A pipeline conversation's action that stops agents or adds to the board (orch.rs pipe_call): a card the user
+/// clicks every time, whatever the policies, as the agent's process waits for it.
+pub fn confirm(app: &AppHandle, key: &str, pid: u32, action: &str, args: &Value) -> Result<(), String> {
+    let provider = conversation(app, key).ok_or(NOT_IN_APP)?;
+    ask(app, &|| !app.state::<crate::App>().procs.lock().unwrap().get(key).is_some_and(|p| p.child.id() == pid), key, &provider, action, args)
+}
 /// Whether mail reaches a conversation of this provider: only through a control pipe, where the app can restrict a
 /// session that read mail.
 fn mail_allowed(provider: &str) -> bool { crate::agents::get(provider).is_ok_and(|p| p.caps().control) }

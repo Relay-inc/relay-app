@@ -1,7 +1,7 @@
 import { useState, type ChangeEvent, type KeyboardEvent } from "react";
 import type { Worker } from "../../../domain/orchestrator/types";
 import { needOf } from "../../../domain/orchestrator/rules";
-import { columnOf, isPlan, prsOf, ticketOf, type AnswerKind } from "../../../domain/pipeline/rules";
+import { answerable, isPlan, placeOf, prsOf, ticketOf, type AnswerKind } from "../../../domain/pipeline/rules";
 import type { BouncedTicket } from "../../../application/pipeline/store";
 import {
   answerTicket,
@@ -120,6 +120,7 @@ export function PipelinePanel({ project }: { project: string }) {
                 project={project}
                 worker={worker}
                 toPick={panel.toPick.includes(worker.key)}
+                place={panel.places[worker.key]}
                 since={panel.since[worker.key] ?? worker.at}
               />
             ))}
@@ -204,35 +205,34 @@ function Confirm({
   );
 }
 
-/** One ticket of the pipeline: its number and title (a click opens the worker's page), where it is on the board, its
- *  worker's state and for how long, the branch, what the agent asks, and open ticket, open PR and take over. */
+/** One ticket of the pipeline: its number and title (a click opens the worker's page), where it is on the board (moved
+ *  by a person, or the column's name there), its worker's state and for how long, the branch, what the agent asks, and
+ *  open ticket, open PR and take over. */
 function TicketRow({
   project,
   worker,
   toPick,
+  place,
   since,
 }: {
   project: string;
   worker: Worker;
   toPick: boolean;
+  place: ReturnType<typeof placeOf> & { name: string };
   since: number; // when it got into its state
 }) {
   const { t } = useT();
   const ago = useAgo();
   const state = useStateText(worker);
   const ticket = ticketOf(worker)!;
-  const question = needOf(worker);
+  // a ticket a person moved on asks nothing anymore
+  const question = place.moved ? null : needOf(worker);
   const running = worker.state === "running";
   const plan = isPlan(worker.report?.questions);
-  // what the agent waits on in the input column: an answer to its question, the plan approved, or a new try
+  // what the agent waits on in the input column: an answer to its question, the plan approved, or a new try. None
+  // for a ticket a person moved on: answering would start the agent on work that is done
   const kind =
-    running || toPick || columnOf(worker) !== "input"
-      ? null
-      : plan
-        ? "approve"
-        : question?.kind === "ask"
-          ? "answer"
-          : "retry";
+    running || toPick || !answerable(place) ? null : plan ? "approve" : question?.kind === "ask" ? "answer" : "retry";
   // taking over stops the agent: asked first, in the row
   const [confirm, setConfirm] = useState(false);
   // a done worker without its PR is not "done with a PR": the state says it needs a person
@@ -251,8 +251,14 @@ function TicketRow({
           {ticket.title || worker.title}
         </button>
         <span className="text-xs text-secondary truncate">
-          {toPick ? t("pp.waiting") : t(COLUMN[columnOf(worker)])} ·{" "}
-          <span className={nopr ? "text-soon" : state.color}>{short}</span>{" "}
+          {toPick
+            ? t("pp.waiting")
+            : place.moved
+              ? place.name
+                ? t("pp.moved", { column: place.name })
+                : t("pp.gone")
+              : place.name || t(COLUMN[place.col])}{" "}
+          · <span className={nopr ? "text-soon" : state.color}>{short}</span>{" "}
           <span className="text-tertiary">{ago(since)}</span>
         </span>
         {worker.branch ? <code className="font-mono text-[11px] text-tertiary truncate">{worker.branch}</code> : null}

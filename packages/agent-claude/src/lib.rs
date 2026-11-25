@@ -40,6 +40,8 @@ pub const RELAY_TOOL: &str = "Bash(relay *)";
 /// The relay-orch tools of the orchestrator's coordinator and of its workers, without a card (src-tauri orch.rs).
 pub const ORCH_COORD_TOOLS: [&str; 4] = ["mcp__relay-orch__dispatch", "mcp__relay-orch__workers", "mcp__relay-orch__message", "mcp__relay-orch__stop"];
 pub const ORCH_WORKER_TOOLS: [&str; 3] = ["mcp__relay-orch__step", "mcp__relay-orch__decision", "mcp__relay-orch__report"];
+/// A board pipeline's coordinator: allowed without a card, Relay itself refuses the actions in a turn it started.
+pub const ORCH_PIPE_TOOLS: [&str; 5] = ["mcp__relay-orch__tickets", "mcp__relay-orch__answer", "mcp__relay-orch__take_over", "mcp__relay-orch__pause", "mcp__relay-orch__create_ticket"];
 
 pub struct Claude;
 pub static PROVIDER: Claude = Claude;
@@ -242,7 +244,7 @@ impl AgentProvider for Claude {
         }
         if let Some(role) = env.grants.orch.as_deref() {
             mcp["mcpServers"]["relay-orch"] = json!({"type": "sdk", "name": "relay-orch"});
-            allowed.extend(if role == "coordinator" { &ORCH_COORD_TOOLS[..] } else { &ORCH_WORKER_TOOLS[..] }.iter().map(|t| t.to_string()));
+            allowed.extend(match role { "coordinator" => &ORCH_COORD_TOOLS[..], "pipeline" => &ORCH_PIPE_TOOLS[..], _ => &ORCH_WORKER_TOOLS[..] }.iter().map(|t| t.to_string()));
         }
         let denied: Vec<String> = DENIED.iter().map(|d| d.to_string()).chain(env.grants.deny.iter().cloned()).collect();
         let system = match env.grants.system.as_deref() { Some(s) => format!("{}\n\n{s}", agent_core::envelope::HINT), None => agent_core::envelope::HINT.to_string() };
