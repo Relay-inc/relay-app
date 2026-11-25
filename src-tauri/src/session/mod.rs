@@ -237,6 +237,8 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
     }
     let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
     let x = procs.get_mut(&project).unwrap();
+    // the user starts this turn, unless one runs: a pipeline coordinator acts only in the user's own turn (orch.rs gate)
+    if !x.turns.busy() { orch::turn_started(&project, true); }
     writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
     x.sent();
     Ok(())
@@ -273,6 +275,7 @@ pub(crate) fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, 
     let x = procs.get_mut(key).unwrap();
     if taint && !x.tainted { x.mark_tainted(); }
     let line = p.input(&Turn { text: text.to_string(), images: vec![] }).ok_or_else(|| format!("{}: no input", p.id()))?;
+    orch::turn_started(key, false); // Relay starts this turn, not the user
     writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
     x.sent();
     Ok(true)

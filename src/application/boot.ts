@@ -44,6 +44,7 @@ import { keepWorkspacesApart, watchLive } from "./navigation/workspaces";
 import { loadPhoneShared } from "./conversations/phoneShare";
 import { loadWorkers, onOrchEvent } from "./orchestrator/orchestrator";
 import { onPipelineWorker, runPipelines } from "./pipeline/runner";
+import { onPipeTool } from "./pipeline/tools";
 import { loadRetries, onRetryEvent } from "./conversations/retry";
 import { loadRecent, sidebarTab } from "./navigation/pages";
 
@@ -130,6 +131,7 @@ function listenToBackend() {
   backend.onVaultInvite(() => void openInvite());
   backend.onMenu(onMenu);
   watchUpdate();
+  void backend.onPipeTool(onPipeTool); // a pipeline conversation's tools, done by the runner like the panel's buttons
   backend.onOrch(event => {
     onOrchEvent(event);
     if (event.type === "worker") onPipelineWorker(event.worker);

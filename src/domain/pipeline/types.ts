@@ -83,6 +83,9 @@ export type PrStatus = {
   inline: { user: { login: string } | null; body: string; path: string; line: number | null; created_at: string }[];
 };
 
+/** A tool call of a pipeline's conversation, for the runner to do (src-tauri orch.rs pipe_webview). */
+export type PipeToolCall = { id: number; project: string; tool: string; args: Record<string, unknown> };
+
 /** Where a worker's end takes its ticket, and what the comment on it says. */
 export type Step = {
   mark: string;

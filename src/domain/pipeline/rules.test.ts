@@ -48,6 +48,7 @@ import {
   reviewAll,
   stalled,
   step,
+  ticketByRef,
   usedUp,
 } from "./rules.ts";
 import type { PrStatus } from "./types.ts";
@@ -663,4 +664,17 @@ test("needsSetup: a repo without a checkout, or a pipeline on that misses a colu
   assert.equal(needsSetup(["acme/web"], found, on), false);
   assert.equal(needsSetup(["acme/web"], found, { ...on, input: "" }), true);
   assert.equal(needsSetup(["acme/web"], found, { ...on, on: false, input: "" }), false);
+});
+
+test("the pipeline's conversation names a ticket by its number or its agent, one ticket only", () => {
+  const numbered = (n: string, state: Worker["state"]) =>
+    worker(n, state, { ticket: { pipeline: "Acme", card: `c${n}`, number: n } });
+  const a = numbered("414", "blocked");
+  const b = numbered("415", "running");
+  const bounced = [{ number: "305", id: "c305" }];
+  assert.deepEqual(ticketByRef([a, b], bounced, "#414"), { worker: a });
+  assert.deepEqual(ticketByRef([a, b], bounced, b.key), { worker: b });
+  assert.deepEqual(ticketByRef([a, b], bounced, " 305 "), { card: bounced[0] });
+  assert.equal(ticketByRef([a, b], bounced, "999"), undefined, "not in this pipeline");
+  assert.equal(ticketByRef([a, numbered("414", "failed")], [], "414"), undefined, "two match: none is picked");
 });

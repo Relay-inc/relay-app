@@ -182,12 +182,14 @@ const posted: Record<string, string> = {};
  *  then the ticket going again: its worker picks it up now when it may start and there is room, else the ticket
  *  waits in the pick column (a hand-picked pipeline has none: it stays, Build with agent continues it). A ticket sent
  *  back before it started (`card`) goes to the pick column for the pre-flight again. Resolves true when the comment
- *  is on the ticket. On a failure it says why and resolves false, so the panel keeps what was typed. */
+ *  is on the ticket. On a failure it says why and resolves false, so the panel keeps what was typed. `say`: where
+ *  what happened is said, a toast for the panel, the tool's answer for the pipeline's conversation. */
 export function answerTicket(
   project: string,
   to: { worker: Worker } | { card: BouncedTicket },
   kind: AnswerKind,
   text: string,
+  say: (text: string) => void = toast,
 ): Promise<boolean> {
   return serial(async () => {
     const p = settings().pipelines?.[project];
@@ -204,7 +206,7 @@ export function answerTicket(
     const now = card ? colOf(b.prov, { group: b.group }, card) : "";
     placed(b, id, now);
     if (now !== p.input) {
-      toast(t("pp.movedOn", { column: nameOf(b, p.input) }));
+      say(t("pp.movedOn", { column: nameOf(b, p.input) }));
       return false;
     }
     if (posted[id] !== words) {
@@ -237,12 +239,12 @@ export function answerTicket(
     } else if (next === "pick" && p.pick) {
       await move(b, id, p.pick);
       if (worker) mark();
-      toast(
+      say(
         t(!worker ? "pp.toPick" : startsNow(settings(), project) ? "pp.toPickFull" : "pp.toPickPaused", {
           project: name,
         }),
       );
-    } else if (next === "stay") toast(t("pp.stayManual", { project: name }));
+    } else if (next === "stay") say(t("pp.stayManual", { project: name }));
     if (!worker) {
       setBounced(
         project,
@@ -253,19 +255,22 @@ export function answerTicket(
     delete posted[id];
     return true;
   }).catch(e => {
-    toast(t("pl.error", { project: projectName(project), error: String((e as Error)?.message ?? e) }));
+    say(t("pl.error", { project: projectName(project), error: String((e as Error)?.message ?? e) }));
     return false;
   });
 }
 
 /** Pause a project's pipeline from its panel, or go on. `stop`: its running workers stop too (their tickets land with
- *  a person), else they finish their step. Going on starts a pass at once. */
+ *  a person), else they finish their step. Going on starts a pass at once. Resolves with why it failed, else "". */
 export async function pausePipeline(project: string, paused: boolean, stop = false) {
   const s = settings();
   const p = s.pipelines?.[project];
-  if (!p) return;
+  if (!p) return "no pipeline";
   const failed = await saveMainSettings({ ...s, pipelines: { ...s.pipelines, [project]: { ...p, paused } } });
-  if (failed) return toast(failed);
+  if (failed) {
+    toast(failed);
+    return failed;
+  }
   if (stop)
     await Promise.all(
       workersOf(allWorkers(), project)
@@ -273,6 +278,7 @@ export async function pausePipeline(project: string, paused: boolean, stop = fal
         .map(w => takeOver(w)),
     );
   if (!paused) runPipelines();
+  return "";
 }
 
 /** Pause every pipeline at once, or go on (each one's own pause stays as it was). */
@@ -280,6 +286,21 @@ export async function pauseAllPipelines(paused: boolean) {
   const failed = await saveMainSettings({ ...settings(), pipelinesPaused: paused });
   if (failed) return toast(failed);
   if (!paused) runPipelines();
+}
+
+/** A new ticket on a pipeline's board, asked for in its conversation: in the pick column when `start` (an agent builds
+ *  it, a hand-picked pipeline has none), else in the board's first column. Its number, link and column. */
+export function createTicket(project: string, title: string, description: string, start: boolean) {
+  return serial(async () => {
+    const p = settings().pipelines?.[project];
+    if (!p) throw new Error("this project has no pipeline");
+    const b = await open(project, p);
+    if (!b.prov.create) throw new Error(`${b.prov.name} boards cannot get a new ticket from Relay`);
+    const column = start && !manual(p) ? p.pick : (b.columns[0]?.id ?? p.pick);
+    const card = await b.prov.create(ctxOf(b.prov), b.ref, { title, description, column, group: b.group || undefined });
+    const url = await b.prov.url(ctxOf(b.prov), b.ref, card.id).catch(() => "");
+    return { number: card.number, url, column: nameOf(b, column) };
+  });
 }
 
 /** A person takes a ticket over from its worker: the worker stops, and its stopped run lands the ticket in the input

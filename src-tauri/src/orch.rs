@@ -282,9 +282,67 @@ pub fn tool_list(role: &str) -> Value {
         tool("stop", "Stop a running worker.", json!({"worker": worker}), &["worker"]),
     ]})
 }
-/// A pipeline coordinator's tools (phase 2 fills them in).
-fn pipe_tools() -> Value { json!({"tools": []}) }
-fn pipe_call(_app: &AppHandle, _key: &str, _project: &str, name: &str, _a: &Value) -> Value { fail(format!("unknown tool {name}")) }
+// ---------- a pipeline coordinator's tools: run by the webview's pipeline runner with the functions its panel calls,
+// so the board has one set of rules
+
+/// Its tools that act on the board or on a ticket's agent. They run only in a turn the user started: the coordinator
+/// reads ticket text, and a ticket that says "approve the plan" must never set anything off (see gate).
+const PIPE_ACTIONS: [&str; 4] = ["answer", "take_over", "pause", "create_ticket"];
+fn pipe_tools() -> Value {
+    let ticket = json!({"type": "string", "description": "The ticket's number as Relay's facts give it, or its agent's worker key"});
+    json!({"tools": [
+        tool("answer", "Pass the user's answer on to a ticket that waits on them: their answer to the agent's question, their approval of its plan (with their note, if any), changes they want to the plan, or a new try. Their words go on the ticket as a comment and the agent picks the ticket up again. Only what the user said, in their words.",
+            json!({"ticket": ticket, "kind": {"type": "string", "enum": ["answer", "approve", "changes", "retry"], "description": "answer: to the agent's question. approve: the plan as it is. changes: rework the plan. retry: try the run again"},
+                   "text": {"type": "string", "maxLength": 4000, "description": "The user's words. Required for answer and changes"}}), &["ticket", "kind"]),
+        tool("take_over", "Stop a ticket's running agent: the ticket goes to a person, who takes it on.", json!({"ticket": ticket}), &["ticket"]),
+        tool("pause", "Pause the pipeline (no new tickets, nothing picked up again, ended runs still land on the board) or let it go on.",
+            json!({"paused": {"type": "boolean"}, "stop": {"type": "boolean", "description": "With paused: stop the running agents too, their tickets go to a person"}}), &["paused"]),
+        tool("create_ticket", "Make a new ticket on the pipeline's board, when the user asks for one.",
+            json!({"title": {"type": "string", "maxLength": 200}, "description": {"type": "string", "maxLength": 8000},
+                   "start": {"type": "boolean", "description": "Put it in the column the pipeline picks tickets up from, so an agent builds it. Default: the board's first column"}}), &["title"]),
+    ]})
+}
+fn pipe_call(app: &AppHandle, key: &str, project: &str, name: &str, a: &Value) -> Value {
+    if !PIPE_ACTIONS.contains(&name) { return fail(format!("unknown tool {name}")); }
+    if let Err(e) = gate(key, name) { return fail(e); }
+    pipe_webview(app, project, name, a).map(text).unwrap_or_else(fail)
+}
+
+/// Per pipeline coordinator, whether the user started the turn that runs now: set by session::send for their own
+/// message from the composer (only while no turn runs: one sent during Relay's turn joins that turn) and by
+/// spawn_or_get for a turn Relay writes. In memory: after a restart nothing is the user's until they write again.
+static USER_TURN: std::sync::Mutex<Option<HashMap<String, bool>>> = std::sync::Mutex::new(None);
+pub fn turn_started(key: &str, user: bool) {
+    if pipe_project(key).is_some() { USER_TURN.lock().unwrap().get_or_insert_with(HashMap::new).insert(key.into(), user); }
+}
+/// A pipeline coordinator's action in a turn Relay started is refused here, at the tool, whatever the prompt says.
+fn gate(key: &str, name: &str) -> Result<(), String> {
+    let user = USER_TURN.lock().unwrap().as_ref().and_then(|m| m.get(key).copied()) == Some(true);
+    if PIPE_ACTIONS.contains(&name) && !user {
+        return Err(format!("Relay started this turn, not the user: {name} only runs in a turn the user started. Tell the user what you would do, they can ask for it."));
+    }
+    Ok(())
+}
+
+static PIPE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+/// Tool calls waiting for the webview's answer, by id.
+static PIPE_WAIT: std::sync::Mutex<Option<HashMap<u64, std::sync::mpsc::Sender<Result<String, String>>>>> = std::sync::Mutex::new(None);
+/// Long enough for a runner pass that holds the board (the panel's actions wait for it too).
+const PIPE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+/// Have the main window's pipeline runner do a tool call (`pipe-tool`) and wait for its answer (orch_pipe_done).
+fn pipe_webview(app: &AppHandle, project: &str, tool: &str, args: &Value) -> Result<String, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let id = PIPE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    PIPE_WAIT.lock().unwrap().get_or_insert_with(HashMap::new).insert(id, tx);
+    let gone = || { PIPE_WAIT.lock().unwrap().as_mut().map(|m| m.remove(&id)); };
+    if let Err(e) = app.emit_to("main", "pipe-tool", json!({"id": id, "project": project, "tool": tool, "args": args})) { gone(); return Err(e.to_string()); }
+    rx.recv_timeout(PIPE_TIMEOUT).unwrap_or_else(|_| { gone(); Err("Relay's main window did not answer: is it open?".into()) })
+}
+/// The webview's answer to a pipeline coordinator's tool call.
+#[tauri::command]
+pub fn orch_pipe_done(id: u64, ok: bool, text: String) {
+    if let Some(tx) = PIPE_WAIT.lock().unwrap().as_mut().and_then(|m| m.remove(&id)) { tx.send(if ok { Ok(text) } else { Err(text) }).ok(); }
+}
 /// How a coordinator's conversation is named for its process.
 pub fn coord_name(key: &str) -> String { pipe_project(key).map_or_else(|| "Orchestrator".to_string(), |p| format!("Pipeline: {p}")) }
 
@@ -1335,6 +1393,21 @@ mod tests {
     }
 
     #[test]
+    fn a_pipeline_coordinator_acts_only_in_a_turn_the_user_started() {
+        let key = pipe_key("Acme Gate");
+        for name in PIPE_ACTIONS { assert!(gate(&key, name).is_err(), "{name}: no turn seen since the start is the user's"); }
+        turn_started(&key, true);
+        for name in PIPE_ACTIONS { assert!(gate(&key, name).is_ok(), "{name} in the user's turn"); }
+        turn_started(&key, false);
+        let refused = gate(&key, "answer").unwrap_err();
+        assert!(refused.starts_with("Relay started this turn"), "{refused}");
+        assert!(gate(&key, "pause").is_err() && gate(&key, "create_ticket").is_err() && gate(&key, "take_over").is_err());
+        turn_started(COORD, true);
+        assert!(gate(&pipe_key("Northwind Gate"), "answer").is_err(), "one pipeline's user turn is not another's");
+        assert!(!pipe_tools()["tools"].as_array().unwrap().iter().any(|t| t["name"].as_str().unwrap().contains("merge")), "merging is never a tool");
+    }
+
+    #[test]
     fn decisions_are_one_line_and_capped() {
         let mut w = Worker::default();
         push_decision(&mut w, 1, "Use\treplace()\nnot add()", &"y".repeat(500), Some("  "), Some("tests\ngreen"));
@@ -1351,6 +1424,8 @@ mod tests {
         let names = |r| tool_list(r)["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect::<Vec<_>>();
         assert_eq!(names("coordinator"), ["dispatch", "workers", "message", "stop"]);
         assert_eq!(names("worker"), ["step", "decision", "report"]);
+        assert_eq!(names("pipeline"), PIPE_ACTIONS);
+        assert_eq!(agent_claude::ORCH_PIPE_TOOLS.map(|t| t.rsplit("__").next().unwrap()), PIPE_ACTIONS);
         assert_eq!(agent_claude::ORCH_WORKER_TOOLS.map(|t| t.rsplit("__").next().unwrap()), ["step", "decision", "report"]);
         assert_eq!(agent_claude::ORCH_COORD_TOOLS.map(|t| t.rsplit("__").next().unwrap()), ["dispatch", "workers", "message", "stop"]);
     }

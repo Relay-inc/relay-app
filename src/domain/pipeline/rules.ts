@@ -185,6 +185,18 @@ export function step(w: Worker): Step | null {
 export const inReview = (w: Worker) =>
   !!prsOf(w).length && !w.pr_error && w.state === "done" && w.board === `done:${w.ended}`;
 
+/** The ticket a pipeline's conversation means (`ref`: its agent's worker key, or its number with or without "#"),
+ *  among the tickets the pipeline has a worker for and the ones it sent back before they started. Undefined when no
+ *  ticket or more than one matches: the conversation acts on one ticket it can name. */
+export function ticketByRef<B extends { number: string }>(workers: Worker[], bounced: B[], ref: string) {
+  const r = ref.trim().replace(/^#/, "");
+  const hits = [
+    ...workers.filter(w => w.key === r || ticketOf(w)?.number === r).map(worker => ({ worker })),
+    ...bounced.filter(b => b.number === r).map(card => ({ card })),
+  ];
+  return hits.length === 1 ? hits[0] : undefined;
+}
+
 /** The pipeline panel's tickets: each ticket's last worker, newest first, the merged and closed ones left out. */
 export function panelTickets(workers: Worker[], project: string) {
   const last = new Map<string, Worker>();

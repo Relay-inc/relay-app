@@ -1296,6 +1296,9 @@ function handle(cmd: string, a: Args): unknown {
       setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
       return structuredClone(worker);
     }
+    // a pipeline conversation's tool call, answered by the runner (orch.rs pipe_webview): kept in pipelineCalls
+    case "orch_pipe_done":
+      return null;
     case "history_sid": {
       const items = conv.terminalHistory(a.sid);
       return (a.from ?? 0) === 0 ? { items, next: items.length ? 4096 : 0 } : { items: [], next: a.from };
