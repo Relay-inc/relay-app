@@ -303,26 +303,59 @@ fn pipe_tools() -> Value {
                    "start": {"type": "boolean", "description": "Put it in the column the pipeline picks tickets up from, so an agent builds it. Default: the board's first column"}}), &["title"]),
     ]})
 }
-fn pipe_call(app: &AppHandle, key: &str, project: &str, name: &str, a: &Value) -> Value {
+fn pipe_call(app: &AppHandle, key: &str, pid: u32, project: &str, name: &str, a: &Value) -> Value {
     if name != "tickets" && !PIPE_ACTIONS.contains(&name) { return fail(format!("unknown tool {name}")); }
-    if let Err(e) = gate(key, name) { return fail(e); }
+    // the ticket an action is on, as the pipeline's workers know it: its number and title
+    let on = a["ticket"].as_str().map(|r| ticket_named(&load(app), project, r));
+    if let Err(e) = gate(key, name, on.as_ref().map(|(n, t)| (n.as_str(), t.as_str()))) { return fail(e); }
+    // stopping agents and adding to the board: the user clicks a card too
+    if name == "take_over" || name == "create_ticket" || (name == "pause" && a["paused"] == true && a["stop"] == true) {
+        let mut shown = a.clone();
+        if let Some((n, t)) = &on { shown["ticket"] = json!(format!("#{n} {t}").trim().to_string()); }
+        if let Err(e) = crate::actions::confirm(app, key, pid, &format!("pipeline.{name}"), &shown) { return fail(e); }
+    }
     pipe_webview(app, project, name, a).map(text).unwrap_or_else(fail)
 }
 
-/// Per pipeline coordinator, whether the user started the turn that runs now: set by session::send for their own
-/// message from the composer (only while no turn runs: one sent during Relay's turn joins that turn) and by
-/// spawn_or_get for a turn Relay writes. In memory: after a restart nothing is the user's until they write again.
-static USER_TURN: std::sync::Mutex<Option<HashMap<String, bool>>> = std::sync::Mutex::new(None);
-pub fn turn_started(key: &str, user: bool) {
-    if pipe_project(key).is_some() { USER_TURN.lock().unwrap().get_or_insert_with(HashMap::new).insert(key.into(), user); }
+/// Per pipeline coordinator, the user's own message that started the turn running now: set by session::send (only
+/// while no turn runs: one sent during Relay's turn joins that turn), taken away when a turn ends and when Relay
+/// starts one (spawn_or_get). In memory: after a restart nothing is the user's until they write again.
+static USER_TURN: std::sync::Mutex<Option<HashMap<String, String>>> = std::sync::Mutex::new(None);
+pub fn turn_started(key: &str, said: Option<&str>) {
+    if pipe_project(key).is_none() { return; }
+    let mut m = USER_TURN.lock().unwrap();
+    let m = m.get_or_insert_with(HashMap::new);
+    match said { Some(s) => { m.insert(key.into(), s.into()); } None => { m.remove(key); } }
 }
-/// A pipeline coordinator's action in a turn Relay started is refused here, at the tool, whatever the prompt says.
-fn gate(key: &str, name: &str) -> Result<(), String> {
-    let user = USER_TURN.lock().unwrap().as_ref().and_then(|m| m.get(key).copied()) == Some(true);
-    if PIPE_ACTIONS.contains(&name) && !user {
+pub fn turn_ended(key: &str) { turn_started(key, None); }
+/// A pipeline coordinator's action is refused here, at the tool, whatever the prompt says: in a turn the user did not
+/// start, and on a ticket (`on`: its number and title) their message does not name. Inside the user's turn the
+/// coordinator has read ticket text too, which must not steer it to another ticket than the one the user meant.
+fn gate(key: &str, name: &str, on: Option<(&str, &str)>) -> Result<(), String> {
+    if !PIPE_ACTIONS.contains(&name) { return Ok(()); }
+    let said = USER_TURN.lock().unwrap().as_ref().and_then(|m| m.get(key).cloned());
+    let Some(said) = said else {
         return Err(format!("Relay started this turn, not the user: {name} only runs in a turn the user started. Tell the user what you would do, they can ask for it."));
+    };
+    match on {
+        Some((n, t)) if !named(&said, n, t) => Err(format!("The user's latest message does not name ticket #{n} (by its number or its title): {name} only acts on the ticket the user names. Ask the user which ticket they mean.")),
+        _ => Ok(()),
     }
-    Ok(())
+}
+/// A tool's ticket (its number or its worker key) as the pipeline's workers know it: its number and title. A ticket
+/// sent back before it started has no worker: then the number as given.
+fn ticket_named(all: &[Worker], project: &str, r: &str) -> (String, String) {
+    let r = r.trim().trim_start_matches('#');
+    let t = |w: &Worker, k: &str| w.ticket.as_ref().and_then(|x| x[k].as_str()).unwrap_or("").to_string();
+    all.iter().rev().filter(|w| w.ticket.as_ref().is_some_and(|x| x["pipeline"] == project))
+        .find(|w| w.key == r || t(w, "number") == r).map_or_else(|| (r.to_string(), String::new()), |w| (t(w, "number"), t(w, "title")))
+}
+/// The user's message names the ticket: its number on its own ("#12", "12:", not "112"), or its title.
+fn named(said: &str, number: &str, title: &str) -> bool {
+    let alnum = |c: Option<char>| c.is_some_and(char::is_alphanumeric);
+    let by_number = !number.is_empty() && said.match_indices(number).any(|(i, _)| !alnum(said[..i].chars().last()) && !alnum(said[i + number.len()..].chars().next()));
+    let title = title.trim().to_lowercase();
+    by_number || (title.chars().count() >= 4 && said.to_lowercase().contains(&title))
 }
 
 static PIPE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -369,7 +402,7 @@ pub fn control(app: &AppHandle, key: &str, pid: u32, rid: Value, m: &Value) {
             let (app, key, name, args) = (app.clone(), key.to_string(), m["params"]["name"].as_str().unwrap_or("").to_string(), m["params"]["arguments"].clone());
             tauri::async_runtime::spawn(async move {
                 let (a, k) = (app.clone(), key.clone());
-                let res = tauri::async_runtime::spawn_blocking(move || call(&a, &k, &name, &args)).await.unwrap_or_else(|e| fail(e.to_string()));
+                let res = tauri::async_runtime::spawn_blocking(move || call(&a, &k, pid, &name, &args)).await.unwrap_or_else(|e| fail(e.to_string()));
                 pipe_reply(&app, &key, pid, &rid, Ok(json!({"jsonrpc": "2.0", "id": id, "result": res})));
             });
             return;
@@ -379,8 +412,8 @@ pub fn control(app: &AppHandle, key: &str, pid: u32, rid: Value, m: &Value) {
     pipe_reply(app, key, pid, &rid, Ok(reply));
 }
 
-fn call(app: &AppHandle, key: &str, name: &str, a: &Value) -> Value {
-    if let Some(project) = pipe_project(key) { return pipe_call(app, key, project, name, a); }
+fn call(app: &AppHandle, key: &str, pid: u32, name: &str, a: &Value) -> Value {
+    if let Some(project) = pipe_project(key) { return pipe_call(app, key, pid, project, name, a); }
     let s = |k: &str| a[k].as_str().map(str::trim).filter(|v| !v.is_empty()).map(String::from);
     match (key == COORD, name) {
         (true, "dispatch") => dispatch(app, s("title"), s("task"), s("project"), s("repo"), s("model")).unwrap_or_else(fail),
@@ -1416,17 +1449,40 @@ mod tests {
     #[test]
     fn a_pipeline_coordinator_acts_only_in_a_turn_the_user_started() {
         let key = pipe_key("Acme Gate");
-        for name in PIPE_ACTIONS { assert!(gate(&key, name).is_err(), "{name}: no turn seen since the start is the user's"); }
-        assert!(gate(&key, "tickets").is_ok(), "reading is fine in any turn");
-        turn_started(&key, true);
-        for name in PIPE_ACTIONS { assert!(gate(&key, name).is_ok(), "{name} in the user's turn"); }
-        turn_started(&key, false);
-        let refused = gate(&key, "answer").unwrap_err();
+        for name in PIPE_ACTIONS { assert!(gate(&key, name, None).is_err(), "{name}: no turn seen since the start is the user's"); }
+        assert!(gate(&key, "tickets", None).is_ok(), "reading is fine in any turn");
+        turn_started(&key, Some("pause the pipeline"));
+        for name in PIPE_ACTIONS { assert!(gate(&key, name, None).is_ok(), "{name} in the user's turn"); }
+        turn_started(&key, None);
+        let refused = gate(&key, "answer", Some(("12", ""))).unwrap_err();
         assert!(refused.starts_with("Relay started this turn"), "{refused}");
-        assert!(gate(&key, "pause").is_err() && gate(&key, "create_ticket").is_err() && gate(&key, "take_over").is_err());
-        turn_started(COORD, true);
-        assert!(gate(&pipe_key("Northwind Gate"), "answer").is_err(), "one pipeline's user turn is not another's");
+        assert!(gate(&key, "pause", None).is_err() && gate(&key, "create_ticket", None).is_err() && gate(&key, "take_over", None).is_err());
+        turn_started(COORD, Some("anything"));
+        assert!(gate(&pipe_key("Northwind Gate"), "answer", None).is_err(), "one pipeline's user turn is not another's");
+        // the user's turn ends: a turn the CLI starts after it is nobody's
+        turn_started(&key, Some("pause it"));
+        turn_ended(&key);
+        assert!(gate(&key, "pause", None).is_err(), "after the turn ended");
         assert!(!pipe_tools()["tools"].as_array().unwrap().iter().any(|t| t["name"].as_str().unwrap().contains("merge")), "merging is never a tool");
+    }
+
+    #[test]
+    fn a_pipeline_coordinator_acts_only_on_the_ticket_the_user_names() {
+        let key = pipe_key("Acme Named");
+        turn_started(&key, Some("answer #12: pears"));
+        assert!(gate(&key, "answer", Some(("12", "Plant the trees"))).is_ok());
+        let refused = gate(&key, "answer", Some(("13", "Water the seedlings"))).unwrap_err();
+        assert!(refused.contains("does not name ticket #13") && refused.contains("Ask the user"), "{refused}");
+        assert!(gate(&key, "take_over", Some(("112", ""))).is_err(), "12 is not 112");
+        turn_started(&key, Some("Stop the agent on water the seedlings please"));
+        assert!(gate(&key, "take_over", Some(("13", "Water the seedlings"))).is_ok(), "by its title, in any case");
+        assert!(gate(&key, "pause", None).is_ok(), "pausing names no ticket");
+        assert!(named("1.9: we deliver a dump", "1.9", "") && named("#414, the newest", "414", "") && !named("4140", "414", "") && !named("about it", "x", "it"));
+        let w = |key: &str, pipeline: &str, number: &str| Worker { key: key.into(), ticket: Some(json!({"pipeline": pipeline, "number": number, "title": format!("T{number}")})), ..Default::default() };
+        let all = [w("c:orch-w-a", "Acme", "12"), w("c:orch-w-b", "Other", "13"), w("c:orch-w-c", "Acme", "14")];
+        assert_eq!(ticket_named(&all, "Acme", "c:orch-w-c"), ("14".to_string(), "T14".to_string()), "a worker key gives its ticket's number");
+        assert_eq!(ticket_named(&all, "Acme", "#12"), ("12".to_string(), "T12".to_string()));
+        assert_eq!(ticket_named(&all, "Acme", "13"), ("13".to_string(), String::new()), "another pipeline's ticket is not this one's");
     }
 
     #[test]

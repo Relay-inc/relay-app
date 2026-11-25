@@ -215,6 +215,8 @@ export function pipelinePanel(project: string) {
 
 // what an answer without words puts on the ticket, so the ticket still shows what happened
 const NO_WORDS = { answer: "", changes: "", approve: "pp.approvedLine", retry: "pp.retryLine" } as const;
+/** What an answer puts on its ticket: the person's words, else the line that says what happened ("" when it needs words). */
+export const postedWords = (kind: AnswerKind, text: string) => text.trim() || (NO_WORDS[kind] ? t(NO_WORDS[kind]) : "");
 // the comment already on a ticket, by card id, when what came after it failed: sending the same again skips the post
 const posted: Record<string, string> = {};
 
@@ -238,7 +240,7 @@ export function answerTicket(
     if (!b.prov.detail?.act) throw new Error(t("pp.noComment"));
     const worker = "worker" in to ? (useOrchestratorStore.getState().workers[to.worker.key] ?? to.worker) : null;
     const id = worker ? ticketOf(worker)!.card : (to as { card: BouncedTicket }).card.id;
-    const words = text.trim() || (NO_WORDS[kind] ? t(NO_WORDS[kind]) : "");
+    const words = postedWords(kind, text);
     if (!words) return false;
     // read fresh, the panel's board can be minutes old: an answer on a ticket a person moved on (reviewed, merged)
     // would start an agent on work that is done
