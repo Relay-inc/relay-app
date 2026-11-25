@@ -425,8 +425,14 @@ const en = {
   "pc.repos": "Repositories",
   "pc.reposHelp":
     "Their open pull requests show under this project. Agents only change repos with a checkout on this Mac.",
-  "pc.waits_one": "{n} ticket waits on you",
-  "pc.waits_other": "{n} tickets wait on you",
+  "po.open": "The pipeline's conversation",
+  "po.panel": "The pipeline's panel",
+  "po.reset": "Start over",
+  "po.resetHelp": "A fresh conversation with the pipeline as it is now. The pipeline runs on.",
+  "po.resetYes": "Start over",
+  "po.resetNote": "Started over: the pipeline as it is now follows.",
+  "po.waits_one": "{n} ticket waits on you",
+  "po.waits_other": "{n} tickets wait on you",
   "pl.title": "Board pipeline",
   "pl.help":
     "Relay picks tickets from the board, an agent builds each in a worktree of every repo it needs, Relay opens a PR per repo and moves the ticket on. Checked every 5 minutes while Relay runs.",

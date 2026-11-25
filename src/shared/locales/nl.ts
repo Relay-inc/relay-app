@@ -429,8 +429,14 @@ export default {
   "pc.repos": "Repositories",
   "pc.reposHelp":
     "Hun open pull requests staan onder dit project. Agents wijzigen alleen repos met een checkout op deze Mac.",
-  "pc.waits_one": "{n} ticket wacht op jou",
-  "pc.waits_other": "{n} tickets wachten op jou",
+  "po.open": "Het gesprek van de pipeline",
+  "po.panel": "Het paneel van de pipeline",
+  "po.reset": "Opnieuw beginnen",
+  "po.resetHelp": "Een nieuw gesprek met de pipeline zoals ze nu staat. De pipeline loopt door.",
+  "po.resetYes": "Opnieuw beginnen",
+  "po.resetNote": "Opnieuw begonnen: de stand van de pipeline volgt.",
+  "po.waits_one": "{n} ticket wacht op jou",
+  "po.waits_other": "{n} tickets wachten op jou",
   "pl.title": "Bordpipeline",
   "pl.help":
     "Relay neemt tickets van het bord, een agent bouwt elk in een worktree van elke repo die het nodig heeft, Relay opent een PR per repo en zet het ticket door. Elke 5 minuten gecontroleerd zolang Relay draait.",

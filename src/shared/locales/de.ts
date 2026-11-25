@@ -429,8 +429,14 @@ export default {
   "pc.repos": "Repositories",
   "pc.reposHelp":
     "Ihre offenen Pull Requests erscheinen unter diesem Projekt. Agents ändern nur Repos mit einem Checkout auf diesem Mac.",
-  "pc.waits_one": "{n} Ticket wartet auf dich",
-  "pc.waits_other": "{n} Tickets warten auf dich",
+  "po.open": "Das Gespräch der Pipeline",
+  "po.panel": "Das Panel der Pipeline",
+  "po.reset": "Neu beginnen",
+  "po.resetHelp": "Ein neues Gespräch mit der Pipeline, wie sie jetzt steht. Die Pipeline läuft weiter.",
+  "po.resetYes": "Neu beginnen",
+  "po.resetNote": "Neu begonnen: der Stand der Pipeline folgt.",
+  "po.waits_one": "{n} Ticket wartet auf dich",
+  "po.waits_other": "{n} Tickets warten auf dich",
   "pl.title": "Board-Pipeline",
   "pl.help":
     "Relay holt Tickets vom Board, ein Agent baut jedes in einem Worktree jedes nötigen Repos, Relay öffnet einen PR pro Repo und schiebt das Ticket weiter. Alle 5 Minuten geprüft, solange Relay läuft.",

@@ -51,6 +51,7 @@ import { notify } from "../conversations/events";
 import { provider as providerOf } from "../../shared/plugins";
 import { ctxOf } from "../board/ctx";
 import { ensurePipeChats } from "../conversations/chats";
+import { useConversationsStore } from "../conversations/store";
 import { toast } from "../navigation/navigation";
 import { onOrchEvent, stopWorker } from "../orchestrator/orchestrator";
 import { useOrchestratorStore } from "../orchestrator/store";
@@ -116,7 +117,29 @@ async function digest(project: string) {
   const waits = waiting(rows);
   said[project] = { sig, waits: waits.map(r => r.ref) };
   storage.set("pipelineDigest", said);
-  if (waits.some(r => !last?.waits.includes(r.ref))) void notify(pipeKey(project), tn("pc.waits", waits.length));
+  if (waits.some(r => !last?.waits.includes(r.ref))) void notify(pipeKey(project), tn("po.waits", waits.length));
+}
+/** The reset button of a pipeline's conversation: a fresh conversation whose first turn is the pipeline as it is now.
+ *  The pipeline runs on, and the next digest compares with this state. */
+export async function resetPipeline(project: string) {
+  const key = pipeKey(project);
+  const panel = pipelinePanel(project);
+  const d = { ...panel, paused: panel.paused || panel.all };
+  const rows = digestRows(d);
+  useConversationsStore.setState(draft => {
+    draft.messages[key] = [{ kind: "note", text: t("po.resetNote") }];
+    delete draft.sidOf[key];
+    draft.status[key] = "idle";
+    draft.queued[key] = 0;
+  });
+  await backend.orchPipeReset(project, digestText(projectName(project), rows, [], d));
+  said[project] = { sig: digestSig(rows, d), waits: waiting(rows).map(r => r.ref) };
+  storage.set("pipelineDigest", said);
+}
+/** How many of a pipeline's tickets wait on the user now, for its row in the sidebar. */
+export function pipelineWaits(project: string) {
+  const panel = pipelinePanel(project);
+  return waiting(digestRows({ ...panel, paused: panel.paused || panel.all })).length;
 }
 /** The pipeline's facts as they are now, for its conversation's `tickets` tool. */
 export function pipelineFacts(project: string) {

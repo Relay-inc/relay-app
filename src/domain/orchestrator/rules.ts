@@ -158,6 +158,12 @@ export function ensurePipeChat(chats: Record<string, Chat>, project: string): bo
   return true;
 }
 
+/** Whether a conversation is a row of the sidebar's project list: not a pipeline's conversation (it has its own row
+ *  on top of its project) and not a pipeline's worker (reached from links in that conversation, the workers view and
+ *  search). */
+export const listedInSidebar = (chat: Pick<Chat, "key">, workers: Record<string, Pick<Worker, "ticket">>) =>
+  !pipeProject(chat.key) && !workers[chat.key]?.ticket;
+
 /** A worker's conversation, made when it is new. One adopted from the backend's list before the app knew it was a worker
  *  gets the worker's project and title; a known worker keeps what the user changed. True when something changed. */
 export function ensureWorkerChat(chats: Record<string, Chat>, worker: Worker): boolean {

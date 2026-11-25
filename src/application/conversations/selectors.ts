@@ -29,7 +29,7 @@ import { contextTint } from "../navigation/sidebar";
 import { agentOf, chatAgent, chatCaps } from "../agents/agents";
 import { otherVaultOf, projectLabel } from "../workspace/vault";
 import { machinePick } from "../../domain/settings/machines";
-import { ORCH, isOrchKey } from "../../domain/orchestrator/rules";
+import { ORCH, isOrchKey, pipeKey, pipeProject } from "../../domain/orchestrator/rules";
 import { workerCounts } from "../orchestrator/orchestrator";
 import { useConversationsStore } from "./store";
 import { phoneCommands } from "./phoneShare";
@@ -187,6 +187,8 @@ export function chatBar(key: string) {
     renamable: !!conversation,
     // the orchestrator's coordinator reads like a view: its name and what runs, no title, no project to move it to
     coordinator: key === ORCH,
+    // a pipeline's conversation: its reset button in the bar
+    pipe: pipeProject(key),
     // the terminal would resume a conversation that touched mail without the app's restrictions
     locked: !!conversation?.fromMail,
     noTerm: onView ? true : session ? session.kind !== "background" : agentOf(chatAgent(key))?.caps.terminal === false,
@@ -202,6 +204,7 @@ export function chatBar(key: string) {
           active: tool ? (board ? ("board" as const) : key === PRS ? ("prs" as const) : ("" as const)) : ("" as const),
           git: settings().gitDrawer === true,
           pipeline: !!settings().pipelines?.[toolProject] && !!settings().boards?.[toolProject],
+          pipeOpen: key === pipeKey(toolProject),
           back: !!tool,
         }
       : null,

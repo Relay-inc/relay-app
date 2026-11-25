@@ -16,7 +16,9 @@ import {
   type ViewRow,
   type Meta,
 } from "../../domain/navigation/sidebar";
-import { ORCH } from "../../domain/orchestrator/rules";
+import { ORCH, listedInSidebar, pipeKey } from "../../domain/orchestrator/rules";
+import { useOrchestratorStore } from "../orchestrator/store";
+import { pipelineWaits } from "../pipeline/runner";
 import { arranged, isHidden, withHidden } from "../../domain/navigation/sidebar-order";
 import { byFolder, newFolderId } from "../../domain/navigation/sidebar-folders";
 import type { SidebarCfg } from "../../domain/settings/types";
@@ -149,10 +151,18 @@ const isOpenDraft = (conversation: Chat, project: string | null) =>
   conversation.project === project &&
   (conversation.key === nav().selected || !!typedOf(conversation.key));
 // the open draft shows as "Nieuw gesprek" under its project, its title follows what is typed
+// a pipeline's conversation and its workers are not rows here: the conversation has its own row on top (pipeRow)
 const listed = (project: string | null): Chat[] => [
   ...Object.values(cs().chats).filter(conversation => isOpenDraft(conversation, project)),
-  ...chatsOf(project),
+  ...chatsOf(project).filter(conversation => listedInSidebar(conversation, useOrchestratorStore.getState().workers)),
 ];
+// the project's pipeline conversation, on top of its group, with what waits on the user
+function pipeRow(project: string): ConvRow[] {
+  const conversation = cs().chats[pipeKey(project)];
+  if (!conversation || conversation.closed) return [];
+  const waits = pipelineWaits(project);
+  return [{ ...convRow(conversation), closable: false, pipe: { waits, title: waits ? tn("po.waits", waits) : "" } }];
+}
 const trailOf = (keys: string[]): Trail => {
   if (keys.some(isWaiting)) return "dot";
   if (keys.some(key => cs().status[key] === "busy")) return "spin";
@@ -285,6 +295,7 @@ function projectBlock(project: Project, allSessions: TerminalSession[]): Project
     folders: folderBlocks(project.name, inside),
     // what is in progress on Today first, then the sessions and conversations in the user's order
     convs: [
+      ...pipeRow(project.name),
       ...workOf(project.name).map(workRow),
       ...ordered(
         [...sessions.map(termRow), ...shownConversations.map(conversation => convRow(conversation))],

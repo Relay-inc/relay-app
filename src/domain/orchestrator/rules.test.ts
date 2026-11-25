@@ -16,6 +16,7 @@ import {
   ensureWorkerChat,
   isCoordKey,
   isOrchKey,
+  listedInSidebar,
   pipeKey,
   pipeProject,
   isRelayTurn,
@@ -210,4 +211,15 @@ test("runs: a burst of dispatches is this run, the rest earlier", () => {
   assert.deepEqual(splitRuns([]), { run: [], since: 0, earlier: [] });
   assert.equal(reportKey('[Relay] Report from worker c:orch-w-b2 (Beacon, "x"): done'), "c:orch-w-b2");
   assert.equal(reportKey("Message from the coordinator"), null);
+});
+
+test("sidebar rows: no pipeline worker and not the pipeline's conversation, which has its own row", () => {
+  const workers = {
+    "c:orch-w-t1": worker("c:orch-w-t1", { ticket: { pipeline: "Acme Web", card: "1" } }),
+    "c:orch-w-l1": worker("c:orch-w-l1"),
+  };
+  const shown = ["c:abc", "c:orch-w-t1", "c:orch-w-l1", pipeKey("Acme Web"), ORCH].filter(key =>
+    listedInSidebar({ key }, workers),
+  );
+  assert.deepEqual(shown, ["c:abc", "c:orch-w-l1", ORCH]);
 });

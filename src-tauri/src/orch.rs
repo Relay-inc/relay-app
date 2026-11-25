@@ -383,6 +383,25 @@ pub fn pipe_say(app: &AppHandle, project: &str, t: &str) -> Result<(), String> {
     let key = pipe_key(project);
     inject(app, &key, &coord_name(&key), &format!("{PREFIX}{t}"), "", true)
 }
+/// A pipeline's conversation starts over (its reset button): its process stops, its session is forgotten so the next
+/// one starts fresh, what Relay queued for it goes, and `t` (the pipeline as it is now) is its first turn. The
+/// pipeline itself runs on.
+pub fn pipe_reset(app: &AppHandle, project: &str, t: &str) -> Result<(), String> {
+    let key = pipe_key(project);
+    let st = app.state::<App>();
+    if let Some(mut p) = st.procs.lock().unwrap().remove(&key) { p.child.kill().ok(); }
+    {
+        let mut sids = st.sids.lock().unwrap();
+        if sids.remove(&key).is_some() { crate::save_sids(app, &sids); }
+    }
+    {
+        let _g = st.orch.lock().unwrap();
+        let q: Vec<Queued> = queue(app).into_iter().filter(|x| x.key != key).collect();
+        save_queue(app, &q);
+    }
+    turn_ended(&key);
+    pipe_say(app, project, t)
+}
 /// How a coordinator's conversation is named for its process.
 pub fn coord_name(key: &str) -> String { pipe_project(key).map_or_else(|| "Orchestrator".to_string(), |p| format!("Pipeline: {p}")) }
 

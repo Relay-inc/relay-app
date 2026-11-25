@@ -286,7 +286,28 @@ export function NavigationView({ className }: { className: string }) {
       </>
     );
   const renderConversation = (row: ConvRow, indent: boolean, nested = false) =>
-    row.work ? (
+    row.pipe ? (
+      // the project's pipeline conversation: on top, not dragged or closed, with what waits on the user
+      <SidebarRow
+        key={row.key}
+        kind="conv"
+        data-kind="pipe"
+        data-key={row.key}
+        icon="workflow"
+        name={row.title}
+        selected={row.selected}
+        unseen={row.unseen}
+        indent={indent}
+        closable={false}
+        closing={false}
+        trail={row.trail}
+        subs={0}
+        subsTitle=""
+        mark=""
+        meta={row.pipe.waits ? { kind: "badge", n: row.pipe.waits, title: row.pipe.title } : undefined}
+        onClick={() => select(row.key)}
+      />
+    ) : row.work ? (
       // Today's work in progress: opens Today on it, closing discards it; not dragged, no conversation menu
       <SidebarRow
         key={row.key}
