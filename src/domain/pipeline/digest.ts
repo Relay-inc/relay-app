@@ -35,7 +35,10 @@ export type DigestRow = {
   key: string; // its worker, "" for a ticket sent back before it started
   title: string;
   url: string;
+  /** the pipeline's column it is in, in Relay's words (Busy, Review, Input, or another one a person moved it to) */
   column: string;
+  /** the column's name on the board, the tracker's words: in the untrusted block */
+  board: string;
   /** Relay's own words for where it stands */
   state: string;
   /** the agent's (or the pre-flight's) question and the answers it offers, a plan for approval */
@@ -44,33 +47,59 @@ export type DigestRow = {
   plan: boolean;
   /** what the agent said it did, for a run that went nowhere */
   summary: string;
+  /** why it is stuck in other people's words (git, gh or the agent's), and the agent's step: in the untrusted block */
+  detail: string;
   prs: string[];
-  /** a running agent's step, left out of what counts as news */
+  /** a running agent's step as Relay counts it, left out of what counts as news */
   progress: string;
 };
 
 const COLUMN = { busy: "Busy", review: "Review", input: "Input" } as const;
 
+/** An outside value that has to stand in one of Relay's own lines (the project's name): one line, without the
+ *  characters that make markdown, links or tags, and short. */
+export const plain = (s: string) =>
+  s
+    .replace(/[[\]()<>`*_#|\\{}!]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+/** A ticket's number as Relay's lines name it: digits (and the dots or dashes some trackers use), else none. */
+export const safeRef = (n: string | undefined) => (n && /^[0-9][0-9.-]{0,15}$/.test(n) ? n : "");
+/** A link Relay may put in markdown: https only, the rule openPipelineLink opens, with what would end the link
+ *  encoded. Anything else gets no link. */
+export function safeUrl(url: string) {
+  if (!/^https:\/\//i.test(url)) return "";
+  try {
+    return new URL(url).href.replace(/[()[\]<>"' ]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  } catch {
+    return "";
+  }
+}
+
 function workerRow(w: Worker, place: Place, toPick: boolean): DigestRow {
   const ticket = ticketOf(w)!;
   const row: DigestRow = {
     group: "runs",
-    ref: ticket.number || w.key,
+    ref: safeRef(ticket.number) || w.key,
     key: w.key,
     title: ticket.title || w.title,
-    url: ticket.url,
-    column: place.name || COLUMN[place.col],
+    url: safeUrl(ticket.url),
+    column: place.moved ? "another column" : COLUMN[place.col],
+    board: place.name,
     state: "",
     question: "",
     options: [],
     plan: false,
     summary: "",
-    prs: prsOf(w),
-    progress: w.step ? `step ${w.step.done} of ${w.step.total}${w.step.note ? `: ${w.step.note}` : ""}` : "",
+    detail: w.step?.note ? `The agent's step: ${w.step.note}` : "",
+    prs: prsOf(w).map(safeUrl).filter(Boolean),
+    progress: w.step ? `step ${Number(w.step.done)} of ${Number(w.step.total)}` : "",
   };
   const need = place.moved ? null : needOf(w);
   if (w.state === "running") {
-    if (w.stalled) return { ...row, group: "stuck", state: `its agent ${w.stalled}` };
+    if (w.stalled)
+      return { ...row, group: "stuck", state: "its agent looks stuck", detail: `Relay sees: it ${w.stalled}` };
     return { ...row, state: w.phase ? "Relay checks the agent's done" : "its agent builds" };
   }
   if (toPick) return { ...row, state: "answered, waits in the pick column for its agent" };
@@ -94,7 +123,8 @@ function workerRow(w: Worker, place: Place, toPick: boolean): DigestRow {
     return {
       ...row,
       group: "stuck",
-      state: `done, but ${row.prs.length ? "not every repo got its PR" : "no PR"}: ${w.pr_error}`,
+      state: `done, but ${row.prs.length ? "not every repo got its PR" : "no PR"}`,
+      detail: `Why: ${w.pr_error}`,
       summary,
     };
   if (w.state === "stopped") return { ...row, group: "stuck", state: "its agent was stopped, a person has it" };
@@ -113,19 +143,21 @@ export function digestRows(d: DigestIn): DigestRow[] {
   );
   for (const b of d.bounced) {
     const base = {
-      ref: b.number,
+      ref: safeRef(b.number),
       key: "",
       title: b.title,
-      url: b.url,
+      url: safeUrl(b.url),
       column: COLUMN.input,
+      board: "",
       options: [],
       plan: false,
       summary: "",
+      detail: "",
       prs: [],
       progress: "",
     };
     if (b.why === "failed")
-      rows.push({ ...base, group: "stuck", state: `it could not start: ${b.reason}`, question: "" });
+      rows.push({ ...base, group: "stuck", state: "it could not start", detail: `Why: ${b.reason}`, question: "" });
     else
       rows.push({
         ...base,
@@ -147,7 +179,7 @@ const HOLDING = {
 /** What counts as news: each ticket's group, column, state and question, the PRs, the pause and why it holds. Not a
  *  running agent's step. */
 export const digestSig = (rows: DigestRow[], d: Pick<DigestIn, "holding" | "paused">) =>
-  JSON.stringify([d.paused, d.holding, rows.map(r => [r.ref, r.group, r.column, r.state, r.question, r.prs])]);
+  JSON.stringify([d.paused, d.holding, rows.map(r => [r.ref, r.group, r.column, r.board, r.state, r.question, r.prs])]);
 
 /** What waits on the user, for the sidebar's count and the banner. */
 export const waiting = (rows: DigestRow[]) => rows.filter(r => r.group === "waits");
@@ -156,7 +188,7 @@ export const waiting = (rows: DigestRow[]) => rows.filter(r => r.group === "wait
 export const workerLink = (key: string) => `relay://worker?key=${key}`;
 
 function rowText(r: DigestRow) {
-  const name = r.ref === r.key ? r.key : `#${r.ref}`;
+  const name = !r.ref ? "a ticket without a number" : r.ref === r.key ? r.key : `#${r.ref}`;
   const links = [
     r.url && `[ticket](${r.url})`,
     r.key && `[agent](${workerLink(r.key)})`,
@@ -165,16 +197,19 @@ function rowText(r: DigestRow) {
   const head = `- ${name}, in ${r.column}: ${r.state}${r.progress ? ` (${r.progress})` : ""}. ${links.filter(Boolean).join(" · ")}`;
   const said = [
     r.title,
+    r.board && `Column on the board: ${r.board}`,
     r.question && `${r.plan ? "Plan" : "Question"}: ${r.question}`,
     r.options.length ? `Options: ${r.options.join(" | ")}` : "",
     r.summary && `The agent's summary: ${r.summary}`,
+    r.detail,
   ];
   return `${head}\n${untrusted("ticket", said.filter(Boolean).join("\n"))}`;
 }
 
 /** The facts for the pipeline's conversation: a first line that says it all folded, then what waits on the user, what
- *  is stuck, what Relay did by itself this pass (`did`, Relay's own lines) and what runs. A part without lines is left
- *  out. */
+ *  is stuck, what Relay did by itself this pass (`did`, Relay's own lines, made with plain and safeRef) and what runs.
+ *  A part without lines is left out. Relay's lines hold only what Relay decides (numbers, fixed words, counts, its
+ *  own verbs, the project through plain); every other outside text is in the ticket's untrusted block. */
 export function digestText(project: string, rows: DigestRow[], did: string[], d: Pick<DigestIn, "holding" | "paused">) {
   const of = (g: DigestRow["group"]) => rows.filter(r => r.group === g);
   const counts = [
@@ -183,7 +218,7 @@ export function digestText(project: string, rows: DigestRow[], did: string[], d:
     did.length && `${did.length} done by Relay`,
     of("runs").length && `${of("runs").length} running`,
   ].filter(Boolean);
-  const head = [`Pipeline ${project}: ${counts.length ? counts.join(", ") : "no tickets"}.`];
+  const head = [`Pipeline ${plain(project)}: ${counts.length ? counts.join(", ") : "no tickets"}.`];
   if (d.paused) head.push("The pipeline is paused: it takes no new tickets, ended runs still land on the board.");
   else if (d.holding) head.push(`The pipeline takes no new tickets: ${HOLDING[d.holding]}.`);
   const part = (title: string, lines: string[]) => (lines.length ? [`${title}\n${lines.join("\n")}`] : []);

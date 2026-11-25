@@ -45,7 +45,7 @@ import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
 import { isPrimary } from "../../infrastructure/window";
 import { t, tn } from "../../shared/i18n";
-import { digestRows, digestSig, digestText, waiting } from "../../domain/pipeline/digest";
+import { digestRows, digestSig, digestText, safeRef, waiting } from "../../domain/pipeline/digest";
 import { pipeKey } from "../../domain/orchestrator/rules";
 import { notify } from "../conversations/events";
 import { provider as providerOf } from "../../shared/plugins";
@@ -93,7 +93,9 @@ function hold(project: string, why: "" | "pl.usedUp" | "pl.stalled") {
 const did: Record<string, string[]> = {};
 const tried = new Set<string>();
 const note = (project: string, line: string) => (did[project] ??= []).push(line);
-const refOf = (w: Worker) => (ticketOf(w)?.number ? `#${ticketOf(w)!.number}` : w.key);
+// Relay's own lines in the digest: a ticket by its number (or its agent), no column names or other outside text
+// (domain/pipeline/digest.ts digestText)
+const refOf = (w: Worker) => (safeRef(ticketOf(w)?.number) ? `#${safeRef(ticketOf(w)?.number)}` : w.key);
 // what the last digest per project said (digestSig) and what waited on the user in it, kept so a restart sends nothing
 // that is not new
 const said = storage.get<Record<string, { sig: string; waits: string[] }>>("pipelineDigest", {});
@@ -399,7 +401,7 @@ async function runOne(project: string, p: Pipeline) {
       const again = await backend.orchRepublish(w.key).catch(() => null);
       note(
         project,
-        `${refOf(w)}: its push failed (${w.pr_error}), Relay tried once more: ${again ? "it went through" : "it failed again"}`,
+        `${refOf(w)}: its push failed, Relay tried once more: ${again ? "it went through" : "it failed again"}`,
       );
       const next = again && step(again);
       if (next) {
@@ -430,18 +432,14 @@ async function runOne(project: string, p: Pipeline) {
     const what = boardMove(w, p, column);
     if (what === "merged") {
       adopt(await backend.orchBoard(w.key, "merged"));
-      note(project, `${refOf(w)}: a person moved it to ${column!.name}, Relay closed it in the pipeline`);
+      note(project, `${refOf(w)}: a person moved it to a done column, Relay closed it in the pipeline`);
     } else if (what === "adopt" && adoptDue(lookedUp[w.key], Date.now())) {
       const found = await backend.orchAdopt(w.key).catch(() => null);
       // no PR on its branch yet: asked again after a while, not every pass
       if (found) delete lookedUp[w.key];
       else lookedUp[w.key] = Date.now();
       adopt(found);
-      if (found)
-        note(
-          project,
-          `${refOf(w)}: a person moved it to ${column!.name}, Relay follows its PR now (${prsOf(found).join(", ")})`,
-        );
+      if (found) note(project, `${refOf(w)}: a person moved it to Review, Relay follows its PR now`);
     }
   }
   // PRs in review: merged, closed, or comments for the worker
@@ -455,12 +453,12 @@ async function runOne(project: string, p: Pipeline) {
       if (p.merged) await move(b, id, p.merged);
       await comment(b, id, t("pl.merged", { pr: links }));
       adopt(await backend.orchBoard(w.key, "merged"));
-      note(project, `${refOf(w)}: its PR was merged${p.merged ? `, Relay moved it to ${nameOf(b, p.merged)}` : ""}`);
+      note(project, `${refOf(w)}: its PR was merged${p.merged ? `, Relay moved it to the merged column` : ""}`);
     } else if (r.kind === "closed") {
       await move(b, id, p.input);
       await comment(b, id, t("pl.closed", { pr: links }));
       adopt(await backend.orchBoard(w.key, "closed"));
-      note(project, `${refOf(w)}: its PR was closed without a merge, Relay moved it to ${nameOf(b, p.input)}`);
+      note(project, `${refOf(w)}: its PR was closed without a merge, Relay moved it to Input`);
     } else if (startsNow(settings(), project)) {
       // review comments start the worker again: that waits while paused (also when paused during this pass), the
       // comments are read again from the run's end once the pipeline goes on. The ticket text stays, unless someone
@@ -579,7 +577,7 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
     });
     adopt(w);
     await comment(b, card.id, t("pl.picked", { branch: w.branch ?? "" }));
-    if (!hand) note(project, `${refOf(w)}: picked up from ${nameOf(b, b.p.pick)}, an agent started on it`);
+    if (!hand) note(project, `${refOf(w)}: picked up from the pick column, an agent started on it`);
   } catch (e) {
     // back in front of a person, with why: the pick column would only try it again
     const error = String((e as Error)?.message ?? e);
