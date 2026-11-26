@@ -24,7 +24,6 @@ import { usePullRequestsStore } from "../pull-requests/store";
 import { useMailStore } from "../mail/store";
 import { unread } from "../../domain/mail/rules";
 import { boardOf } from "../navigation/navigation";
-import { provider } from "../../shared/plugins";
 import { contextTint } from "../navigation/sidebar";
 import { agentOf, chatAgent, chatCaps } from "../agents/agents";
 import { otherVaultOf, projectLabel } from "../workspace/vault";
@@ -173,8 +172,6 @@ export function chatBar(key: string) {
           : review
             ? `${t("today.kind.review")} ${review.title}`
             : "";
-  const linkedRef = toolProject ? settings().boards?.[toolProject] : undefined;
-  const linked = linkedRef && provider(linkedRef.provider);
   return {
     heading: tool ? projectLabel(tool.project) : viewName || projectLabel(projectName),
     onView,
@@ -194,14 +191,13 @@ export function chatBar(key: string) {
     noTerm: onView ? true : session ? session.kind !== "background" : agentOf(chatAgent(key))?.caps.terminal === false,
     // the view's second crumb: the project's view name when opened from a project, else a one-phrase summary
     sub: tool ? viewName : viewSummary(key),
-    // the project's tools: its linked board, GitHub (dimmed while it has no repos) and, in the drawer, terminal and notes
+    // the project's tools: GitHub (dimmed while it has no repos) and, in the drawer, terminal and design
     tools: toolProject
       ? {
           project: toolProject,
-          board: linked ? { id: linked.id, name: linked.name, mark: linked.mark } : null,
           github: ghOn(),
           repos: !!usePullRequestsStore.getState().repos[toolProject]?.length,
-          active: tool ? (board ? ("board" as const) : key === PRS ? ("prs" as const) : ("" as const)) : ("" as const),
+          active: tool && key === PRS ? ("prs" as const) : ("" as const),
           git: settings().gitDrawer === true,
           pipeline: !!settings().pipelines?.[toolProject] && !!settings().boards?.[toolProject],
           pipeOpen: key === pipeKey(toolProject),

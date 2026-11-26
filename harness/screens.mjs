@@ -1087,6 +1087,13 @@ const VIEWS = {
     await click("Productive");
     await waitText(markers.card);
   },
+  // clicking the project in the sidebar opens its linked board; the title bar has no board button (PR project-click-opens-board)
+  "project-opens-board": async () => {
+    await open(page, server.url);
+    await waitText(titles.permission);
+    await page.locator('[data-kind="proj"][data-project="Northwind Portal"]').click();
+    await waitText(markers.card);
+  },
   "card-detail": async () => {
     await VIEWS.board();
     await click(markers.card);

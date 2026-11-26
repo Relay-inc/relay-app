@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Changed
+
+- Clicking a project in the sidebar opens its board (Productive, Trello, Linear, Jira, whatever it is linked to), and the board button is gone from the title bar. Projects without a linked board still open their latest conversation; the heading in the board's title bar takes you back to it (#543)
+
 ### Removed
 
 - The Notes drawer is gone from the project title bar and the quick-ask tool list, nobody used it. Notes you wrote there stay where they are: the ones in the Inbox are still Inbox notes, and older ones stay in the vault's .relay/notes folder (#544)

@@ -1,7 +1,6 @@
 import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { Drawer } from "../../../domain/navigation/views";
 import { useT } from "../../hooks/useT";
-import { Glyph } from "../../components/Glyph";
 import { Icon } from "../../components/Icon";
 import { ProjectImg } from "../../components/ProjectImg";
 import { tintText, type Tint } from "../../../shared/tints";
@@ -14,17 +13,16 @@ import { BuddyButton } from "../buddy/BuddyButton";
 /** What the bar offers for a project: its tools, the one that is open lit. */
 export type BarTools = {
   project: string; // the vault project the tools are of
-  board: { name: string; mark: string } | null; // the board linked to the project
   github: boolean; // GitHub is on: the PRs button shows
   repos: boolean; // the project has repos; without them the button offers to link one
-  active: "" | "board" | "prs"; // the project's board or PRs is what the centre shows
+  active: "" | "prs"; // the project's PRs are what the centre shows
   git: boolean; // the Git drawer is switched on (Settings › General)
   pipeline: boolean; // the project has a board pipeline: its button shows
   pipeOpen: boolean; // the pipeline's conversation is the one open: its button does not show
 };
 
 /** The title bar of the centre column: the project (or the view), the conversation's title, a view's own
- *  buttons (`actions`), the project's tools (board, pull requests, terminal drawer) and the external
+ *  buttons (`actions`), the project's tools (pull requests, terminal drawer) and the external
  *  terminal button. The shell keys it by the selection, so a title being edited never carries over. */
 export function ChatBar({
   heading,
@@ -45,7 +43,6 @@ export function ChatBar({
   onEditProject,
   onRename,
   onOpenTerminal,
-  onOpenBoard,
   onOpenPrs,
   onToggleDrawer,
   onOpenPipeline,
@@ -69,7 +66,6 @@ export function ChatBar({
   onEditProject: () => void;
   onRename: (title: string) => void;
   onOpenTerminal: (external: boolean) => void;
-  onOpenBoard: () => void;
   onOpenPrs: () => void;
   onToggleDrawer: (tool: "terminal" | "design" | "git" | "files") => void;
   onOpenPipeline: () => void;
@@ -199,14 +195,6 @@ export function ChatBar({
       {board ? <BoardActions provider={board} /> : null}
       {tools ? (
         <>
-          {tools.board ? (
-            <ToolButton
-              on={tools.active === "board"}
-              label={tools.board.name}
-              onClick={onOpenBoard}
-              icon={<Glyph svg={tools.board.mark} className="glyph size-4" viewBox="0 0 24 24" />}
-            />
-          ) : null}
           {tools.github ? (
             <ToolButton
               on={tools.active === "prs"}

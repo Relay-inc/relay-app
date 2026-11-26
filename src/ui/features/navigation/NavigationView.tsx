@@ -9,7 +9,13 @@ import {
 } from "../../../domain/navigation/sidebar";
 import { USAGE } from "../../../domain/navigation/views";
 import { useNavigationStore } from "../../../application/navigation/store";
-import { select, openProject, openProjectPanel, openSettings, toast } from "../../../application/navigation/navigation";
+import {
+  select,
+  openProjectBoard,
+  openProjectPanel,
+  openSettings,
+  toast,
+} from "../../../application/navigation/navigation";
 import {
   sidebarModel,
   setFind,
@@ -406,7 +412,7 @@ export function NavigationView({ className }: { className: string }) {
         addTitle={project.addTitle}
         {...dropzone("proj", project.name)}
         onPointerDown={press("proj", project.name, project.context)}
-        onClick={unlessDragged(() => openProject(project.name))}
+        onClick={unlessDragged(() => openProjectBoard(project.name))}
         onContextMenu={openMenu({ chatKey: "", project: project.name, kind: "proj" })}
         onAdd={unlessDragged(() => select(newChatHere(project.name)))}
       />
