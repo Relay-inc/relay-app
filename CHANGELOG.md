@@ -16,7 +16,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Changed
 
-- Clicking a project in the sidebar opens its board (Productive, Trello, Linear, Jira, whatever it is linked to), and the board button is gone from the title bar. Projects without a linked board still open their latest conversation; the heading in the board's title bar takes you back to it (#PR)
+- Clicking a project in the sidebar opens its board (Productive, Trello, Linear, Jira, whatever it is linked to), and the board button is gone from the title bar. Projects without a linked board still open their latest conversation; the heading in the board's title bar takes you back to it (#543)
 
 ## [0.0.66] - 2026-11-25
 
