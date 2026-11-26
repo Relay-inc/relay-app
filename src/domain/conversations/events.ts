@@ -24,7 +24,11 @@ export type EventEnv = {
   imageUrl: (mediaType: string, data: string) => string;
 };
 /** What the reducer asks for after an event. */
-export type Effect = { kind: "save-chats" } | { kind: "notify"; key: string; body: string } | { kind: "snapshot" };
+export type Effect =
+  | { kind: "save-chats" }
+  | { kind: "notify"; key: string; body: string }
+  | { kind: "snapshot" }
+  | { kind: "artifact"; key: string; url: string };
 
 export function push(state: Pick<ConversationsState, "messages">, key: string, item: Item) {
   (state.messages[key] ||= []).push(item);
@@ -197,6 +201,11 @@ function draftNote(saved: EventOf<"draft_saved">, t: Translate) {
 
 function onToolCall(state: ConversationsState, key: string, call: EventOf<"tool_call">, now: number): Effect[] {
   push(state, key, toolItem(call.id, call.name, call.input, "run", now));
+  // Claude Code's Artifact tool opens a page "for the user" only in its own terminal UI: under Relay it does
+  // nothing, so Relay shows the page itself, in the Design drawer
+  const input = call.input as { action?: unknown; url?: unknown } | null;
+  if (call.name === "Artifact" && input?.action === "open" && typeof input.url === "string")
+    return [{ kind: "artifact", key, url: input.url }];
   // a chat that touched mail stays marked: every later spawn of it stays on this Mac
   const conversation = state.chats[key];
   if (call.name.startsWith("mcp__relay-mail__") && conversation && !conversation.fromMail) {

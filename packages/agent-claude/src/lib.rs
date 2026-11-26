@@ -255,7 +255,12 @@ impl AgentProvider for Claude {
             .arg("--allowedTools").args(&allowed).arg("--disallowedTools").args(&denied)
             .arg("--append-system-prompt").arg(&system).args(["-n", l.name])
             // each message echoed when Claude takes it up: one sent during a turn often joins that turn
-            .arg("--replay-user-messages");
+            .arg("--replay-user-messages")
+            // ponytail: undocumented switches (Claude Code 2.1.332). ARTIFACT gives the Artifact tools, VERIFY adds
+            // ArtifactCheck, and the SDK entrypoint keeps a live subscription so artifact comments reach the running
+            // conversation (print mode has none). The tools' `open` does nothing without the CLI's own UI: the app
+            // shows the page from the tool call (Design drawer). Drop these once the Agent SDK documents a switch.
+            .envs([("CLAUDE_CODE_ARTIFACT", "1"), ("CLAUDE_CODE_ARTIFACT_VERIFY", "1"), ("CLAUDE_CODE_ENTRYPOINT", "sdk-ts")]);
         if !mcp["mcpServers"].as_object().is_some_and(|m| m.is_empty()) { cmd.arg("--mcp-config").arg(mcp.to_string()); }
         // grants.fenced, set by the app in a shared vault: only the servers above, none of the user's own or claude.ai's
         if fenced { cmd.arg("--strict-mcp-config"); }
@@ -479,6 +484,10 @@ mod tests {
         assert!(cmd.get_envs().any(|(k, v)| k == "ANTHROPIC_API_KEY" && v.is_none()));
         assert!(cmd.get_envs().any(|(k, v)| k == "CLAUDE_CONFIG_DIR" && v.is_none()));
         assert!(!cmd.get_envs().any(|(k, _)| k == "MCP_TOOL_TIMEOUT"));
+        // the Artifact tools, and a live subscription for their comments
+        for (k, v) in [("CLAUDE_CODE_ARTIFACT", "1"), ("CLAUDE_CODE_ARTIFACT_VERIFY", "1"), ("CLAUDE_CODE_ENTRYPOINT", "sdk-ts")] {
+            assert!(cmd.get_envs().any(|(a, b)| a == k && b.is_some_and(|b| b == v)), "{k}");
+        }
         let l = Launch { resume: None, model: "", effort: "", ..l };
         let args: Vec<String> = PROVIDER.command(&env(&p), &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert_eq!(&args[24..], ["-n", "Algemeen: x", "--replay-user-messages", "--permission-mode", "auto", "--resume", "def", "--fork-session"]);

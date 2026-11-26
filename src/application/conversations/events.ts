@@ -14,6 +14,7 @@ import { saveChats } from "./chats";
 import { imageUrl } from "./images";
 import { captureWhenIdle } from "../today/capture";
 import { finishPrep } from "../calendar/prep";
+import { showArtifact } from "../design/design";
 
 // The agent processes' events, through the pure reducer (domain/conversations/events.ts). Stream deltas are the hot
 // path: the text deltas of one animation frame go into the store as one update, so a delta redraws the streaming
@@ -47,7 +48,8 @@ function run(effects: Effect[]) {
   for (const effect of effects) {
     if (effect.kind === "notify") {
       if (!digestReply(effect.key)) notify(effect.key, effect.body);
-    } else if (!once.has(effect.kind)) {
+    } else if (effect.kind === "artifact") showArtifact(effect.key, effect.url);
+    else if (!once.has(effect.kind)) {
       once.add(effect.kind);
       if (effect.kind === "save-chats") saveChats();
       else if (effect.kind === "snapshot") loadSnapshot();

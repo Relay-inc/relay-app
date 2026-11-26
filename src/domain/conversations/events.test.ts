@@ -94,6 +94,20 @@ test("a mail tool marks the conversation as touching mail, once", () => {
   assert.deepEqual(run(next, { type: "tool_call", id: "n", name: "mcp__relay-mail__read", input: {} }).effects, []);
 });
 
+test("an Artifact open asks to show the page; any other Artifact call does not", () => {
+  const url = "https://claude.ai/artifact/abc";
+  const open = run(fresh(), { type: "tool_call", id: "a", name: "Artifact", input: { action: "open", url } });
+  assert.deepEqual(open.effects, [{ kind: "artifact", key: "c:1", url }]);
+  assert.deepEqual(
+    run(fresh(), { type: "tool_call", id: "b", name: "Artifact", input: { action: "read", url } }).effects,
+    [],
+  );
+  assert.deepEqual(
+    run(fresh(), { type: "tool_call", id: "c", name: "Artifact", input: { action: "open" } }).effects,
+    [],
+  );
+});
+
 test("a turn that ends ok: done with its duration, idle, a banner with the last answer, unseen when not open", () => {
   const busy = produce(fresh(), draft => {
     draft.status["c:1"] = "busy";
