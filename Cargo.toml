@@ -15,9 +15,10 @@ board-core = { path = "packages/board-core" }
 agent-core = { path = "packages/agent-core" }
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+# thin LTO over all cores instead of fat LTO in one codegen unit: a release builds the app twice (Apple silicon, Intel)
+# plus relay-server, and the single-threaded link was most of each build; the binaries come out a little larger
 [profile.release]
-codegen-units = 1
-lto = true
+lto = "thin"
 opt-level = 3
 panic = "abort"
 strip = true
