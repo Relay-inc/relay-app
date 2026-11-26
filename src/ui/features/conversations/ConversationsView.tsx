@@ -68,6 +68,9 @@ import { OrchestratorBack } from "../orchestrator/OrchestratorBack";
 import { AgentsToggle } from "../agents/AgentsToggle";
 import { PipeReset } from "../pipeline/PipeReset";
 import { PipePause } from "../pipeline/PipePause";
+import { PipeBoard, PipeState } from "../pipeline/PipeBar";
+import { PipeStrip } from "../pipeline/PipeStrip";
+import { PipeCards } from "../pipeline/PipeCards";
 import { AgentPage } from "../agents/AgentPage";
 import { AgentBack } from "../agents/AgentBack";
 import { chatWidth, column } from "./layout";
@@ -162,6 +165,17 @@ export function ConversationsView({ className }: { className: string }) {
     requestAnimationFrame(() => log.current && (log.current.scrollTop = 0));
   });
 
+  // the pipeline's strip and its cards: a row or the bar's Needs you scrolls the log to that card and lights it
+  const jumpToNeed = (id: string) => {
+    const card = document.getElementById(`pipe-need-${id}`);
+    if (!card) return;
+    stick.current = false;
+    card.scrollIntoView({ block: "center", behavior: "smooth" });
+    card.classList.remove("need-ring");
+    void card.offsetWidth; // restarts the animation when it is jumped to again
+    card.classList.add("need-ring");
+    card.addEventListener("animationend", () => card.classList.remove("need-ring"), { once: true });
+  };
   const asked = onView || !!bar.session || !!bar.projectName || bar.coordinator || dismissed || busy;
   const chatBarEl = (
     <ChatBar
@@ -178,6 +192,7 @@ export function ConversationsView({ className }: { className: string }) {
       noTerm={bar.noTerm}
       locked={bar.locked}
       tools={bar.tools}
+      titleExtra={bar.pipe ? <PipeState project={bar.pipe} /> : undefined}
       drawer={drawer}
       back={!!bar.tools?.back}
       actions={
@@ -193,6 +208,7 @@ export function ConversationsView({ className }: { className: string }) {
           <MailReload />
         ) : bar.pipe ? (
           <>
+            <PipeBoard project={bar.pipe} />
             <PipeReset project={bar.pipe} />
             <PipePause project={bar.pipe} />
           </>
@@ -243,6 +259,7 @@ export function ConversationsView({ className }: { className: string }) {
     <div className={`${className} flex flex-col relative bg-bg`}>
       {agentPage ? <AgentBack /> : workerPage ? <OrchestratorBack /> : chatBarEl}
       {projectPanel ? <ProjectPanel /> : null}
+      {bar.pipe ? <PipeStrip project={bar.pipe} onJump={jumpToNeed} /> : null}
       {onView ? null : (
         <FindBar
           className={`${column} mt-2`}
@@ -283,6 +300,7 @@ export function ConversationsView({ className }: { className: string }) {
           ) : (
             <SelectedView />
           )}
+          {bar.pipe ? <PipeCards project={bar.pipe} /> : null}
           {/* on Reminders the chip sticks to the bottom of the scroller */}
           {toast && selected === REM ? (
             <div className="sticky bottom-3 pt-2 pb-1">

@@ -3724,6 +3724,37 @@ const VIEWS = {
     await page.getByRole("button", { name: "Show in graph" }).click();
     await page.waitForTimeout(4000);
   },
+  // the pipeline's conversation with its stage strip: the collapsed bar (the default), the strip open with a question, a
+  // plan and a failed run as cards in the conversation, paused with a stuck agent and a ticket a person moved on, and
+  // after Needs you in the bar: scrolled to the oldest card with its ring (held at its first frame, as a screenshot
+  // fast-forwards animations), each also in dark mode
+  "pipeline-strip": async (fixture = "pipeline-strip", dark = false) => {
+    await open(page, server.url, { fixture: dark ? `${fixture}-dark` : fixture, sel: "c:orch:Northwind Portal" });
+    await waitText("Up next");
+  },
+  "pipeline-strip-open": async (fixture = "pipeline-strip", dark = false) => {
+    await VIEWS["pipeline-strip"](fixture, dark);
+    await button("Show tickets in flight").click();
+    await waitText("Tickets in flight");
+    await waitText("CI passed");
+    await settle(page, 400);
+  },
+  "pipeline-strip-paused": async (dark = false) => {
+    await VIEWS["pipeline-strip-open"]("pipeline-strip-paused", dark);
+  },
+  "pipeline-strip-jump": async () => {
+    await VIEWS["pipeline-strip"]();
+    await button("Needs you: 3. Jump to the oldest open question").click();
+    await page.waitForTimeout(700);
+    await page.evaluate(() => {
+      const card = document.querySelector("[id^=pipe-need-]");
+      card.classList.remove("need-ring");
+      card.style.boxShadow = "0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent)";
+    });
+  },
+  "pipeline-strip-dark": async () => VIEWS["pipeline-strip"]("pipeline-strip", true),
+  "pipeline-strip-open-dark": async () => VIEWS["pipeline-strip-open"]("pipeline-strip", true),
+  "pipeline-strip-paused-dark": async () => VIEWS["pipeline-strip-paused"](true),
   "dark-mail": async () => {
     await open(page, server.url, { fixture: "dark" });
     await click("Mail");

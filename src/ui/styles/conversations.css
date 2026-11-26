@@ -87,3 +87,16 @@
   background-color: oklch(0.8 0.16 65);
   color: #1c1c1e;
 }
+
+/* a pipeline's card a jump from the strip landed on: an accent ring that fades out */
+@keyframes need-ring {
+  from {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 5px transparent;
+  }
+}
+.need-ring {
+  animation: need-ring 1.2s ease-out;
+}

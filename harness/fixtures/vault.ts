@@ -449,6 +449,7 @@ export function settings(fixture: string) {
     pipelines: {
       "Northwind Portal": {
         on: fixture.startsWith("pipeline"),
+        paused: fixture.startsWith("pipeline-strip-paused"),
         mode: fixture === "pipeline-manual" ? "manual" : "auto",
         repo: "",
         // its repos as pipeline_repos finds them (mock-backend.ts): each with its checks, the infrastructure kept out
@@ -464,8 +465,8 @@ export function settings(fixture: string) {
         review: "tl4",
         input: "tl1",
         merged: "tl5",
-        label: fixture === "pipeline" ? "" : "agent",
-        parallel: 1,
+        label: fixture === "pipeline" || fixture.startsWith("pipeline-strip") ? "" : "agent",
+        parallel: fixture.startsWith("pipeline-strip") ? 2 : 1,
         reviewer: "codex",
         rounds: 3,
       },

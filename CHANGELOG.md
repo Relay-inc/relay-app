@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Added
+
+- A pipeline's conversation shows a stage strip under its title bar: a 40px bar with what is building, in review and up next and a crab per running agent, which opens (and stays open or closed per pipeline) into the tickets with their step, branch, PRs and whether their CI passed. What needs you is a short list there; clicking it scrolls the conversation to a card with the question and its options, the plan to approve, the failed run to try again or the ticket a person moved on, which is where you answer. The title bar now says whether the pipeline runs, is paused or is holding, and why (#546)
+
 ### Changed
 
 - Clicking a project in the sidebar opens its board (Productive, Trello, Linear, Jira, whatever it is linked to), and the board button is gone from the title bar. Projects without a linked board still open their latest conversation; the heading in the board's title bar takes you back to it (#543)

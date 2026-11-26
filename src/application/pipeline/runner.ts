@@ -41,7 +41,7 @@ import {
   workersOf,
   pickedOf,
 } from "../../domain/pipeline/rules";
-import type { Pipeline, Step, Ticket } from "../../domain/pipeline/types";
+import type { Pipeline, PrStatus, Step, Ticket } from "../../domain/pipeline/types";
 import type { AnswerKind } from "../../domain/pipeline/rules";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
@@ -198,6 +198,17 @@ export function buildTicket(ref: BoardRef, card: Pick<Card, "id" | "title" | "nu
   }).catch(e => toast(t("pl.error", { project: "", error: String((e as Error)?.message ?? e) })));
 }
 
+/** A worker's PRs as gh reads them now (checks, comments), none for one gh cannot read: for the strip's cards. */
+export const prStatuses = (key: string) => backend.orchPr(key).catch((): PrStatus[] => []);
+
+/** Open or close the stage strip above a project's pipeline conversation, remembered per pipeline. */
+export function setStripOpen(project: string, open: boolean) {
+  usePipelineStore.setState(draft => {
+    draft.strip[project] = open;
+  });
+  storage.set("pipelineStrip", usePipelineStore.getState().strip);
+}
+
 /** A project's pipeline as its conversation's facts and tools read it: whether it has one and runs, its own and the
  *  global pause, its workers running against its maximum, why it holds, and its tickets. */
 export function pipelinePanel(project: string) {
@@ -214,6 +225,10 @@ export function pipelinePanel(project: string) {
     all: !!s.pipelinesPaused,
     running: workersOf(allWorkers(), project).filter(w => w.state === "running").length,
     parallel: Math.max(1, p?.parallel ?? 1),
+    // the validation rounds before a person gets the ticket (orch.rs: 0 means 3)
+    rounds: p?.rounds || 3,
+    // the name of the pick column on the board, "" while the board was not read yet
+    pickName: board?.names[p?.pick ?? ""] ?? "",
     holding: usePipelineStore.getState().holding[project] ?? "",
     tickets,
     // where each row's ticket is: the column the pipeline put it in, whether a person moved it since and the name of

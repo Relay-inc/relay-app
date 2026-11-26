@@ -37,6 +37,11 @@ if (query.get("platform") === "windows")
     configurable: true,
   });
 const onboarding = fixture === "onboarding";
+const pipeWorkers = fixture.startsWith("pipeline-strip")
+  ? fixture.includes("paused")
+    ? orch.pipeStripPausedWorkers
+    : orch.pipeStripWorkers
+  : orch.pipeOrchWorkers;
 const isSettingsWindow = location.pathname.endsWith("settings.html");
 
 // ---------- the persisted state a returning user has: the conversation list, the open view, the board picked
@@ -49,9 +54,15 @@ function seedStorage() {
   const chats: Record<string, object> = Object.fromEntries(conv.conversations.map(c => [c.key, { ...c }]));
   // pipeline-orch: the pipeline's conversation, and its workers' conversations as a run of the app made them (the
   // sidebar lists none of them as rows)
-  if (fixture === "pipeline-orch") {
-    chats[orch.PIPE] = { key: orch.PIPE, project: "Northwind Portal", title: "Pipeline", at: Date.now(), provider: "claude" };
-    for (const w of orch.pipeOrchWorkers)
+  if (fixture.startsWith("pipeline-orch") || fixture.startsWith("pipeline-strip")) {
+    chats[orch.PIPE] = {
+      key: orch.PIPE,
+      project: "Northwind Portal",
+      title: "Pipeline",
+      at: Date.now(),
+      provider: "claude",
+    };
+    for (const w of fixture.startsWith("pipeline-strip") ? pipeWorkers : orch.pipeOrchWorkers)
       chats[w.key] = { key: w.key, project: w.project, title: w.title, at: w.at, provider: "claude", orch: true };
   }
   localStorage.setItem("chats", JSON.stringify(chats));
@@ -211,9 +222,11 @@ const diceTools = [
 ];
 // pipeline-orch: the pipeline's conversation (PR pipeline-orch), four of those workers, on the used-up plan so the
 // runner starts nothing while the screenshot is taken
-const pipeOrch = fixture === "pipeline-orch";
+// pipeline-strip(-paused): the stage strip and its cards (fixtures/orchestrator.ts), on the same used-up plan
+const pipeStrip = fixture.startsWith("pipeline-strip");
+const pipeOrch = fixture === "pipeline-orch" || pipeStrip;
 let workers = orchOn && !orchEmpty ? structuredClone(orch.workers) : [];
-if (pipeOrch) workers = structuredClone(orch.pipeOrchWorkers) as typeof workers;
+if (pipeOrch) workers = structuredClone(pipeWorkers) as typeof workers;
 
 // ---------- the event plugin: listeners by event, emitted synchronously (a real Tauri event is one task per event)
 const listeners = new Map<string, Set<number>>();
@@ -1173,7 +1186,13 @@ function handle(cmd: string, a: Args): unknown {
       return a.project === conv.SWITCH_KEY ? { removed: 1, kept: 0 } : { removed: 0, kept: 0 };
     case "history":
       if ((orchEmpty || orchClosed) && a.project === orch.ORCH) return [];
-      return (orchOn && orch.history(a.project)) || (pipeOrch && orch.pipeHistory(a.project)) || conv.history(a.project);
+      return (
+        (orchOn && orch.history(a.project)) ||
+        (pipeStrip
+          ? orch.pipeStripHistory(a.project, fixture.includes("strip-paused"))
+          : pipeOrch && orch.pipeHistory(a.project)) ||
+        conv.history(a.project)
+      );
     // the orchestrator: its workers, and Stop, which reports the new state as an `orch` event
     case "orch_workers":
       harness.workersRead = true;
@@ -1257,7 +1276,11 @@ function handle(cmd: string, a: Args): unknown {
     case "orch_pr": {
       const w = workers.find(x => x.key === a.key);
       const urls = w?.trees?.length ? w.trees.flatMap(t => (t.pr ? [t.pr] : [])) : w?.pr ? [w.pr] : [];
-      return urls.map(url => ({ ...structuredClone(prStatus), url }));
+      return urls.map(url => ({
+        ...structuredClone(prStatus),
+        ...(pipeStrip ? orch.pipeStripPrs(fixture.includes("strip-paused"))[url] : {}),
+        url,
+      }));
     }
     // the checkouts of a project's repos on this Mac (lib.rs pipeline_repos): Northwind Portal's two, and the ones picked
     // by hand in place of the one found for their repo
