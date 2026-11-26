@@ -5,6 +5,7 @@ import * as backend from "../../infrastructure/backend";
 import {
   answerTicket,
   createTicket,
+  doneTicket,
   pausePipeline,
   pipelineFacts,
   pipelinePanel,
@@ -54,6 +55,11 @@ async function run({ project, tool, args }: PipeToolCall): Promise<string> {
       throw new Error(`the agent of ${nameOf(found)} does not run`);
     if (!(await takeOver(found.worker))) throw new Error(`the agent of ${nameOf(found)} could not be stopped`);
     return `Stopped the agent ${found.worker.key} of ${nameOf(found)}: the ticket goes to a person. Nothing was posted on it by this tool.`;
+  }
+  if (tool === "done") {
+    const found = ticket();
+    await doneTicket(project, found);
+    return `Marked ${nameOf(found)} done: its agent stopped if it ran, and the pipeline no longer works on it or follows its PR.`;
   }
   if (tool === "pause") {
     const paused = args.paused === true;

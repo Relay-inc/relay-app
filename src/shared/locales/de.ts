@@ -597,6 +597,7 @@ export default {
   "ps.approve": "Freigeben",
   "ps.askChanges": "Änderungen anfragen",
   "ps.retry": "Nochmal versuchen",
+  "ps.done": "Als erledigt markieren",
   "ps.send": "Antwort senden",
   "ps.planNote": "Notiz hinzufügen oder sagen, was sich ändern soll…",
   "ps.planLabel": "Plan zur Freigabe:",

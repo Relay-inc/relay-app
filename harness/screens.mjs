@@ -3742,6 +3742,15 @@ const VIEWS = {
   "pipeline-strip-paused": async (dark = false) => {
     await VIEWS["pipeline-strip-open"]("pipeline-strip-paused", dark);
   },
+  // many tickets that need you: the lane is taller than the strip, its rows keep their height and the strip scrolls
+  "pipeline-strip-many": async () => {
+    await VIEWS["pipeline-strip-open"]();
+    await page.evaluate(() => {
+      const lane = document.querySelector('[aria-label="Needs you"]');
+      const row = lane.querySelector("button");
+      for (let i = 0; i < 10; i++) lane.append(row.cloneNode(true));
+    });
+  },
   "pipeline-strip-jump": async () => {
     await VIEWS["pipeline-strip"]();
     await button("Needs you: 3. Jump to the oldest open question").click();

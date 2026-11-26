@@ -387,6 +387,36 @@ export function createTicket(project: string, title: string, description: string
   });
 }
 
+/** A person marks a ticket done: its agent stops if it runs, the ticket leaves the pipeline for good (never picked up
+ *  or landed again, its PR no longer followed) and goes to the merged column when the pipeline has one and a person did
+ *  not already put it in a done column. In the queue, so a pass never lands the stopped run first. */
+export function doneTicket(project: string, to: { worker: Worker } | { card: BouncedTicket }) {
+  return serial(async () => {
+    const p = settings().pipelines?.[project];
+    if (!p) throw new Error("this project has no pipeline");
+    const id = "worker" in to ? ticketOf(to.worker)!.card : to.card.id;
+    if ("worker" in to) {
+      const w = useOrchestratorStore.getState().workers[to.worker.key] ?? to.worker;
+      if (w.state === "running" && !(await stopWorker(w.key))) throw new Error("its agent could not be stopped");
+      adopt(await backend.orchBoard(w.key, "merged"));
+    } else
+      setBounced(
+        project,
+        bouncedOf(project).filter(e => e.id !== id),
+      );
+    if (p.merged) {
+      const b = await open(project, p);
+      const card = (await b.prov.cards(ctxOf(b.prov), b.ref)).find(c => c.id === id);
+      const now = b.columns.find(c => c.id === (card ? colOf(b.prov, { group: b.group }, card) : ""));
+      if (card && now?.state !== "done" && now?.id !== p.merged) await move(b, id, p.merged);
+    }
+    note(
+      project,
+      `#${"worker" in to ? ticketOf(to.worker)!.number : to.card.number}: a person marked it done, Relay closed it in the pipeline`,
+    );
+  });
+}
+
 /** A person takes a ticket over from its worker: the worker stops, and its stopped run lands the ticket in the input
  *  column like any run that ended without a PR (runOne, paused or not). */
 export const takeOver = (w: Worker) => stopWorker(w.key);

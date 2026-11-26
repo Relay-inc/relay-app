@@ -2,7 +2,13 @@ import { useState, type ReactNode } from "react";
 import { costumeOf } from "../../../domain/orchestrator/rules";
 import { ticketOf, type AnswerKind } from "../../../domain/pipeline/rules";
 import { stripOf, type Need } from "../../../domain/pipeline/strip";
-import { answerTicket, buildTicket, openPipelineLink, pipelinePanel } from "../../../application/pipeline/runner";
+import {
+  answerTicket,
+  buildTicket,
+  doneTicket,
+  openPipelineLink,
+  pipelinePanel,
+} from "../../../application/pipeline/runner";
 import type { BouncedTicket } from "../../../application/pipeline/store";
 import { toast } from "../../../application/navigation/navigation";
 import { settings } from "../../../application/settings/settings";
@@ -44,6 +50,12 @@ function NeedCard({ project, need }: { project: string; need: Need<BouncedTicket
     const ok = await answerTicket(project, to, kind, text, say => toast(say));
     setSending(false);
     if (ok) setOwn("");
+  };
+  const done = async () => {
+    if (sending) return;
+    setSending(true);
+    await doneTicket(project, to).catch(e => toast(String((e as Error)?.message ?? e)));
+    setSending(false);
   };
   const build = () => {
     const ref = settings().boards?.[project];
@@ -93,6 +105,14 @@ function NeedCard({ project, need }: { project: string; need: Need<BouncedTicket
           {need.title}
         </button>
         <span className="whitespace-nowrap">· {who}</span>
+        <span className="flex-1" />
+        <button
+          className="flex-none h-6 px-2 -mr-1.5 rounded-md text-xs text-secondary cursor-default hover:bg-fill hover:text-label disabled:opacity-50"
+          disabled={sending}
+          onClick={() => void done()}
+        >
+          {t("ps.done")}
+        </button>
       </div>
       {need.kind === "moved" ? (
         <span className="self-start h-5 inline-flex items-center gap-1.25 px-2 rounded-full border border-separator-strong text-xs text-secondary">
