@@ -14,14 +14,16 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+## [0.0.70] - 2026-11-26
+
 ### Added
 
 - **Claude's artifacts in the conversation**: a page, dashboard, deck or design that Claude Code publishes to claude.ai with its Artifact tool shows as a card where it was made, with its name, kind and version. Open shows it in the new Artifact drawer: from the file Claude wrote, on this Mac (instant, no sign-in), or live on claude.ai as others see it, signed in to claude.ai once. A republish reloads it, the conversation's other artifacts are a pick away, and a claude.ai artifact link in a message opens there too instead of in the browser (#553)
-- Claude Code's Artifact tools are on in Claude conversations, so Claude can publish, read and update pages, dashboards and designs on claude.ai, read and restore older versions, and keep its data. A page Claude opens for you, or publishes asking to open it (a new design, a dashboard), shows in the Artifact drawer. A comment sent to Claude on an artifact the conversation watches starts a turn there that answers it on its thread, with a note that Claude started it itself
+- Claude Code's Artifact tools are on in Claude conversations, so Claude can publish, read and update pages, dashboards and designs on claude.ai, read and restore older versions, and keep its data. A page Claude opens for you, or publishes asking to open it (a new design, a dashboard), shows in the Artifact drawer. A comment sent to Claude on an artifact the conversation watches starts a turn there that answers it on its thread, with a note that Claude started it itself (#554)
 
 ### Removed
 
-- The Design drawer and its per-project link, and the relay-design tools (`design_read`, `design_prompt`, `design_snapshot`, `design_create`): Claude Code's Artifact tools and the Artifact drawer replace them. Claude Design as a separate product closes 14 Dec 2026.
+- The Design drawer and its per-project link, and the relay-design tools (`design_read`, `design_prompt`, `design_snapshot`, `design_create`): Claude Code's Artifact tools and the Artifact drawer replace them. Claude Design as a separate product closes 14 Dec 2026 (#554)
 
 ## [0.0.69] - 2026-11-26
 
