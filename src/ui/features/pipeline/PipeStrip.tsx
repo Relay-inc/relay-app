@@ -59,8 +59,12 @@ export function PipeStrip({ project, onJump }: { project: string; onJump: (id: s
   if (!linked) return null;
   const bar = barOf(strip, rounds);
   const toggle = () => setStripOpen(project, !open);
+  // optional chain: the React Compiler reads a closure's member path as a memo dependency during render, and an
+  // empty Needs you made `strip.need[0].id` throw there and blank the whole window
   const jump = () => {
-    onJump(strip.need[0].id);
+    const id = strip.need[0]?.id;
+    if (!id) return;
+    onJump(id);
     setLit(true);
     setTimeout(() => setLit(false), 1200);
   };
