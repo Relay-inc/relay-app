@@ -241,6 +241,19 @@ export function boardMove(w: Worker, p: Pipeline, column: Column | undefined): "
   return column.id === p.review && !inReview(w) ? "adopt" : null;
 }
 
+/** A move Relay must not make by itself: a person moved the ticket from where the pipeline put it (`own`) to `now`, and
+ *  `to` is back from there. Further on: a done column, else a later one on the board. A ticket not on the board, or in
+ *  a column Relay does not know, is not held. Confirming is the person's: Build with agent, or the pick column. */
+export function movedOn(columns: Column[], own: string, now: string | undefined, to: string) {
+  if (!now || now === own || now === to) return false;
+  const rank = (id: string) => {
+    const c = columns.find(x => x.id === id);
+    return c && ([c.state === "done" ? 1 : 0, c.placement] as const);
+  };
+  const [a, b] = [rank(now), rank(to)];
+  return !!a && !!b && (a[0] !== b[0] ? a[0] > b[0] : a[1] > b[1]);
+}
+
 /** How long a ticket a person took to review waits before its branch is asked for a PR again, after a lookup found
  *  none: each lookup is a gh call per repo. */
 export const ADOPT_EVERY = 30 * 60_000;
