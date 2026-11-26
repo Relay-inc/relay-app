@@ -14,6 +14,14 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Added
+
+- Mark a pipeline ticket done: from its card in the pipeline's conversation, or by telling the conversation ("#322 is done"). Its agent stops if it runs, the pipeline drops it for good (not picked up, landed or resumed again, its PR no longer followed) and the ticket goes to the merged column when the pipeline has one
+
+### Fixed
+
+- The Needs you lane of the stage strip no longer squeezes its rows when there are many: each keeps its height and the strip scrolls
+
 ## [0.0.67] - 2026-11-26
 
 ### Added

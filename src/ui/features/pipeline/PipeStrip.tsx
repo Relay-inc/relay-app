@@ -197,7 +197,7 @@ function Lane({
   children: ReactNode;
 }) {
   return (
-    <div className={`${w} flex-none min-w-0 flex flex-col gap-2`} aria-label={name}>
+    <div className={`${w} flex-none min-w-0 flex flex-col gap-2 *:shrink-0`} aria-label={name}>
       <div className={`flex items-center gap-1.5 h-4.5 px-0.5 ${LABEL}`}>
         <span>{name}</span>
         <span className={`tracking-normal ${hot && count ? "text-accent-text" : ""}`}>{count}</span>

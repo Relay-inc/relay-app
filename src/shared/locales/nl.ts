@@ -595,6 +595,7 @@ export default {
   "ps.approve": "Goedkeuren",
   "ps.askChanges": "Wijzigingen vragen",
   "ps.retry": "Opnieuw proberen",
+  "ps.done": "Markeer als klaar",
   "ps.send": "Antwoord sturen",
   "ps.planNote": "Voeg een notitie toe, of zeg wat er moet veranderen…",
   "ps.planLabel": "Plan ter goedkeuring:",

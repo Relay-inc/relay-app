@@ -589,6 +589,7 @@ const en = {
   "ps.approve": "Approve",
   "ps.askChanges": "Ask changes",
   "ps.retry": "Try again",
+  "ps.done": "Mark done",
   "ps.send": "Send answer",
   "ps.planNote": "Add a note, or say what to change…",
   "ps.planLabel": "Plan for your approval:",

@@ -601,6 +601,7 @@ export default {
   "ps.approve": "Approuver",
   "ps.askChanges": "Demander des changements",
   "ps.retry": "Réessayer",
+  "ps.done": "Marquer comme terminé",
   "ps.send": "Envoyer la réponse",
   "ps.planNote": "Ajoute une note, ou dis quoi changer…",
   "ps.planLabel": "Plan à approuver :",
