@@ -8,6 +8,8 @@ import {
   bare,
   adoptDue,
   boardMove,
+  columnOf,
+  movedOn,
   EMPTY_PIPELINE,
   placeOf,
   briefOf,
@@ -412,6 +414,14 @@ async function runOne(project: string, p: Pipeline) {
   const b = await open(project, p);
   const { prov, ref, group } = b;
   const ctx = ctxOf(prov);
+  // the board once per pass, also for a hand-picked pipeline: where each worker's ticket really is, for the panel, for
+  // what a person did with it, and so no move below puts back a ticket a person moved on (follow). Read before the
+  // runner's own moves, which are kept in the store (move), so the pick column below reads a ticket it just moved where
+  // it put it
+  const cards = await prov.cards(ctx, ref);
+  const read = (card: Card) => colOf(prov, { group }, card);
+  keepColumns(b, cards, read);
+  const col = (card: Card) => usePipelineStore.getState().columns[project]?.of[card.id] ?? read(card);
 
   // runs that ended: their ticket to review or to a person. First Relay's own steps on a fact it found itself, once
   // per worker: a push that failed on something passing goes once more, an agent that ended its turn without a report
@@ -442,13 +452,6 @@ async function runOne(project: string, p: Pipeline) {
     }
     await land(b, w, s);
   }
-  // the board once per pass, also for a hand-picked pipeline: where each worker's ticket really is, for the panel and
-  // for what a person did with it. The runner's own moves after this read are kept in the store too (move), so the
-  // pick column below reads a ticket it just moved where it put it
-  const cards = await prov.cards(ctx, ref);
-  const read = (card: Card) => colOf(prov, { group }, card);
-  keepColumns(b, cards, read);
-  const col = (card: Card) => usePipelineStore.getState().columns[project]?.of[card.id] ?? read(card);
   // tickets a person took on from the agent: merged or done, the worker is through; in review, its PR is followed
   for (const w of panelTickets(allWorkers(), project)) {
     const column = b.columns.find(c => c.id === usePipelineStore.getState().columns[project]?.of[ticketOf(w)!.card]);
@@ -473,15 +476,24 @@ async function runOne(project: string, p: Pipeline) {
     const id = ticketOf(w)!.card;
     const links = prsOf(w).join("\n");
     if (r.kind === "merged") {
-      if (p.merged) await move(b, id, p.merged);
+      const moved = !!p.merged && (await follow(b, w, p.merged));
       await comment(b, id, t("pl.merged", { pr: links }));
       adopt(await backend.orchBoard(w.key, "merged"));
-      note(project, `${refOf(w)}: its PR was merged${p.merged ? `, Relay moved it to the merged column` : ""}`);
+      note(project, `${refOf(w)}: its PR was merged${moved ? `, Relay moved it to the merged column` : ""}`);
     } else if (r.kind === "closed") {
-      await move(b, id, p.input);
+      const moved = await follow(b, w, p.input);
       await comment(b, id, t("pl.closed", { pr: links }));
       adopt(await backend.orchBoard(w.key, "closed"));
-      note(project, `${refOf(w)}: its PR was closed without a merge, Relay moved it to Input`);
+      note(project, `${refOf(w)}: its PR was closed without a merge${moved ? ", Relay moved it to Input" : ""}`);
+    } else if (heldAt(b, w, p.busy)) {
+      // a person moved it on since: its agent is not started on it behind their back. Build with agent, or the ticket
+      // in the pick column, starts it with these comments (resume)
+      if (!tried.has(`held:${w.key}:${w.ended}`))
+        note(
+          project,
+          `${refOf(w)}: review comments on its PR, but a person moved the ticket further on the board, so Relay left it there and did not start its agent; Build with agent or the pick column starts it with the comments`,
+        );
+      tried.add(`held:${w.key}:${w.ended}`);
     } else if (startsNow(settings(), project)) {
       // review comments start the worker again: that waits while paused (also when paused during this pass), the
       // comments are read again from the run's end once the pipeline goes on. The ticket text stays, unless someone
@@ -524,14 +536,27 @@ async function runOne(project: string, p: Pipeline) {
   }
 }
 
-/** A ticket an agent ran on before: back to building, the agent gets what is new on it since. */
+/** A ticket an agent ran on before: back to building, the agent gets what is new on it since, on the ticket and, for
+ *  one in review, on its PRs (review comments the pipeline held because a person had moved the ticket on). */
 async function resume(b: Board, id: string, worker: Worker, why: string) {
   await move(b, id, b.p.busy);
   const view = await viewOf(b, id);
+  const prs = inReview(worker) ? await backend.orchPr(worker.key).catch(() => null) : null;
+  const r = prs && reviewAll(prs, worker.ended ?? 0);
+  const said =
+    r?.kind === "feedback" ? fill(prompts.pipeline.reviewComments, { pr: prsOf(worker).join(", "), text: r.text }) : "";
   const news = view ? briefOf(view, worker.ended ?? 0) : "";
   // a changed ticket becomes its task, so the review judges the work against what is asked now
   const task = view && retask(worker.task, view, worker.at);
-  await sendWorker(worker, fill(prompts.pipeline.resume, { why, news: news && untrusted("ticket", news) }), task);
+  await sendWorker(
+    worker,
+    fill(prompts.pipeline.resume, {
+      // the PR's comments as the review path sends them
+      why: [why, said].filter(Boolean).join("\n\n"),
+      news: news && untrusted("ticket", news),
+    }),
+    task,
+  );
   await comment(b, id, t("pl.resumed"));
 }
 
@@ -656,7 +681,7 @@ async function land(b: Board, w: Worker, s: Step) {
     merged: () => "",
     closed: () => "",
   }[s.kind]();
-  await move(b, id, s.to === "review" ? b.p.review : s.to === "merged" ? b.p.merged : b.p.input);
+  await follow(b, w, s.to === "review" ? b.p.review : s.to === "merged" ? b.p.merged : b.p.input);
   await comment(b, id, text.trim());
   adopt(await backend.orchBoard(w.key, s.mark));
 }
@@ -701,6 +726,19 @@ function placed(b: Board, id: string, column: string) {
 const viewOf = async (b: Board, id: string) =>
   b.prov.detail ? b.prov.detail.view(await b.prov.detail.fetch(ctxOf(b.prov), b.ref, id)) : null;
 const nameOf = (b: Board, id: string) => b.columns.find(c => c.id === id)?.name ?? id;
+/** Where a person put a worker's ticket when `to` would move it back from there (movedOn), by the board as this pass
+ *  read it with Relay's own moves since: the column's id, else "". */
+function heldAt(b: Board, w: Worker, to: string) {
+  const now = usePipelineStore.getState().columns[b.project]?.of[ticketOf(w)!.card];
+  return movedOn(b.columns, b.p[columnOf(w)], now, to) ? now! : "";
+}
+/** A worker's ticket to `to`, unless a person moved it on: then it stays where they put it, said in the digest.
+ *  Resolves whether it moved. */
+async function follow(b: Board, w: Worker, to: string) {
+  if (!heldAt(b, w, to)) return move(b, ticketOf(w)!.card, to).then(() => true);
+  note(b.project, `${refOf(w)}: a person moved it further on the board, Relay left it there instead of moving it back`);
+  return false;
+}
 // the providers move and comment by the card's id alone
 async function move(b: Board, id: string, to: string) {
   await b.prov.move(ctxOf(b.prov), b.ref, { id } as Card, to, b.group);

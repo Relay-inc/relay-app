@@ -38,6 +38,7 @@ import {
   adoptDue,
   ADOPT_EVERY,
   boardMove,
+  movedOn,
   placeOf,
   stateSince,
   isPlan,
@@ -279,6 +280,30 @@ test("the board over the worker: a ticket a person moved on shows where it is, w
   assert.equal(boardMove(reviewing, P2, column("rev")), null);
   assert.equal(boardMove(worker("e", "running"), P2, column("shipped")), null);
   assert.equal(boardMove(worker("f", "blocked"), P2, column("rev")), null, "its end is not on the board yet");
+});
+
+test("movedOn: Relay never moves a ticket back from where a person moved it on", () => {
+  const cols: Column[] = [
+    { id: "busy", name: "Busy", placement: 1 },
+    { id: "rev", name: "Review", placement: 2 },
+    { id: "qa", name: "QA", placement: 3 },
+    { id: "help", name: "Input", placement: 4 },
+    { id: "shipped", name: "Shipped", placement: 0, state: "done" },
+  ];
+  // in review, a person took it to QA: review comments would put it back in busy, a closed PR in an earlier column
+  assert.equal(movedOn(cols, "rev", "qa", "busy"), true);
+  assert.equal(movedOn(cols, "rev", "qa", "qa"), false, "where it already is");
+  // a run ended while a person moved it on: not back to review; a done column is furthest, whatever its place
+  assert.equal(movedOn(cols, "busy", "qa", "rev"), true);
+  assert.equal(movedOn(cols, "busy", "shipped", "help"), true);
+  // where the pipeline put it, moved back by a person, or on to a later column: Relay moves as before
+  assert.equal(movedOn(cols, "rev", "rev", "busy"), false);
+  assert.equal(movedOn(cols, "rev", "busy", "help"), false);
+  assert.equal(movedOn(cols, "busy", "qa", "help"), false);
+  // not on the board, not read yet, or a column Relay does not know: not held
+  assert.equal(movedOn(cols, "busy", "", "rev"), false);
+  assert.equal(movedOn(cols, "busy", undefined, "rev"), false);
+  assert.equal(movedOn(cols, "busy", "gone", "rev"), false);
 });
 
 test("adoptDue: the first lookup at once, after one that found nothing only every ADOPT_EVERY", () => {
