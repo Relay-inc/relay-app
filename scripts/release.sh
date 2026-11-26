@@ -60,8 +60,13 @@ notes=$(mktemp)
   [ -z "$windows" ] || echo "On Windows: the installer is not signed yet, so SmartScreen says it protected your PC. Click More info, then Run anyway."
 } > "$notes"
 
+# how long each step took, at the end (a release builds five times; this shows which one to make faster)
+started=$(date +%s) took=""
+step() { now=$(date +%s); took="$took$1 $((now - started))s, "; started=$now; }
 pnpm install --frozen-lockfile
+step install
 pnpm tauri build
+step "Apple silicon"
 dmg="target/release/bundle/dmg/Relay_${version}_aarch64.dmg"
 [ -f "$dmg" ] || { echo "no $dmg after the build" >&2; exit 1; }
 # ad-hoc signed as a whole (signingIdentity "-"): with only the linker's signature on the binary macOS calls a
@@ -73,6 +78,7 @@ tgz="$(mktemp -d)/Relay_${version}_aarch64.app.tar.gz"
 cp "$bundle" "$tgz"
 # the same for Intel Macs, without the ONNX speech models (src-tauri/Cargo.toml)
 pnpm tauri build --target x86_64-apple-darwin
+step Intel
 intel=target/x86_64-apple-darwin/release/bundle
 idmg="$intel/dmg/Relay_${version}_x64.dmg"
 [ -f "$idmg" ] || { echo "no $idmg after the build" >&2; exit 1; }
@@ -90,6 +96,7 @@ if [ -z "$android" ]; then
   "$signer" verify "$built" || { echo "$built is not signed" >&2; exit 1; }
   apk="$(dirname "$tgz")/Relay_${version}_android.apk"
   cp "$built" "$apk"
+  step Android
 fi
 gh release create "v$version" "$dmg" "$tgz" "$idmg" "$itgz" ${apk:+"$apk"} --target "$(git rev-parse HEAD)" --title "Relay $version" --notes-file "$notes"
 rm -f "$notes"
@@ -129,3 +136,5 @@ echo "released v$version"
 
 # the tag is HEAD now: the image and the Linux binaries of the same code
 scripts/push-server-image.sh
+step relay-server
+echo "took: ${took%, }"

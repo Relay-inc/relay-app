@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # relay-server in a container: `server` installs the real Claude Code on its first start (entrypoint.sh, log in once:
 # docker exec -it relay-server claude), `test` has a stand-in claude (fake-claude) to try Relay's work machines without
 # a Claude login. Released as ghcr.io/relay-inc/relay-server for amd64 and arm64 (scripts/push-server-image.sh).
@@ -5,18 +6,23 @@
 FROM rust:1-slim AS build
 WORKDIR /src
 COPY . .
-RUN cargo build --release -p relay-server
+# the crates and the build output in caches of the builder, one per platform: a release compiles what changed, not
+# every dependency again (a cache mount is not in the layer, so the binary is copied out of it)
+ARG TARGETPLATFORM
+RUN --mount=type=cache,id=relay-cargo-registry-$TARGETPLATFORM,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=relay-server-target-$TARGETPLATFORM,target=/src/target \
+    cargo build --release -p relay-server && cp target/release/relay-server /relay-server
 
 # only the binary, for the release (scripts/push-server-image.sh): what a machine gets in a remote update
 FROM scratch AS bin
-COPY --from=build /src/target/release/relay-server /relay-server
+COPY --from=build /relay-server /relay-server
 
 FROM debian:stable-slim AS base
 LABEL org.opencontainers.image.source="https://github.com/Relay-inc/relay-app"
 # git for the repos, curl for the Claude Code installer
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* && useradd -m relay
-COPY --from=build /src/target/release/relay-server /usr/local/bin/relay-server
+COPY --from=build /relay-server /usr/local/bin/relay-server
 COPY packages/relay-server/docker/entrypoint.sh /usr/local/bin/relay-entrypoint
 USER relay
 WORKDIR /home/relay
