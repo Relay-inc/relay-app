@@ -171,7 +171,8 @@ export function applyAgentEvent(
     case "artifact": {
       const item = state.messages[key]?.find(x => x.id === event.id);
       if (item) item.artifact = event.artifact;
-      return [];
+      // the publish asked to open the page for the user, which Claude Code does only in its own UI
+      return event.artifact.open ? [{ kind: "artifact", key, url: event.artifact.url }] : [];
     }
     case "turn_end":
       return onTurnEnd(state, key, event, env);

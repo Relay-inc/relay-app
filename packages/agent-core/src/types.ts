@@ -21,7 +21,7 @@ export type Hunk = { oldStart: number; newStart: number; lines: string[] };
  *  published from, `root`: the folder its other files came from, `version`: its number on claude.ai, `updated`: it
  *  replaced an earlier version, `fromType`: the Artifact type it was made from (a design, slides, a dashboard). */
 export type Artifact = { url: string; title?: string | null; icon?: string | null; path?: string | null; root?: string | null;
-  version?: number | null; updated?: boolean; fromType?: string | null };
+  version?: number | null; updated?: boolean; fromType?: string | null; open?: boolean };
 export type TurnUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; cost?: number | null };
 /** A permission request or question in the pending folder (pending/<id>.json). */
 export type PermissionRequest = { id: string; project: string; provider?: string; kind?: "tool" | "question" | ""; tool_name: string; input: any; tool_use_id?: string; request_id?: string; suggestions?: any[]; relay?: boolean; at: number };

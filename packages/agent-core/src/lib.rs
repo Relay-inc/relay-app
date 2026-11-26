@@ -253,6 +253,9 @@ pub struct Artifact {
     pub version: Option<u64>,
     pub updated: bool,
     pub from_type: Option<String>,
+    /// the publish asked to open the page for the user (`auto_open`)
+    #[serde(default)]
+    pub open: bool,
 }
 
 /// Tokens of one turn, as the provider reports them.

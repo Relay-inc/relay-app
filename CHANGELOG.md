@@ -17,9 +17,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 ### Added
 
 - **Claude's artifacts in the conversation**: a page, dashboard, deck or design that Claude Code publishes to claude.ai with its Artifact tool shows as a card where it was made, with its name, kind and version. Open shows it in the new Artifact drawer: from the file Claude wrote, on this Mac (instant, no sign-in), or live on claude.ai as others see it, signed in once like the Design drawer. A republish reloads it, the conversation's other artifacts are a pick away, and a claude.ai artifact link in a message opens there too instead of in the browser (#553)
-- Claude conversations get Claude Code's Artifact tools (publish, read, comments, data, verify) on claude.ai, and a page the agent opens shows in the Design drawer of the conversation's project
-- Claude conversations get Claude Code's Artifact tools (publish, read, comments, data, verify) on claude.ai, and a page the agent opens shows in the Design drawer of the conversation's project. A comment sent to Claude on an artifact the conversation watches gets an answer on its thread and a turn marked as started by Claude itself; Claude can read and restore an older version
-- Claude conversations get Claude Code's Artifact tools (publish, read, comments, data, verify) on claude.ai, and a page the agent opens shows in the Design drawer of the conversation's project. A comment sent to Claude on an artifact the conversation watches starts a turn there, marked as started by Claude itself, that answers it on its thread; Claude can read and restore an older version
+- Claude Code's Artifact tools are on in Claude conversations, so Claude can publish, read and update pages, dashboards and designs on claude.ai, read and restore older versions, and keep its data. A page Claude opens for you, or publishes asking to open it (a new design, a dashboard), shows in the Artifact drawer. A comment sent to Claude on an artifact the conversation watches starts a turn there that answers it on its thread, with a note that Claude started it itself
 
 ## [0.0.69] - 2026-11-26
 

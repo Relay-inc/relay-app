@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  clearArtifact,
   designBounds,
   designHide,
   designLink,
@@ -23,9 +22,7 @@ function Design({ project }: { project: string }) {
   const [saved, setLink] = useState<string | null>(null); // null while it loads
   // a design an agent is making has no link until claude.ai opened it: the page it starts from stands in (design.rs)
   const start = useDesignStore(s => s.start[project]);
-  // a page an agent opened (Artifact tool) goes over the saved link
-  const artifact = useDesignStore(s => s.artifact[project]);
-  const link = saved === null ? null : artifact || saved || start || "";
+  const link = saved === null ? null : saved || start || "";
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const box = useRef<HTMLDivElement>(null);
@@ -68,7 +65,6 @@ function Design({ project }: { project: string }) {
       await setDesignLink(project, value);
       setError("");
       setLink(value.trim());
-      clearArtifact(project);
       setEditing(false);
     } catch {
       setError(t("design.invalid"));

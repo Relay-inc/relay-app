@@ -14,7 +14,7 @@ import { saveChats } from "./chats";
 import { imageUrl } from "./images";
 import { captureWhenIdle } from "../today/capture";
 import { finishPrep } from "../calendar/prep";
-import { showArtifact } from "../design/design";
+import { showArtifact } from "../artifacts/artifacts";
 
 // The agent processes' events, through the pure reducer (domain/conversations/events.ts). Stream deltas are the hot
 // path: the text deltas of one animation frame go into the store as one update, so a delta redraws the streaming

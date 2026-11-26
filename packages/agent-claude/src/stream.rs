@@ -79,6 +79,8 @@ fn artifact(content: &Value, result: &Value, call: impl FnOnce(&str) -> Option<V
         version: result["seq"].as_u64(),
         updated: result["updated"] == true,
         from_type: if from_type { text(&result["type"]["url"]).or_else(|| text(&input["type_url"])) } else { None },
+        // the call asked to open the page for the user, which Claude Code does only in its own UI
+        open: input["auto_open"] == true || input["auto_open"].as_str().is_some_and(|s| !s.is_empty() && s != "never"),
     };
     publish(&artifact);
     Some(Event::Artifact { id: id.into(), artifact })
@@ -624,6 +626,15 @@ mod tests {
         assert_eq!(id, "a1");
         assert_eq!((artifact.url.as_str(), artifact.title.as_deref(), artifact.version, artifact.updated), ("https://claude.ai/artifact/X15g", Some("Naming the mail client"), Some(1), false));
         assert!(published(&page).is_some());
+        assert!(!artifact.open);
+        // a publish that asks to open its page for the user ("never" does not)
+        let opens = |auto: Value| {
+            let call = json!({"type": "assistant", "message": {"id": "m2", "content": [{"type": "tool_use", "id": "a2", "name": "Artifact", "input": {"title": "x", "auto_open": auto}}]}});
+            let result = json!({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "a2", "content": "Published"}]},
+                "tool_use_result": {"url": "https://claude.ai/artifact/D3", "created_from_type": true, "type": {"url": "https://claude.ai/artifact/T"}}});
+            matches!(parse_all(&[call, result]).last(), Some(Event::Artifact { artifact: Artifact { open: true, .. }, .. }))
+        };
+        assert!(opens(json!("after_first_write")) && !opens(json!("never")) && !opens(Value::Null));
         assert!(published(&dir.join("data.json")).is_some());
         assert!(published(&dir.join("notes.rs")).is_none()); // not a served type
         assert!(published(&dir.join(".hidden/x.json")).is_none());

@@ -108,6 +108,17 @@ test("an Artifact open asks to show the page; any other Artifact call does not",
   );
 });
 
+test("a publish that asks to open its page asks to show it; one that does not, not", () => {
+  const artifact = { url: "https://claude.ai/artifact/new", open: true };
+  const call = { type: "tool_call" as const, id: "p", name: "Artifact", input: {} };
+  const opened = run(fresh(), call, { type: "artifact", id: "p", artifact });
+  assert.deepEqual(opened.effects, [{ kind: "artifact", key: "c:1", url: artifact.url }]);
+  assert.deepEqual(
+    run(fresh(), call, { type: "artifact", id: "p", artifact: { ...artifact, open: false } }).effects,
+    [],
+  );
+});
+
 test("a turn Claude started itself gets a note in front of it, after the previous turn", () => {
   const before = produce(fresh(), draft => {
     draft.messages["c:1"] = [
