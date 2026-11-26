@@ -23,6 +23,7 @@ import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { Crab } from "../orchestrator/Crab";
+import { PipeControls } from "./PipeBar";
 import { StateMark } from "../orchestrator/parts";
 
 const NEED_KEY = {
@@ -115,9 +116,17 @@ export function PipeStrip({ project, onJump }: { project: string; onJump: (id: s
               ) : null}
             </>
           )}
-          <span className="flex-1" />
-          <span className="text-xs text-secondary">{open ? t("ps.collapse") : ""}</span>
-          <span className="size-6.5 grid place-items-center rounded-md text-secondary" aria-hidden="true">
+        </button>
+        <PipeControls project={project} />
+        {/* the chevron opens and closes too, the controls sit between it and the rest of the bar */}
+        <button
+          className="h-10 flex-none flex items-center gap-1 ml-1.5 cursor-default"
+          aria-hidden="true"
+          tabIndex={-1}
+          onClick={toggle}
+        >
+          {open ? <span className="text-xs text-secondary">{t("ps.collapse")}</span> : null}
+          <span className="size-6.5 grid place-items-center rounded-md text-secondary">
             <Icon
               name="chevron"
               className={`glyph size-3 stroke-2 transition-transform duration-200 ease-out ${open ? "rotate-180" : ""}`}
