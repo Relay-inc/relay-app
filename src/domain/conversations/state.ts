@@ -17,6 +17,7 @@ export type ConversationsState = {
   // Claude Code's: messages sent that it has not taken up yet, shown below the conversation until it does
   waiting: Record<string, Item[]>;
   taken: Record<string, number>; // the messages the running turn took up, its turn end answers them all
+  turnAt: Record<string, number>; // where in the conversation the running turn's first activity landed
   unseen: Set<string>;
   dismissed: Set<string>; // "is this about project X?" answered no
   closing: Set<string>; // conversations being closed: the process stops and its worktrees go, which can take a while
@@ -59,6 +60,7 @@ export const initialConversations = (stored: {
   queued: {},
   waiting: {},
   taken: {},
+  turnAt: {},
   unseen: new Set(),
   dismissed: new Set(),
   closing: new Set(),

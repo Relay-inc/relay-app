@@ -101,6 +101,7 @@ export function applyAgentEvent(
     if (!state.taken[key]) {
       takeWaiting(state, key);
       state.taken[key] ||= 1;
+      state.turnAt[key] = state.messages[key]?.length ?? 0;
     }
   }
   switch (event.type) {
@@ -123,11 +124,12 @@ export function applyAgentEvent(
       push(state, key, { kind: "compact", text: env.t("compact.running"), state: "run" });
       return [];
     case "woke": {
-      // the turn is in the conversation already: its note goes in front of it, after the previous turn's end
+      // the turn is in the conversation already: its note goes where its first activity landed
       const items = (state.messages[key] ||= []);
-      let at = items.length;
-      while (at > 0 && items[at - 1].kind !== "done" && items[at - 1].kind !== "me") at--;
-      items.splice(at, 0, { kind: "note", text: env.t("chat.woke") });
+      items.splice(Math.min(state.turnAt[key] ?? items.length, items.length), 0, {
+        kind: "note",
+        text: env.t("chat.woke"),
+      });
       return [];
     }
     case "compacted": {

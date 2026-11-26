@@ -583,6 +583,26 @@ const VIEWS = {
     await page.frameLocator('iframe[title="Pipeline dashboard"]').getByText("Open deals").waitFor();
     await settle(page);
   },
+  // a comment sent to Claude on the artifact starts a turn by itself: a note in front of it, the reply as a tool call
+  "conversation-artifact-comment": async () => {
+    await open(page, server.url, { sel: keys.artifact });
+    await waitText("The pipeline dashboard is up");
+    await page.evaluate(key => {
+      const send = event => window.__harness.emit("agent", { project: key, provider: "claude", event });
+      const url = "https://claude.ai/artifact/Fx7Hb2demoPipeline";
+      send({ type: "tool_call", id: "c1", name: "ArtifactComments", input: { action: "read", url } });
+      send({ type: "tool_result", id: "c1", error: false });
+      const text = "Added: the win rate now also shows last quarter's for comparison.";
+      send({ type: "tool_call", id: "c2", name: "ArtifactComments", input: { action: "reply", url, thread_id: "t1", text } });
+      send({ type: "tool_result", id: "c2", error: false });
+      send({ type: "text", text: "Answered the comment on the win rate on its thread.", delta: false });
+      send({ type: "woke" });
+      send({ type: "turn_end", ok: true, error: null, usage: null, duration_ms: 4200 });
+    }, keys.artifact);
+    await waitText("Claude started this on its own");
+    await page.getByText("2 steps").last().click(); // the reply it posted on the thread
+    await settle(page);
+  },
   // a card whose request carries Claude's permission_suggestions: Deny, Always allow, Allow
   "conversation-permission": async () => {
     await open(page, server.url, { sel: keys.permission });

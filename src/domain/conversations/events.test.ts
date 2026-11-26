@@ -119,21 +119,24 @@ test("a publish that asks to open its page asks to show it; one that does not, n
   );
 });
 
-test("a turn Claude started itself gets a note in front of it, after the previous turn", () => {
+test("a turn Claude started itself gets a note where it began, also after a turn that left no Done", () => {
   const before = produce(fresh(), draft => {
     draft.messages["c:1"] = [
       { kind: "me", text: "hi" },
-      { kind: "done", text: "" },
-      { kind: "ai", text: "Yes, I can hear you." },
+      { kind: "ai", text: "The dashboard is up." },
     ];
   });
-  const { next } = run(before, { type: "woke" });
+  const { next } = run(
+    before,
+    { type: "text", text: "Answered the comment.", delta: false },
+    { type: "woke" },
+    { type: "turn_end", ok: true, error: null, usage: null, duration_ms: 1 },
+  );
   assert.deepEqual(
     next.messages["c:1"].map(i => i.kind),
-    ["me", "done", "note", "ai"],
+    ["me", "ai", "note", "ai", "done"],
   );
 });
-
 test("a turn that ends ok: done with its duration, idle, a banner with the last answer, unseen when not open", () => {
   const busy = produce(fresh(), draft => {
     draft.status["c:1"] = "busy";
