@@ -336,6 +336,12 @@ export const migrateProject = (
 export const moveChatWorkspace = (key: string, title: string, mail: boolean, to: string) =>
   invoke("move_chat_workspace", { key, title, mail, to });
 /** The Design drawer's native claude.ai webview (design.rs), placed by the drawer's bounds in logical px. */
+/** A page Claude Code published as an Artifact, from its file (the `relay-artifact` scheme of artifact.rs): each part
+ *  of the path its own segment, so the page's relative links reach the files beside it. */
+export const artifactSrc = (path: string, theme: "light" | "dark" | "system") =>
+  convertFileSrc("", "relay-artifact") +
+  path.replace(/^\/+/, "").split("/").map(encodeURIComponent).join("/") +
+  `?theme=${theme}`;
 export const designShow = (url: string, r: DOMRect) =>
   invoke("design_show", { url, x: r.x, y: r.y, w: r.width, h: r.height });
 export const designBounds = (r: DOMRect) => invoke("design_bounds", { x: r.x, y: r.y, w: r.width, h: r.height });

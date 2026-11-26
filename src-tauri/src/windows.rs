@@ -47,6 +47,21 @@ pub fn open_new(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// The main window, from tauri.conf.json (`create: false` there, so it is made here). For a `--screenshot` run
+/// ([`crate::screenshot`]) it never takes the focus, keeps its storage in memory (so it never reads or writes the
+/// person's Relay's), and on Windows sits behind the other windows, where a covered window still draws.
+pub fn open_main(app: &AppHandle, picture: bool) -> tauri::Result<()> {
+    let conf = app.config().app.windows.first().cloned().unwrap_or_default();
+    let mut w = tauri::WebviewWindowBuilder::from_config(app, &conf)?;
+    if picture {
+        w = w.focused(false).incognito(true);
+        #[cfg(windows)]
+        { w = w.always_on_bottom(true); }
+    }
+    w.build()?;
+    Ok(())
+}
+
 /// Ctrl-N on Windows, where the webview takes the key (macOS has it in the menu bar).
 #[tauri::command]
 pub fn new_window(app: AppHandle) -> Result<(), String> { open_new(&app).map_err(|e| e.to_string()) }

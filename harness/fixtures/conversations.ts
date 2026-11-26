@@ -74,6 +74,13 @@ export const SWITCH_KEY = chats.filter(c => c.project === "Northwind Portal")[1]
 chats.filter(c => c.project === "Northwind Portal")[1].title = "Invoice export columns";
 export const QUESTION_KEY = special("Harbor CRM", "Contact sync strategy", 8);
 export const ACTION_KEY = special("Atlas Logistics", "Plan the depot import", 11);
+// a conversation that published a claude.ai Artifact (Claude Code's Artifact tool): its card, and the drawer showing its
+// file, which the harness's server has (the mock's relay-artifact address is the path itself)
+const artifactChat = chats.filter(c => c.project === "Harbor CRM")[1];
+artifactChat.title = "Pipeline dashboard";
+export const ARTIFACT_KEY = artifactChat.key;
+export const ARTIFACT_TITLE = "Pipeline dashboard";
+export const ARTIFACT_URL = "https://claude.ai/artifact/Fx7Hb2demoPipeline";
 export const LONG_TITLE = "Billing sync double balances";
 export const SWITCH_TITLE = "Invoice export columns";
 export const PERMISSION_TITLE = "Push the portal fix";
@@ -257,6 +264,25 @@ export function history(key: string): Ev[] {
       ai("The branch is clean. I need your go to push."),
     );
   if (key === QUESTION_KEY) base.push(user("Which sync should we use?"), ai("Two options, I asked you below."));
+  if (key === ARTIFACT_KEY) {
+    const path = "/harness/fixtures/artifacts/pipeline-dashboard.html";
+    const quickstart = tool("Artifact", { action: "quickstart", intent: "other" });
+    const publish = tool("Artifact", { file_path: path, icon: "chart", description: "The CRM pipeline by stage." });
+    base.push(
+      user("Make me a dashboard of the pipeline I can share with the team."),
+      quickstart,
+      tool("Write", { file_path: path }),
+      publish,
+      {
+        type: "artifact",
+        id: publish.id,
+        artifact: { url: ARTIFACT_URL, title: ARTIFACT_TITLE, icon: "chart", path, version: 1, updated: false },
+      },
+      ai(
+        `The pipeline dashboard is up: open deals, weighted value and win rate on top, new deals per week below. It is private until you share it: [Pipeline dashboard](${ARTIFACT_URL}).`,
+      ),
+    );
+  }
   if (key === ACTION_KEY)
     base.push(
       user("Make a ticket for the depot import."),

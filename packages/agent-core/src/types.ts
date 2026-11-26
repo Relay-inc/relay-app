@@ -17,6 +17,11 @@ export type AgentStatus = { id: string; name: string; on: boolean; caps: Caps; d
 export type Image = { media_type: string; data: string };
 /** One hunk of a file change: its start in the old and new file, its lines prefixed " ", "-" or "+". */
 export type Hunk = { oldStart: number; newStart: number; lines: string[] };
+/** A page the agent published as a claude.ai Artifact (Claude Code's `Artifact` tool). `path`: the local file it was
+ *  published from, `root`: the folder its other files came from, `version`: its number on claude.ai, `updated`: it
+ *  replaced an earlier version, `fromType`: the Artifact type it was made from (a design, slides, a dashboard). */
+export type Artifact = { url: string; title?: string | null; icon?: string | null; path?: string | null; root?: string | null;
+  version?: number | null; updated?: boolean; fromType?: string | null };
 export type TurnUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; cost?: number | null };
 /** A permission request or question in the pending folder (pending/<id>.json). */
 export type PermissionRequest = { id: string; project: string; provider?: string; kind?: "tool" | "question" | ""; tool_name: string; input: any; tool_use_id?: string; request_id?: string; suggestions?: any[]; relay?: boolean; at: number };
@@ -36,6 +41,7 @@ export type AgentEvent =
   | { type: "patch"; id: string; hunks: Hunk[] } // the change a file tool made, when the provider reports it
   | { type: "tool_images"; id: string; images: Image[] } // the images a tool returned (a Read of a picture, a screenshot)
   | { type: "tool_output"; id: string; text: string } // what a command printed (Claude Code, Bash only)
+  | { type: "artifact"; id: string; artifact: Artifact } // a page the agent published as a claude.ai Artifact (Claude Code)
   | { type: "permission"; request: PermissionRequest }
   | { type: "turn_end"; ok: boolean; error?: string | null; usage?: TurnUsage | null; duration_ms?: number | null }
   | { type: "time"; at: string }       // history only: when the transcript line after it was written

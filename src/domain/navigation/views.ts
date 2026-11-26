@@ -45,8 +45,8 @@ export const meetingOf = (key: string) => {
   return target.kind === "work" && target.work === "meeting" ? target.id : "";
 };
 /** What the right drawer shows, "" while it is closed: one of the project's tools, the open conversation's changes,
- *  or the orchestrator's workers. */
-export type Drawer = "" | "terminal" | "design" | "workers" | "git" | "files" | "agents";
+ *  the orchestrator's workers, or an Artifact the conversation published. */
+export type Drawer = "" | "terminal" | "design" | "workers" | "git" | "files" | "agents" | "artifact";
 /** A project's board or PRs opened from its title bar: whose they are, and the conversation to go back to. */
 export type Tool = { project: string; back: string };
 /** `detail`: a second, quieter line; a toast with one is a refusal and shows the red mark. */

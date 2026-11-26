@@ -13,6 +13,7 @@
     "withGlobalTauri": false,
     "windows": [
       {
+        "create": false,
         "title": "Relay",
         "width": 1280,
         "height": 820,
@@ -31,7 +32,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: relay-file:; media-src 'self' relay-file:; connect-src ipc: http://ipc.localhost; frame-src relay-plugin:"
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: relay-file:; media-src 'self' relay-file:; connect-src ipc: http://ipc.localhost; frame-src relay-plugin: relay-artifact:"
     },
     "macOSPrivateApi": true
   },

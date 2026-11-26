@@ -12,6 +12,7 @@ import { UserMessage } from "./UserMessage";
 import { Answer } from "./Answer";
 import { Thinking } from "./Thinking";
 import { ToolStep } from "./ToolStep";
+import { ArtifactCard } from "../artifacts/ArtifactCard";
 import { NoteLine } from "./NoteLine";
 import { LoginCard } from "./LoginCard";
 import { RelayTurn } from "./RelayTurn";
@@ -32,7 +33,7 @@ export const ConversationItem = memo(function ConversationItem({ item }: { item:
     case "thinking":
       return <Thinking text={item.text} />;
     case "tool":
-      return <ToolStep item={item} />;
+      return item.artifact ? <ArtifactCard artifact={item.artifact} /> : <ToolStep item={item} />;
     case "allowed":
     case "denied": {
       // what was answered on a permission card, where the card stood

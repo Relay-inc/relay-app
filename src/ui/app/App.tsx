@@ -3,6 +3,8 @@ import { urlOk } from "../../shared/markdown";
 import { isView, MAIL, pageOf } from "../../domain/navigation/views";
 import { useNavigationStore } from "../../application/navigation/store";
 import { useConversationsStore } from "../../application/conversations/store";
+import { openArtifactLink } from "../../application/artifacts/artifacts";
+import { artifactsIn } from "../../domain/artifacts/rules";
 import { useWorkspaceStore } from "../../application/workspace/store";
 import { escStop, ctrlC } from "../../application/conversations/actions";
 import {
@@ -270,6 +272,14 @@ function onLink(e: MouseEvent) {
   if (workerLink) {
     e.preventDefault();
     void openWorker(workerLink.dataset.worker!);
+    return;
+  }
+  // a claude.ai Artifact link: the Artifact drawer, with what the conversation knows of it (shared/markdown.ts)
+  const artifactLink = closest(e, node => !!node.dataset.artifact);
+  if (artifactLink) {
+    e.preventDefault();
+    const key = useNavigationStore.getState().selected;
+    openArtifactLink(artifactLink.dataset.artifact!, artifactsIn(useConversationsStore.getState().messages[key]));
     return;
   }
   // a code block's copy button (shared/markdown.ts)

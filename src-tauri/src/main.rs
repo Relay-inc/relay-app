@@ -16,5 +16,7 @@ fn main() {
     // `relay --relay-server <command>`: relay-server itself, this computer as a work machine (src/host.rs, host_windows.rs)
     #[cfg(any(target_os = "macos", windows))]
     if a.get(1).map(String::as_str) == Some("--relay-server") { return relay_server::cli::run(&a[1..]); }
+    // `relay --screenshot <file.png>`: a picture of the window, from a Relay of its own (src/screenshot.rs)
+    if let Some(out) = relay_lib::screenshot::asked(&a, &std::env::current_dir().unwrap_or_default()) { relay_lib::screenshot::prepare(out); }
     relay_lib::run()
 }

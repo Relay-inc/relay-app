@@ -569,6 +569,20 @@ const VIEWS = {
     await page.getByRole("button", { name: /invoice\.png/ }).click();
     await settle(page);
   },
+  // a page Claude Code published as a claude.ai Artifact: its card where the call stood, the quickstart a tool line
+  "conversation-artifact": async () => {
+    await open(page, server.url, { sel: keys.artifact });
+    await waitText("The pipeline dashboard is up");
+    await settle(page);
+  },
+  // Open on the card: the Artifact drawer with the page from its file, This Mac and claude.ai to switch between
+  "conversation-artifact-open": async () => {
+    await open(page, server.url, { sel: keys.artifact });
+    await waitText("The pipeline dashboard is up");
+    await page.getByRole("button", { name: "Open", exact: true }).click();
+    await page.frameLocator('iframe[title="Pipeline dashboard"]').getByText("Open deals").waitFor();
+    await settle(page);
+  },
   // a card whose request carries Claude's permission_suggestions: Deny, Always allow, Allow
   "conversation-permission": async () => {
     await open(page, server.url, { sel: keys.permission });

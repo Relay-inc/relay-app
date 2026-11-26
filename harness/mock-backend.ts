@@ -2456,6 +2456,7 @@ const harness = {
     permission: conv.PERMISSION_KEY,
     question: conv.QUESTION_KEY,
     action: conv.ACTION_KEY,
+    artifact: conv.ARTIFACT_KEY,
     orch: orch.ORCH,
     orchWorker: orch.workers[1].key,
     terminal: `t:${vault.terminalSessions[0].sessionId}`,

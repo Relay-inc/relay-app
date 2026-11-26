@@ -55,6 +55,8 @@ mod mail;
 mod meeting;
 mod migrate;
 mod attach;
+mod artifact;
+pub mod screenshot;
 mod changes;
 mod pagefiles;
 mod homes;
@@ -3463,6 +3465,9 @@ pub fn cli(args: &[String]) -> i32 { actions::cli(args) }
 
 pub fn run() {
     let builder = tauri::Builder::default();
+    // a `--screenshot` run starts behind what the person is doing: the app is not brought forward
+    #[cfg(target_os = "macos")]
+    let builder = builder.activate_ignoring_other_apps(screenshot::target().is_none());
     // Windows: a second start, or a relay:// link (the deep-link feature hands it to on_open_url below), brings the
     // running window up instead of a second Relay. macOS does both itself. Must be the first plugin
     #[cfg(windows)]
@@ -3503,6 +3508,8 @@ pub fn run() {
         // the HTML of a plugin's view, with the policy it declares (plugins.rs)
         .register_uri_scheme_protocol("relay-plugin", |ctx, req| plugins::serve(ctx.app_handle(), req.uri().path()))
         // a workspace's files for the webview (images, audio in a page's embeds), nothing outside a workspace (attach.rs)
+        // a page Claude Code published as an Artifact, for the Artifact drawer's local preview (artifact.rs)
+        .register_uri_scheme_protocol("relay-artifact", |_, req| artifact::serve(req.uri().path(), req.uri().query()))
         .register_uri_scheme_protocol("relay-file", |ctx, req| {
             let state = ctx.app_handle().state::<App>();
             let roots = page_roots(&state).unwrap_or_default();
@@ -3526,6 +3533,7 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            windows::open_main(app.handle(), screenshot::target().is_some())?;
             let sids = agents::load_sessions(&fs::read_to_string(data_dir(app.handle()).join("sessions.json")).unwrap_or_default());
             let settings = norm(fs::read_to_string(data_dir(app.handle()).join("settings.json")).ok()
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default());
@@ -3538,6 +3546,13 @@ pub fn run() {
             app.manage(plugins::Plugins::default());
             app.manage(dictation::Dictation::default());
             app.manage(meeting::MeetingRec::default());
+            // a `--screenshot` run: the window and the commands, none of the work in the background, then its picture
+            if let Some(out) = screenshot::target() {
+                #[cfg(target_os = "macos")]
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                screenshot::take(app.handle().clone(), out.clone());
+                return Ok(());
+            }
             anywhere::apply(app.handle());
             reattach(app.handle());
             std::thread::spawn(host::refresh); // a new Relay restarts this Mac's relay-server on its own binary

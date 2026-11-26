@@ -12,6 +12,7 @@ import { GitPanel } from "../git/GitPanel";
 import { FilesPanel } from "../files/FilesPanel";
 import { DesignPanel } from "../design/DesignPanel";
 import { AgentsColumn } from "../agents/AgentsColumn";
+import { ArtifactPanel } from "../artifacts/ArtifactPanel";
 import "../../styles/navigation.css";
 
 const TITLES = {
@@ -21,6 +22,7 @@ const TITLES = {
   git: "drawer.git",
   files: "drawer.files",
   agents: "agents.column",
+  artifact: "drawer.artifact",
 } as const;
 
 /** The right drawer, open on demand: one of the project's tools (terminals, notes), the
@@ -63,6 +65,7 @@ export function DrawerView({ className, drawer }: { className: string; drawer: E
           {drawer === "git" ? <GitPanel /> : null}
           {drawer === "files" ? <FilesPanel /> : null}
           {drawer === "agents" ? <AgentsColumn /> : null}
+          {drawer === "artifact" ? <ArtifactPanel /> : null}
         </div>
       </div>
     </aside>

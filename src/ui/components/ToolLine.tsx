@@ -59,6 +59,16 @@ export function ToolLine({
       return line(th("tool.agent", { d: args.description || args.subagent_type || "" }));
     case "Skill":
       return line(th("tool.skill", { s: args.skill ?? "" }));
+    case "Artifact": {
+      // Claude Code's claude.ai Artifacts: a publish that worked shows as its card (ArtifactCard), this is the rest
+      const action = typeof args.action === "string" ? args.action : "publish";
+      if (action === "publish" && (args.file_path || args.title))
+        return line(th("tool.artifactNew", { file: String(args.title || fileName(args.file_path)) }));
+      if (action === "read" || action === "read_file" || action === "list_files") return line(th("tool.artifactRead"));
+      if (action === "list") return line(th("tool.artifactList"));
+      if (action === "quickstart") return line(th("tool.artifactGuide"));
+      return line(th("tool.artifactOther", { a: action.replace(/_/g, " ") }));
+    }
     case "TodoWrite": {
       const todos = todosIn(args);
       return line(

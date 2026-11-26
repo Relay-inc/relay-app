@@ -1,10 +1,11 @@
 //! Claude Code's stream-json, in and out, and its transcripts, as the contract's events.
 
 use agent_core::envelope::strip;
-use agent_core::{Event, Hunk, Image, Turn, TurnUsage, IMAGE_TYPES};
+use agent_core::{Artifact, Event, Hunk, Image, Turn, TurnUsage, IMAGE_TYPES};
 use serde_json::{json, Value};
-use std::collections::HashSet;
-use std::path::Path;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 /// A turn as stream-json takes it: pasted images as base64 image blocks before the text.
 pub fn user_message(turn: &Turn) -> Value {
@@ -51,6 +52,59 @@ fn tool_images(content: &Value, out: &mut Vec<Event>) {
     }
 }
 
+/// The page an `Artifact` call published, from the result Claude Code keeps next to its tool result (`tool_use_result`
+/// in stream-json, `toolUseResult` in the transcript): a publish of a file (`url` and `path`) or an Artifact made from a
+/// type (`created_from_type`). A read, a list or an asset upload names no page and gives nothing. `call` is the call's
+/// input, for the folder its other files came from (`root`). Only for a message with one tool result, as [`patch`].
+fn artifact(content: &Value, result: &Value, call: impl FnOnce(&str) -> Option<Value>) -> Option<Event> {
+    let results: Vec<&Value> = content.as_array().into_iter().flatten().filter(|c| c["type"] == "tool_result").collect();
+    let [r] = results[..] else { return None };
+    if r["is_error"] == true { return None; }
+    let url = result["url"].as_str().filter(|u| u.starts_with("https://claude.ai/"))?;
+    let from_type = result["created_from_type"] == true;
+    if !from_type && !result["path"].is_string() { return None; }
+    let id = r["tool_use_id"].as_str().unwrap_or("");
+    let input = call(id).unwrap_or(Value::Null);
+    let text = |v: &Value| v.as_str().filter(|s| !s.is_empty()).map(String::from);
+    let artifact = Artifact {
+        url: url.into(),
+        title: text(&result["title"]).or_else(|| text(&input["title"])),
+        icon: text(&result["icon"]).or_else(|| text(&input["icon"])),
+        path: text(&result["path"]),
+        root: text(&input["root"]),
+        version: result["seq"].as_u64(),
+        updated: result["updated"] == true,
+        from_type: if from_type { text(&result["type"]["url"]).or_else(|| text(&input["type_url"])) } else { None },
+    };
+    publish(&artifact);
+    Some(Event::Artifact { id: id.into(), artifact })
+}
+
+/// The pages Claude Code published as Artifacts, and the folders their other files came from: what the app's local
+/// preview may read (`relay-artifact://`), nothing else on disk.
+static PUBLISHED: Mutex<Vec<(PathBuf, PathBuf)>> = Mutex::new(Vec::new());
+fn publish(a: &Artifact) {
+    let Some(page) = a.path.as_deref().and_then(|p| std::fs::canonicalize(p).ok()) else { return };
+    let root = a.root.as_deref().and_then(|r| std::fs::canonicalize(r).ok()).filter(|r| page.starts_with(r))
+        .or_else(|| page.parent().map(Path::to_path_buf));
+    let Some(root) = root else { return };
+    let mut all = PUBLISHED.lock().unwrap();
+    if !all.iter().any(|(p, r)| *p == page && *r == root) { all.push((page, root)); }
+}
+/// The extensions an Artifact serves (the Artifact tool's own list), what the local preview gives a page beside it.
+const SERVED: &[&str] = &["html", "htm", "css", "js", "mjs", "wasm", "json", "map", "geojson", "webmanifest", "txt", "md", "csv", "xml",
+    "svg", "png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "woff", "woff2", "ttf", "otf", "mp3", "wav", "ogg", "mp4", "webm", "pdf"];
+/// A file the local preview may serve: a published page, or a file of a served type in its folder (no hidden part).
+pub fn published(path: &Path) -> Option<PathBuf> {
+    let real = std::fs::canonicalize(path).ok().filter(|p| p.is_file())?;
+    let all = PUBLISHED.lock().unwrap();
+    let ok = all.iter().any(|(page, root)| *page == real || real.strip_prefix(root).is_ok_and(|rel| {
+        rel.components().all(|c| !c.as_os_str().to_string_lossy().starts_with('.'))
+            && real.extension().and_then(|e| e.to_str()).is_some_and(|e| SERVED.contains(&e.to_ascii_lowercase().as_str()))
+    }));
+    ok.then_some(real)
+}
+
 /// The text of a tool result: a string, or its text blocks.
 fn text_of(content: &Value) -> String {
     if let Some(s) = content.as_str() { return s.into(); }
@@ -82,6 +136,8 @@ pub struct State {
     spent: f64,
     /// the Bash calls of the conversation whose result has not come yet
     bash: HashSet<String>,
+    /// the Artifact calls whose result has not come yet, with their input
+    artifacts: HashMap<String, Value>,
 }
 
 impl State {
@@ -127,6 +183,7 @@ impl State {
                 assistant(&ev["message"]["content"], streamed, &mut out);
                 out.extend(context(&ev["message"]["usage"]));
                 self.bash.extend(out.iter().filter_map(|e| match e { Event::ToolCall { id, name, .. } if name == "Bash" => Some(id.clone()), _ => None }));
+                self.artifacts.extend(out.iter().filter_map(|e| match e { Event::ToolCall { id, name, input } if name == "Artifact" => Some((id.clone(), input.clone())), _ => None }));
             }
             _ => {
                 let mut evs = parse(&ev);
@@ -138,6 +195,7 @@ impl State {
                 out.extend(evs);
                 if ev["type"] == "user" {
                     out.extend(tool_output(&ev["message"]["content"], |id| self.bash.remove(id)));
+                    out.extend(artifact(&ev["message"]["content"], &ev["tool_use_result"], |id| self.artifacts.remove(id)));
                 }
             }
         }
@@ -229,6 +287,9 @@ pub fn history_line(e: &Value, out: &mut Vec<Event>) {
     let bash = |id: &str| out.iter().rev().find_map(|e| match e { Event::ToolCall { id: i, name, .. } if i == id => Some(name == "Bash"), _ => None }) == Some(true);
     let printed = tool_output(c, bash);
     out.extend(printed);
+    let call = |id: &str| out.iter().rev().find_map(|e| match e { Event::ToolCall { id: i, input, .. } if i == id => Some(input.clone()), _ => None });
+    let published = artifact(c, &e["toolUseResult"], call);
+    out.extend(published);
     if let Some(s) = c.as_str().map(strip) { if !harness(s) { out.push(Event::User { text: s.into(), images: vec![] }); } return; }
     let Some(blocks) = c.as_array() else { return };
     let texts: Vec<&str> = blocks.iter().filter(|x| x["type"] == "text").filter_map(|x| x["text"].as_str()).map(strip).filter(|t| !harness(t)).collect();
@@ -525,5 +586,41 @@ mod tests {
         assert_eq!(ev.len(), 7); // no <command>, meta or teammate lines, other tool results, sidechains or other types
         assert_eq!(history(&p, next).0.len(), 0);
         std::fs::remove_file(p).ok();
+    }
+
+    #[test]
+    fn an_artifact_publish_is_an_artifact_event_and_its_folder_may_be_previewed() {
+        let dir = std::env::temp_dir().join(format!("relay-artifact-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(".hidden")).unwrap();
+        let page = dir.join("names.html");
+        std::fs::write(&page, "<title>Names</title>").unwrap();
+        std::fs::write(dir.join("data.json"), "{}").unwrap();
+        std::fs::write(dir.join("notes.rs"), "").unwrap();
+        std::fs::write(dir.join(".hidden/x.json"), "{}").unwrap();
+        let path = page.to_string_lossy().to_string();
+        let call = json!({"type": "assistant", "message": {"id": "m1", "content": [{"type": "tool_use", "id": "a1", "name": "Artifact", "input": {"file_path": path, "icon": "logo"}}]}});
+        let result = json!({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "a1", "content": "Published"}]},
+            "tool_use_result": {"url": "https://claude.ai/artifact/X15g", "path": path, "title": "Naming the mail client", "updated": false, "icon": "logo", "seq": 1}});
+        let out = parse_all(&[call, result]);
+        let Some(Event::Artifact { id, artifact }) = out.last() else { panic!("no artifact: {out:?}") };
+        assert_eq!(id, "a1");
+        assert_eq!((artifact.url.as_str(), artifact.title.as_deref(), artifact.version, artifact.updated), ("https://claude.ai/artifact/X15g", Some("Naming the mail client"), Some(1), false));
+        assert!(published(&page).is_some());
+        assert!(published(&dir.join("data.json")).is_some());
+        assert!(published(&dir.join("notes.rs")).is_none()); // not a served type
+        assert!(published(&dir.join(".hidden/x.json")).is_none());
+        assert!(published(&std::env::temp_dir().join("elsewhere.html")).is_none());
+        // made from a type: no file, the type's link; a read gives nothing
+        let typed = json!({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "a2", "content": "Created"}]},
+            "toolUseResult": {"created_from_type": true, "url": "https://claude.ai/artifact/7gY", "title": "Quill Design System", "type": {"url": "https://claude.ai/artifact/5M7"}}});
+        let mut h = vec![];
+        history_line(&typed, &mut h);
+        assert!(matches!(&h[..], [Event::Artifact { artifact: Artifact { from_type: Some(t), path: None, .. }, .. }] if t == "https://claude.ai/artifact/5M7"));
+        let read = json!({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "a3", "content": "Files saved"}]},
+            "toolUseResult": {"files_read": {"url": "https://claude.ai/artifact/7gY"}}});
+        let mut h = vec![];
+        history_line(&read, &mut h);
+        assert!(h.is_empty());
+        std::fs::remove_dir_all(dir).ok();
     }
 }

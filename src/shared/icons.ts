@@ -2,6 +2,11 @@
 // it as SVG elements, `iconPaths` as markup for the HTML the app builds itself (markdown's copy button). Stroke and its
 // width are left to the CSS, so a row can colour its glyph the way it did with the hand-drawn ones
 import {
+  Analytics01Icon,
+  Presentation01Icon,
+  PaintBoardIcon,
+  WebDesign01Icon,
+  Globe02Icon,
   Notification01Icon,
   QrCodeIcon,
   KeyboardIcon,
@@ -81,6 +86,12 @@ type Shape = readonly [string, Readonly<Record<string, string | number>>];
 type Icon = readonly Shape[];
 
 const ICONS: Record<string, Icon> = {
+  // an Artifact's card and drawer: a dashboard, slides, a design, a page, and its live page on claude.ai
+  chart: Analytics01Icon,
+  slides: Presentation01Icon,
+  palette: PaintBoardIcon,
+  page: WebDesign01Icon,
+  globe: Globe02Icon,
   bell: Notification01Icon,
   list: LeftToRightListBulletIcon,
   chat: Message01Icon,
