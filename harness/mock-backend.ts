@@ -250,10 +250,8 @@ const voiceModels = [
   { id: "whisper-turbo", mb: 574, langs: ["nl", "en", "de", "fr"], auto: true, installed: false, downloading: false },
   { id: "moonshine-base", mb: 55, langs: ["en"], auto: true, installed: false, downloading: false },
 ];
-const scratch = new Map<string, { id: string; text: string; modified: number }[]>();
 // fixture kb-changes-inbox: the Inbox's notes (fixtures/inbox.ts)
 const inboxOn = fixture.includes("inbox");
-let scratchId = 0;
 const NOW_S = Math.floor(NOW / 1000);
 // the machine's GitHub and repos (fixture "github"), changed by Disconnect, Connect and Push
 let github = structuredClone(vault.machineGit.github);
@@ -1471,20 +1469,8 @@ function handle(cmd: string, a: Args): unknown {
     case "pty_kill":
       ptys.delete(a.id);
       return null;
-    // scratch notes per project, in memory
     case "related_notes":
       return [];
-    case "scratch_list":
-      return (scratch.get(a.project) ?? []).map(n => ({ ...n }));
-    case "scratch_save": {
-      const list = scratch.get(a.project) ?? [];
-      const id = a.id ?? `note-${++scratchId}`;
-      const note = list.find(n => n.id === id);
-      if (note) Object.assign(note, { text: a.text, modified: NOW_S });
-      else list.unshift({ id, text: a.text, modified: NOW_S });
-      scratch.set(a.project, list);
-      return id;
-    }
     // the Inbox and quick capture (K7): the notes are the written ones under Inbox/, as inbox.rs lists them
     case "inbox_list":
       return [...written.keys()]
@@ -1556,12 +1542,6 @@ function handle(cmd: string, a: Args): unknown {
       return path;
     }
     case "quick_capture_hide":
-      return null;
-    case "scratch_delete":
-      scratch.set(
-        a.project,
-        (scratch.get(a.project) ?? []).filter(n => n.id !== a.id),
-      );
       return null;
     case "stop":
     case "bg":

@@ -1747,15 +1747,6 @@ const VIEWS = {
     await waitText("No note named");
     await settle(page, 200);
   },
-  "drawer-notes": async () => {
-    await VIEWS["project-tools"]();
-    await page.getByRole("button", { name: "Notes", exact: true, pressed: false }).click();
-    await click("+ New note");
-    await page
-      .getByRole("textbox")
-      .last()
-      .fill("Ask Mara about the VAT column\n- export: viewers see no button\n- check the staging seed");
-  },
   "tool-board": async () => {
     await VIEWS["project-tools"]();
     await page.getByRole("button", { name: "Productive", exact: true, pressed: false }).last().click(); // the sidebar row comes first

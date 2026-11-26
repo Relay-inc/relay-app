@@ -191,7 +191,7 @@ export function chatBar(key: string) {
     noTerm: onView ? true : session ? session.kind !== "background" : agentOf(chatAgent(key))?.caps.terminal === false,
     // the view's second crumb: the project's view name when opened from a project, else a one-phrase summary
     sub: tool ? viewName : viewSummary(key),
-    // the project's tools: GitHub (dimmed while it has no repos) and, in the drawer, terminal and notes
+    // the project's tools: GitHub (dimmed while it has no repos) and, in the drawer, terminal and design
     tools: toolProject
       ? {
           project: toolProject,
