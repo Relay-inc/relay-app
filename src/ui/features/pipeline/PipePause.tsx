@@ -23,12 +23,12 @@ export function PipePause({ project }: { project: string }) {
       : [t("pp.running"), t("pp.pause"), () => pausePipeline(project, true)];
   return (
     <button
-      className={`btn-icon ${paused || all ? "text-soon!" : ""}`}
+      className="h-7 flex items-center gap-1.5 px-3 rounded-lg border border-separator-strong bg-transparent text-[13px] font-medium whitespace-nowrap hover:bg-fill-2 cursor-default"
       title={`${state} · ${action}`}
-      aria-label={action}
       onClick={() => void go()}
     >
-      <Icon name={paused || all ? "play" : "pause"} className="glyph size-4" />
+      <Icon name={paused || all ? "play" : "pause"} className="glyph size-2.5 fill-current" />
+      {action}
     </button>
   );
 }

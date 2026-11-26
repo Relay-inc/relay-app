@@ -892,7 +892,7 @@ fn pr_template(worktree: &str) -> Option<String> {
 }
 
 /// A pipeline worker's PRs as the board needs them, one per repo with a PR: its URL, state (OPEN, MERGED, CLOSED), the
-/// review decision, the reviews and the line comments, newest last.
+/// review decision, the reviews, the line comments (newest last) and the checks' rollup (`checks`, gh's statusCheckRollup).
 pub fn pr_status(app: &AppHandle, key: &str) -> Result<Value, String> {
     let w = load(app).into_iter().find(|w| w.key == key).ok_or_else(|| format!("no worker {key}"))?;
     let urls: Vec<String> = trees(&w).into_iter().filter_map(|t| t.pr).chain(w.pr.clone()).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
@@ -900,14 +900,14 @@ pub fn pr_status(app: &AppHandle, key: &str) -> Result<Value, String> {
     let st = app.state::<App>();
     let mut out = Vec::new();
     for url in urls {
-        let view: Value = serde_json::from_str(&super::gh(&st, &["pr", "view", &url, "--json", "state,reviewDecision,reviews,comments"])?).map_err(|e| e.to_string())?;
+        let view: Value = serde_json::from_str(&super::gh(&st, &["pr", "view", &url, "--json", "state,reviewDecision,reviews,comments,statusCheckRollup"])?).map_err(|e| e.to_string())?;
         // .../owner/repo/pull/12 → the line comments of that PR
         let parts: Vec<&str> = url.trim_end_matches('/').rsplit('/').take(4).collect();
         let inline = match parts.as_slice() {
             [n, "pull", r, o] => super::gh(&st, &["api", &format!("repos/{o}/{r}/pulls/{n}/comments?per_page=100")]).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()),
             _ => None,
         };
-        out.push(json!({"url": url, "state": view["state"], "reviewDecision": view["reviewDecision"], "reviews": view["reviews"], "comments": view["comments"],
+        out.push(json!({"url": url, "state": view["state"], "reviewDecision": view["reviewDecision"], "reviews": view["reviews"], "comments": view["comments"], "checks": view["statusCheckRollup"],
             "inline": inline.unwrap_or(json!([]))}));
     }
     Ok(Value::Array(out))

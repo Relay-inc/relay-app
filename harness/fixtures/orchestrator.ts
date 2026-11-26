@@ -400,3 +400,189 @@ export function live(): Ev[] {
     },
   ];
 }
+
+// ?fixture=pipeline-strip: the pipeline's stage strip and its cards. Two agents build (one on a step, one in Relay's
+// review), one ticket waits for review (a PR in each repo, one CI passed and one running, two new comments), and three
+// wait on the user: a question with options, a plan, a failed run. The pick column's three tickets are up next
+// (fixtures/integrations.ts: the cards of the To do list). ?fixture=pipeline-strip-paused: the pipeline paused, one agent
+// looks stuck and one ticket a person moved on the board
+const API = "/Users/demo/code/northwind-api";
+const PORTAL = "/Users/demo/code/northwind";
+const tree = (repo: string, pr: string | null) => ({
+  repo,
+  worktree: `${repo}-relay`,
+  start: "abc123",
+  base: "develop",
+  checks: "",
+  pr,
+  pr_error: null,
+});
+const base = {
+  ...building,
+  base_branch: "develop",
+  decisions: [],
+  report: null,
+  trees: [] as ReturnType<typeof tree>[],
+};
+const PR_API = "https://github.com/acme/northwind-api/pull/187";
+const PR_PORTAL = "https://github.com/acme/northwind-portal/pull/221";
+const stripBuilding = (paused: boolean) => ({
+  ...base,
+  key: "c:orch-w-s1",
+  title: "Export orders as CSV",
+  task: 'Ticket #412 "Export orders as CSV"',
+  branch: "relay/412-export-orders-csv",
+  model: "opus",
+  at: NOW - (paused ? 41 : 14) * MIN,
+  step: { done: paused ? 4 : 3, total: 7, note: paused ? "running the export test" : "writing the migration" },
+  ticket: pipelineTicket("900102", "412", "Export orders as CSV"),
+  trees: [tree(API, null)],
+  stalled: paused ? "No output for 23 min. A permission card in its conversation is unanswered." : null,
+});
+const stripReviewing = {
+  ...base,
+  key: "c:orch-w-s2",
+  title: "Bulk edit product prices",
+  task: 'Ticket #409 "Bulk edit product prices"',
+  branch: "relay/409-bulk-edit-prices",
+  model: "sonnet",
+  at: NOW - 38 * MIN,
+  step: null,
+  phase: "review",
+  rounds: 0,
+  ticket: pipelineTicket("900107", "409", "Bulk edit product prices"),
+  trees: [tree(API, null), tree(PORTAL, null)],
+};
+const stripInReview = {
+  ...base,
+  key: "c:orch-w-s3",
+  title: "Guest checkout keeps the cart",
+  task: 'Ticket #398 "Guest checkout keeps the cart"',
+  branch: "relay/398-guest-checkout-cart",
+  model: "sonnet",
+  state: "done",
+  at: NOW - 80 * MIN,
+  ended: NOW - 60 * MIN,
+  step: null,
+  board: `done:${NOW - 60 * MIN}`,
+  pr: PR_PORTAL,
+  ticket: pipelineTicket("900103", "398", "Guest checkout keeps the cart"),
+  trees: [tree(PORTAL, PR_PORTAL), tree(API, PR_API)],
+  report: { status: "done", summary: "Done.", questions: null, diff: null, flags: [] },
+};
+const stripAsking = {
+  ...asking,
+  key: "c:orch-w-s4",
+  title: "Discount codes on one order",
+  task: 'Ticket #405 "Discount codes on one order"',
+  branch: "relay/405-discount-codes",
+  model: "opus",
+  at: NOW - 70 * MIN,
+  ended: NOW - 6 * MIN,
+  board: `blocked:${NOW - 6 * MIN}`,
+  ticket: pipelineTicket("900100", "405", "Discount codes on one order"),
+  report: {
+    status: "blocked",
+    summary: "",
+    questions: "A customer can enter two codes. Should the second code replace the first, or should they stack?",
+    diff: null,
+    flags: [],
+    options: ["Replace the first code", "Let them stack", "Stack, at most two codes"],
+  },
+};
+const stripPlan = {
+  ...asking,
+  key: "c:orch-w-s5",
+  title: "Gift wrap option at checkout",
+  task: 'Ticket #419 "Gift wrap option at checkout"',
+  branch: "relay/419-gift-wrap",
+  model: "sonnet",
+  at: NOW - 50 * MIN,
+  ended: NOW - 11 * MIN,
+  board: `blocked:${NOW - 11 * MIN}`,
+  ticket: pipelineTicket("900105", "419", "Gift wrap option at checkout"),
+  report: {
+    status: "blocked",
+    summary: "",
+    questions:
+      "Plan for approval:\n\n1. Add a gift wrap line item with its own price in northwind-api\n2. Show a gift wrap checkbox and note field in the checkout\n3. Print the gift note on the packing slip, not on the invoice",
+    diff: null,
+    flags: [],
+  },
+};
+const stripFailed = {
+  ...failing,
+  key: "c:orch-w-s6",
+  title: "Fix rounding on VAT totals",
+  task: 'Ticket #416 "Fix rounding on VAT totals"',
+  branch: "relay/416-vat-rounding",
+  model: "opus",
+  at: NOW - 90 * MIN,
+  ended: NOW - 30 * MIN,
+  board: `failed:${NOW - 30 * MIN}`,
+  ticket: pipelineTicket("900110", "416", "Fix rounding on VAT totals"),
+  report: {
+    status: "failed",
+    summary:
+      "The run ended without a PR: the totals test in northwind-api still fails by one cent on orders with three or more lines.",
+    questions: null,
+    diff: null,
+    flags: [],
+  },
+};
+// moved on by a person: it is done with a PR in review, its card now sits in another list
+const stripMoved = {
+  ...stripInReview,
+  key: "c:orch-w-s7",
+  title: "Search by SKU",
+  ticket: pipelineTicket("900105", "391", "Search by SKU"),
+  trees: [tree(PORTAL, "https://github.com/acme/northwind-portal/pull/219")],
+  pr: "https://github.com/acme/northwind-portal/pull/219",
+};
+export const pipeStripWorkers = [
+  stripBuilding(false),
+  stripReviewing,
+  stripInReview,
+  stripAsking,
+  stripPlan,
+  stripFailed,
+];
+export const pipeStripPausedWorkers = [stripBuilding(true), stripReviewing, stripInReview, stripMoved];
+/** What gh says about the strip fixture's PRs: the checks of each, and what reviewers wrote on the first */
+export const pipeStripPrs = (paused: boolean): Record<string, Record<string, unknown>> => ({
+  [PR_PORTAL]: {
+    checks: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
+    // the new comments only where the pipeline is paused: running, it sends them to the agent at once
+    comments: paused
+      ? [
+          { author: { login: "sam" }, body: "Could the cart key move to a constant?", createdAt: iso(NOW - 20 * MIN) },
+          { author: { login: "alex" }, body: "Same for the guest id.", createdAt: iso(NOW - 15 * MIN) },
+        ]
+      : [],
+  },
+  [PR_API]: { checks: [{ status: "IN_PROGRESS", conclusion: "" }] },
+});
+export function pipeStripHistory(key: string, paused: boolean): Ev[] | null {
+  if (key !== PIPE) return null;
+  return paused
+    ? [
+        time(NOW - 20 * MIN),
+        ai(
+          "Pass at 10:02:\n\n- #412: no output for 23 min; a permission card waits in its conversation.\n- #398: moved on to QA by a person, details below.",
+        ),
+        time(NOW - 18 * MIN),
+        user("Pause for now, I want to look at #412 first."),
+        ai("Paused. #409 finishes its checks; I won't pick up anything new until you resume."),
+      ]
+    : [
+        time(NOW - 40 * MIN),
+        ai("Picked #412 and #409. #398 has open pull requests in northwind-portal and northwind-api."),
+        time(NOW - 30 * MIN),
+        user("Keep #417 for after Friday's release, it touches checkout."),
+        ai("Noted. #417 stays in Up next until you say go."),
+        time(NOW - 7 * MIN),
+        ai(
+          "Pass at 09:41:\n\n- #405: waits on you, should discount codes stack or replace each other?\n- #409: the agent is done, review round 1/3 is running.\n- #398: 2 new review comments; CI still running in northwind-api.",
+        ),
+      ];
+}

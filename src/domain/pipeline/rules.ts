@@ -265,16 +265,24 @@ export function reviewAll(prs: PrStatus[], since: number): Review {
   return said.length ? { kind: "feedback", text: said.join("\n\n") } : null;
 }
 
-/** What happened to a PR in review: merged, closed, or what people wrote on it since the worker's run ended (reviews
- *  that are not an approval, comments, line comments; bots left out, they would start a loop) as the next brief. */
+/** What people wrote on a PR since `since` (the worker's run ended): reviews that are not an approval, comments, line
+ *  comments; bots left out, they would start a loop. */
+export function fresh(pr: PrStatus, since: number) {
+  return {
+    reviews: pr.reviews.filter(
+      r => after(r.submittedAt, since) && r.state !== "APPROVED" && r.state !== "DISMISSED" && !bot(r.author?.login),
+    ),
+    comments: pr.comments.filter(c => after(c.createdAt, since) && !bot(c.author?.login)),
+    lines: pr.inline.filter(c => after(c.created_at, since) && !bot(c.user?.login)),
+  };
+}
+
+/** What happened to a PR in review: merged, closed, or what people wrote on it since the worker's run ended as the
+ *  next brief. */
 export function review(pr: PrStatus, since: number): Review {
   if (pr.state === "MERGED") return { kind: "merged" };
   if (pr.state === "CLOSED") return { kind: "closed" };
-  const reviews = pr.reviews.filter(
-    r => after(r.submittedAt, since) && r.state !== "APPROVED" && r.state !== "DISMISSED" && !bot(r.author?.login),
-  );
-  const comments = pr.comments.filter(c => after(c.createdAt, since) && !bot(c.author?.login));
-  const lines = pr.inline.filter(c => after(c.created_at, since) && !bot(c.user?.login));
+  const { reviews, comments, lines } = fresh(pr, since);
   if (!reviews.some(r => r.body.trim()) && !comments.length && !lines.length) return null;
   const parts = [
     ...reviews.filter(r => r.body.trim()).map(r => `Review by ${r.author?.login} (${r.state}):\n${r.body.trim()}`),

@@ -80,8 +80,13 @@ export type PrStatus = {
   reviewDecision: string | null;
   reviews: { author: { login: string } | null; body: string; state: string; submittedAt: string }[];
   comments: { author: { login: string } | null; body: string; createdAt: string }[];
+  /** gh's statusCheckRollup: a check run (`status`, `conclusion`) or a commit status (`state`) each; absent from before */
+  checks?: PrCheck[];
   inline: { user: { login: string } | null; body: string; path: string; line: number | null; created_at: string }[];
 };
+
+/** One entry of a PR's check rollup, as gh gives it. */
+export type PrCheck = { status?: string | null; conclusion?: string | null; state?: string | null };
 
 /** A tool call of a pipeline's conversation, for the runner to do (src-tauri orch.rs pipe_webview). */
 export type PipeToolCall = { id: number; project: string; tool: string; args: Record<string, unknown> };

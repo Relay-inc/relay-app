@@ -28,6 +28,9 @@ type PipelineState = {
   /** a ticket answered from the panel and moved to the pick column for its worker, by card id: when (the row says it
    *  waits there until the worker runs again) */
   answered: Record<string, number>;
+  /** the stage strip above a pipeline's conversation, by vault project: open or closed (absent: closed), kept across
+   *  restarts (`pipelineStrip`) */
+  strip: Record<string, boolean>;
 };
 
 export const usePipelineStore = makeStore<PipelineState>(() => ({
@@ -35,5 +38,6 @@ export const usePipelineStore = makeStore<PipelineState>(() => ({
   waiting: {},
   columns: {},
   answered: {},
+  strip: storage.get<Record<string, boolean>>("pipelineStrip", {}),
   bounced: storage.get<Record<string, BouncedTicket[]>>("pipelineBounced", {}),
 }));

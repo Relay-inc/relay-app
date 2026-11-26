@@ -40,6 +40,7 @@ export function ChatBar({
   drawer,
   back,
   actions,
+  titleExtra,
   onEditProject,
   onRename,
   onOpenTerminal,
@@ -63,6 +64,7 @@ export function ChatBar({
   drawer: Drawer; // what the right drawer shows, the open tool lights up
   back: boolean; // the project's board or PRs is shown: the heading goes back to the conversation
   actions?: ReactNode; // a view's own buttons and quiet text, on the right before the project's tools
+  titleExtra?: ReactNode; // what belongs to the title, right after it (a pipeline's state)
   onEditProject: () => void;
   onRename: (title: string) => void;
   onOpenTerminal: (external: boolean) => void;
@@ -189,6 +191,7 @@ export function ChatBar({
           </span>
         </>
       ) : null}
+      {titleExtra}
       {board ? <BoardCrumb provider={board} /> : null}
       <span className="flex-1" data-tauri-drag-region></span>
       {actions}
