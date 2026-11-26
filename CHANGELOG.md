@@ -16,7 +16,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Removed
 
-- The Notes drawer is gone from the project title bar and the quick-ask tool list, nobody used it. Notes you wrote there stay where they are: the ones in the Inbox are still Inbox notes, and older ones stay in the vault's .relay/notes folder (#PR)
+- The Notes drawer is gone from the project title bar and the quick-ask tool list, nobody used it. Notes you wrote there stay where they are: the ones in the Inbox are still Inbox notes, and older ones stay in the vault's .relay/notes folder (#544)
 
 ## [0.0.66] - 2026-11-25
 
