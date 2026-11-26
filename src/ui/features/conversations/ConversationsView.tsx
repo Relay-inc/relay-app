@@ -31,7 +31,6 @@ import {
   backTop,
 } from "../../../application/navigation/navigation";
 import { showInGraph } from "../../../application/navigation/graph";
-import { boardKey } from "../../../domain/navigation/keys";
 import { useDerived } from "../../hooks/useDerived";
 import { useUiRequest } from "../../hooks/useUiRequest";
 import { SelectedView } from "../../app/SelectedView";
@@ -204,7 +203,6 @@ export function ConversationsView({ className }: { className: string }) {
       onEditProject={bar.tools?.back ? closeTool : openProjectPanel}
       onRename={rename}
       onOpenTerminal={openTerminal}
-      onOpenBoard={() => bar.tools?.board && openTool(bar.tools.project, boardKey(bar.tools.board.id))}
       // a project without repos sends you to the settings to link one
       onOpenPrs={() => (bar.tools?.repos ? openTool(bar.tools.project, PRS) : openSettings())}
       onToggleDrawer={toggleDrawer}

@@ -13,7 +13,7 @@ import {
   type Tool,
 } from "../../domain/navigation/views";
 import { provider } from "../../shared/plugins";
-import { isTerminal } from "../../domain/navigation/keys";
+import { isTerminal, boardKey } from "../../domain/navigation/keys";
 import { ORCH } from "../../domain/orchestrator/rules";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
@@ -144,6 +144,15 @@ export function show(key: string) {
 }
 /** A project's newest conversation, or a new one under it. */
 export const openProject = (project: string) => select(chatsOf(project)[0]?.key || newChat(project));
+/** A sidebar click on a project: its linked board, else its newest conversation (`openProject`). */
+export function openProjectBoard(project: string) {
+  const ref = settings().boards?.[project];
+  const linked = ref && provider(ref.provider);
+  if (!linked) return openProject(project);
+  // already on that board: stay (openTool would toggle back)
+  if (nav().tool?.project === project && nav().selected === boardKey(linked.id)) return;
+  return openTool(project, boardKey(linked.id));
+}
 /** A new conversation under the open one's project, or a general one. */
 export const newHere = () => select(newChatHere(isView(nav().selected) ? null : selectedProject()));
 
