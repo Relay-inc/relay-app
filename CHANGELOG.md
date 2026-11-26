@@ -14,6 +14,8 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+## [0.0.69] - 2026-11-26
+
 ### Fixed
 
 - Relay opened on a blank window when a pipeline had nothing waiting on you: the stage strip read the first Needs you ticket while drawing
