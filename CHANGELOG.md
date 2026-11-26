@@ -14,6 +14,8 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+## [0.0.67] - 2026-11-26
+
 ### Added
 
 - A pipeline's conversation shows a stage strip under its title bar: a 40px bar with what is building, in review and up next and a crab per running agent, which opens (and stays open or closed per pipeline) into the tickets with their step, branch, PRs and whether their CI passed. What needs you is a short list there; clicking it scrolls the conversation to a card with the question and its options, the plan to approve, the failed run to try again or the ticket a person moved on, which is where you answer. The title bar now says whether the pipeline runs, is paused or is holding, and why (#546)
