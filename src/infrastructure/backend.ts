@@ -775,7 +775,7 @@ export const onNoteChanged = (handler: (change: NoteChange) => void) =>
 /** The team's changes came into a shared vault's folder. */
 export const onVaultPulled = (handler: () => void) => listen("vault-pulled", () => handler());
 
-// ---------- the embedded terminals (src-tauri/src/pty.rs) and the scratch notes (scratch.rs)
+// ---------- the embedded terminals (src-tauri/src/pty.rs)
 /** A shell in the project's vault folder, first continuing the conversation `chat` when given. `onData` gets its
  *  output bytes, `onExit` its exit code; resolves with the shell's id. */
 export const ptySpawn = (
@@ -793,12 +793,6 @@ export const ptySpawn = (
 export const ptyWrite = (id: number, data: string) => invoke("pty_write", { id, data });
 export const ptyResize = (id: number, cols: number, rows: number) => invoke("pty_resize", { id, cols, rows });
 export const ptyKill = (id: number) => invoke("pty_kill", { id });
-export type ScratchFile = { id: string; text: string; modified: number };
-export const scratchList = (project: string) => invoke<ScratchFile[]>("scratch_list", { project });
-/** Writes the note, `id` null for a new one; resolves with its id. */
-export const scratchSave = (project: string, id: string | null, text: string) =>
-  invoke<string>("scratch_save", { project, id, text });
-export const scratchDelete = (project: string, id: string) => invoke("scratch_delete", { project, id });
 
 // ---------- the Inbox and quick capture (src-tauri/src/inbox.rs, anywhere.rs)
 export const inboxList = (workspace: string) => invoke<InboxNote[]>("inbox_list", { workspace });

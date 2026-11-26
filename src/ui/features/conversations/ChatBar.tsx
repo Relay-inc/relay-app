@@ -24,7 +24,7 @@ export type BarTools = {
 };
 
 /** The title bar of the centre column: the project (or the view), the conversation's title, a view's own
- *  buttons (`actions`), the project's tools (board, pull requests, terminal and notes drawers) and the external
+ *  buttons (`actions`), the project's tools (board, pull requests, terminal drawer) and the external
  *  terminal button. The shell keys it by the selection, so a title being edited never carries over. */
 export function ChatBar({
   heading,
@@ -71,7 +71,7 @@ export function ChatBar({
   onOpenTerminal: (external: boolean) => void;
   onOpenBoard: () => void;
   onOpenPrs: () => void;
-  onToggleDrawer: (tool: "terminal" | "notes" | "design" | "git" | "files") => void;
+  onToggleDrawer: (tool: "terminal" | "design" | "git" | "files") => void;
   onOpenPipeline: () => void;
   onShowInGraph?: () => void;
 }) {
@@ -229,8 +229,8 @@ export function ChatBar({
           {/* the project's git repos, with the worktrees of the open conversation: only a conversation has them; its
               folders as a tree next to them */}
           {(renamable && tools.git
-            ? (["git", "files", "terminal", "notes", "design"] as const)
-            : (["files", "terminal", "notes", "design"] as const)
+            ? (["git", "files", "terminal", "design"] as const)
+            : (["files", "terminal", "design"] as const)
           ).map(tool => (
             <ToolButton
               key={tool}
@@ -250,7 +250,6 @@ const DRAWER_ICONS = {
   git: "branch",
   files: "folder",
   terminal: "drawerTerm",
-  notes: "notes",
   design: "design",
 } as const;
 
