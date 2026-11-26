@@ -522,7 +522,7 @@ fn dom(view: &Webview) -> Result<Value, String> {
 }
 
 #[cfg(target_os = "macos")]
-fn snapshot(view: &Webview) -> Result<Vec<u8>, String> {
+pub(crate) fn snapshot(view: &Webview) -> Result<Vec<u8>, String> {
     let (tx, rx) = mpsc::channel::<Option<Vec<u8>>>();
     view.with_webview(move |w| {
         use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep, NSImage};
@@ -541,7 +541,7 @@ fn snapshot(view: &Webview) -> Result<Vec<u8>, String> {
 }
 /// WebView2's `CapturePreview` writes a PNG of the visible page into a memory stream, read back once it completes.
 #[cfg(windows)]
-fn snapshot(view: &Webview) -> Result<Vec<u8>, String> {
+pub(crate) fn snapshot(view: &Webview) -> Result<Vec<u8>, String> {
     use webview2_com::CapturePreviewCompletedHandler;
     use webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG;
     use windows::Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal;
@@ -578,7 +578,7 @@ unsafe fn stream_bytes(s: &windows::Win32::System::Com::IStream) -> windows::cor
     Ok(buf)
 }
 #[cfg(not(any(target_os = "macos", windows)))]
-fn snapshot(_: &Webview) -> Result<Vec<u8>, String> { Err("snapshots are macOS and Windows only".into()) }
+pub(crate) fn snapshot(_: &Webview) -> Result<Vec<u8>, String> { Err("snapshots are macOS and Windows only".into()) }
 
 /// A new design: the "new design" tile of claude.ai's design page makes a Cowork session with an empty canvas. Returns its link.
 /// ponytail: the tile has no test id, it is found by its aria-label (tile_label_ok); claude.ai changing it fails here, with this error.

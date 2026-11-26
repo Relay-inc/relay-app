@@ -3,6 +3,7 @@ import { t, currentLang } from "./i18n";
 import { iconPaths } from "./icons";
 import { esc } from "./html";
 import { highlightHtml } from "./highlight";
+import { isArtifactUrl } from "./artifact-link";
 
 // ---------- safe markdown: Claude's text never becomes live HTML in a window that can approve actions
 /** relay://worker?key=…, the in-app link to a worker's conversation (domain/pipeline/digest.ts workerLink). */
@@ -83,6 +84,9 @@ marked.use({
       isNotePath(text) ? noteA(noteOf(text), `<code>${esc(text)}</code>`) : `<code>${esc(text)}</code>`,
     link({ href, tokens }) {
       const inner = this.parser.parseInline(tokens);
+      // a claude.ai Artifact opens in the Artifact drawer (ui/app, data-artifact), the web in the browser
+      if (isArtifactUrl(href))
+        return `<a href="${esc(href)}" data-artifact="${esc(href)}" target="_blank" rel="noreferrer">${inner}</a>`;
       if (urlOk(href)) return `<a href="${esc(href)}" target="_blank" rel="noreferrer">${inner}</a>`;
       // a pipeline agent's conversation, linked from its pipeline's conversation: opens in the app (ui/app, data-worker)
       const worker = WORKER_LINK.exec(href)?.[1];

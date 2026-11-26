@@ -16,12 +16,13 @@ import { UserMessage } from "./UserMessage";
 import { ToolGroup } from "./ToolGroup";
 import { Working } from "./Working";
 
-// the tool calls between two messages fold into one group, keyed by the index of its first step
+// the tool calls between two messages fold into one group, keyed by the index of its first step; a published
+// Artifact is a card of its own between them, never folded away
 export function groupSteps(items: Item[]) {
   const out: { at: number; item: Item; steps?: Item[] }[] = [];
   items.forEach((item, at) => {
     const last = out[out.length - 1];
-    if (item.kind !== "tool") out.push({ at, item });
+    if (item.kind !== "tool" || item.artifact) out.push({ at, item });
     else if (last?.steps) last.steps.push(item);
     else out.push({ at, item, steps: [item] });
   });

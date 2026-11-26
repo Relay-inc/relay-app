@@ -1,5 +1,5 @@
 import type { PrepRun } from "../calendar/briefing.ts";
-import type { Hunk } from "../agents/types";
+import type { Artifact, Hunk } from "../agents/types";
 
 // The conversations: the app's own (with their messages, state and drafts), the terminal sessions next to them, and
 // what is waiting for the user (permission cards, questions, background sessions that block).
@@ -59,6 +59,8 @@ export type Item = {
   hunks?: Hunk[];
   /** what a command printed, when the provider reports it (Claude Code) */
   output?: string;
+  /** a page the call published as a claude.ai Artifact (Claude Code): the step shows as its card */
+  artifact?: Artifact;
   /** the end of a turn: what the turn did, and what it cost when the provider says (USD) */
   receipt?: { edits: number; errors: number; agents: number; cost?: number };
   /** a turn refused because the agent is not signed in: drawn as a card with a sign-in button */

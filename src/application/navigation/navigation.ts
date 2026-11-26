@@ -51,7 +51,7 @@ export async function select(key: string, tool: Tool | null = null) {
     draft.orchDetail = false;
     // a conversation's agents column and agent page belong to that conversation
     draft.agentPage = "";
-    if (draft.selected !== key && draft.drawer === "agents") draft.drawer = "";
+    if (draft.selected !== key && (draft.drawer === "agents" || draft.drawer === "artifact")) draft.drawer = "";
     if (key === ORCH) draft.drawer = "workers";
     else if (draft.drawer === "workers") draft.drawer = "";
     draft.selected = key;
@@ -196,12 +196,12 @@ export function closeTool() {
   else openProject(tool.project);
 }
 /** A drawer tool's button: opens it, or closes it when it is the one shown. */
-export const toggleDrawer = (tool: "terminal" | "design" | "workers" | "git" | "files" | "agents") =>
+export const toggleDrawer = (tool: "terminal" | "design" | "workers" | "git" | "files" | "agents" | "artifact") =>
   set(draft => {
     draft.drawer = draft.drawer === tool ? "" : tool;
   });
 /** A drawer tool open, whatever the drawer showed. */
-export const showDrawer = (tool: "design") =>
+export const showDrawer = (tool: "design" | "artifact") =>
   set(draft => {
     draft.drawer = tool;
   });

@@ -156,6 +156,11 @@ export function applyAgentEvent(
       if (item) item.output = event.text;
       return [];
     }
+    case "artifact": {
+      const item = state.messages[key]?.find(x => x.id === event.id);
+      if (item) item.artifact = event.artifact;
+      return [];
+    }
     case "turn_end":
       return onTurnEnd(state, key, event, env);
     case "error":
@@ -340,6 +345,9 @@ export function toItems(
     } else if (entry.type === "tool_output") {
       const tool = items.find(x => x.id === entry.id);
       if (tool) tool.output = entry.text;
+    } else if (entry.type === "artifact") {
+      const tool = items.find(x => x.id === entry.id);
+      if (tool) tool.artifact = entry.artifact;
     }
   }
   settle();

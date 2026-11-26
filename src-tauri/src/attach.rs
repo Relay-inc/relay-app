@@ -103,7 +103,7 @@ pub fn kind_of(path: &str) -> &'static str {
         _ => "file",
     }
 }
-fn mime_of(path: &str) -> &'static str {
+pub(crate) fn mime_of(path: &str) -> &'static str {
     match path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).as_deref() {
         Some("png") => "image/png",
         Some("jpg" | "jpeg") => "image/jpeg",
@@ -190,7 +190,7 @@ pub fn info(root: &Path, note_rel: &str, targets: &[String]) -> Vec<Value> {
     }).collect()
 }
 
-fn pct_decode(s: &str) -> String {
+pub(crate) fn pct_decode(s: &str) -> String {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;

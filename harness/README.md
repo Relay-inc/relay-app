@@ -106,10 +106,10 @@ new Tauri command (`generate_handler!` in `src-tauri/src/lib.rs`) gets its answe
 
 ## Views (`screens.mjs`)
 
-101 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
+103 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
 conversation-permission, conversation-plan (ExitPlanMode: the plan next to Allow and Deny), conversation-action (an agent action's card), conversation-code (a code block and its header),
 conversation-steps (a tool group unfolded), composer-slash (`/` completion), composer-resolved (the pickers name the CLI's
-defaults), composer-files (a picture and two file chips waiting), conversation-files (a sent message with chips), conversation-unread (a message sent mid-turn, waiting for Claude), conversation-question, new-general-draft (the menu event `new-general`, Cmd-Option-T), new-window (a window Cmd-N opened, on Today), terminal. Mail and PRs:
+defaults), composer-files (a picture and two file chips waiting), conversation-files (a sent message with chips), conversation-unread (a message sent mid-turn, waiting for Claude), conversation-question, conversation-artifact (a page Claude Code published as a claude.ai Artifact: its card), conversation-artifact-open (its Artifact drawer, the page from its file), new-general-draft (the menu event `new-general`, Cmd-Option-T), new-window (a window Cmd-N opened, on Today), terminal. Mail and PRs:
 mail-second-account, mail-list, mail-plain, mail-html, mail-experimental (Inbox/Other tabs, archive and delete in the
 mail's bar), mail-other (the Other tab), mail-selection (three mails ticked, the bulk bar), prs-list, pr-detail (list and mail or PR side by side). Board:
 board, card-detail (the ticket window), board-list, board-filters, board-presets, board-group, ticket-activity, buddy-menu (a project's Buddy pipelines from its title bar).

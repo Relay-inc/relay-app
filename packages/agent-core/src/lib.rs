@@ -189,6 +189,8 @@ pub enum Event {
     ToolImages { id: String, images: Vec<Image> },
     /// What a command printed, as the agent got it back (Claude Code, Bash only).
     ToolOutput { id: String, text: String },
+    /// A page the agent published as a claude.ai Artifact (Claude Code's `Artifact` tool), from the result it got back.
+    Artifact { id: String, artifact: Artifact },
     /// A permission request or question raised in the provider's own protocol. The app writes it to the
     /// pending folder; the answer comes back through [`AgentProvider::respond`].
     Permission { request: pending::Request },
@@ -232,6 +234,22 @@ pub enum Event {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Hunk { pub old_start: u64, pub new_start: u64, pub lines: Vec<String> }
+
+/// A published claude.ai Artifact: its link, the name and icon word it got, the local file it was published from and
+/// the folder its other files came from, which version this is, whether it replaced an earlier one, and the Artifact
+/// type it was made from (a design, slides, a dashboard), when it was.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Artifact {
+    pub url: String,
+    pub title: Option<String>,
+    pub icon: Option<String>,
+    pub path: Option<String>,
+    pub root: Option<String>,
+    pub version: Option<u64>,
+    pub updated: bool,
+    pub from_type: Option<String>,
+}
 
 /// Tokens of one turn, as the provider reports them.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
