@@ -14,6 +14,8 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+## [0.0.68] - 2026-11-26
+
 ### Added
 
 - Mark a pipeline ticket done: from its card in the pipeline's conversation, or by telling the conversation ("#322 is done"). Its agent stops if it runs, the pipeline drops it for good (not picked up, landed or resumed again, its PR no longer followed) and the ticket goes to the merged column when the pipeline has one
