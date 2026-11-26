@@ -1,6 +1,6 @@
 // The Inbox: notes dropped in without a place, `<workspace>/Inbox/<YYYY-MM-DD HHMM>.md`, plain markdown like any other
-// note (Obsidian, ⌘K and Claude see them). They come from quick capture (the window ⌃⌥⌘N opens from any app), from the
-// notes drawer (scratch.rs: a note with `about: [[Project]]`) and from the vault itself. Filing moves a note out: Claude
+// note (Obsidian, ⌘K and Claude see them). They come from quick capture (the window ⌃⌥⌘N opens from any app), from
+// the old notes drawer (a note with `about: [[Project]]`) and from the vault itself. Filing moves a note out: Claude
 // proposes a title, type, folder and links per note (`propose` builds the prompt, `parse` reads the answer back and
 // drops what cannot be trusted), the user accepts, and `accept` writes the frontmatter and moves the file through
 // pagefiles, which keeps every link to it. The writes go to the Changes feed (changes.rs) as source "inbox", so each
@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub const DIR: &str = "Inbox";
 /// The longest note text a listing or a prompt carries.
@@ -216,12 +216,11 @@ pub fn reason(items: &[&Item]) -> String {
     format!("Filed {} {}: {kinds}", items.len(), if items.len() == 1 { "capture" } else { "captures" })
 }
 
-pub fn dir(root: &Path) -> PathBuf { root.join(DIR) }
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::TimeZone;
+    use std::path::PathBuf;
 
     fn vault(name: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("relay-inbox-{name}-{}", std::process::id()));
