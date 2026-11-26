@@ -67,7 +67,7 @@ export function ChatBar({
   onRename: (title: string) => void;
   onOpenTerminal: (external: boolean) => void;
   onOpenPrs: () => void;
-  onToggleDrawer: (tool: "terminal" | "design" | "git" | "files") => void;
+  onToggleDrawer: (tool: "terminal" | "git" | "files") => void;
   onOpenPipeline: () => void;
   onShowInGraph?: () => void;
 }) {
@@ -216,18 +216,17 @@ export function ChatBar({
           ) : null}
           {/* the project's git repos, with the worktrees of the open conversation: only a conversation has them; its
               folders as a tree next to them */}
-          {(renamable && tools.git
-            ? (["git", "files", "terminal", "design"] as const)
-            : (["files", "terminal", "design"] as const)
-          ).map(tool => (
-            <ToolButton
-              key={tool}
-              on={drawer === tool}
-              label={t(`drawer.${tool}`)}
-              onClick={() => onToggleDrawer(tool)}
-              icon={<Icon name={DRAWER_ICONS[tool]} className="glyph size-4" />}
-            />
-          ))}
+          {(renamable && tools.git ? (["git", "files", "terminal"] as const) : (["files", "terminal"] as const)).map(
+            tool => (
+              <ToolButton
+                key={tool}
+                on={drawer === tool}
+                label={t(`drawer.${tool}`)}
+                onClick={() => onToggleDrawer(tool)}
+                icon={<Icon name={DRAWER_ICONS[tool]} className="glyph size-4" />}
+              />
+            ),
+          )}
         </>
       ) : null}
     </div>
@@ -238,7 +237,6 @@ const DRAWER_ICONS = {
   git: "branch",
   files: "folder",
   terminal: "drawerTerm",
-  design: "design",
 } as const;
 
 // one button per tool, the one that is open lit: a second click goes back (a view) or closes the drawer

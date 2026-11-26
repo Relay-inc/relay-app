@@ -275,7 +275,7 @@ mod tests {
 
     #[test]
     fn turns_and_answers() {
-        let t = Turn { text: "kijk".into(), images: vec![Image { media_type: "image/png".into(), data: "AA==".into() }, Image { media_type: "text/html".into(), data: "x".into() }] };
+        let t = Turn { text: "kijk".into(), images: vec![Image { media_type: "image/png".into(), data: "AA==".into() }, Image { media_type: "text/html".into(), data: "x".into() }], human: false };
         let m = turn_start(&t);
         assert_eq!(m["params"]["threadId"], "");
         assert_eq!(m["params"]["input"][0], json!({"type": "text", "text": "kijk", "text_elements": []}));

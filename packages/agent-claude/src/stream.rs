@@ -12,7 +12,11 @@ pub fn user_message(turn: &Turn) -> Value {
     let mut content: Vec<Value> = turn.images.iter().filter(|i| IMAGE_TYPES.contains(&i.media_type.as_str()))
         .map(|i| json!({"type": "image", "source": {"type": "base64", "media_type": i.media_type, "data": i.data}})).collect();
     if !turn.text.is_empty() { content.push(json!({"type": "text", "text": turn.text})); }
-    json!({"type": "user", "message": {"role": "user", "content": content}})
+    let mut msg = json!({"type": "user", "message": {"role": "user", "content": content}});
+    // ponytail: undocumented (Claude Code 2.1.332). Without an origin the CLI takes a stream-json message as an
+    // unattended turn, and an artifact watch the person asks for then never lets comments sent to Claude through
+    if turn.human { msg["origin"] = json!({"kind": "human"}); }
+    msg
 }
 
 /// The text of a user message: a string, or its text blocks.
@@ -75,6 +79,8 @@ fn artifact(content: &Value, result: &Value, call: impl FnOnce(&str) -> Option<V
         version: result["seq"].as_u64(),
         updated: result["updated"] == true,
         from_type: if from_type { text(&result["type"]["url"]).or_else(|| text(&input["type_url"])) } else { None },
+        // the call asked to open the page for the user, which Claude Code does only in its own UI
+        open: input["auto_open"] == true || input["auto_open"].as_str().is_some_and(|s| !s.is_empty() && s != "never"),
     };
     publish(&artifact);
     Some(Event::Artifact { id: id.into(), artifact })
@@ -251,6 +257,8 @@ fn parse(ev: &Value) -> Vec<Event> {
             let window = ev["modelUsage"].as_object().and_then(|m| m.values().filter_map(|u| u["contextWindow"].as_u64()).max());
             if window.is_some() { out.push(Event::Context { used: None, window }); }
             agent_core::limited(error.as_deref(), &mut out);
+            // a turn no message started (Claude Code 2.1.332: an artifact comment sent to Claude, a background task done)
+            if ev["origin"]["kind"] == "task-notification" { out.push(Event::Woke); }
             out.push(Event::TurnEnd { ok, error, usage, duration_ms: ev["duration_ms"].as_u64() });
         }
         _ => {}
@@ -549,12 +557,24 @@ mod tests {
     }
 
     #[test]
+    fn a_turn_no_message_started_wakes_first() {
+        let end = |origin: Value| parse_all(&[json!({"type": "result", "subtype": "success", "origin": origin})]);
+        let woke = end(json!({"kind": "task-notification"}));
+        assert_eq!(woke[0], Event::Woke);
+        assert!(matches!(woke[1], Event::TurnEnd { ok: true, .. }));
+        assert!(!end(json!({"kind": "human"})).contains(&Event::Woke) && !end(Value::Null).contains(&Event::Woke));
+    }
+
+    #[test]
     fn turn_as_stream_json() {
-        let t = Turn { text: "kijk".into(), images: vec![Image { media_type: "image/png".into(), data: "AA==".into() }, Image { media_type: "text/html".into(), data: "x".into() }] };
+        let t = Turn { text: "kijk".into(), images: vec![Image { media_type: "image/png".into(), data: "AA==".into() }, Image { media_type: "text/html".into(), data: "x".into() }], human: false };
         let m = user_message(&t);
         assert_eq!(m["message"]["content"][0]["source"]["media_type"], "image/png");
         assert_eq!(m["message"]["content"][1], json!({"type": "text", "text": "kijk"}));
         assert_eq!(m["message"]["content"].as_array().unwrap().len(), 2);
+        // Relay's own turns carry no origin; the person's are human, so the CLI counts them as the user's
+        assert!(m.get("origin").is_none());
+        assert_eq!(user_message(&Turn { human: true, ..t })["origin"], json!({"kind": "human"}));
     }
 
     #[test]
@@ -606,6 +626,15 @@ mod tests {
         assert_eq!(id, "a1");
         assert_eq!((artifact.url.as_str(), artifact.title.as_deref(), artifact.version, artifact.updated), ("https://claude.ai/artifact/X15g", Some("Naming the mail client"), Some(1), false));
         assert!(published(&page).is_some());
+        assert!(!artifact.open);
+        // a publish that asks to open its page for the user ("never" does not)
+        let opens = |auto: Value| {
+            let call = json!({"type": "assistant", "message": {"id": "m2", "content": [{"type": "tool_use", "id": "a2", "name": "Artifact", "input": {"title": "x", "auto_open": auto}}]}});
+            let result = json!({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "a2", "content": "Published"}]},
+                "tool_use_result": {"url": "https://claude.ai/artifact/D3", "created_from_type": true, "type": {"url": "https://claude.ai/artifact/T"}}});
+            matches!(parse_all(&[call, result]).last(), Some(Event::Artifact { artifact: Artifact { open: true, .. }, .. }))
+        };
+        assert!(opens(json!("after_first_write")) && !opens(json!("never")) && !opens(Value::Null));
         assert!(published(&dir.join("data.json")).is_some());
         assert!(published(&dir.join("notes.rs")).is_none()); // not a served type
         assert!(published(&dir.join(".hidden/x.json")).is_none());

@@ -24,7 +24,11 @@ export type EventEnv = {
   imageUrl: (mediaType: string, data: string) => string;
 };
 /** What the reducer asks for after an event. */
-export type Effect = { kind: "save-chats" } | { kind: "notify"; key: string; body: string } | { kind: "snapshot" };
+export type Effect =
+  | { kind: "save-chats" }
+  | { kind: "notify"; key: string; body: string }
+  | { kind: "snapshot" }
+  | { kind: "artifact"; key: string; url: string };
 
 export function push(state: Pick<ConversationsState, "messages">, key: string, item: Item) {
   (state.messages[key] ||= []).push(item);
@@ -97,6 +101,7 @@ export function applyAgentEvent(
     if (!state.taken[key]) {
       takeWaiting(state, key);
       state.taken[key] ||= 1;
+      state.turnAt[key] = state.messages[key]?.length ?? 0;
     }
   }
   switch (event.type) {
@@ -118,6 +123,15 @@ export function applyAgentEvent(
     case "compacting":
       push(state, key, { kind: "compact", text: env.t("compact.running"), state: "run" });
       return [];
+    case "woke": {
+      // the turn is in the conversation already: its note goes where its first activity landed
+      const items = (state.messages[key] ||= []);
+      items.splice(Math.min(state.turnAt[key] ?? items.length, items.length), 0, {
+        kind: "note",
+        text: env.t("chat.woke"),
+      });
+      return [];
+    }
     case "compacted": {
       const text = compactedText(event, env.t);
       if (!endCompaction(state.messages[key], "ok", text)) push(state, key, { kind: "compact", text, state: "ok" });
@@ -159,7 +173,8 @@ export function applyAgentEvent(
     case "artifact": {
       const item = state.messages[key]?.find(x => x.id === event.id);
       if (item) item.artifact = event.artifact;
-      return [];
+      // the publish asked to open the page for the user, which Claude Code does only in its own UI
+      return event.artifact.open ? [{ kind: "artifact", key, url: event.artifact.url }] : [];
     }
     case "turn_end":
       return onTurnEnd(state, key, event, env);
@@ -197,6 +212,11 @@ function draftNote(saved: EventOf<"draft_saved">, t: Translate) {
 
 function onToolCall(state: ConversationsState, key: string, call: EventOf<"tool_call">, now: number): Effect[] {
   push(state, key, toolItem(call.id, call.name, call.input, "run", now));
+  // Claude Code's Artifact tool opens a page "for the user" only in its own terminal UI: under Relay it does
+  // nothing, so Relay shows the page itself, in the Design drawer
+  const input = call.input as { action?: unknown; url?: unknown } | null;
+  if (call.name === "Artifact" && input?.action === "open" && typeof input.url === "string")
+    return [{ kind: "artifact", key, url: input.url }];
   // a chat that touched mail stays marked: every later spawn of it stays on this Mac
   const conversation = state.chats[key];
   if (call.name.startsWith("mcp__relay-mail__") && conversation && !conversation.fromMail) {

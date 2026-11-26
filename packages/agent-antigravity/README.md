@@ -78,6 +78,6 @@ account; Windows and Linux; `agy` older than 1.5.
 - No "always allow" on a card (the agent offers once only), no questions, fork, subagents or AI titles.
 - No session list: a conversation started in the terminal is not shown, and has no history in Relay.
 - The plan's name without what is left of it, and only after a conversation has run.
-- Relay's own tools (mail, design) are not offered: they go over Claude Code's control pipe. The `relay` command works.
+- Relay's own tools (mail) are not offered: they go over Claude Code's control pipe. The `relay` command works.
 - A patch is one hunk from the first changed line to the last.
 - A message sent while a turn runs is passed on as another `session/prompt`; what `agy` does with it was not measured.

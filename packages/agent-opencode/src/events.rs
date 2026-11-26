@@ -279,7 +279,7 @@ mod tests {
 
     #[test]
     fn prompts_errors_and_a_failed_send() {
-        let p = prompt(&Turn { text: "hoi".into(), images: vec![agent_core::Image { media_type: "image/png".into(), data: "AAA".into() }] });
+        let p = prompt(&Turn { text: "hoi".into(), images: vec![agent_core::Image { media_type: "image/png".into(), data: "AAA".into() }], human: false });
         assert_eq!(p["parts"][1], json!({"type": "file", "mime": "image/png", "filename": "image-1.png", "url": "data:image/png;base64,AAA"}));
         let mut st = State::default();
         let ev = st.parse(r#"{"type":"bridge.error","message":"HTTP Error 400"}"#);

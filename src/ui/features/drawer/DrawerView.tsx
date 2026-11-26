@@ -10,14 +10,12 @@ import { TerminalsPanel } from "../terminals/TerminalsPanel";
 import { WorkersColumn } from "../orchestrator/WorkersColumn";
 import { GitPanel } from "../git/GitPanel";
 import { FilesPanel } from "../files/FilesPanel";
-import { DesignPanel } from "../design/DesignPanel";
 import { AgentsColumn } from "../agents/AgentsColumn";
 import { ArtifactPanel } from "../artifacts/ArtifactPanel";
 import "../../styles/navigation.css";
 
 const TITLES = {
   terminal: "drawer.terminal",
-  design: "drawer.design",
   workers: "nav.orch",
   git: "drawer.git",
   files: "drawer.files",
@@ -60,7 +58,6 @@ export function DrawerView({ className, drawer }: { className: string; drawer: E
           className={`min-w-(--drawer-w) ${drawer === "workers" || drawer === "agents" ? "overflow-y-auto pt-2.5 px-3 pb-4" : "flex-1 min-h-0 flex flex-col p-3"}`}
         >
           {drawer === "terminal" ? <TerminalsPanel project={toolProject} /> : null}
-          {drawer === "design" ? <DesignPanel project={toolProject} /> : null}
           {drawer === "workers" ? <WorkersColumn /> : null}
           {drawer === "git" ? <GitPanel /> : null}
           {drawer === "files" ? <FilesPanel /> : null}

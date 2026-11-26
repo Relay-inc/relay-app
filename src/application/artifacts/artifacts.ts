@@ -3,9 +3,12 @@ import { type ArtifactView, firstView, fromLink } from "../../domain/artifacts/r
 import * as backend from "../../infrastructure/backend";
 import { makeStore } from "../make-store";
 import { showDrawer } from "../navigation/navigation";
+import { useNavigationStore } from "../navigation/store";
+import { useConversationsStore } from "../conversations/store";
+import { artifactsIn } from "../../domain/artifacts/rules";
 
 // The Artifact drawer: a page Claude Code published to claude.ai, from its local file in a sandboxed frame
-// (artifact.rs) or live on claude.ai in the native webview the Design drawer uses (design.rs).
+// (artifact.rs) or live on claude.ai in a native webview (design.rs).
 
 /** The Artifact the drawer shows, and how. */
 export const useArtifactStore = makeStore(() => ({
@@ -39,3 +42,11 @@ export const liveShow = backend.designShow;
 export const liveBounds = backend.designBounds;
 export const liveHide = () => backend.designHide().catch(() => {});
 export { openExternal as openInBrowser } from "../navigation/navigation";
+
+/** Claude opened a page for the user (the Artifact tool's `open`, a publish with `auto_open`), which Claude Code does
+ *  only in its own UI: the drawer shows it, when that conversation is the one in view (an agent elsewhere does not
+ *  take over the window; its card in the conversation keeps the page). */
+export function showArtifact(key: string, url: string) {
+  if (useNavigationStore.getState().selected !== key) return;
+  openArtifactLink(url, artifactsIn(useConversationsStore.getState().messages[key]));
+}

@@ -66,7 +66,6 @@ export function MigrateDialog({
     tn("mig.notes", plan.files.length),
     plan.row ? t(plan.card ? "mig.card" : "mig.row") : "",
     plan.icon ? t("mig.icon") : "",
-    plan.design ? t("mig.design") : "",
     plan.repos ? tn("mig.repos", plan.repos) : "",
     plan.scratch ? tn("mig.scratch", plan.scratch) : "",
   ];

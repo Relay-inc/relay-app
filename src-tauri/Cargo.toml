@@ -104,7 +104,7 @@ tauri-plugin-notification = "2"
 # whether the microphone is switched off in Windows' privacy settings (src/permissions.rs), and dictation's paste:
 # the clipboard, Ctrl+V and the window in front (src/anywhere.rs)
 windows-sys = { version = "0.61", features = ["Win32_System_Registry", "Win32_Foundation", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
-# a picture of the Design drawer's WebView2 (src/design.rs), the versions tauri's wry uses
+# a picture of a WebView2 for --screenshot (src/design.rs), the versions tauri's wry uses
 webview2-com = "0.39"
 windows = { version = "0.62", features = ["Win32_System_Com_StructuredStorage"] }
 # a vault's `.claude -> System` link as a directory junction, which needs no admin rights (src/platform.rs)
@@ -118,7 +118,7 @@ keyring = { version = "3.6.3", features = ["windows-native"] }
 objc2 = "0.6"
 objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
-# a picture of the Design drawer's webview for relay-design (src/design.rs)
+# a picture of a webview for --screenshot (src/design.rs)
 objc2-web-kit = "0.3"
 block2 = "0.6"
 # the tap on what the Mac plays, for recording meetings (src/meeting.rs)

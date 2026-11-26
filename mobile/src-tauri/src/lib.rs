@@ -104,7 +104,7 @@ fn running(app: AppHandle, state: State<App>) -> Result<HashMap<String, u32>, St
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, model: Option<String>, effort: Option<String>) -> Result<(), String> {
     follow(&app, &state, &project, model.as_deref().unwrap_or(""), effort.as_deref().unwrap_or(""))?;
     let images: Vec<Image> = images.unwrap_or_default().into_iter().filter_map(|i| serde_json::from_value(i).ok()).collect();
-    let line = PROVIDER.input(&Turn { text, images }).ok_or("no input")?;
+    let line = PROVIDER.input(&Turn { text, images, human: true }).ok_or("no input")?;
     let mut live = state.live.lock().unwrap();
     let x = live.get_mut(&project).ok_or("the conversation went away")?;
     writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;

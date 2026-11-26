@@ -269,7 +269,7 @@ mod tests {
 
     #[test]
     fn turns_answers_and_errors() {
-        let t = Turn { text: "kijk".into(), images: vec![Image { media_type: "image/png".into(), data: "AA==".into() }, Image { media_type: "text/html".into(), data: "x".into() }] };
+        let t = Turn { text: "kijk".into(), images: vec![Image { media_type: "image/png".into(), data: "AA==".into() }, Image { media_type: "text/html".into(), data: "x".into() }], human: false };
         let m = prompt(&t);
         assert_eq!(m["params"], json!({"sessionId": "", "prompt": [{"type": "text", "text": "kijk"}, {"type": "image", "mimeType": "image/png", "data": "AA=="}]}));
         // an agent that offers no way to refuse: the request is cancelled

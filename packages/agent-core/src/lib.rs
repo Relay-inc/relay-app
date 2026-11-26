@@ -104,8 +104,6 @@ pub struct Grants {
     pub fenced: bool,
     /// The relay-mail tools, answered by the app over the control pipe.
     pub mail: bool,
-    /// The relay-design tools, answered by the app over the control pipe.
-    pub design: bool,
     /// Runs on a work machine: the mode comes with the machine's mirrored settings.
     pub machine: bool,
     /// The orchestrator's role, "coordinator", "pipeline" (a board pipeline's coordinator) or "worker": the relay-orch tools.
@@ -114,7 +112,7 @@ pub struct Grants {
     pub system: Option<String>,
 }
 /// No grants, for a call that is not a conversation (and for tests).
-pub static NO_GRANTS: Grants = Grants { deny: Vec::new(), fenced: false, mail: false, design: false, machine: false, orch: None, system: None };
+pub static NO_GRANTS: Grants = Grants { deny: Vec::new(), fenced: false, mail: false, machine: false, orch: None, system: None };
 
 /// Installed, which version, logged in. `None` where the provider cannot tell.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -138,9 +136,10 @@ pub struct Image { pub media_type: String, pub data: String }
 /// The media types the webview pastes, base64 in `data`.
 pub const IMAGE_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
-/// One user message.
+/// One user message. `human`: the person wrote it or asked for it in the app (the composer, a button), not Relay on
+/// its own (the orchestrator's briefs and reports).
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Turn { pub text: String, pub images: Vec<Image> }
+pub struct Turn { pub text: String, pub images: Vec<Image>, pub human: bool }
 
 /// Starting the process for a conversation. `model` and `effort` are "" for the CLI's default, else one of
 /// [`AgentProvider::models`] (or a model id the user typed, checked by [`safe_model`]) and [`AgentProvider::efforts`].
@@ -204,6 +203,9 @@ pub enum Event {
     Reset,
     /// The provider began compacting the conversation (summarising it to free context); `Compacted` ends it.
     Compacting,
+    /// The turn that ends next was started by the agent itself, not by a message: a comment sent to Claude on an
+    /// artifact it watches, or a background task that finished. Claude Code only.
+    Woke,
     /// The account's limit is used up: the turn is refused, and the app moves the next message to another account or
     /// retries once it resets. `resets_at` (epoch ms) when the provider says. Not shown in the webview.
     Limited { resets_at: Option<i64> },
@@ -249,6 +251,9 @@ pub struct Artifact {
     pub version: Option<u64>,
     pub updated: bool,
     pub from_type: Option<String>,
+    /// the publish asked to open the page for the user (`auto_open`)
+    #[serde(default)]
+    pub open: bool,
 }
 
 /// Tokens of one turn, as the provider reports them.

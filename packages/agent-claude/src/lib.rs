@@ -24,10 +24,6 @@ pub const DENIED: [&str; 3] = ["mcp__claude_ai_Gmail__*", "Bash(himalaya*)", "Ed
 /// The mail tools run without a card, also once the session holds mail text: none can send, a draft only lands in Drafts.
 pub const MAIL_TOOLS: [&str; 5] = ["mcp__relay-mail__search", "mcp__relay-mail__read", "mcp__relay-mail__thread", "mcp__relay-mail__attachment", "mcp__relay-mail__save_draft"];
 
-/// The relay-design tools (src-tauri design.rs), without a Claude Code card: the app asks for the two that act on the
-/// user's claude.ai account itself, by the policy under `design` in the vault's `actions`.
-pub const DESIGN_TOOLS: [&str; 4] = ["mcp__relay-design__design_read", "mcp__relay-design__design_snapshot", "mcp__relay-design__design_prompt", "mcp__relay-design__design_create"];
-
 /// CLAUDE_CONFIG_DIR for an account, and not inherited for ~/.claude.
 fn on_account(cmd: &mut Command, account: &str) {
     if account.is_empty() { cmd.env_remove("CLAUDE_CONFIG_DIR"); } else { cmd.env("CLAUDE_CONFIG_DIR", account); }
@@ -54,6 +50,9 @@ pub fn agents_raw(env: &Env) -> Option<String> {
 /// The oldest Claude Code seen taking every flag `command` passes (`--thinking-display` is not in its changelog, so
 /// this is the oldest build checked, not the release that added it). An older one stops each turn on "unknown option".
 const MIN_VERSION: [u32; 3] = [2, 1, 294];
+/// Claude Code's Artifact tools and their comments (see `command`).
+const ARTIFACT_ENV: [(&str, &str); 4] = [("CLAUDE_CODE_ARTIFACT", "1"), ("CLAUDE_CODE_ARTIFACT_VERIFY", "1"),
+    ("CLAUDE_CODE_ARTIFACT_VERSIONS", "1"), ("CLAUDE_CODE_ENTRYPOINT", "sdk-ts")];
 // the title call's prompts (prompts/conversation/): the system prompt, and the message in quotes as data
 const TITLE: &str = agent_core::prompt::text(include_str!("../../../prompts/conversation/title.md"));
 const TITLE_SYSTEM: &str = agent_core::prompt::text(include_str!("../../../prompts/conversation/title-system.md"));
@@ -237,11 +236,6 @@ impl AgentProvider for Claude {
         // role prompt, and the denies and asks that hold whatever the user's settings allow (ask beats allow)
         let strs = |k: &str| env.opts[k].as_array().into_iter().flatten().filter_map(Value::as_str).map(String::from).collect::<Vec<_>>();
         let mut allowed: Vec<String> = MAIL_TOOLS.iter().chain([RELAY_TOOL].iter()).map(|t| t.to_string()).collect();
-        // grants.design, set by the app: the relay-design tools, answered over this pipe too
-        if env.grants.design {
-            mcp["mcpServers"]["relay-design"] = json!({"type": "sdk", "name": "relay-design"});
-            allowed.extend(DESIGN_TOOLS.iter().map(|t| t.to_string()));
-        }
         if let Some(role) = env.grants.orch.as_deref() {
             mcp["mcpServers"]["relay-orch"] = json!({"type": "sdk", "name": "relay-orch"});
             allowed.extend(match role { "coordinator" => &ORCH_COORD_TOOLS[..], "pipeline" => &ORCH_PIPE_TOOLS[..], _ => &ORCH_WORKER_TOOLS[..] }.iter().map(|t| t.to_string()));
@@ -255,7 +249,15 @@ impl AgentProvider for Claude {
             .arg("--allowedTools").args(&allowed).arg("--disallowedTools").args(&denied)
             .arg("--append-system-prompt").arg(&system).args(["-n", l.name])
             // each message echoed when Claude takes it up: one sent during a turn often joins that turn
-            .arg("--replay-user-messages");
+            .arg("--replay-user-messages")
+            // ponytail: undocumented switches (Claude Code 2.1.332). ARTIFACT gives the Artifact tools, VERIFY adds
+            // ArtifactCheck, and the SDK entrypoint keeps a live subscription so artifact comments reach the running
+            // conversation (print mode has none), where its own agent answers it, so the reply shows there (not
+            // COMMENT_RESPONDER: that answers from the side and leaves the conversation only a notice); VERSIONS lets
+            // Claude read and restore an older version. The tools' `open` does nothing without the CLI's
+            // own UI: the app shows the page from the tool call (Design drawer). Drop these once the Agent SDK
+            // documents a switch.
+            .envs(ARTIFACT_ENV);
         if !mcp["mcpServers"].as_object().is_some_and(|m| m.is_empty()) { cmd.arg("--mcp-config").arg(mcp.to_string()); }
         // grants.fenced, set by the app in a shared vault: only the servers above, none of the user's own or claude.ai's
         if fenced { cmd.arg("--strict-mcp-config"); }
@@ -479,6 +481,10 @@ mod tests {
         assert!(cmd.get_envs().any(|(k, v)| k == "ANTHROPIC_API_KEY" && v.is_none()));
         assert!(cmd.get_envs().any(|(k, v)| k == "CLAUDE_CONFIG_DIR" && v.is_none()));
         assert!(!cmd.get_envs().any(|(k, _)| k == "MCP_TOOL_TIMEOUT"));
+        // the Artifact tools, and a live subscription for their comments
+        for (k, v) in ARTIFACT_ENV {
+            assert!(cmd.get_envs().any(|(a, b)| a == k && b.is_some_and(|b| b == v)), "{k}");
+        }
         let l = Launch { resume: None, model: "", effort: "", ..l };
         let args: Vec<String> = PROVIDER.command(&env(&p), &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert_eq!(&args[24..], ["-n", "Algemeen: x", "--replay-user-messages", "--permission-mode", "auto", "--resume", "def", "--fork-session"]);
@@ -486,9 +492,6 @@ mod tests {
         let grants = Grants { mail: true, ..Default::default() };
         let args: Vec<String> = PROVIDER.command(&Env { grants: &grants, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args[at(&args, "--mcp-config") + 1].contains("\"relay-mail\":{\"name\":\"relay-mail\",\"type\":\"sdk\"}"));
-        let grants = Grants { design: true, ..Default::default() };
-        let args: Vec<String> = PROVIDER.command(&Env { grants: &grants, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert!(args[at(&args, "--mcp-config") + 1].contains("\"relay-design\":{\"name\":\"relay-design\",\"type\":\"sdk\"}") && args.contains(&"mcp__relay-design__design_snapshot".to_string()));
         let grants = Grants { orch: Some("worker".into()), system: Some("be a worker".into()), deny: vec!["Edit(//v/x)".into()], ..Default::default() };
         let opts = json!({"ask": ["Bash(git push*)"]});
         let args: Vec<String> = PROVIDER.command(&Env { grants: &grants, opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();

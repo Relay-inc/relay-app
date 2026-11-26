@@ -195,7 +195,7 @@ mod tests {
             let (out_r, out_w) = std::io::pipe().unwrap();
             let b = bin.clone();
             let bridge = std::thread::spawn(move || bridge::run(&b, &cfg, BufReader::new(stdin_r), out_w, |_| {}));
-            writeln!(stdin, "{}", PROVIDER.input(&Turn { text: text.into(), images: vec![] }).unwrap()).unwrap();
+            writeln!(stdin, "{}", PROVIDER.input(&Turn { text: text.into(), images: vec![], human: false }).unwrap()).unwrap();
             let mut st = acp::State::default();
             let (mut sid, mut said) = (String::new(), String::new());
             for l in BufReader::new(out_r).lines().map_while(Result::ok) {
@@ -238,7 +238,7 @@ mod tests {
         // the resume fails, so a new session; its response is the session, on the model that was asked for
         let (_, ev) = next();
         assert_eq!(ev, [Event::Session { id: "5e55-0001".into() }, Event::Resolved { model: "m2".into(), effort: None }]);
-        writeln!(stdin, "{}", PROVIDER.input(&Turn { text: "hoi".into(), images: vec![] }).unwrap()).unwrap();
+        writeln!(stdin, "{}", PROVIDER.input(&Turn { text: "hoi".into(), images: vec![], human: false }).unwrap()).unwrap();
         // the fake echoes the prompt it got, then asks for a permission
         let (echo, _) = next();
         assert_eq!(echo["method"], "echo");

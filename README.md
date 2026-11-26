@@ -35,7 +35,7 @@ without finding its terminal. Prepare a meeting and its briefing is written into
 <img src="docs/images/waiting.jpg" alt="Today: agents waiting on you, with a permission card open">
 
 **Conversations with the project next to them.** Follow the agents Claude Code starts in their own column, open the
-project's terminal, Git, Files or Claude Design drawer beside the chat, and see per turn what it edited and cost. The
+project's terminal, Git, Files or Artifact drawer beside the chat, and see per turn what it edited and cost. The
 Git drawer stages, commits and pushes across every repo of the project, with side-by-side diffs and a branch graph.
 
 **An orchestrator for parallel work.** Tell it what you want across projects and it starts a worker per task in its own
