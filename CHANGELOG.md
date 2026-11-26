@@ -16,7 +16,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Added
 
-- **Claude's artifacts in the conversation**: a page, dashboard, deck or design that Claude Code publishes to claude.ai with its Artifact tool shows as a card where it was made, with its name, kind and version. Open shows it in the new Artifact drawer: from the file Claude wrote, on this Mac (instant, no sign-in), or live on claude.ai as others see it, signed in once like the Design drawer. A republish reloads it, the conversation's other artifacts are a pick away, and a claude.ai artifact link in a message opens there too instead of in the browser
+- **Claude's artifacts in the conversation**: a page, dashboard, deck or design that Claude Code publishes to claude.ai with its Artifact tool shows as a card where it was made, with its name, kind and version. Open shows it in the new Artifact drawer: from the file Claude wrote, on this Mac (instant, no sign-in), or live on claude.ai as others see it, signed in once like the Design drawer. A republish reloads it, the conversation's other artifacts are a pick away, and a claude.ai artifact link in a message opens there too instead of in the browser (#553)
 
 ## [0.0.69] - 2026-11-26
 
