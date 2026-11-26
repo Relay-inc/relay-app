@@ -1,15 +1,15 @@
 {
-  "version": "0.0.69",
-  "notes": "### Fixed\n\n- Relay opened on a blank window when a pipeline had nothing waiting on you: the stage strip read the first Needs you ticket while drawing",
-  "pub_date": "2026-11-26T13:02:53.918Z",
+  "version": "0.0.70",
+  "notes": "### Added\n\n- **Claude's artifacts in the conversation**: a page, dashboard, deck or design that Claude Code publishes to claude.ai with its Artifact tool shows as a card where it was made, with its name, kind and version. Open shows it in the new Artifact drawer: from the file Claude wrote, on this Mac (instant, no sign-in), or live on claude.ai as others see it, signed in to claude.ai once. A republish reloads it, the conversation's other artifacts are a pick away, and a claude.ai artifact link in a message opens there too instead of in the browser (#553)\n- Claude Code's Artifact tools are on in Claude conversations, so Claude can publish, read and update pages, dashboards and designs on claude.ai, read and restore older versions, and keep its data. A page Claude opens for you, or publishes asking to open it (a new design, a dashboard), shows in the Artifact drawer. A comment sent to Claude on an artifact the conversation watches starts a turn there that answers it on its thread, with a note that Claude started it itself (#554)\n\n### Removed\n\n- The Design drawer and its per-project link, and the relay-design tools (`design_read`, `design_prompt`, `design_snapshot`, `design_create`): Claude Code's Artifact tools and the Artifact drawer replace them. Claude Design as a separate product closes 14 Dec 2026 (#554)",
+  "pub_date": "2026-11-26T16:03:32.766Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWm9XLzBac1UzbDRnK3BUOHl1RG9TZnZqeklLQ0VCTWV1cHJ6MjZIWWNPeEFPWTh3elFtN2tHcXh4ZWM2bXdFUnUzczR1QWwxRkpDazRVM1FZNWw5VHdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1Njk3ODY4CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC42OQp0UlU4UFk1dEJOUjFsVGlMSEt6SnNiY3FzdmNMOCtoTzZGdFJyNUJ3VmZrU2RWQTJPR0Fnem0zLzQzSVNRcVk2WjRBR2xuMFFsRVdTNFFHRVNWYzFEQT09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/795924317"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnVVS0pDSkxTNjM3M1ZlcFVjeStITGtHOGxxckVCRkFxTmNjOW5CSXBIM3A3SERtRDBzaFBhZDdET0p4YXVkQ05oMnVYNmNqZy9aRWdzWnlrS251eEF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NzA4NTc4CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC43MAplUlpRVkVtTGU4WG4zVG01aDZkU0toeXc5RjFXd3dsZ0NIUFV6Q0s3RGUzZjBrTWEzdWJRUGIxNFVXSmZCZWhtV2VPeUErcWlPSm9pNElkVm1RVFVEZz09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/796647485"
     },
     "darwin-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWm5ubG1nQ2E1cjFLQlc4L001WTEwMVJ5TC92ZWdBR3dwazk5b1p4WHVFZGd4SFhsSHVxeUtNWnpHVlg5YkIrQ1MzYjNIa05vNG1FSlYwVTBJOVBWOHdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1Njk4MDk3CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC42OQpWZjRNbEJheWhhM3FvTUNWNm8rTGhMcWc0dEc2OHBYQlM4bWd2dmFxNzhxd3FYV1g5TThOWUxKdHU2YUFtbnB2V0VtYU91dDdnamx3eEhBcW01b1REZz09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/795924311"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnJoQjEySkpzWlpEbUlNSEEvcHdvbTBkaFVhNVVRek9qWDJaYUtibXlXcGZNUGdsL0JHVHBENk13YXBvZXlkNWRNdFZxN0cySWh4Lys0Q0RmMExrK1FNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NzA4ODkyCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC43MApxK2tGYUZuK25Xa2EwSzVGS09HS1dRZEp6N2FXYjhQeGMyaUVYYjJCWUpnQmNOaW50eUZNRStURGlkWXZVdTBDdDJqeS9HRlhlaDVKdVF6RVVBZFlDZz09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/796647487"
     }
   }
 }
