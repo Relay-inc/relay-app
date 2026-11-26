@@ -55,8 +55,8 @@ pub fn agents_raw(env: &Env) -> Option<String> {
 /// this is the oldest build checked, not the release that added it). An older one stops each turn on "unknown option".
 const MIN_VERSION: [u32; 3] = [2, 1, 294];
 /// Claude Code's Artifact tools and their comments (see `command`).
-const ARTIFACT_ENV: [(&str, &str); 5] = [("CLAUDE_CODE_ARTIFACT", "1"), ("CLAUDE_CODE_ARTIFACT_VERIFY", "1"),
-    ("CLAUDE_CODE_ARTIFACT_COMMENT_RESPONDER", "1"), ("CLAUDE_CODE_ARTIFACT_VERSIONS", "1"), ("CLAUDE_CODE_ENTRYPOINT", "sdk-ts")];
+const ARTIFACT_ENV: [(&str, &str); 4] = [("CLAUDE_CODE_ARTIFACT", "1"), ("CLAUDE_CODE_ARTIFACT_VERIFY", "1"),
+    ("CLAUDE_CODE_ARTIFACT_VERSIONS", "1"), ("CLAUDE_CODE_ENTRYPOINT", "sdk-ts")];
 // the title call's prompts (prompts/conversation/): the system prompt, and the message in quotes as data
 const TITLE: &str = agent_core::prompt::text(include_str!("../../../prompts/conversation/title.md"));
 const TITLE_SYSTEM: &str = agent_core::prompt::text(include_str!("../../../prompts/conversation/title-system.md"));
@@ -261,8 +261,9 @@ impl AgentProvider for Claude {
             .arg("--replay-user-messages")
             // ponytail: undocumented switches (Claude Code 2.1.332). ARTIFACT gives the Artifact tools, VERIFY adds
             // ArtifactCheck, and the SDK entrypoint keeps a live subscription so artifact comments reach the running
-            // conversation (print mode has none); COMMENT_RESPONDER answers a comment sent to Claude on its thread,
-            // VERSIONS lets Claude read and restore an older version. The tools' `open` does nothing without the CLI's
+            // conversation (print mode has none), where its own agent answers it, so the reply shows there (not
+            // COMMENT_RESPONDER: that answers from the side and leaves the conversation only a notice); VERSIONS lets
+            // Claude read and restore an older version. The tools' `open` does nothing without the CLI's
             // own UI: the app shows the page from the tool call (Design drawer). Drop these once the Agent SDK
             // documents a switch.
             .envs(ARTIFACT_ENV);
