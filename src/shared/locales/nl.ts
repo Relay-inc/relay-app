@@ -971,6 +971,8 @@ export default {
   "chat.general": "Algemeen gesprek",
   "chat.terminal": "Terminalsessie",
   "compact.running": "Gesprek wordt samengevat…",
+  "chat.woke":
+    "Claude begon hier zelf aan: een opmerking aan Claude op een artifact, of een achtergrondtaak die klaar is",
   "compact.done": "Gesprek samengevat",
   "compact.auto": "Gesprek automatisch samengevat",
   "chat.editTitle": "Project aanpassen: icoon, naam, of dit gesprek naar een ander project",

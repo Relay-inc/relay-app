@@ -506,7 +506,7 @@ fn real_claude_through_the_server() {
     // default mode, so the Write below asks first, whatever this Mac's own settings allow
     send(&mut conn.stdin, json!({"type": "control_request", "request_id": "mode", "request": {"subtype": "set_permission_mode", "mode": "default"}}));
     let text = "Use the Write tool to create the file note.txt in the current directory, containing the single word relay. Then answer with only: done";
-    send(&mut conn.stdin, agent_claude::stream::user_message(&Turn { text: text.into(), images: vec![] }));
+    send(&mut conn.stdin, agent_claude::stream::user_message(&Turn { text: text.into(), images: vec![], human: false }));
 
     // the card: the request comes over the pipe, answered through the provider as the app does
     let (mut result, mut sid, mut tool) = (Value::Null, String::new(), None::<String>);

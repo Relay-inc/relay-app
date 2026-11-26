@@ -351,7 +351,7 @@ fn a_reattached_process_takes_its_turns_from_the_file_and_writes_changes_back() 
 
 #[test]
 fn a_process_starts_with_its_first_turn_only_when_it_has_one() {
-    assert_eq!(super::start_turns(Some(&agent_core::Turn { text: "hi".into(), images: vec![] })), 1);
+    assert_eq!(super::start_turns(Some(&agent_core::Turn { text: "hi".into(), images: vec![], human: false })), 1);
     assert_eq!(super::start_turns(None), 0);
 }
 

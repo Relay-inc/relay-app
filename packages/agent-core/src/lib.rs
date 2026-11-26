@@ -138,9 +138,10 @@ pub struct Image { pub media_type: String, pub data: String }
 /// The media types the webview pastes, base64 in `data`.
 pub const IMAGE_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
-/// One user message.
+/// One user message. `human`: the person wrote it or asked for it in the app (the composer, a button), not Relay on
+/// its own (the orchestrator's briefs and reports).
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Turn { pub text: String, pub images: Vec<Image> }
+pub struct Turn { pub text: String, pub images: Vec<Image>, pub human: bool }
 
 /// Starting the process for a conversation. `model` and `effort` are "" for the CLI's default, else one of
 /// [`AgentProvider::models`] (or a model id the user typed, checked by [`safe_model`]) and [`AgentProvider::efforts`].
@@ -204,6 +205,9 @@ pub enum Event {
     Reset,
     /// The provider began compacting the conversation (summarising it to free context); `Compacted` ends it.
     Compacting,
+    /// The turn that ends next was started by the agent itself, not by a message: a comment sent to Claude on an
+    /// artifact it watches, or a background task that finished. Claude Code only.
+    Woke,
     /// The account's limit is used up: the turn is refused, and the app moves the next message to another account or
     /// retries once it resets. `resets_at` (epoch ms) when the provider says. Not shown in the webview.
     Limited { resets_at: Option<i64> },

@@ -108,6 +108,21 @@ test("an Artifact open asks to show the page; any other Artifact call does not",
   );
 });
 
+test("a turn Claude started itself gets a note in front of it, after the previous turn", () => {
+  const before = produce(fresh(), draft => {
+    draft.messages["c:1"] = [
+      { kind: "me", text: "hi" },
+      { kind: "done", text: "" },
+      { kind: "ai", text: "Yes, I can hear you." },
+    ];
+  });
+  const { next } = run(before, { type: "woke" });
+  assert.deepEqual(
+    next.messages["c:1"].map(i => i.kind),
+    ["me", "done", "note", "ai"],
+  );
+});
+
 test("a turn that ends ok: done with its duration, idle, a banner with the last answer, unseen when not open", () => {
   const busy = produce(fresh(), draft => {
     draft.status["c:1"] = "busy";

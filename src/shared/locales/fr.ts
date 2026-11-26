@@ -980,6 +980,8 @@ export default {
   "chat.general": "Conversation générale",
   "chat.terminal": "Session Terminal",
   "compact.running": "Conversation en cours de compactage…",
+  "chat.woke":
+    "Claude a commencé cela de lui-même : un commentaire adressé à Claude sur un artifact, ou une tâche en arrière-plan terminée",
   "compact.done": "Conversation compactée",
   "compact.auto": "Conversation compactée automatiquement",
   "chat.editTitle": "Modifier le projet : icône, nom, ou déplacer cette conversation vers un autre projet",

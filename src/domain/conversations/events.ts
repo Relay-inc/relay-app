@@ -122,6 +122,14 @@ export function applyAgentEvent(
     case "compacting":
       push(state, key, { kind: "compact", text: env.t("compact.running"), state: "run" });
       return [];
+    case "woke": {
+      // the turn is in the conversation already: its note goes in front of it, after the previous turn's end
+      const items = (state.messages[key] ||= []);
+      let at = items.length;
+      while (at > 0 && items[at - 1].kind !== "done" && items[at - 1].kind !== "me") at--;
+      items.splice(at, 0, { kind: "note", text: env.t("chat.woke") });
+      return [];
+    }
     case "compacted": {
       const text = compactedText(event, env.t);
       if (!endCompaction(state.messages[key], "ok", text)) push(state, key, { kind: "compact", text, state: "ok" });

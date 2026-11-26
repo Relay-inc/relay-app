@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn slash_compaction_and_extension_completion() {
-        let compact = input(&Turn { text: "/compact keep decisions".into(), images: vec![] });
+        let compact = input(&Turn { text: "/compact keep decisions".into(), images: vec![], human: false });
         let command: Value = serde_json::from_str(compact.lines().last().unwrap()).unwrap();
         assert_eq!(command, json!({"type": "compact", "customInstructions": "keep decisions"}));
         let mut st = State::default();
@@ -292,7 +292,7 @@ mod tests {
         assert_eq!(ev, [Event::ToolCall { id: "c1".into(), name: "Glob".into(), input: json!({"pattern": "*.rs", "path": "src"}) }]);
         assert_eq!(tool("ls", &json!({"path": "/a"})).1["pattern"], "/a");
 
-        let lines = input(&Turn { text: "hoi".into(), images: vec![agent_core::Image { media_type: "image/png".into(), data: "AAA".into() }, agent_core::Image { media_type: "image/bmp".into(), data: "B".into() }] });
+        let lines = input(&Turn { text: "hoi".into(), images: vec![agent_core::Image { media_type: "image/png".into(), data: "AAA".into() }, agent_core::Image { media_type: "image/bmp".into(), data: "B".into() }], human: false });
         let l: Vec<Value> = lines.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
         assert_eq!(l[0], json!({"type": "get_state"}));
         assert_eq!(l[1], json!({"type": "prompt", "message": "hoi", "streamingBehavior": "followUp", "images": [{"type": "image", "data": "AAA", "mimeType": "image/png"}]}));

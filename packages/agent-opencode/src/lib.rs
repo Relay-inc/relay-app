@@ -200,7 +200,7 @@ mod tests {
         let mut next = || { let l = lines.next().expect("bridge ended"); (serde_json::from_str::<Value>(&l).unwrap(), st.parse(&l)) };
         let (_, ev) = next();
         assert_eq!(ev, [Event::Session { id: "ses_new1".into() }]);
-        writeln!(stdin, "{}", PROVIDER.input(&Turn { text: "hoi".into(), images: vec![] }).unwrap()).unwrap();
+        writeln!(stdin, "{}", PROVIDER.input(&Turn { text: "hoi".into(), images: vec![], human: false }).unwrap()).unwrap();
         // the fake echoes what it got as an event of our session, after one of another session (left out)
         let (echo, _) = next();
         assert_eq!(echo["type"], "echo");
@@ -217,7 +217,7 @@ mod tests {
         writeln!(stdin, "{}", json!({"type": "permission", "id": "per_bad", "reply": "once"})).unwrap();
         let (_, ev) = next();
         assert!(matches!(&ev[0], Event::Error { text } if text.contains("404")));
-        writeln!(stdin, "{}", PROVIDER.input(&Turn { text: "/check src/main.rs".into(), images: vec![] }).unwrap()).unwrap();
+        writeln!(stdin, "{}", PROVIDER.input(&Turn { text: "/check src/main.rs".into(), images: vec![], human: false }).unwrap()).unwrap();
         let (command, _) = next();
         assert_eq!(command["properties"]["body"], json!({"command": "check", "arguments": "src/main.rs", "model": "anthropic/m1", "variant": "high"}));
         let (_, ev) = next();

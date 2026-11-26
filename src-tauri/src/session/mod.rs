@@ -198,7 +198,7 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
             .filter(|i| IMAGE_TYPES.contains(&i.media_type.as_str())).collect()
     };
     if images.is_empty() && text.trim().is_empty() { return Err(tr(ui_lang_of(&state.settings.lock().unwrap()), "err.empty")); }
-    let turn = Turn { text, images };
+    let turn = Turn { text, images, human: true };
     // empty = the CLI default from its settings. Only aliases and model ids, never a stray flag
     let model = model.filter(|m| agent_core::safe_model(m)).unwrap_or_default();
     let effort = effort.filter(|e| p.efforts().iter().any(|c| c.id == *e)).unwrap_or_default();
@@ -276,7 +276,7 @@ pub(crate) fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, 
     }
     let x = procs.get_mut(key).unwrap();
     if taint && !x.tainted { x.mark_tainted(); }
-    let line = p.input(&Turn { text: text.to_string(), images: vec![] }).ok_or_else(|| format!("{}: no input", p.id()))?;
+    let line = p.input(&Turn { text: text.to_string(), images: vec![], human: false }).ok_or_else(|| format!("{}: no input", p.id()))?;
     orch::turn_started(key, None); // Relay starts this turn, not the user
     writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
     x.sent();

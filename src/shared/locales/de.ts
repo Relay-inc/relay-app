@@ -976,6 +976,8 @@ export default {
   "chat.general": "Allgemeines Gespräch",
   "chat.terminal": "Terminalsitzung",
   "compact.running": "Gespräch wird zusammengefasst …",
+  "chat.woke":
+    "Claude hat das von selbst begonnen: ein Kommentar an Claude auf einem Artifact oder eine fertige Hintergrundaufgabe",
   "compact.done": "Gespräch zusammengefasst",
   "compact.auto": "Gespräch automatisch zusammengefasst",
   "chat.editTitle": "Projekt bearbeiten: Symbol, Name oder dieses Gespräch in ein anderes Projekt verschieben",

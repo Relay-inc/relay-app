@@ -47,6 +47,7 @@ export type AgentEvent =
   | { type: "time"; at: string }       // history only: when the transcript line after it was written
   | { type: "error"; text: string }
   | { type: "reset" }                 // the conversation started over (/clear); a new session follows
+  | { type: "woke" }                // Claude Code started the turn that ends next itself: an artifact comment or a finished background task
   | { type: "compacting" }           // Claude Code is summarising the conversation to free context; `compacted` ends it
   | { type: "compacted"; trigger?: string | null; pre_tokens?: number | null; post_tokens?: number | null } // trigger: "manual" | "auto"
   | { type: "context"; used?: number | null; window?: number | null } // how full the context is: tokens in use and/or the model's window (Claude Code)

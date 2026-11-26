@@ -963,6 +963,8 @@ const en = {
   "chat.general": "General conversation",
   "chat.terminal": "Terminal session",
   "compact.running": "Compacting conversation…",
+  "chat.woke":
+    "Claude started this on its own: a comment sent to Claude on an artifact, or a background task that finished",
   "compact.done": "Conversation compacted",
   "compact.auto": "Conversation compacted automatically",
   "chat.editTitle": "Edit the project: icon, name, or move this conversation to another project",

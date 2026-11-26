@@ -289,7 +289,7 @@ mod tests {
         // the resume fails, so a new thread; its response is the session
         let (_, ev) = next();
         assert_eq!(ev, [Event::Session { id: "019a0000-ffff-7000-8000-00000000000f".into() }, Event::Resolved { model: "m1".into(), effort: None }]);
-        writeln!(stdin, "{}", PROVIDER.input(&Turn { text: "hoi".into(), images: vec![] }).unwrap()).unwrap();
+        writeln!(stdin, "{}", PROVIDER.input(&Turn { text: "hoi".into(), images: vec![], human: false }).unwrap()).unwrap();
         // the fake echoes the turn/start it got, then asks for an approval
         let (echo, _) = next();
         assert_eq!(echo["method"], "echo");
