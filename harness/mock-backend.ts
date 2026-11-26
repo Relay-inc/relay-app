@@ -1040,13 +1040,9 @@ function handle(cmd: string, a: Args): unknown {
     case "find_icon_sites":
     case "integration_import":
       return {};
-    case "design_link":
-      return "";
     case "design_show":
     case "design_bounds":
     case "design_hide":
-    case "design_opened":
-    case "set_design_link":
     case "set_project_icon":
     case "move_chat_workspace":
     // a project moved or copied to another workspace: what goes, a team workspace's warning, and Northwind Portal into
@@ -1080,7 +1076,6 @@ function handle(cmd: string, a: Args): unknown {
         row: true,
         card: team,
         icon: true,
-        design: false,
         repos: 1,
         contexts,
         context,

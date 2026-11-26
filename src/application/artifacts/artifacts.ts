@@ -8,7 +8,7 @@ import { useConversationsStore } from "../conversations/store";
 import { artifactsIn } from "../../domain/artifacts/rules";
 
 // The Artifact drawer: a page Claude Code published to claude.ai, from its local file in a sandboxed frame
-// (artifact.rs) or live on claude.ai in the native webview the Design drawer uses (design.rs).
+// (artifact.rs) or live on claude.ai in a native webview (design.rs).
 
 /** The Artifact the drawer shows, and how. */
 export const useArtifactStore = makeStore(() => ({

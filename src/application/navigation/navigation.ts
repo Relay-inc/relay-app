@@ -60,8 +60,7 @@ export async function select(key: string, tool: Tool | null = null) {
   set(draft => {
     if (!isView(key)) draft.lastProject = project;
     // a project's terminals only stay open while that project's tools are in the bar
-    if ((draft.drawer === "terminal" || draft.drawer === "design") && !(isView(key) ? tool?.project : project))
-      draft.drawer = "";
+    if (draft.drawer === "terminal" && !(isView(key) ? tool?.project : project)) draft.drawer = "";
   });
   markSeen(key);
   storage.set("sel", chats[key]?.draft && !typedOf(key) ? WAIT : key);
@@ -196,12 +195,12 @@ export function closeTool() {
   else openProject(tool.project);
 }
 /** A drawer tool's button: opens it, or closes it when it is the one shown. */
-export const toggleDrawer = (tool: "terminal" | "design" | "workers" | "git" | "files" | "agents" | "artifact") =>
+export const toggleDrawer = (tool: "terminal" | "workers" | "git" | "files" | "agents" | "artifact") =>
   set(draft => {
     draft.drawer = draft.drawer === tool ? "" : tool;
   });
 /** A drawer tool open, whatever the drawer showed. */
-export const showDrawer = (tool: "design" | "artifact") =>
+export const showDrawer = (tool: "artifact") =>
   set(draft => {
     draft.drawer = tool;
   });

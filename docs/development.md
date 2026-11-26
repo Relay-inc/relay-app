@@ -402,10 +402,10 @@ that are plain memory are kept aside (GDI handles such as `CF_BITMAP` are not, W
 `CF_DIB`), the text goes on it, Ctrl+V goes out through `SendInput` once the shortcut's modifiers are up, and the
 clipboard comes back 400 ms later unless something else was copied. The defaults there use Ctrl instead of the Win key,
 Alt+Space and Alt+Shift (`keys` in `anywhere.rs`, `defaultShortcuts` in `src/domain/settings/voice.ts`).
-The Design drawer (`src-tauri/src/design.rs`) is the same Tauri child webview on Windows, a WebView2. Its sign-in
+The Artifact drawer's live page (`src-tauri/src/design.rs`) is the same Tauri child webview on Windows, a WebView2. Its sign-in
 popup needs no code there: wry answers an allowed `NewWindowRequested` with `SetHandled(false)`, so WebView2 opens its
 own popup window with the opener's profile, and handles that window's `window.close()` (the macOS side needs a
-WKUIDelegate for that). The picture for `design_snapshot` is `ICoreWebView2::CapturePreview` as PNG into a memory
+WKUIDelegate for that). The picture for `--screenshot` (`screenshot.rs`) is `ICoreWebView2::CapturePreview` as PNG into a memory
 stream, through `with_webview`.
 
 The fence for Claude Code on Windows (`policy::fence`): Claude Code turns a Windows path into its POSIX form before it

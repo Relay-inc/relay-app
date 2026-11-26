@@ -104,8 +104,6 @@ pub struct Grants {
     pub fenced: bool,
     /// The relay-mail tools, answered by the app over the control pipe.
     pub mail: bool,
-    /// The relay-design tools, answered by the app over the control pipe.
-    pub design: bool,
     /// Runs on a work machine: the mode comes with the machine's mirrored settings.
     pub machine: bool,
     /// The orchestrator's role, "coordinator", "pipeline" (a board pipeline's coordinator) or "worker": the relay-orch tools.
@@ -114,7 +112,7 @@ pub struct Grants {
     pub system: Option<String>,
 }
 /// No grants, for a call that is not a conversation (and for tests).
-pub static NO_GRANTS: Grants = Grants { deny: Vec::new(), fenced: false, mail: false, design: false, machine: false, orch: None, system: None };
+pub static NO_GRANTS: Grants = Grants { deny: Vec::new(), fenced: false, mail: false, machine: false, orch: None, system: None };
 
 /// Installed, which version, logged in. `None` where the provider cannot tell.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]

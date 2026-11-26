@@ -124,7 +124,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         bind.cwd = machines::cwd_or_vault(bind.cwd, &info);
         let mut eb = env_of(app, state, p);
         // that machine's paths and its claude; no mail tools there, and the mode comes with the mirrored settings
-        eb.grants = agent_core::Grants { mail: false, design: false, machine: true, ..eb.grants };
+        eb.grants = agent_core::Grants { mail: false, machine: true, ..eb.grants };
         // at its first start, the project's repo the page made ready there (machine_git.rs): the agent gets its folder
         // and a line saying where it is. The conversation itself stays in the vault, so the vault's rules load
         let repo = if resume.is_none() { machine_git::ready(project, &bind.machine) } else { None };
@@ -143,7 +143,6 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         let mut eb = env_of(app, state, p);
         eb.vault = dir.clone();
         if p.caps().accounts { eb.opts["account"] = json!(account); }
-        if orch::is_orch(project) { eb.grants.design = false; }
         if caps.control && orch::is_orch(project) { orch::flags(&mut eb.grants, project, &dir, &orch::shared(app, &dir)); } // the orchestrator's coordinator and workers (orch.rs)
         // fenced and started under the vault lock, which the caller holds (taken before `procs`, policy.rs): a vault
         // added meanwhile (policy::hold_for_vault) waits for this
@@ -157,7 +156,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
     let broker::Conn { agent, mut stdin, frames, backlog } = c;
     // the orchestrator's tools are answered over this Mac's pipe: its conversations never run on a machine (see send)
     if caps.control {
-        let servers: Vec<&str> = [(mail_on, "relay-mail"), (!remote && orch::is_orch(project), "relay-orch"), (!remote && !orch::is_orch(project), "relay-design")].into_iter().filter(|s| s.0).map(|s| s.1).collect();
+        let servers: Vec<&str> = [(mail_on, "relay-mail"), (!remote && orch::is_orch(project), "relay-orch")].into_iter().filter(|s| s.0).map(|s| s.1).collect();
         if let Some(line) = p.control_init(&servers) { writeln!(stdin, "{line}").and_then(|_| stdin.flush()).map_err(|e| format!("{} start: {e}", p.id()))?; }
     }
     // a resumed or forked session may keep its own model: only a fresh one shows the CLI's defaults

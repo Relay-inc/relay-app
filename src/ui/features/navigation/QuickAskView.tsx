@@ -154,7 +154,6 @@ export function QuickAskView() {
   const note = (id: string, label: string, run?: () => void) => ({ id, label, run });
   const tools = [
     ["terminal", t("drawer.terminal")],
-    ["design", t("drawer.design")],
     ["git", t("drawer.git")],
     ["files", t("drawer.files")],
     ["agents", t("agents.column")],

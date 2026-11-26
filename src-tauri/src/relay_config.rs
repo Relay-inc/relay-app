@@ -9,7 +9,6 @@
 //   icons     project -> its icon: "icons/<file>.png" (a file next to the config), an emoji, a website whose
 //             favicon the app fetches and stores as a file, or "" (none, do not guess). No entry: the app guesses
 //             the project's website from its notes and stores the favicon.
-//   designs   project -> its Claude Design link (a claude.ai artifact), shown in the Design drawer (design.rs)
 //   actions   extension -> agent access and the policy per action for the `relay` command (actions.rs):
 //             {"access": false} switches an extension off for agents, {"*": "ask", "add_time": "auto"} sets
 //             policies (auto, ask, deny), a plain "auto" sets them all. No entry: on, reads run, writes ask.
@@ -171,21 +170,6 @@ pub fn set_actions(vault: &str, ext: &str, entry: &Value) -> Result<(), String> 
     if !c["actions"].is_object() { c["actions"] = json!({}); }
     let m = c["actions"].as_object_mut().unwrap();
     if o.is_empty() { m.remove(ext); } else { m.insert(ext.into(), entry.clone()); }
-    save(vault, &c)
-}
-
-// ---------- designs
-
-/// A project's Claude Design link, "" for none.
-pub fn design(vault: &str, project: &str) -> String {
-    load(vault).and_then(|c| c["designs"][project].as_str().map(String::from)).unwrap_or_default()
-}
-/// Set a project's Design link, "" removes it.
-pub fn set_design(vault: &str, project: &str, url: &str) -> Result<(), String> {
-    let mut c = load(vault).ok_or("no .relay/config.json")?;
-    if !c["designs"].is_object() { c["designs"] = json!({}); }
-    let m = c["designs"].as_object_mut().unwrap();
-    if url.is_empty() { m.remove(project); } else { m.insert(project.into(), json!(url)); }
     save(vault, &c)
 }
 
@@ -515,25 +499,24 @@ mod dry_run {
 
 // ---------- a project moving to another vault (migrate.rs)
 
-/// A project's entries in a vault's config: `{icons, designs, repos}` with only its own keys, and the icon file its
+/// A project's entries in a vault's config: `{icons, repos}` with only its own keys, and the icon file its
 /// entry points at (a picked image, or a site's stored favicon), relative to `.relay/`.
 pub fn project_entries(vault: &str, project: &str) -> (Value, Option<String>) {
     let c = load(vault).unwrap_or_else(|| json!({}));
-    let mut out = json!({"icons": {}, "designs": {}, "repos": {}});
+    let mut out = json!({"icons": {}, "repos": {}});
     let mut file = None;
     if let Some(v) = c["icons"][project].as_str() {
         out["icons"][project] = json!(v);
         file = match icon_kind(v) { Icon::File(f) if !f.contains("..") => Some(f.to_string()), Icon::Site(_) => Some(icon_file(project)), _ => None }
             .filter(|f| path(vault).with_file_name(f).is_file());
     }
-    if let Some(v) = c["designs"][project].as_str() { out["designs"][project] = json!(v); }
     for (r, p) in c["repos"].as_object().into_iter().flatten().filter(|(_, p)| p.as_str() == Some(project)) { out["repos"][r] = p.clone(); }
     (out, file)
 }
 /// `project_entries` of another vault written into this one's config, over what it has under those keys.
 pub fn add_project_entries(vault: &str, entries: &Value) -> Result<(), String> {
     let mut c = load(vault).unwrap_or_else(|| json!({}));
-    for k in ["icons", "designs", "repos"] {
+    for k in ["icons", "repos"] {
         if !c[k].is_object() { c[k] = json!({}); }
         for (n, v) in entries[k].as_object().into_iter().flatten() { c[k][n] = v.clone(); }
     }
@@ -542,7 +525,7 @@ pub fn add_project_entries(vault: &str, entries: &Value) -> Result<(), String> {
 /// A project's entries out of a vault's config. Its icon file is left to the caller.
 pub fn drop_project_entries(vault: &str, project: &str) -> Result<(), String> {
     let Some(mut c) = load(vault) else { return Ok(()) };
-    for k in ["icons", "designs"] { if let Some(m) = c[k].as_object_mut() { m.remove(project); } }
+    if let Some(m) = c["icons"].as_object_mut() { m.remove(project); }
     if let Some(m) = c["repos"].as_object_mut() { m.retain(|_, p| p.as_str() != Some(project)); }
     save(vault, &c)
 }

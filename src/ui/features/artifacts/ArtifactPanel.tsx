@@ -31,7 +31,7 @@ function useFrameTheme() {
 }
 
 /** The Artifact drawer: a page Claude published to claude.ai, from its file on this Mac (a frame that cannot reach
- *  Relay, artifact.rs) or live on claude.ai (the native webview the Design drawer uses, signed in once). The other
+ *  Relay, artifact.rs) or live on claude.ai (a native webview, signed in once). The other
  *  Artifacts of the conversation are a pick away; a republish shows its new version. */
 export function ArtifactPanel() {
   const { t } = useT();

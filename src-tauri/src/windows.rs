@@ -1,6 +1,6 @@
 // Relay's windows: the main one from tauri.conf.json and the ones Cmd-N opens next to it (main-2, main-3, …), each
 // the whole app. The one the user worked in last is the active one: the menu, a banner's click, dictation and the
-// Design drawer go there, and only it writes the UI state (src/infrastructure/storage.ts).
+// Artifact drawer's live page go there, and only it writes the UI state (src/infrastructure/storage.ts).
 
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, Window, WindowEvent};

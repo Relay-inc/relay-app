@@ -1,6 +1,6 @@
 // A project moved or copied to another vault (workspace): its note, or its folder when the note is a folder note, its
 // work-state row (a hand-kept table) or card (a vault whose work-state.md build-index.py generates from the project
-// notes' frontmatter), its entries in .relay/config.json (icon, Design link, repos) and its scratch notes. `plan` reads
+// notes' frontmatter), its entries in .relay/config.json (icon, repos) and its scratch notes. `plan` reads
 // both sides and writes nothing; `apply` writes the plan. Nothing is written while a path in the target exists, and a
 // move removes only what was copied, after every write succeeded. On a move the project's Claude Code conversations go
 // along (`Carry`): their transcripts are copied first, the sessions point at the new vault once every write worked, the
@@ -189,7 +189,6 @@ impl Plan {
             "row": self.row.is_some() || self.from_card,
             "card": self.to_card,
             "icon": e["icons"].as_object().is_some_and(|m| !m.is_empty()),
-            "design": e["designs"].as_object().is_some_and(|m| !m.is_empty()),
             "repos": e["repos"].as_object().map_or(0, |m| m.len()),
         })
     }
@@ -307,7 +306,7 @@ mod tests {
         w(&v, "Contexts/Work/Portfolio/Kestrel/Kestrel.md", "---\ntype: Product\n---\n# Kestrel\n");
         w(&v, "Contexts/Work/Portfolio/Kestrel/Documents/Spec.md", "spec");
         w(&v, ".relay/notes/Kestrel/a1.md", "scratch");
-        w(&v, ".relay/config.json", r#"{"icons": {"Kestrel": "🦅"}, "designs": {"Kestrel": "https://claude.ai/x"}, "repos": {"me/kestrel": "Kestrel", "me/other": "Other"}}"#);
+        w(&v, ".relay/config.json", r#"{"icons": {"Kestrel": "🦅"}, "repos": {"me/kestrel": "Kestrel", "me/other": "Other"}}"#);
         v
     }
 

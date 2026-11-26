@@ -25,7 +25,6 @@ import { onAgentEvent, sawModel } from "./conversations/events";
 import { ensureHistory, tailTerm, tailOutside } from "./conversations/history";
 import { pollPending, pollAgents, pollSubs, agentsStale, fetchAgents, setSessions } from "./conversations/polls";
 import { closeChat, reopenLast } from "./conversations/actions";
-import { watchDesign } from "./design/design";
 import { loadAgents, sawDefaults } from "./agents/agents";
 import { useNavigationStore } from "./navigation/store";
 import { select, newHere, watchUpdate } from "./navigation/navigation";
@@ -197,7 +196,6 @@ async function loadSettingsAndVault() {
   backend.onChangesChanged(reloadChanges);
   backend.onInboxChanged(inboxChanged);
   backend.onRepoUnlinked(askRepo);
-  watchDesign();
 }
 
 // conversations from earlier versions: general:<id>, plain project names
