@@ -66,9 +66,6 @@ import { WorkerDetail } from "../orchestrator/WorkerDetail";
 import { OrchestratorEmpty } from "../orchestrator/OrchestratorEmpty";
 import { OrchestratorBack } from "../orchestrator/OrchestratorBack";
 import { AgentsToggle } from "../agents/AgentsToggle";
-import { PipeReset } from "../pipeline/PipeReset";
-import { PipePause } from "../pipeline/PipePause";
-import { PipeBoard, PipeState } from "../pipeline/PipeBar";
 import { PipeStrip } from "../pipeline/PipeStrip";
 import { PipeCards } from "../pipeline/PipeCards";
 import { AgentPage } from "../agents/AgentPage";
@@ -192,7 +189,6 @@ export function ConversationsView({ className }: { className: string }) {
       noTerm={bar.noTerm}
       locked={bar.locked}
       tools={bar.tools}
-      titleExtra={bar.pipe ? <PipeState project={bar.pipe} /> : undefined}
       drawer={drawer}
       back={!!bar.tools?.back}
       actions={
@@ -206,13 +202,7 @@ export function ConversationsView({ className }: { className: string }) {
           <TodayReload />
         ) : selected === MAIL ? (
           <MailReload />
-        ) : bar.pipe ? (
-          <>
-            <PipeBoard project={bar.pipe} />
-            <PipeReset project={bar.pipe} />
-            <PipePause project={bar.pipe} />
-          </>
-        ) : hasSubagents ? (
+        ) : bar.pipe ? null : hasSubagents ? (
           <AgentsToggle />
         ) : null
       }

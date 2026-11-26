@@ -10,7 +10,7 @@ export function PipeReset({ project }: { project: string }) {
   if (!asking)
     return (
       <button
-        className="h-7 px-2.5 rounded-lg border-0 bg-transparent text-[13px] text-secondary whitespace-nowrap hover:bg-fill-2 hover:text-label cursor-default"
+        className="h-7 px-2.5 rounded-lg border-0 bg-transparent text-xs text-secondary whitespace-nowrap hover:bg-fill-2 hover:text-label cursor-default"
         title={t("po.resetHelp")}
         onClick={() => setAsking(true)}
       >
@@ -19,7 +19,7 @@ export function PipeReset({ project }: { project: string }) {
     );
   // the bar is narrow: the two buttons only, what Start over does is in their tooltip
   return (
-    <span className="flex flex-none items-center gap-1.5 text-[13px]" title={t("po.resetHelp")}>
+    <span className="flex flex-none items-center gap-1.5 text-xs" title={t("po.resetHelp")}>
       <button
         className="h-7 px-2.5 rounded-lg border-0 bg-accent text-on-accent font-medium whitespace-nowrap cursor-default"
         onClick={() => {
