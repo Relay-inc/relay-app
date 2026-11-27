@@ -587,6 +587,8 @@ const VIEWS = {
     await page.getByRole("button", { name: /Build the Northwind Portal bundle/ }).click();
     await settle(page);
     await scrollMain("bottom");
+    // a subagent Claude still runs as a background task: its stop icon on hover
+    await page.getByRole("button", { name: /Check the other sync jobs/ }).hover();
   },
   // the same list folded away by its header line
   "conversation-tasks-folded": async () => {
