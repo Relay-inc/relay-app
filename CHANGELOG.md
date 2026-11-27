@@ -14,6 +14,8 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+## [0.0.71] - 2026-11-27
+
 ### Added
 
 - A board pipeline can pick up only the tickets assigned to you (Settings › Projects › Pipeline, Only tickets assigned to me); tickets assigned to someone else or to nobody stay in the column. Trello and Linear cards now know when they are yours too, as Productive and GitHub Projects already did (#558)
@@ -27,7 +29,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Changed
 
-- A board pipeline's Mark done is now **Ignore**, and it can be undone: the pipeline leaves an ignored ticket alone wherever it is on the board (no pick-up, no moves, no PR follow-up, its agent stops if it runs) and no longer moves it to the merged column. The ignored tickets are listed under Up next in the pipeline's strip, each with **Unignore**, which hands it back to the pipeline from where it was. The pipeline's conversation does both too (`ignore`, `unignore`), also for a ticket still waiting in the pick column. An ignored ticket a person moves to a done column leaves the list
+- A board pipeline's Mark done is now **Ignore**, and it can be undone: the pipeline leaves an ignored ticket alone wherever it is on the board (no pick-up, no moves, no PR follow-up, its agent stops if it runs) and no longer moves it to the merged column. The ignored tickets are listed under Up next in the pipeline's strip, each with **Unignore**, which hands it back to the pipeline from where it was. The pipeline's conversation does both too (`ignore`, `unignore`), also for a ticket still waiting in the pick column. An ignored ticket a person moves to a done column leaves the list (#568)
 - Each conversation keeps its own Artifact drawer: switching to another conversation and back opens the same artifact again, in the view you picked (This Mac or claude.ai), and a drawer you closed stays closed. The agents column comes back the same way; the terminal, Git and files drawers still follow the open conversation (#567)
 
 ## [0.0.70] - 2026-11-26
