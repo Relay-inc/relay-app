@@ -255,6 +255,16 @@ pub(crate) fn task_line(state: &App, project: &str, line: impl Fn(&dyn AgentProv
     writeln!(x.stdin, "{l}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())
 }
 
+/// Has a running conversation pick up skills and plugins changed on disk (its answer comes as events). False: no
+/// process runs for it, or its provider cannot, and it reads them when it starts anyway.
+pub(crate) fn reload(state: &App, project: &str) -> Result<bool, String> {
+    let Some(line) = provider_of(state, project, None).reload() else { return Ok(false) };
+    let mut procs = state.procs.lock().unwrap();
+    let Some(x) = procs.get_mut(project) else { return Ok(false) };
+    writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
 /// Remote Control on or off for a running conversation (the terminal's /remote-control): the answer comes back as an
 /// `agent` event of type `remote`. The process must be running, it is what claude.ai connects to.
 pub(crate) fn remote_control(state: &App, project: &str, on: bool) -> Result<(), String> {

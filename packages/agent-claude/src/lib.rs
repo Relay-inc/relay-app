@@ -217,6 +217,19 @@ impl AgentProvider for Claude {
             Ok(if commands.is_null() { json!([]) } else { commands.clone() })
         })
     }
+    fn skills(&self, env: &Env) -> Value {
+        agent_core::discover_commands(env, |p| {
+            let mut cmd = Command::new(env.bin);
+            cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+                "--settings", r#"{"disableAllHooks":true}"#, "--no-session-persistence"]).current_dir(env.vault).env_remove("ANTHROPIC_API_KEY");
+            let c = p.start(cmd)?;
+            p.send(c, json!({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize"}}))?;
+            p.receive(c, |v| v["type"] == "control_response")?;
+            p.send(c, json!({"type": "control_request", "request_id": "skills", "request": {"subtype": "get_skills_dialog"}}))?;
+            let v = p.receive(c, |v| v["type"] == "control_response" && v["response"]["request_id"] == "skills")?;
+            Ok(stream::skills(&v["response"]["response"]["skills"]))
+        })
+    }
     fn efforts(&self) -> Vec<Choice> {
         [("low", "Low"), ("medium", "Medium"), ("high", "High"), ("xhigh", "Extra high"), ("max", "Max")].iter().map(|(i, l)| Choice::new(i, l)).collect()
     }
@@ -305,6 +318,9 @@ impl AgentProvider for Claude {
     }
     fn task_output(&self, id: &str) -> Option<String> {
         Some(json!({"type": "control_request", "request_id": format!("task-out:{id}"), "request": {"subtype": "get_task_output", "task_id": id}}).to_string())
+    }
+    fn reload(&self) -> Option<String> {
+        Some(json!({"type": "control_request", "request_id": "reload_plugins", "request": {"subtype": "reload_plugins", "refuse_if_busy": true}}).to_string())
     }
     fn remote_control(&self, on: bool) -> Option<String> {
         Some(json!({"type": "control_request", "request_id": "remote", "request": {"subtype": "remote_control", "enabled": on}}).to_string())

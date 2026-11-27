@@ -1409,6 +1409,22 @@ const VIEWS = {
     await unfold("Antigravity");
     await intoView("Ask");
   },
+  // Settings › Agents › Skills: Claude's skills in the vault, where each comes from, and Reload
+  "settings-skills": async () => {
+    await settingsPage("Agents");
+    await waitText("northwind:triage");
+    await intoView("northwind:deploy-check");
+  },
+  // Cmd-K in a Claude conversation offers Reload skills and plugins; the busy refusal shows as a note in the conversation
+  "cmd-k-reload-skills": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(key => window.__harness.emitAgent(key, { type: "reload", busy: true }), keys.switchTo);
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.keyboard.type("reload");
+    await settle(page, 300);
+  },
   // Settings › Agents › Codex: the Approvals option, Codex's own reviewer first (PR #513)
   "settings-agents-codex-approvals": async () => {
     await settingsPage("Agents");
