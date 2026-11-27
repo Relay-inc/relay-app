@@ -5,27 +5,28 @@ import {
   downloadModel,
   loadAccess,
   loadModels,
-  pauseShortcuts,
   pickModel,
   removeModel,
-  saveShortcut,
   saveVoice,
   useVoicePageStore,
 } from "../../../application/settings/voice-page";
-import { MODEL_NAMES, voiceOf, type ShortcutKey, type VoiceMode } from "../../../domain/settings/voice";
+import { MODEL_NAMES, shortcutLabel, voiceOf, type ShortcutKey, type VoiceMode } from "../../../domain/settings/voice";
 import type { Key } from "../../../shared/i18n";
 import { isMac } from "../../../shared/platform";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
-import { buttonClass, ERROR_MESSAGE, HINT_IN_ROW, OK_MESSAGE, SELECT } from "./blocks";
+import { go } from "../../../application/settings/window";
+import { buttonClass, DEFAULT_PILL, ERROR_MESSAGE, HINT_IN_ROW, KBD, OK_MESSAGE, SELECT } from "./blocks";
 import { Field } from "./Field";
 import { Section } from "./Section";
 import { Segmented } from "./Segmented";
-import { ShortcutField } from "./ShortcutField";
 import { Switch } from "./Switch";
 
-/** Voice: dictation on or off, the speech model to use (downloaded or removed here), its language, and the shortcut
- *  with how it records. The models are asked for each time the page shows. */
+// in the two side-by-side cards the select goes under its label
+const STACK = "lg:flex-col lg:items-stretch lg:gap-2";
+
+/** Voice: each way to dictate on or off (its key shown, changed in Shortcuts) and how it records, the speech model to
+ *  use (downloaded or removed here), its language and the meetings'. The models are asked for each time the page shows. */
 export function VoicePage({ active }: { active: boolean }) {
   const { t, tn, locale } = useT();
   const cfg = useSettingsStore(s => s.settings.voice);
@@ -34,7 +35,6 @@ export function VoicePage({ active }: { active: boolean }) {
   const progress = useVoicePageStore(s => s.progress);
   const errors = useVoicePageStore(s => s.errors);
   const access = useVoicePageStore(s => s.access);
-  const shortcutError = useVoicePageStore(s => s.shortcutError);
   useEffect(() => {
     if (active) loadModels();
   }, [active]);
@@ -56,38 +56,26 @@ export function VoicePage({ active }: { active: boolean }) {
       .sort((a, b) => a.name.localeCompare(b.name, locale)),
   ];
   const modes = (["both", "hold", "tap"] as const).map(id => [id, t(`voice.mode.${id}`)] as const);
-  // a way's shortcut, indented under its switch, with why a pick was refused
-  const shortcutRow = (key: ShortcutKey, hint: string) => (
-    <Field
-      label={t("voice.shortcut")}
-      id={`voice-${key}`}
-      className="pl-6"
-      hint={shortcutError[key] ? <span className={ERROR_MESSAGE}>{shortcutError[key]}</span> : hint}
-    >
-      <ShortcutField
-        id={`voice-${key}`}
-        value={voice[key]}
-        onPick={shortcut => saveShortcut(key, shortcut)}
-        onListening={pauseShortcuts}
-      />
-    </Field>
-  );
+  // a way's key, read-only: Shortcuts owns changing it
+  const key = (way: ShortcutKey) => <kbd className={KBD}>{shortcutLabel(voice[way])}</kbd>;
+  // the model in use first, the rest in the order the backend lists them
+  const ordered = [...models].sort((a, b) => Number(b.id === picked?.id) - Number(a.id === picked?.id));
   return (
     <div className="grid gap-7">
-      {/* each way to dictate: its switch, and once on, its shortcut under it */}
+      {/* each way to dictate: its switch with its key beside it */}
       <Section title={t("voice.sec.dictation")} rows>
         <Field label={t("voice.on")} id="voiceon" hint={t("voice.onHelp")}>
+          {key("shortcut")}
           <Switch id="voiceon" on={voice.on} onToggle={on => saveVoice({ on })} />
         </Field>
-        {voice.on ? shortcutRow("shortcut", t("voice.composerShortcutHelp")) : null}
         <Field label={t("voice.chat")} id="voicechat" hint={t("voice.chatHelp")}>
+          {key("chatShortcut")}
           <Switch id="voicechat" on={voice.chatOn} onToggle={chatOn => saveVoice({ chatOn })} />
         </Field>
-        {voice.chatOn ? shortcutRow("chatShortcut", t("voice.anyAppShortcutHelp")) : null}
         <Field label={t("voice.paste")} id="voicepaste" hint={t("voice.pasteHelp")}>
+          {key("pasteShortcut")}
           <Switch id="voicepaste" on={voice.pasteOn} onToggle={pasteOn => saveVoice({ pasteOn })} />
         </Field>
-        {voice.pasteOn ? shortcutRow("pasteShortcut", t("voice.anyAppShortcutHelp")) : null}
         {/* Windows lets any app send Ctrl+V, there is nothing to allow */}
         {voice.pasteOn && isMac() ? (
           <Field label={t("voice.access")} className="pl-6" hint={t(access ? "voice.accessOk" : "voice.accessHelp")}>
@@ -110,13 +98,18 @@ export function VoicePage({ active }: { active: boolean }) {
             />
           </Field>
         ) : null}
+        <Field label={<span className="text-xs text-s-muted">{t("voice.keysElsewhere")}</span>}>
+          <button className="text-xs text-accent-text hover:underline" onClick={() => go("shortcuts")}>
+            {t("voice.keysLink")}
+          </button>
+        </Field>
       </Section>
       <Section title={t("voice.sec.model")} desc={t("voice.modelHelp")} list>
-        {models.map(model => {
+        {ordered.map(model => {
           const pct = progress[model.id];
           const downloading = pct !== undefined || model.downloading;
           return (
-            <div key={model.id} className="flex items-start gap-3 px-3.5 py-3 [&+&]:border-t [&+&]:border-s-border">
+            <div key={model.id} className="flex items-start gap-3 px-3.5 py-2.5 [&+&]:border-t [&+&]:border-s-border">
               <input
                 type="radio"
                 name="voicemodel"
@@ -129,7 +122,7 @@ export function VoicePage({ active }: { active: boolean }) {
                 <span className="text-[13px] text-s-fg">
                   {MODEL_NAMES[model.id] ?? model.id}
                   {picked?.id === model.id && model.installed ? (
-                    <span className={`ml-2 ${OK_MESSAGE}`}>{t("voice.inUse")}</span>
+                    <span className={`ml-2 ${DEFAULT_PILL}`}>{t("voice.inUse")}</span>
                   ) : null}
                 </span>
                 <span className={HINT_IN_ROW}>
@@ -159,43 +152,45 @@ export function VoicePage({ active }: { active: boolean }) {
           );
         })}
       </Section>
-      <Section title={t("voice.sec.language")} rows>
-        <Field label={t("voice.language")} id="voicelang" hint={t("voice.languageHelp")}>
-          <Select
-            className={SELECT}
-            id="voicelang"
-            options={languages}
-            value={voice.language}
-            onChange={language => saveVoice({ language })}
-          />
-        </Field>
-      </Section>
-      <Section title={t("voice.sec.meetings")} desc={t("voice.meetingsHelp")} rows>
-        <Field label={t("voice.meetingModel")} id="voicemeet" hint={t("voice.meetingModelHelp")}>
-          <Select
-            className={SELECT}
-            id="voicemeet"
-            options={[
-              { id: "", name: t("voice.sameModel") },
-              ...models
-                .filter(model => model.installed || model.id === voice.meetingModel)
-                .map(model => ({ id: model.id, name: MODEL_NAMES[model.id] ?? model.id })),
-            ]}
-            value={voice.meetingModel}
-            onChange={meetingModel => saveVoice({ meetingModel })}
-          />
-        </Field>
-        <Field
-          label={t("voice.keepAudio")}
-          id="voiceaudio"
-          hint={t(isMac() ? "voice.keepAudioHelp" : "voice.keepAudioHelpWin")}
-        >
-          <Switch id="voiceaudio" on={voice.keepAudio} onToggle={keepAudio => saveVoice({ keepAudio })} />
-        </Field>
-        <Field label={t("voice.summarize")} id="voicesum" hint={t("voice.summarizeHelp")}>
-          <Switch id="voicesum" on={voice.summarize} onToggle={summarize => saveVoice({ summarize })} />
-        </Field>
-      </Section>
+      <div className="grid items-start gap-7 lg:grid-cols-2 lg:gap-4">
+        <Section title={t("voice.sec.language")} rows>
+          <Field label={t("voice.language")} id="voicelang" hint={t("voice.languageHelp")} className={STACK}>
+            <Select
+              className={`${SELECT} lg:w-full`}
+              id="voicelang"
+              options={languages}
+              value={voice.language}
+              onChange={language => saveVoice({ language })}
+            />
+          </Field>
+        </Section>
+        <Section title={t("voice.sec.meetings")} desc={t("voice.meetingsHelp")} rows>
+          <Field label={t("voice.meetingModel")} id="voicemeet" hint={t("voice.meetingModelHelp")} className={STACK}>
+            <Select
+              className={`${SELECT} lg:w-full`}
+              id="voicemeet"
+              options={[
+                { id: "", name: t("voice.sameModel") },
+                ...models
+                  .filter(model => model.installed || model.id === voice.meetingModel)
+                  .map(model => ({ id: model.id, name: MODEL_NAMES[model.id] ?? model.id })),
+              ]}
+              value={voice.meetingModel}
+              onChange={meetingModel => saveVoice({ meetingModel })}
+            />
+          </Field>
+          <Field
+            label={t("voice.keepAudio")}
+            id="voiceaudio"
+            hint={t(isMac() ? "voice.keepAudioHelp" : "voice.keepAudioHelpWin")}
+          >
+            <Switch id="voiceaudio" on={voice.keepAudio} onToggle={keepAudio => saveVoice({ keepAudio })} />
+          </Field>
+          <Field label={t("voice.summarize")} id="voicesum" hint={t("voice.summarizeHelp")}>
+            <Switch id="voicesum" on={voice.summarize} onToggle={summarize => saveVoice({ summarize })} />
+          </Field>
+        </Section>
+      </div>
     </div>
   );
 }
