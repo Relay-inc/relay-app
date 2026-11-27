@@ -579,6 +579,16 @@ const VIEWS = {
     await settle(page);
     await scrollMain("bottom");
   },
+  // the same list folded away by its header line
+  "conversation-tasks-folded": async () => {
+    await open(page, server.url, { sel: keys.long });
+    await waitText(markers.longEnd);
+    await page.evaluate(() => window.__harness.tasksLive());
+    await settle(page);
+    await page.getByRole("button", { name: /background tasks/ }).click();
+    await settle(page);
+    await scrollMain("bottom");
+  },
   // a page Claude Code published as a claude.ai Artifact: its card where the call stood, the quickstart a tool line (#553)
   "conversation-artifact": async () => {
     await open(page, server.url, { sel: keys.artifact });
@@ -603,7 +613,12 @@ const VIEWS = {
       send({ type: "tool_call", id: "c1", name: "ArtifactComments", input: { action: "read", url } });
       send({ type: "tool_result", id: "c1", error: false });
       const text = "Added: the win rate now also shows last quarter's for comparison.";
-      send({ type: "tool_call", id: "c2", name: "ArtifactComments", input: { action: "reply", url, thread_id: "t1", text } });
+      send({
+        type: "tool_call",
+        id: "c2",
+        name: "ArtifactComments",
+        input: { action: "reply", url, thread_id: "t1", text },
+      });
       send({ type: "tool_result", id: "c2", error: false });
       send({ type: "text", text: "Answered the comment on the win rate on its thread.", delta: false });
       send({ type: "woke" });

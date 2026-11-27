@@ -1388,6 +1388,8 @@ export default {
   "tasks.killed": "Gestopt",
   "tasks.steps_one": "{n} stap",
   "tasks.steps_other": "{n} stappen",
+  "tasks.header_one": "{n} achtergrondtaak",
+  "tasks.header_other": "{n} achtergrondtaken",
   "agents.column": "Agents",
   "agents.conversation": "Gesprek",
   "agents.running": "Bezig",

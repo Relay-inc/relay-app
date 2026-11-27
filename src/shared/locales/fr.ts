@@ -1398,6 +1398,8 @@ export default {
   "tasks.killed": "Arrêtée",
   "tasks.steps_one": "{n} étape",
   "tasks.steps_other": "{n} étapes",
+  "tasks.header_one": "{n} tâche en arrière-plan",
+  "tasks.header_other": "{n} tâches en arrière-plan",
   "agents.column": "Agents",
   "agents.conversation": "Conversation",
   "agents.running": "En cours",

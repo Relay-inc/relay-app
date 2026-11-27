@@ -1378,6 +1378,8 @@ const en = {
   "tasks.killed": "Stopped",
   "tasks.steps_one": "{n} step",
   "tasks.steps_other": "{n} steps",
+  "tasks.header_one": "{n} background task",
+  "tasks.header_other": "{n} background tasks",
   "agents.column": "Agents",
   "agents.conversation": "Conversation",
   "agents.running": "Running",

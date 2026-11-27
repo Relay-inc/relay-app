@@ -1396,6 +1396,8 @@ export default {
   "tasks.killed": "Gestoppt",
   "tasks.steps_one": "{n} Schritt",
   "tasks.steps_other": "{n} Schritte",
+  "tasks.header_one": "{n} Hintergrundaufgabe",
+  "tasks.header_other": "{n} Hintergrundaufgaben",
   "agents.column": "Agenten",
   "agents.conversation": "Gespräch",
   "agents.running": "Läuft",
