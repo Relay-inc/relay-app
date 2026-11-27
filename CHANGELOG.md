@@ -18,6 +18,11 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 - Settings › Agents has the layout of Settings › Projects: your agents on the left (on, then off), the picked agent's settings on the right with tabs (General, and for Claude Code MCP servers and Skills). Its header switches it on or off and makes it the default. Where new conversations run and agent access to Knowledge workspaces moved to Settings › General (#572)
 
+### Fixed
+
+- Clicking another project in the sidebar while a project's board is open now shows that project's board. Before, the
+  title bar named the new project but the board kept showing the previous project's tickets. (#570)
+
 ## [0.0.71] - 2026-11-27
 
 ### Added

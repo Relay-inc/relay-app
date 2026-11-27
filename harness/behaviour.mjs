@@ -2038,6 +2038,28 @@ const SCENARIOS = {
     s.fact("card send", sends[0]?.args ?? null);
   },
 
+  // a project click opens its linked board, also when another project's board is open: the cards are that project's,
+  // and a click on the first project shows its cards again
+  async boardFollowsProject(s) {
+    await s.load({ fixture: "twoboards" });
+    const { page } = s;
+    const card = (await page.evaluate(() => window.__harness.markers)).card;
+    const folders = async () =>
+      (await s.calls("integration_call"))
+        .map(c => String(c.args.path))
+        .filter(path => path.startsWith("/tasks?filter[folder_id]="))
+        .map(path => path.split("=")[1].split("&")[0]);
+    await click(page.locator('[data-project="Northwind Portal"]').first(), 300);
+    s.check("Northwind's board shown", await waitText(page, card));
+    await click(page.locator('[data-project="Beacon Billing"]').first(), 300);
+    s.check("Beacon's cards shown", await waitText(page, "Dunning letter template"));
+    s.check("Northwind's cards gone", !(await hasText(page, card)));
+    await click(page.locator('[data-project="Northwind Portal"]').first(), 300);
+    s.check("Northwind's cards shown again", await waitText(page, card));
+    s.check("Beacon's cards gone again", !(await hasText(page, "Dunning letter template")));
+    s.fact("boards loaded", await folders());
+  },
+
   // Start conversation names the team's branch: a worktree on <type>/<number>-<slug>, the PR title with the number and
   // the ticket link in the PR body. A relay://ticket link opens the same ticket window and starts nothing by itself.
   async ticketBranch(s) {
