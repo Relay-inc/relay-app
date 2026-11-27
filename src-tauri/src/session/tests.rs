@@ -50,7 +50,7 @@ impl Sink for Fake {
     fn spend(&self) { *self.spent.lock().unwrap() += 1; }
     fn control(&self, id: &Value, server: Option<&str>, message: &Value) { self.pipes.lock().unwrap().push(json!({"id": id, "server": server, "message": message})); }
     fn working(&self) { let n = self.turns.lock().unwrap().working(); self.save(n); }
-    fn picked(&self) { self.turns.lock().unwrap().picked(); }
+    fn picked(&self) -> bool { self.turns.lock().unwrap().picked() }
     fn turn_ended(&self) -> String { let n = self.turns.lock().unwrap().ended(); self.save(n); "opus".into() }
     fn session(&self, sid: &str) { self.sessions.lock().unwrap().push(sid.into()); }
     fn permission(&self, req: &pending::Request) { self.cards.lock().unwrap().push(req.clone()); }
@@ -106,6 +106,22 @@ fn one_turn_end_answers_every_message_the_turn_took_up() {
     assert_eq!(f.count(), 0, "the spinner stops");
     assert_eq!(f.turns.lock().unwrap().picked, 0);
     assert_eq!(f.types().iter().filter(|t| *t == "picked").count(), 2, "the webview moves each message into the conversation");
+}
+
+// a message typed on the phone (Remote Control) is echoed too, but Relay sent none for it: it goes into the
+// conversation as it is, and the turn end still answers only Relay's own message
+#[test]
+fn a_message_from_the_phone_is_said_not_picked() {
+    let f = Fake::running(1);
+    run(&f, &[echo("from the laptop"), echo("from the phone"), text("m1", "ok"), done()], 0);
+    assert_eq!(f.count(), 0);
+    assert_eq!(f.types().iter().filter(|t| *t == "picked").count(), 1);
+    let said: Vec<_> = f.events.lock().unwrap().iter().filter(|e| e["type"] == "said").map(|e| e["text"].clone()).collect();
+    assert_eq!(said, [json!("from the phone")]);
+    // idle: nothing of ours is running, so the echo is the phone's alone
+    let g = Fake::running(0);
+    run(&g, &[echo("hello from the phone"), text("m2", "hi"), done()], 0);
+    assert_eq!(g.types().iter().filter(|t| *t == "said").count(), 1);
 }
 
 // 46b06f5: a turn without an echo (a slash command) answers the oldest message only, and `picked` starts over

@@ -37,7 +37,9 @@ impl Turns {
     fn set(&mut self, n: u32) -> Option<u32> { (n != self.running).then(|| { self.running = n; n }) }
     /// Live work, also a replayed one: a turn is running. Repeated model steps are no extra message.
     pub fn working(&mut self) -> Option<u32> { self.set(self.running.max(1)) }
-    pub fn picked(&mut self) { self.picked += 1; }
+    /// Claude echoed a message it took up. False when Relay sent no more than the echoes so far: a message typed
+    /// elsewhere (the phone, with Remote Control on), which no turn end of ours answers.
+    pub fn picked(&mut self) -> bool { let own = self.picked < self.running; if own { self.picked += 1; } own }
     /// A turn end answers every message its turn took up, at least the one that started it.
     pub fn ended(&mut self) -> Option<u32> { let n = self.running.saturating_sub(self.picked.max(1)); self.picked = 0; self.set(n) }
     /// A message went in.
@@ -243,6 +245,15 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
     writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
     x.sent();
     Ok(())
+}
+
+/// Remote Control on or off for a running conversation (the terminal's /remote-control): the answer comes back as an
+/// `agent` event of type `remote`. The process must be running, it is what claude.ai connects to.
+pub(crate) fn remote_control(state: &App, project: &str, on: bool) -> Result<(), String> {
+    let mut procs = state.procs.lock().unwrap();
+    let x = procs.get_mut(project).ok_or_else(|| trc("err.remote_idle"))?;
+    let line = provider_of(state, project, Some(x.provider)).remote_control(on).filter(|_| !x.remote).ok_or_else(|| trc("err.remote_none"))?;
+    writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())
 }
 
 /// A side question (`/btw`) for a conversation: written to its running process, which answers from the conversation's
