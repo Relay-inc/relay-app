@@ -6,7 +6,7 @@ import type { Locales } from "./i18n";
 export type Caps = {
   persistent: boolean; images: boolean; thinking: boolean; permissions: boolean; questions: boolean; subagents: boolean;
   fork: boolean; terminal: boolean; background: boolean; effort: boolean; limits: boolean; title: boolean; write: boolean; accounts: boolean;
-  liveModel: boolean; control: boolean; picked: boolean; remote: boolean; bridge: boolean;
+  liveModel: boolean; control: boolean; picked: boolean; remote: boolean; mcp: boolean; bridge: boolean;
 };
 export type Choice = { id: string; label: string };
 export type Detect = { installed: boolean; bin: string; version?: string | null; loggedIn?: boolean | null; note?: string | null };
@@ -52,6 +52,7 @@ export type AgentEvent =
   | { type: "compacted"; trigger?: string | null; pre_tokens?: number | null; post_tokens?: number | null } // trigger: "manual" | "auto"
   | { type: "turn_summary"; category: string; detail: string; needs_action: string } // Claude Code's one-line status after a turn; needs_action is "" unless the user has to act
   | { type: "context"; used?: number | null; window?: number | null } // how full the context is: tokens in use and/or the model's window (Claude Code)
+  | { type: "suggestion"; text: string } // live, Claude Code only: the message the user will probably send next
   | { type: "resolved"; model: string; effort?: string | null; default_model: boolean; default_effort: boolean } // what the CLI runs on; default_* when the conversation left it to the CLI
   | { type: "remote"; on: boolean; url?: string | null; state?: string | null } // Remote Control (Claude Code): on with the session's url, its bridge `state` alone, or off (with `state` the reason it did not turn on)
   | { type: "said"; text: string }   // added by the app: a message typed elsewhere (the phone, with Remote Control) that the agent took up

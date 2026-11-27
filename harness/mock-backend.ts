@@ -153,6 +153,7 @@ const gitRepos = structuredClone(fixture === "git-long" ? git.longRepos : git.re
 let reminders = [...vault.reminders];
 let added = 0;
 let actionConfig = integ.actionConfig();
+let mcp = integ.mcpServers();
 // the vault's git backup, with a round three minutes ago
 let vaultSync = {
   remote: "git@github.com:you/vault.git",
@@ -1099,6 +1100,14 @@ function handle(cmd: string, a: Args): unknown {
       return fixture === "models" ? integ.agentsStatusManyModels : integ.agentsStatus;
     case "agent_commands":
       return integ.agentCommands(a.provider);
+    case "agent_mcp": {
+      // a sign-in or a new try connects, a switch flips; a server still starting is up the next time
+      if (a.op.op !== "status") mcp = mcp.map(m => (m.status === "pending" ? { ...m, status: "connected" } : m));
+      const row = mcp.find(m => m.name === a.op.server);
+      if (row && a.op.op === "toggle") row.status = a.op.on ? "connected" : "disabled";
+      else if (row && a.op.op !== "status" && !row.connector) Object.assign(row, { status: "connected", error: null });
+      return structuredClone(mcp);
+    }
     case "agent_skills":
       return integ.agentSkills(a.provider);
     case "agent_reload":
