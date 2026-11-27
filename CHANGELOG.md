@@ -20,6 +20,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 - **`/btw` side questions**: type `/btw <question>` in a Claude conversation to ask something about it without interrupting Claude. The answer shows in a small card above the composer, also while Claude is working, and is not added to the conversation. Ask again to follow up; × or Esc closes the card (#559)
 - Continue a Claude Code conversation on claude.ai or the Claude phone app: right-click it in the sidebar and pick Continue on phone. A phone icon in the title bar shows it is on, with the link to open or copy and Stop; what you type on the phone shows up in the conversation. (#562)
 
+### Changed
+
+- Each conversation keeps its own Artifact drawer: switching to another conversation and back opens the same artifact again, in the view you picked (This Mac or claude.ai), and a drawer you closed stays closed. The agents column comes back the same way; the terminal, Git and files drawers still follow the open conversation (#567)
+
 ## [0.0.70] - 2026-11-26
 
 ### Added

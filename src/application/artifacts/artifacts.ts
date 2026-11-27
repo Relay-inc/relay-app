@@ -10,19 +10,25 @@ import { artifactsIn } from "../../domain/artifacts/rules";
 // The Artifact drawer: a page Claude Code published to claude.ai, from its local file in a sandboxed frame
 // (artifact.rs) or live on claude.ai in a native webview (design.rs).
 
-/** The Artifact the drawer shows, and how. */
+/** Per conversation, the Artifact its drawer shows and how: each conversation keeps its own while another is open. */
 export const useArtifactStore = makeStore(() => ({
-  open: null as Artifact | null,
-  view: "local" as ArtifactView,
+  shown: {} as Record<string, { open: Artifact; view: ArtifactView }>,
 }));
 const set = useArtifactStore.setState;
+const selected = () => useNavigationStore.getState().selected;
+/** The Artifact the open conversation's drawer shows, and how. */
+export function useShownArtifact() {
+  const key = useNavigationStore(s => s.selected);
+  return useArtifactStore(s => s.shown[key]);
+}
 
-/** Open an Artifact in the drawer, in the view that shows it best (its file, or live when it has none or comes from a
- *  type). The same Artifact again keeps the view the person picked. */
+/** Open an Artifact in the open conversation's drawer, in the view that shows it best (its file, or live when it has
+ *  none or comes from a type). The same Artifact again keeps the view the person picked. */
 export function openArtifact(artifact: Artifact) {
+  const key = selected();
   set(draft => {
-    if (draft.open?.url !== artifact.url) draft.view = firstView(artifact);
-    draft.open = artifact;
+    const was = draft.shown[key];
+    draft.shown[key] = { open: artifact, view: was?.open.url === artifact.url ? was.view : firstView(artifact) };
   });
   showDrawer("artifact");
 }
@@ -33,7 +39,8 @@ const sameArtifact = (a: string, b: string) => a.replace(/[?#].*$|\/$/g, "") ===
 
 export const setArtifactView = (view: ArtifactView) =>
   set(draft => {
-    draft.view = view;
+    const shown = draft.shown[selected()];
+    if (shown) shown.view = view;
   });
 
 export const artifactSrc = backend.artifactSrc;

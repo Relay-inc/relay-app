@@ -583,6 +583,24 @@ const VIEWS = {
     await page.frameLocator('iframe[title="Pipeline dashboard"]').getByText("Open deals").waitFor();
     await settle(page);
   },
+  // the Artifact drawer kept per conversation: opened, another conversation opened with Cmd-K, then this one again
+  "conversation-artifact-back": async () => {
+    await open(page, server.url, { sel: keys.artifact });
+    await waitText("The pipeline dashboard is up");
+    await page.getByRole("button", { name: "Open", exact: true }).click();
+    await page.frameLocator('iframe[title="Pipeline dashboard"]').getByText("Open deals").waitFor();
+    for (const text of ["invoice export", "pipeline dashboard"]) {
+      await page.keyboard.press("Meta+k");
+      await settle(page, 200);
+      await page.keyboard.type(text);
+      await settle(page, 300);
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Enter");
+      await settle(page, 400);
+    }
+    await page.frameLocator('iframe[title="Pipeline dashboard"]').getByText("Open deals").waitFor();
+    await settle(page);
+  },
   // a comment sent to Claude on the artifact starts a turn by itself: a note in front of it, the reply as a tool call
   "conversation-artifact-comment": async () => {
     await open(page, server.url, { sel: keys.artifact });
