@@ -378,6 +378,17 @@ export default {
   "ag.listHelp":
     "Nur eingeschaltete Agents erscheinen im Composer. Klicke auf einen, um seine Einstellungen zu ändern.",
   "ag.isDefault": "Standard",
+  "ag.overview": "Übersicht",
+  "ag.countOn": "{on} von {total} an",
+  "ag.groupOn": "An",
+  "ag.groupOff": "Aus",
+  "ag.notInstalled": "Nicht installiert",
+  "ag.off": "Aus",
+  "ag.makeDefault": "Als Standard festlegen",
+  "ag.offTitle": "{agent} ist aus",
+  "ag.offHelp": "Schalte ihn ein, um ihn in neuen Gesprächen zu nutzen und hier einzurichten.",
+  "ag.switchOn": "Einschalten",
+  "ag.general": "Allgemein",
   "int.add": "+ Integration hinzufügen",
   "int.empty":
     "Noch keine Integrationen. Füge eine hinzu, um ihr Board, Pull Requests oder Mail in der Seitenleiste zu sehen.",

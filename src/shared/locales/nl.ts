@@ -379,6 +379,17 @@ export default {
   "ag.listHelp":
     "Enkel agents die aanstaan verschijnen in de composer. Klik er een aan om de instellingen te wijzigen.",
   "ag.isDefault": "standaard",
+  "ag.overview": "Overzicht",
+  "ag.countOn": "{on} van {total} aan",
+  "ag.groupOn": "Aan",
+  "ag.groupOff": "Uit",
+  "ag.notInstalled": "Niet geïnstalleerd",
+  "ag.off": "Uit",
+  "ag.makeDefault": "Standaard maken",
+  "ag.offTitle": "{agent} staat uit",
+  "ag.offHelp": "Zet het aan om het in nieuwe gesprekken te gebruiken en hier in te stellen.",
+  "ag.switchOn": "Aanzetten",
+  "ag.general": "Algemeen",
   "int.add": "+ Integratie toevoegen",
   "int.empty": "Nog geen integraties. Voeg er een toe om het bord, de pull requests of de mail in de zijbalk te zien.",
   "int.listHelp":

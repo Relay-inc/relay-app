@@ -382,6 +382,17 @@ export default {
   "ag.listHelp":
     "Seuls les agents activés apparaissent dans le compositeur. Cliquez sur l'un d'eux pour modifier ses réglages.",
   "ag.isDefault": "par défaut",
+  "ag.overview": "Aperçu",
+  "ag.countOn": "{on} sur {total} activés",
+  "ag.groupOn": "Activés",
+  "ag.groupOff": "Désactivés",
+  "ag.notInstalled": "Non installé",
+  "ag.off": "Désactivé",
+  "ag.makeDefault": "Définir par défaut",
+  "ag.offTitle": "{agent} est désactivé",
+  "ag.offHelp": "Activez-le pour l'utiliser dans les nouvelles conversations et le régler ici.",
+  "ag.switchOn": "Activer",
+  "ag.general": "Général",
   "int.add": "+ Ajouter une intégration",
   "int.empty":
     "Aucune intégration pour l'instant. Ajoutez-en une pour voir son tableau, ses pull requests ou vos mails dans la barre latérale.",

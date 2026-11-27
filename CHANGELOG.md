@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Changed
+
+- Settings › Agents has the layout of Settings › Projects: an Overview and your agents on the left (on, then off), the picked agent's settings on the right with tabs (General, and for Claude Code MCP servers and Skills). The Overview lists every agent with its status and a switch, and an agent can be made the default from its header
+
 ## [0.0.71] - 2026-11-27
 
 ### Added
