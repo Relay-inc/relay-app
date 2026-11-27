@@ -1305,16 +1305,40 @@ const VIEWS = {
     await waitText("Website");
   },
   "settings-integration-github-projects": () => settingsPage("Integrations", "GitHub Projects", "ghprojects"),
-  // a project's Pipeline tab in Settings › Projects, whole: the switch, the ticket flow, the build and the review, each
-  // repo found on this Mac with its checks
+  // a project's Pipeline tab in Settings › Projects, whole: the switch, the ticket flow on one line, branches and
+  // checks (one per repo found on this Mac), the build and the review side by side
   "settings-project-pipeline": async () => {
-    await projectTab("Pipeline", { fixture: "pipeline-label", height: 1300 });
+    await projectTab("Pipeline", { fixture: "pipeline-label", height: 1100 });
     await waitText("acme/northwind-api");
   },
-  // its General tab: identity, the repos with their checkouts on this Mac, the branches
-  "settings-project-general": async () => {
-    await projectTab("General", { fixture: "pipeline-label", height: 1000 });
+  // the same with the pipeline off (the board linked, the switch off), and on a narrow window: the flow in two lines
+  "settings-project-pipeline-off": async () => {
+    await projectTab("Pipeline", { height: 1100 });
+    await waitText("Branches & checks");
+  },
+  "settings-project-pipeline-dark": async () => {
+    await projectTab("Pipeline", { fixture: "pipeline-label-dark", height: 1100 });
     await waitText("acme/northwind-api");
+  },
+  "settings-project-pipeline-narrow": async () => {
+    await projectTab("Pipeline", { fixture: "pipeline-label", height: 1500 });
+    await page.setViewportSize({ width: 900, height: 1500 });
+    await waitText("acme/northwind-api");
+    await settle(page);
+  },
+  // its General tab: identity, the board with its line, the repos with their checkouts on this Mac; the pipeline is on
+  "settings-project-general": async () => {
+    await projectTab("General", { fixture: "pipeline-label", height: 900 });
+    await waitText("acme/northwind-api");
+  },
+  // the list's icon button: its menu with Find icons now and the daily lookup, checked
+  "settings-projects-icons-menu": async () => {
+    await projectTab("General", { height: 700 });
+    await page.getByRole("button", { name: "Project icons" }).click();
+    await page.getByRole("menuitemcheckbox", { name: "Look up website icons daily" }).click();
+    await page.getByRole("button", { name: "Project icons" }).click();
+    await waitText("Look up website icons daily");
+    await settle(page);
   },
   // its Board section: Productive's project and board linked, Unlink, the tracker in the list's line (PR board link)
   "settings-project-board": async () => {
