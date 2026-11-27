@@ -78,6 +78,7 @@ import {
   Video01Icon,
   Alert02Icon,
   Link01Icon,
+  SmartPhone01Icon,
 } from "@hugeicons/core-free-icons";
 
 /** One SVG element: its tag and its attributes, camelCase as React takes them. */
@@ -163,6 +164,7 @@ const ICONS: Record<string, Icon> = {
   video: Video01Icon,
   alert: Alert02Icon,
   link: Link01Icon,
+  phone: SmartPhone01Icon,
   // Organisations and servers: who can read (the eye), an organisation, this Mac, people
   eye: ViewIcon,
   building: Building03Icon,

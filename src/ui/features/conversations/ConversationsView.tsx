@@ -19,7 +19,7 @@ import { boardOf } from "../../../application/navigation/navigation";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { chatBar } from "../../../application/conversations/selectors";
-import { openTerminal, rename } from "../../../application/conversations/actions";
+import { openTerminal, rename, toggleRemote } from "../../../application/conversations/actions";
 import {
   closeTool,
   openProjectPanel,
@@ -188,6 +188,7 @@ export function ConversationsView({ className }: { className: string }) {
       renamable={bar.renamable}
       noTerm={bar.noTerm}
       locked={bar.locked}
+      remote={bar.remote}
       tools={bar.tools}
       drawer={drawer}
       back={!!bar.tools?.back}
@@ -209,6 +210,7 @@ export function ConversationsView({ className }: { className: string }) {
       onEditProject={bar.tools?.back ? closeTool : openProjectPanel}
       onRename={rename}
       onOpenTerminal={openTerminal}
+      onStopRemote={() => toggleRemote(selected)}
       // a project without repos sends you to the settings to link one
       onOpenPrs={() => (bar.tools?.repos ? openTool(bar.tools.project, PRS) : openSettings())}
       onToggleDrawer={toggleDrawer}

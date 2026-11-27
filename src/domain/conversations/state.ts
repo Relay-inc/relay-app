@@ -45,6 +45,8 @@ export type ConversationsState = {
   // the slash commands and skills per provider, for the current vault: asked at the start, updated when an agent starts
   commands: Record<string, SlashCommand[]>;
   retries: Record<string, Retry>; // conversations waiting for a limit to reset, by key (retry.rs)
+  // conversations with Remote Control on: the session to open on claude.ai and its bridge's state ("ready", "connected", "failed")
+  remote: Record<string, { url: string; state: string }>;
 };
 
 /** The state on a fresh start, with what was stored. */
@@ -81,6 +83,7 @@ export const initialConversations = (stored: {
   subs: {},
   subsOpen: new Set(),
   retries: {},
+  remote: {},
 });
 
 /** The composer's drafts, kept apart from the conversations so a keystroke only changes this small state: what is

@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Added
+
+- Continue a Claude Code conversation on claude.ai or the Claude phone app: right-click it in the sidebar and pick Continue on phone. A phone icon in the title bar shows it is on, with the link to open or copy and Stop; what you type on the phone shows up in the conversation.
+
 ## [0.0.70] - 2026-11-26
 
 ### Added

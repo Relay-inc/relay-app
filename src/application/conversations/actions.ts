@@ -518,6 +518,11 @@ export async function backgroundAction(action: "hide" | "stop" | "attach", id: s
       draft.agentsList = draft.agentsList.filter(agent => agent.id !== id);
     });
 }
+/** Remote Control (the terminal's /remote-control): continue the conversation from claude.ai or the phone, or stop that.
+ *  The answer arrives as an agent event; the indicator follows it. */
+export function toggleRemote(key: string) {
+  backend.remoteControl(key, !cs().remote[key]).catch(e => toast(String(e)));
+}
 /** The terminal button: a terminal session opens in iTerm. An app conversation resumes in the project's terminal
  *  drawer, or in iTerm with `external` (Option-click) or without a project (the drawer belongs to a project). */
 export function openTerminal(external = false) {

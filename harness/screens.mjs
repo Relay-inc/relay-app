@@ -954,6 +954,31 @@ const VIEWS = {
     await settle(page, 300);
   },
   // a message sent while Claude works waits under the conversation until Claude reads it (PR: waiting messages)
+  // Remote Control: the sidebar menu's Continue on phone turns it on, the phone icon in the title bar shows it (#PR)
+  "conversation-remote": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator(`[data-key="${keys.switchTo}"]`).first().click({ button: "right" });
+    await click("Continue on phone");
+    await page.getByRole("button", { name: "Remote Control is on" }).waitFor();
+    await settle(page, 500);
+  },
+  // the same with its popover open: open on claude.ai, copy the link, stop; and a message typed on the phone in the log
+  "conversation-remote-popover": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(key => {
+      const send = event => window.__harness.emit("agent", { project: key, provider: "claude", event });
+      send({ type: "remote", on: true, url: "https://claude.ai/code/session_northwind" });
+      send({ type: "remote", on: true, state: "connected" });
+      send({ type: "said", text: "Can you also check the staging build?" });
+      send({ type: "text", text: "Checking the staging build now.", delta: false });
+      send({ type: "turn_end", ok: true, error: null, usage: null, duration_ms: 3100 });
+    }, keys.switchTo);
+    await page.getByRole("button", { name: "Remote Control is on" }).click();
+    await waitText("Open on claude.ai");
+    await settle(page, 300);
+  },
   "conversation-unread": async () => {
     await open(page, server.url, { sel: keys.switchTo });
     await waitText(markers.switchEnd);

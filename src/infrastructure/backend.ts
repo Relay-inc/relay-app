@@ -382,6 +382,9 @@ type SendArgs = {
 };
 export const send = (args: SendArgs) => invoke("send", args);
 export const stop = (project: string) => invoke("stop", { project });
+/** Remote Control: continue a running conversation from claude.ai or the phone (`on`), or stop that. The answer
+ *  comes as an agent event of type `remote`. Rejects when the conversation has no running process. */
+export const remoteControl = (project: string, on: boolean) => invoke<void>("remote_control", { project, on });
 /** Removes the git worktrees a conversation made; the ones with work git would lose stay. */
 export const dropWorktrees = (project: string) =>
   invoke<{ removed: number; kept: number }>("drop_worktrees", { project });
