@@ -29,7 +29,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Fixed
 
-- In dark mode the stop button of a running conversation shows a dark icon on its light circle, instead of a white one that was almost invisible.
+- In dark mode the stop button of a running conversation shows a dark icon on its light circle, instead of a white one that was almost invisible. (#575)
 - Clicking another project in the sidebar while a project's board is open now shows that project's board. Before, the
   title bar named the new project but the board kept showing the previous project's tickets. (#570)
 
