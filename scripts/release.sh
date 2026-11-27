@@ -76,8 +76,9 @@ bundle=target/release/bundle/macos/Relay.app.tar.gz
 [ -f "$bundle.sig" ] || { echo "no $bundle.sig after the build" >&2; exit 1; }
 tgz="$(mktemp -d)/Relay_${version}_aarch64.app.tar.gz"
 cp "$bundle" "$tgz"
-# the same for Intel Macs, without the ONNX speech models (src-tauri/Cargo.toml)
-pnpm tauri build --target x86_64-apple-darwin
+# the same for Intel Macs, without the ONNX speech models (src-tauri/Cargo.toml), and on the frontend the Apple silicon
+# build just made in dist/ (it is the same for both, tsc and vite would only take half a minute to make it again)
+pnpm tauri build --target x86_64-apple-darwin --config '{"build":{"beforeBuildCommand":""}}'
 step Intel
 intel=target/x86_64-apple-darwin/release/bundle
 idmg="$intel/dmg/Relay_${version}_x64.dmg"

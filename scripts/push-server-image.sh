@@ -27,10 +27,21 @@ sign() {
   esac </dev/null >/dev/null
   [ -f "$1.sig" ] || { echo "no $1.sig after signing" >&2; exit 1; }
 }
+# GitHub's secondary rate limit refuses a push or an upload now and then (release 0.0.67's image push): wait, try again,
+# three times in all. Each try after the first is cheap, the build is cached
+retry() {
+  n=1
+  until "$@"; do
+    [ $n -lt 3 ] || { echo "failed three times: $*" >&2; return 1; }
+    echo "failed, trying again in $((n * 60))s" >&2
+    sleep $((n * 60))
+    n=$((n + 1))
+  done
+}
 gh auth token | docker login ghcr.io -u "$(gh api user --jq .login)" --password-stdin >/dev/null
 # a multi-platform push needs a builder of its own (the docker-container driver)
 docker buildx inspect relay-multi >/dev/null 2>&1 || docker buildx create --name relay-multi --driver docker-container >/dev/null
-docker buildx build --builder relay-multi --platform linux/amd64,linux/arm64 \
+retry docker buildx build --builder relay-multi --platform linux/amd64,linux/arm64 \
   -f packages/relay-server/docker/Dockerfile --target server \
   -t "$image:$version" -t "$image:latest" --push .
 echo "pushed $image:$version and $image:latest"
@@ -42,7 +53,7 @@ cp "$out/linux_amd64/relay-server" "$out/relay-server-linux-x86_64"
 cp "$out/linux_arm64/relay-server" "$out/relay-server-linux-aarch64"
 sign "$out/relay-server-linux-x86_64"
 sign "$out/relay-server-linux-aarch64"
-gh release upload "v$version" "$out/relay-server-linux-x86_64" "$out/relay-server-linux-aarch64" \
+retry gh release upload "v$version" "$out/relay-server-linux-x86_64" "$out/relay-server-linux-aarch64" \
   "$out/relay-server-linux-x86_64.sig" "$out/relay-server-linux-aarch64.sig" --clobber
 rm -rf "$out"
 echo "attached relay-server-linux-x86_64 and -aarch64 with their .sig to release v$version"
