@@ -3,6 +3,11 @@
 // width are left to the CSS, so a row can colour its glyph the way it did with the hand-drawn ones
 import {
   Analytics01Icon,
+  Database01Icon,
+  InformationCircleIcon,
+  FlashIcon,
+  SecurityCheckIcon,
+  FlaskConicalIcon,
   Presentation01Icon,
   PaintBoardIcon,
   WebDesign01Icon,
@@ -170,6 +175,12 @@ const ICONS: Record<string, Icon> = {
   building: Building03Icon,
   laptop: LaptopIcon,
   users: UserGroupIcon,
+  // Settings pages: Vault, Automation, Privacy & access, Labs
+  info: InformationCircleIcon,
+  vault: Database01Icon,
+  flash: FlashIcon,
+  shield: SecurityCheckIcon,
+  flask: FlaskConicalIcon,
 };
 // the attributes without React's key and the stroke settings the CSS owns
 const own = ([tag, attrs]: Shape): Shape => [

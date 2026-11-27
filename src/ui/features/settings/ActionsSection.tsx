@@ -13,8 +13,9 @@ import { Switch } from "./Switch";
 const POLICIES: Policy[] = ["auto", "ask", "deny"];
 
 /** Agent access for one extension (`ext`, called `name`): whether agents may use it through `relay` at all, and per
- *  action whether it runs, asks first or never runs. Read again whenever it mounts. */
-export function ActionsSection({ ext, name }: { ext: string; name: string }) {
+ *  action whether it runs, asks first or never runs. Read again whenever it mounts. `nested`: under a heading that
+ *  says what it is (Privacy & access), so the section is titled by the tool. */
+export function ActionsSection({ ext, name, nested = false }: { ext: string; name: string; nested?: boolean }) {
   const { t } = useT();
   const list = useSettingsStore(s => s.actions.list);
   const entry = useSettingsStore(s => s.actions.entries[ext]);
@@ -29,8 +30,8 @@ export function ActionsSection({ ext, name }: { ext: string; name: string }) {
   const inherited = entry?.["*"] as Policy | undefined;
   return (
     <Section
-      title={t("act.title")}
-      desc={t("act.help", { name })}
+      title={nested ? name : t("act.title")}
+      desc={nested ? undefined : t("act.help", { name })}
       rows
       footer={error ? <span className={ERROR_MESSAGE}>{error}</span> : null}
     >

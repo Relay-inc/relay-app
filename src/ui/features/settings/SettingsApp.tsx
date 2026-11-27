@@ -1,14 +1,18 @@
 import { useSettingsStore } from "../../../application/settings/store";
-import { go, openServersPage, TABS } from "../../../application/settings/window";
+import { go, openServersPage, TABS, TAB_GROUPS } from "../../../application/settings/window";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
+import { AccessPage } from "./AccessPage";
 import { AgentsPage } from "./AgentsPage";
+import { AutomationPage } from "./AutomationPage";
 import { GeneralPage } from "./GeneralPage";
 import { IntegrationsPage } from "./IntegrationsPage";
+import { LabsPage } from "./LabsPage";
 import { PluginsPage } from "./PluginsPage";
 import { ProjectsPage } from "./ProjectsPage";
 import { ShortcutsPage } from "./ShortcutsPage";
 import { UpdatesPage } from "./UpdatesPage";
+import { VaultPage } from "./VaultPage";
 import { VoicePage } from "./VoicePage";
 
 /** The settings window, laid out like bb's: the pages in a sidebar on the left, the shown page on the right. Every
@@ -29,22 +33,25 @@ export function SettingsApp() {
   return (
     <div className="flex h-full min-h-0 [line-height:1.4]">
       <nav className="w-52 flex-none overflow-y-auto border-r border-s-seam bg-s-side px-2 pt-12 select-none">
-        <div className="grid gap-px py-1">
-          {TABS.map(([id, name, glyph]) => (
-            <button
-              key={id}
-              className={`flex h-7 items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-[13px] text-s-fg focus-visible:ring-2 ring-s-ring focus-visible:outline-none ${tab === id ? "bg-s-sel font-medium" : "hover:bg-s-hover"}`}
-              onClick={() => go(id)}
-              aria-current={tab === id ? "page" : undefined}
-            >
-              <Icon
-                name={glyph}
-                className={`size-4 flex-none fill-none stroke-current stroke-2 glyph ${tab === id ? "text-accent-text" : "text-secondary"}`}
-              />
-              <span className="min-w-0 flex-1 truncate text-left">{t(name)}</span>
-            </button>
-          ))}
-        </div>
+        {/* four groups, a hairline between them */}
+        {TAB_GROUPS.map((group, i) => (
+          <div key={group[0][0]} className={`grid gap-px py-1 ${i ? "mt-1 border-t border-s-seam pt-2" : ""}`}>
+            {group.map(([id, name, glyph]) => (
+              <button
+                key={id}
+                className={`flex h-7 items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-[13px] text-s-fg focus-visible:ring-2 ring-s-ring focus-visible:outline-none ${tab === id ? "bg-s-sel font-medium" : "hover:bg-s-hover"}`}
+                onClick={() => go(id)}
+                aria-current={tab === id ? "page" : undefined}
+              >
+                <Icon
+                  name={glyph}
+                  className={`size-4 flex-none fill-none stroke-current stroke-2 glyph ${tab === id ? "text-accent-text" : "text-secondary"}`}
+                />
+                <span className="min-w-0 flex-1 truncate text-left">{t(name)}</span>
+              </button>
+            ))}
+          </div>
+        ))}
         <div className="mt-1 grid border-t border-s-seam pt-2">
           <button
             className="flex h-7 items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-[13px] text-s-fg hover:bg-s-hover focus-visible:ring-2 ring-s-ring focus-visible:outline-none"
@@ -68,7 +75,10 @@ export function SettingsApp() {
           }
         >
           <div className={page("general")}>
-            <GeneralPage vaultStatus={vaultStatus} active={tab === "general"} />
+            <GeneralPage />
+          </div>
+          <div className={page("vault")}>
+            <VaultPage vaultStatus={vaultStatus} />
           </div>
           <div className={page("projects")}>
             <ProjectsPage active={tab === "projects"} />
@@ -87,6 +97,15 @@ export function SettingsApp() {
           </div>
           <div className={page("shortcuts")}>
             <ShortcutsPage />
+          </div>
+          <div className={page("automation")}>
+            <AutomationPage />
+          </div>
+          <div className={page("access")}>
+            <AccessPage active={tab === "access"} />
+          </div>
+          <div className={page("labs")}>
+            <LabsPage />
           </div>
           <div className={page("updates")}>
             <UpdatesPage active={tab === "updates"} />

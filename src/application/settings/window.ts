@@ -9,21 +9,36 @@ import { watchVaultSync } from "./vault-sync";
 import { useSettingsStore, type SettingsTab } from "./store";
 
 // The settings window, laid out like bb's: the pages in a sidebar on the left, the window title follows the page.
-// General holds the vault folder with its mapping and the language, Projects the projects the user customised,
-// Agents the coding-agent CLIs (and where conversations run, and the agents' access to knowledge workspaces),
-// Integrations the external services, Plugins the MCP servers that bring views, Voice dictation, Shortcuts the keys (read
-// only), Updates Relay itself and the agent CLIs; each
+// General holds how Relay looks (appearance, language, terminal, the sidebar), Vault the vault folder with its
+// mapping and git backup, Projects the projects the user customised, Agents the coding-agent CLIs (and where
+// conversations run), Integrations the external services, Plugins the MCP servers that bring views, Voice dictation,
+// Shortcuts the keys, Automation what Relay does on its own, Privacy & access what macOS lets Relay do and what agents
+// may do with the user's tools, Labs the features still being tried, Updates Relay itself and the agent CLIs; each
 // page's use cases are in <page>-page.ts and integrations.ts. Saving emits "settings-changed" from the backend, the main window follows it.
-export const TABS = [
-  ["general", "set.tab.general", "gear"],
-  ["projects", "set.tab.projects", "folder"],
-  ["agents", "set.tab.agents", "agent"],
-  ["integrations", "set.tab.integrations", "plug"],
-  ["plugins", "set.tab.plugins", "puzzle"],
-  ["voice", "set.tab.voice", "mic"],
-  ["shortcuts", "set.tab.shortcuts", "keyboard"],
-  ["updates", "set.tab.updates", "refresh"],
-] as const satisfies readonly (readonly [SettingsTab, Key, string])[];
+const PAGES = {
+  general: ["set.tab.general", "gear"],
+  vault: ["set.tab.vault", "vault"],
+  shortcuts: ["set.tab.shortcuts", "keyboard"],
+  voice: ["set.tab.voice", "mic"],
+  projects: ["set.tab.projects", "folder"],
+  agents: ["set.tab.agents", "agent"],
+  integrations: ["set.tab.integrations", "plug"],
+  plugins: ["set.tab.plugins", "puzzle"],
+  automation: ["set.tab.automation", "flash"],
+  access: ["set.tab.access", "shield"],
+  updates: ["set.tab.updates", "refresh"],
+  labs: ["set.tab.labs", "flask"],
+} as const satisfies Record<SettingsTab, readonly [Key, string]>;
+/** The nav's groups: the app, what Relay works with, what runs on its own and what it may touch, housekeeping. */
+const GROUPS: SettingsTab[][] = [
+  ["general", "vault", "shortcuts", "voice"],
+  ["projects", "agents", "integrations", "plugins"],
+  ["automation", "access"],
+  ["updates", "labs"],
+];
+const row = (id: SettingsTab) => [id, PAGES[id][0], PAGES[id][1]] as const;
+export const TAB_GROUPS = GROUPS.map(group => group.map(row));
+export const TABS = TAB_GROUPS.flat();
 
 /** Pages that moved to Organisations and servers, and what opens there for them. */
 const MOVED: Record<string, string> = { workspaces: "join", machines: "mac", organisation: "" };

@@ -3,12 +3,7 @@ import type { Column } from "../../../domain/board/types";
 import { checksOf, EMPTY_PIPELINE } from "../../../domain/pipeline/rules";
 import type { Pipeline } from "../../../domain/pipeline/types";
 import { useSettingsStore } from "../../../application/settings/store";
-import {
-  pipelineColumns,
-  setPipeline,
-  setPipelineRepo,
-  setPipelinesPaused,
-} from "../../../application/settings/pipeline";
+import { pipelineColumns, setPipeline, setPipelineRepo } from "../../../application/settings/pipeline";
 import { Icon } from "../../components/Icon";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
@@ -38,7 +33,6 @@ export function PipelineSettings({ name, onGeneral }: { name: string; onGeneral:
   const stored = useSettingsStore(s => s.settings.pipelines?.[name]);
   const p: Pipeline = { ...EMPTY_PIPELINE, ...stored };
   const linked = useSettingsStore(s => !!s.settings.boards?.[name]);
-  const allPaused = useSettingsStore(s => !!s.settings.pipelinesPaused);
   // only Productive has a client portal to keep comments out of
   const clients = useSettingsStore(s => s.settings.boards?.[name]?.provider === "productive");
   const found = useSettingsStore(s => s.projectsPage.checkouts[name]) ?? [];
@@ -155,17 +149,6 @@ export function PipelineSettings({ name, onGeneral }: { name: string; onGeneral:
             <span className={HELP}>{t(manual ? "pl.labelManual" : "pl.mineHelp")}</span>
           </div>
           <Switch id={`pl-mine-${name}`} on={!!p.mine} disabled={manual} onToggle={mine => set({ mine })} />
-        </div>
-        {/* every project's pipeline at once, here since no panel shows it anymore: the conversation's title bar
-            pauses only its own */}
-        <div className={`${ROW} border-t border-s-border`}>
-          <div className="flex-1">
-            <label htmlFor="pl-paused-all" className="block font-medium">
-              {t("pp.all")}
-            </label>
-            <span className={HELP}>{t("pp.pauseHelp")}</span>
-          </div>
-          <Switch id="pl-paused-all" on={allPaused} onToggle={setPipelinesPaused} />
         </div>
       </section>
       {err && <span className={ERROR_MESSAGE}>{err}</span>}

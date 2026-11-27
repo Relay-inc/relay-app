@@ -223,11 +223,22 @@ export const setMailAccount = (email: string) =>
   change(draft => {
     draft.mail.edit.account = email;
   });
-// archive, delete, Inbox/Other and bulk actions, saved with Save like the account choice
-export const setMailExperimental = (on: boolean) =>
-  change(draft => {
-    draft.mail.edit.experimental = on;
-  });
+/** Archive, delete, Inbox/Other and bulk actions (Settings › Labs): saved at once, the mail form's copy follows. */
+export async function saveMailExperimental(on: boolean) {
+  const next = structuredClone(current());
+  next.mail = { ...next.mail, experimental: on };
+  try {
+    commit(await backend.setSettings(next));
+    change(draft => {
+      draft.mail.edit.experimental = on;
+      draft.listMessage = null;
+    });
+  } catch (error) {
+    change(draft => {
+      draft.listMessage = fail(error);
+    });
+  }
+}
 export const dropMailAccount = (account: MailAcct) =>
   change(draft => {
     delete draft.mail.tests[account.email];

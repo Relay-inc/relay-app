@@ -1,27 +1,12 @@
-import { useState } from "react";
-import type { Key } from "../../../shared/i18n";
-import { KEYS, type MapKey, type VaultMap, type VaultStatus } from "../../../domain/workspace/types";
 import type { TerminalApp } from "../../../domain/settings/types";
 import { useSettingsStore } from "../../../application/settings/store";
 import {
   changeAccent,
   changeLanguage,
   changeTheme,
-  checkMap,
-  pickMappedFile,
-  pickVaultFolder,
-  addExtraVault,
-  removeExtraVault,
   saveFavicons,
-  saveKeepAwake,
-  saveFiles,
-  saveAutoKeepChanges,
-  saveAutoRetry,
-  saveTimeFromSessions,
-  saveCaptureOnClose,
   saveWorkerCrabs,
   saveGitDrawer,
-  saveFolders,
   saveSidebar,
   saveTerminal,
   showView,
@@ -33,28 +18,20 @@ import { Icon } from "../../components/Icon";
 import { Select } from "../../components/Select";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
-import { ActionsSection } from "./ActionsSection";
-import { buttonClass, OPTIONAL_TEXT, SELECT, TILE, withoutColon } from "./blocks";
+import { buttonClass, SELECT, TILE } from "./blocks";
 import { Field } from "./Field";
-import { Footer } from "./Footer";
-import { PathField } from "./PathField";
-import { PermissionsSection } from "./PermissionsSection";
 import { RunDefault } from "./RunDefault";
 import { Section } from "./Section";
 import { Segmented } from "./Segmented";
 import { Switch } from "./Switch";
-import { filesOn } from "../../../domain/settings/types";
-import { VaultSyncSection } from "./VaultSyncSection";
-
-const NONE: string[] = [];
-const trimmed = (map: VaultMap) => Object.fromEntries(KEYS.map(([key]) => [key, map[key].trim()])) as VaultMap;
 
 // Relay blue is the fixed brand colour (it must not follow the current accent); graphite is the text colour
 const SWATCH = { relay: "bg-[#3a5ffb]", graphite: "bg-label" };
 
-/** General: the vault folder with its mapping, its git backup, what agents may do with reminders, the interface (language, colour
- *  scheme, accent, favicons, terminal), the views on top of the sidebar and what macOS lets Relay do. */
-export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus; active: boolean }) {
+/** General: how Relay looks and the apps it opens (appearance, accent, the orchestrator's crabs, language, terminal),
+ *  the Git button of a project's conversation and the views on top of the sidebar. Until their pages take them over,
+ *  the project icons' favicon lookup and where conversations run stay at the bottom. */
+export function GeneralPage() {
   const { t, th } = useT();
   const language = useSettingsStore(s => s.settings.language);
   const theme = useSettingsStore(s => s.settings.theme || "system");
@@ -65,25 +42,8 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
   const views = useDerived(sidebarViews);
   const more = useSettingsStore(s => s.settings.sidebar?.more !== false);
   const faviconsOn = useSettingsStore(s => s.settings.favicons?.on !== false);
-  const keepAwake = useSettingsStore(s => s.settings.keepAwake !== false);
-  const files = useSettingsStore(s => filesOn(s.settings));
-  const autoRetry = useSettingsStore(s => s.settings.autoRetry === true);
-  const autoKeep = useSettingsStore(s => s.settings.autoKeepChanges === true);
-  const timeFromSessions = useSettingsStore(s => s.settings.timeFromSessions !== false);
-  const captureOnClose = useSettingsStore(s => s.settings.captureOnClose !== false);
   const workerCrabs = useSettingsStore(s => s.settings.workerCrabs !== false);
   const gitDrawer = useSettingsStore(s => s.settings.gitDrawer === true);
-  const message = useSettingsStore(s => s.message);
-  const extraVaults = useSettingsStore(s => s.settings.extraVaults ?? NONE);
-  const extraRead = useSettingsStore(s => s.extraVaults);
-  // the vault mapping as it is being edited, back to what the backend says whenever the vault status changes
-  const [map, setMap] = useState(vaultStatus.map);
-  const [mapOf, setMapOf] = useState(vaultStatus);
-  if (mapOf !== vaultStatus) {
-    setMapOf(vaultStatus);
-    setMap(vaultStatus.map);
-  }
-
   // language names stay in their own language, so they are findable whatever the app is set to
   const languages = [
     { id: "system", name: t("set.system") },
@@ -107,100 +67,9 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
     ["list", t("set.sidebarList")],
     ["icons", t("set.sidebarIcons")],
   ] as const;
-  const mapping = ([key, , required]: [MapKey, boolean, boolean]) => {
-    const configured = vaultStatus.map[key];
-    const found = required || configured ? vaultStatus.found[key] : null;
-    return (
-      <Field
-        key={key}
-        label={
-          <>
-            <Html html={th(`vault.k.${key}` as Key)} />
-            {!required && (
-              <>
-                {" "}
-                <span className={OPTIONAL_TEXT}>{t("vault.optional")}</span>
-              </>
-            )}
-          </>
-        }
-        hint={<Html html={th(`vault.h.${key}` as Key)} />}
-      >
-        <PathField
-          value={map[key]}
-          tip={configured}
-          found={found}
-          foundTip={found == null ? "" : t(found ? "vault.found" : "vault.missing")}
-          pickTip={t("vault.pickPath")}
-          onInput={value => setMap({ ...map, [key]: value })}
-          onCommit={() => checkMap(trimmed(map))}
-          onPick={() => pickMappedFile(key, trimmed(map))}
-        />
-      </Field>
-    );
-  };
-
   return (
     <>
-      <Section title={withoutColon(t("set.vaultLabel"))} desc={<Html html={th("set.vaultHelp")} />}>
-        <PathField
-          value={vaultStatus.vault}
-          tip={vaultStatus.vault}
-          wide
-          readOnly
-          placeholder={t("vault.none")}
-          pickTip={t("vault.pickPath")}
-          onPick={pickVaultFolder}
-        />
-      </Section>
-      <Section title={t("set.extraVaultsTitle")} desc={<Html html={th("set.extraVaultsHelp")} />}>
-        <div className="flex flex-col gap-2">
-          {extraVaults.map(vault => {
-            const read = extraRead.find(x => x.vault === vault);
-            return (
-              <div key={vault} className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <code className="min-w-0 flex-1 truncate text-xs text-s-fg" title={vault}>
-                    {vault}
-                  </code>
-                  <button
-                    className={buttonClass("ghost")}
-                    aria-label={t("set.extraVaultRemove", { name: vault })}
-                    onClick={() => removeExtraVault(vault)}
-                  >
-                    {t("ag.remove")}
-                  </button>
-                </div>
-                {read?.error && <p className="text-xs text-s-warn">{read.error}</p>}
-              </div>
-            );
-          })}
-          <div>
-            <button className={buttonClass()} onClick={addExtraVault}>
-              {t("set.extraVaultAdd")}
-            </button>
-          </div>
-        </div>
-      </Section>
-      <Section
-        title={t("vault.map")}
-        desc={<Html html={th("vault.mapHelp")} />}
-        rows
-        footer={
-          <Footer message={message}>
-            <button className={buttonClass("primary")} onClick={() => saveFolders(trimmed(map))}>
-              {t("set.save")}
-            </button>
-          </Footer>
-        }
-      >
-        {KEYS.map(mapping)}
-      </Section>
-      <VaultSyncSection />
-      <ActionsSection ext="reminders" name={t("act.reminders")} />
-      <ActionsSection ext="knowledge" name={t("act.knowledge")} />
-      <RunDefault />
-      <Section title={t("set.sec.interface")} rows>
+      <Section title={t("set.sec.appearance")} rows>
         <Field label={t("set.theme")} hint={<Html html={th("set.themeHelp")} />}>
           <Segmented label={t("set.theme")} options={themes} value={theme} onPick={changeTheme} />
         </Field>
@@ -220,6 +89,11 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
             ))}
           </div>
         </Field>
+        <Field label={t("set.workerCrabs")} id="crabs" hint={<Html html={th("set.workerCrabsHelp")} />}>
+          <Switch id="crabs" on={workerCrabs} onToggle={saveWorkerCrabs} />
+        </Field>
+      </Section>
+      <Section title={t("set.sec.langApps")} rows>
         <Field label={t("set.language")} id="language" hint={<Html html={th("set.languageHelp")} />}>
           <Select
             className={SELECT}
@@ -228,9 +102,6 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
             value={language || "system"}
             onChange={changeLanguage}
           />
-        </Field>
-        <Field label={t("set.faviconsOn")} id="favon" hint={<Html html={th("set.faviconsHelp")} />}>
-          <Switch id="favon" on={faviconsOn} onToggle={saveFavicons} />
         </Field>
         <Field label={t("set.terminal")} id="terminal" hint={<Html html={th("set.terminalHelp")} />}>
           <Select
@@ -241,25 +112,14 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
             onChange={value => saveTerminal(value as TerminalApp)}
           />
         </Field>
-        <Field label={t("set.keepAwake")} id="awake" hint={<Html html={th("set.keepAwakeHelp")} />}>
-          <Switch id="awake" on={keepAwake} onToggle={saveKeepAwake} />
-        </Field>
-        <Field label={t("set.autoKeepChanges")} id="autokeep" hint={<Html html={th("set.autoKeepChangesHelp")} />}>
-          <Switch id="autokeep" on={autoKeep} onToggle={saveAutoKeepChanges} />
-        </Field>
-        <Field label={t("set.autoRetry")} id="retry" hint={<Html html={th("set.autoRetryHelp")} />}>
-          <Switch id="retry" on={autoRetry} onToggle={saveAutoRetry} />
-        </Field>
-        <Field label={t("set.timeFromSessions")} id="time" hint={<Html html={th("set.timeFromSessionsHelp")} />}>
-          <Switch id="time" on={timeFromSessions} onToggle={saveTimeFromSessions} />
-        </Field>
-        <Field label={t("set.captureOnClose")} id="capture" hint={<Html html={th("set.captureOnCloseHelp")} />}>
-          <Switch id="capture" on={captureOnClose} onToggle={saveCaptureOnClose} />
-        </Field>
-        <Field label={t("set.workerCrabs")} id="crabs" hint={<Html html={th("set.workerCrabsHelp")} />}>
-          <Switch id="crabs" on={workerCrabs} onToggle={saveWorkerCrabs} />
-        </Field>
-        <Field label={t("set.gitDrawer")} id="gitdrawer" hint={<Html html={th("set.gitDrawerHelp")} />}>
+      </Section>
+      <Section title={t("set.sec.titleBar")} rows>
+        <Field
+          label={t("set.gitDrawer")}
+          id="gitdrawer"
+          hint={<Html html={th("set.gitDrawerHelp")} />}
+          info={t("set.gitDrawerInfo")}
+        >
           <Switch id="gitdrawer" on={gitDrawer} onToggle={saveGitDrawer} />
         </Field>
       </Section>
@@ -310,12 +170,12 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
           <Switch id="sb-more" on={more} onToggle={on => saveSidebar({ more: on })} />
         </Field>
       </Section>
-      <PermissionsSection active={active} />
-      <Section title={t("set.sec.experimental")} desc={t("set.experimentalHelp")} rows>
-        <Field label={t("set.files")} id="files" hint={t("set.filesHelp")}>
-          <Switch id="files" on={files} onToggle={saveFiles} />
+      <Section title={t("set.favicons")} rows>
+        <Field label={t("set.faviconsOn")} id="favon" hint={<Html html={th("set.faviconsHelp")} />}>
+          <Switch id="favon" on={faviconsOn} onToggle={saveFavicons} />
         </Field>
       </Section>
+      <RunDefault />
     </>
   );
 }

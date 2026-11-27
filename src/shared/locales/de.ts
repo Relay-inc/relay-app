@@ -574,7 +574,6 @@ export default {
   "pp.resumeAll": "Alle Pipelines fortsetzen",
   "pp.pauseHelp":
     "Pausieren stoppt neue Tickets, das Wiederaufnehmen von Tickets und das Weitergeben von Review-Kommentaren. Laufende Agenten beenden ihren Schritt, beendete Läufe kommen weiter aufs Board und gemergte PRs werden weiter verfolgt.",
-  "pp.all": "Alle Pipelines pausieren",
   "pp.movedOn":
     "Jemand hat dieses Ticket auf dem Board aus {column} verschoben, daher wurde nichts gesendet: Der Agent würde an erledigter Arbeit beginnen.",
   "pl.pausedBack":
@@ -1525,10 +1524,10 @@ export default {
   "rem.none": "Keine Erinnerungen.",
   "set.sharedTitle": "Workspaces",
   "set.extraVaultsHelp":
-    "Andere Ordner mit einem Vault, jeder ein Workspace, zu dem du unten in der Seitenleiste wechselst. Ein Gespräch bleibt im Workspace seines Projekts: Die Datei-Werkzeuge und Dateibefehle von Claude Code sind für deine anderen Workspaces gesperrt. Ein Gespräch in einem dieser Ordner bekommt die Grenzen eines geteilten Workspaces: Deine eigenen MCP-Server, claude.ai-Konnektoren und Hooks sind aus, Claude Code läuft immer im Auto-Modus, und Mail, Erinnerungen und Kalender bleiben außer Reichweite.",
-  "set.extraVaultAdd": "Workspace hinzufügen…",
+    "Weitere Vaults auf diesem Mac. Ihre Projekte erscheinen neben deinen; eine Unterhaltung bleibt im Vault, in dem sie begann.",
+  "set.extraVaultAdd": "Ordner hinzufügen…",
   "set.extraVaultRemove": "{name} entfernen",
-  "set.extraVaultsTitle": "Andere Workspace-Ordner",
+  "set.extraVaultsTitle": "Andere Ordner",
   "set.sharedHelp":
     "Workspaces, die ein Team mit dir auf einem relay-server teilt, der keine deiner Maschinen ist. Der Server speichert nur verschlüsselte Dateien. Jeder Mac synchronisiert den Workspace in einen eigenen Ordner. Workspaces auf deinen Maschinen folgen darunter, pro Maschine.",
   "set.sharedAdmin": "Admin",
@@ -1632,9 +1631,8 @@ export default {
   "set.saved": "Gespeichert.",
   "set.restored": "Zurückgesetzt.",
   "set.language": "Sprache",
-  "set.languageHelp":
-    "Die Sprache der App. System folgt der macOS-Sprache, oder Englisch, wenn die App diese Sprache nicht hat.",
-  "set.theme": "Erscheinungsbild",
+  "set.languageHelp": "System folgt macOS, sonst Englisch.",
+  "set.theme": "Thema",
   "set.themeHelp": "Hell oder dunkel. System folgt macOS.",
   "set.themeLight": "Hell",
   "set.themeDark": "Dunkel",
@@ -1642,10 +1640,9 @@ export default {
   "set.accentHelp": "Auswahl, Hauptschaltflächen und was auf dich wartet.",
   "set.accent.relay": "Relay-Blau",
   "set.accent.graphite": "Graphit",
-  "set.terminal": "Terminal",
+  "set.terminal": "„Im Terminal öffnen“ nutzt",
   "set.terminalAuto": "Automatisch",
-  "set.terminalHelp":
-    "Wo „Im Terminal öffnen“ ein Gespräch fortsetzt. Automatisch nimmt das erste installierte: iTerm, WezTerm, dann Terminal.",
+  "set.terminalHelp": "Automatisch nimmt iTerm, WezTerm, dann Terminal.",
   "set.favicons": "Projektsymbole",
   "act.reminders": "Erinnerungen",
   "act.knowledge": "Wissens-Workspaces",
@@ -1673,27 +1670,23 @@ export default {
   "set.faviconsOn": "Favicon der Website als Symbol",
   "set.faviconsHelp":
     "Einmal am Tag sucht die App in den Notizen jedes Projekts ohne Symbol eine Website und nutzt deren Favicon. Pro Website wird ein Projekt einmal versucht, ein zurückgesetztes Symbol kommt nicht wieder.",
-  "set.keepAwake": "Mac wach halten, während Unterhaltungen laufen",
-  "set.keepAwakeHelp":
-    "Solange eine Unterhaltung einen laufenden Zug hat, schläft der Mac bei Inaktivität nicht ein, du kannst ihn also weiterarbeiten lassen. Zuklappen schickt ihn trotzdem in den Ruhezustand.",
-  "set.autoKeepChanges": "Änderungen im Vault automatisch behalten",
-  "set.autoKeepChangesHelp":
-    "Was Relays Claude-Läufe in den Vault schreiben (Captures, Seitenaktionen, Briefings), wartet in Änderungen nicht mehr auf Behalten: es kommt behalten an, unter Geprüft, wo du es weiter ansehen kannst.",
+  "set.keepAwake": "Den Mac wach halten",
+  "set.keepAwakeHelp": "Solange ein Zug läuft. Zuklappen schickt ihn trotzdem in den Ruhezustand.",
+  "set.autoKeepChanges": "Diese Änderungen ohne Nachfrage behalten",
+  "set.autoKeepChangesHelp": "Sie landen unter Geprüft in Änderungen, statt auf Behalten zu warten.",
   "set.autoRetry": "Erneut versuchen, wenn ein Nutzungslimit zurückgesetzt wird",
   "set.autoRetryHelp":
-    "Wird eine Unterhaltung abgelehnt, weil das Nutzungslimit des Anbieters erreicht ist, und gibt es kein anderes Konto zum Wechseln, sendet Relay sie erneut, sobald das Limit zurückgesetzt ist. Ist <b>Mac wach halten</b> an, bleibt der Mac bis dahin wach.",
+    "Sendet eine abgelehnte Nachricht erneut, sobald das Limit zurückgesetzt ist und kein anderes Konto Platz hat.",
   "set.timeFromSessions": "Die Tageszeit aus Gesprächen vorschlagen",
   "set.timeFromSessionsHelp":
-    "Ab 16:00 schlägt Today die <b>Productive</b>-Zeiteinträge des Tages vor, danach, wann du in deinen Gesprächen geschrieben hast (Claude Code). Nichts wird ohne deine Zustimmung gebucht. Aus: Relay liest die Transkripte dafür nicht.",
+    "Ab 16:00 schlägt Today Productive-Einträge vor, danach, wann du geschrieben hast. Nichts wird ohne dich gebucht.",
   "set.captureOnClose": "Vault aktualisieren, wenn eine Unterhaltung schließt oder ruht",
   "set.captureOnCloseHelp":
-    "Wenn du eine Unterhaltung schließt oder sie nach einer Antwort 30 Minuten ruht, liest Claude sie noch einmal und schreibt, was in den Vault gehört, direkt hinein: Entscheidungen und warum, Projektstand, Folgeaufgaben mit Datum. Keine Schritte oder Details. Nichts wird angezeigt oder gefragt; die Git-Historie des Vaults ist die Kontrolle. Kurze Fragen (weniger als 3 Nachrichten) und Unterhaltungen ohne Neues seit dem letzten Lesen werden übersprungen.",
+    "Entscheidungen und warum, Projektstand, Folgeaufgaben mit Datum. Überspringt Unterhaltungen unter 3 Nachrichten.",
   "set.workerCrabs": "Krabben für die Worker des Orchestrators",
-  "set.workerCrabsHelp":
-    "Jeder Worker in der Liste des Orchestrators bekommt eine Pixelkrabbe im Kostüm seines Modells, die läuft, solange er arbeitet. Aus: eine einfache Statusmarke.",
-  "set.gitDrawer": "Git in Projektgesprächen",
-  "set.gitDrawerHelp":
-    "Ein <b>Git</b>-Knopf in der Titelleiste eines Projektgesprächs: die Repos des Projekts auf diesem Mac und die Worktrees, die das Gespräch angelegt hat, mit ihren geänderten Dateien zum Stagen, Verwerfen, Committen und Pushen. Nie der Vault, dort committet sein eigenes Backup.",
+  "set.workerCrabsHelp": "Eine Pixelkrabbe pro Worker, die läuft, solange er arbeitet. Aus: eine Statusmarke.",
+  "set.gitDrawer": "Git-Knopf in Projektgesprächen",
+  "set.gitDrawerHelp": "Stagen, committen und pushen der Repos des Projekts. Nie der Vault.",
   "retry.at": "Nutzungslimit erreicht. Neuer Versuch um {time}.",
   "retry.check": "Nutzungslimit erreicht. Erneute Prüfung um {time}.",
   "retry.cancel": "Abbrechen",
@@ -1702,7 +1695,6 @@ export default {
   "set.system": "System (Standard)",
   "set.themeSystem": "System",
   "set.sec.folders": "Ordner",
-  "set.sec.interface": "Darstellung",
   "nav.hide": "{name} ausblenden",
   "nav.show": "{name} anzeigen",
   "nav.asIcons": "Als Symbole anzeigen",
@@ -1714,29 +1706,26 @@ export default {
   "set.sidebarMore": "Ausgeblendete unter „…“",
   "nav.resetOrder": "Reihenfolge zurücksetzen",
   "nav.sidebarSettings": "Seitenleisten-Einstellungen…",
-  "set.sec.experimental": "Experimentell",
   "set.experimentalHelp":
     "Funktionen, die noch erprobt werden. Aus, bis du sie einschaltest; sie können sich noch ändern oder wegfallen.",
   "set.files": "Dateien: Seiten, Bearbeiten und Team-Dokumente",
   "set.filesHelp":
-    "Der Reiter Seiten neben Chats, eine Notiz als bearbeitbare Seite, Dateiverwaltung, Verlauf, Kommentare und Erwähnungen. Aus: Notizen öffnen wie bisher in der Seitenleiste.",
+    "Eine Notiz öffnet sich als bearbeitbare Seite, mit Dateiverwaltung, Verlauf, Kommentaren und Erwähnungen. Aus: Notizen öffnen sich in der Seitenleiste.",
   "set.sec.sidebar": "Seitenleiste",
-  "perm.title": "Berechtigungen",
-  "perm.help": "Was macOS Relay erlaubt. Ein nicht von Apple signierter Build verliert sie bei jedem Update.",
+  "perm.title": "Was macOS Relay erlaubt",
+  "perm.help": "Ein nicht von Apple signierter Build verliert sie bei jedem Update.",
   "perm.helpWin":
     "Was Windows Relay erlaubt. Für die Aufnahme dessen, was dieser Computer abspielt, ist keine Berechtigung nötig.",
   "perm.fullDisk": "Festplattenvollzugriff",
-  "perm.fullDiskHelp": "Agents lesen deine Dateien, ohne dass macOS pro Ordner fragt (Dokumente, Fotos, Musik, …).",
+  "perm.fullDiskHelp": "Agents lesen deine Dateien, ohne dass macOS pro Ordner fragt.",
   "perm.microphone": "Mikrofon",
   "perm.microphoneHelp": "Diktieren und Meetings aufnehmen.",
   "perm.systemAudio": "Systemaudio-Aufnahme",
-  "perm.systemAudioHelp":
-    "Die andere Seite eines Meetings, das du aufnimmst. macOS sagt Apps nicht, ob das erlaubt ist.",
+  "perm.systemAudioHelp": "Die andere Seite eines Meetings, das du aufnimmst.",
   "perm.accessibility": "Bedienungshilfen",
   "perm.accessibilityHelp": "Diktieren fügt in die App im Vordergrund ein.",
   "perm.notifications": "Mitteilungen",
-  "perm.notificationsHelp":
-    "Ein Banner, wenn ein Zug fertig ist oder eine Karte wartet. macOS sagt Relay nicht, ob das erlaubt ist.",
+  "perm.notificationsHelp": "Ein Banner, wenn ein Zug fertig ist oder eine Karte wartet.",
   "perm.state.ok": "Erlaubt",
   "perm.state.missing": "Nicht erlaubt",
   "perm.state.ask": "Wird beim ersten Mal gefragt",
@@ -1851,7 +1840,7 @@ export default {
   "set.tab.general": "Allgemein",
   "set.tab.projects": "Projekte",
   "set.tab.integrations": "Integrationen",
-  "set.vaultLabel": "Workspace-Ordner:",
+  "set.vaultLabel": "Vault-Ordner:",
   "int.set": "Eingerichtet",
   "int.notSet": "Nicht eingerichtet",
   "int.sidebar": "Seitenleiste:",
@@ -1948,7 +1937,7 @@ export default {
   "mail.accounts_one": "{n} Konto",
   "mail.accounts_other": "{n} Konten",
   "mail.help":
-    "Zeigt die 50 neuesten Mails deines Posteingangs. Eine Mail öffnen lässt sie ungelesen, gelesen und ungelesen änderst du mit dem Knopf. Die App sendet nie etwas, und archiviert oder löscht erst, wenn du das unten einschaltest: aus einer Mail startest du ein Gespräch, eine Antwort wird nur ein Entwurf.",
+    "Zeigt die 50 neuesten Mails deines Posteingangs. Eine Mail öffnen lässt sie ungelesen, gelesen und ungelesen änderst du mit dem Knopf. Die App sendet nie etwas, und archiviert oder löscht erst, wenn du das in Labs einschaltest: aus einer Mail startest du ein Gespräch, eine Antwort wird nur ein Entwurf.",
   "mail.search": "Absender oder Betreff suchen",
   "mail.fAll": "Alle",
   "mail.fUnread": "Ungelesen",
@@ -1967,7 +1956,6 @@ export default {
   "mail.selectAll": "Alle auswählen",
   "mail.selected": "{n} ausgewählt",
   "mail.clearSelection": "Auswahl aufheben",
-  "mail.experimentalL": "Archivieren, löschen und Posteingang/Sonstige (experimentell)",
   "mail.experimentalHint":
     "Archiviere (E) und lösche (#) eine Mail oder eine Auswahl, Cmd- oder Shift-Klick zum Auswählen. Newsletter und Benachrichtigungen von Leuten, denen du nie geschrieben hast, landen unter Sonstige. Archivierte Mails landen im Archiv-Ordner (Gmail: Alle Nachrichten), gelöschte im Papierkorb. Claude kann weiterhin nichts verschieben oder löschen.",
   "work.done": "Fertig",
@@ -2768,6 +2756,51 @@ export default {
   "graph.showIn": "Im Graph zeigen",
   "graph.showInTitle": "Die Notizen, die dieses Gespräch gelesen und geschrieben hat, im Pages-Graph hervorgehoben",
   "bar.graphNotes": "{n} Notizen",
+  "set.tab.vault": "Vault",
+  "set.tab.automation": "Automatisierung",
+  "set.tab.access": "Datenschutz und Zugriff",
+  "set.tab.labs": "Labs",
+  "set.sec.appearance": "Erscheinungsbild",
+  "set.sec.langApps": "Sprache und Apps",
+  "set.sec.titleBar": "Titelleiste der Unterhaltung",
+  "set.moreInfo": "Mehr zu dieser Einstellung",
+  "set.vaultMap": "Dateien, die Relay liest",
+  "set.vaultMapHelp": "Relativ zum Vault-Ordner. Optionale dürfen leer bleiben.",
+  "set.vaultH.workState": "Eine Projekttabelle pro Kontext. Erforderlich.",
+  "set.vaultH.reminders": "Optional.",
+  "set.vaultH.notes": "Optional. Leer: der ganze Vault.",
+  "auto.help": "Was Relay von selbst tut, während du nicht hinschaust.",
+  "auto.sec.running": "Während Unterhaltungen laufen",
+  "auto.sec.after": "Nach einer Unterhaltung",
+  "auto.sec.pipelines": "Board-Pipelines",
+  "auto.sec.time": "Zeit",
+  "auto.runPipelines": "Pipelines ausführen",
+  "auto.runPipelinesHelp": "Aus pausiert die Pipeline jedes Projekts. Jedes Projekt behält seine eigene Einrichtung.",
+  "auto.pipesOn": "An in {projects}.",
+  "auto.pipesNone": "Noch kein Projekt hat eine Pipeline an.",
+  "auto.pipesLink": "In Projekte einrichten",
+  "perm.state.unknown": "Lässt sich nicht prüfen",
+  "access.agents": "Was Agents mit deinen Tools tun dürfen",
+  "access.agentsHelp":
+    "Über den Befehl <code>relay</code>. Gespeichert in <code>.relay/config.json</code> des Vaults, das Agents nicht bearbeiten können.",
+  "labs.files.sidebar": "Seitenleiste: Reiter Seiten",
+  "labs.files.keys": "Tastenkürzel: Chats / Seiten",
+  "labs.mail": "Mail: archivieren, löschen und Posteingang/Sonstige",
+  "labs.mailHelp": "Mail bekommt Archivieren und Löschen und teilt den Posteingang in zwei.",
+  "labs.mail.keys": "Tastenkürzel: Mail",
+  "mail.labsOpen": "In Labs einschalten →",
+  "set.gitDrawerInfo":
+    "Ein <b>Git</b>-Knopf in der Titelleiste eines Projektgesprächs: die Repos des Projekts auf diesem Mac und die Worktrees, die das Gespräch angelegt hat, mit ihren geänderten Dateien zum Stagen, Verwerfen, Committen und Pushen. Nie der Vault, dort committet sein eigenes Backup.",
+  "set.extraVaultsInfo":
+    "Andere Ordner mit einem Vault, jeder ein Workspace, zu dem du unten in der Seitenleiste wechselst. Ein Gespräch bleibt im Workspace seines Projekts: Die Datei-Werkzeuge und Dateibefehle von Claude Code sind für deine anderen Workspaces gesperrt. Ein Gespräch in einem dieser Ordner bekommt die Grenzen eines geteilten Workspaces: Deine eigenen MCP-Server, claude.ai-Konnektoren und Hooks sind aus, Claude Code läuft immer im Auto-Modus, und Mail, Erinnerungen und Kalender bleiben außer Reichweite.",
+  "set.captureOnCloseInfo":
+    "Wenn du eine Unterhaltung schließt oder sie nach einer Antwort 30 Minuten ruht, liest Claude sie noch einmal und schreibt, was in den Vault gehört, direkt hinein: Entscheidungen und warum, Projektstand, Folgeaufgaben mit Datum. Keine Schritte oder Details. Nichts wird angezeigt oder gefragt; die Git-Historie des Vaults ist die Kontrolle. Kurze Fragen (weniger als 3 Nachrichten) und Unterhaltungen ohne Neues seit dem letzten Lesen werden übersprungen.",
+  "set.autoKeepChangesInfo":
+    "Was Relays Claude-Läufe in den Vault schreiben (Captures, Seitenaktionen, Briefings), wartet in Änderungen nicht mehr auf Behalten: es kommt behalten an, unter Geprüft, wo du es weiter ansehen kannst.",
+  "set.timeFromSessionsInfo":
+    "Ab 16:00 schlägt Today die <b>Productive</b>-Zeiteinträge des Tages vor, danach, wann du in deinen Gesprächen geschrieben hast (Claude Code). Nichts wird ohne deine Zustimmung gebucht. Aus: Relay liest die Transkripte dafür nicht.",
+  "set.autoRetryInfo":
+    "Wird eine Unterhaltung abgelehnt, weil das Nutzungslimit des Anbieters erreicht ist, und gibt es kein anderes Konto zum Wechseln, sendet Relay sie erneut, sobald das Limit zurückgesetzt ist. Ist <b>Den Mac wach halten</b> an, bleibt der Mac bis dahin wach.",
   "set.tab.plugins": "Plugins",
   "plug.help":
     "Ein Plugin ist ein MCP-Server, den Relay auf diesem Mac startet. Eines mit einer Ansicht bekommt eine Zeile in der Seitenleiste. Die Ansicht läuft in einer Sandbox, ohne Zugriff auf Relay oder das Netzwerk, und kann nur die Tools aufrufen, die du hier erlaubst. Geheimnisse landen im Schlüsselbund.",

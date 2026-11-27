@@ -200,9 +200,7 @@ export function WorkspaceSwitcher({
           </button>
           <button
             className={`${ACTION} text-secondary`}
-            onClick={() =>
-              run(() => (active.team ? openTeamWorkspace(active.folder) : openWorkspaceSettings("general")))
-            }
+            onClick={() => run(() => (active.team ? openTeamWorkspace(active.folder) : openWorkspaceSettings("vault")))}
           >
             {t("ws.settings")}
           </button>

@@ -3,6 +3,7 @@ import type { Key } from "../../../shared/i18n";
 import { numberFormat } from "../../../shared/format";
 import type { MailAcct, MailNew } from "../../../domain/settings/types";
 import { useSettingsStore } from "../../../application/settings/store";
+import { go } from "../../../application/settings/window";
 import {
   addMailAccount,
   clearMailMessage,
@@ -10,7 +11,6 @@ import {
   dropMailAccount,
   saveMail,
   setMailAccount,
-  setMailExperimental,
   setMailDraft,
   testMail,
 } from "../../../application/settings/integrations";
@@ -33,7 +33,6 @@ import { Field } from "./Field";
 import { Footer } from "./Footer";
 import { Section } from "./Section";
 import { SettingsMenu } from "./SettingsMenu";
-import { Switch } from "./Switch";
 
 // a step of the account guide: a small grid of its own, the ones after the first below a line
 const STEP = "grid justify-items-start gap-2 [&>*]:max-w-full";
@@ -285,15 +284,12 @@ export function MailSettings() {
           />
         </Field>
       )}
-      {/* archive, delete, Inbox/Other and bulk actions: off until switched on here */}
+      {/* archive, delete, Inbox/Other and bulk actions: switched on in Labs */}
       {accounts.length > 0 && (
-        <Field
-          label={t("mail.experimentalL")}
-          id="mailexp"
-          hint={t("mail.experimentalHint")}
-          className="border-t border-s-border pt-3.5"
-        >
-          <Switch id="mailexp" on={!!config.experimental} onToggle={setMailExperimental} />
+        <Field label={t("labs.mail")} className="border-t border-s-border pt-3.5">
+          <button className={buttonClass()} onClick={() => go("labs")}>
+            {t("mail.labsOpen")}
+          </button>
         </Field>
       )}
       <div className={FOOTER_IN_ROW}>

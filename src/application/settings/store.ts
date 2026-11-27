@@ -41,7 +41,18 @@ export type AddKind = "" | "own" | "org" | "join";
 export type OrgTab = (typeof ORG_TABS)[number];
 
 export type SettingsTab =
-  "general" | "projects" | "agents" | "integrations" | "plugins" | "voice" | "shortcuts" | "updates";
+  | "general"
+  | "vault"
+  | "shortcuts"
+  | "voice"
+  | "projects"
+  | "agents"
+  | "integrations"
+  | "plugins"
+  | "automation"
+  | "access"
+  | "labs"
+  | "updates";
 
 /** The settings as the backend keeps them and the UI language (both windows), plus what the settings window shows.
  *  Every save result is a `Message | null` (null: nothing to say). */

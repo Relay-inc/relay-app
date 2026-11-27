@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { FOOTER, HINT } from "./blocks";
+import { Info } from "./Info";
 
 const CARD = "grid min-w-0 grid-cols-1 rounded-xl border border-s-border bg-raised [&>*]:min-w-0";
 
@@ -8,6 +9,7 @@ const CARD = "grid min-w-0 grid-cols-1 rounded-xl border border-s-border bg-rais
 export function Section({
   title,
   desc,
+  info,
   action,
   footer,
   list = false,
@@ -16,6 +18,8 @@ export function Section({
 }: {
   title: ReactNode;
   desc?: ReactNode;
+  /** the long explanation behind a small ⓘ next to the title, as plain text */
+  info?: string;
   action?: ReactNode;
   footer?: ReactNode;
   list?: boolean;
@@ -33,7 +37,10 @@ export function Section({
       <header className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-2.5">
           <div>
-            <h2 className="text-[13px] font-semibold text-s-fg">{title}</h2>
+            <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-s-fg">
+              {title}
+              {info && <Info text={info} />}
+            </h2>
             {desc && <p className={HINT}>{desc}</p>}
           </div>
         </div>

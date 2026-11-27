@@ -34,6 +34,16 @@ export const ready = (p: Pipeline | undefined): p is Pipeline =>
 /** Paused, by its own pause or by the one for every pipeline (settings.pipelinesPaused). */
 export const pausedOf = (p: Pipeline | undefined, all?: boolean) => !!all || !!p?.paused;
 
+/** The Run pipelines switch on Settings › Automation: on while the global pause (settings.pipelinesPaused, what is
+ *  stored) is off. */
+export const pipelinesRun = (paused?: boolean) => !paused;
+
+/** The projects whose pipeline is switched on, in the order of the settings. */
+export const pipelineProjects = (pipelines: Record<string, Pipeline> | undefined) =>
+  Object.entries(pipelines ?? {})
+    .filter(([, p]) => p?.on)
+    .map(([project]) => project);
+
 /** The pipelines a pass runs: the ready ones, each paused as it counts now, by its own pause or the global one. */
 export const runnable = (pipelines: Record<string, Pipeline> | undefined, all?: boolean): [string, Pipeline][] =>
   Object.entries(pipelines ?? {}).flatMap(([project, p]) =>

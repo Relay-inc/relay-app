@@ -579,7 +579,6 @@ export default {
   "pp.resumeAll": "Reprendre tous les pipelines",
   "pp.pauseHelp":
     "La pause arrête les nouveaux tickets, la reprise des tickets et le renvoi des commentaires de revue. Les agents en cours finissent leur étape, les exécutions terminées arrivent toujours sur le tableau et les PR fusionnées sont toujours suivies.",
-  "pp.all": "Mettre tous les pipelines en pause",
   "pp.movedOn":
     "Quelqu'un a sorti ce ticket de {column} sur le tableau, rien n'a donc été envoyé : l'agent commencerait un travail déjà terminé.",
   "pl.pausedBack":
@@ -1528,10 +1527,10 @@ export default {
   "rem.none": "Aucun rappel.",
   "set.sharedTitle": "Espaces de travail",
   "set.extraVaultsHelp":
-    "D'autres dossiers avec un coffre, chacun un espace de travail auquel vous passez en bas de la barre latérale. Une conversation reste dans l'espace de travail de son projet : les outils et commandes de fichiers de Claude Code sont bloqués pour vos autres espaces de travail. Une conversation dans l'un de ces dossiers reçoit les limites d'un espace de travail partagé : vos propres serveurs MCP, connecteurs claude.ai et hooks sont désactivés, Claude Code tourne toujours en mode auto, et vos mails, rappels et agenda restent hors de portée.",
-  "set.extraVaultAdd": "Ajouter un espace de travail…",
+    "D'autres coffres sur ce Mac. Leurs projets apparaissent à côté des vôtres ; une conversation reste dans le coffre où elle a commencé.",
+  "set.extraVaultAdd": "Ajouter un dossier…",
   "set.extraVaultRemove": "Retirer {name}",
-  "set.extraVaultsTitle": "Autres dossiers d'espace de travail",
+  "set.extraVaultsTitle": "Autres dossiers",
   "set.sharedHelp":
     "Les espaces de travail qu'une équipe partage avec vous sur un relay-server qui n'est pas une de vos machines. Le serveur ne garde que des fichiers chiffrés. Chaque Mac synchronise l'espace de travail dans son propre dossier. Les espaces de travail sur vos machines suivent, par machine.",
   "set.sharedAdmin": "Admin",
@@ -1634,8 +1633,8 @@ export default {
   "set.saved": "Enregistré.",
   "set.restored": "Réinitialisé.",
   "set.language": "Langue",
-  "set.languageHelp": "La langue de l'app. Système suit la langue de macOS, ou l'anglais si l'app ne la propose pas.",
-  "set.theme": "Apparence",
+  "set.languageHelp": "Système suit macOS, sinon l'anglais.",
+  "set.theme": "Thème",
   "set.themeHelp": "Clair ou sombre. Système suit macOS.",
   "set.themeLight": "Clair",
   "set.themeDark": "Sombre",
@@ -1643,10 +1642,9 @@ export default {
   "set.accentHelp": "La sélection, les boutons principaux et ce qui vous attend.",
   "set.accent.relay": "Bleu Relay",
   "set.accent.graphite": "Graphite",
-  "set.terminal": "Terminal",
+  "set.terminal": "« Ouvrir dans Terminal » utilise",
   "set.terminalAuto": "Automatique",
-  "set.terminalHelp":
-    "Où « Ouvrir dans Terminal » poursuit une conversation. Automatique prend le premier installé : iTerm, WezTerm, puis Terminal.",
+  "set.terminalHelp": "Automatique prend iTerm, WezTerm, puis Terminal.",
   "set.favicons": "Icônes de projet",
   "act.reminders": "Rappels",
   "act.knowledge": "Espaces de connaissances",
@@ -1674,27 +1672,24 @@ export default {
   "set.faviconsOn": "Utiliser le favicon du site comme icône",
   "set.faviconsHelp":
     "Une fois par jour, l'app cherche un site web dans les notes de chaque projet sans icône et utilise son favicon. Chaque site n'est essayé qu'une fois par projet, une icône réinitialisée ne revient pas.",
-  "set.keepAwake": "Garder le Mac éveillé pendant les conversations",
-  "set.keepAwakeHelp":
-    "Tant qu'une conversation a un tour en cours, le Mac ne se met pas en veille par inactivité, vous pouvez donc le laisser travailler. Fermer l'écran le met quand même en veille.",
-  "set.autoKeepChanges": "Garder automatiquement les modifications du coffre",
-  "set.autoKeepChangesHelp":
-    "Ce que les exécutions de Claude dans Relay écrivent dans le coffre (captures, actions de page, briefings) n’attend plus Garder dans Modifications : il arrive déjà gardé, sous Vérifiées, où vous pouvez encore le consulter.",
+  "set.keepAwake": "Garder le Mac éveillé",
+  "set.keepAwakeHelp": "Pendant un tour. Fermer l'écran le met quand même en veille.",
+  "set.autoKeepChanges": "Garder ces modifications sans demander",
+  "set.autoKeepChangesHelp": "Elles arrivent sous Vérifiées dans Modifications au lieu d'attendre Garder.",
   "set.autoRetry": "Réessayer quand une limite d'utilisation se réinitialise",
   "set.autoRetryHelp":
-    "Quand une conversation est refusée parce que la limite d'utilisation du fournisseur est atteinte et qu'aucun autre compte n'est disponible, Relay la renvoie dès que la limite se réinitialise. Le Mac reste éveillé jusque-là si <b>Garder le Mac éveillé</b> est activé.",
+    "Renvoie un message refusé dès que la limite se réinitialise, si aucun autre compte n'a de place.",
   "set.timeFromSessions": "Proposer le temps de la journée à partir des conversations",
   "set.timeFromSessionsHelp":
-    "À partir de 16:00, Today propose les saisies de temps <b>Productive</b> de la journée selon les moments où vous avez écrit dans vos conversations (Claude Code). Rien n'est saisi sans votre accord. Désactivé : Relay ne lit pas les transcriptions pour cela.",
+    "À partir de 16:00, Today propose des saisies Productive selon les moments où vous avez écrit. Rien n'est saisi sans vous.",
   "set.captureOnClose": "Mettre à jour le coffre quand une conversation se ferme ou s'arrête",
   "set.captureOnCloseHelp":
-    "Quand vous fermez une conversation, ou qu'elle reste 30 minutes sans activité après un tour, Claude la relit et écrit directement dans le coffre ce qui y a sa place : décisions et leur raison, état des projets, suivis datés. Pas d'étapes ni de détails. Rien n'est affiché ni demandé ; l'historique git du coffre sert de contrôle. Les questions rapides (moins de 3 messages) et les conversations sans rien de nouveau depuis la dernière lecture sont ignorées.",
+    "Décisions et leur raison, état des projets, suivis datés. Ignore les conversations de moins de 3 messages.",
   "set.workerCrabs": "Des crabes pour les workers de l'orchestrateur",
   "set.workerCrabsHelp":
-    "Chaque worker de la liste de l'Orchestrateur reçoit un crabe en pixels, costumé selon son modèle, qui marche pendant qu'il travaille. Désactivé : un simple indicateur d'état.",
-  "set.gitDrawer": "Git dans les conversations de projet",
-  "set.gitDrawerHelp":
-    "Un bouton <b>Git</b> dans la barre de titre d'une conversation de projet : les dépôts du projet sur ce Mac et les worktrees créés par la conversation, avec leurs fichiers modifiés à indexer, annuler, committer et pousser. Jamais le coffre, sa propre sauvegarde y committe.",
+    "Un crabe en pixels par worker, qui marche pendant qu'il travaille. Désactivé : un indicateur d'état.",
+  "set.gitDrawer": "Bouton Git dans les conversations de projet",
+  "set.gitDrawerHelp": "Indexer, committer et pousser les dépôts du projet. Jamais le coffre.",
   "retry.at": "Limite d'utilisation atteinte. Nouvel essai à {time}.",
   "retry.check": "Limite d'utilisation atteinte. Nouvelle vérification à {time}.",
   "retry.cancel": "Annuler",
@@ -1703,7 +1698,6 @@ export default {
   "set.system": "Système (par défaut)",
   "set.themeSystem": "Système",
   "set.sec.folders": "Dossiers",
-  "set.sec.interface": "Affichage",
   "nav.hide": "Masquer {name}",
   "nav.show": "Afficher {name}",
   "nav.asIcons": "Afficher en icônes",
@@ -1715,30 +1709,26 @@ export default {
   "set.sidebarMore": "Éléments masqués sous « … »",
   "nav.resetOrder": "Rétablir l'ordre",
   "nav.sidebarSettings": "Réglages de la barre latérale…",
-  "set.sec.experimental": "Expérimental",
   "set.experimentalHelp":
     "Des fonctions encore à l'essai. Désactivées tant que tu ne les actives pas, elles peuvent encore changer ou disparaître.",
   "set.files": "Fichiers : pages, édition et documents d'équipe",
   "set.filesHelp":
-    "L'onglet Pages à côté de Chats, une note ouverte comme page modifiable, la gestion des fichiers, l'historique, les commentaires et les mentions. Désactivé : les notes s'ouvrent dans le panneau latéral, comme avant.",
+    "Une note s'ouvre comme page modifiable, avec gestion des fichiers, historique, commentaires et mentions. Désactivé : les notes s'ouvrent dans le panneau latéral.",
   "set.sec.sidebar": "Barre latérale",
-  "perm.title": "Autorisations",
-  "perm.help": "Ce que macOS permet à Relay. Une version non signée par Apple les perd à chaque mise à jour.",
+  "perm.title": "Ce que macOS permet à Relay",
+  "perm.help": "Une version non signée par Apple les perd à chaque mise à jour.",
   "perm.helpWin":
     "Ce que Windows permet à Relay. Enregistrer ce que joue cet ordinateur ne demande aucune autorisation.",
   "perm.fullDisk": "Accès complet au disque",
-  "perm.fullDiskHelp":
-    "Les agents lisent vos fichiers sans que macOS demande pour chaque dossier (Documents, Photos, Musique, …).",
+  "perm.fullDiskHelp": "Les agents lisent vos fichiers sans que macOS demande pour chaque dossier.",
   "perm.microphone": "Micro",
   "perm.microphoneHelp": "Dictée et enregistrement des réunions.",
   "perm.systemAudio": "Enregistrement de l'audio système",
-  "perm.systemAudioHelp":
-    "L'autre côté d'une réunion que vous enregistrez. macOS n'indique pas aux apps si c'est autorisé.",
+  "perm.systemAudioHelp": "L'autre côté d'une réunion que vous enregistrez.",
   "perm.accessibility": "Accessibilité",
   "perm.accessibilityHelp": "La dictée colle dans l'app au premier plan.",
   "perm.notifications": "Notifications",
-  "perm.notificationsHelp":
-    "Une bannière quand un tour se termine ou qu'une carte attend. macOS n'indique pas à Relay si c'est autorisé.",
+  "perm.notificationsHelp": "Une bannière quand un tour se termine ou qu'une carte attend.",
   "perm.state.ok": "Autorisé",
   "perm.state.missing": "Non autorisé",
   "perm.state.ask": "Demandé à la première utilisation",
@@ -1855,7 +1845,7 @@ export default {
   "set.tab.general": "Général",
   "set.tab.projects": "Projets",
   "set.tab.integrations": "Intégrations",
-  "set.vaultLabel": "Dossier de l'espace de travail :",
+  "set.vaultLabel": "Dossier du coffre :",
   "int.set": "Configuré",
   "int.notSet": "Non configuré",
   "int.sidebar": "Barre latérale :",
@@ -1951,7 +1941,7 @@ export default {
   "mail.accounts_one": "{n} compte",
   "mail.accounts_other": "{n} comptes",
   "mail.help":
-    "Affiche les 50 mails les plus récents de votre boîte. Ouvrir un mail le laisse non lu, lu et non lu se changent avec le bouton. L'app n'envoie jamais rien, et n'archive ou ne supprime que si vous l'activez ci-dessous : depuis un mail vous lancez une conversation, une réponse devient seulement un brouillon.",
+    "Affiche les 50 mails les plus récents de votre boîte. Ouvrir un mail le laisse non lu, lu et non lu se changent avec le bouton. L'app n'envoie jamais rien, et n'archive ou ne supprime que si vous l'activez dans Labs : depuis un mail vous lancez une conversation, une réponse devient seulement un brouillon.",
   "mail.search": "Chercher expéditeur ou objet",
   "mail.fAll": "Tous",
   "mail.fUnread": "Non lus",
@@ -1970,7 +1960,6 @@ export default {
   "mail.selectAll": "Tout sélectionner",
   "mail.selected": "{n} sélectionnés",
   "mail.clearSelection": "Effacer la sélection",
-  "mail.experimentalL": "Archiver, supprimer et Boîte/Autres (expérimental)",
   "mail.experimentalHint":
     "Archivez (E) et supprimez (#) un mail ou une sélection, Cmd- ou Maj-clic pour sélectionner. Les newsletters et notifications de gens à qui vous n'avez jamais écrit vont dans Autres. Les mails archivés vont dans le dossier Archives (Gmail : Tous les messages), les mails supprimés dans la corbeille. Claude ne peut toujours ni déplacer ni supprimer.",
   "work.done": "Terminé",
@@ -2772,6 +2761,51 @@ export default {
   "graph.showIn": "Voir dans le graphe",
   "graph.showInTitle": "Les notes que cette conversation a lues et écrites, éclairées dans le graphe de Pages",
   "bar.graphNotes": "{n} notes",
+  "set.tab.vault": "Coffre",
+  "set.tab.automation": "Automatisation",
+  "set.tab.access": "Confidentialité et accès",
+  "set.tab.labs": "Labs",
+  "set.sec.appearance": "Apparence",
+  "set.sec.langApps": "Langue et apps",
+  "set.sec.titleBar": "Barre de titre de la conversation",
+  "set.moreInfo": "Plus d'informations sur ce réglage",
+  "set.vaultMap": "Fichiers lus par Relay",
+  "set.vaultMapHelp": "Relatifs au dossier du coffre. Les optionnels peuvent rester vides.",
+  "set.vaultH.workState": "Un tableau de projets par contexte. Obligatoire.",
+  "set.vaultH.reminders": "Facultatif.",
+  "set.vaultH.notes": "Facultatif. Vide : tout le coffre.",
+  "auto.help": "Ce que Relay fait tout seul, pendant que vous ne regardez pas.",
+  "auto.sec.running": "Pendant les conversations",
+  "auto.sec.after": "Après une conversation",
+  "auto.sec.pipelines": "Pipelines de board",
+  "auto.sec.time": "Temps",
+  "auto.runPipelines": "Lancer les pipelines",
+  "auto.runPipelinesHelp": "Désactivé met en pause la pipeline de chaque projet. Chaque projet garde sa configuration.",
+  "auto.pipesOn": "Active dans {projects}.",
+  "auto.pipesNone": "Aucun projet n'a encore de pipeline active.",
+  "auto.pipesLink": "Configurer dans Projets",
+  "perm.state.unknown": "Ne peut pas être vérifié",
+  "access.agents": "Ce que les agents peuvent faire avec vos outils",
+  "access.agentsHelp":
+    "Via la commande <code>relay</code>. Conservé dans <code>.relay/config.json</code> du coffre, que les agents ne peuvent pas modifier.",
+  "labs.files.sidebar": "Barre latérale : onglet Pages",
+  "labs.files.keys": "Raccourcis : Discussions / Pages",
+  "labs.mail": "Mail : archiver, supprimer et Boîte de réception/Autres",
+  "labs.mailHelp": "Mail gagne l'archivage et la suppression, et sépare la boîte de réception en deux.",
+  "labs.mail.keys": "Raccourcis : Mail",
+  "mail.labsOpen": "Activer dans Labs →",
+  "set.gitDrawerInfo":
+    "Un bouton <b>Git</b> dans la barre de titre d'une conversation de projet : les dépôts du projet sur ce Mac et les worktrees créés par la conversation, avec leurs fichiers modifiés à indexer, annuler, committer et pousser. Jamais le coffre, sa propre sauvegarde y committe.",
+  "set.extraVaultsInfo":
+    "D'autres dossiers avec un coffre, chacun un espace de travail auquel vous passez en bas de la barre latérale. Une conversation reste dans l'espace de travail de son projet : les outils et commandes de fichiers de Claude Code sont bloqués pour vos autres espaces de travail. Une conversation dans l'un de ces dossiers reçoit les limites d'un espace de travail partagé : vos propres serveurs MCP, connecteurs claude.ai et hooks sont désactivés, Claude Code tourne toujours en mode auto, et vos mails, rappels et agenda restent hors de portée.",
+  "set.captureOnCloseInfo":
+    "Quand vous fermez une conversation, ou qu'elle reste 30 minutes sans activité après un tour, Claude la relit et écrit directement dans le coffre ce qui y a sa place : décisions et leur raison, état des projets, suivis datés. Pas d'étapes ni de détails. Rien n'est affiché ni demandé ; l'historique git du coffre sert de contrôle. Les questions rapides (moins de 3 messages) et les conversations sans rien de nouveau depuis la dernière lecture sont ignorées.",
+  "set.autoKeepChangesInfo":
+    "Ce que les exécutions de Claude dans Relay écrivent dans le coffre (captures, actions de page, briefings) n’attend plus Garder dans Modifications : il arrive déjà gardé, sous Vérifiées, où vous pouvez encore le consulter.",
+  "set.timeFromSessionsInfo":
+    "À partir de 16:00, Today propose les saisies de temps <b>Productive</b> de la journée selon les moments où vous avez écrit dans vos conversations (Claude Code). Rien n'est saisi sans votre accord. Désactivé : Relay ne lit pas les transcriptions pour cela.",
+  "set.autoRetryInfo":
+    "Quand une conversation est refusée parce que la limite d'utilisation du fournisseur est atteinte et qu'aucun autre compte n'est disponible, Relay la renvoie dès que la limite se réinitialise. Le Mac reste éveillé jusque-là si <b>Garder le Mac éveillé</b> est activé.",
   "set.tab.plugins": "Plugins",
   "plug.help":
     "Un plugin est un serveur MCP que Relay démarre sur ce Mac. Celui qui apporte une vue obtient une ligne dans la barre latérale. La vue s'exécute dans un bac à sable, sans accès à Relay ni au réseau, et ne peut appeler que les outils que vous autorisez ici. Les secrets vont dans le trousseau.",

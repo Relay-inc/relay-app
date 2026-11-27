@@ -21,9 +21,10 @@ export function setPipeline(project: string, patch: Partial<Pipeline>) {
   return save(next);
 }
 
-/** Every project's pipeline paused at once, or going on: each one's own pause stays as it was. */
-export function setPipelinesPaused(paused: boolean) {
-  return save({ ...useSettingsStore.getState().settings, pipelinesPaused: paused });
+/** Every project's pipeline going on or paused at once (Settings › Automation › Run pipelines, stored as the pause):
+ *  each one's own pause stays as it was. */
+export function setPipelinesRun(run: boolean) {
+  return save({ ...useSettingsStore.getState().settings, pipelinesPaused: !run });
 }
 
 /** One repo of the project in the pipeline: switched off, or its checks. */
