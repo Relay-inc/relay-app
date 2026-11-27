@@ -8,6 +8,7 @@ import { AutomationPage } from "./AutomationPage";
 import { GeneralPage } from "./GeneralPage";
 import { IntegrationsPage } from "./IntegrationsPage";
 import { LabsPage } from "./LabsPage";
+import { SettingsSearch } from "./SettingsSearch";
 import { PluginsPage } from "./PluginsPage";
 import { ProjectsPage } from "./ProjectsPage";
 import { ShortcutsPage } from "./ShortcutsPage";
@@ -34,25 +35,27 @@ export function SettingsApp() {
   return (
     <div className="flex h-full min-h-0 [line-height:1.4]">
       <nav className="w-52 flex-none overflow-y-auto border-r border-s-seam bg-s-side px-2 pt-12 select-none">
-        {/* four groups, a hairline between them */}
-        {TAB_GROUPS.map((group, i) => (
-          <div key={group[0][0]} className={`grid gap-px py-1 ${i ? "mt-1 border-t border-s-seam pt-2" : ""}`}>
-            {group.map(([id, name, glyph]) => (
-              <button
-                key={id}
-                className={`flex h-7 items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-[13px] text-s-fg focus-visible:ring-2 ring-s-ring focus-visible:outline-none ${tab === id ? "bg-s-sel font-medium" : "hover:bg-s-hover"}`}
-                onClick={() => go(id)}
-                aria-current={tab === id ? "page" : undefined}
-              >
-                <Icon
-                  name={glyph}
-                  className={`size-4 flex-none fill-none stroke-current stroke-2 glyph ${tab === id ? "text-accent-text" : "text-secondary"}`}
-                />
-                <span className="min-w-0 flex-1 truncate text-left">{t(name)}</span>
-              </button>
-            ))}
-          </div>
-        ))}
+        <SettingsSearch>
+          {/* four groups, a hairline between them */}
+          {TAB_GROUPS.map((group, i) => (
+            <div key={group[0][0]} className={`grid gap-px py-1 ${i ? "mt-1 border-t border-s-seam pt-2" : ""}`}>
+              {group.map(([id, name, glyph]) => (
+                <button
+                  key={id}
+                  className={`flex h-7 items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-[13px] text-s-fg focus-visible:ring-2 ring-s-ring focus-visible:outline-none ${tab === id ? "bg-s-sel font-medium" : "hover:bg-s-hover"}`}
+                  onClick={() => go(id)}
+                  aria-current={tab === id ? "page" : undefined}
+                >
+                  <Icon
+                    name={glyph}
+                    className={`size-4 flex-none fill-none stroke-current stroke-2 glyph ${tab === id ? "text-accent-text" : "text-secondary"}`}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-left">{t(name)}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </SettingsSearch>
         <div className="mt-1 grid border-t border-s-seam pt-2">
           <button
             className="flex h-7 items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-[13px] text-s-fg hover:bg-s-hover focus-visible:ring-2 ring-s-ring focus-visible:outline-none"
@@ -75,40 +78,40 @@ export function SettingsApp() {
               : "mx-auto grid max-w-150 grid-cols-1 content-start gap-7 px-8 pt-6 pb-10 [&>*]:min-w-0"
           }
         >
-          <div className={page("general")}>
+          <div className={page("general")} data-search-page="general">
             <GeneralPage />
           </div>
-          <div className={page("vault")}>
+          <div className={page("vault")} data-search-page="vault">
             <VaultPage vaultStatus={vaultStatus} />
           </div>
-          <div className={page("projects")}>
+          <div className={page("projects")} data-search-page="projects">
             <ProjectsPage active={tab === "projects"} />
           </div>
-          <div className={page("agents")}>
+          <div className={page("agents")} data-search-page="agents">
             <AgentsPage />
           </div>
-          <div className={page("integrations")}>
+          <div className={page("integrations")} data-search-page="integrations">
             <IntegrationsPage active={tab === "integrations"} />
           </div>
-          <div className={page("plugins")}>
+          <div className={page("plugins")} data-search-page="plugins">
             <PluginsPage active={tab === "plugins"} />
           </div>
-          <div className={page("voice")}>
+          <div className={page("voice")} data-search-page="voice">
             <VoicePage active={tab === "voice"} />
           </div>
-          <div className={page("shortcuts")}>
+          <div className={page("shortcuts")} data-search-page="shortcuts">
             <ShortcutsPage />
           </div>
-          <div className={page("automation")}>
+          <div className={page("automation")} data-search-page="automation">
             <AutomationPage />
           </div>
-          <div className={page("access")}>
+          <div className={page("access")} data-search-page="access">
             <AccessPage active={tab === "access"} />
           </div>
-          <div className={page("labs")}>
+          <div className={page("labs")} data-search-page="labs">
             <LabsPage />
           </div>
-          <div className={page("updates")}>
+          <div className={page("updates")} data-search-page="updates">
             <UpdatesPage active={tab === "updates"} />
           </div>
         </div>
