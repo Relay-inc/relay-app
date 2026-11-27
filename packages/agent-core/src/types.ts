@@ -57,6 +57,7 @@ export type AgentEvent =
   | { type: "stderr"; text: string }   // added by the app: the process's stderr
   | { type: "side_answer"; id: string; text: string; error: boolean } // the answer to a side question (/btw), or why there is none; Claude Code
   | { type: "draft_saved"; folder: string; to: string[]; cc?: string[]; bcc?: string[] } // added by the app: a relay-mail draft (Claude Code only)
+  | { type: "reload"; busy: boolean } // added by the app: the answer to a reload of skills and plugins (Claude Code); busy: refused, a turn runs
   | { type: "commands"; commands: { name: string; description: string; argumentHint?: string }[] } // added by the app: Claude Code's slash commands and skills
   | { type: "exit" };                  // added by the app: the process ended
 

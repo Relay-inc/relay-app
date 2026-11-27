@@ -136,6 +136,9 @@ export function applyAgentEvent(
     case "draft_saved":
       push(state, key, { kind: "note", text: draftNote(event, env.t) });
       return [];
+    case "reload":
+      push(state, key, { kind: "note", text: env.t(event.busy ? "note.reloadBusy" : "note.reloaded") });
+      return [];
     case "reset":
       state.messages[key] = [];
       delete state.context[key];

@@ -1099,6 +1099,10 @@ function handle(cmd: string, a: Args): unknown {
       return fixture === "models" ? integ.agentsStatusManyModels : integ.agentsStatus;
     case "agent_commands":
       return integ.agentCommands(a.provider);
+    case "agent_skills":
+      return integ.agentSkills(a.provider);
+    case "agent_reload":
+      return true;
     case "action_config":
       return { actions: integ.actions, config: structuredClone(actionConfig) };
     case "set_action_config":

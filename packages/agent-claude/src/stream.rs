@@ -209,6 +209,13 @@ impl State {
     }
 }
 
+/// The rows of Settings › Skills out of `get_skills_dialog`'s skills: what the menu shows, not its token estimates.
+pub fn skills(list: &Value) -> Value {
+    Value::Array(list.as_array().into_iter().flatten().map(|s| json!({
+        "name": s["display_name"].as_str().or(s["name"].as_str()), "description": s["description"], "source": s["source"], "state": s["state"],
+    })).collect())
+}
+
 fn parse(ev: &Value) -> Vec<Event> {
     let mut out = vec![];
     match ev["type"].as_str().unwrap_or("") {
@@ -233,6 +240,7 @@ fn parse(ev: &Value) -> Vec<Event> {
         }
         "control_response" => {
             let r = &ev["response"];
+            let reload = r["request_id"] == "reload_plugins";
             if r["request_id"] == "remote" {
                 // Remote Control's answer: the session to continue on claude.ai, or nothing once it is off
                 let url = r["response"]["session_url"].as_str().map(String::from);
@@ -242,10 +250,17 @@ fn parse(ev: &Value) -> Vec<Event> {
                 // a side question's answer (/btw) is the user's, not a log line
                 let (text, error) = if r["subtype"] == "error" { (r["error"].as_str().unwrap_or("error"), true) } else { (r["response"]["response"].as_str().unwrap_or(""), false) };
                 out.push(Event::SideAnswer { id: id.into(), text: text.into(), error });
+            } else if reload {
+                // the app's reload_plugins: a session that is busy refuses it (that is no failure), else it is done
+                let busy = r["subtype"] == "error";
+                if busy && r["error_code"] != "reload_plugins_busy" { out.push(Event::Stderr { text: format!("relay-mail ({}): {}", r["request_id"].as_str().unwrap_or(""), r["error"]) }); }
+                else { out.push(Event::Reload { busy }); }
             } else if r["subtype"] == "error" { out.push(Event::Stderr { text: format!("relay-mail ({}): {}", r["request_id"].as_str().unwrap_or(""), r["error"]) }); }
             // the slash commands and skills this vault has, for the composer's completion
-            if r["request_id"] == "init" && r["response"]["commands"].is_array() { out.push(Event::Commands { commands: r["response"]["commands"].clone() }); }
+            if (r["request_id"] == "init" || reload) && r["response"]["commands"].is_array() { out.push(Event::Commands { commands: r["response"]["commands"].clone() }); }
         }
+        // plugins and skills load in the background and change on disk: the new list, as the init response had it
+        "system" if ev["subtype"] == "commands_changed" && ev["commands"].is_array() => out.push(Event::Commands { commands: ev["commands"].clone() }),
         "system" if ev["subtype"] == "bridge_state" => out.push(Event::Remote { on: true, url: None, state: ev["state"].as_str().map(String::from) }),
         "system" if ev["subtype"] == "status" && ev["status"] == "compacting" => out.push(Event::Compacting),
         "system" if ev["subtype"] == "compact_boundary" => out.push(compacted(&ev["compact_metadata"], "pre_tokens", "post_tokens")),
@@ -434,6 +449,25 @@ mod tests {
         let ok = json!({"type": "control_response", "response": {"subtype": "success", "request_id": "btw-1", "response": {"response": "Teal.", "synthetic": false}}});
         let bad = json!({"type": "control_response", "response": {"subtype": "error", "request_id": "btw-2", "error": "side_question_busy"}});
         assert_eq!(parse_all(&[ok, bad]), [Event::SideAnswer { id: "btw-1".into(), text: "Teal.".into(), error: false }, Event::SideAnswer { id: "btw-2".into(), text: "side_question_busy".into(), error: true }]);
+    }
+
+    #[test]
+    fn reload_answers_and_changed_commands() {
+        let done = json!({"type": "control_response", "response": {"subtype": "success", "request_id": "reload_plugins", "response": {"commands": [{"name": "new-skill"}], "plugins": []}}});
+        assert_eq!(parse_all(&[done]), [Event::Reload { busy: false }, Event::Commands { commands: json!([{"name": "new-skill"}]) }]);
+        let busy = json!({"type": "control_response", "response": {"subtype": "error", "request_id": "reload_plugins", "error": "The session is busy", "error_code": "reload_plugins_busy"}});
+        assert_eq!(parse_all(&[busy]), [Event::Reload { busy: true }]);
+        let failed = json!({"type": "control_response", "response": {"subtype": "error", "request_id": "reload_plugins", "error": "boom"}});
+        assert!(matches!(&parse_all(&[failed])[..], [Event::Stderr { .. }]));
+        let changed = json!({"type": "system", "subtype": "commands_changed", "commands": [{"name": "a"}]});
+        assert_eq!(parse_all(&[changed]), [Event::Commands { commands: json!([{"name": "a"}]) }]);
+    }
+
+    #[test]
+    fn skills_keep_what_the_menu_shows() {
+        let got = skills(&json!([{"name": "acme:review", "display_name": "review", "description": "d", "source": "plugin", "state": "on", "tokens": 9, "advertised": true}]));
+        assert_eq!(got, json!([{"name": "review", "description": "d", "source": "plugin", "state": "on"}]));
+        assert_eq!(skills(&json!(null)), json!([]));
     }
 
     #[test]

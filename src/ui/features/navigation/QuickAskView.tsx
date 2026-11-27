@@ -33,7 +33,7 @@ import {
 } from "../../../application/navigation/kb";
 import { activeFolder, workspaces } from "../../../application/navigation/workspaces";
 import { filterPrefix, queryOf, takeFilters } from "../../../domain/navigation/search";
-import { quickSend } from "../../../application/conversations/actions";
+import { canReloadSkills, quickSend, reloadSkills } from "../../../application/conversations/actions";
 import { knownTickets, openFoundCard, searchTickets, type Found } from "../../../application/board/board";
 import { findMeetings, timeOf } from "../../../application/calendar/calendar";
 import { openMeeting } from "../../../application/today/today";
@@ -172,6 +172,7 @@ export function QuickAskView() {
     note("new-here", t("qk.cmdNewHere"), () => void newHere()),
     note("today", t("nav.today"), () => void select(WAIT)),
     ...(inProject ? tools.map(([id, label]) => note(`tool:${id}`, label, () => openDrawer(id))) : []),
+    ...(canReloadSkills() ? [note("reload-skills", t("qk.cmdReloadSkills"), () => void reloadSkills())] : []),
     note("settings", t("set.title"), () => void openSettingsTab()),
     ...TABS.map(([id, name]) =>
       note(`settings:${id}`, `${t("set.title")}: ${t(name)}`, () => void openSettingsTab(id)),

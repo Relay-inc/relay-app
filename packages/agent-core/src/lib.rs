@@ -228,6 +228,8 @@ pub enum Event {
     Stderr { text: String },
     /// The slash commands and skills the vault has, as the provider's control pipe lists them on opening.
     Commands { commands: Value },
+    /// The answer to a [`AgentProvider::reload`]: done, or refused because the session was busy.
+    Reload { busy: bool },
     /// The answer to a side question ([`AgentProvider::side_question`]): `id` is the one it was asked with, `text` the
     /// answer, or the failure when `error`. Not part of the conversation.
     SideAnswer { id: String, text: String, error: bool },
@@ -291,6 +293,8 @@ pub trait AgentProvider: Sync {
     fn models(&self) -> Vec<Choice>;
     /// Executable slash commands/skills in this vault, without starting a conversation.
     fn commands(&self, _env: &Env) -> Value { serde_json::json!([]) }
+    /// The skills in this vault with where each comes from (`{name, description, source, state}`), without starting a conversation.
+    fn skills(&self, _env: &Env) -> Value { serde_json::json!([]) }
     fn efforts(&self) -> Vec<Choice> { vec![] }
     /// Whether a session id may go on a command line.
     fn valid_session(&self, id: &str) -> bool { safe_id(id) }
@@ -307,6 +311,9 @@ pub trait AgentProvider: Sync {
     fn control_reply(&self, _id: &Value, _reply: Result<Value, String>) -> Option<String> { None }
     /// `caps.live_model`: the stdin line that changes the model for the turns after it ("": the CLI's own).
     fn set_model(&self, _model: &str) -> Option<String> { None }
+    /// The stdin line that has a running process pick up skills and plugins changed on disk, refused while it is busy.
+    /// Its answer is [`Event::Reload`] and a fresh [`Event::Commands`].
+    fn reload(&self) -> Option<String> { None }
     /// `caps.bridge`: the stdin line that turns Remote Control on or off, answered by [`Event::Remote`].
     fn remote_control(&self, _on: bool) -> Option<String> { None }
     /// `caps.control`: the stdin line that asks the running process a side question (`/btw`), answered from the

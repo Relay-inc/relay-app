@@ -15,6 +15,7 @@ import { Footer } from "./Footer";
 import { LoadingSection } from "./LoadingSection";
 import { RunDefault } from "./RunDefault";
 import { Section } from "./Section";
+import { SkillsSection } from "./SkillsSection";
 import { SettingsFold } from "./SettingsFold";
 import { StatusLine } from "./StatusLine";
 import { useToggleSet } from "./useToggleSet";
@@ -140,6 +141,8 @@ export function AgentsPage() {
           }
         />
       )}
+      {/* Claude Code's, when it is on and installed */}
+      {detected.providers.some(p => p.id === "claude" && config(p.id).on && p.detect.installed) && <SkillsSection />}
       <RunDefault />
       <ActionsSection ext="knowledge" name={t("act.knowledge")} />
     </>
