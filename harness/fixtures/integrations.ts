@@ -781,6 +781,7 @@ const caps = (all: boolean) => ({
   control: all,
   picked: all,
   remote: all,
+  bridge: all,
   brain: all,
   mcp: all,
 });
@@ -918,6 +919,36 @@ export const mcpServers = () => [
   { name: "claude.ai Calendar", status: "connected", error: null, connector: true },
   { name: "claude.ai Tracker", status: "needs-auth", error: null, connector: true },
 ];
+/** agent_skills: Claude's skills in the vault, where each comes from. */
+export const agentSkills = (provider: string) =>
+  provider === "claude"
+    ? [
+        {
+          name: "release-notes",
+          description: "Draft release notes from the merged pull requests of a sprint",
+          source: "project",
+          state: "on",
+        },
+        {
+          name: "meeting-recap",
+          description: "Turn rough meeting notes into a short recap with decisions and next steps",
+          source: "user",
+          state: "on",
+        },
+        {
+          name: "northwind:triage",
+          description: "Sort incoming tickets for Northwind Portal by urgency and owner",
+          source: "plugin",
+          state: "on",
+        },
+        {
+          name: "northwind:deploy-check",
+          description: "Check the staging deploy before it goes to production",
+          source: "plugin",
+          state: "user-invocable-only",
+        },
+      ]
+    : [];
 /** agent_commands: per provider, what the composer completes after a slash. */
 export const agentCommands = (provider: string) =>
   provider === "claude"
@@ -944,7 +975,13 @@ const act = (ext: string, id: string, about: string, write: boolean, def: string
   default: def,
 });
 export const actions = [
-  act("productive", "search", "Search tasks by text (title or number), up to 20. Closed tasks are included, see 'closed'.", false, "auto"),
+  act(
+    "productive",
+    "search",
+    "Search tasks by text (title or number), up to 20. Closed tasks are included, see 'closed'.",
+    false,
+    "auto",
+  ),
   act("productive", "task", "Read one task by id, or by number with the project id.", false, "auto"),
   act("productive", "statuses", "The workflow statuses a task of a project can move to.", false, "auto"),
   act("productive", "create_task", "Create a task in a project's task list.", true, "ask"),
@@ -1175,7 +1212,9 @@ const GH_ITEMS = [
 export function githubProjects(body: unknown): unknown {
   const q = String((body as { query?: string })?.query ?? "");
   const op = q.match(/^\s*(?:query|mutation)\s+(\w+)/)?.[1];
-  const projects = (nodes: [string, string][]) => ({ nodes: nodes.map(([id, title]) => ({ id, title, closed: false })) });
+  const projects = (nodes: [string, string][]) => ({
+    nodes: nodes.map(([id, title]) => ({ id, title, closed: false })),
+  });
   if (op === "Boards")
     return {
       data: {
@@ -1184,7 +1223,16 @@ export function githubProjects(body: unknown): unknown {
           name: "Demo User",
           projectsV2: projects([["PVT_kwDOPersonal1", "Side projects"]]),
           organizations: {
-            nodes: [{ login: "beacon", name: "Beacon", projectsV2: projects([[GH_PROJECT, "Billing roadmap"], ["PVT_kwDOBeacon02", "Website"]]) }],
+            nodes: [
+              {
+                login: "beacon",
+                name: "Beacon",
+                projectsV2: projects([
+                  [GH_PROJECT, "Billing roadmap"],
+                  ["PVT_kwDOBeacon02", "Website"],
+                ]),
+              },
+            ],
           },
         },
       },
@@ -1198,7 +1246,8 @@ export function githubProjects(body: unknown): unknown {
         },
       },
     };
-  if (op === "Items") return { data: { node: { items: { nodes: GH_ITEMS, pageInfo: { hasNextPage: false, endCursor: null } } } } };
+  if (op === "Items")
+    return { data: { node: { items: { nodes: GH_ITEMS, pageInfo: { hasNextPage: false, endCursor: null } } } } };
   if (op === "Move") return { data: { updateProjectV2ItemFieldValue: { projectV2Item: { id: "x" } } } };
   if (op === "Clear") return { data: { clearProjectV2ItemFieldValue: { projectV2Item: { id: "x" } } } };
   if (op === "Create") return { data: { addProjectV2DraftIssue: { projectItem: { id: "PVTI_lADOBeaconNew" } } } };

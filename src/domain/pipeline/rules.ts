@@ -137,7 +137,8 @@ export const workersOf = (workers: Worker[], project: string) => workers.filter(
 /** A ticket's last worker. */
 export const lastWorker = (workers: Worker[], card: string) => workers.filter(w => ticketOf(w)?.card === card).pop();
 
-/** The tickets to start on, best first: the ones in the pick column (with the label, when set) that have no running
+/** The tickets to start on, best first: the ones in the pick column (with the label, when set, and assigned to the
+ *  user, when `mine`) that have no running
  *  worker. `resume`: a ticket moved back after a worker ran on it, which that worker picks up again with its worktree.
  *  None while the pipeline is paused. */
 export function picks(cards: Card[], col: (c: Card) => string, p: Pipeline, workers: Worker[]) {
@@ -154,7 +155,10 @@ function pickColumn(cards: Card[], col: (c: Card) => string, p: Pipeline, worker
   const fresh: Card[] = [];
   const resume: { card: Card; worker: Worker }[] = [];
   const waiting = cards
-    .filter(c => col(c) === p.pick && (!label || (c.labels ?? []).some(l => l.toLowerCase() === label)))
+    .filter(
+      c =>
+        col(c) === p.pick && (!label || (c.labels ?? []).some(l => l.toLowerCase() === label)) && (!p.mine || !!c.me),
+    )
     .sort((a, b) => a.placement - b.placement);
   for (const card of waiting) {
     const w = lastWorker(workers, card.id);

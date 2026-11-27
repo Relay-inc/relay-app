@@ -26,8 +26,13 @@ test("cards carry number, list, due day and the first name of the first member",
 });
 
 test("assigned to me keeps only my cards", () => {
-  assert.deepEqual(mapCards(fx("cards"), "600000000000000000000e01").map(c => c.id), ["600000000000000000000d01"]);
-  assert.equal(mapCards(fx("cards"), "600000000000000000000eff").length, 0);
+  assert.deepEqual(mapCards(fx("cards"), "600000000000000000000e01", true).map(c => c.id), ["600000000000000000000d01"]);
+  assert.equal(mapCards(fx("cards"), "600000000000000000000eff", true).length, 0);
+  assert.equal(mapCards(fx("cards"), undefined, true).length, 0, "nobody known: nothing is mine");
+});
+
+test("my cards are marked, the others kept", () => {
+  assert.deepEqual(mapCards(fx("cards"), "600000000000000000000e01").map(c => !!c.me), [true, false]);
 });
 
 test("labels and the last activity come along when Trello sends them", () => {

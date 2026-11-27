@@ -3,10 +3,10 @@ import type { AgentEvent, AgentsStatus, Caps, PickKind, Seen } from "./types";
 /** The last pick per provider; Claude's under the keys from before the providers. */
 export const pickKey = (kind: PickKind, id: string) => (id === "claude" ? kind : `${kind}.${id}`);
 /** What the rules read of a provider before `agents_status` has answered: what each of the built-in ones is known for. */
-const KNOWN: Record<string, { caps: Pick<Caps, "picked" | "remote">; textOnly: string[] }> = {
-  claude: { caps: { picked: true, remote: true }, textOnly: [] },
-  codex: { caps: { picked: false, remote: false }, textOnly: ["compact", "review"] },
-  pi: { caps: { picked: false, remote: false }, textOnly: ["compact"] },
+const KNOWN: Record<string, { caps: Pick<Caps, "picked" | "remote" | "bridge">; textOnly: string[] }> = {
+  claude: { caps: { picked: true, remote: true, bridge: true }, textOnly: [] },
+  codex: { caps: { picked: false, remote: false, bridge: false }, textOnly: ["compact", "review"] },
+  pi: { caps: { picked: false, remote: false, bridge: false }, textOnly: ["compact"] },
 };
 export const knownCaps = (id: string) => KNOWN[id]?.caps;
 /** The agents a conversation in another vault than the main one may run on: Claude Code keeps to the fence's rules,

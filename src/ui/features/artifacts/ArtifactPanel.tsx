@@ -8,7 +8,7 @@ import {
   openArtifact,
   openInBrowser,
   setArtifactView,
-  useArtifactStore,
+  useShownArtifact,
 } from "../../../application/artifacts/artifacts";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useNavigationStore } from "../../../application/navigation/store";
@@ -35,8 +35,9 @@ function useFrameTheme() {
  *  Artifacts of the conversation are a pick away; a republish shows its new version. */
 export function ArtifactPanel() {
   const { t } = useT();
-  const opened = useArtifactStore(s => s.open);
-  const view = useArtifactStore(s => s.view);
+  const shownHere = useShownArtifact();
+  const opened = shownHere?.open ?? null;
+  const view = shownHere?.view ?? "local";
   const selected = useNavigationStore(s => s.selected);
   const items = useConversationsStore(s => s.messages[selected]);
   const all = artifactsIn(items);
