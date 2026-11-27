@@ -18,6 +18,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 - A board pipeline can pick up only the tickets assigned to you (Settings › Projects › Pipeline, Only tickets assigned to me); tickets assigned to someone else or to nobody stay in the column. Trello and Linear cards now know when they are yours too, as Productive and GitHub Projects already did (#558)
 
+### Changed
+
+- Each conversation keeps its own Artifact drawer: switching to another conversation and back opens the same artifact again, in the view you picked (This Mac or claude.ai), and a drawer you closed stays closed. The agents column comes back the same way; the terminal, Git and files drawers still follow the open conversation
+
 ## [0.0.70] - 2026-11-26
 
 ### Added

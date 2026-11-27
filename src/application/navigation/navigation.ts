@@ -8,6 +8,8 @@ import {
   isView,
   boardIdOf,
   backAfter,
+  drawerOn,
+  ownDrawer,
   type Back,
   type Drawer,
   type Tool,
@@ -51,7 +53,12 @@ export async function select(key: string, tool: Tool | null = null) {
     draft.orchDetail = false;
     // a conversation's agents column and agent page belong to that conversation
     draft.agentPage = "";
-    if (draft.selected !== key && (draft.drawer === "agents" || draft.drawer === "artifact")) draft.drawer = "";
+    // a conversation's own drawer (its agents, its Artifact) waits for it while another is open
+    if (draft.selected !== key) {
+      if (ownDrawer(draft.drawer)) draft.kept[draft.selected] = draft.drawer;
+      else delete draft.kept[draft.selected];
+      draft.drawer = drawerOn(draft.drawer, draft.kept[key]);
+    }
     if (key === ORCH) draft.drawer = "workers";
     else if (draft.drawer === "workers") draft.drawer = "";
     draft.selected = key;
