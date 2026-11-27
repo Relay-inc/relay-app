@@ -3,9 +3,10 @@
 Every PR adds a line under **Unreleased**, in the group that fits (Added, Changed, Fixed, Removed). CI fails a PR
 that doesn't touch this file; the `skip-changelog` label opts out (docs, CI, refactors nobody notices).
 
-To release: move Unreleased under a new version heading with the date, then set that version in `package.json`,
-the root `Cargo.toml` (`[workspace.package]`, the app and relay-server read it there, `tauri.conf.json` reads it from
-`package.json`) and the image tag in `deploy/relay-server/compose.yml`. Once that is on main, run `scripts/release.sh` on a Mac, on main: it builds Relay and publishes it as
+To release: `scripts/bump.sh <version>` moves Unreleased under a new version heading with today's date and sets that
+version in `package.json`, the root `Cargo.toml` (`[workspace.package]`, the app and relay-server read it there,
+`tauri.conf.json` reads it from `package.json`), `Cargo.lock` and the image tag in `deploy/relay-server/compose.yml`.
+Once that is on main, run `scripts/release.sh` on a Mac, on main: it builds Relay and publishes it as
 GitHub release `v<version>` with this version's section as its notes, then pushes relay-server's image and attaches
 its Linux binaries (`scripts/push-server-image.sh`). The Windows installer is built on a Windows machine with
 `scripts/release-windows.ps1`, not in GitHub Actions: `RELAY_WINDOWS_SETUP=/path/to/Relay_<version>_x64-setup.exe`
