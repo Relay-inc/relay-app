@@ -12,7 +12,7 @@ import { Html } from "../../components/Html";
 import { Icon } from "../../components/Icon";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
-import { buttonClass, DEFAULT_PILL, ERROR_MESSAGE, FIELD_BASE, OK_MESSAGE, PILL, SELECT, withoutColon } from "./blocks";
+import { buttonClass, ERROR_MESSAGE, FIELD_BASE, OK_MESSAGE, PILL, SELECT, withoutColon } from "./blocks";
 import { AgentAccounts } from "./AgentAccounts";
 import { AgentGlyph, AgentStatusLine } from "./AgentBits";
 import { ChangeInput } from "./ChangeInput";
@@ -65,7 +65,6 @@ export function AgentSettings({
               <AgentStatusLine detect={status.detect} />
             </div>
           </div>
-          {on && (isDefault ? <span className={DEFAULT_PILL}>{t("ag.isDefault")}</span> : null)}
           {on && !isDefault && (
             <button className={buttonClass()} onClick={() => setDefaultAgent(id)}>
               {t("ag.makeDefault")}

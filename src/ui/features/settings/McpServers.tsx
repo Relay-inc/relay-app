@@ -6,7 +6,7 @@ import { buttonClass, ERROR_MESSAGE } from "./blocks";
 import { Section } from "./Section";
 import { StatusLine } from "./StatusLine";
 
-const LEVEL = { connected: "ok", failed: "warn", "needs-auth": "warn", pending: "off", disabled: "off" } as const;
+const LEVEL = { connected: "ok", failed: "bad", "needs-auth": "warn", pending: "off", disabled: "off" } as const;
 const ROW = "flex items-center gap-3 px-3.5 py-3 [&+&]:border-t [&+&]:border-s-border";
 
 /** The MCP servers Claude Code runs itself in this vault, the second section of Settings › Plugins: each with its
@@ -61,11 +61,7 @@ export function McpServers({
         </span>
         <span className="flex w-36 flex-none justify-end">
           {action && (
-            <button
-              className={buttonClass(action === "signin" || action === "connect" ? "primary" : "plain")}
-              disabled={!!busy}
-              onClick={() => runMcp(action, server.name)}
-            >
+            <button className={buttonClass("plain")} disabled={!!busy} onClick={() => runMcp(action, server.name)}>
               {here && action === "signin" ? t("mcp.waiting") : t(`mcp.${action}`)}
             </button>
           )}
