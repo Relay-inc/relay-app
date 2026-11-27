@@ -53,6 +53,7 @@ export type AgentEvent =
   | { type: "context"; used?: number | null; window?: number | null } // how full the context is: tokens in use and/or the model's window (Claude Code)
   | { type: "resolved"; model: string; effort?: string | null; default_model: boolean; default_effort: boolean } // what the CLI runs on; default_* when the conversation left it to the CLI
   | { type: "stderr"; text: string }   // added by the app: the process's stderr
+  | { type: "side_answer"; id: string; text: string; error: boolean } // the answer to a side question (/btw), or why there is none; Claude Code
   | { type: "draft_saved"; folder: string; to: string[]; cc?: string[]; bcc?: string[] } // added by the app: a relay-mail draft (Claude Code only)
   | { type: "commands"; commands: { name: string; description: string; argumentHint?: string }[] } // added by the app: Claude Code's slash commands and skills
   | { type: "exit" };                  // added by the app: the process ended
