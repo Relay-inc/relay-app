@@ -16,6 +16,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Added
 
+- **Keep vault changes automatically** (Settings › General, off by default): what Relay's Claude runs write to the vault comes into the Changes feed already kept, under Reviewed, instead of waiting for Keep one entry at a time
 - **A project's board is picked in one place: Settings › Projects › General**. A Board section with the tracker (only the ones set up under Integrations), its project and the board, the ones named like the project first. Picking a board links it at once, Unlink drops it, and the project list shows which tracker a project uses. Changing the board of a project whose pipeline is on switches the pipeline off until you check its columns (#571)
 
 ### Removed

@@ -210,6 +210,7 @@ export type Settings = {
   accent?: Accent;
   terminal?: TerminalApp;
   keepAwake?: boolean; // hold off idle sleep while a turn runs, on unless false
+  autoKeepChanges?: boolean; // Changes feed: what Claude runs write to the vault comes in kept, off unless true
   voice?: VoiceCfg; // Settings › Voice (domain/settings/voice.ts)
   shortcuts?: Record<string, string[]>; // Settings › Shortcuts, what differs from the defaults (domain/settings/shortcuts.ts)
   autoRetry?: boolean; // send a turn refused for a limit again once it resets, off unless true

@@ -66,6 +66,7 @@ export async function changeAccent(accent: Accent) {
 }
 export const saveTerminal = (terminal: TerminalApp) => save({ ...current(), terminal });
 export const saveKeepAwake = (keepAwake: boolean) => save({ ...current(), keepAwake });
+export const saveAutoKeepChanges = (autoKeepChanges: boolean) => save({ ...current(), autoKeepChanges });
 export const saveAutoRetry = (autoRetry: boolean) => save({ ...current(), autoRetry });
 export const saveTimeFromSessions = (timeFromSessions: boolean) => save({ ...current(), timeFromSessions });
 export const saveGitDrawer = (gitDrawer: boolean) => save({ ...current(), gitDrawer });

@@ -1676,6 +1676,9 @@ export default {
   "set.keepAwake": "Mac wach halten, während Unterhaltungen laufen",
   "set.keepAwakeHelp":
     "Solange eine Unterhaltung einen laufenden Zug hat, schläft der Mac bei Inaktivität nicht ein, du kannst ihn also weiterarbeiten lassen. Zuklappen schickt ihn trotzdem in den Ruhezustand.",
+  "set.autoKeepChanges": "Änderungen im Vault automatisch behalten",
+  "set.autoKeepChangesHelp":
+    "Was Relays Claude-Läufe in den Vault schreiben (Captures, Seitenaktionen, Briefings), wartet in Änderungen nicht mehr auf Behalten: es kommt behalten an, unter Geprüft, wo du es weiter ansehen kannst.",
   "set.autoRetry": "Erneut versuchen, wenn ein Nutzungslimit zurückgesetzt wird",
   "set.autoRetryHelp":
     "Wird eine Unterhaltung abgelehnt, weil das Nutzungslimit des Anbieters erreicht ist, und gibt es kein anderes Konto zum Wechseln, sendet Relay sie erneut, sobald das Limit zurückgesetzt ist. Ist <b>Mac wach halten</b> an, bleibt der Mac bis dahin wach.",

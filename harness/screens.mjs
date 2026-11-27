@@ -2026,6 +2026,12 @@ const VIEWS = {
     await settingsPage("General");
     await intoView("Write vault updates when a conversation closes or goes quiet");
   },
+  // Settings › General › Keep vault changes automatically, switched on (off by default)
+  "settings-autokeep": async () => {
+    await settingsPage("General");
+    await click("Keep vault changes automatically");
+    await intoView("Keep vault changes automatically");
+  },
   "settings-crabs": async () => {
     await settingsPage("General");
     await intoView("Crabs for the orchestrator's workers");

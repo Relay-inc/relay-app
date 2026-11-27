@@ -15,6 +15,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, Mutex};
 
 const KEEP_MS: i64 = 30 * 86_400_000;
@@ -23,6 +24,10 @@ const MAX_BYTES: u64 = 1 << 20;
 
 /// The vault's notes before a job: path (relative) -> text.
 pub type Snap = HashMap<String, String>;
+
+/// Settings › General › Keep vault changes automatically (`autoKeepChanges`): a new entry comes in kept, under
+/// Reviewed, instead of waiting for Keep. Set by lib.rs at start and on every settings save.
+pub static AUTO_KEEP: AtomicBool = AtomicBool::new(false);
 
 // read-modify-write of an entry's file: one at a time
 static LOCK: Mutex<()> = Mutex::new(());
@@ -64,7 +69,7 @@ pub fn record(root: &Path, before: &Snap, source: &str, subject: &str, reason: &
         if a.is_some_and(|a| typed.get(&root.join(p)).is_some_and(|h| *h == crate::vault::text_hash(a))) { continue; }
         files.push(json!({"path": p, "before": b, "after": a, "state": "open"}));
     }
-    write_entry(root, source, subject, reason, files)
+    write_entry(root, source, subject, reason, files, AUTO_KEEP.load(Ordering::Relaxed))
 }
 
 /// An entry for writes the app made itself (a meeting's briefing, summary, decision or follow-up mark, written from the
@@ -77,11 +82,12 @@ pub fn record_files(root: &Path, source: &str, subject: &str, reason: &str, note
         if !plain || !path.ends_with(".md") { return Err(format!("not a note of this workspace: {path}")); }
         if before != after { files.push(json!({"path": path, "before": before, "after": after, "state": "open"})); }
     }
-    write_entry(root, source, subject, reason, files)
+    write_entry(root, source, subject, reason, files, AUTO_KEEP.load(Ordering::Relaxed))
 }
 
-fn write_entry(root: &Path, source: &str, subject: &str, reason: &str, files: Vec<Value>) -> Result<Option<String>, String> {
+fn write_entry(root: &Path, source: &str, subject: &str, reason: &str, mut files: Vec<Value>, kept: bool) -> Result<Option<String>, String> {
     if files.is_empty() { return Ok(None); }
+    if kept { for f in &mut files { f["state"] = json!("kept"); } }
     let _lock = LOCK.lock().unwrap();
     let at = now_ms();
     let id = format!("{at}-{}", &relay_remote::tls::random_secret()[..6]);
@@ -280,6 +286,14 @@ mod tests {
         keep(&d, &id, None).unwrap();
         assert_eq!(list(&d)[0]["files"][0]["state"], "kept");
         assert!(undo(&d, &id, "Projects/Findings.md").is_err());
+    }
+
+    #[test]
+    fn with_auto_keep_an_entry_comes_in_kept() {
+        let d = vault("autokeep");
+        let files = vec![json!({"path": "Projects/Beacon.md", "before": "a\n", "after": "b\n", "state": "open"})];
+        write_entry(&d, "capture", "x", "", files, true).unwrap().unwrap();
+        assert_eq!(list(&d)[0]["files"][0]["state"], "kept");
     }
 
     #[test]
