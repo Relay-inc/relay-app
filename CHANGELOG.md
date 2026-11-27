@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Added
+
+- A board pipeline can pick up only the tickets assigned to you (Settings › Projects › Pipeline, Only tickets assigned to me); tickets assigned to someone else or to nobody stay in the column. Trello and Linear cards now know when they are yours too, as Productive and GitHub Projects already did (#558)
+
 ## [0.0.70] - 2026-11-26
 
 ### Added

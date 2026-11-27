@@ -460,6 +460,9 @@ export default {
   "pl.none": "Dort lassen",
   "pl.label": "Nur mit Label",
   "pl.labelHelp": "Leer: jedes Ticket in der Spalte.",
+  "pl.mine": "Nur mir zugewiesene Tickets",
+  "pl.mineHelp":
+    "Tickets, die jemand anderem oder niemandem zugewiesen sind, bleiben in der Spalte. Productive braucht deine Benutzer-ID unter Integrationen.",
   "pl.skill": "Skill",
   "pl.skillHelp": "Ein Claude-Code-Skill, dem der Agent pro Ticket folgt. Leer: Relays eigener Ablauf.",
   "pl.plan": "Zuerst ein Plan",
