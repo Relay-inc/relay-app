@@ -16,7 +16,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Added
 
-- Claude Code now suggests your next message after a turn: it shows grey in the empty message field, and Tab or the right arrow takes it. Claude Code's own setting `promptSuggestionEnabled` turns it off.
+- Claude Code now suggests your next message after a turn: it shows grey in the empty message field, and Tab or the right arrow takes it. Claude Code's own setting `promptSuggestionEnabled` turns it off. (#566)
 
 ## [0.0.70] - 2026-11-26
 
