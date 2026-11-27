@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Added
+
+- **MCP servers in Settings › Agents › Claude Code**: the servers Claude has in the vault with their state (connected, failed with its error, needs sign-in, starting, off). Sign in to one that needs it (the page opens in your browser; a claude.ai connector is connected on claude.ai), reconnect a failed one, or switch one off or on. New conversations pick up the change; running ones keep the servers they have
+
 ## [0.0.70] - 2026-11-26
 
 ### Added
