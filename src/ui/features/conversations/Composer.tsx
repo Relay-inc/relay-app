@@ -626,7 +626,7 @@ export function Composer({ className }: { className: string }) {
           ) : null}
           {/* sends, or stops the running turn */}
           <button
-            className={`grid place-items-center size-7 rounded-full border-0 ${busy ? "bg-label" : "bg-accent hover:bg-accent-hover"} text-on-accent`}
+            className={`grid place-items-center size-7 rounded-full border-0 ${busy ? "bg-label text-bg" : "bg-accent hover:bg-accent-hover text-on-accent"}`}
             aria-label={busy ? t("wait.stop") : t("composer.send")}
             onClick={sendOrStop}
           >
