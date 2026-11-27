@@ -20,6 +20,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 - **`/btw` side questions**: type `/btw <question>` in a Claude conversation to ask something about it without interrupting Claude. The answer shows in a small card above the composer, also while Claude is working, and is not added to the conversation. Ask again to follow up; × or Esc closes the card (#559)
 - Continue a Claude Code conversation on claude.ai or the Claude phone app: right-click it in the sidebar and pick Continue on phone. A phone icon in the title bar shows it is on, with the link to open or copy and Stop; what you type on the phone shows up in the conversation. (#562)
 - Settings › Agents lists the skills Claude Code has in your vault, from you, the project or a plugin, and ⌘K gets "Reload skills and plugins" to pick up a skill or plugin you just added without starting a new conversation (#564).
+- **MCP servers in Settings › Agents › Claude Code**: the servers Claude has in the vault with their state (connected, failed with its error, needs sign-in, starting, off). Sign in to one that needs it (the page opens in your browser; a claude.ai connector is connected on claude.ai), reconnect a failed one, or switch one off or on. New conversations pick up the change; running ones keep the servers they have (#565)
 - Claude Code now suggests your next message after a turn: it shows grey in the empty message field, and Tab or the right arrow takes it. Claude Code's own setting `promptSuggestionEnabled` turns it off. (#566)
 
 ### Changed

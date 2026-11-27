@@ -118,7 +118,8 @@ pub fn discover_commands(env: &Env, probe: impl FnOnce(&mut Probe) -> R<Value>) 
     discover_within(env, Duration::from_secs(15), probe)
 }
 
-fn discover_within(env: &Env, limit: Duration, probe: impl FnOnce(&mut Probe) -> R<Value>) -> Value {
+/// [`discover_commands`] with its own deadline: a sign-in waits for a person.
+pub fn discover_within(env: &Env, limit: Duration, probe: impl FnOnce(&mut Probe) -> R<Value>) -> Value {
     let pids = Arc::new(Mutex::new(Vec::new()));
     #[cfg(windows)]
     let Ok(job) = crate::job::Job::new().map(Arc::new) else { return json!({}) };

@@ -1406,6 +1406,13 @@ const VIEWS = {
     await unfold("Codex");
     await intoView("Approvals");
   },
+  // Settings › Agents › Claude Code › MCP servers: one row per state, a failed one's error on one muted line
+  "settings-agents-mcp": async () => {
+    await settingsPage("Agents");
+    await unfold("Claude Code");
+    await waitText("northwind-db", 10000);
+    await intoView("MCP servers");
+  },
   // two Claude accounts, the first used up: each account's limits, the one in use marked
   "usage-accounts": async () => {
     await open(page, server.url, { fixture: "accounts" });

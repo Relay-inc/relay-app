@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
 
+pub mod mcp;
 pub mod permission;
 pub mod stream;
 pub mod subagents;
@@ -184,13 +185,21 @@ fn answered(out: std::process::Output) -> Result<String, String> {
 
 static SUBS: Mutex<Option<subagents::SubCache>> = Mutex::new(None);
 
+/// A short-lived `claude -p` that takes control requests and starts no conversation (`commands`, `mcp`).
+fn control_cmd(env: &Env) -> Command {
+    let mut cmd = Command::new(env.bin);
+    cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+        "--settings", r#"{"disableAllHooks":true}"#, "--no-session-persistence"]).current_dir(env.vault).env_remove("ANTHROPIC_API_KEY");
+    cmd
+}
+
 impl AgentProvider for Claude {
     fn id(&self) -> &'static str { "claude" }
     fn name(&self) -> &'static str { "Claude Code" }
     fn caps(&self) -> Caps {
         Caps { persistent: true, images: true, thinking: true, permissions: true, questions: true, subagents: true, fork: true,
             terminal: true, background: true, effort: true, limits: true, title: true, write: true, accounts: true,
-            live_model: true, control: true, picked: true, remote: true, bridge: true }
+            live_model: true, control: true, picked: true, remote: true, mcp: true, bridge: true }
     }
     fn npm_package(&self) -> Option<&'static str> { Some("@anthropic-ai/claude-code") }
     fn self_update(&self) -> &'static [&'static str] { &["update"] }
@@ -214,16 +223,14 @@ impl AgentProvider for Claude {
     }
     fn commands(&self, env: &Env) -> Value {
         agent_core::discover_commands(env, |p| {
-            let mut cmd = Command::new(env.bin);
-            cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
-                "--settings", r#"{"disableAllHooks":true}"#, "--no-session-persistence"]).current_dir(env.vault).env_remove("ANTHROPIC_API_KEY");
-            let c = p.start(cmd)?;
+            let c = p.start(control_cmd(env))?;
             p.send(c, json!({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize"}}))?;
             let v = p.receive(c, |v| v["type"] == "control_response")?;
             let commands = &v["response"]["response"]["commands"];
             Ok(if commands.is_null() { json!([]) } else { commands.clone() })
         })
     }
+    fn mcp(&self, env: &Env, op: &Value, open: &dyn Fn(&str)) -> Result<Value, String> { mcp::run(env, op, open) }
     fn skills(&self, env: &Env) -> Value {
         agent_core::discover_commands(env, |p| {
             let mut cmd = Command::new(env.bin);

@@ -4,6 +4,7 @@ import { saveAgent, saveAgentBin } from "../../../application/settings/agents-pa
 import { Html } from "../../components/Html";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
+import { McpServers } from "./McpServers";
 import { FIELD, HINT_IN_ROW, PILL, SELECT, withoutColon } from "./blocks";
 import { AgentAccounts } from "./AgentAccounts";
 import { ChangeInput } from "./ChangeInput";
@@ -69,6 +70,7 @@ export function AgentSettings({
         );
       })}
       {status.caps.accounts && <AgentAccounts id={id} config={config} />}
+      {status.caps.mcp && <McpServers />}
       {/* the label above the pills: a row of them on the right would wrap into a ragged column */}
       <div className="grid gap-1.5">
         <span className="text-[13px] text-s-fg">{withoutColon(t("ag.caps"))}</span>
