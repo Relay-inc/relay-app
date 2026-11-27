@@ -14,21 +14,17 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+## [0.0.72] - 2026-11-27
+
 ### Added
 
 - **Search in Settings**: a field on top of the page list (⌘F, Ctrl+F on Windows) that finds a setting by its label, its hint or its section. Results show the page and section; Return or a click opens the page, scrolls to the setting, rings it for a moment and marks the words you typed. Esc clears the field (#583)
-- **Keep vault changes automatically** (Settings › General, off by default): what Relay's Claude runs write to the vault comes into the Changes feed already kept, under Reviewed, instead of waiting for Keep one entry at a time
+- **Keep vault changes automatically** (Settings › General, off by default): what Relay's Claude runs write to the vault comes into the Changes feed already kept, under Reviewed, instead of waiting for Keep one entry at a time (#574)
 - **A project's board is picked in one place: Settings › Projects › General**. A Board section with the tracker (only the ones set up under Integrations), its project and the board, the ones named like the project first. Picking a board links it at once, Unlink drops it, and the project list shows which tracker a project uses. Changing the board of a project whose pipeline is on switches the pipeline off until you check its columns (#571)
 
 ### Changed
 
 - **Settings › Projects** regrouped: General keeps identity, board and repositories, each saying where it is stored (this Mac or the vault). Base branch and PRs into moved to Pipeline next to the checks as Branches & checks, the ticket flow reads left to right on one line, and the daily website-icon lookup sits in a menu on the list's icon button (#581)
-
-### Removed
-
-- The other places that linked a board to a project: the board list in Integrations, Vault project in the board's menu and the board picker on a pull request in Today. The board's menu and Today's Link a board now open Settings › Projects on that project (#571)
-
-### Changed
 
 - **Settings › Agents has a bar on top: "New conversations use [agent] on [where]"**, the default agent and where new conversations run (that moved here from General; the "on" part shows when you have a machine of your own). An agent's General tab starts with its Version (with Changelog and Update, as in Updates) and Program, then Accounts, with how much of each plan is left when known, and a link to its MCP servers. **Every MCP server is now on Plugins**, in two sections: Run by Relay (your plugins) and Run by Claude Code (the servers Claude Code runs, with Sign in, Reconnect and so on, and an Import button per server that replaces Import from Claude Code) (#580)
 - **Settings regrouped into pages in four groups**: General now holds only how Relay looks, with new pages Vault (vault folder, other folders, the files Relay reads, git backup, "Workspace folder" is now "Vault folder"), Automation (the switches for what Relay does on its own, Pause all pipelines is now Run pipelines there and gone from a project's Pipeline tab), Privacy & access (macOS permissions, which only offer System Settings where something is missing, and what agents may do with Reminders and Knowledge workspaces) and Labs (Files, and Mail's archive, delete and Inbox/Other, which moved out of Mail's integration page). Long hints are shortened, with the detail behind an info button (#578)
@@ -36,6 +32,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 - **What agents may do with your tools is one table** in Settings › Privacy & access: a row per tool (Reminders, Knowledge workspaces, Mail, Calendar, each board) with a summary like "3 run · 1 ask first", its switch, and its actions when you unfold it. Tools that are not connected are dimmed. (#582)
 - **Settings › Shortcuts owns every key, Voice and Updates are tidier**. Shortcuts has a filter, two columns on a wide window, Workspaces 1 to 9 and the rest of Today folded until you open them, and the dictation keys next to the others. Voice shows each dictation key read-only with a link to Shortcuts, lists the speech model in use first, and puts Language and Meetings side by side. Updates calls the agents "Agent programs", has Update all, and shows an agent that is not installed with a link to Agents (#577)
 - Settings › Agents has the layout of Settings › Projects: your agents on the left (on, then off), the picked agent's settings on the right with tabs (General, and for Claude Code MCP servers and Skills). Its header switches it on or off and makes it the default. Where new conversations run and agent access to Knowledge workspaces moved to Settings › General (#572)
+
+### Removed
+
+- The other places that linked a board to a project: the board list in Integrations, Vault project in the board's menu and the board picker on a pull request in Today. The board's menu and Today's Link a board now open Settings › Projects on that project (#571)
 
 ### Fixed
 
