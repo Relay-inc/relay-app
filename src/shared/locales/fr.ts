@@ -338,7 +338,6 @@ export default {
   "ag.skillFrom.user": "utilisateur",
   "ag.skillFrom.project": "projet",
   "ag.skillFrom.plugin": "plugin",
-  "ag.caps": "Sait",
   "ag.cap.images": "images",
   "ag.cap.permissions": "autorisations",
   "ag.cap.questions": "questions",
@@ -393,6 +392,8 @@ export default {
   "ag.offHelp": "Activez-le pour l'utiliser dans les nouvelles conversations et le régler ici.",
   "ag.switchOn": "Activer",
   "ag.general": "Général",
+  "ag.runs": "Comment il tourne",
+  "ag.supports": "Prend en charge",
   "int.add": "+ Ajouter une intégration",
   "int.empty":
     "Aucune intégration pour l'instant. Ajoutez-en une pour voir son tableau, ses pull requests ou vos mails dans la barre latérale.",

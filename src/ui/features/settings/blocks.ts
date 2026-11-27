@@ -36,7 +36,7 @@ export const BUTTON_GLYPH = "size-4 fill-none stroke-current stroke-2 glyph";
 /** The glyph on a tile (menu items, rows). */
 export const TILE = "glyph size-4 stroke-1";
 
-const FIELD_BASE =
+export const FIELD_BASE =
   " rounded-md border border-s-input bg-transparent px-2.5 text-s-fg placeholder:font-sans placeholder:text-s-subtle read-only:text-s-muted focus-visible:ring-1 ring-s-primary focus-visible:outline-none";
 export const FIELD = `${FIELD_BASE} h-8 w-65 text-sm`;
 export const FIELD_ICON = `${FIELD_BASE} h-8 w-42 text-sm`;

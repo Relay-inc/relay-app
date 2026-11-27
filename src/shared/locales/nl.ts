@@ -336,7 +336,6 @@ export default {
   "ag.skillFrom.user": "gebruiker",
   "ag.skillFrom.project": "project",
   "ag.skillFrom.plugin": "plugin",
-  "ag.caps": "Kan",
   "ag.cap.images": "afbeeldingen",
   "ag.cap.permissions": "toestemmingskaarten",
   "ag.cap.questions": "vragen",
@@ -390,6 +389,8 @@ export default {
   "ag.offHelp": "Zet het aan om het in nieuwe gesprekken te gebruiken en hier in te stellen.",
   "ag.switchOn": "Aanzetten",
   "ag.general": "Algemeen",
+  "ag.runs": "Hoe het draait",
+  "ag.supports": "Ondersteunt",
   "int.add": "+ Integratie toevoegen",
   "int.empty": "Nog geen integraties. Voeg er een toe om het bord, de pull requests of de mail in de zijbalk te zien.",
   "int.listHelp":

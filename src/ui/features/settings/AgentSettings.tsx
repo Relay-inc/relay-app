@@ -7,7 +7,7 @@ import { Html } from "../../components/Html";
 import { Icon } from "../../components/Icon";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
-import { buttonClass, DEFAULT_PILL, FIELD, HINT_IN_ROW, PILL, SELECT, withoutColon } from "./blocks";
+import { buttonClass, DEFAULT_PILL, FIELD_BASE, PILL, SELECT, withoutColon } from "./blocks";
 import { AgentAccounts } from "./AgentAccounts";
 import { AgentGlyph, AgentStatusLine } from "./AgentBits";
 import { ChangeInput } from "./ChangeInput";
@@ -19,6 +19,8 @@ import { Switch } from "./Switch";
 
 export type AgentTab = "general" | "mcp" | "skills";
 
+// the options' choices are sentences: as wide as the program field, so they read whole
+const WIDE_SELECT = SELECT.replace(" w-50 ", " w-96 ");
 const CAPS = ["images", "permissions", "questions", "subagents", "terminal", "limits", "effort"] as const;
 
 /** One agent's settings, the right side of Settings › Agents: its header (name, status, the switch, Make default) and
@@ -132,7 +134,7 @@ function General({ status, config }: { status: AgentStatus; config: AgentCfg }) 
         }
       >
         <ChangeInput
-          className={FIELD}
+          className={`${FIELD_BASE} h-8 w-96 text-sm`}
           id={`agbin-${id}`}
           value={config.bin}
           placeholder={t("ag.binPh", { bin: status.defaultBin })}
@@ -145,7 +147,7 @@ function General({ status, config }: { status: AgentStatus; config: AgentCfg }) 
         return (
           <Field key={option.id} label={at(agent!, option.label)} id={optionId}>
             <Select
-              className={SELECT}
+              className={WIDE_SELECT}
               id={optionId}
               options={option.choices.map(choice => ({ id: choice.id, name: at(agent!, choice.label) }))}
               value={String(config[option.id] ?? option.choices[0].id)}
@@ -159,12 +161,11 @@ function General({ status, config }: { status: AgentStatus; config: AgentCfg }) 
   );
   return (
     <>
-      {agent && <Html as="p" className={HINT_IN_ROW} html={ath(agent, "set.help")} />}
-      <Section title={t("ag.general")} rows>
+      <Section title={t("ag.runs")} desc={agent && <Html html={ath(agent, "set.help")} />} rows>
         {rows}
       </Section>
       {/* the label above the pills: a row of them on the right would wrap into a ragged column */}
-      <Section title={withoutColon(t("ag.caps"))}>
+      <Section title={t("ag.supports")}>
         <div className="flex flex-wrap gap-1">
           {CAPS.filter(name => status.caps[name]).map(name => (
             <span key={name} className={PILL}>

@@ -335,7 +335,6 @@ export default {
   "ag.skillFrom.user": "Benutzer",
   "ag.skillFrom.project": "Projekt",
   "ag.skillFrom.plugin": "Plugin",
-  "ag.caps": "Kann",
   "ag.cap.images": "Bilder",
   "ag.cap.permissions": "Berechtigungen",
   "ag.cap.questions": "Fragen",
@@ -389,6 +388,8 @@ export default {
   "ag.offHelp": "Schalte ihn ein, um ihn in neuen Gesprächen zu nutzen und hier einzurichten.",
   "ag.switchOn": "Einschalten",
   "ag.general": "Allgemein",
+  "ag.runs": "Wie er läuft",
+  "ag.supports": "Unterstützt",
   "int.add": "+ Integration hinzufügen",
   "int.empty":
     "Noch keine Integrationen. Füge eine hinzu, um ihr Board, Pull Requests oder Mail in der Seitenleiste zu sehen.",
