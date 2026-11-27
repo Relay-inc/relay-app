@@ -37,7 +37,9 @@ impl Turns {
     fn set(&mut self, n: u32) -> Option<u32> { (n != self.running).then(|| { self.running = n; n }) }
     /// Live work, also a replayed one: a turn is running. Repeated model steps are no extra message.
     pub fn working(&mut self) -> Option<u32> { self.set(self.running.max(1)) }
-    pub fn picked(&mut self) { self.picked += 1; }
+    /// Claude echoed a message it took up. False when Relay sent no more than the echoes so far: a message typed
+    /// elsewhere (the phone, with Remote Control on), which no turn end of ours answers.
+    pub fn picked(&mut self) -> bool { let own = self.picked < self.running; if own { self.picked += 1; } own }
     /// A turn end answers every message its turn took up, at least the one that started it.
     pub fn ended(&mut self) -> Option<u32> { let n = self.running.saturating_sub(self.picked.max(1)); self.picked = 0; self.set(n) }
     /// A message went in.
@@ -253,6 +255,40 @@ pub(crate) fn reload(state: &App, project: &str) -> Result<bool, String> {
     let Some(x) = procs.get_mut(project) else { return Ok(false) };
     writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
     Ok(true)
+}
+
+/// Remote Control on or off for a running conversation (the terminal's /remote-control): the answer comes back as an
+/// `agent` event of type `remote`. The process must be running, it is what claude.ai connects to.
+pub(crate) fn remote_control(state: &App, project: &str, on: bool) -> Result<(), String> {
+    let mut procs = state.procs.lock().unwrap();
+    let x = procs.get_mut(project).ok_or_else(|| trc("err.remote_idle"))?;
+    let line = provider_of(state, project, Some(x.provider)).remote_control(on).filter(|_| !x.remote).ok_or_else(|| trc("err.remote_none"))?;
+    writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())
+}
+
+/// A side question (`/btw`) for a conversation: written to its running process, which answers from the conversation's
+/// context without taking it into it, also while a turn runs. The answer comes back as a `side_answer` event. A
+/// conversation with no process yet (idle for long, or after a restart) gets one started the way `send` does, resumed
+/// on its session, without a turn. `r.text` is the question; `history` the earlier question/response pairs of this aside.
+pub(crate) fn side_question(app: &AppHandle, state: &App, r: Msg, id: &str, history: &Value) -> Result<(), String> {
+    let Msg { project, text, name, model, effort, provider, machine, about, vault, .. } = r;
+    let p = provider_of(state, &project, provider.as_deref());
+    let line = p.side_question(id, &text, history).filter(|_| p.caps().persistent).ok_or_else(|| format!("{}: no side questions", p.id()))?;
+    let model = model.filter(|m| agent_core::safe_model(m)).unwrap_or_default();
+    let effort = effort.filter(|e| p.efforts().iter().any(|c| c.id == *e)).unwrap_or_default();
+    let opts = (model, effort);
+    let name = name.unwrap_or_else(|| project.clone());
+    let account = account_of(state, p, &project, &opts.0);
+    let _gate = state.vault_gate.lock().unwrap();
+    let mut procs = state.procs.lock().unwrap();
+    if crate::policy::adding() { return Err(trc("err.vault_adding")); }
+    if !procs.contains_key(&project) {
+        let vault = crate::policy::picked_vault(&state.settings.lock().unwrap(), vault.as_deref())?;
+        let x = spawn(app, state, p, Start { project: &project, name: &name, fork: None, opts, turn: None, from_mail: false, account: &account, machine: machine.as_deref(), about: about.as_deref(), vault: vault.as_deref() })?;
+        procs.insert(project.clone(), x);
+    }
+    let x = procs.get_mut(&project).unwrap();
+    writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())
 }
 
 pub(crate) fn stop(app: &AppHandle, state: &App, project: &str) {

@@ -240,17 +240,28 @@ fn parse(ev: &Value) -> Vec<Event> {
         }
         "control_response" => {
             let r = &ev["response"];
-            // the app's reload_plugins: a session that is busy refuses it (that is no failure), else it is done
             let reload = r["request_id"] == "reload_plugins";
-            if r["subtype"] == "error" {
-                if reload && r["error_code"] == "reload_plugins_busy" { out.push(Event::Reload { busy: true }); }
-                else { out.push(Event::Stderr { text: format!("relay-mail ({}): {}", r["request_id"].as_str().unwrap_or(""), r["error"]) }); }
-            } else if reload { out.push(Event::Reload { busy: false }); }
+            if r["request_id"] == "remote" {
+                // Remote Control's answer: the session to continue on claude.ai, or nothing once it is off
+                let url = r["response"]["session_url"].as_str().map(String::from);
+                let error = (r["subtype"] == "error").then(|| r["error"].as_str().unwrap_or("").to_string());
+                out.push(Event::Remote { on: url.is_some(), url, state: error });
+            } else if let Some(id) = r["request_id"].as_str().filter(|id| id.starts_with("btw-")) {
+                // a side question's answer (/btw) is the user's, not a log line
+                let (text, error) = if r["subtype"] == "error" { (r["error"].as_str().unwrap_or("error"), true) } else { (r["response"]["response"].as_str().unwrap_or(""), false) };
+                out.push(Event::SideAnswer { id: id.into(), text: text.into(), error });
+            } else if reload {
+                // the app's reload_plugins: a session that is busy refuses it (that is no failure), else it is done
+                let busy = r["subtype"] == "error";
+                if busy && r["error_code"] != "reload_plugins_busy" { out.push(Event::Stderr { text: format!("relay-mail ({}): {}", r["request_id"].as_str().unwrap_or(""), r["error"]) }); }
+                else { out.push(Event::Reload { busy }); }
+            } else if r["subtype"] == "error" { out.push(Event::Stderr { text: format!("relay-mail ({}): {}", r["request_id"].as_str().unwrap_or(""), r["error"]) }); }
             // the slash commands and skills this vault has, for the composer's completion
             if (r["request_id"] == "init" || reload) && r["response"]["commands"].is_array() { out.push(Event::Commands { commands: r["response"]["commands"].clone() }); }
         }
         // plugins and skills load in the background and change on disk: the new list, as the init response had it
         "system" if ev["subtype"] == "commands_changed" && ev["commands"].is_array() => out.push(Event::Commands { commands: ev["commands"].clone() }),
+        "system" if ev["subtype"] == "bridge_state" => out.push(Event::Remote { on: true, url: None, state: ev["state"].as_str().map(String::from) }),
         "system" if ev["subtype"] == "status" && ev["status"] == "compacting" => out.push(Event::Compacting),
         "system" if ev["subtype"] == "compact_boundary" => out.push(compacted(&ev["compact_metadata"], "pre_tokens", "post_tokens")),
         "user" => {
@@ -423,8 +434,21 @@ mod tests {
         assert_eq!((r.kind.as_str(), r.tool_name.as_str(), r.request_id.as_deref(), r.tool_use_id.as_deref()), ("tool", "Write", Some("r3"), Some("toolu_1")));
         let init = json!({"type": "control_response", "response": {"subtype": "success", "request_id": "init", "response": {"commands": [{"name": "/compact"}]}}});
         assert_eq!(parse_all(&[init]), [Event::Commands { commands: json!([{"name": "/compact"}]) }]);
+        // Remote Control: the session on, its bridge's state, and off (an error says why it did not turn on)
+        let on = json!({"type": "control_response", "response": {"subtype": "success", "request_id": "remote", "response": {"session_url": "https://claude.ai/code/session_x", "bridge_epoch": 1}}});
+        assert_eq!(parse_all(&[on]), [Event::Remote { on: true, url: Some("https://claude.ai/code/session_x".into()), state: None }]);
+        let bridge = json!({"type": "system", "subtype": "bridge_state", "state": "connected", "bridge_epoch": 1});
+        assert_eq!(parse_all(&[bridge]), [Event::Remote { on: true, url: None, state: Some("connected".into()) }]);
+        let off = json!({"type": "control_response", "response": {"subtype": "success", "request_id": "remote"}});
+        assert_eq!(parse_all(&[off]), [Event::Remote { on: false, url: None, state: None }]);
+        let no = json!({"type": "control_response", "response": {"subtype": "error", "request_id": "remote", "error": "Remote Control cannot be enabled from inside a remote session"}});
+        assert_eq!(parse_all(&[no]), [Event::Remote { on: false, url: None, state: Some("Remote Control cannot be enabled from inside a remote session".into()) }]);
         let err = json!({"type": "control_response", "response": {"subtype": "error", "request_id": "model", "error": "nope"}});
         assert_eq!(parse_all(&[err]), [Event::Stderr { text: "relay-mail (model): \"nope\"".into() }]);
+        // a side question's answer and failure are events of their own, never relay-mail's stderr
+        let ok = json!({"type": "control_response", "response": {"subtype": "success", "request_id": "btw-1", "response": {"response": "Teal.", "synthetic": false}}});
+        let bad = json!({"type": "control_response", "response": {"subtype": "error", "request_id": "btw-2", "error": "side_question_busy"}});
+        assert_eq!(parse_all(&[ok, bad]), [Event::SideAnswer { id: "btw-1".into(), text: "Teal.".into(), error: false }, Event::SideAnswer { id: "btw-2".into(), text: "side_question_busy".into(), error: true }]);
     }
 
     #[test]

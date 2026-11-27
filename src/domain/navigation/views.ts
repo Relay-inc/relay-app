@@ -47,6 +47,12 @@ export const meetingOf = (key: string) => {
 /** What the right drawer shows, "" while it is closed: one of the project's tools, the open conversation's changes,
  *  the orchestrator's workers, or an Artifact the conversation published. */
 export type Drawer = "" | "terminal" | "workers" | "git" | "files" | "agents" | "artifact";
+/** A conversation's own drawer: its agents or its Artifact. The project's tools (terminal, Git, files) follow whatever
+ *  is open instead. */
+export const ownDrawer = (drawer: Drawer) => drawer === "agents" || drawer === "artifact";
+/** The drawer once another conversation opens while `drawer` is shown: the own drawer that one had open when it was
+ *  left (`kept`), else what is shown, unless that belonged to the conversation left. */
+export const drawerOn = (drawer: Drawer, kept: Drawer | undefined): Drawer => kept || (ownDrawer(drawer) ? "" : drawer);
 /** A project's board or PRs opened from its title bar: whose they are, and the conversation to go back to. */
 export type Tool = { project: string; back: string };
 /** `detail`: a second, quieter line; a toast with one is a refusal and shows the red mark. */

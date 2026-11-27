@@ -49,16 +49,24 @@ export const projectOf = (key: string) => rules.projectOf(cs(), key);
 export const label = (key: string) => rules.label(cs(), key, t);
 /** The agent's session id behind a conversation (`claude --resume <id>`); empty while a new chat has none yet. */
 export const sessionIdOf = (key: string) => cs().sidOf[key]?.sid ?? termSid(key);
+/** Whether Remote Control can be turned on for a conversation: a Claude Code one on this Mac. */
+export const canRemote = (key: string) =>
+  !!cs().chats[key] && !isTerminal(key) && !isOrchKey(key) && !cs().machines[key] && !!chatCaps(key)?.bridge;
+/** The conversation's Remote Control session, while it is on. */
+export const remoteOf = (key: string) => cs().remote[key];
 /** A project's open conversations (null: the general ones), newest first. */
 export const chatsOf = (project: string | null) => rules.chatsOf(cs(), project);
 /** The sessions open in the terminal that the app did not start; `hidden` the ones closed here. */
 export const terminalSessions = (hidden = false) =>
   rules.terminalSessions(cs(), useWorkspaceStore.getState().snap.sessions.items, settings().overrides, t, hidden);
 export const terminalOf = (key: string) => terminalSessions().find(session => session.key === key);
+/** Whether the conversation's agent answers side questions (`/btw`): Claude Code's app conversations. */
+export const takesAside = (key: string) => !!cs().chats[key] && chatAgent(key) === "claude";
 /** The slash commands and skills of a conversation's agent, for the composer's completion, and Relay's own for an app
  *  conversation (phoneShare). */
 export const commandsOf = (key: string) => [
   ...(cs().commands[chatAgent(key)] ?? []),
+  ...(takesAside(key) ? [{ name: "btw", description: t("btw.desc"), argumentHint: "<question>" }] : []),
   ...(cs().chats[key] && !isOrchKey(key) ? phoneCommands() : []),
 ];
 /** The project of the open conversation, terminal or app. */
@@ -188,6 +196,8 @@ export function chatBar(key: string) {
     pipe: pipeProject(key),
     // the terminal would resume a conversation that touched mail without the app's restrictions
     locked: !!conversation?.fromMail,
+    // Remote Control is on for this conversation: the session to open on claude.ai
+    remote: conversation ? (cs().remote[key] ?? null) : null,
     noTerm: onView ? true : session ? session.kind !== "background" : agentOf(chatAgent(key))?.caps.terminal === false,
     // the view's second crumb: the project's view name when opened from a project, else a one-phrase summary
     sub: tool ? viewName : viewSummary(key),

@@ -2589,6 +2589,55 @@ const SCENARIOS = {
     s.fact("chat changes", await s.chatChanges());
   },
 
+  // each conversation keeps its own Artifact drawer: another conversation opens without it, and coming back shows it
+  // again, the same page in the view the person picked; the project's Git drawer still follows the conversation
+  async artifactPerConversation(s) {
+    await s.load();
+    await s.load({ sel: s.keys.artifact });
+    const { page } = s;
+    const drawer = () => page.evaluate(() => document.querySelector(".relay-app")?.getAttribute("data-drawer") ?? "");
+    const go = async text => {
+      await page.keyboard.press("Meta+k");
+      await settle(page, 200);
+      await page.keyboard.type(text);
+      await settle(page, 300);
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Enter");
+      await settle(page, 400);
+    };
+    await waitText(page, "The pipeline dashboard is up");
+    await page.getByRole("button", { name: "Open", exact: true }).click();
+    await settle(page, 300);
+    s.check("Open shows the Artifact drawer", (await drawer()) === "artifact");
+    await page.getByRole("tab", { name: "claude.ai" }).click();
+    await settle(page, 200);
+    await go("invoice export");
+    s.check("another conversation opens", (await s.local(["sel"])).sel === s.keys.switchTo);
+    s.check("without the Artifact drawer", (await drawer()) === "");
+    await go("pipeline dashboard");
+    s.check("back on the conversation", (await s.local(["sel"])).sel === s.keys.artifact);
+    s.check("its Artifact drawer is open again", (await drawer()) === "artifact");
+    s.check(
+      "on the same page, in the view picked",
+      await page.locator(".relay-drawer").getByText("Pipeline dashboard").first().isVisible(),
+    );
+    s.check(
+      "claude.ai still picked",
+      (await page.getByRole("tab", { name: "claude.ai" }).getAttribute("aria-selected")) === "true",
+    );
+    // closing it there: it stays closed when the conversation opens again
+    await page.getByRole("tab", { name: "This Mac" }).click();
+    await page.keyboard.press("Escape");
+    await settle(page, 200);
+    const closed = await drawer();
+    s.fact("drawer after Escape", closed);
+    if (closed === "") {
+      await go("invoice export");
+      await go("pipeline dashboard");
+      s.check("a closed drawer stays closed", (await drawer()) === "");
+    }
+  },
+
   // issue 387: ⌘K as the palette. Conversations (project on the right), commands (exact names first, one Commands
   // group with Today's note), settings pages, the 8-row cap, and a question (6+ words or `?`) that lists nothing
   async cmdkPalette(s) {

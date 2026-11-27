@@ -36,6 +36,8 @@ export type Pipeline = {
   merged: string;
   /** only tickets with this label are picked; empty: every ticket in the pick column */
   label: string;
+  /** only tickets assigned to the user of this Relay (the card's `me`); absent: anyone's */
+  mine?: boolean;
   /** workers running at once */
   parallel: number;
   /** Relay's validation of a done before it pushes (orch.rs validate): a shell command in each worktree the agent

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { outgoing, planSend, refusesImages, sendRequest } from "./send.ts";
+import { btwQuestion, outgoing, planSend, refusesImages, sendRequest } from "./send.ts";
 
 const state = (typed: Record<string, string>, outside: Record<string, number> = {}) => ({
   typed,
@@ -101,3 +101,22 @@ test("a note chip's path reaches every agent in the sent text, nothing of the no
     );
   }
 });
+
+test("/btw <question> is a side question, not a message, and goes at once even while a turn runs", () => {
+  assert.deepEqual(planSend(state({ "c:1": "/btw what colour? " }), "c:1", undefined, undefined, 0, true), {
+    kind: "btw",
+    key: "c:1",
+    question: "what colour?",
+    take: true,
+  });
+  assert.equal(btwQuestion("/btw"), null);
+  assert.equal(btwQuestion("/btwx y"), null);
+});
+
+test("/btw goes as an ordinary message where the agent has no side questions", () =>
+  assert.deepEqual(planSend(state({ "c:1": "/btw x" }), "c:1"), {
+    kind: "send",
+    key: "c:1",
+    text: "/btw x",
+    take: true,
+  }));

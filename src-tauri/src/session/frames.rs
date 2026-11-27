@@ -36,7 +36,8 @@ pub(crate) trait Sink {
     fn control(&self, id: &Value, server: Option<&str>, message: &Value);
     /// Turn accounting, see Turns. `turn_ended` gives the model the process runs on.
     fn working(&self);
-    fn picked(&self);
+    /// An echo of a message the agent took up: whether Relay sent it (see Turns::picked).
+    fn picked(&self) -> bool;
     fn turn_ended(&self) -> String;
     /// The provider's session id, kept for resume.
     fn session(&self, sid: &str);
@@ -121,7 +122,7 @@ impl Reader {
             Event::TurnLimited => { sink.spend(); self.limited = true; return; }
             // the control pipe's traffic stays between the CLI and the app, the webview only hears the commands and the failures
             Event::Control { id, server, message } => { sink.control(id, server.as_deref(), message); return; }
-            Event::Stderr { .. } | Event::Commands { .. } => { sink.emit(serde_json::to_value(&ev).unwrap_or_default()); return; }
+            Event::Stderr { .. } | Event::Commands { .. } | Event::SideAnswer { .. } => { sink.emit(serde_json::to_value(&ev).unwrap_or_default()); return; }
             // raised in the provider's own protocol: a card like any other, answered through respond()
             Event::Permission { request } => sink.permission(request),
             Event::Resolved { model, effort } => {
@@ -130,7 +131,11 @@ impl Reader {
             }
             Event::Text { text, delta } => { if !delta { self.last.clear(); } self.last.push_str(text); }
             // a turn end answers every message taken up in its turn, at least the one that started it
-            Event::Picked { .. } => sink.picked(),
+            Event::Picked { text } => if !sink.picked() {
+                // typed on the phone (Remote Control): not waiting in the webview, so it goes into the conversation now
+                if !replay { sink.emit(json!({"type": "said", "text": text})); }
+                return;
+            },
             Event::TurnEnd { .. } => self.turn_end(sink, replay),
             _ => {}
         }

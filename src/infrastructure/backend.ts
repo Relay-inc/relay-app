@@ -386,7 +386,19 @@ type SendArgs = {
   vault: string | null;
 };
 export const send = (args: SendArgs) => invoke("send", args);
+/** `/btw`: a side question for a conversation; the answer comes back as a `side_answer` event with `id`. `history`: the
+ *  earlier question and response pairs of the aside. The other arguments are those of `send`. */
+export const sideQuestion = (
+  args: Pick<SendArgs, "project" | "name" | "model" | "effort" | "provider" | "machine" | "about" | "vault"> & {
+    question: string;
+    id: string;
+    history: { question: string; response: string }[];
+  },
+) => invoke("side_question", args);
 export const stop = (project: string) => invoke("stop", { project });
+/** Remote Control: continue a running conversation from claude.ai or the phone (`on`), or stop that. The answer
+ *  comes as an agent event of type `remote`. Rejects when the conversation has no running process. */
+export const remoteControl = (project: string, on: boolean) => invoke<void>("remote_control", { project, on });
 /** Removes the git worktrees a conversation made; the ones with work git would lose stay. */
 export const dropWorktrees = (project: string) =>
   invoke<{ removed: number; kept: number }>("drop_worktrees", { project });

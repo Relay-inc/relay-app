@@ -781,6 +781,7 @@ const caps = (all: boolean) => ({
   control: all,
   picked: all,
   remote: all,
+  bridge: all,
   brain: all,
 });
 const choices = (pairs: [string, string][]) => pairs.map(([id, label]) => ({ id, label }));
