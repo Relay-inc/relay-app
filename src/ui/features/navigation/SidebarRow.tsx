@@ -32,6 +32,7 @@ type Props = Omit<ComponentProps<"div">, "className"> & {
   subs?: number; // subagents working
   subsTitle?: string;
   mark?: string; // a worker of the orchestrator: its small marker carries this tooltip
+  sub?: string; // a conversation's one-line status, small under its title
   hint?: string; // a short word after the name: the vault a general conversation runs in
   hintTitle?: string;
   meta?: Meta;
@@ -88,6 +89,7 @@ export function SidebarRow({
   subs = 0,
   subsTitle = "",
   mark = "",
+  sub = "",
   hint = "",
   hintTitle,
   meta,
@@ -171,13 +173,20 @@ export function SidebarRow({
       onKeyDown={clickOnKey}
       aria-busy={closing}
       {...rest}
-      className={`group flex ${indent ? "h-7.5 gap-2" : "h-8 gap-2.5"} items-center px-2 rounded-md cursor-default transition-colors duration-150 ease-out ${rowClass} ${nested ? "ml-9" : indent ? "ml-4.5" : ""} ${dropLineClass(drop, false)} ${dragging ? "opacity-40" : ""} ${closing ? "pointer-events-none animate-skel" : ""}`}
+      className={`group flex ${sub ? "min-h-9 py-1" : indent ? "h-7.5" : "h-8"} ${indent ? "gap-2" : "gap-2.5"} items-center px-2 rounded-md cursor-default transition-colors duration-150 ease-out ${rowClass} ${nested ? "ml-9" : indent ? "ml-4.5" : ""} ${dropLineClass(drop, false)} ${dragging ? "opacity-40" : ""} ${closing ? "pointer-events-none animate-skel" : ""}`}
     >
       {lead}
-      <span
-        className={`flex-1 overflow-hidden whitespace-nowrap text-ellipsis ${unseen ? "font-semibold" : selected ? "font-medium" : ""}`}
-      >
-        {name}
+      <span className="flex-1 min-w-0">
+        <span
+          className={`block overflow-hidden whitespace-nowrap text-ellipsis ${unseen ? "font-semibold" : selected ? "font-medium" : ""}`}
+        >
+          {name}
+        </span>
+        {sub ? (
+          <span className="block truncate text-xs text-tertiary" title={sub}>
+            {sub}
+          </span>
+        ) : null}
       </span>
       {hint ? (
         <span className="flex-none max-w-24 truncate text-xs text-tertiary" title={hintTitle}>

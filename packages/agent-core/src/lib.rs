@@ -237,6 +237,10 @@ pub enum Event {
     SideAnswer { id: String, text: String, error: bool },
     /// The conversation was compacted: what triggered it ("manual" or "auto") and the context's size in tokens before and after.
     Compacted { trigger: Option<String>, pre_tokens: Option<u64>, post_tokens: Option<u64> },
+    /// A one-line status of how the turn that just ended left the conversation, written by the provider after each
+    /// turn (Claude Code only). `category`: blocked, waiting, completed, review_ready or failed; `needs_action` is
+    /// empty unless the user has to do something.
+    TurnSummary { category: String, detail: String, needs_action: String },
     /// How full the context is: tokens in use now and/or the model's window, each when the provider says. Claude Code only.
     Context { used: Option<u64>, window: Option<u64> },
     /// The next message the user will probably send, predicted after a turn (Claude Code with `--prompt-suggestions`).

@@ -53,6 +53,7 @@ export type AgentEvent =
   | { type: "woke" }                // Claude Code started the turn that ends next itself: an artifact comment or a finished background task
   | { type: "compacting" }           // Claude Code is summarising the conversation to free context; `compacted` ends it
   | { type: "compacted"; trigger?: string | null; pre_tokens?: number | null; post_tokens?: number | null } // trigger: "manual" | "auto"
+  | { type: "turn_summary"; category: string; detail: string; needs_action: string } // Claude Code's one-line status after a turn; needs_action is "" unless the user has to act
   | { type: "context"; used?: number | null; window?: number | null } // how full the context is: tokens in use and/or the model's window (Claude Code)
   | { type: "suggestion"; text: string } // live, Claude Code only: the message the user will probably send next
   | { type: "resolved"; model: string; effort?: string | null; default_model: boolean; default_effort: boolean } // what the CLI runs on; default_* when the conversation left it to the CLI

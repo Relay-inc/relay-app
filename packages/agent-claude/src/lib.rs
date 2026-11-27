@@ -56,6 +56,8 @@ const SUGGESTIONS_VERSION: [u32; 3] = [2, 1, 332];
 /// Claude Code's Artifact tools and their comments (see `command`).
 const ARTIFACT_ENV: [(&str, &str); 4] = [("CLAUDE_CODE_ARTIFACT", "1"), ("CLAUDE_CODE_ARTIFACT_VERIFY", "1"),
     ("CLAUDE_CODE_ARTIFACT_VERSIONS", "1"), ("CLAUDE_CODE_ENTRYPOINT", "sdk-ts")];
+/// Switches on the `post_turn_summary` of each turn (see `command`).
+const RECAP_ENV: (&str, &str) = ("CLAUDE_CODE_ENVIRONMENT_KIND", "bridge");
 // the title call's prompts (prompts/conversation/): the system prompt, and the message in quotes as data
 const TITLE: &str = agent_core::prompt::text(include_str!("../../../prompts/conversation/title.md"));
 const TITLE_SYSTEM: &str = agent_core::prompt::text(include_str!("../../../prompts/conversation/title-system.md"));
@@ -290,7 +292,12 @@ impl AgentProvider for Claude {
             // Claude read and restore an older version. The tools' `open` does nothing without the CLI's
             // own UI: the app shows the page from the tool call (Design drawer). Drop these once the Agent SDK
             // documents a switch.
-            .envs(ARTIFACT_ENV);
+            .envs(ARTIFACT_ENV)
+            // ponytail: undocumented. Claude Code writes a one-line `post_turn_summary` after each turn for the surfaces
+            // that show one (Claude Desktop, remote control); `bridge` is the one that leaves the rest of print mode alone
+            // (the sdk entrypoint, the in-process MCP servers, the permission pipe). It costs a small background model call
+            // per turn. Do not set CLAUDE_CODE_CLASSIFIER_SUMMARY: any value of it turns the summary off.
+            .env(RECAP_ENV.0, RECAP_ENV.1);
         if !mcp["mcpServers"].as_object().is_some_and(|m| m.is_empty()) { cmd.arg("--mcp-config").arg(mcp.to_string()); }
         // grants.fenced, set by the app in a shared vault: only the servers above, none of the user's own or claude.ai's
         if fenced { cmd.arg("--strict-mcp-config"); }
@@ -546,8 +553,8 @@ mod tests {
         assert!(cmd.get_envs().any(|(k, v)| k == "CLAUDE_CONFIG_DIR" && v.is_none()));
         assert!(!cmd.get_envs().any(|(k, _)| k == "MCP_TOOL_TIMEOUT"));
         // the Artifact tools, and a live subscription for their comments
-        for (k, v) in ARTIFACT_ENV {
-            assert!(cmd.get_envs().any(|(a, b)| a == k && b.is_some_and(|b| b == v)), "{k}");
+        for (k, v) in ARTIFACT_ENV.iter().chain([&RECAP_ENV]) {
+            assert!(cmd.get_envs().any(|(a, b)| a == *k && b.is_some_and(|b| b == *v)), "{k}");
         }
         let l = Launch { resume: None, model: "", effort: "", ..l };
         let args: Vec<String> = PROVIDER.command(&env(&p), &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();

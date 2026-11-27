@@ -288,6 +288,11 @@ fn parse(ev: &Value) -> Vec<Event> {
         "system" if ev["subtype"] == "commands_changed" && ev["commands"].is_array() => out.push(Event::Commands { commands: ev["commands"].clone() }),
         "system" if ev["subtype"] == "bridge_state" => out.push(Event::Remote { on: true, url: None, state: ev["state"].as_str().map(String::from) }),
         "system" if ev["subtype"] == "status" && ev["status"] == "compacting" => out.push(Event::Compacting),
+        // the status line Claude Code writes after each turn, before its result (only when it is switched on, see `command`)
+        "system" if ev["subtype"] == "post_turn_summary" => {
+            let s = |k: &str| ev[k].as_str().unwrap_or("").trim().to_string();
+            out.push(Event::TurnSummary { category: s("status_category"), detail: s("status_detail"), needs_action: s("needs_action") });
+        }
         "system" if ev["subtype"] == "compact_boundary" => out.push(compacted(&ev["compact_metadata"], "pre_tokens", "post_tokens")),
         "user" => {
             for c in ev["message"]["content"].as_array().into_iter().flatten().filter(|c| c["type"] == "tool_result") {
@@ -648,6 +653,19 @@ mod tests {
         let end = go(json!({"type": "result", "subtype": "success", "usage": {}, "modelUsage": {"claude-haiku-4-5-20251001": {"contextWindow": 200000}}}));
         assert_eq!(end[0], Event::Context { used: None, window: Some(200000) });
         assert!(matches!(end[1], Event::TurnEnd { ok: true, .. }));
+    }
+
+    #[test]
+    fn the_post_turn_summary_is_the_conversations_status_line() {
+        // shapes as `claude -p` emitted them with CLAUDE_CODE_ENVIRONMENT_KIND=bridge (Claude Code 2.1.332)
+        let mut st = State::default();
+        let mut go = |l: Value| st.parse(&l.to_string());
+        let line = |cat: &str, detail: &str, needs: &str| json!({"type": "system", "subtype": "post_turn_summary", "summarizes_uuid": "a1", "status_category": cat,
+            "status_detail": detail, "needs_action": needs, "uuid": "u1", "session_id": "s1"});
+        assert_eq!(go(line("completed", "greeted the user in three words", "")),
+            vec![Event::TurnSummary { category: "completed".into(), detail: "greeted the user in three words".into(), needs_action: "".into() }]);
+        assert_eq!(go(line("blocked", " Which colour? ", "Pick blue or green")),
+            vec![Event::TurnSummary { category: "blocked".into(), detail: "Which colour?".into(), needs_action: "Pick blue or green".into() }]);
     }
 
     #[test]

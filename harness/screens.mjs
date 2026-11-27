@@ -3842,6 +3842,38 @@ const VIEWS = {
     await waitText("Conversation compacted automatically");
     await scrollMain("bottom");
   },
+  // Claude Code's one-line status after each turn as the subtitle of its conversation in the sidebar; one that asks
+  // the user something also gets the "needs you" dot
+  "sidebar-turn-summary": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(
+      ([done, ask, long]) => {
+        const h = window.__harness;
+        h.emitAgent(done, {
+          type: "turn_summary",
+          category: "completed",
+          detail: "Fixed the invoice rounding and added a test",
+          needs_action: "",
+        });
+        h.emitAgent(ask, {
+          type: "turn_summary",
+          category: "blocked",
+          detail: "Waiting on which sync strategy to use",
+          needs_action: "Pick one-way or two-way sync",
+        });
+        h.emitAgent(long, {
+          type: "turn_summary",
+          category: "failed",
+          detail: "The balance export failed twice on the staging database, so nothing was changed",
+          needs_action: "",
+        });
+      },
+      [keys.switchTo, keys.question, keys.long],
+    );
+    await waitText("Waiting on which sync strategy to use");
+    await page.evaluate(key => document.querySelector(`[data-key="${key}"]`)?.scrollIntoView({ block: "center" }), keys.question);
+  },
   // Claude's guess at the next message after a turn: the empty field's placeholder; Tab takes it into the field
   "conversation-suggestion": async () => {
     await open(page, server.url, { sel: keys.switchTo });

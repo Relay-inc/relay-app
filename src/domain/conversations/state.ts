@@ -8,6 +8,7 @@ import type {
   BtwPair,
   Chat,
   ContextUse,
+  Recap,
   Img,
   Item,
   Pending,
@@ -24,6 +25,7 @@ export type Translate = (key: Key, params?: Record<string, string | number>) => 
 export type ConversationsState = {
   chats: Record<string, Chat>;
   messages: Record<string, Item[]>; // per conversation, from the transcript and the live events
+  recap: Record<string, Recap>; // Claude Code's one-line status after the latest turn (not saved: the next turn writes it again)
   suggestion: Record<string, string>; // Claude Code's guess at the next message, the composer's placeholder; not saved
   context: Record<string, ContextUse>; // Claude Code's: what the latest message filled of the model's window
   status: Record<string, "idle" | "busy">;
@@ -77,6 +79,7 @@ export const initialConversations = (stored: {
 }): ConversationsState => ({
   ...stored,
   messages: {},
+  recap: {},
   suggestion: {},
   context: {},
   status: {},

@@ -365,6 +365,7 @@ export function NavigationView({ className }: { className: string }) {
         closable={row.closable}
         closing={row.closing}
         trail={row.trail}
+        sub={row.sub}
         subs={row.subs}
         subsTitle={row.subsTitle}
         mark={row.orch ? t("nav.orchWorker") : ""}
