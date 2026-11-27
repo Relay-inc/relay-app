@@ -438,6 +438,10 @@ export function settings(fixture: string) {
     },
     boards: {
       "Northwind Portal": { provider: "productive", project: "p1", board: "f1" },
+      // twoboards: a second project on its own Productive board, to switch between boards from the sidebar
+      ...(fixture === "twoboards"
+        ? { "Beacon Billing": { provider: "productive", project: "p2", board: "f-p2" } }
+        : {}),
       ...(fixture === "linear"
         ? { "Beacon Billing": { provider: "linear", project: LINEAR_TEAM, board: `cycle_${LINEAR_TEAM}` } }
         : {}),

@@ -14,6 +14,11 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Fixed
+
+- Clicking another project in the sidebar while a project's board is open now shows that project's board. Before, the
+  title bar named the new project but the board kept showing the previous project's tickets.
+
 ## [0.0.71] - 2026-11-27
 
 ### Added

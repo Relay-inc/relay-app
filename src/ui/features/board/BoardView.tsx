@@ -46,10 +46,14 @@ export function BoardView({ provider }: { provider: BoardProvider }) {
     },
   });
 
-  // load when shown, and again once resetBoard (new credentials, a new language) has cleared what was known
+  // the project whose board this is, when opened from a project (sidebar, title bar): another project's board is another
+  // board, also when the view stays open
+  const project = useNavigationStore(s => s.tool?.project);
+  // load when shown, for another project, and again once resetBoard (new credentials, a new language) has cleared what
+  // was known
   useEffect(() => {
     showBoard(provider);
-  }, [provider, resets]);
+  }, [provider, resets, project]);
 
   const onGrab = (grab: CardGrab) =>
     start(
