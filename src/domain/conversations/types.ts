@@ -88,6 +88,8 @@ export type Chat = {
   answers?: string; // a second opinion: the review conversation it answers
   window?: number; // the context window its last turn reported, for the meter once its transcript is read again
 };
+/** How the latest turn left a conversation, from the provider's own summary: one line, and what the user has to do ("" when nothing). */
+export type Recap = { detail: string; needs: string };
 /** How full a conversation's context is, in tokens. */
 export type ContextUse = { used: number; window: number };
 /** An image waiting to be sent: its media type, base64 data, and a blob url to show it. */

@@ -113,6 +113,8 @@ export const waitCount = (s: Pick<ConversationsState, "agentsList" | "hidden" | 
   s.pendingList.length + blockedAgents(s).length;
 export const isWaiting = (s: Pick<ConversationsState, "pendingList">, key: string) =>
   s.pendingList.some(request => request.project === key);
+/** A turn that ended on something only the user can do (a question, a choice): the provider's own summary says so. */
+export const needsYou = (s: Pick<ConversationsState, "recap">, key: string) => !!s.recap[key]?.needs;
 export const runningSubs = (s: Pick<ConversationsState, "subs">, key: string) =>
   (s.subs[key] || []).filter(sub => sub.running).length;
 /** What was closed under a project (or under Algemeen when project is null), newest first. */

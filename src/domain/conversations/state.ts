@@ -2,7 +2,19 @@ import type { Key } from "../../shared/i18n";
 import type { MachineChoice } from "../settings/types";
 import type { RepoWork } from "../settings/machines";
 import type { SlashCommand } from "./commands";
-import type { AgentSession, Chat, ContextUse, Img, Item, Pending, Retry, RouteChoice, SessionOf, Sub } from "./types";
+import type {
+  AgentSession,
+  Chat,
+  ContextUse,
+  Recap,
+  Img,
+  Item,
+  Pending,
+  Retry,
+  RouteChoice,
+  SessionOf,
+  Sub,
+} from "./types";
 
 /** A translation, handed to the rules that write text into the state (notes, titles). */
 export type Translate = (key: Key, params?: Record<string, string | number>) => string;
@@ -11,6 +23,7 @@ export type Translate = (key: Key, params?: Record<string, string | number>) => 
 export type ConversationsState = {
   chats: Record<string, Chat>;
   messages: Record<string, Item[]>; // per conversation, from the transcript and the live events
+  recap: Record<string, Recap>; // Claude Code's one-line status after the latest turn (not saved: the next turn writes it again)
   context: Record<string, ContextUse>; // Claude Code's: what the latest message filled of the model's window
   status: Record<string, "idle" | "busy">;
   queued: Record<string, number>; // messages sent but not answered yet: one turn end each, or one for all a turn took up
@@ -55,6 +68,7 @@ export const initialConversations = (stored: {
 }): ConversationsState => ({
   ...stored,
   messages: {},
+  recap: {},
   context: {},
   status: {},
   queued: {},

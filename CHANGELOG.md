@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Added
+
+- **Where each Claude conversation stands**: after each turn Claude Code writes a one-line status, which shows in small text under the conversation's title in the sidebar. When the turn ended on something only you can do (a question, a choice), the conversation gets the blue dot until you answer. Not kept over a restart; the next turn writes it again
+
 ## [0.0.70] - 2026-11-26
 
 ### Added

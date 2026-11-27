@@ -70,6 +70,7 @@ export const blockedAgents = () => rules.blockedAgents(cs());
 // what agents and sessions wait on: the meetings are not in it (the card above Today's queue carries them)
 export const waitCount = () => rules.waitCount(cs());
 export const isWaiting = (key: string) => rules.isWaiting(cs(), key);
+export const needsYou = (key: string) => rules.needsYou(cs(), key);
 export const runningSubs = (key: string) => rules.runningSubs(cs(), key);
 /** What was closed under a project, newest first, for "Heropen". */
 export const closedOf = (project: string | null) => rules.closedOf(cs(), terminalSessions(true), project, t);

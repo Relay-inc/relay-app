@@ -20,6 +20,7 @@ export type ConvRow = {
   selected: boolean;
   unseen: boolean;
   trail: Trail;
+  sub?: string; // Claude Code's one-line status of the latest turn, under the title
   subs: number;
   subsTitle: string;
   closable: boolean;

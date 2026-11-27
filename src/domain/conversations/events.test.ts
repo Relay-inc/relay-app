@@ -269,6 +269,24 @@ test("a compaction without a boundary fails with the turn, and one without sizes
   assert.equal(bare.context["c:1"], undefined); // the size after is unknown: no number rather than a stale one
 });
 
+test("a turn summary is kept for the sidebar, its needs_action is gone once the next turn starts, /clear drops it", () => {
+  let { next } = run(fresh(), {
+    type: "turn_summary",
+    category: "blocked",
+    detail: "Which colour?",
+    needs_action: "Pick blue or green",
+  });
+  assert.deepEqual(next.recap["c:1"], { detail: "Which colour?", needs: "Pick blue or green" });
+  // only the latest is kept; an empty one says nothing and leaves it
+  next = run(next, { type: "turn_summary", category: "", detail: "", needs_action: "" }).next;
+  assert.equal(next.recap["c:1"].needs, "Pick blue or green");
+  next = run(next, { type: "working" }).next;
+  assert.deepEqual(next.recap["c:1"], { detail: "Which colour?", needs: "" });
+  next = run(next, { type: "turn_summary", category: "completed", detail: "Painted it blue", needs_action: "" }).next;
+  assert.deepEqual(next.recap["c:1"], { detail: "Painted it blue", needs: "" });
+  assert.equal(run(next, { type: "reset" }).next.recap["c:1"], undefined);
+});
+
 test("context follows the latest message, takes the window a result names, and goes with /clear", () => {
   let { next } = run(fresh(), { type: "context", used: 40_000 });
   assert.deepEqual(next.context["c:1"], { used: 40_000, window: 200_000 });

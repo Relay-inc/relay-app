@@ -37,6 +37,7 @@ import {
   chatsOf,
   displayTitle,
   isWaiting,
+  needsYou,
   projectOf,
   runningSubs,
   terminalSessions,
@@ -164,7 +165,7 @@ function pipeRow(project: string): ConvRow[] {
   return [{ ...convRow(conversation), closable: false, pipe: { waits, title: waits ? tn("po.waits", waits) : "" } }];
 }
 const trailOf = (keys: string[]): Trail => {
-  if (keys.some(isWaiting)) return "dot";
+  if (keys.some(isWaiting) || keys.some(needsYou)) return "dot";
   if (keys.some(key => cs().status[key] === "busy")) return "spin";
   return "";
 };
@@ -188,6 +189,7 @@ const convRow = (conversation: Chat, folder = ""): ConvRow => ({
   selected: nav().selected === conversation.key,
   unseen: cs().unseen.has(conversation.key),
   trail: trailOf([conversation.key]),
+  sub: cs().recap[conversation.key]?.detail,
   ...subsOf(conversation.key),
   // only a draft reads what is typed: a keystroke in a started conversation leaves the sidebar alone
   closable: !(conversation.draft && !typedOf(conversation.key)),

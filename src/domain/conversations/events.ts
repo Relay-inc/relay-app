@@ -94,6 +94,8 @@ export function applyAgentEvent(
   // activity can arrive after a reload before the first status poll: it shows the turn, without counting another one
   if (ACTIVITY.includes(event.type)) {
     state.status[key] = "busy";
+    // a new turn is under way: what the last one asked of the user is answered or moot
+    if (state.recap[key]?.needs) state.recap[key].needs = "";
     state.queued[key] = Math.max(1, state.queued[key] || 0);
     // a turn at work that echoed nothing yet answers the oldest waiting message (a slash command never echoes), or
     // something Claude started itself (a background task done): a message sent from now on waits for its echo
@@ -119,6 +121,7 @@ export function applyAgentEvent(
     case "reset":
       state.messages[key] = [];
       delete state.context[key];
+      delete state.recap[key];
       return [];
     case "compacting":
       push(state, key, { kind: "compact", text: env.t("compact.running"), state: "run" });
@@ -137,6 +140,9 @@ export function applyAgentEvent(
       if (!endCompaction(state.messages[key], "ok", text)) push(state, key, { kind: "compact", text, state: "ok" });
       return setContext(state, key, event);
     }
+    case "turn_summary":
+      if (event.detail || event.needs_action) state.recap[key] = { detail: event.detail, needs: event.needs_action };
+      return [];
     case "context":
       return setContext(state, key, event);
     case "text":
