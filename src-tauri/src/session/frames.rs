@@ -36,7 +36,8 @@ pub(crate) trait Sink {
     fn control(&self, id: &Value, server: Option<&str>, message: &Value);
     /// Turn accounting, see Turns. `turn_ended` gives the model the process runs on.
     fn working(&self);
-    fn picked(&self);
+    /// An echo of a message the agent took up: whether Relay sent it (see Turns::picked).
+    fn picked(&self) -> bool;
     fn turn_ended(&self) -> String;
     /// The provider's session id, kept for resume.
     fn session(&self, sid: &str);
@@ -131,7 +132,11 @@ impl Reader {
             }
             Event::Text { text, delta } => { if !delta { self.last.clear(); } self.last.push_str(text); }
             // a turn end answers every message taken up in its turn, at least the one that started it
-            Event::Picked { .. } => sink.picked(),
+            Event::Picked { text } => if !sink.picked() {
+                // typed on the phone (Remote Control): not waiting in the webview, so it goes into the conversation now
+                if !replay { sink.emit(json!({"type": "said", "text": text})); }
+                return;
+            },
             Event::TurnEnd { .. } => self.turn_end(sink, replay),
             _ => {}
         }

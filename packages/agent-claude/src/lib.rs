@@ -183,7 +183,7 @@ impl AgentProvider for Claude {
     fn caps(&self) -> Caps {
         Caps { persistent: true, images: true, thinking: true, permissions: true, questions: true, subagents: true, fork: true,
             terminal: true, background: true, effort: true, limits: true, title: true, write: true, accounts: true,
-            live_model: true, control: true, picked: true, remote: true }
+            live_model: true, control: true, picked: true, remote: true, bridge: true }
     }
     fn npm_package(&self) -> Option<&'static str> { Some("@anthropic-ai/claude-code") }
     fn self_update(&self) -> &'static [&'static str] { &["update"] }
@@ -305,6 +305,9 @@ impl AgentProvider for Claude {
     }
     fn task_output(&self, id: &str) -> Option<String> {
         Some(json!({"type": "control_request", "request_id": format!("task-out:{id}"), "request": {"subtype": "get_task_output", "task_id": id}}).to_string())
+    }
+    fn remote_control(&self, on: bool) -> Option<String> {
+        Some(json!({"type": "control_request", "request_id": "remote", "request": {"subtype": "remote_control", "enabled": on}}).to_string())
     }
     fn respond(&self, req: &agent_core::pending::Request, decision: &Value) -> Option<String> { permission::respond(req, decision) }
     fn input(&self, turn: &Turn) -> Option<String> { Some(stream::user_message(turn).to_string()) }
@@ -582,6 +585,9 @@ mod tests {
         assert_eq!((ask["request_id"].as_str(), ask["request"]["subtype"].as_str(), ask["request"]["question"].as_str(), ask["request"]["history"][0]["response"].as_str()), (Some("btw-1"), Some("side_question"), Some("Which colour?"), Some("b")));
         assert_eq!((model["type"].as_str(), model["request"]["subtype"].as_str(), model["request"]["model"].as_str()), (Some("control_request"), Some("set_model"), Some("sonnet")));
         assert_eq!(line(PROVIDER.set_model(""))["request"]["model"], "default");
+        let rc = line(PROVIDER.remote_control(true));
+        assert_eq!((rc["request_id"].as_str(), rc["request"]["subtype"].as_str(), rc["request"]["enabled"].as_bool()), (Some("remote"), Some("remote_control"), Some(true)));
+        assert_eq!(line(PROVIDER.remote_control(false))["request"]["enabled"], false);
     }
     #[test]
     fn terminal_commands() {

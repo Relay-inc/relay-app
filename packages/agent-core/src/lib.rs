@@ -70,6 +70,8 @@ pub struct Caps {
     pub picked: bool,
     /// Can run on a work machine (Settings › Machines) and be moved there.
     pub remote: bool,
+    /// Can be continued from claude.ai or the Claude phone app while it runs ([`AgentProvider::remote_control`]).
+    pub bridge: bool,
 }
 
 /// Where the provider runs. `bin` is the settings' override or [`AgentProvider::default_bin`].
@@ -177,6 +179,9 @@ pub enum Event {
     /// Live: the agent took up a user message sent to it, at this point of its work (Claude Code only, the echo of
     /// `--replay-user-messages`). A message sent while a turn runs can join that turn instead of starting its own.
     Picked { text: String },
+    /// Remote Control: turned on (`url` the session to open on claude.ai, none when only its `state` changed, "ready",
+    /// "connected" or "failed") or off. Off with a `state` is the reason it did not turn on. Claude Code only.
+    Remote { on: bool, url: Option<String>, state: Option<String> },
     /// Assistant text: a whole block, or with `delta` a piece appended to the last one.
     Text { text: String, delta: bool },
     Thinking { text: String, delta: bool },
@@ -319,6 +324,8 @@ pub trait AgentProvider: Sync {
     /// The stdin lines that stop a background task, and ask for what it printed (answered as [`Event::TaskOutput`]).
     fn stop_task(&self, _id: &str) -> Option<String> { None }
     fn task_output(&self, _id: &str) -> Option<String> { None }
+    /// `caps.bridge`: the stdin line that turns Remote Control on or off, answered by [`Event::Remote`].
+    fn remote_control(&self, _on: bool) -> Option<String> { None }
     /// `caps.control`: the stdin line that asks the running process a side question (`/btw`), answered from the
     /// conversation's context without joining it and also while a turn runs, as an [`Event::SideAnswer`] for `id`.
     /// `history`: the earlier `{question, response}` pairs of the same aside. Claude Code only.

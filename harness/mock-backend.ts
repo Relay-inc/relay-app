@@ -1575,6 +1575,14 @@ function handle(cmd: string, a: Args): unknown {
     case "task_output":
       emitAgent(a.project as string, { type: "task_output", id: a.task, text: "> northwind-portal@1.4.0 build\n> vite build\n\ntransforming...\n42 modules transformed.\ndist/index.html   0.46 kB\ndist/assets/index-3f9a1c.js   143.20 kB" });
       return null;
+    // Remote Control (session/mod.rs remote_control): the answer comes as agent events, a made-up session link
+    case "remote_control":
+      setTimeout(() => {
+        if (!a.on) return emitAgent(a.project, { type: "remote", on: false });
+        emitAgent(a.project, { type: "remote", on: true, url: "https://claude.ai/code/session_northwind" });
+        setTimeout(() => emitAgent(a.project, { type: "remote", on: true, state: "connected" }), 300);
+      }, 200);
+      return null;
     // a side question (/btw): its answer comes a moment later, as the backend's `side_answer` event
     case "side_question":
       setTimeout(

@@ -9,6 +9,7 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { BoardCrumb } from "../board/BoardCrumb";
 import { BoardActions } from "../board/BoardActions";
 import { BuddyButton } from "../buddy/BuddyButton";
+import { RemoteButton } from "./RemoteButton";
 
 /** What the bar offers for a project: its tools, the one that is open lit. */
 export type BarTools = {
@@ -36,6 +37,7 @@ export function ChatBar({
   renamable,
   noTerm,
   locked,
+  remote,
   tools,
   drawer,
   back,
@@ -43,6 +45,7 @@ export function ChatBar({
   onEditProject,
   onRename,
   onOpenTerminal,
+  onStopRemote,
   onOpenPrs,
   onToggleDrawer,
   onOpenPipeline,
@@ -59,6 +62,7 @@ export function ChatBar({
   renamable: boolean;
   noTerm: boolean;
   locked: boolean; // the terminal would resume a conversation that touched mail without the app's restrictions
+  remote: { url: string; state: string } | null; // Remote Control is on: the session to open on claude.ai
   tools: BarTools | null; // a vault project is open (or its board or PRs): its tool icons show on the right
   drawer: Drawer; // what the right drawer shows, the open tool lights up
   back: boolean; // the project's board or PRs is shown: the heading goes back to the conversation
@@ -66,6 +70,7 @@ export function ChatBar({
   onEditProject: () => void;
   onRename: (title: string) => void;
   onOpenTerminal: (external: boolean) => void;
+  onStopRemote: () => void;
   onOpenPrs: () => void;
   onToggleDrawer: (tool: "terminal" | "git" | "files") => void;
   onOpenPipeline: () => void;
@@ -168,6 +173,7 @@ export function ChatBar({
           >
             <Icon name="term" className="glyph size-4" />
           </button>
+          {remote ? <RemoteButton remote={remote} onStop={onStopRemote} /> : null}
           {/* the notes this conversation read and wrote, lit in the Pages graph */}
           {onShowInGraph ? (
             <button

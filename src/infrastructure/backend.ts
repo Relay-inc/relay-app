@@ -394,6 +394,9 @@ export const stop = (project: string) => invoke("stop", { project });
 /** Stop a background task of the conversation, or ask what it printed (it comes back as the agent event `task_output`). */
 export const taskStop = (project: string, task: string) => invoke("task_stop", { project, task });
 export const taskOutput = (project: string, task: string) => invoke("task_output", { project, task });
+/** Remote Control: continue a running conversation from claude.ai or the phone (`on`), or stop that. The answer
+ *  comes as an agent event of type `remote`. Rejects when the conversation has no running process. */
+export const remoteControl = (project: string, on: boolean) => invoke<void>("remote_control", { project, on });
 /** Removes the git worktrees a conversation made; the ones with work git would lose stay. */
 export const dropWorktrees = (project: string) =>
   invoke<{ removed: number; kept: number }>("drop_worktrees", { project });

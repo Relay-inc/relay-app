@@ -136,6 +136,21 @@ export function applyAgentEvent(
       if (event.detail) state.taskLine[key] = event.detail;
       else delete state.taskLine[key];
       return [];
+    case "said":
+      // typed on the phone: Relay did not send it, so nothing waits for it
+      push(state, key, { kind: "me", text: event.text, at: env.now });
+      return [];
+    case "remote": {
+      const on = state.remote[key];
+      if (event.url) state.remote[key] = { url: event.url, state: "ready" };
+      // the bridge's state before the answer, or after Remote Control went off, is not a switch
+      else if (event.on && on) on.state = event.state || on.state;
+      else if (!event.on) {
+        delete state.remote[key];
+        if (event.state) push(state, key, { kind: "err", text: event.state.slice(0, 2000) });
+      }
+      return [];
+    }
     case "commands":
       state.commands[provider] = cleanCommands(event.commands);
       return [];
@@ -348,6 +363,8 @@ function onProcessExit(state: ConversationsState, key: string, env: EventEnv): E
   }
   state.queued[key] = 0;
   state.status[key] = "idle";
+  // Remote Control ran in the process
+  delete state.remote[key];
   return effects;
 }
 
