@@ -1,0 +1,9 @@
+[package]
+name = "integration-cloudbuild"
+version = "0.1.0"
+edition = "2021"
+description = "Google Cloud Build on the backend: a read-only allowlist, headers and errors; the token is gcloud's"
+
+[dependencies]
+board-core.workspace = true
+serde_json.workspace = true
