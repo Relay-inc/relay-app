@@ -20,7 +20,9 @@ import { go } from "../../../application/settings/window";
 import { buttonClass, HINT, TILE } from "./blocks";
 import { BoardSettings } from "./BoardSettings";
 import { BuddySettings } from "./BuddySettings";
+import { CloudbuildSettings } from "./CloudbuildSettings";
 import { BUDDY_LOGO } from "../buddy/mark";
+import { CLOUDBUILD_LOGO } from "../buddy/cloudmark";
 import { CalendarSettings } from "./CalendarSettings";
 import { Footer } from "./Footer";
 import { GithubSettings } from "./GithubSettings";
@@ -48,7 +50,7 @@ const GITHUB_MARK = (
  *  its actions for agents, when it has some. `configured`: there is something to connect again. */
 type Entry = {
   id: string;
-  group: "boards" | "code" | "mail" | "other";
+  group: "boards" | "code" | "cicd" | "mail";
   icon: ReactNode;
   name: string;
   status: ReactNode;
@@ -61,8 +63,8 @@ type Entry = {
 const GROUPS = [
   ["boards", "int.gBoards"],
   ["code", "int.gCode"],
+  ["cicd", "int.gCicd"],
   ["mail", "int.gMail"],
-  ["other", "int.gOther"],
 ] as const;
 const FORGET = {
   token: "int.forgetToken",
@@ -70,7 +72,7 @@ const FORGET = {
   calendars: "int.forgetCalendars",
 } as const;
 
-/** Integrations: the board providers, GitHub, Mail, Calendar and Buddy in groups on the left, the picked one's page on
+/** Integrations: the board providers, GitHub, Mail, Calendar, Buddy and Cloud Build in groups on the left, the picked one's page on
  *  the right (its connection, its agent access, Disconnect). On means in the sidebar (Calendar: under Today). A page
  *  reads its own state; this one only knows which are listed and which is picked. */
 export function IntegrationsPage({ active }: { active: boolean }) {
@@ -85,6 +87,8 @@ export function IntegrationsPage({ active }: { active: boolean }) {
   const calendarCount = useSettingsStore(s => s.settings.calendar?.feeds.length ?? 0);
   const calendarOn = useSettingsStore(s => !!s.settings.calendar?.on);
   const buddyOn = useSettingsStore(s => s.settings.integrations.buddy?.on === true);
+  const cloudbuild = useSettingsStore(s => s.integrations.cloudbuild);
+  const cloudbuildOn = useSettingsStore(s => s.settings.integrations.cloudbuild?.on === true);
   const buddyToken = useSettingsStore(s => !!s.integrations.tokens.buddy);
   // per provider: set up, and in use
   const boardsState = useDerived(() =>
@@ -171,7 +175,7 @@ export function IntegrationsPage({ active }: { active: boolean }) {
     },
     {
       id: "buddy",
-      group: "other",
+      group: "cicd",
       icon: <Glyph svg={BUDDY_LOGO} className="size-4" viewBox="0 0 24 24" />,
       name: "Buddy",
       status: connected(buddyOn && buddyToken, t("int.connected")),
@@ -180,6 +184,23 @@ export function IntegrationsPage({ active }: { active: boolean }) {
       secret: "token",
       // read-only, so no actions for the agent
       page: () => <BuddySettings />,
+    },
+    {
+      id: "cloudbuild",
+      group: "cicd",
+      icon: <Glyph svg={CLOUDBUILD_LOGO} className="size-4" viewBox="0 0 24 24" />,
+      name: "Cloud Build",
+      status: !cloudbuildOn ? (
+        <StatusLine level="off">{t("int.notConnected")}</StatusLine>
+      ) : cloudbuild.account ? (
+        <StatusLine level="ok">{t("cb.account", { account: cloudbuild.account })}</StatusLine>
+      ) : (
+        <StatusLine level={cloudbuild.error ? "warn" : "off"}>{cloudbuild.error || t("gh.checking")}</StatusLine>
+      ),
+      on: cloudbuildOn,
+      // gcloud's own login: nothing of ours to connect again, nothing in the keychain; read-only, so no actions for the agent
+      configured: !!cloudbuild.account,
+      page: () => <CloudbuildSettings />,
     },
   ];
   const current = entries.find(entry => entry.id === picked) ?? entries[0];

@@ -18,6 +18,7 @@ import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { BUTTON_GLYPH, buttonClass } from "./blocks";
 import { BuddyProject } from "./BuddyProject";
+import { CloudbuildProject } from "./CloudbuildProject";
 import { ChangeInput } from "./ChangeInput";
 import { Field } from "./Field";
 import { PipelineSettings } from "./PipelineSettings";
@@ -201,6 +202,7 @@ function General({
       </Section>
 
       <BuddyRow name={name} />
+      <CloudbuildRow name={name} />
     </>
   );
 }
@@ -212,6 +214,17 @@ function BuddyRow({ name }: { name: string }) {
   return (
     <section className="rounded-xl border border-s-border px-4 py-3">
       <BuddyProject name={name} />
+    </section>
+  );
+}
+
+/** Cloud Build's project, while Cloud Build is on: a row in a card of its own. */
+function CloudbuildRow({ name }: { name: string }) {
+  const on = useSettingsStore(s => s.settings.integrations.cloudbuild?.on === true);
+  if (!on) return null;
+  return (
+    <section className="rounded-xl border border-s-border px-4 py-3">
+      <CloudbuildProject name={name} />
     </section>
   );
 }

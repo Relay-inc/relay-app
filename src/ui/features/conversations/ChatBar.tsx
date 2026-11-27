@@ -9,6 +9,7 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { BoardCrumb } from "../board/BoardCrumb";
 import { BoardActions } from "../board/BoardActions";
 import { BuddyButton } from "../buddy/BuddyButton";
+import { CloudbuildButton } from "../buddy/CloudbuildButton";
 import { RemoteButton } from "./RemoteButton";
 
 /** What the bar offers for a project: its tools, the one that is open lit. */
@@ -211,6 +212,7 @@ export function ChatBar({
             />
           ) : null}
           <BuddyButton project={tools.project} />
+          <CloudbuildButton project={tools.project} />
           {/* the pipeline's conversation, from the project's other conversations and its board */}
           {tools.pipeline && !tools.pipeOpen ? (
             <ToolButton
