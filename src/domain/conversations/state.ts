@@ -4,6 +4,7 @@ import type { RepoWork } from "../settings/machines";
 import type { SlashCommand } from "./commands";
 import type {
   AgentSession,
+  BtwPair,
   Chat,
   ContextUse,
   Recap,
@@ -58,6 +59,7 @@ export type ConversationsState = {
   // the slash commands and skills per provider, for the current vault: asked at the start, updated when an agent starts
   commands: Record<string, SlashCommand[]>;
   retries: Record<string, Retry>; // conversations waiting for a limit to reset, by key (retry.rs)
+  btw: Record<string, BtwPair[]>; // the open `/btw` aside per conversation: in memory only, gone on close or reload
 };
 
 /** The state on a fresh start, with what was stored. */
@@ -95,6 +97,7 @@ export const initialConversations = (stored: {
   subs: {},
   subsOpen: new Set(),
   retries: {},
+  btw: {},
 });
 
 /** The composer's drafts, kept apart from the conversations so a keystroke only changes this small state: what is

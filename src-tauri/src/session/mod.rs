@@ -245,6 +245,31 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
     Ok(())
 }
 
+/// A side question (`/btw`) for a conversation: written to its running process, which answers from the conversation's
+/// context without taking it into it, also while a turn runs. The answer comes back as a `side_answer` event. A
+/// conversation with no process yet (idle for long, or after a restart) gets one started the way `send` does, resumed
+/// on its session, without a turn. `r.text` is the question; `history` the earlier question/response pairs of this aside.
+pub(crate) fn side_question(app: &AppHandle, state: &App, r: Msg, id: &str, history: &Value) -> Result<(), String> {
+    let Msg { project, text, name, model, effort, provider, machine, about, vault, .. } = r;
+    let p = provider_of(state, &project, provider.as_deref());
+    let line = p.side_question(id, &text, history).filter(|_| p.caps().persistent).ok_or_else(|| format!("{}: no side questions", p.id()))?;
+    let model = model.filter(|m| agent_core::safe_model(m)).unwrap_or_default();
+    let effort = effort.filter(|e| p.efforts().iter().any(|c| c.id == *e)).unwrap_or_default();
+    let opts = (model, effort);
+    let name = name.unwrap_or_else(|| project.clone());
+    let account = account_of(state, p, &project, &opts.0);
+    let _gate = state.vault_gate.lock().unwrap();
+    let mut procs = state.procs.lock().unwrap();
+    if crate::policy::adding() { return Err(trc("err.vault_adding")); }
+    if !procs.contains_key(&project) {
+        let vault = crate::policy::picked_vault(&state.settings.lock().unwrap(), vault.as_deref())?;
+        let x = spawn(app, state, p, Start { project: &project, name: &name, fork: None, opts, turn: None, from_mail: false, account: &account, machine: machine.as_deref(), about: about.as_deref(), vault: vault.as_deref() })?;
+        procs.insert(project.clone(), x);
+    }
+    let x = procs.get_mut(&project).unwrap();
+    writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())
+}
+
 pub(crate) fn stop(app: &AppHandle, state: &App, project: &str) {
     if orch::is_worker(project) { orch::stop(app, project); return; }
     if let Some(mut p) = state.procs.lock().unwrap().remove(project) { p.child.kill().ok(); }

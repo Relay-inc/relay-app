@@ -93,6 +93,8 @@ export type Recap = { detail: string; needs: string };
 /** How full a conversation's context is, in tokens. */
 export type ContextUse = { used: number; window: number };
 /** An image waiting to be sent: its media type, base64 data, and a blob url to show it. */
+/** One question of a `/btw` aside and its answer (or the failure, `error`) once it came. Never part of the conversation. */
+export type BtwPair = { id: string; question: string; answer?: string; error?: boolean };
 export type Img = { mt: string; data: string; url: string };
 /** A subagent a session spawned (Agent tool, background agents). */
 export type Sub = {

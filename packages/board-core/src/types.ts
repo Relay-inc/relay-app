@@ -18,7 +18,7 @@ export type State = "todo" | "doing" | "done";
 export type Tone = "idle" | "planned" | "active" | "blocked" | "review" | "done";
 /** A card in a column. `number` is shown as #number (as it is when not only digits, Linear's ENG-12), `who` is the
  * assignee's first name (what the filters and saved views match on), `whoName` their full name (the avatar's
- * initials), `me` whether that is the user, `due` is yyyy-mm-dd, `priority` Linear's scale: 1 urgent to 4 low, 0 or absent none. */
+ * initials), `me` whether the user is assigned (Trello: among its members), `due` is yyyy-mm-dd, `priority` Linear's scale: 1 urgent to 4 low, 0 or absent none. */
 export type Card = { id: string; title: string; number: string; column: string; placement: number; due: string | null; who: string; priority?: number;
   whoName?: string; me?: boolean;
   /** its column in each grouping but the first (`column`): Productive's { status: workflow status id } */

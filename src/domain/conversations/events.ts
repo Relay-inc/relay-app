@@ -115,6 +115,11 @@ export function applyAgentEvent(
     case "commands":
       state.commands[provider] = cleanCommands(event.commands);
       return [];
+    case "side_answer": {
+      const pair = state.btw[key]?.find(p => p.id === event.id);
+      if (pair) Object.assign(pair, { answer: event.text, error: event.error });
+      return [];
+    }
     case "draft_saved":
       push(state, key, { kind: "note", text: draftNote(event, env.t) });
       return [];

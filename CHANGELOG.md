@@ -16,6 +16,8 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Added
 
+- A board pipeline can pick up only the tickets assigned to you (Settings › Projects › Pipeline, Only tickets assigned to me); tickets assigned to someone else or to nobody stay in the column. Trello and Linear cards now know when they are yours too, as Productive and GitHub Projects already did (#558)
+- **`/btw` side questions**: type `/btw <question>` in a Claude conversation to ask something about it without interrupting Claude. The answer shows in a small card above the composer, also while Claude is working, and is not added to the conversation. Ask again to follow up; × or Esc closes the card (#559)
 - **Where each Claude conversation stands**: after each turn Claude Code writes a one-line status, which shows in small text under the conversation's title in the sidebar. When the turn ended on something only you can do (a question, a choice), the conversation gets the blue dot until you answer. Not kept over a restart; the next turn writes it again (#561)
 
 ## [0.0.70] - 2026-11-26

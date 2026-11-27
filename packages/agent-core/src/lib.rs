@@ -223,6 +223,9 @@ pub enum Event {
     Stderr { text: String },
     /// The slash commands and skills the vault has, as the provider's control pipe lists them on opening.
     Commands { commands: Value },
+    /// The answer to a side question ([`AgentProvider::side_question`]): `id` is the one it was asked with, `text` the
+    /// answer, or the failure when `error`. Not part of the conversation.
+    SideAnswer { id: String, text: String, error: bool },
     /// The conversation was compacted: what triggered it ("manual" or "auto") and the context's size in tokens before and after.
     Compacted { trigger: Option<String>, pre_tokens: Option<u64>, post_tokens: Option<u64> },
     /// A one-line status of how the turn that just ended left the conversation, written by the provider after each
@@ -303,6 +306,10 @@ pub trait AgentProvider: Sync {
     fn control_reply(&self, _id: &Value, _reply: Result<Value, String>) -> Option<String> { None }
     /// `caps.live_model`: the stdin line that changes the model for the turns after it ("": the CLI's own).
     fn set_model(&self, _model: &str) -> Option<String> { None }
+    /// `caps.control`: the stdin line that asks the running process a side question (`/btw`), answered from the
+    /// conversation's context without joining it and also while a turn runs, as an [`Event::SideAnswer`] for `id`.
+    /// `history`: the earlier `{question, response}` pairs of the same aside. Claude Code only.
+    fn side_question(&self, _id: &str, _question: &str, _history: &Value) -> Option<String> { None }
     /// Slash commands (without the slash) that take no attachments: refused in the webview before they are sent.
     fn text_only_commands(&self) -> Vec<&'static str> { vec![] }
     /// The stdin line answering a request this provider raised as [`Event::Permission`] (relay = true).
