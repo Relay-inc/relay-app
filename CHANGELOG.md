@@ -16,7 +16,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Added
 
-- Background tasks in a Claude conversation: what Claude has running (commands, subagents) is listed above the message box with its state and time, a command shows its output on a click and a hover icon stops it; while Claude works, the line shows what it is doing now.
+- Background tasks in a Claude conversation: what Claude has running (commands, subagents) is listed above the message box with its state and time, a command shows its output on a click and a hover icon stops it; while Claude works, the line shows what it is doing now. (#563)
 
 ## [0.0.70] - 2026-11-26
 
