@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { needsSetup } from "../../../domain/pipeline/rules";
 import { provider as providerById } from "../../../shared/plugins";
 import { useSettingsStore } from "../../../application/settings/store";
-import { findIcons, showProjectsPage } from "../../../application/settings/projects-page";
+import { askedProject, findIcons, showProjectsPage } from "../../../application/settings/projects-page";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
 import { BUTTON_GLYPH, buttonClass, EMPTY_LIST } from "./blocks";
@@ -36,6 +36,17 @@ export function ProjectsPage({ active }: { active: boolean }) {
   useEffect(() => {
     if (active) showProjectsPage();
   }, [active]);
+  // another window asked for a project (a board to link): its General tab, whatever the search and filter were
+  useEffect(
+    () =>
+      askedProject(project => {
+        setQuery("");
+        setFilter("all");
+        setPicked(project);
+        setTab("general");
+      }),
+    [],
+  );
 
   if (!icons) return <LoadingSection title={t("set.tab.projects")} text={t("pr.loading")} />;
 

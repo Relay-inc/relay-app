@@ -1290,6 +1290,13 @@ const VIEWS = {
     await click("GitHub Projects");
     await waitText("GitHub Projects as board");
   },
+  // the board crumb's menu: its boards and projects, and the project it is linked to, which opens Settings › Projects
+  // there (PR board link)
+  "board-crumb-linked": async () => {
+    await VIEWS.board();
+    await click("Portal v2");
+    await waitText("Linked to");
+  },
   "board-github-projects-picker": async () => {
     await VIEWS["board-github-projects"]();
     await click("Billing roadmap");

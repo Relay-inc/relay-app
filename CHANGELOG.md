@@ -16,7 +16,11 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Added
 
-- **Pick a project's board in Settings › Projects › General**: a Board section with the tracker (only the ones set up under Integrations), its project and the board, the ones named like the project first. Picking a board links it at once, Unlink drops it, and the project list shows which tracker a project uses. Changing the board of a project whose pipeline is on switches the pipeline off until you check its columns. Productive boards can now be linked from Settings too, not only from the board view (#571)
+- **A project's board is picked in one place: Settings › Projects › General**. A Board section with the tracker (only the ones set up under Integrations), its project and the board, the ones named like the project first. Picking a board links it at once, Unlink drops it, and the project list shows which tracker a project uses. Changing the board of a project whose pipeline is on switches the pipeline off until you check its columns (#571)
+
+### Removed
+
+- The other places that linked a board to a project: the board list in Integrations, Vault project in the board's menu and the board picker on a pull request in Today. The board's menu and Today's Link a board now open Settings › Projects on that project (#571)
 
 ## [0.0.71] - 2026-11-27
 

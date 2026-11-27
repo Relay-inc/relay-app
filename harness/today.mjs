@@ -109,15 +109,9 @@ try {
   await shot("04g-picker");
   await page.locator("div.shadow-sm button", { hasText: "Two-factor setup" }).first().click();
   await shot("04h-picked");
-  // a PR whose project has no board: the fix is one click away
+  // a PR whose project has no board: Link a board opens Settings › Projects on that project
   await rowOf("Replace balance instead of adding it");
   await shot("04i-no-board");
-  await page.getByRole("button", { name: "Link a board" }).locator("visible=true").first().click();
-  await page.waitForTimeout(600);
-  await shot("04j-board-linker");
-  await page.locator("div.shadow-sm button", { hasText: "Link" }).first().click();
-  await page.waitForTimeout(800);
-  await shot("04k-board-linked");
   await page
     .getByRole("button", { name: /^Review with Claude/ })
     .locator("visible=true")

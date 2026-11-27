@@ -1,29 +1,12 @@
-import { link } from "../../domain/board/rules";
 import { matchBoard } from "../../domain/settings/board-match";
-import { readyBoards, vaultProjects } from "../board/board";
+import { vaultProjects } from "../board/board";
 import { findProjects } from "../workspace/vault";
 import { loadPrs, loadProjectRepos } from "../pull-requests/prs";
 import * as backend from "../../infrastructure/backend";
-import { saveMainSettings, settings } from "../settings/settings";
 import { loadTodayCards } from "./today";
 
-export { trackerBoards, trackerProjects } from "../board/trackers";
-
-// Linking a vault project to its board from Today, where the need shows (a PR without a ticket because its project
-// has no board). Every tracker works: one that lists all its boards in one call (Trello, Linear) as one list, Productive
-// project by project. A board whose name is the project's comes first.
-
-/** The trackers that are set up, to link a board of. */
-export const linkableTrackers = () => readyBoards().map(tracker => ({ id: tracker.id, name: tracker.name }));
-
-/** Link the vault project to the board (it takes the board from any other project), then read the boards again, so
- *  the PRs find their tickets. Throws what saving said. */
-export async function linkVaultBoard(vaultProject: string, providerId: string, project: string, board: string) {
-  const next = link(settings().boards || {}, vaultProject, { provider: providerId, project, board });
-  const failed = await saveMainSettings({ ...settings(), boards: next });
-  if (failed) throw new Error(failed);
-  await loadTodayCards();
-}
+// Linking a repo to its vault project from Today, where the need shows (a PR without a project). A project's board is
+// linked in Settings › Projects only (navigation openProjectSettings).
 
 /** The vault projects to link a repo to, the one its name points at first (acme-plastics-frontend → Acme Plastics). */
 export function repoProjects(repo: string): [string, string][] {

@@ -29,7 +29,6 @@ import { SETUP_FOLDERS, type SetupPlatform } from "../../domain/settings/machine
 import type { ORG_TABS, OrgDraft } from "../../domain/settings/servers";
 import type { AgentsStatus, Skill } from "../../domain/agents/types";
 import type { AgentUpdate, UpdateProgress, UpdatesStatus } from "../../domain/settings/updates";
-import type { BoardOpt } from "../../domain/board/types";
 import type { PluginTest } from "../../domain/plugins/types";
 import type { PipelineRepo } from "../../domain/pipeline/types";
 import type { ExtraVault, ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
@@ -165,9 +164,6 @@ export type SettingsState = {
     // the token sits in the macOS keychain, the backend only says whether there is one
     tokens: Record<string, boolean>;
     messages: Record<string, Message>;
-    // the boards per vault project, for a provider that lists all its boards in one call
-    all: Record<string, { list: BoardOpt[] | null; err: string }>;
-    vaultProjects: string[] | null;
     // can it take its credentials from Claude Code, and does Claude Code have them (asked once)
     mcp: Record<string, { supported: boolean; found: boolean }>;
     mcpAsked: boolean;
@@ -260,8 +256,6 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     listMessage: null,
     tokens: {},
     messages: {},
-    all: {},
-    vaultProjects: null,
     mcp: {},
     mcpAsked: false,
     form: {},

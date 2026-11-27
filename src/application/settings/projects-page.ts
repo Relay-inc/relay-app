@@ -6,6 +6,7 @@ import type { BoardRef } from "../../domain/board/types";
 import { link, sameRef } from "../../domain/board/rules";
 import { PROVIDERS } from "../../shared/plugins";
 import * as backend from "../../infrastructure/backend";
+import { storage } from "../../infrastructure/storage";
 import { iconFrom, loadIcons, setIcon } from "../workspace/icons";
 import { boardSetUp, isBoardOn } from "./integrations";
 import { save } from "./window";
@@ -149,4 +150,16 @@ export function setProjectBoard(project: string, ref: BoardRef | null) {
   const off = !!pipeline?.on;
   if (off) pipeline.on = false;
   return save(next, off ? t("pc.boardPipelineOff") : "");
+}
+/** The project another window asked to open (openProjectSettings), once: it is cleared when read, so asking for the
+ *  same project again still reaches an open window. `follow` gets the ones asked while the window is open. */
+export function askedProject(follow: (project: string) => void) {
+  const take = () => {
+    const project = storage.getRaw("prefsProject");
+    if (!project) return;
+    void storage.setRaw("prefsProject", "");
+    follow(project);
+  };
+  take();
+  storage.watch("prefsProject", take);
 }
