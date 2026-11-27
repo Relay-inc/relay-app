@@ -1,56 +1,172 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pipeline dashboard</title>
-<style>
-  :root { --bg: #f7f7f8; --card: #fff; --ink: #1d1d1f; --muted: #6e6e73; --line: #e5e5ea; --a: #3b6fd8; --b: #34a368; --c: #e8a33d; }
-  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #161618; --card: #232326; --ink: #f2f2f4; --muted: #9a9aa2; --line: #333338; } }
-  :root[data-theme="dark"] { --bg: #161618; --card: #232326; --ink: #f2f2f4; --muted: #9a9aa2; --line: #333338; }
-  * { box-sizing: border-box; }
-  body { margin: 0; padding: 16px; background: var(--bg); color: var(--ink); font: 14px/1.4 -apple-system, system-ui, sans-serif; }
-  h1 { font-size: 18px; margin: 0 0 2px; }
-  p.sub { margin: 0 0 14px; color: var(--muted); font-size: 12px; }
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 12px; }
-  .kpi, .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
-  .kpi b { display: block; font-size: 20px; }
-  .kpi span { color: var(--muted); font-size: 12px; }
-  .panel h2 { font-size: 13px; margin: 0 0 8px; }
-  .bars { display: flex; align-items: flex-end; gap: 6px; height: 120px; }
-  .bars div { flex: 1; border-radius: 4px 4px 0 0; background: var(--a); }
-  .bars div:nth-child(3n) { background: var(--b); }
-  .bars div:nth-child(4n) { background: var(--c); }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
-  td, th { text-align: left; padding: 6px 4px; border-top: 1px solid var(--line); }
-  th { color: var(--muted); font-weight: 500; }
-  button { margin-top: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 7px; padding: 4px 10px; font: inherit; }
-</style>
-</head>
-<body>
-<h1>Pipeline dashboard</h1>
-<p class="sub">Sample data · updated this morning</p>
-<div class="kpis">
-  <div class="kpi"><b>42</b><span>Open deals</span></div>
-  <div class="kpi"><b>€318k</b><span>Weighted value</span></div>
-  <div class="kpi"><b>27%</b><span>Win rate</span></div>
-</div>
-<div class="panel">
-  <h2>New deals per week</h2>
-  <div class="bars" id="bars"></div>
-  <table>
-    <tr><th>Stage</th><th>Deals</th><th>Value</th></tr>
-    <tr><td>Qualified</td><td>18</td><td>€122k</td></tr>
-    <tr><td>Proposal</td><td>14</td><td>€131k</td></tr>
-    <tr><td>Negotiation</td><td>10</td><td>€65k</td></tr>
-  </table>
-  <button id="shuffle">Shuffle weeks</button>
-</div>
-<script>
-  const weeks = [6, 9, 7, 11, 8, 12, 10, 14, 9, 13];
-  const draw = () => { document.getElementById("bars").innerHTML = weeks.map(v => `<div style="height:${v * 7}%"></div>`).join(""); };
-  draw();
-  document.getElementById("shuffle").onclick = () => { weeks.sort(() => Math.random() - 0.5); draw(); };
-</script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pipeline dashboard</title>
+    <style>
+      :root {
+        --bg: #f7f7f8;
+        --card: #fff;
+        --ink: #1d1d1f;
+        --muted: #6e6e73;
+        --line: #e5e5ea;
+        --a: #3b6fd8;
+        --b: #34a368;
+        --c: #e8a33d;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #161618;
+          --card: #232326;
+          --ink: #f2f2f4;
+          --muted: #9a9aa2;
+          --line: #333338;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #161618;
+        --card: #232326;
+        --ink: #f2f2f4;
+        --muted: #9a9aa2;
+        --line: #333338;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          14px/1.4 -apple-system,
+          system-ui,
+          sans-serif;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 2px;
+      }
+      p.sub {
+        margin: 0 0 14px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .kpis {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .kpi,
+      .panel {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+      }
+      .kpi b {
+        display: block;
+        font-size: 20px;
+      }
+      .kpi span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .panel h2 {
+        font-size: 13px;
+        margin: 0 0 8px;
+      }
+      .bars {
+        display: flex;
+        align-items: flex-end;
+        gap: 6px;
+        height: 120px;
+      }
+      .bars div {
+        flex: 1;
+        border-radius: 4px 4px 0 0;
+        background: var(--a);
+      }
+      .bars div:nth-child(3n) {
+        background: var(--b);
+      }
+      .bars div:nth-child(4n) {
+        background: var(--c);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        margin-top: 12px;
+      }
+      td,
+      th {
+        text-align: left;
+        padding: 6px 4px;
+        border-top: 1px solid var(--line);
+      }
+      th {
+        color: var(--muted);
+        font-weight: 500;
+      }
+      button {
+        margin-top: 10px;
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--ink);
+        border-radius: 7px;
+        padding: 4px 10px;
+        font: inherit;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Pipeline dashboard</h1>
+    <p class="sub">Sample data · updated this morning</p>
+    <div class="kpis">
+      <div class="kpi"><b>42</b><span>Open deals</span></div>
+      <div class="kpi"><b>€318k</b><span>Weighted value</span></div>
+      <div class="kpi"><b>27%</b><span>Win rate</span></div>
+    </div>
+    <div class="panel">
+      <h2>New deals per week</h2>
+      <div class="bars" id="bars"></div>
+      <table>
+        <tr>
+          <th>Stage</th>
+          <th>Deals</th>
+          <th>Value</th>
+        </tr>
+        <tr>
+          <td>Qualified</td>
+          <td>18</td>
+          <td>€122k</td>
+        </tr>
+        <tr>
+          <td>Proposal</td>
+          <td>14</td>
+          <td>€131k</td>
+        </tr>
+        <tr>
+          <td>Negotiation</td>
+          <td>10</td>
+          <td>€65k</td>
+        </tr>
+      </table>
+      <button id="shuffle">Shuffle weeks</button>
+    </div>
+    <script>
+      const weeks = [6, 9, 7, 11, 8, 12, 10, 14, 9, 13];
+      const draw = () => {
+        document.getElementById("bars").innerHTML = weeks.map(v => `<div style="height:${v * 7}%"></div>`).join("");
+      };
+      draw();
+      document.getElementById("shuffle").onclick = () => {
+        weeks.sort(() => Math.random() - 0.5);
+        draw();
+      };
+    </script>
+  </body>
 </html>

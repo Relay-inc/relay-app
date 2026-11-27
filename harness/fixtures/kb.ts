@@ -297,7 +297,13 @@ export function rail(path: string, textOf: (path: string) => string | undefined)
       const at = text.indexOf(m[0], m.input === head ? 0 : head.length);
       const lines = head.split("\n");
       const n = lines.findIndex(l => link.test(l));
-      const f = n < 0 ? undefined : lines.slice(0, n + 1).findLast(l => /^[^\s#-][^:]*:/.test(l))?.split(":")[0];
+      const f =
+        n < 0
+          ? undefined
+          : lines
+              .slice(0, n + 1)
+              .findLast(l => /^[^\s#-][^:]*:/.test(l))
+              ?.split(":")[0];
       backlinks.push({ ...meta(p, text), ...context(text, at, m[0].length), ...(f ? { f } : {}) });
     }
   }
@@ -397,7 +403,12 @@ export function seedChanges(long = false) {
     ? [
         { ...capture.files[0], after: `${capture.files[0].after}\n${lots(120)}\n${"x".repeat(400)}\n` },
         capture.files[1],
-        ...[1, 2, 3, 4, 5].map(n => ({ ...filed, path: `${docs}/Migration step ${n}.md`, before: null, after: lots(30) })),
+        ...[1, 2, 3, 4, 5].map(n => ({
+          ...filed,
+          path: `${docs}/Migration step ${n}.md`,
+          before: null,
+          after: lots(30),
+        })),
       ]
     : capture.files;
   return [

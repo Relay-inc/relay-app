@@ -301,7 +301,12 @@ export const liveTail = (): Ev[] => [
     input: { file_path: "/Users/demo/code/beacon/src/Billing/Invoice.php" },
   },
   { type: "tool_result", id: "toolu_live_ok", error: false },
-  { type: "tool_call", id: "toolu_live_img", name: "Read", input: { file_path: "/Users/demo/code/beacon/invoice.png" } },
+  {
+    type: "tool_call",
+    id: "toolu_live_img",
+    name: "Read",
+    input: { file_path: "/Users/demo/code/beacon/invoice.png" },
+  },
   { type: "tool_result", id: "toolu_live_img", error: false },
   {
     type: "tool_images",
@@ -453,7 +458,9 @@ export function agentHistory(id: string): Ev[] {
   if (!agent) return [];
   return [
     time(Date.parse(agent.started_at)),
-    user(`${agent.description}. Look at every job under src/Billing that writes a balance and report which ones add instead of set.`),
+    user(
+      `${agent.description}. Look at every job under src/Billing that writes a balance and report which ones add instead of set.`,
+    ),
     tool("Glob", { pattern: "src/Billing/**/*Sync.php" }),
     tool("Read", { file_path: "/Users/demo/code/beacon/src/Billing/InvoiceSync.php" }),
     tool("Read", { file_path: "/Users/demo/code/beacon/src/Billing/CreditSync.php" }),

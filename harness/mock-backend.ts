@@ -240,7 +240,12 @@ const emitAgent = (project: string, event: unknown, provider = "claude") => emit
 const BG_TASKS = [
   { id: "bk3f9a1c2", kind: "local_bash", description: "Build the Northwind Portal bundle" },
   { id: "bq7d20e5b", kind: "local_bash", description: "Watch the portal redirect tests" },
-  { id: "a4c81d07e55b2f3a1", kind: "local_agent", agent: "general-purpose", description: "Check the checkout redirects" },
+  {
+    id: "a4c81d07e55b2f3a1",
+    kind: "local_agent",
+    agent: "general-purpose",
+    description: "Check the checkout redirects",
+  },
 ];
 
 // ---------- the embedded terminals: output goes to the Channel the frontend passed, as the backend does (raw bytes)
@@ -1586,7 +1591,11 @@ function handle(cmd: string, a: Args): unknown {
       emitAgent(a.project as string, { type: "tasks", tasks: BG_TASKS.filter(t => t.id !== a.task) });
       return null;
     case "task_output":
-      emitAgent(a.project as string, { type: "task_output", id: a.task, text: "> northwind-portal@1.4.0 build\n> vite build\n\ntransforming...\n42 modules transformed.\ndist/index.html   0.46 kB\ndist/assets/index-3f9a1c.js   143.20 kB" });
+      emitAgent(a.project as string, {
+        type: "task_output",
+        id: a.task,
+        text: "> northwind-portal@1.4.0 build\n> vite build\n\ntransforming...\n42 modules transformed.\ndist/index.html   0.46 kB\ndist/assets/index-3f9a1c.js   143.20 kB",
+      });
       return null;
     // Remote Control (session/mod.rs remote_control): the answer comes as agent events, a made-up session link
     case "remote_control":
@@ -1951,6 +1960,8 @@ function handle(cmd: string, a: Args): unknown {
         throw new Error("Archive and delete are experimental, switch them on in Settings › Mail");
       if (!a.ids?.length || a.ids.length > 500) throw new Error("1 to 500 mails at a time");
       for (const id of a.ids) movedMails.add(`${a.account}:${id}`);
+      return null;
+    case "mail_forget":
       return null;
     case "mail_test":
       return "Connected: 1,204 mails in INBOX";
