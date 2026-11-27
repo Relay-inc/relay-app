@@ -1,5 +1,5 @@
 import type { GhActor, PR, PrDetail } from "../../../../domain/pull-requests/types";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   chooseTicket,
   ticketOf,
@@ -14,14 +14,8 @@ import { projectLabel } from "../../../../application/workspace/vault";
 import { useDerived } from "../../../hooks/useDerived";
 import { openTicketOf } from "../../../../application/today/today";
 import { findTicketAgain } from "../../../../application/today/actions";
-import {
-  linkRepo,
-  linkVaultBoard,
-  linkableTrackers,
-  repoProjects,
-  trackerBoards,
-  trackerProjects,
-} from "../../../../application/today/boardlink";
+import { openProjectSettings } from "../../../../application/navigation/navigation";
+import { linkRepo, repoProjects } from "../../../../application/today/boardlink";
 import { setLinking, setPicking, useDetailsStore } from "../../../../application/today/details";
 import { useT } from "../../../hooks/useT";
 import { Icon } from "../../../components/Icon";
@@ -246,11 +240,16 @@ export function TicketRow({ pr }: { pr: PR }) {
               ? t("today.link.noProject", { repo: pr.repo })
               : t("today.link.noBoardShort", { project: projectLabel(pr.project) })}
           </span>
-          <button className={CTA} onClick={() => setLinking(linking ? "" : pr.url)}>
+          <button
+            className={CTA}
+            onClick={() =>
+              state === "noProject" ? setLinking(linking ? "" : pr.url) : void openProjectSettings(pr.project!)
+            }
+          >
             {state === "noProject" ? t("today.link.linkRepo") : t("today.link.linkBoard")}
           </button>
         </div>
-        {linking ? state === "noProject" ? <RepoLinker pr={pr} /> : <BoardLinker project={pr.project!} /> : null}
+        {linking && state === "noProject" ? <RepoLinker pr={pr} /> : null}
       </div>
     );
   return (
@@ -357,83 +356,6 @@ function RepoLinker({ pr }: { pr: PR }) {
   );
 }
 
-/** Link the vault project to its board, here: the tracker, its project (Productive) and the board, the ones named
- *  like the vault project first. */
-function BoardLinker({ project }: { project: string }) {
-  const { t } = useT();
-  const trackers = linkableTrackers();
-  const [tracker, setTracker] = useState(trackers.find(x => x.id === "productive")?.id ?? trackers[0]?.id ?? "");
-  // what was loaded, with what it was loaded for: a list of another tracker or project counts as loading
-  const [projectList, setProjectList] = useState<{ of: string; list: { id: string; name: string }[] } | null>(null);
-  const [picked, setPicked] = useState("");
-  const [boardList, setBoardList] = useState<{ of: string; list: { id: string; name: string }[] } | null>(null);
-  const [pickedBoard, setPickedBoard] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  const projects = projectList?.of === tracker ? projectList.list : null;
-  const inTracker = picked && projects?.some(p => p.id === picked) ? picked : (projects?.[0]?.id ?? "");
-  const boards = boardList?.of === `${tracker}/${inTracker}` ? boardList.list : null;
-  const board = pickedBoard && boards?.some(b => b.id === pickedBoard) ? pickedBoard : (boards?.[0]?.id ?? "");
-  useEffect(() => {
-    if (!tracker) return;
-    trackerProjects(tracker, project).then(
-      list => setProjectList({ of: tracker, list }),
-      error => setErr(String(error)),
-    );
-  }, [tracker, project]);
-  useEffect(() => {
-    if (!tracker || !inTracker) return;
-    trackerBoards(tracker, inTracker, project).then(
-      list => setBoardList({ of: `${tracker}/${inTracker}`, list }),
-      error => setErr(String(error)),
-    );
-  }, [tracker, inTracker, project]);
-  if (!trackers.length) return <div className={`${PANEL} text-xs text-secondary`}>{t("today.link.noTracker")}</div>;
-  return (
-    <div className={PANEL}>
-      <span className="text-xs text-secondary">{t("today.link.boardHint", { project: projectLabel(project) })}</span>
-      <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2">
-        <select className={SELECT} value={tracker} onChange={e => setTracker(e.target.value)}>
-          {trackers.map(x => (
-            <option key={x.id} value={x.id}>
-              {x.name}
-            </option>
-          ))}
-        </select>
-        <select className={SELECT} value={inTracker} disabled={!projects} onChange={e => setPicked(e.target.value)}>
-          {(projects ?? []).map(p => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        <select className={SELECT} value={board} disabled={!boards} onChange={e => setPickedBoard(e.target.value)}>
-          {(boards ?? []).map(b => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-        <button
-          disabled={busy || !board}
-          className="btn btn-primary cursor-pointer disabled:opacity-50"
-          onClick={async () => {
-            setBusy(true);
-            setErr("");
-            await linkVaultBoard(project, tracker, inTracker, board).then(
-              () => setLinking(""),
-              error => setErr(String(error)),
-            );
-            setBusy(false);
-          }}
-        >
-          {busy ? t("today.saving") : t("today.link.link")}
-        </button>
-      </div>
-      {err ? <div className="err-box">{err}</div> : null}
-    </div>
-  );
-}
 export const prFacts: SectionDef<"pr">["facts"] = (entry, day, t) => {
   const { pr } = entry.subject;
   const link = ticketOf(pr.url);

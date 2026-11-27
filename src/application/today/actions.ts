@@ -21,7 +21,7 @@ import * as backend from "../../infrastructure/backend";
 import { ctxOf } from "../board/ctx";
 import { ticketChat } from "../board/board";
 import { openCard, openPr } from "../navigation/panel";
-import { select, toast } from "../navigation/navigation";
+import { openProjectSettings, select, toast } from "../navigation/navigation";
 import { projectLabel } from "../workspace/vault";
 import { joinMeeting, meetingChat } from "../calendar/calendar";
 import { openMeetingView } from "../calendar/meeting-view";
@@ -94,7 +94,7 @@ export async function findTicketAgain(pr: PR) {
   if (state === "noBoard")
     return toast(
       t("today.link.noBoard", { project: projectLabel(pr.project) }),
-      () => linkFor(pr),
+      () => void openProjectSettings(pr.project ?? ""),
       t("today.link.linkBoard"),
     );
   const link = await relinkPr(pr);

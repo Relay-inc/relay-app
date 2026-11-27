@@ -1,22 +1,12 @@
 import { t, currentLocale } from "../../shared/i18n";
 import { PROVIDERS } from "../../shared/plugins";
 import type { BoardProvider, BoardRef, Card, Column, Hit, View } from "../../domain/board/types";
-import {
-  refOf,
-  colOf,
-  sameRef,
-  storageKey,
-  isFolded,
-  tidied,
-  link,
-  draftCard,
-  type Board,
-} from "../../domain/board/rules";
+import { refOf, colOf, sameRef, storageKey, isFolded, tidied, draftCard, type Board } from "../../domain/board/rules";
 import { parsePresets, savePreset, type Facet, type Filters, type Preset } from "../../domain/board/filter";
 import { moveCard } from "../../domain/board/moves";
 import { branchName } from "../../domain/board/branch";
 import { storage } from "../../infrastructure/storage";
-import { saveMainSettings, settings } from "../settings/settings";
+import { settings } from "../settings/settings";
 import { PRS } from "../../domain/navigation/views";
 import { boardKey, prKey } from "../../domain/navigation/keys";
 import { useNavigationStore } from "../navigation/store";
@@ -445,18 +435,6 @@ export const projectOfRef = (ref: BoardRef | undefined) =>
 export const linkedProject = (provider: BoardProvider) =>
   Object.entries(settings().boards || {}).find(([, ref]) => sameRef(ref, refOf(provider, boardState(provider))))?.[0] ??
   "";
-/** Link the board to a vault project, or unlink it (""). A failed save shows on the board. */
-export async function linkBoard(provider: BoardProvider, vaultProject: string) {
-  const boards = settings().boards || {};
-  const next = vaultProject
-    ? link(boards, vaultProject, refOf(provider, boardState(provider)))
-    : link(boards, linkedProject(provider), null);
-  const failed = await saveMainSettings({ ...settings(), boards: next });
-  if (failed)
-    change(provider, state => {
-      state.err = failed;
-    });
-}
 
 // ---------- what a ticket links to
 /** The conversations Start conversation began from the card (those still there), and the pull requests of the board's

@@ -2,8 +2,13 @@ import { t } from "../../shared/i18n";
 import { pickedOf } from "../../domain/pipeline/rules";
 import { isSite } from "../../domain/workspace/rules";
 import type { IconKind } from "../../domain/workspace/types";
+import type { BoardRef } from "../../domain/board/types";
+import { link, sameRef } from "../../domain/board/rules";
+import { PROVIDERS } from "../../shared/plugins";
 import * as backend from "../../infrastructure/backend";
+import { storage } from "../../infrastructure/storage";
 import { iconFrom, loadIcons, setIcon } from "../workspace/icons";
+import { boardSetUp, isBoardOn } from "./integrations";
 import { save } from "./window";
 import { useSettingsStore } from "./store";
 
@@ -130,4 +135,31 @@ export function setLabel(project: string, label: string) {
   if (label) next.projects[project] = { ...next.projects[project], label };
   else delete next.projects[project];
   return save(next);
+}
+
+/** The trackers a project can take its board from: set up and switched on under Integrations. */
+export const boardTrackers = () => PROVIDERS.filter(provider => boardSetUp(provider) && isBoardOn(provider));
+/** The project's board, or none (null). It takes the board from any other project (domain/board link). Another board
+ *  switches the project's pipeline off, since its columns were picked on the old one. */
+export function setProjectBoard(project: string, ref: BoardRef | null) {
+  const next = structuredClone(st().settings);
+  const was = next.boards?.[project];
+  if (was && ref && sameRef(was, ref)) return;
+  next.boards = link(next.boards ?? {}, project, ref);
+  const pipeline = next.pipelines?.[project];
+  const off = !!pipeline?.on;
+  if (off) pipeline.on = false;
+  return save(next, off ? t("pc.boardPipelineOff") : "");
+}
+/** The project another window asked to open (openProjectSettings), once: it is cleared when read, so asking for the
+ *  same project again still reaches an open window. `follow` gets the ones asked while the window is open. */
+export function askedProject(follow: (project: string) => void) {
+  const take = () => {
+    const project = storage.getRaw("prefsProject");
+    if (!project) return;
+    void storage.setRaw("prefsProject", "");
+    follow(project);
+  };
+  take();
+  storage.watch("prefsProject", take);
 }

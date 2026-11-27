@@ -1,5 +1,5 @@
 import { pt, t, tn } from "../../shared/i18n";
-import { PROVIDERS, provider as providerById } from "../../shared/plugins";
+import { PROVIDERS } from "../../shared/plugins";
 import type { BoardProvider } from "../../domain/board/types";
 import {
   NO_MAIL_DRAFT,
@@ -11,7 +11,6 @@ import {
   type Settings,
 } from "../../domain/settings/types";
 import * as backend from "../../infrastructure/backend";
-import { link } from "../../domain/board/rules";
 import { ctxOf } from "../board/ctx";
 import { commit } from "./window";
 import { useSettingsStore, type SettingsState } from "./store";
@@ -91,68 +90,10 @@ export const isBoardOn = (provider: BoardProvider) => {
   const on = current().integrations[provider.id]?.on;
   return on === true || (on === undefined && boardSetUp(provider));
 };
-/** The vault's project names, sorted, for mapping boards to them. */
-async function loadVaultProjects() {
-  const snapshot = await backend.snapshot();
-  return snapshot.projects.map(project => project.name).sort((a, b) => a.localeCompare(b));
-}
-/** Every board of a provider that lists them in one call, to map them to vault projects; once per set-up. */
-export async function loadAllBoards(provider: BoardProvider) {
-  if (st().integrations.all[provider.id]) return;
-  change(draft => {
-    draft.all[provider.id] = { list: null, err: "" };
-  });
-  try {
-    const [list, names] = await Promise.all([
-      provider.settings.allBoards!(ctxOf(provider, current().integrations)),
-      st().integrations.vaultProjects ?? loadVaultProjects(),
-    ]);
-    change(draft => {
-      draft.vaultProjects = names;
-      draft.all[provider.id] = { list, err: "" };
-    });
-  } catch (error) {
-    change(draft => {
-      draft.all[provider.id] = { list: [], err: String(error) };
-    });
-  }
-}
-/** A vault project in the board mapping: the board of this provider it is on, or the other provider it is on. */
-export type BoardRow = { vaultProject: string; board?: string; other?: string };
-/** Each vault project with the board of this provider it is on; a vault project has at most one board. */
-export const boardRows = (provider: BoardProvider): BoardRow[] =>
-  (st().integrations.vaultProjects || []).map(vaultProject => {
-    const linked = current().boards?.[vaultProject];
-    const isOurs = linked?.provider === provider.id;
-    return {
-      vaultProject,
-      board: isOurs ? linked.board : undefined,
-      other: linked && !isOurs ? (providerById(linked.provider)?.name ?? linked.provider) : undefined,
-    };
-  });
 const said = (provider: BoardProvider, message: Message) =>
   change(draft => {
     draft.messages[provider.id] = message;
   });
-/** A vault project linked to a board (`value` "project/board"), or unlinked (""). */
-export type BoardLink = { vaultProject: string; value: string };
-/** Link vault projects to the provider's boards or unlink them, in one save. Linking replaces what the vault project
- *  had and takes the board from any other project (domain/board link); unlinking only drops this provider's board,
- *  another provider's link stays. */
-export async function mapBoard(provider: BoardProvider, links: BoardLink[]) {
-  let boards = current().boards ?? {};
-  for (const { vaultProject, value } of links) {
-    const [project, board] = value.split("/");
-    if (board) boards = link(boards, vaultProject, { provider: provider.id, project, board });
-    else if (boards[vaultProject]?.provider === provider.id) boards = link(boards, vaultProject, null);
-  }
-  try {
-    commit(await backend.setSettings({ ...current(), boards }));
-    said(provider, { text: t("set.saved"), ok: true });
-  } catch (error) {
-    said(provider, fail(error));
-  }
-}
 /** A board form field as typed (BoardForm ids). */
 export const setBoardField = (id: string, value: string | boolean) =>
   change(draft => {
@@ -190,9 +131,6 @@ async function saveBoard(provider: BoardProvider, config: IntegrationConfig, sec
     );
     const test = await provider.settings.test(ctxOf(provider, current().integrations));
     said(provider, { text: test, ok: true });
-    change(draft => {
-      delete draft.all[provider.id];
-    });
   } catch (error) {
     said(provider, fail(error));
   }
@@ -223,7 +161,6 @@ export async function clearBoard(provider: BoardProvider) {
   await backend.integrationToken(provider.id, "");
   change(draft => {
     draft.tokens[provider.id] = false;
-    delete draft.all[provider.id];
     draft.messages[provider.id] = { text: t("int.cleared"), ok: true };
   });
 }

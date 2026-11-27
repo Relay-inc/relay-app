@@ -256,6 +256,13 @@ export const quickChats = (typed: string) =>
   );
 /** The settings window on a page (the last one it showed when none is given). */
 export const openSettingsTab = (tab?: string) => backend.openSettingsWindow(tab);
+/** Settings › Projects on one project's General tab, where its board is linked: the settings window reads
+ *  `prefsProject` when it opens and follows it while open (application/settings/projects-page). Without a project, the
+ *  page as it was. */
+export async function openProjectSettings(project = "") {
+  if (project) await storage.setRaw("prefsProject", project);
+  return backend.openSettingsWindow("projects");
+}
 /** A drawer tool, opened and left open when it already is. */
 export const openDrawer = (tool: Parameters<typeof toggleDrawer>[0]) => {
   if (nav().drawer !== tool) toggleDrawer(tool);

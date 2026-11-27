@@ -1,9 +1,10 @@
 import { useRef, useState } from "react";
 import type { BoardProvider } from "../../../domain/board/types";
-import { linkBoard, linkedProject, pickBoard, pickProject, vaultProjects } from "../../../application/board/board";
+import { linkedProject, pickBoard, pickProject } from "../../../application/board/board";
+import { openProjectSettings } from "../../../application/navigation/navigation";
+import { projectLabel } from "../../../application/workspace/vault";
 import { useBoardStore } from "../../../application/board/store";
 import { Icon } from "../../components/Icon";
-import { Select } from "../../components/Select";
 import { useDerived } from "../../hooks/useDerived";
 import { useDismiss } from "../../hooks/useDismiss";
 import { useT } from "../../hooks/useT";
@@ -11,11 +12,10 @@ import { PopHeading } from "./PopHeading";
 import { POPOVER, POP_ROW } from "./toolbar";
 
 /** The board's crumb in the title bar: "/ <board>", which opens the menu to switch to another board of the project or
- *  another project, and to link the board to a vault project. */
+ *  another project. Which project it belongs to is set in Settings › Projects; the menu says it and opens it there. */
 export function BoardCrumb({ provider }: { provider: BoardProvider }) {
   const { t } = useT();
   const board = useBoardStore(s => s.states[provider.id]);
-  const projects = useDerived(() => vaultProjects());
   // which vault project this board belongs to: a vault project has at most one board
   const linked = useDerived(() => linkedProject(provider));
   const [open, setOpen] = useState(false);
@@ -66,19 +66,15 @@ export function BoardCrumb({ provider }: { provider: BoardProvider }) {
               row(p.id === board.project, p.name, () => pickProject(provider, p.id), p.id),
             )}
           </div>
-          {board.board && !!projects.length && (
+          {board.board && (
             <>
               <div className="h-px bg-separator my-1"></div>
-              <div className="flex items-center gap-2 px-2 py-1.5" title={t("kb.linkHelp")}>
-                <span className="text-xs text-secondary whitespace-nowrap">{t("kb.link")}</span>
-                <Select
-                  className="field flex-1 min-w-0"
-                  options={projects.map(([id, label]) => ({ id, name: label }))}
-                  value={linked}
-                  empty={t("kb.linkNone")}
-                  onChange={vaultProject => linkBoard(provider, vaultProject)}
-                />
-              </div>
+              {row(
+                false,
+                linked ? t("kb.linkedTo", { project: projectLabel(linked) }) : t("kb.linkInSettings"),
+                () => void openProjectSettings(linked),
+                "link",
+              )}
             </>
           )}
         </div>

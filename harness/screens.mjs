@@ -1292,6 +1292,13 @@ const VIEWS = {
     await click("GitHub Projects");
     await waitText("GitHub Projects as board");
   },
+  // the board crumb's menu: its boards and projects, and the project it is linked to, which opens Settings › Projects
+  // there (PR board link)
+  "board-crumb-linked": async () => {
+    await VIEWS.board();
+    await click("Portal v2");
+    await waitText("Linked to");
+  },
   "board-github-projects-picker": async () => {
     await VIEWS["board-github-projects"]();
     await click("Billing roadmap");
@@ -1308,6 +1315,20 @@ const VIEWS = {
   "settings-project-general": async () => {
     await projectTab("General", { fixture: "pipeline-label", height: 1000 });
     await waitText("acme/northwind-api");
+  },
+  // its Board section: Productive's project and board linked, Unlink, the tracker in the list's line (PR board link)
+  "settings-project-board": async () => {
+    await projectTab("General", { fixture: "pipeline-label", height: 900 });
+    await page.waitForSelector('[id="pc-board-Northwind Portal"]:not([disabled])');
+    await settle(page);
+  },
+  // a project without a board: the tracker's project named like it first, a board still to pick (PR board link)
+  "settings-project-board-new": async () => {
+    await projectTab("General", { height: 900 });
+    // its emoji icon comes first in the row's name
+    await page.getByRole("complementary", { name: "Projects" }).getByRole("button", { name: /Beacon/ }).click();
+    await page.waitForSelector('[id="pc-board-Beacon Billing"]:not([disabled])');
+    await settle(page);
   },
   // the list filtered on Needs setup: a repo without a checkout here, or a pipeline on that misses a column
   "settings-projects-setup": async () => {

@@ -25,6 +25,7 @@ import { BUTTON_GLYPH, buttonClass } from "./blocks";
 import { BuddyProject } from "./BuddyProject";
 import { ChangeInput } from "./ChangeInput";
 import { PipelineSettings } from "./PipelineSettings";
+import { ProjectBoard } from "./ProjectBoard";
 import { ProjectIcon } from "./ProjectIcon";
 import { Section } from "./Section";
 import { Switch } from "./Switch";
@@ -38,8 +39,8 @@ export const MONO = "font-mono text-xs";
 export const HELP = "text-xs text-s-muted";
 const SMALL_BUTTON = `${buttonClass()} h-6 px-2 text-xs font-normal`;
 
-/** One project's settings, the right side of Settings › Projects: its header and two tabs, General (name, icon, repos
- *  and branches) and Pipeline (PipelineSettings). */
+/** One project's settings, the right side of Settings › Projects: its header and two tabs, General (name, icon, board,
+ *  repos and branches) and Pipeline (PipelineSettings). */
 export function ProjectSettings({
   name,
   icon,
@@ -95,13 +96,14 @@ export function ProjectSettings({
       {tab === "general" ? (
         <General name={name} icon={icon} shown={shown} onPipeline={() => onTab("pipeline")} />
       ) : (
-        <PipelineSettings name={name} />
+        <PipelineSettings name={name} onGeneral={() => onTab("general")} />
       )}
     </div>
   );
 }
 
-/** The General tab: identity, the repos with their checkouts on this Mac, the branches, and the pipeline when off. */
+/** The General tab: identity, the board, the repos with their checkouts on this Mac, the branches, and the pipeline
+ *  when off. */
 function General({
   name,
   icon,
@@ -190,6 +192,8 @@ function General({
           </div>
         </div>
       </Section>
+
+      <ProjectBoard name={name} shown={shown} />
 
       <section className="grid gap-2.5">
         <Section title={t("pc.repos")} desc={t("pc.reposHelp")} list>
