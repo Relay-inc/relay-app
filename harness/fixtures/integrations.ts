@@ -1018,6 +1018,12 @@ export const actions = [
     "auto",
   ),
 ];
+// the real backend has these too: Calendar's meetings and Trello's cards (a board provider that is not connected here)
+actions.push(
+  act("calendar", "meetings", "Meetings on the user's calendars from an hour ago to 12 hours ahead.", false, "auto"),
+  act("trello", "search", "Search cards by text, up to 20.", false, "auto"),
+  act("trello", "create_card", "Create a card in a list.", true, "ask"),
+);
 export const actionConfig = (): Record<string, unknown> => ({ productive: { "*": "ask", add_time: "auto" } });
 
 // ---------- calendar (calendar_meetings, src-tauri/src/calendar.rs): the meetings from an hour ago to 12 hours ahead.

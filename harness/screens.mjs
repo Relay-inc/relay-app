@@ -309,13 +309,27 @@ const todayDay = async (variant, dark) => {
   await settle(page);
 };
 const settingsPage = async (tab, sub, fixture = "default", platform = "") => {
-  // Projects and Agents are a list and the picked item side by side: the window's default size
+  // Projects, Agents and Integrations are a list and the picked item side by side: the window's default size
   await page.setViewportSize(
-    tab === "Projects" || tab === "Agents" ? { width: 1280, height: 800 } : { width: 900, height: 700 },
+    tab === "Projects" || tab === "Agents" || tab === "Integrations"
+      ? { width: 1280, height: 800 }
+      : { width: 900, height: 700 },
   );
   await open(page, server.url, { path: "/settings.html", fixture, platform });
   await click(tab);
   if (sub) await click(sub);
+};
+/** Settings › Integrations with `name` picked in the list, `height` tall */
+const integration = async (name, { fixture = "default", height = 1000 } = {}) => {
+  await settingsPage("Integrations", name, fixture);
+  await page.setViewportSize({ width: 1280, height });
+  await settle(page);
+};
+/** Settings › Privacy & access scrolled to the table of what agents may do with the tools, `height` tall */
+const accessTable = async (height = 900) => {
+  await settingsPage("Privacy & access");
+  await page.setViewportSize({ width: 900, height });
+  await intoView("What agents may do with your tools");
 };
 /** Settings › Projects on a project (`name`) and its tab (General or Pipeline), `height` tall */
 const projectTab = async (tabName, { fixture = "default", name = "Northwind Portal", height = 800 } = {}) => {
@@ -1304,7 +1318,7 @@ const VIEWS = {
     await click("Billing roadmap");
     await waitText("Website");
   },
-  "settings-integration-github-projects": () => settingsPage("Integrations", "GitHub Projects", "ghprojects"),
+  "settings-integration-github-projects": () => integration("GitHub Projects", { fixture: "ghprojects" }),
   // a project's Pipeline tab in Settings › Projects, whole: the switch, the ticket flow, the build and the review, each
   // repo found on this Mac with its checks
   "settings-project-pipeline": async () => {
@@ -1347,7 +1361,7 @@ const VIEWS = {
     await waitText("Ada Lovelace");
   },
   // Buddy's page in Integrations (region, read-only token) and its Buddy project in Settings › Projects (PR buddy)
-  "settings-integration-buddy": () => settingsPage("Integrations", "Buddy", "buddy"),
+  "settings-integration-buddy": () => integration("Buddy", { fixture: "buddy" }),
   "settings-project-buddy": async () => {
     await projectTab("General", { fixture: "buddy" });
     const field = page.getByRole("combobox", { name: "Buddy", exact: true }).first();
@@ -3511,14 +3525,35 @@ const VIEWS = {
     await scrollMain("bottom");
     await settle(page);
   },
+  // Settings › Integrations as list + detail (PR #582): the list in four groups with a status line each, the picked one's
+  // page on the right: its connection, Agent access (one summary row, a link to Privacy & access), Disconnect
   ...Object.fromEntries(
     ["Productive", "GitHub", "Mail"].map(name => [
       `settings-integration-${name.toLowerCase()}`,
-      () => settingsPage("Integrations", name),
+      () => integration(name),
     ]),
   ),
-  "settings-integration-mail-experimental": () => settingsPage("Integrations", "Mail", "mailexp"),
-  "settings-integration-calendar": () => settingsPage("Integrations", "Calendar", "calendar"),
+  "settings-integration-mail-experimental": () => integration("Mail", { fixture: "mailexp" }),
+  "settings-integration-calendar": () => integration("Calendar", { fixture: "calendar" }),
+  // Mail disconnected: it stays in the list as Not connected, its page offers Connect where Disconnect was
+  "settings-integration-disconnected": async () => {
+    await integration("Mail");
+    await button("Disconnect").click();
+    await waitText("Connect Mail");
+    await settle(page);
+  },
+  // Privacy & access: one table, a row per tool with a summary and its switch; Trello is not connected
+  "settings-access-table": () => accessTable(),
+  // the same in dark: Mail's page
+  "settings-integration-mail-dark": () => integration("Mail", { fixture: "dark" }),
+  // a tool's row unfolded to its actions, reached from the link on its integration's page
+  "settings-access-open": async () => {
+    await integration("Productive");
+    await click("Change in Privacy & access →");
+    await waitText("productive.create_task");
+    await page.setViewportSize({ width: 900, height: 1000 });
+    await intoView("What agents may do with your tools");
+  },
   // Settings › Agents as it opens: the agents on the left (on, then off), the default one picked
   "settings-agents": async () => {
     await settingsPage("Agents");
@@ -3618,7 +3653,8 @@ const VIEWS = {
   },
   // Settings › General › Reminders' agent access: add, done and push default to Runs (#PR)
   "settings-reminders-access": async () => {
-    await settingsPage("Privacy & access");
+    await accessTable(1000);
+    await click("Reminders");
     await intoView("reminders.push");
   },
   // the vault's git backup under General, after a round that pushed
@@ -3640,7 +3676,7 @@ const VIEWS = {
     await intoView("Last sync");
   },
   "settings-agent-access": async () => {
-    await settingsPage("Integrations", "Productive");
+    await integration("Productive");
     await intoView("Agent access");
   },
   onboarding: async () => {
