@@ -66,6 +66,20 @@ export type Item = {
   /** a turn refused because the agent is not signed in: drawn as a card with a sign-in button */
   login?: true;
 };
+/** A background task of the conversation as the list above the composer shows it: live only, never saved. `since`: when
+ *  this page first saw it, `end`: when it ended (it stays a few seconds with its result). */
+export type BgTask = {
+  id: string;
+  kind: string;
+  agent?: string;
+  description: string;
+  since: number;
+  status: "running" | "completed" | "failed" | "killed";
+  end?: number;
+  tools?: number;
+  last?: string;
+  summary?: string;
+};
 export type Chat = {
   key: string;
   project: string | null;

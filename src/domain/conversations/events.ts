@@ -6,6 +6,7 @@ import { FILE_TOOLS } from "../git/git.ts";
 import { cleanCommands } from "./commands.ts";
 import { splitFiles } from "./files.ts";
 import { isRelayTurn } from "../orchestrator/rules.ts";
+import { applyTasks, endTask } from "./tasks.ts";
 
 // The agent processes' events (normalised by their provider, packages/agent-core) as a reducer over the conversations
 // state, and the transcripts behind a conversation as items. Pure: what needs the outside (a banner, saving, a vault
@@ -109,6 +110,31 @@ export function applyAgentEvent(
       // a turn Relay wrote itself (orchestrator) is in the conversation already
       if (!isRelayTurn(event.text)) takeWaiting(state, key);
       else state.taken[key] = (state.taken[key] || 0) + 1;
+      return [];
+    case "tasks": {
+      const tasks = applyTasks(state.tasks[key], event.tasks, env.now);
+      if (tasks.length) state.tasks[key] = tasks;
+      else delete state.tasks[key];
+      return [];
+    }
+    case "task_progress": {
+      const task = state.tasks[key]?.find(t => t.id === event.id);
+      if (task) {
+        if (event.tool_uses != null) task.tools = event.tool_uses;
+        if (event.last_tool) task.last = event.last_tool;
+        if (event.summary) task.summary = event.summary;
+      }
+      return [];
+    }
+    case "task_ended":
+      if (state.tasks[key]) state.tasks[key] = endTask(state.tasks[key], event.id, event.status, env.now);
+      return [];
+    case "task_output":
+      (state.taskOutput[key] ||= {})[event.id] = event.text;
+      return [];
+    case "task_summary":
+      if (event.detail) state.taskLine[key] = event.detail;
+      else delete state.taskLine[key];
       return [];
     case "commands":
       state.commands[provider] = cleanCommands(event.commands);
@@ -271,6 +297,7 @@ function onTurnEnd(state: ConversationsState, key: string, end: EventOf<"turn_en
   const { t } = env;
   const effects: Effect[] = [];
   endCompaction(state.messages[key], "err");
+  delete state.taskLine[key];
   finishTurnInQueue(state, key);
   if (!end.ok) {
     const login = needsLogin(end.error);
@@ -304,6 +331,10 @@ function onTurnEnd(state: ConversationsState, key: string, end: EventOf<"turn_en
 function onProcessExit(state: ConversationsState, key: string, env: EventEnv): Effect[] {
   const effects: Effect[] = [];
   endCompaction(state.messages[key], "err");
+  // the process took its background tasks with it
+  delete state.tasks[key];
+  delete state.taskLine[key];
+  delete state.taskOutput[key];
   releaseWaiting(state, key);
   // the process stopped while a turn ran: say so, the dots alone would just disappear
   if (state.status[key] === "busy") {

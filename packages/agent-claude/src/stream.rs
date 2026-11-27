@@ -1,7 +1,7 @@
 //! Claude Code's stream-json, in and out, and its transcripts, as the contract's events.
 
 use agent_core::envelope::strip;
-use agent_core::{Artifact, Event, Hunk, Image, Turn, TurnUsage, IMAGE_TYPES};
+use agent_core::{Artifact, Event, Hunk, Image, Task, Turn, TurnUsage, IMAGE_TYPES};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -231,12 +231,36 @@ fn parse(ev: &Value) -> Vec<Event> {
             let mcp = req["subtype"] == "mcp_message";
             out.push(Event::Control { id: ev["request_id"].clone(), server: mcp.then(|| req["server_name"].as_str().unwrap_or("").to_string()), message: req["message"].clone() });
         }
+        "control_response" if ev["response"]["request_id"].as_str().is_some_and(|i| i.starts_with("task-out:")) => {
+            let r = &ev["response"];
+            let id = r["request_id"].as_str().unwrap_or("").trim_start_matches("task-out:").to_string();
+            let text = if r["subtype"] == "error" { r["error"].as_str().unwrap_or("").to_string() } else { r["response"]["output"].as_str().unwrap_or("").to_string() };
+            out.push(Event::TaskOutput { id, text });
+        }
         "control_response" => {
             let r = &ev["response"];
             if r["subtype"] == "error" { out.push(Event::Stderr { text: format!("relay-mail ({}): {}", r["request_id"].as_str().unwrap_or(""), r["error"]) }); }
             // the slash commands and skills this vault has, for the composer's completion
             if r["request_id"] == "init" && r["response"]["commands"].is_array() { out.push(Event::Commands { commands: r["response"]["commands"].clone() }); }
         }
+        // background tasks: the set after each change, how far one is, how it ended; the live phrase of the turn
+        "system" if ev["subtype"] == "background_tasks_changed" => {
+            let tasks = ev["tasks"].as_array().into_iter().flatten().filter(|t| t["ambient"] != true).map(|t| Task {
+                id: t["task_id"].as_str().unwrap_or("").into(), kind: t["task_type"].as_str().unwrap_or("").into(),
+                agent: t["subagent_type"].as_str().map(String::from), description: t["description"].as_str().unwrap_or("").into() }).collect();
+            out.push(Event::Tasks { tasks });
+        }
+        "system" if ev["subtype"] == "task_progress" => {
+            let u = &ev["usage"];
+            out.push(Event::TaskProgress { id: ev["task_id"].as_str().unwrap_or("").into(), tool_uses: u["tool_uses"].as_u64(), tokens: u["total_tokens"].as_u64(),
+                last_tool: ev["last_tool_name"].as_str().map(String::from), summary: ev["summary"].as_str().map(String::from) });
+        }
+        "system" if ev["subtype"] == "task_updated" => {
+            if let Some(status) = ev["patch"]["status"].as_str().filter(|s| ["completed", "failed", "killed"].contains(s)) {
+                out.push(Event::TaskEnded { id: ev["task_id"].as_str().unwrap_or("").into(), status: status.into() });
+            }
+        }
+        "system" if ev["subtype"] == "task_summary" => out.push(Event::TaskSummary { detail: ev["detail"].as_str().map(String::from) }),
         "system" if ev["subtype"] == "status" && ev["status"] == "compacting" => out.push(Event::Compacting),
         "system" if ev["subtype"] == "compact_boundary" => out.push(compacted(&ev["compact_metadata"], "pre_tokens", "post_tokens")),
         "user" => {
@@ -394,6 +418,32 @@ mod tests {
     fn any_line_naming_the_synthetic_model_is_marked() {
         let line = json!({"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "from <synthetic> model", "model": "<synthetic>"}]}});
         assert!(matches!(&parse_all(&[line])[..], [Event::Synthetic, Event::ToolResult { .. }]));
+    }
+
+    #[test]
+    fn background_tasks_come_as_a_set_progress_and_an_end() {
+        let set = json!({"type": "system", "subtype": "background_tasks_changed", "tasks": [
+            {"task_id": "b1", "task_type": "local_bash", "description": "Run the portal build"},
+            {"task_id": "a1", "task_type": "local_agent", "subagent_type": "general-purpose", "description": "Check the redirects"},
+            {"task_id": "w1", "task_type": "monitor_ws", "description": "socket", "ambient": true}]});
+        let task = |id: &str, kind: &str, agent: Option<&str>, d: &str| Task { id: id.into(), kind: kind.into(), agent: agent.map(String::from), description: d.into() };
+        assert_eq!(parse_all(&[set]), [Event::Tasks { tasks: vec![task("b1", "local_bash", None, "Run the portal build"), task("a1", "local_agent", Some("general-purpose"), "Check the redirects")] }]);
+        let progress = json!({"type": "system", "subtype": "task_progress", "task_id": "a1", "description": "x", "usage": {"total_tokens": 900, "tool_uses": 2, "duration_ms": 5}, "last_tool_name": "Grep"});
+        assert_eq!(parse_all(&[progress]), [Event::TaskProgress { id: "a1".into(), tool_uses: Some(2), tokens: Some(900), last_tool: Some("Grep".into()), summary: None }]);
+        let ended = |s: &str| json!({"type": "system", "subtype": "task_updated", "task_id": "b1", "patch": {"status": s}});
+        assert_eq!(parse_all(&[ended("killed")]), [Event::TaskEnded { id: "b1".into(), status: "killed".into() }]);
+        assert!(parse_all(&[ended("running")]).is_empty());
+        let phrase = |d: Value| json!({"type": "system", "subtype": "task_summary", "detail": d});
+        assert_eq!(parse_all(&[phrase(json!("Reading the redirect rules"))]), [Event::TaskSummary { detail: Some("Reading the redirect rules".into()) }]);
+        assert_eq!(parse_all(&[phrase(Value::Null)]), [Event::TaskSummary { detail: None }]);
+    }
+
+    #[test]
+    fn a_task_output_is_answered_by_its_request_id() {
+        let ok = json!({"type": "control_response", "response": {"subtype": "success", "request_id": "task-out:b1", "response": {"output": "hello\n", "total_bytes": 6, "truncated": false}}});
+        assert_eq!(parse_all(&[ok]), [Event::TaskOutput { id: "b1".into(), text: "hello\n".into() }]);
+        let err = json!({"type": "control_response", "response": {"subtype": "error", "request_id": "task-out:b1", "error": "no shell or Monitor task with that task_id"}});
+        assert_eq!(parse_all(&[err]), [Event::TaskOutput { id: "b1".into(), text: "no shell or Monitor task with that task_id".into() }]);
     }
 
     #[test]

@@ -230,7 +230,21 @@ pub enum Event {
     /// The model (and effort, when the CLI says) it runs on, its own defaults resolved. The app passes it on as
     /// `resolved` with which of the two the conversation left to the CLI, so the composer can name the defaults.
     Resolved { model: String, effort: Option<String> },
+    /// Claude Code's background tasks (Bash commands, subagents) after a change: the whole set, it replaces what was shown.
+    Tasks { tasks: Vec<Task> },
+    /// How far a background task is, as far as the provider says.
+    TaskProgress { id: String, tool_uses: Option<u64>, tokens: Option<u64>, last_tool: Option<String>, summary: Option<String> },
+    /// A background task ended: "completed", "failed" or "killed".
+    TaskEnded { id: String, status: String },
+    /// What a background task printed (or why it could not be read), the answer to [`AgentProvider::task_output`].
+    TaskOutput { id: String, text: String },
+    /// The one-line phrase of what the agent does now, mid-turn; None clears it.
+    TaskSummary { detail: Option<String> },
 }
+
+/// A background task as Claude Code lists it: its id, kind (`local_bash`, `local_agent`, ..), the subagent's type, what it was asked.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct Task { pub id: String, pub kind: String, pub agent: Option<String>, pub description: String }
 
 /// One hunk of a change: where it starts in the old and the new file, and its lines prefixed " ", "-" or "+".
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -299,6 +313,9 @@ pub trait AgentProvider: Sync {
     fn control_reply(&self, _id: &Value, _reply: Result<Value, String>) -> Option<String> { None }
     /// `caps.live_model`: the stdin line that changes the model for the turns after it ("": the CLI's own).
     fn set_model(&self, _model: &str) -> Option<String> { None }
+    /// The stdin lines that stop a background task, and ask for what it printed (answered as [`Event::TaskOutput`]).
+    fn stop_task(&self, _id: &str) -> Option<String> { None }
+    fn task_output(&self, _id: &str) -> Option<String> { None }
     /// Slash commands (without the slash) that take no attachments: refused in the webview before they are sent.
     fn text_only_commands(&self) -> Vec<&'static str> { vec![] }
     /// The stdin line answering a request this provider raised as [`Event::Permission`] (relay = true).

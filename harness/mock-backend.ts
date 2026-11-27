@@ -235,6 +235,12 @@ function emit(event: string, payload: unknown) {
   for (const id of [...(listeners.get(event) || [])]) internals().runCallback(id, { event, id, payload });
 }
 const emitAgent = (project: string, event: unknown, provider = "claude") => emit("agent", { project, provider, event });
+// the background tasks `tasksLive` shows: a build, a watcher and a subagent
+const BG_TASKS = [
+  { id: "bk3f9a1c2", kind: "local_bash", description: "Build the Northwind Portal bundle" },
+  { id: "bq7d20e5b", kind: "local_bash", description: "Watch the portal redirect tests" },
+  { id: "a4c81d07e55b2f3a1", kind: "local_agent", agent: "general-purpose", description: "Check the checkout redirects" },
+];
 
 // ---------- the embedded terminals: output goes to the Channel the frontend passed, as the backend does (raw bytes)
 const PROMPT = "alex@mac ~/vault % ";
@@ -1561,6 +1567,14 @@ function handle(cmd: string, a: Args): unknown {
     }
     case "quick_capture_hide":
       return null;
+    // a background task of a conversation (Claude Code): its output comes back as an agent event, a stop as its end
+    case "task_stop":
+      emitAgent(a.project as string, { type: "task_ended", id: a.task, status: "killed" });
+      emitAgent(a.project as string, { type: "tasks", tasks: BG_TASKS.filter(t => t.id !== a.task) });
+      return null;
+    case "task_output":
+      emitAgent(a.project as string, { type: "task_output", id: a.task, text: "> northwind-portal@1.4.0 build\n> vite build\n\ntransforming...\n42 modules transformed.\ndist/index.html   0.46 kB\ndist/assets/index-3f9a1c.js   143.20 kB" });
+      return null;
     case "stop":
     case "bg":
     case "open_terminal":
@@ -2515,6 +2529,13 @@ const harness = {
   resolved: (key: string, model = "opus", effort = "high") =>
     emitAgent(key, { type: "resolved", model, effort, default_model: true, default_effort: true }),
   /** the live events after the long conversation opened: running and failed tools, an error, a draft note */
+  // Claude has three tasks in the background while a turn runs, with its live phrase (Claude Code only)
+  tasksLive: (key = conv.LONG_KEY) => {
+    emitAgent(key, { type: "working" });
+    emitAgent(key, { type: "tasks", tasks: BG_TASKS });
+    emitAgent(key, { type: "task_progress", id: BG_TASKS[2].id, tool_uses: 4, tokens: 21000, last_tool: "Grep" });
+    emitAgent(key, { type: "task_summary", detail: "Checking the redirect rules of the checkout" });
+  },
   liveTail: (key = conv.LONG_KEY) => conv.liveTail().forEach(event => emitAgent(key, event)),
   /** how a meeting's wrap-up draft goes: written, never finishing (the skeleton), or failing */
   wrapupMode: (mode: "ok" | "slow" | "fail") => void (wrapupMode = mode),

@@ -295,6 +295,13 @@ impl AgentProvider for Claude {
     fn set_model(&self, model: &str) -> Option<String> {
         Some(json!({"type": "control_request", "request_id": "model", "request": {"subtype": "set_model", "model": if model.is_empty() { "default" } else { model }}}).to_string())
     }
+    // ponytail: undocumented control requests (Claude Code 2.1.332); the answer to the second comes back by its request id (stream.rs)
+    fn stop_task(&self, id: &str) -> Option<String> {
+        Some(json!({"type": "control_request", "request_id": format!("task-stop:{id}"), "request": {"subtype": "stop_task", "task_id": id}}).to_string())
+    }
+    fn task_output(&self, id: &str) -> Option<String> {
+        Some(json!({"type": "control_request", "request_id": format!("task-out:{id}"), "request": {"subtype": "get_task_output", "task_id": id}}).to_string())
+    }
     fn respond(&self, req: &agent_core::pending::Request, decision: &Value) -> Option<String> { permission::respond(req, decision) }
     fn input(&self, turn: &Turn) -> Option<String> { Some(stream::user_message(turn).to_string()) }
     fn parser(&self) -> Parser {
@@ -401,6 +408,15 @@ mod tests {
     use super::*;
     use agent_core::{Grants, NO_GRANTS};
     fn env<'a>(p: &'a Path) -> Env<'a> { Env { home: "/Users/me", vault: "/Users/me/my vault", path: "/usr/bin", bin: "/Users/me/.local/bin/claude", pending: p, grants: &agent_core::NO_GRANTS, opts: &Value::Null } }
+    #[test]
+    fn task_control_lines() {
+        let line = |s: Option<String>| serde_json::from_str::<Value>(&s.unwrap()).unwrap();
+        let stop = line(PROVIDER.stop_task("b1"));
+        assert_eq!((stop["request"]["subtype"].as_str(), stop["request"]["task_id"].as_str(), stop["request_id"].as_str()), (Some("stop_task"), Some("b1"), Some("task-stop:b1")));
+        let out = line(PROVIDER.task_output("b1"));
+        assert_eq!((out["request"]["subtype"].as_str(), out["request_id"].as_str()), (Some("get_task_output"), Some("task-out:b1")));
+    }
+
     #[test]
     fn the_title_prompt_holds_the_message_as_data() {
         let p = agent_core::prompt::fill(TITLE, &[("text", "wat is {{dit}}?")]);

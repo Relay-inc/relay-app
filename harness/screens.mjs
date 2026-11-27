@@ -569,6 +569,16 @@ const VIEWS = {
     await page.getByRole("button", { name: /invoice\.png/ }).click();
     await settle(page);
   },
+  // Claude's background tasks above the composer, one command's output unfolded, and the live phrase on the working line
+  "conversation-tasks": async () => {
+    await open(page, server.url, { sel: keys.long });
+    await waitText(markers.longEnd);
+    await page.evaluate(() => window.__harness.tasksLive());
+    await settle(page);
+    await page.getByRole("button", { name: /Build the Northwind Portal bundle/ }).click();
+    await settle(page);
+    await scrollMain("bottom");
+  },
   // a page Claude Code published as a claude.ai Artifact: its card where the call stood, the quickstart a tool line (#553)
   "conversation-artifact": async () => {
     await open(page, server.url, { sel: keys.artifact });

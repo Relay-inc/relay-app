@@ -382,6 +382,9 @@ type SendArgs = {
 };
 export const send = (args: SendArgs) => invoke("send", args);
 export const stop = (project: string) => invoke("stop", { project });
+/** Stop a background task of the conversation, or ask what it printed (it comes back as the agent event `task_output`). */
+export const taskStop = (project: string, task: string) => invoke("task_stop", { project, task });
+export const taskOutput = (project: string, task: string) => invoke("task_output", { project, task });
 /** Removes the git worktrees a conversation made; the ones with work git would lose stay. */
 export const dropWorktrees = (project: string) =>
   invoke<{ removed: number; kept: number }>("drop_worktrees", { project });

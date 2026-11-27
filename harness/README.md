@@ -57,6 +57,7 @@ transparent over the macOS sidebar material in Tauri; the mock gives `html` the 
 | `deepLink(url)` | A `relay://` link while the app runs (the `deep-link://new-url` event). |
 | `resolved(key, model?, effort?)` | The `resolved` agent event: what a fresh session ran on when model and effort were left to the CLI. |
 | `orchLive()` | The orchestrator's live `orch` events (fixture orch): a new worker, a worker that reports, the `sent` report into `c:orch`. |
+| `tasksLive(key?)` | Claude's background tasks (a build, a watcher, a subagent) while a turn runs, with its live phrase (Claude Code). |
 | `liveTail(key?)` | Live events on the long conversation: a running tool, a failed one, an error, a draft note. |
 | `pickFolder` | What `pick_folder` answers (null, the default, is cancelled). |
 | `pickFiles`, `pastedFiles` | What `pick_files` (the + dialog) and `pasted_files` (Finder copy) answer; `[]` by default. |
@@ -106,7 +107,7 @@ new Tauri command (`generate_handler!` in `src-tauri/src/lib.rs`) gets its answe
 
 ## Views (`screens.mjs`)
 
-103 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
+104 views. Conversation: conversation-tasks (background tasks above the composer, a command's output unfolded), waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
 conversation-permission, conversation-plan (ExitPlanMode: the plan next to Allow and Deny), conversation-action (an agent action's card), conversation-code (a code block and its header),
 conversation-steps (a tool group unfolded), composer-slash (`/` completion), composer-resolved (the pickers name the CLI's
 defaults), composer-files (a picture and two file chips waiting), conversation-files (a sent message with chips), conversation-unread (a message sent mid-turn, waiting for Claude), conversation-question, conversation-artifact (a page Claude Code published as a claude.ai Artifact: its card), conversation-artifact-open (its Artifact drawer, the page from its file), new-general-draft (the menu event `new-general`, Cmd-Option-T), new-window (a window Cmd-N opened, on Today), terminal. Mail and PRs:
