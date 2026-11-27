@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import type { BgTask } from "../../../domain/conversations/types";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useNavigationStore } from "../../../application/navigation/store";
-import { openAgent } from "../../../application/navigation/navigation";
 import { readTaskOutput, stopTask } from "../../../application/conversations/actions";
 import { shownTasks } from "../../../domain/conversations/tasks";
 import { formatDuration } from "../../../domain/conversations/rules";
@@ -15,7 +14,7 @@ const DOT = { running: "bg-accent", completed: "bg-separator", failed: "bg-late"
 
 /** What Claude has running in the background of the open conversation, above the composer like the terminal lists it:
  *  per task what it is, how far it is and how long it runs. A hover icon stops it, a click shows what a command
- *  printed (a subagent opens its page). Finished ones stay a few seconds with their result. The header line folds
+ *  printed. Subagents are left out, the agents list shows them. Finished ones stay a few seconds with their result. The header line folds
  *  the list away, like a turn's steps. */
 export function BackgroundTasks({ className }: { className: string }) {
   const { t, tn } = useT();
@@ -40,13 +39,7 @@ export function BackgroundTasks({ className }: { className: string }) {
     return () => clearInterval(timer);
   }, [open, reading?.status]);
   if (!shown.length) return null;
-  const kind = (task: BgTask) =>
-    task.agent ??
-    (task.kind === "local_bash"
-      ? t("tasks.command")
-      : task.kind === "local_agent"
-        ? t("tasks.agent")
-        : task.kind.replace(/^local_/, ""));
+  const kind = (task: BgTask) => (task.kind === "local_bash" ? t("tasks.command") : task.kind.replace(/^local_/, ""));
   const result = (task: BgTask) => (task.status === "running" ? "" : t(RESULT[task.status]));
   return (
     <div className={className}>
@@ -67,10 +60,8 @@ export function BackgroundTasks({ className }: { className: string }) {
             <div className="group flex items-center min-h-6 rounded-md text-sm text-secondary hover:bg-fill">
               <button
                 className="flex-1 min-w-0 flex items-center gap-2 px-1.5 min-h-6 text-left cursor-default select-none"
-                title={task.kind === "local_agent" ? t("subs.show") : t("tasks.output")}
-                onClick={() =>
-                  task.kind === "local_agent" ? openAgent(task.id) : setOpen(open === task.id ? null : task.id)
-                }
+                title={t("tasks.output")}
+                onClick={() => setOpen(open === task.id ? null : task.id)}
               >
                 <span className={`size-2 flex-none rounded-full ${DOT[task.status]}`}></span>
                 <span className={`flex-initial min-w-0 truncate ${task.status === "running" ? "text-label" : ""}`}>
