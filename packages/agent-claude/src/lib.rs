@@ -217,6 +217,19 @@ impl AgentProvider for Claude {
             Ok(if commands.is_null() { json!([]) } else { commands.clone() })
         })
     }
+    fn skills(&self, env: &Env) -> Value {
+        agent_core::discover_commands(env, |p| {
+            let mut cmd = Command::new(env.bin);
+            cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+                "--settings", r#"{"disableAllHooks":true}"#, "--no-session-persistence"]).current_dir(env.vault).env_remove("ANTHROPIC_API_KEY");
+            let c = p.start(cmd)?;
+            p.send(c, json!({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize"}}))?;
+            p.receive(c, |v| v["type"] == "control_response")?;
+            p.send(c, json!({"type": "control_request", "request_id": "skills", "request": {"subtype": "get_skills_dialog"}}))?;
+            let v = p.receive(c, |v| v["type"] == "control_response" && v["response"]["request_id"] == "skills")?;
+            Ok(stream::skills(&v["response"]["response"]["skills"]))
+        })
+    }
     fn efforts(&self) -> Vec<Choice> {
         [("low", "Low"), ("medium", "Medium"), ("high", "High"), ("xhigh", "Extra high"), ("max", "Max")].iter().map(|(i, l)| Choice::new(i, l)).collect()
     }
@@ -294,6 +307,9 @@ impl AgentProvider for Claude {
     }
     fn set_model(&self, model: &str) -> Option<String> {
         Some(json!({"type": "control_request", "request_id": "model", "request": {"subtype": "set_model", "model": if model.is_empty() { "default" } else { model }}}).to_string())
+    }
+    fn reload(&self) -> Option<String> {
+        Some(json!({"type": "control_request", "request_id": "reload_plugins", "request": {"subtype": "reload_plugins", "refuse_if_busy": true}}).to_string())
     }
     fn respond(&self, req: &agent_core::pending::Request, decision: &Value) -> Option<String> { permission::respond(req, decision) }
     fn input(&self, turn: &Turn) -> Option<String> { Some(stream::user_message(turn).to_string()) }

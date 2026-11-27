@@ -83,6 +83,14 @@ test("commands are kept per provider", () => {
   assert.deepEqual(state.commands.claude, [{ name: "live-claude", description: "", argumentHint: undefined }]);
 });
 
+test("a reload answer is a note in the conversation, the busy refusal says so", () => {
+  const state = fresh("claude");
+  const done = events(state, { type: "reload", busy: false });
+  assert.deepEqual(done.messages.open, [{ kind: "note", text: "note.reloaded" }]);
+  const busy = events(state, { type: "reload", busy: true });
+  assert.deepEqual(busy.messages.open, [{ kind: "note", text: "note.reloadBusy" }]);
+});
+
 test("/clear empties the conversation", () => {
   const next = events(fresh("claude"), { type: "text", text: "old", delta: false }, { type: "reset" });
   assert.deepEqual(next.messages.open, []);

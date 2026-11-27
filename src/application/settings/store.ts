@@ -27,7 +27,7 @@ import {
 } from "../../domain/settings/types";
 import { SETUP_FOLDERS, type SetupPlatform } from "../../domain/settings/machines";
 import type { ORG_TABS, OrgDraft } from "../../domain/settings/servers";
-import type { AgentsStatus } from "../../domain/agents/types";
+import type { AgentsStatus, Skill } from "../../domain/agents/types";
 import type { AgentUpdate, UpdateProgress, UpdatesStatus } from "../../domain/settings/updates";
 import type { BoardOpt } from "../../domain/board/types";
 import type { PluginTest } from "../../domain/plugins/types";
@@ -56,7 +56,7 @@ export type SettingsState = {
   extraVaults: ExtraVault[]; // the extra vaults as the main window's last snapshot read them
   tab: SettingsTab;
   message: Message | null; // the last save's result on General and Projects
-  agentsPage: { detected: AgentsStatus | null; message: Message | null };
+  agentsPage: { detected: AgentsStatus | null; message: Message | null; skills: Skill[] | null };
   updatesPage: {
     status: UpdatesStatus | null; // null until read
     checking: boolean;
@@ -195,7 +195,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
   extraVaults: [],
   tab: "general",
   message: null,
-  agentsPage: { detected: null, message: null },
+  agentsPage: { detected: null, message: null, skills: null },
   updatesPage: {
     status: null,
     checking: false,

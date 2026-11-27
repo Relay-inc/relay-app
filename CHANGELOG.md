@@ -14,6 +14,9 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Added
+- Settings › Agents lists the skills Claude Code has in your vault, from you, the project or a plugin, and ⌘K gets "Reload skills and plugins" to pick up a skill or plugin you just added without starting a new conversation.
+
 ## [0.0.70] - 2026-11-26
 
 ### Added

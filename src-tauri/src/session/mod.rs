@@ -245,6 +245,16 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
     Ok(())
 }
 
+/// Has a running conversation pick up skills and plugins changed on disk (its answer comes as events). False: no
+/// process runs for it, or its provider cannot, and it reads them when it starts anyway.
+pub(crate) fn reload(state: &App, project: &str) -> Result<bool, String> {
+    let Some(line) = provider_of(state, project, None).reload() else { return Ok(false) };
+    let mut procs = state.procs.lock().unwrap();
+    let Some(x) = procs.get_mut(project) else { return Ok(false) };
+    writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
 pub(crate) fn stop(app: &AppHandle, state: &App, project: &str) {
     if orch::is_worker(project) { orch::stop(app, project); return; }
     if let Some(mut p) = state.procs.lock().unwrap().remove(project) { p.child.kill().ok(); }

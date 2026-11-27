@@ -223,6 +223,8 @@ pub enum Event {
     Stderr { text: String },
     /// The slash commands and skills the vault has, as the provider's control pipe lists them on opening.
     Commands { commands: Value },
+    /// The answer to a [`AgentProvider::reload`]: done, or refused because the session was busy.
+    Reload { busy: bool },
     /// The conversation was compacted: what triggered it ("manual" or "auto") and the context's size in tokens before and after.
     Compacted { trigger: Option<String>, pre_tokens: Option<u64>, post_tokens: Option<u64> },
     /// How full the context is: tokens in use now and/or the model's window, each when the provider says. Claude Code only.
@@ -283,6 +285,8 @@ pub trait AgentProvider: Sync {
     fn models(&self) -> Vec<Choice>;
     /// Executable slash commands/skills in this vault, without starting a conversation.
     fn commands(&self, _env: &Env) -> Value { serde_json::json!([]) }
+    /// The skills in this vault with where each comes from (`{name, description, source, state}`), without starting a conversation.
+    fn skills(&self, _env: &Env) -> Value { serde_json::json!([]) }
     fn efforts(&self) -> Vec<Choice> { vec![] }
     /// Whether a session id may go on a command line.
     fn valid_session(&self, id: &str) -> bool { safe_id(id) }
@@ -299,6 +303,9 @@ pub trait AgentProvider: Sync {
     fn control_reply(&self, _id: &Value, _reply: Result<Value, String>) -> Option<String> { None }
     /// `caps.live_model`: the stdin line that changes the model for the turns after it ("": the CLI's own).
     fn set_model(&self, _model: &str) -> Option<String> { None }
+    /// The stdin line that has a running process pick up skills and plugins changed on disk, refused while it is busy.
+    /// Its answer is [`Event::Reload`] and a fresh [`Event::Commands`].
+    fn reload(&self) -> Option<String> { None }
     /// Slash commands (without the slash) that take no attachments: refused in the webview before they are sent.
     fn text_only_commands(&self) -> Vec<&'static str> { vec![] }
     /// The stdin line answering a request this provider raised as [`Event::Permission`] (relay = true).
