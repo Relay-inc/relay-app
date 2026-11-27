@@ -15,14 +15,7 @@ const findings = `---\ntype: Document\nstatus: Active\n---\n# Rate limit finding
 const project = `---\ntype: Project\nstatus: Active\ncreated: 2026-09-21\n---\n# Northwind Portal\n\nConfigurator traffic is lowest on Saturday morning, so we plan the migration for 15 November between 06:00 and 08:00.\n\n![[${CHART}|Configurator traffic, last 7 days. Low point Saturday 06:00–08:00|560]]\n\n![[${QUOTE}]]\n\n![[${TALK}]]\n\n![[Rate limit findings#Rate limits]]\n\nNext: confirm the window with the client.\n`;
 export const texts: Record<string, string> = { [PROJECT_NOTE]: project, [FINDINGS_NOTE]: findings };
 
-const KIND: Record<string, string> = {
-  png: "image",
-  jpg: "image",
-  jpeg: "image",
-  pdf: "pdf",
-  m4a: "audio",
-  mp3: "audio",
-};
+const KIND: Record<string, string> = { png: "image", jpg: "image", jpeg: "image", pdf: "pdf", m4a: "audio", mp3: "audio" };
 /** embed_info (src-tauri/src/attach.rs): per target what it is; a name with no extension is a note. */
 export function info(targets: string[]) {
   return targets.map(target => {
@@ -32,25 +25,12 @@ export function info(targets: string[]) {
     if (!kind) {
       const note = target === "Rate limit findings";
       return note
-        ? {
-            target,
-            path: `${VAULT}/${FINDINGS_NOTE}`,
-            rel: FINDINGS_NOTE,
-            kind: "note",
-            size: findings.length,
-            text: findings,
-          }
+        ? { target, path: `${VAULT}/${FINDINGS_NOTE}`, rel: FINDINGS_NOTE, kind: "note", size: findings.length, text: findings }
         : { target, missing: true };
     }
     const rel = `Attachments/2026/${target}`;
     const base = { target, path: `${VAULT}/${rel}`, rel, kind };
-    if (kind === "pdf")
-      return {
-        ...base,
-        size: 1_200_000,
-        pages: 6,
-        thumb: `data:image/png;base64,${pngBase64(88, 112, "#fbfbfa", "#3a5ffb")}`,
-      };
+    if (kind === "pdf") return { ...base, size: 1_200_000, pages: 6, thumb: `data:image/png;base64,${pngBase64(88, 112, "#fbfbfa", "#3a5ffb")}` };
     return { ...base, size: kind === "audio" ? 31_000_000 : 184_000 };
   });
 }

@@ -3525,7 +3525,7 @@ const VIEWS = {
     await scrollMain("bottom");
     await settle(page);
   },
-  // Settings › Integrations as list + detail (PR #pr2): the list in four groups with a status line each, the picked one's
+  // Settings › Integrations as list + detail (PR #582): the list in four groups with a status line each, the picked one's
   // page on the right: its connection, Agent access (one summary row, a link to Privacy & access), Disconnect
   ...Object.fromEntries(
     ["Productive", "GitHub", "Mail"].map(name => [

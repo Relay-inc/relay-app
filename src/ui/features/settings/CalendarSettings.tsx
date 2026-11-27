@@ -100,13 +100,10 @@ export function CalendarSettings() {
           {feeds.map(feed => (
             <div
               key={feed.email}
-              className="group flex items-center gap-3 border-t border-s-border py-2.5 first:border-t-0 first:pt-0 last:pb-0"
+              className="flex items-center gap-3 border-t border-s-border py-2.5 first:border-t-0 first:pt-0 last:pb-0"
             >
               <b className="min-w-0 flex-1 truncate font-medium">{feed.email}</b>
-              <button
-                className={`${buttonClass("ghost")} opacity-0 transition-opacity duration-150 ease-in-out group-focus-within:opacity-100 group-hover:opacity-100`}
-                onClick={() => dropCalendar(feed.email)}
-              >
+              <button className={buttonClass("ghost")} onClick={() => dropCalendar(feed.email)}>
                 {t("mail.remove")}
               </button>
             </div>

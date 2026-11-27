@@ -79,7 +79,7 @@ function ToolRow({ tool }: { tool: AccessTool }) {
         <span className="flex-none text-xs text-s-muted">{tool.connected ? summary : t("int.notConnected")}</span>
         <Switch
           id={`acc-${tool.ext}`}
-          on={on}
+          on={on && tool.connected}
           label={t("act.access", { name: tool.name })}
           disabled={!tool.connected}
           onToggle={value => setAction(tool.ext, "access", value)}
