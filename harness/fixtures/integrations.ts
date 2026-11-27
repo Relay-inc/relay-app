@@ -670,10 +670,10 @@ export const usageLimitsAccounts = [
   {
     provider: "claude",
     limits: roomySecond,
-    active: "/Users/ann/.claude-work",
+    active: "/Users/demo/.claude-work",
     accounts: [
       { dir: "", name: null, limits: fullFirst },
-      { dir: "/Users/ann/.claude-work", name: "Work", limits: roomySecond },
+      { dir: "/Users/demo/.claude-work", name: "Work", limits: roomySecond },
     ],
   },
   usageLimits[1],

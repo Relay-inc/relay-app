@@ -346,9 +346,6 @@ export default {
   "ag.accountAdd": "Konto hinzufügen…",
   "ag.accountRemove": "{name} entfernen",
   "ag.accountName": "Name des Kontos",
-  "mcp.title": "MCP-Server",
-  "mcp.help":
-    "Die Server, die Claude in diesem Vault hat. Eine Änderung gilt für neue Unterhaltungen; laufende behalten ihre Server.",
   "mcp.checking": "Prüfe…",
   "mcp.none": "Keine MCP-Server in diesem Vault.",
   "mcp.state.connected": "Verbunden",
@@ -381,7 +378,6 @@ export default {
   "ag.offHelp": "Schalte ihn ein, um ihn in neuen Gesprächen zu nutzen und hier einzurichten.",
   "ag.switchOn": "Einschalten",
   "ag.general": "Allgemein",
-  "ag.runs": "Wie er läuft",
   "ag.supports": "Unterstützt",
   "int.add": "+ Integration hinzufügen",
   "int.empty":
@@ -2524,9 +2520,7 @@ export default {
   "composer.machineNoMail": "Ein Gespräch über eine Mail bleibt auf diesem Mac: Die Mail-Werkzeuge laufen hier.",
   "composer.machineSharedVault":
     "Ein Gespräch in einem anderen Workspace als Persönlich bleibt auf diesem Mac: Eine Arbeitsmaschine hat nur deinen Workspace Persönlich.",
-  "mc.runDefaultTitle": "Wo Gespräche laufen",
   "mc.runDefault": "Neue Gespräche laufen auf",
-  "mc.runDefaultHelp": "Jedes neue Gespräch kann neben dem Modell noch einen anderen Ort wählen.",
   "mc.line": "Kopplungszeile",
   "mc.lineHelp":
     "Führe <code>relay-server pair</code> auf der Maschine aus und füge die Zeile hier ein. Der Code funktioniert einmal, 10 Minuten lang.",
@@ -2805,13 +2799,25 @@ export default {
   "plug.help":
     "Ein Plugin ist ein MCP-Server, den Relay auf diesem Mac startet. Eines mit einer Ansicht bekommt eine Zeile in der Seitenleiste. Die Ansicht läuft in einer Sandbox, ohne Zugriff auf Relay oder das Netzwerk, und kann nur die Tools aufrufen, die du hier erlaubst. Geheimnisse landen im Schlüsselbund.",
   "plug.add": "Plugin hinzufügen",
-  "plug.import": "Aus Claude Code importieren",
+  "ag.newUse": "Neue Gespräche nutzen",
+  "ag.defaultAgent": "Standard-Agent",
+  "ag.runsOn": "auf",
+  "ag.machinesHint": "Maschinen verwaltest du unter Organisationen und Server.",
+  "ag.version": "Version",
+  "ag.mcpLink": "MCP-Server: {n}, in Plugins →",
+  "ag.accountLeft": "{pct} % übrig",
+  "mcp.connector": "Connector auf claude.ai",
+  "plug.claudeH": "Von Claude Code ausgeführt",
+  "plug.relayH": "Von Relay ausgeführt",
+  "plug.intro":
+    "MCP-Server in einer Liste. Relay führt seine Plugins selbst aus und gibt einem Plugin mit einer Ansicht einen Platz in der Seitenleiste; Claude Code führt seine eigenen Server aus und Relay zeigt, wie es ihnen geht.",
+  "plug.import": "Importieren",
   "plug.importHelp":
-    "MCP-Server aus der Konfiguration von Claude Code. Geheimnisse in ihrer Umgebung landen im Schlüsselbund.",
+    "Aus der eigenen Konfiguration von Claude Code. Importiere einen, damit er stattdessen in Relay läuft. Geheimnisse in ihrer Umgebung landen im Schlüsselbund.",
   "plug.empty": "Noch keine Plugins.",
-  "plug.viewStatus": "Hat eine Ansicht",
+  "plug.viewStatus": "Hat eine Ansicht in der Seitenleiste",
   "plug.views": "Ansichten",
-  "plug.noView": "Noch keine Ansicht gefunden",
+  "plug.noView": "Noch keine Ansicht",
   "plug.allowed_one": "{n} Tool erlaubt",
   "plug.allowed_other": "{n} Tools erlaubt",
   "plug.serverH": "Server",
