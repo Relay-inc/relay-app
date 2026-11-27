@@ -1,31 +1,34 @@
-import type { ReactNode } from "react";
+import { useEffect } from "react";
 import { agent as agentOf } from "../../../shared/plugins";
 import type { AgentCfg } from "../../../domain/settings/types";
 import type { AgentStatus } from "../../../domain/agents/types";
+import { AGENT_CHANGELOG, agentBehind } from "../../../domain/settings/updates";
 import { saveAgent, saveAgentBin, setDefaultAgent } from "../../../application/settings/agents-page";
+import { loadMcp, useMcpStore } from "../../../application/settings/mcp";
+import { useSettingsStore } from "../../../application/settings/store";
+import { updateAgent } from "../../../application/settings/updates-page";
+import { go, openLink } from "../../../application/settings/window";
 import { Html } from "../../components/Html";
 import { Icon } from "../../components/Icon";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
-import { buttonClass, DEFAULT_PILL, FIELD_BASE, PILL, SELECT, withoutColon } from "./blocks";
+import { buttonClass, DEFAULT_PILL, ERROR_MESSAGE, FIELD_BASE, OK_MESSAGE, PILL, SELECT, withoutColon } from "./blocks";
 import { AgentAccounts } from "./AgentAccounts";
 import { AgentGlyph, AgentStatusLine } from "./AgentBits";
 import { ChangeInput } from "./ChangeInput";
 import { Field } from "./Field";
-import { McpServers } from "./McpServers";
 import { Section } from "./Section";
 import { SkillsSection } from "./SkillsSection";
 import { Switch } from "./Switch";
 
-export type AgentTab = "general" | "mcp" | "skills";
+export type AgentTab = "general" | "skills";
 
 // the options' choices are sentences: as wide as the program field, so they read whole
 const WIDE_SELECT = SELECT.replace(" w-50 ", " w-96 ");
 const CAPS = ["images", "permissions", "questions", "subagents", "terminal", "limits", "effort"] as const;
 
 /** One agent's settings, the right side of Settings › Agents: its header (name, status, the switch, Make default) and
- *  the tabs General (help, program, options, accounts, what it can do), MCP servers (Claude) and Skills (Claude, on
- *  and installed). An agent that is off has General only, with a card to switch it on. */
+ *  the tabs General (version, program, options, accounts, what it can do) and Skills (Claude, on and installed). An agent that is off has General only, with a card to switch it on. */
 export function AgentSettings({
   status,
   config,
@@ -44,12 +47,11 @@ export function AgentSettings({
   const on = config.on;
   const tabs: AgentTab[] = [
     "general",
-    ...(on && status.caps.mcp ? (["mcp"] as const) : []),
     ...(on && id === "claude" && status.detect.installed ? (["skills"] as const) : []),
   ];
   // a tab this agent does not have (picked on another one) shows General
   const tab = tabs.includes(picked) ? picked : "general";
-  const label = { general: t("ag.general"), mcp: t("mcp.title"), skills: t("ag.skills") };
+  const label = { general: t("ag.general"), skills: t("ag.skills") };
   return (
     <div className="mx-auto grid max-w-240 grid-cols-1 gap-7 [&>*]:min-w-0">
       <header className="grid gap-4">
@@ -85,13 +87,7 @@ export function AgentSettings({
           ))}
         </nav>
       </header>
-      {tab === "mcp" ? (
-        <McpServers />
-      ) : tab === "skills" ? (
-        <SkillsSection />
-      ) : (
-        <General status={status} config={config} />
-      )}
+      {tab === "skills" ? <SkillsSection /> : <General status={status} config={config} />}
     </div>
   );
 }
@@ -118,62 +114,127 @@ function General({ status, config }: { status: AgentStatus; config: AgentCfg }) 
       </section>
     );
   const note = status.detect.note;
-  const rows: ReactNode = (
-    <>
-      <Field
-        label={withoutColon(t("ag.bin"))}
-        id={`agbin-${id}`}
-        hint={
-          note ? (
-            <span className="block truncate font-mono" title={note}>
-              {note}
-            </span>
-          ) : (
-            ""
-          )
-        }
-      >
-        <ChangeInput
-          className={`${FIELD_BASE} h-8 w-96 text-sm`}
-          id={`agbin-${id}`}
-          value={config.bin}
-          placeholder={t("ag.binPh", { bin: status.defaultBin })}
-          spellCheck={false}
-          onCommit={value => saveAgentBin(id, value.trim())}
-        />
-      </Field>
-      {(agent?.options ?? []).map(option => {
-        const optionId = `agopt-${id}-${option.id}`;
-        return (
-          <Field key={option.id} label={at(agent!, option.label)} id={optionId}>
-            <Select
-              className={WIDE_SELECT}
-              id={optionId}
-              options={option.choices.map(choice => ({ id: choice.id, name: at(agent!, choice.label) }))}
-              value={String(config[option.id] ?? option.choices[0].id)}
-              onChange={value => saveAgent(id, { [option.id]: value })}
-            />
-          </Field>
-        );
-      })}
-      {status.caps.accounts && <AgentAccounts id={id} config={config} />}
-    </>
-  );
+  const help = agent && <Html html={ath(agent, "set.help")} />;
   return (
     <>
-      <Section title={t("ag.runs")} desc={agent && <Html html={ath(agent, "set.help")} />} rows>
-        {rows}
+      <Section rows>
+        <VersionRow id={id} />
+        <Field
+          label={withoutColon(t("ag.bin"))}
+          id={`agbin-${id}`}
+          hint={
+            <>
+              {help}
+              {note && (
+                <span className="block truncate font-mono" title={note}>
+                  {note}
+                </span>
+              )}
+            </>
+          }
+        >
+          <ChangeInput
+            className={`${FIELD_BASE} h-8 w-96 text-sm`}
+            id={`agbin-${id}`}
+            value={config.bin}
+            placeholder={t("ag.binPh", { bin: status.defaultBin })}
+            spellCheck={false}
+            onCommit={value => saveAgentBin(id, value.trim())}
+          />
+        </Field>
+        {(agent?.options ?? []).map(option => {
+          const optionId = `agopt-${id}-${option.id}`;
+          return (
+            <Field key={option.id} label={at(agent!, option.label)} id={optionId}>
+              <Select
+                className={WIDE_SELECT}
+                id={optionId}
+                options={option.choices.map(choice => ({ id: choice.id, name: at(agent!, choice.label) }))}
+                value={String(config[option.id] ?? option.choices[0].id)}
+                onChange={value => saveAgent(id, { [option.id]: value })}
+              />
+            </Field>
+          );
+        })}
       </Section>
-      {/* the label above the pills: a row of them on the right would wrap into a ragged column */}
-      <Section title={t("ag.supports")}>
-        <div className="flex flex-wrap gap-1">
-          {CAPS.filter(name => status.caps[name]).map(name => (
-            <span key={name} className={PILL}>
-              {t(`ag.cap.${name}`)}
-            </span>
-          ))}
-        </div>
-      </Section>
+      {status.caps.accounts && <AgentAccounts id={id} config={config} />}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="mr-0.5 text-xs text-s-muted">{t("ag.supports")}</span>
+        {CAPS.filter(name => status.caps[name]).map(name => (
+          <span key={name} className={PILL}>
+            {t(`ag.cap.${name}`)}
+          </span>
+        ))}
+        {status.caps.mcp && <McpLink />}
+      </div>
     </>
+  );
+}
+
+/** The agent's version against the latest one, its changelog and, when it is behind and Relay knows how it was
+ *  installed, Update: the same update Settings › Updates runs. Nothing before the check answers or for an agent
+ *  that is not installed. */
+function VersionRow({ id }: { id: string }) {
+  const { t } = useT();
+  const update = useSettingsStore(s => s.updatesPage.agents?.find(a => a.id === id));
+  const updating = useSettingsStore(s => s.updatesPage.updating);
+  const message = useSettingsStore(s => s.updatesPage.agentMessages[id]);
+  if (!update || update.installed === null) return null;
+  const behind = agentBehind(update);
+  const version = update.installed || t("upd.noVersion");
+  const line = behind
+    ? t("upd.agentBehind", { installed: version, latest: update.latest! })
+    : update.latest
+      ? t("upd.agentLatest", { version })
+      : version;
+  return (
+    <Field
+      label={t("ag.version")}
+      hint={
+        <>
+          {line}
+          {message && (
+            <span className={`block whitespace-pre-wrap ${message.ok ? OK_MESSAGE : ERROR_MESSAGE}`}>
+              {message.text}
+            </span>
+          )}
+          {behind && !update.command && <span className="block">{t("upd.agentManual")}</span>}
+        </>
+      }
+    >
+      {AGENT_CHANGELOG[id] && (
+        <button className={buttonClass("ghost")} onClick={() => openLink(AGENT_CHANGELOG[id])}>
+          {t("upd.changelog")}
+        </button>
+      )}
+      {behind && update.command && (
+        <button
+          className={buttonClass("primary")}
+          disabled={!!updating}
+          title={update.command}
+          onClick={() => updateAgent(id)}
+        >
+          {updating === id ? t("upd.updating") : t("upd.update")}
+        </button>
+      )}
+    </Field>
+  );
+}
+
+/** "MCP servers: N, in Plugins": the servers Claude Code has live on the Plugins page now. */
+function McpLink() {
+  const { t } = useT();
+  const servers = useMcpStore(s => s.servers);
+  useEffect(() => {
+    if (!servers) void loadMcp(true);
+  }, [servers]);
+  if (!servers) return null;
+  return (
+    <button
+      className="ml-auto text-xs text-accent-text hover:underline focus-visible:ring-2 ring-s-ring focus-visible:outline-none"
+      onClick={() => go("plugins")}
+    >
+      {t("ag.mcpLink", { n: servers.length })}
+    </button>
   );
 }

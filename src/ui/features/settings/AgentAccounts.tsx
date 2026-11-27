@@ -1,61 +1,63 @@
+import { useEffect, useState } from "react";
 import type { AgentCfg } from "../../../domain/settings/types";
 import { accountsOf, MOST_ROOM, removeAccount, renameAccount } from "../../../domain/settings/accounts";
-import { addAgentAccount, saveAgentAccounts } from "../../../application/settings/agents-page";
+import { accountRoom, addAgentAccount, saveAgentAccounts } from "../../../application/settings/agents-page";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
-import { buttonClass, FIELD_CHIP, SELECT } from "./blocks";
+import { buttonClass, FIELD_CHIP, PILL, SELECT } from "./blocks";
 import { ChangeInput } from "./ChangeInput";
 import { Field } from "./Field";
+import { Section } from "./Section";
 import { Switch } from "./Switch";
 
-/** The agent's logins: the CLI's own and the extra config folders, which one new conversations use, and whether to
- *  move on when one's limits run out. Rows of the folded-open row's grid, like the rest of AgentSettings. */
+/** The agent's logins as a card of rows: the extra config folders (each with what is left of its plan when the
+ *  provider says), which one new conversations use, and whether to move on when one's limits run out. */
 export function AgentAccounts({ id, config }: { id: string; config: AgentCfg }) {
   const { t } = useT();
   const now = accountsOf(config);
   const last = now.accounts[now.accounts.length - 1];
+  // per account folder, the percent of its plan left; empty while unknown
+  const [room, setRoom] = useState<Record<string, number>>({});
+  useEffect(() => {
+    void accountRoom(id).then(setRoom);
+  }, [id]);
   return (
-    <>
-      <Field
-        label={t("ag.accounts")}
-        hint={
-          <>
-            {t("ag.accountsHelp")} {last && <code>CLAUDE_CONFIG_DIR={last.dir} claude /login</code>}
-          </>
-        }
-      >
-        <div className="flex flex-col items-end gap-1">
-          {now.accounts.map((account, i) => (
-            <div key={account.dir} className="flex items-center justify-end gap-2">
-              <ChangeInput
-                className={FIELD_CHIP}
-                aria-label={t("ag.accountName")}
-                value={account.name}
-                maxLength={40}
-                onCommit={(name, input) => {
-                  const next = renameAccount(now, i, name);
-                  // a blank name is not saved: the field shows the old one again
-                  if (next) saveAgentAccounts(id, next);
-                  else input.value = account.name;
-                }}
-              />
-              <code className="max-w-48 truncate text-xs text-s-muted" title={account.dir}>
-                {account.dir}
-              </code>
-              <button
-                className={buttonClass("ghost")}
-                aria-label={t("ag.accountRemove", { name: account.name })}
-                onClick={() => saveAgentAccounts(id, removeAccount(now, i))}
-              >
-                {t("ag.remove")}
-              </button>
-            </div>
-          ))}
-          <button className={buttonClass("ghost")} onClick={() => addAgentAccount(id, now)}>
-            {t("ag.accountAdd")}
+    <Section
+      title={t("ag.accounts")}
+      desc={
+        <>
+          {t("ag.accountsHelp")} {last && <code>CLAUDE_CONFIG_DIR={last.dir} claude /login</code>}
+        </>
+      }
+      rows
+    >
+      {now.accounts.map((account, i) => (
+        <div key={account.dir} className="flex items-center gap-3">
+          <ChangeInput
+            className={FIELD_CHIP}
+            aria-label={t("ag.accountName")}
+            value={account.name}
+            maxLength={40}
+            onCommit={(name, input) => {
+              const next = renameAccount(now, i, name);
+              // a blank name is not saved: the field shows the old one again
+              if (next) saveAgentAccounts(id, next);
+              else input.value = account.name;
+            }}
+          />
+          <code className="min-w-0 flex-1 truncate text-xs text-s-muted" title={account.dir}>
+            {account.dir}
+          </code>
+          {account.dir in room && <span className={PILL}>{t("ag.accountLeft", { pct: room[account.dir] })}</span>}
+          <button
+            className={buttonClass("ghost")}
+            aria-label={t("ag.accountRemove", { name: account.name })}
+            onClick={() => saveAgentAccounts(id, removeAccount(now, i))}
+          >
+            {t("ag.remove")}
           </button>
         </div>
-      </Field>
+      ))}
       {now.accounts.length > 0 && (
         <>
           <Field
@@ -79,6 +81,11 @@ export function AgentAccounts({ id, config }: { id: string; config: AgentCfg }) 
           </Field>
         </>
       )}
-    </>
+      <div>
+        <button className={`${buttonClass("ghost")} -ml-2`} onClick={() => addAgentAccount(id, now)}>
+          {t("ag.accountAdd")}
+        </button>
+      </div>
+    </Section>
   );
 }
