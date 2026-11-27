@@ -309,11 +309,12 @@ const todayDay = async (variant, dark) => {
   await settle(page);
 };
 const settingsPage = async (tab, sub, fixture = "default", platform = "") => {
-  // Projects and Agents are a list and the picked item side by side: the window's default size
+  // Projects, Agents and Integrations are a list and the picked item side by side: the window's default size
   // Voice and Shortcuts are the design's 1100 x 900, Updates 1100 x 760 (PR #577: two columns on a wide window)
   const sizes = {
     Projects: [1280, 800],
     Agents: [1280, 800],
+    Integrations: [1280, 800],
     Voice: [1100, 900],
     Shortcuts: [1100, 900],
     Updates: [1100, 760],
@@ -323,6 +324,25 @@ const settingsPage = async (tab, sub, fixture = "default", platform = "") => {
   await open(page, server.url, { path: "/settings.html", fixture, platform });
   await click(tab);
   if (sub) await click(sub);
+};
+/** Settings with `query` typed into the search; `pick` presses Return on the first result */
+const settingsSearch = async (query, pick, fixture = "default") => {
+  await settingsPage("General", undefined, fixture);
+  await page.getByRole("searchbox", { name: "Search settings" }).fill(query);
+  if (pick) await page.keyboard.press("Enter");
+  await page.waitForTimeout(pick ? 400 : 100);
+};
+/** Settings › Integrations with `name` picked in the list, `height` tall */
+const integration = async (name, { fixture = "default", height = 1000 } = {}) => {
+  await settingsPage("Integrations", name, fixture);
+  await page.setViewportSize({ width: 1280, height });
+  await settle(page);
+};
+/** Settings › Privacy & access scrolled to the table of what agents may do with the tools, `height` tall */
+const accessTable = async (height = 900) => {
+  await settingsPage("Privacy & access");
+  await page.setViewportSize({ width: 900, height });
+  await intoView("What agents may do with your tools");
 };
 /** Settings › Projects on a project (`name`) and its tab (General or Pipeline), `height` tall */
 const projectTab = async (tabName, { fixture = "default", name = "Northwind Portal", height = 800 } = {}) => {
@@ -1313,17 +1333,41 @@ const VIEWS = {
     await click("Billing roadmap");
     await waitText("Website");
   },
-  "settings-integration-github-projects": () => settingsPage("Integrations", "GitHub Projects", "ghprojects"),
-  // a project's Pipeline tab in Settings › Projects, whole: the switch, the ticket flow, the build and the review, each
-  // repo found on this Mac with its checks
+  "settings-integration-github-projects": () => integration("GitHub Projects", { fixture: "ghprojects" }),
+  // a project's Pipeline tab in Settings › Projects, whole: the switch, the ticket flow on one line, branches and
+  // checks (one per repo found on this Mac), the build and the review side by side
   "settings-project-pipeline": async () => {
-    await projectTab("Pipeline", { fixture: "pipeline-label", height: 1300 });
+    await projectTab("Pipeline", { fixture: "pipeline-label", height: 1100 });
     await waitText("acme/northwind-api");
   },
-  // its General tab: identity, the repos with their checkouts on this Mac, the branches
-  "settings-project-general": async () => {
-    await projectTab("General", { fixture: "pipeline-label", height: 1000 });
+  // the same with the pipeline off (the board linked, the switch off), and on a narrow window: the flow in two lines
+  "settings-project-pipeline-off": async () => {
+    await projectTab("Pipeline", { height: 1100 });
+    await waitText("Branches & checks");
+  },
+  "settings-project-pipeline-dark": async () => {
+    await projectTab("Pipeline", { fixture: "pipeline-label-dark", height: 1100 });
     await waitText("acme/northwind-api");
+  },
+  "settings-project-pipeline-narrow": async () => {
+    await projectTab("Pipeline", { fixture: "pipeline-label", height: 1500 });
+    await page.setViewportSize({ width: 900, height: 1500 });
+    await waitText("acme/northwind-api");
+    await settle(page);
+  },
+  // its General tab: identity, the board with its line, the repos with their checkouts on this Mac; the pipeline is on
+  "settings-project-general": async () => {
+    await projectTab("General", { fixture: "pipeline-label", height: 900 });
+    await waitText("acme/northwind-api");
+  },
+  // the list's icon button: its menu with Find icons now and the daily lookup, checked
+  "settings-projects-icons-menu": async () => {
+    await projectTab("General", { height: 700 });
+    await page.getByRole("button", { name: "Project icons" }).click();
+    await page.getByRole("menuitemcheckbox", { name: "Look up website icons daily" }).click();
+    await page.getByRole("button", { name: "Project icons" }).click();
+    await waitText("Look up website icons daily");
+    await settle(page);
   },
   // its Board section: Productive's project and board linked, Unlink, the tracker in the list's line (PR board link)
   "settings-project-board": async () => {
@@ -1356,7 +1400,7 @@ const VIEWS = {
     await waitText("Ada Lovelace");
   },
   // Buddy's page in Integrations (region, read-only token) and its Buddy project in Settings › Projects (PR buddy)
-  "settings-integration-buddy": () => settingsPage("Integrations", "Buddy", "buddy"),
+  "settings-integration-buddy": () => integration("Buddy", { fixture: "buddy" }),
   "settings-project-buddy": async () => {
     await projectTab("General", { fixture: "buddy" });
     const field = page.getByRole("combobox", { name: "Buddy", exact: true }).first();
@@ -2025,24 +2069,24 @@ const VIEWS = {
   // Settings › General › Git in project conversations, switched on (off by default)
   "settings-git": async () => {
     await settingsPage("General");
-    await click("Git in project conversations");
-    await intoView("Git in project conversations");
+    await click("Git button in project conversations");
+    await intoView("Git button in project conversations");
   },
   // the workers without their crabs (Settings › General › Crabs for the orchestrator's workers off)
   "orchestrator-plain": async () => {
     await open(page, server.url, { fixture: "orch-plain", sel: keys.orch });
     await waitText("Open worker");
   },
-  // Settings › General › Write vault updates when a conversation closes or goes quiet (PR capture-on-idle)
+  // Settings › Automation › Write vault updates when a conversation closes or goes quiet (PR capture-on-idle)
   "settings-capture": async () => {
-    await settingsPage("General");
+    await settingsPage("Automation");
     await intoView("Write vault updates when a conversation closes or goes quiet");
   },
-  // Settings › General › Keep vault changes automatically, switched on (off by default)
+  // Settings › Automation › Keep those changes without asking, switched on (off by default)
   "settings-autokeep": async () => {
-    await settingsPage("General");
-    await click("Keep vault changes automatically");
-    await intoView("Keep vault changes automatically");
+    await settingsPage("Automation");
+    await click("Keep those changes without asking");
+    await intoView("Keep those changes without asking");
   },
   "settings-crabs": async () => {
     await settingsPage("General");
@@ -2053,11 +2097,28 @@ const VIEWS = {
     await waitText("From Relay");
   },
   ...Object.fromEntries(
-    ["General", "Projects", "Agents", "Integrations", "Plugins", "Voice", "Shortcuts", "Updates"].map(tab => [
-      `settings-${tab.toLowerCase()}`,
-      () => settingsPage(tab),
-    ]),
+    [
+      "General",
+      "Vault",
+      "Projects",
+      "Agents",
+      "Integrations",
+      "Plugins",
+      "Automation",
+      "Voice",
+      "Shortcuts",
+      "Updates",
+      "Labs",
+    ].map(tab => [`settings-${tab.toLowerCase()}`, () => settingsPage(tab)]),
   ),
+  // Settings › Privacy & access (PR settings-pages): what macOS lets Relay do, then what agents may do with tools
+  "settings-access": () => settingsPage("Privacy & access"),
+  "settings-automation-dark": () => settingsPage("Automation", undefined, "dark"),
+  // Settings search (PR settings-search): "keep" typed with the results showing, then the first one picked
+  "settings-search": () => settingsSearch("keep", false),
+  "settings-search-picked": () => settingsSearch("keep", true),
+  "settings-search-dark": () => settingsSearch("keep", true, "dark"),
+  "settings-general-dark": () => settingsPage("General", undefined, "dark"),
   // the keys that work in a conversation, Find among them
   // ⌃1 to ⌃9 for the workspaces, changeable like the others (PR #294)
   // Workspaces folded to its first and last key, then Edit each: the nine rows
@@ -2480,8 +2541,8 @@ const VIEWS = {
   // the other vault folders under General: a path, Remove, and the project shown under another name (the main vault
   // has one)
   "settings-other-vaults": async () => {
-    await settingsPage("General", undefined, "shared");
-    await intoView("Other workspace folders");
+    await settingsPage("Vault", undefined, "shared");
+    await intoView("Other folders");
   },
   // the side vault's and the workspace's projects in the sidebar, in their own context (found by the search)
   "sidebar-shared": async () => {
@@ -2532,10 +2593,7 @@ const VIEWS = {
   },
   // Settings › General, the Experimental section at the bottom with the Files switch off
   "settings-experimental": async () => {
-    await settingsPage("General", undefined, "files-off");
-    await page.setViewportSize({ width: 900, height: 1350 });
-    await page.getByText("Experimental", { exact: true }).scrollIntoViewIfNeeded();
-    await settle(page);
+    await settingsPage("Labs", undefined, "files-off");
   },
   "pages-tab": async () => {
     await open(page, server.url);
@@ -3519,7 +3577,7 @@ const VIEWS = {
     await intoView("Accent");
   },
   "settings-time": async () => {
-    await settingsPage("General");
+    await settingsPage("Automation");
     await intoView("Propose the day's time from conversations");
   },
   // Windows (W10): dictation from any app switched on, its keys with Ctrl, no Accessibility to allow
@@ -3541,29 +3599,47 @@ const VIEWS = {
   },
   // Settings › General › Permissions on Windows: the microphone only, no Accessibility (W7, W10)
   "settings-permissions-windows": async () => {
-    await settingsPage("General", undefined, "default", "windows");
-    await scrollMain("bottom");
-    await settle(page);
+    await settingsPage("Privacy & access", undefined, "default", "windows");
   },
   // Settings › General › Permissions: the mock has Full Disk Access missing (PR permissions-check)
   "settings-permissions": async () => {
-    await settingsPage("General");
-    await scrollMain("bottom");
-    await settle(page);
+    await settingsPage("Privacy & access");
   },
   "settings-sidebar": async () => {
     await settingsPage("General");
+    await intoView("Top items");
     await scrollMain("bottom");
     await settle(page);
   },
+  // Settings › Integrations as list + detail (PR #582): the list in four groups with a status line each, the picked one's
+  // page on the right: its connection, Agent access (one summary row, a link to Privacy & access), Disconnect
   ...Object.fromEntries(
     ["Productive", "GitHub", "Mail"].map(name => [
       `settings-integration-${name.toLowerCase()}`,
-      () => settingsPage("Integrations", name),
+      () => integration(name),
     ]),
   ),
-  "settings-integration-mail-experimental": () => settingsPage("Integrations", "Mail", "mailexp"),
-  "settings-integration-calendar": () => settingsPage("Integrations", "Calendar", "calendar"),
+  "settings-integration-mail-experimental": () => integration("Mail", { fixture: "mailexp" }),
+  "settings-integration-calendar": () => integration("Calendar", { fixture: "calendar" }),
+  // Mail disconnected: it stays in the list as Not connected, its page offers Connect where Disconnect was
+  "settings-integration-disconnected": async () => {
+    await integration("Mail");
+    await button("Disconnect").click();
+    await waitText("Connect Mail");
+    await settle(page);
+  },
+  // Privacy & access: one table, a row per tool with a summary and its switch; Trello is not connected
+  "settings-access-table": () => accessTable(),
+  // the same in dark: Mail's page
+  "settings-integration-mail-dark": () => integration("Mail", { fixture: "dark" }),
+  // a tool's row unfolded to its actions, reached from the link on its integration's page
+  "settings-access-open": async () => {
+    await integration("Productive");
+    await click("Change in Privacy & access →");
+    await waitText("productive.create_task");
+    await page.setViewportSize({ width: 900, height: 1000 });
+    await intoView("What agents may do with your tools");
+  },
   // Settings › Agents as it opens: the agents on the left (on, then off), the default one picked
   "settings-agents": async () => {
     await settingsPage("Agents");
@@ -3663,17 +3739,18 @@ const VIEWS = {
   },
   // Settings › General › Reminders' agent access: add, done and push default to Runs (#PR)
   "settings-reminders-access": async () => {
-    await settingsPage("General");
+    await accessTable(1000);
+    await click("Reminders");
     await intoView("reminders.push");
   },
   // the vault's git backup under General, after a round that pushed
   "settings-vault-sync": async () => {
-    await settingsPage("General");
+    await settingsPage("Vault");
     await intoView("Last sync");
   },
   // the same after a round the remote refused
   "settings-vault-sync-failed": async () => {
-    await settingsPage("General");
+    await settingsPage("Vault");
     await page.evaluate(() =>
       window.__harness.emit("vault-sync", {
         at: Math.floor(Date.now() / 1000) - 60,
@@ -3685,7 +3762,7 @@ const VIEWS = {
     await intoView("Last sync");
   },
   "settings-agent-access": async () => {
-    await settingsPage("Integrations", "Productive");
+    await integration("Productive");
     await intoView("Agent access");
   },
   onboarding: async () => {

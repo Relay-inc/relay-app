@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { FOOTER, HINT } from "./blocks";
+import { Info } from "./Info";
 
 const CARD = "grid min-w-0 grid-cols-1 rounded-xl border border-s-border bg-raised [&>*]:min-w-0";
 
@@ -8,6 +9,7 @@ const CARD = "grid min-w-0 grid-cols-1 rounded-xl border border-s-border bg-rais
 export function Section({
   title,
   desc,
+  info,
   action,
   footer,
   list = false,
@@ -16,6 +18,8 @@ export function Section({
 }: {
   title: ReactNode;
   desc?: ReactNode;
+  /** the long explanation behind a small ⓘ next to the title, as plain text */
+  info?: string;
   action?: ReactNode;
   footer?: ReactNode;
   list?: boolean;
@@ -29,11 +33,14 @@ export function Section({
       ? "gap-0 p-0 [&>*]:px-3.5 [&>*]:py-3 [&>*+*]:border-t [&>*+*]:border-s-border"
       : "gap-3.5 px-3.5 py-3";
   return (
-    <section className="grid min-w-0 grid-cols-1 gap-2.5 [&>*]:min-w-0">
-      <header className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 items-start gap-2.5">
+    <section className="grid min-w-0 grid-cols-1 gap-2.5 [&>*]:min-w-0" data-search-section>
+      <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-48 flex-1 items-start gap-2.5">
           <div>
-            <h2 className="text-[13px] font-semibold text-s-fg">{title}</h2>
+            <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-s-fg">
+              <span data-search-title>{title}</span>
+              {info && <Info text={info} />}
+            </h2>
             {desc && <p className={HINT}>{desc}</p>}
           </div>
         </div>

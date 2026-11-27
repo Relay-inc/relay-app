@@ -664,6 +664,8 @@ export const mailMove = (account: string, ids: string[], trash: boolean) =>
 export const mailConnect = (email: string, password: string, imap?: { host: string; port: number }) =>
   invoke<{ account: MailAcct; result: string }>("mail_connect", { email, password, ...imap });
 export const mailTest = (account: MailAcct) => invoke<string>("mail_test", { account });
+/** Deletes the passwords this app keeps for these addresses (service relay-mail), not ones an account brought along. */
+export const mailForget = (emails: string[]) => invoke<void>("mail_forget", { emails });
 
 // ---------- calendar (read-only; the secret iCal address goes to the keychain and never comes back)
 /** Save a calendar's secret iCal address in the keychain after a test fetch: the meetings in the next 7 days. An empty

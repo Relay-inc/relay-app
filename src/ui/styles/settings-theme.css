@@ -32,3 +32,8 @@ body.prefs {
   color: var(--s-fg);
   font-size: 13px;
 } /* not the main window's 900px */
+/* the words of the settings search on the shown page */
+::highlight(settings-search) {
+  background-color: var(--mark);
+  color: inherit;
+}

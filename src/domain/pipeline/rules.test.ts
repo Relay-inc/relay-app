@@ -23,6 +23,8 @@ import {
   htmlText,
   inReview,
   panelTickets,
+  pipelineProjects,
+  pipelinesRun,
   columnOf,
   needsSetup,
   picks,
@@ -739,4 +741,14 @@ test("finished: the merged column, or a done column the pipeline does not use (a
   assert.equal(finished(P, column("shipped")), false, "no merged column set");
   assert.equal(finished(P2, column(P2.review, "done")), false, "a column of its own is never finished");
   assert.equal(finished(P2, column("todo")), false);
+});
+
+test("Run pipelines is the stored global pause turned round; the projects it names are the ones switched on", () => {
+  assert.equal(pipelinesRun(undefined), true, "nothing stored: running");
+  assert.equal(pipelinesRun(false), true);
+  assert.equal(pipelinesRun(true), false, "paused: the switch is off");
+  // what the switch shows is what the runner does
+  assert.equal(startsNow({ pipelines: { Acme: P }, pipelinesPaused: true }, "Acme"), pipelinesRun(true));
+  assert.deepEqual(pipelineProjects({ Acme: P, Northwind: { ...P, on: false }, Orchard: P }), ["Acme", "Orchard"]);
+  assert.deepEqual(pipelineProjects(undefined), []);
 });
