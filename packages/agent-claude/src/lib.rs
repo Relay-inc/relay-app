@@ -292,6 +292,10 @@ impl AgentProvider for Claude {
         };
         Some(json!({"type": "control_response", "response": response}).to_string())
     }
+    // ponytail: undocumented control request (Claude Code 2.1.332), the same one `/btw` sends in the terminal
+    fn side_question(&self, id: &str, question: &str, history: &Value) -> Option<String> {
+        Some(json!({"type": "control_request", "request_id": id, "request": {"subtype": "side_question", "question": question, "history": history}}).to_string())
+    }
     fn set_model(&self, model: &str) -> Option<String> {
         Some(json!({"type": "control_request", "request_id": "model", "request": {"subtype": "set_model", "model": if model.is_empty() { "default" } else { model }}}).to_string())
     }
@@ -561,6 +565,8 @@ mod tests {
         let err = line(PROVIDER.control_reply(&json!("r2"), Err("unsupported".into())));
         assert_eq!(err, json!({"type": "control_response", "response": {"subtype": "error", "request_id": "r2", "error": "unsupported"}}));
         let model = line(PROVIDER.set_model("sonnet"));
+        let ask = line(PROVIDER.side_question("btw-1", "Which colour?", &json!([{"question": "a", "response": "b"}])));
+        assert_eq!((ask["request_id"].as_str(), ask["request"]["subtype"].as_str(), ask["request"]["question"].as_str(), ask["request"]["history"][0]["response"].as_str()), (Some("btw-1"), Some("side_question"), Some("Which colour?"), Some("b")));
         assert_eq!((model["type"].as_str(), model["request"]["subtype"].as_str(), model["request"]["model"].as_str()), (Some("control_request"), Some("set_model"), Some("sonnet")));
         assert_eq!(line(PROVIDER.set_model(""))["request"]["model"], "default");
         let rc = line(PROVIDER.remote_control(true));

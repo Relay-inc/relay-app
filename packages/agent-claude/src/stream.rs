@@ -238,6 +238,10 @@ fn parse(ev: &Value) -> Vec<Event> {
                 let url = r["response"]["session_url"].as_str().map(String::from);
                 let error = (r["subtype"] == "error").then(|| r["error"].as_str().unwrap_or("").to_string());
                 out.push(Event::Remote { on: url.is_some(), url, state: error });
+            } else if let Some(id) = r["request_id"].as_str().filter(|id| id.starts_with("btw-")) {
+                // a side question's answer (/btw) is the user's, not a log line
+                let (text, error) = if r["subtype"] == "error" { (r["error"].as_str().unwrap_or("error"), true) } else { (r["response"]["response"].as_str().unwrap_or(""), false) };
+                out.push(Event::SideAnswer { id: id.into(), text: text.into(), error });
             } else if r["subtype"] == "error" { out.push(Event::Stderr { text: format!("relay-mail ({}): {}", r["request_id"].as_str().unwrap_or(""), r["error"]) }); }
             // the slash commands and skills this vault has, for the composer's completion
             if r["request_id"] == "init" && r["response"]["commands"].is_array() { out.push(Event::Commands { commands: r["response"]["commands"].clone() }); }
@@ -426,6 +430,10 @@ mod tests {
         assert_eq!(parse_all(&[no]), [Event::Remote { on: false, url: None, state: Some("Remote Control cannot be enabled from inside a remote session".into()) }]);
         let err = json!({"type": "control_response", "response": {"subtype": "error", "request_id": "model", "error": "nope"}});
         assert_eq!(parse_all(&[err]), [Event::Stderr { text: "relay-mail (model): \"nope\"".into() }]);
+        // a side question's answer and failure are events of their own, never relay-mail's stderr
+        let ok = json!({"type": "control_response", "response": {"subtype": "success", "request_id": "btw-1", "response": {"response": "Teal.", "synthetic": false}}});
+        let bad = json!({"type": "control_response", "response": {"subtype": "error", "request_id": "btw-2", "error": "side_question_busy"}});
+        assert_eq!(parse_all(&[ok, bad]), [Event::SideAnswer { id: "btw-1".into(), text: "Teal.".into(), error: false }, Event::SideAnswer { id: "btw-2".into(), text: "side_question_busy".into(), error: true }]);
     }
 
     #[test]

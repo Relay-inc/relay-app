@@ -818,6 +818,38 @@ const VIEWS = {
     await page.keyboard.type("/");
     await settle(page);
   },
+  // /btw: in the completion, waiting for its answer, answered, and a follow-up under the first pair (PR btw)
+  "btw-completion": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("/bt");
+    await settle(page);
+  },
+  "btw-waiting": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(() => (window.__harness.btwDelay = 600000));
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("/btw When is the Northwind Portal release?");
+    await page.keyboard.press("Enter");
+    await page.getByRole("button", { name: "Close", exact: true }).waitFor();
+  },
+  "btw-answer": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(() => (window.__harness.btwDelay = 100));
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("/btw When is the Northwind Portal release?");
+    await page.keyboard.press("Enter");
+    await waitText("signs it off");
+  },
+  "btw-followup": async () => {
+    await VIEWS["btw-answer"]();
+    await page.keyboard.type("/btw And who owns the checklist?");
+    await page.keyboard.press("Enter");
+    await waitText("release checklist");
+  },
   // @ in the composer: the notes to pick from, then a picked note as a chip (issue 370)
   "composer-note-mention": async () => {
     await open(page, server.url, { fixture: "kb", sel: keys.switchTo });

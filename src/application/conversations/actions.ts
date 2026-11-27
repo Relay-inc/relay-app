@@ -38,6 +38,7 @@ import {
   machineRepo,
   projectOf,
   selectedProject,
+  takesAside,
   terminalOf,
   terminalSessions,
 } from "./selectors";
@@ -303,10 +304,18 @@ export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = [], 
       await setPhoneShare(key, share, displayTitle(conversation?.title || ""), !!conversation?.fromMail),
     );
   }
-  const plan = planSend({ ...drafts(), outside: cs().outside }, selected(), forced, to, toImgs.length + toFiles.length);
+  const plan = planSend(
+    { ...drafts(), outside: cs().outside },
+    selected(),
+    forced,
+    to,
+    toImgs.length + toFiles.length,
+    takesAside(selected()),
+  );
   if (plan.kind === "nothing") return;
   if (plan.kind === "wait-outside") return note(plan.key, t("work.waitOutside"));
   if (plan.take) takeTyped();
+  if (plan.kind === "btw") return askBtw(plan.key, plan.question);
   if (plan.kind === "fork") return forkTerminalAndSend(plan.text);
   const { key, text } = plan;
   if (cs().chats[key] && routeFirstMessage(key, text, forced)) return;
@@ -323,6 +332,44 @@ export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = [], 
   queueMessage(key, text, images, files);
   await deliver(key, text, images, files);
 }
+// `/btw`: the question goes to the agent's side channel at once, also while a turn runs. Its card keeps the earlier
+// pairs of the aside, which go along as history; nothing of it reaches the conversation
+let asked = 0;
+async function askBtw(key: string, question: string) {
+  const id = `btw-${Date.now().toString(36)}-${asked++}`;
+  const history = (cs().btw[key] ?? [])
+    .filter(p => p.answer && !p.error)
+    .map(p => ({ question: p.question, response: p.answer! }));
+  set(draft => {
+    (draft.btw[key] ||= []).push({ id, question });
+  });
+  const conversation = cs().chats[key];
+  try {
+    await backend.sideQuestion({
+      project: key,
+      question,
+      id,
+      history,
+      name: `${conversation?.project || t("general")}: ${displayTitle(conversation?.title || key)}`,
+      model: picks("model", key).value,
+      effort: picks("effort", key).value,
+      provider: chatAgent(key),
+      machine: machineChoice(key).value,
+      about: conversation?.project ?? null,
+      vault: (!conversation?.project && conversation?.vault) || null,
+    });
+  } catch (error) {
+    set(draft => {
+      const pair = draft.btw[key]?.find(p => p.id === id);
+      if (pair) Object.assign(pair, { answer: String(error), error: true });
+    });
+  }
+}
+/** Close the `/btw` card of a conversation. */
+export const closeBtw = (key: string) =>
+  set(draft => {
+    delete draft.btw[key];
+  });
 /** Stop the open conversation's running turn. */
 const stopChat = () => {
   const key = selected();

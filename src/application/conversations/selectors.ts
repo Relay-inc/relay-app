@@ -60,10 +60,13 @@ export const chatsOf = (project: string | null) => rules.chatsOf(cs(), project);
 export const terminalSessions = (hidden = false) =>
   rules.terminalSessions(cs(), useWorkspaceStore.getState().snap.sessions.items, settings().overrides, t, hidden);
 export const terminalOf = (key: string) => terminalSessions().find(session => session.key === key);
+/** Whether the conversation's agent answers side questions (`/btw`): Claude Code's app conversations. */
+export const takesAside = (key: string) => !!cs().chats[key] && chatAgent(key) === "claude";
 /** The slash commands and skills of a conversation's agent, for the composer's completion, and Relay's own for an app
  *  conversation (phoneShare). */
 export const commandsOf = (key: string) => [
   ...(cs().commands[chatAgent(key)] ?? []),
+  ...(takesAside(key) ? [{ name: "btw", description: t("btw.desc"), argumentHint: "<question>" }] : []),
   ...(cs().chats[key] && !isOrchKey(key) ? phoneCommands() : []),
 ];
 /** The project of the open conversation, terminal or app. */

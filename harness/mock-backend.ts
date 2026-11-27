@@ -1569,6 +1569,21 @@ function handle(cmd: string, a: Args): unknown {
         setTimeout(() => emitAgent(a.project, { type: "remote", on: true, state: "connected" }), 300);
       }, 200);
       return null;
+    // a side question (/btw): its answer comes a moment later, as the backend's `side_answer` event
+    case "side_question":
+      setTimeout(
+        () =>
+          emitAgent(a.project, {
+            type: "side_answer",
+            id: a.id,
+            text: a.history.length
+              ? "Tom Willems owns the **Northwind Portal** release checklist."
+              : "The release of **Northwind Portal** is planned for Friday. Sofie Claes signs it off.",
+            error: false,
+          }),
+        harness.btwDelay,
+      );
+      return null;
     case "stop":
     case "bg":
     case "open_terminal":
@@ -2444,6 +2459,8 @@ const harness = {
   calls,
   unmocked,
   autoReply: true,
+  /** ms until a side question (/btw) is answered */
+  btwDelay: 1200,
   echo: true,
   /** What `pick_folder` answers: null is cancelled. */
   pickFolder: null as string | null,

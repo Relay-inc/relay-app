@@ -228,6 +228,9 @@ pub enum Event {
     Stderr { text: String },
     /// The slash commands and skills the vault has, as the provider's control pipe lists them on opening.
     Commands { commands: Value },
+    /// The answer to a side question ([`AgentProvider::side_question`]): `id` is the one it was asked with, `text` the
+    /// answer, or the failure when `error`. Not part of the conversation.
+    SideAnswer { id: String, text: String, error: bool },
     /// The conversation was compacted: what triggered it ("manual" or "auto") and the context's size in tokens before and after.
     Compacted { trigger: Option<String>, pre_tokens: Option<u64>, post_tokens: Option<u64> },
     /// How full the context is: tokens in use now and/or the model's window, each when the provider says. Claude Code only.
@@ -306,6 +309,10 @@ pub trait AgentProvider: Sync {
     fn set_model(&self, _model: &str) -> Option<String> { None }
     /// `caps.bridge`: the stdin line that turns Remote Control on or off, answered by [`Event::Remote`].
     fn remote_control(&self, _on: bool) -> Option<String> { None }
+    /// `caps.control`: the stdin line that asks the running process a side question (`/btw`), answered from the
+    /// conversation's context without joining it and also while a turn runs, as an [`Event::SideAnswer`] for `id`.
+    /// `history`: the earlier `{question, response}` pairs of the same aside. Claude Code only.
+    fn side_question(&self, _id: &str, _question: &str, _history: &Value) -> Option<String> { None }
     /// Slash commands (without the slash) that take no attachments: refused in the webview before they are sent.
     fn text_only_commands(&self) -> Vec<&'static str> { vec![] }
     /// The stdin line answering a request this provider raised as [`Event::Permission`] (relay = true).

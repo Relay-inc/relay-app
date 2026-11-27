@@ -55,6 +55,7 @@ export type AgentEvent =
   | { type: "remote"; on: boolean; url?: string | null; state?: string | null } // Remote Control (Claude Code): on with the session's url, its bridge `state` alone, or off (with `state` the reason it did not turn on)
   | { type: "said"; text: string }   // added by the app: a message typed elsewhere (the phone, with Remote Control) that the agent took up
   | { type: "stderr"; text: string }   // added by the app: the process's stderr
+  | { type: "side_answer"; id: string; text: string; error: boolean } // the answer to a side question (/btw), or why there is none; Claude Code
   | { type: "draft_saved"; folder: string; to: string[]; cc?: string[]; bcc?: string[] } // added by the app: a relay-mail draft (Claude Code only)
   | { type: "commands"; commands: { name: string; description: string; argumentHint?: string }[] } // added by the app: Claude Code's slash commands and skills
   | { type: "exit" };                  // added by the app: the process ended

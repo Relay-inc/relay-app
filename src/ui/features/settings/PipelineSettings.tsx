@@ -148,6 +148,15 @@ export function PipelineSettings({ name }: { name: string }) {
             <span className={HELP}>{t("pl.parallelHelp")}</span>
           </div>
         </div>
+        <div className={`${ROW} border-t border-s-border`}>
+          <div className="flex-1">
+            <label htmlFor={`pl-mine-${name}`} className="block font-medium">
+              {t("pl.mine")}
+            </label>
+            <span className={HELP}>{t(manual ? "pl.labelManual" : "pl.mineHelp")}</span>
+          </div>
+          <Switch id={`pl-mine-${name}`} on={!!p.mine} disabled={manual} onToggle={mine => set({ mine })} />
+        </div>
         {/* every project's pipeline at once, here since no panel shows it anymore: the conversation's title bar
             pauses only its own */}
         <div className={`${ROW} border-t border-s-border`}>

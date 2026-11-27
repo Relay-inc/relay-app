@@ -23,10 +23,12 @@ export function mapBoards(boards: any[], orgs: any[], personal: string): { proje
 export const mapColumns = (lists: any[]): Column[] => lists.filter((l: any) => !l.closed)
   .map((l: any) => ({ id: l.id, name: l.name, placement: Number(l.pos) || 0 })).sort((a, b) => a.placement - b.placement);
 
-/** /boards/{id}/cards/open with members: the open cards, only those with `me` as a member when given. */
-export const mapCards = (cards: any[], me?: string): Card[] => cards
-  .filter((c: any) => !c.closed && (!me || (c.idMembers || []).includes(me)))
+/** /boards/{id}/cards/open with members: the open cards, `me` on those with the member `me` among theirs, and only those
+ *  when `only`. */
+export const mapCards = (cards: any[], me?: string, only = false): Card[] => cards
+  .filter((c: any) => !c.closed && (!only || (!!me && (c.idMembers || []).includes(me))))
   .map((c: any) => ({ id: c.id, title: c.name, number: c.idShort != null ? String(c.idShort) : "", column: c.idList, placement: Number(c.pos) || 0,
+    ...(me && (c.idMembers || []).includes(me) ? { me: true } : {}),
     due: typeof c.due === "string" ? c.due.slice(0, 10) : null, who: String((c.members || [])[0]?.fullName || "").split(" ")[0],
     ...((c.members || [])[0]?.fullName ? { whoName: String(c.members[0].fullName) } : {}),
     ...((c.labels || []).some((l: any) => l.name) ? { labels: c.labels.map((l: any) => l.name).filter(Boolean) } : {}), ...(c.dateLastActivity ? { updated: c.dateLastActivity } : {}) }));

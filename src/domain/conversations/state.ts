@@ -2,7 +2,19 @@ import type { Key } from "../../shared/i18n";
 import type { MachineChoice } from "../settings/types";
 import type { RepoWork } from "../settings/machines";
 import type { SlashCommand } from "./commands";
-import type { AgentSession, Chat, ContextUse, Img, Item, Pending, Retry, RouteChoice, SessionOf, Sub } from "./types";
+import type {
+  AgentSession,
+  BtwPair,
+  Chat,
+  ContextUse,
+  Img,
+  Item,
+  Pending,
+  Retry,
+  RouteChoice,
+  SessionOf,
+  Sub,
+} from "./types";
 
 /** A translation, handed to the rules that write text into the state (notes, titles). */
 export type Translate = (key: Key, params?: Record<string, string | number>) => string;
@@ -47,6 +59,7 @@ export type ConversationsState = {
   retries: Record<string, Retry>; // conversations waiting for a limit to reset, by key (retry.rs)
   // conversations with Remote Control on: the session to open on claude.ai and its bridge's state ("ready", "connected", "failed")
   remote: Record<string, { url: string; state: string }>;
+  btw: Record<string, BtwPair[]>; // the open `/btw` aside per conversation: in memory only, gone on close or reload
 };
 
 /** The state on a fresh start, with what was stored. */
@@ -84,6 +97,7 @@ export const initialConversations = (stored: {
   subsOpen: new Set(),
   retries: {},
   remote: {},
+  btw: {},
 });
 
 /** The composer's drafts, kept apart from the conversations so a keystroke only changes this small state: what is
