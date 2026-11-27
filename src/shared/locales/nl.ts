@@ -2226,9 +2226,6 @@ export default {
   "upd.install": "Installeren en herstarten",
   "upd.downloading": "Downloaden…",
   "upd.noNotes": "Geen notities voor deze release.",
-  "upd.agentsHelp":
-    "De coding agents op deze Mac, tegenover de nieuwste versie op npm. Bijwerken gebruikt npm, Homebrew of de eigen updater van de agent, net waarmee hij geïnstalleerd is.",
-  "upd.noAgents": "Geen agents geïnstalleerd.",
   "upd.noVersion": "versie onbekend",
   "upd.agentBehind": "{installed} → {latest}",
   "upd.agentLatest": "Up-to-date, {version}",
@@ -2258,13 +2255,10 @@ export default {
   "voice.paste": "Plakken in elke app",
   "voice.pasteHelp":
     "Plakt wat je zegt waar de cursor staat, in elke app. Een klein pilletje onderaan het scherm toont dat het luistert.",
-  "voice.composerShortcutHelp": "Werkt als Relay vooraan staat, net als de microfoonknop.",
-  "voice.anyAppShortcutHelp": "Werkt in elke app, ook als Relay op de achtergrond staat.",
   "voice.shortcutPress": "Druk de toetsen…",
   "voice.shortcutRecordHelp": "Klik en druk dan de toetsen (met ⌘, ⌥, ⌃ of ⇧). Escape annuleert.",
   "voice.shortcutRecordHelpWin": "Klik en druk dan de toetsen (met Ctrl, Alt of Shift). Escape annuleert.",
   "voice.shortcutTaken": "{key} wordt al gebruikt door een andere manier van dicteren.",
-  "voice.shortcut": "Sneltoets",
   "voice.sec.model": "Spraakmodel",
   "voice.modelHelp":
     "Elk model wordt één keer gedownload; het model in gebruik blijft geladen. Een model kiezen dat nog niet op deze Mac staat, downloadt het.",
@@ -3373,4 +3367,20 @@ export default {
   "srv.errCertCause": "De server werd opnieuw opgezet zonder zijn back-up. Elke Mac weigert hem.",
   "srv.errCertFix":
     "Herstel de back-up met ./backup.sh restore. Zonder: vergeet de server en koppel of sluit opnieuw aan.",
+  "keys.filter": "Filter {n} sneltoetsen",
+  "keys.filterLabel": "Sneltoetsen filteren",
+  "keys.noMatch": "Geen sneltoets past bij “{query}”.",
+  "keys.workspaces": "Workspace 1 tot 9 in het menu onderaan",
+  "keys.editEach": "Elk aanpassen",
+  "keys.hideEach": "Klaar",
+  "keys.more": "{n} meer: {names}",
+  "keys.mailOff":
+    "Archiveren, verwijderen, alles selecteren, selectie wissen. Ze werken zodra het mailarchief aan staat (Labs).",
+  "upd.agents": "Agentprogramma’s",
+  "upd.agentsHint": "De CLI’s achter elke agent",
+  "upd.updateAll": "Alles bijwerken ({n})",
+  "upd.notInstalled": "Niet geïnstalleerd",
+  "upd.setUp": "Instellen bij Agents →",
+  "voice.keysElsewhere": "Toetsen pas je op één plek aan.",
+  "voice.keysLink": "Aanpassen in Sneltoetsen →",
 } satisfies Record<Key, string>;

@@ -5,6 +5,8 @@ import {
   bindingOf,
   bindingsOf,
   COMMANDS,
+  filterRows,
+  foldRows,
   isBinding,
   pickedDigit,
   pickLabel,
@@ -219,4 +221,20 @@ test("Windows has its own dictation and capture keys: Ctrl where the Mac has the
     // a saved key stays what it is
     assert.equal(voiceOf({ pasteShortcut: "ctrl+shift+KeyD" }).pasteShortcut, "ctrl+shift+KeyD");
   });
+});
+
+test("filterRows narrows by label, ignoring case and accents", () => {
+  const rows = [{ label: "Réponse rapide" }, { label: "Send" }, { label: "Find in the conversation" }];
+  assert.deepEqual(filterRows(rows, "  REPONSE "), [rows[0]]);
+  assert.deepEqual(filterRows(rows, "CON"), [rows[2]]);
+  assert.equal(filterRows(rows, "").length, 3);
+  assert.equal(filterRows(rows, "zzz").length, 0);
+});
+
+test("foldRows keeps the first rows and folds the rest, unless open or only one would hide", () => {
+  const rows = [1, 2, 3, 4, 5, 6];
+  assert.deepEqual(foldRows(rows, 3), { shown: [1, 2, 3], more: [4, 5, 6] });
+  assert.deepEqual(foldRows(rows, 3, true), { shown: rows, more: [] });
+  assert.deepEqual(foldRows(rows, 5), { shown: rows, more: [] });
+  assert.deepEqual(foldRows(rows, 4), { shown: [1, 2, 3, 4], more: [5, 6] });
 });

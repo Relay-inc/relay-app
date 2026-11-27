@@ -25,6 +25,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Changed
 
+- **Settings › Shortcuts owns every key, Voice and Updates are tidier**. Shortcuts has a filter, two columns on a wide window, Workspaces 1 to 9 and the rest of Today folded until you open them, and the dictation keys next to the others. Voice shows each dictation key read-only with a link to Shortcuts, lists the speech model in use first, and puts Language and Meetings side by side. Updates calls the agents "Agent programs", has Update all, and shows an agent that is not installed with a link to Agents (#577)
 - Settings › Agents has the layout of Settings › Projects: your agents on the left (on, then off), the picked agent's settings on the right with tabs (General, and for Claude Code MCP servers and Skills). Its header switches it on or off and makes it the default. Where new conversations run and agent access to Knowledge workspaces moved to Settings › General (#572)
 
 ### Fixed

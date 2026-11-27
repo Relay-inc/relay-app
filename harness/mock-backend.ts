@@ -378,7 +378,14 @@ function handle(cmd: string, a: Args): unknown {
           latest: "0.162.1",
           command: "/opt/homebrew/bin/brew upgrade codex",
         },
-        { id: "opencode", name: "OpenCode", on: false, installed: "1.1.6", latest: "1.19.0", command: null },
+        {
+          id: "opencode",
+          name: "OpenCode",
+          on: false,
+          installed: "1.1.6",
+          latest: "1.19.0",
+          command: fixture === "updates-all" ? "/opt/homebrew/bin/brew upgrade opencode" : null,
+        },
         { id: "pi", name: "Pi", on: false, installed: null, latest: null, command: null },
         { id: "antigravity", name: "Antigravity", on: false, installed: null, latest: null, command: null },
       ];
@@ -1587,7 +1594,11 @@ function handle(cmd: string, a: Args): unknown {
       emitAgent(a.project as string, { type: "tasks", tasks: BG_TASKS.filter(t => t.id !== a.task) });
       return null;
     case "task_output":
-      emitAgent(a.project as string, { type: "task_output", id: a.task, text: "> northwind-portal@1.4.0 build\n> vite build\n\ntransforming...\n42 modules transformed.\ndist/index.html   0.46 kB\ndist/assets/index-3f9a1c.js   143.20 kB" });
+      emitAgent(a.project as string, {
+        type: "task_output",
+        id: a.task,
+        text: "> northwind-portal@1.4.0 build\n> vite build\n\ntransforming...\n42 modules transformed.\ndist/index.html   0.46 kB\ndist/assets/index-3f9a1c.js   143.20 kB",
+      });
       return null;
     // Remote Control (session/mod.rs remote_control): the answer comes as agent events, a made-up session link
     case "remote_control":

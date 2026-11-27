@@ -58,3 +58,7 @@ export const FOOTER_IN_ROW = `${FOOTER} mt-0.5`;
 
 // the form labels end in a colon, the fields do without
 export const withoutColon = (label: string) => label.replace(/\s*:\s*$/, "");
+
+/** A key shown, not changed here (a `kbd`) */
+export const KBD =
+  "inline-flex h-5.5 min-w-5.5 items-center justify-center rounded-[5px] border border-s-border bg-s-mutedbg/40 px-1.5 font-sans text-xs whitespace-nowrap text-s-fg";
