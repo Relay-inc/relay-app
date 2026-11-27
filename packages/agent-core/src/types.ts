@@ -28,6 +28,9 @@ export type PermissionRequest = { id: string; project: string; provider?: string
 /** The answer the app writes (pending/<id>.answer.json). A question: allow with `updatedInput.answers`. */
 export type Decision = { behavior: "allow"; updatedInput: any; updatedPermissions?: any[] } | { behavior: "deny"; message: string };
 
+/** A background task of Claude Code: `kind` is `local_bash`, `local_agent`, ..; `agent` the subagent's type. */
+export type BackgroundTask = { id: string; kind: string; agent?: string | null; description: string };
+
 /** The normalised events, the Tauri event `agent` as `{project, provider, event}`, and history items. */
 export type AgentEvent =
   | { type: "working" }
@@ -54,6 +57,11 @@ export type AgentEvent =
   | { type: "context"; used?: number | null; window?: number | null } // how full the context is: tokens in use and/or the model's window (Claude Code)
   | { type: "suggestion"; text: string } // live, Claude Code only: the message the user will probably send next
   | { type: "resolved"; model: string; effort?: string | null; default_model: boolean; default_effort: boolean } // what the CLI runs on; default_* when the conversation left it to the CLI
+  | { type: "tasks"; tasks: BackgroundTask[] } // Claude Code's background tasks after a change: the whole set, it replaces what was shown
+  | { type: "task_progress"; id: string; tool_uses?: number | null; tokens?: number | null; last_tool?: string | null; summary?: string | null }
+  | { type: "task_ended"; id: string; status: "completed" | "failed" | "killed" }
+  | { type: "task_output"; id: string; text: string } // what a background task printed (or why it could not be read)
+  | { type: "task_summary"; detail: string | null } // the live one-line phrase of what the agent does mid-turn; null clears it
   | { type: "remote"; on: boolean; url?: string | null; state?: string | null } // Remote Control (Claude Code): on with the session's url, its bridge `state` alone, or off (with `state` the reason it did not turn on)
   | { type: "said"; text: string }   // added by the app: a message typed elsewhere (the phone, with Remote Control) that the agent took up
   | { type: "stderr"; text: string }   // added by the app: the process's stderr

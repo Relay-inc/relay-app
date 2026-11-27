@@ -23,6 +23,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 - **MCP servers in Settings › Agents › Claude Code**: the servers Claude has in the vault with their state (connected, failed with its error, needs sign-in, starting, off). Sign in to one that needs it (the page opens in your browser; a claude.ai connector is connected on claude.ai), reconnect a failed one, or switch one off or on. New conversations pick up the change; running ones keep the servers they have (#565)
 - Claude Code now suggests your next message after a turn: it shows grey in the empty message field, and Tab or the right arrow takes it. Claude Code's own setting `promptSuggestionEnabled` turns it off. (#566)
 - **Where each Claude conversation stands**: after each turn Claude Code writes a one-line status, which shows in small text under the conversation's title in the sidebar. When the turn ended on something only you can do (a question, a choice), the conversation gets the blue dot until you answer. Not kept over a restart; the next turn writes it again (#561)
+- Background tasks in a Claude conversation: what Claude has running (commands, subagents) is listed above the message box with its state and time, a command shows its output on a click and a hover icon stops it, and the list folds away under its header line; while Claude works, the line shows what it is doing now. (#563)
 
 ### Changed
 

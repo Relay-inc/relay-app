@@ -39,6 +39,8 @@ export function ConversationView({ cards = true, empty }: { cards?: boolean; emp
   const items = useConversationsStore(s => s.messages[selected]);
   const busy = useConversationsStore(s => s.status[selected] === "busy");
   const outside = useConversationsStore(s => selected in s.outside);
+  // the phrase of what Claude does now, from Claude Code's classifier
+  const line = useConversationsStore(s => s.taskLine[selected]);
   const pendingList = useConversationsStore(s => s.pendingList);
   const unread = useConversationsStore(s => s.waiting[selected]);
   const routeHits = useConversationsStore(s => (s.routeChoice?.key === selected ? s.routeChoice.hits : null));
@@ -88,7 +90,7 @@ export function ConversationView({ cards = true, empty }: { cards?: boolean; emp
       {cards ? waiting.map(request => <PendingRequest key={request.id} request={request} />) : null}
       {/* every provider shares the same indicator; permission cards take its place while waiting */}
       {busy && !waiting.length ? (
-        <Working label={working} text={outside ? t("work.outside") : working} since={since} />
+        <Working label={working} text={outside ? t("work.outside") : (line ?? working)} since={since} />
       ) : null}
       {where.writing ? <Working text={t("term.writing")} /> : null}
       {/* sent, not read by the agent yet: it moves up into the conversation where the agent takes it up */}
