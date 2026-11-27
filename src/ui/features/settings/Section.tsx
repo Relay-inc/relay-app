@@ -16,7 +16,8 @@ export function Section({
   rows = false,
   children,
 }: {
-  title: ReactNode;
+  /** Without a title (and desc, action) there is no header: just the card */
+  title?: ReactNode;
   desc?: ReactNode;
   /** the long explanation behind a small ⓘ next to the title, as plain text */
   info?: string;
@@ -34,18 +35,20 @@ export function Section({
       : "gap-3.5 px-3.5 py-3";
   return (
     <section className="grid min-w-0 grid-cols-1 gap-2.5 [&>*]:min-w-0">
-      <header className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 items-start gap-2.5">
-          <div>
-            <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-s-fg">
-              {title}
-              {info && <Info text={info} />}
-            </h2>
-            {desc && <p className={HINT}>{desc}</p>}
+      {(title || desc || action) && (
+        <header className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <div>
+              <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-s-fg">
+                {title}
+                {info && <Info text={info} />}
+              </h2>
+              {desc && <p className={HINT}>{desc}</p>}
+            </div>
           </div>
-        </div>
-        {action && <div className="flex flex-none items-center gap-1.5 self-start">{action}</div>}
-      </header>
+          {action && <div className="flex flex-none items-center gap-1.5 self-start">{action}</div>}
+        </header>
+      )}
       {children ? <div className={`${CARD} ${cardPadding}`}>{children}</div> : null}
       {footer ? <div className={FOOTER}>{footer}</div> : null}
     </section>

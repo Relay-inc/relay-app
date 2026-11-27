@@ -20,7 +20,6 @@ import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { buttonClass, SELECT, TILE } from "./blocks";
 import { Field } from "./Field";
-import { RunDefault } from "./RunDefault";
 import { Section } from "./Section";
 import { Segmented } from "./Segmented";
 import { Switch } from "./Switch";
@@ -175,7 +174,6 @@ export function GeneralPage() {
           <Switch id="favon" on={faviconsOn} onToggle={saveFavicons} />
         </Field>
       </Section>
-      <RunDefault />
     </>
   );
 }
