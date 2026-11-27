@@ -12,18 +12,14 @@ import {
   setProjectIcon,
   setRepos,
 } from "../../../application/settings/projects-page";
-import {
-  clearPipelineRepo,
-  pickPipelineRepo,
-  setPipeline,
-  setPipelineRepo,
-} from "../../../application/settings/pipeline";
+import { clearPipelineRepo, pickPipelineRepo, setPipelineRepo } from "../../../application/settings/pipeline";
 import { Icon as AppIcon } from "../../components/Icon";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { BUTTON_GLYPH, buttonClass } from "./blocks";
 import { BuddyProject } from "./BuddyProject";
 import { ChangeInput } from "./ChangeInput";
+import { Field } from "./Field";
 import { PipelineSettings } from "./PipelineSettings";
 import { ProjectBoard } from "./ProjectBoard";
 import { ProjectIcon } from "./ProjectIcon";
@@ -39,8 +35,8 @@ export const MONO = "font-mono text-xs";
 export const HELP = "text-xs text-s-muted";
 const SMALL_BUTTON = `${buttonClass()} h-6 px-2 text-xs font-normal`;
 
-/** One project's settings, the right side of Settings › Projects: its header and two tabs, General (name, icon, board,
- *  repos and branches) and Pipeline (PipelineSettings). */
+/** One project's settings, the right side of Settings › Projects: its header and two tabs, General (name, icon, board
+ *  and repos) and Pipeline (PipelineSettings: the switch, the ticket flow, branches and checks, build and review). */
 export function ProjectSettings({
   name,
   icon,
@@ -102,8 +98,18 @@ export function ProjectSettings({
   );
 }
 
-/** The General tab: identity, the board, the repos with their checkouts on this Mac, the branches, and the pipeline
- *  when off. */
+/** A line saying where a setting is stored, with its icon: "This Mac only", "Vault, shared". */
+function Where({ glyph, children }: { glyph: string; children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <AppIcon name={glyph} className="size-3.5 flex-none fill-none stroke-current stroke-2" />
+      {children}
+    </span>
+  );
+}
+
+/** The General tab: identity, the board, the repos with their checkouts on this Mac and Buddy's project. Each says
+ *  where it is stored. The branches and the pipeline's switch are on the Pipeline tab. */
 function General({
   name,
   icon,
@@ -118,7 +124,6 @@ function General({
   const { t } = useT();
   const label = useSettingsStore(s => s.settings.projects[name]?.label ?? "");
   const placeholder = useSettingsStore(s => s.projectsPage.projects.find(p => p.name === name)?.label) || name;
-  const p = { ...EMPTY_PIPELINE, ...useSettingsStore(s => s.settings.pipelines?.[name]) };
   const hint = useDerived(() => iconHint(name));
   // one input for an emoji or a website; the buttons for an image, none and guessing again
   const iconText = icon?.icon ?? (icon && isSite(icon.value) ? icon.value : "");
@@ -126,148 +131,77 @@ function General({
     const file = e.target.files?.[0];
     if (file) setIconFromFile(name, file);
   };
-  const note = (glyph: string, text: string) => (
-    <span className={`${HELP} flex items-center gap-1.5`}>
-      <AppIcon name={glyph} className="size-3.5 flex-none fill-none stroke-current stroke-2" />
-      {text}
-    </span>
-  );
 
   return (
     <>
-      <Section title={t("pc.identity")}>
-        <div className="grid grid-cols-1 gap-5 py-1 @xl:grid-cols-2">
-          <div className="grid content-start gap-1.5">
-            <label htmlFor={`pc-name-${name}`} className="font-medium">
-              {t("pc.name")}
-            </label>
-            <ChangeInput
-              id={`pc-name-${name}`}
-              className={`${TEXT} w-full`}
-              value={label}
-              placeholder={placeholder}
-              spellCheck={false}
-              onCommit={value => setLabel(name, value.trim())}
-            />
-            {note("laptop", t("pc.thisMac"))}
-          </div>
-          <div className="grid content-start gap-1.5">
-            <label htmlFor={`pc-icon-${name}`} className="font-medium">
-              {t("pc.icon")}
-            </label>
-            <div className="flex items-center gap-1.5">
-              <span className="grid size-7.5 flex-none place-items-center rounded-lg border border-s-border">
-                <ProjectIcon icon={icon} where="tile" />
-              </span>
-              <ChangeInput
-                id={`pc-icon-${name}`}
-                className={`${TEXT} flex-1`}
-                value={iconText}
-                placeholder={t("pc.iconPh")}
-                spellCheck={false}
-                onCommit={value => setIconText(name, value.trim())}
-              />
-              <label className={buttonClass("plain", true)} title={t("pi.upload")}>
-                <AppIcon name="upload" className={BUTTON_GLYPH} />
-                <input type="file" accept="image/*,.ico,.svg" hidden onChange={onIconFile} />
-              </label>
-              <button
-                className={buttonClass("plain", true)}
-                onClick={() => setProjectIcon(name, "none")}
-                title={t("pi.none")}
-                aria-label={t("pi.none")}
-              >
-                <AppIcon name="none" className={BUTTON_GLYPH} />
-              </button>
-              <button
-                className={buttonClass("plain", true)}
-                onClick={() => setProjectIcon(name, "reset")}
-                title={t("pi.reset")}
-                aria-label={t("pi.reset")}
-              >
-                <AppIcon name="refresh" className={BUTTON_GLYPH} />
-              </button>
-            </div>
-            {note("folderLinked", `${t("pc.synced")} · ${hint}`)}
-          </div>
-        </div>
+      <Section title={t("pc.identity")} rows>
+        <Field wrap label={t("pc.name")} id={`pc-name-${name}`} hint={<Where glyph="laptop">{t("pc.thisMac")}</Where>}>
+          <ChangeInput
+            id={`pc-name-${name}`}
+            className={`${TEXT} w-65`}
+            value={label}
+            placeholder={placeholder}
+            spellCheck={false}
+            onCommit={value => setLabel(name, value.trim())}
+          />
+        </Field>
+        <Field
+          wrap
+          label={t("pc.icon")}
+          id={`pc-icon-${name}`}
+          hint={
+            <Where glyph="folderLinked">
+              {t("pc.synced")} · {hint}
+            </Where>
+          }
+        >
+          <span className="grid size-7.5 flex-none place-items-center rounded-lg border border-s-border">
+            <ProjectIcon icon={icon} where="tile" />
+          </span>
+          <ChangeInput
+            id={`pc-icon-${name}`}
+            className={`${TEXT} w-38`}
+            value={iconText}
+            placeholder={t("pc.iconPh")}
+            spellCheck={false}
+            onCommit={value => setIconText(name, value.trim())}
+          />
+          <label className={buttonClass("plain", true)} title={t("pi.upload")}>
+            <AppIcon name="upload" className={BUTTON_GLYPH} />
+            <input type="file" accept="image/*,.ico,.svg" hidden onChange={onIconFile} />
+          </label>
+          <button
+            className={buttonClass("plain", true)}
+            onClick={() => setProjectIcon(name, "none")}
+            title={t("pi.none")}
+            aria-label={t("pi.none")}
+          >
+            <AppIcon name="none" className={BUTTON_GLYPH} />
+          </button>
+          <button
+            className={buttonClass("plain", true)}
+            onClick={() => setProjectIcon(name, "reset")}
+            title={t("pi.reset")}
+            aria-label={t("pi.reset")}
+          >
+            <AppIcon name="refresh" className={BUTTON_GLYPH} />
+          </button>
+        </Field>
       </Section>
 
-      <ProjectBoard name={name} shown={shown} />
+      <ProjectBoard name={name} shown={shown} onPipeline={onPipeline} />
 
-      <section className="grid gap-2.5">
-        <Section title={t("pc.repos")} desc={t("pc.reposHelp")} list>
-          <Repos name={name} />
-        </Section>
-        <Branch
-          id={`pc-base-${name}`}
-          label={t("pl.base")}
-          help={t("pl.baseHelp")}
-          value={p.base}
-          placeholder="develop"
-          onCommit={base => setPipeline(name, { base })}
-        />
-        <Branch
-          id={`pc-into-${name}`}
-          label={t("pl.into")}
-          help={t("pl.intoHelp")}
-          value={p.into ?? ""}
-          placeholder={p.base || "main"}
-          onCommit={into => setPipeline(name, { into })}
-        />
-      </section>
+      <Section
+        title={t("pc.repos")}
+        desc={t("pc.reposHelp")}
+        action={<span className={HELP}>{t("pc.reposWhere")}</span>}
+        list
+      >
+        <Repos name={name} />
+      </Section>
 
       <BuddyRow name={name} />
-
-      {!p.on && (
-        <section className="flex flex-wrap items-center gap-4 rounded-xl border border-s-border bg-s-hover p-4">
-          <span className="grid size-9 flex-none place-items-center rounded-lg border border-s-border bg-raised text-s-muted">
-            <AppIcon name="kanban" className="size-4.5 fill-none stroke-current stroke-[1.5]" />
-          </span>
-          <div className="min-w-60 flex-1">
-            <h2 className="text-[13px] font-semibold">{t("pc.pipeOffTitle")}</h2>
-            <p className={`${HELP} mt-0.5`}>{t("pc.pipeOffHelp", { project: shown })}</p>
-          </div>
-          <button className={buttonClass("primary")} onClick={onPipeline}>
-            {t("pc.setUp")}
-          </button>
-        </section>
-      )}
     </>
-  );
-}
-
-/** A branch: its label, a short monospace field and what it does, on one line. */
-function Branch({
-  id,
-  label,
-  help,
-  value,
-  placeholder,
-  onCommit,
-}: {
-  id: string;
-  label: string;
-  help: string;
-  value: string;
-  placeholder: string;
-  onCommit: (value: string) => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-0.5 py-1">
-      <label htmlFor={id} className="w-24 font-medium">
-        {label}
-      </label>
-      <ChangeInput
-        id={id}
-        className={`${TEXT} ${MONO} w-40`}
-        value={value}
-        placeholder={placeholder}
-        spellCheck={false}
-        onCommit={v => onCommit(v.trim())}
-      />
-      <span className={`${HELP} min-w-56 flex-1`}>{help}</span>
-    </div>
   );
 }
 
@@ -309,12 +243,8 @@ function Repos({ name }: { name: string }) {
       <table className="w-full min-w-140 border-collapse text-left">
         <thead>
           <tr>
-            <th className={head}>
-              {t("pc.colRepo")} <span className="font-normal">· {t("pc.colSynced")}</span>
-            </th>
-            <th className={head}>
-              {t("pc.colCheckout")} <span className="font-normal">· {t("pc.colThisMac")}</span>
-            </th>
+            <th className={head}>{t("pc.colRepo")}</th>
+            <th className={head}>{t("pc.colCheckout")}</th>
             <th className={`${head} text-right whitespace-nowrap`}>{t("pc.colAgents")}</th>
             <th className={`${head} w-10 px-0`}>
               <span className="sr-only">{t("pc.colActions")}</span>
@@ -332,7 +262,7 @@ function Repos({ name }: { name: string }) {
                   <span className="flex items-center gap-2">
                     {checkout ? (
                       <span
-                        className={`${MONO} inline-flex max-w-64 min-w-0 items-center gap-1.5 text-s-muted`}
+                        className={`${MONO} inline-flex max-w-48 min-w-0 items-center gap-1.5 text-s-muted`}
                         title={checkout.path}
                       >
                         <AppIcon name="check" className="size-3.5 flex-none fill-none stroke-s-ok stroke-2" />

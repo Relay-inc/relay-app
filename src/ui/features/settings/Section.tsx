@@ -36,8 +36,8 @@ export function Section({
   return (
     <section className="grid min-w-0 grid-cols-1 gap-2.5 [&>*]:min-w-0">
       {(title || desc || action) && (
-        <header className="flex items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-2.5">
+        <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+          <div className="flex min-w-48 flex-1 items-start gap-2.5">
             <div>
               <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-s-fg">
                 {title}

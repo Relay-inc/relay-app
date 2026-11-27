@@ -2444,10 +2444,8 @@ const SCENARIOS = {
     const field = id => visible(page.locator(`#${id}`)).first();
     const add = () => visible(button(page, "Add calendar")).first();
     await click(navButton(page, "Integrations"), 300);
-    // switching a row on opens its page
-    await click(visible(page.getByRole("switch", { name: "Calendar" })).first(), 400);
-    let saves = await s.calls("set_settings");
-    s.check("switched on from its row", saves.length === 1 && saves[0].args.settings?.calendar?.on === true);
+    // Calendar is in the list, off and without calendars: its page opens on the empty list
+    await click(byText(page, "Calendar"), 400);
     s.check("its page opens on the list of calendars", await waitText(page, "Calendars"));
     await click(button(page, "+ Add calendar"), 300);
     s.check("+ Add calendar opens the form", await waitText(page, "Add a calendar"));
@@ -2455,6 +2453,7 @@ const SCENARIOS = {
     await field("calemail").fill("lena@example.com");
     await field("calurl").fill("https://example.com/calendar.ics");
     await click(add(), 300);
+    let saves;
     let connects = await s.calls("calendar_connect");
     s.check(
       "the address goes to the backend as typed",
@@ -2463,7 +2462,7 @@ const SCENARIOS = {
         connects[0].args.url === "https://example.com/calendar.ics",
     );
     s.check("a refused address shows why", await waitText(page, "That is no secret iCal address", 2000));
-    s.check("and saves nothing", (await s.calls("set_settings")).length === 1);
+    s.check("and saves nothing", (await s.calls("set_settings")).length === 0);
     s.check("the fields stay to fix", (await field("calemail").inputValue()) === "lena@example.com");
     const url = "https://calendar.google.com/calendar/ical/lena%40example.com/private-0123456789abcdef/basic.ics";
     await field("calurl").fill(url);
@@ -2471,8 +2470,8 @@ const SCENARIOS = {
     saves = await s.calls("set_settings"); // args come normalised, keys sorted
     s.check(
       "a calendar that loads is saved by its email only",
-      saves.length === 2 &&
-        JSON.stringify(saves[1].args.settings?.calendar) ===
+      saves.length === 1 &&
+        JSON.stringify(saves[0].args.settings?.calendar) ===
           JSON.stringify({ feeds: [{ email: "lena@example.com" }], on: true }),
     );
     s.check(
@@ -2484,7 +2483,6 @@ const SCENARIOS = {
       await waitText(page, "lena@example.com added: 3 meetings in the next 7 days", 2000),
     );
     s.check("back on the list with the calendar", await waitText(page, "lena@example.com", 2000));
-    // the calendar's own Remove comes before the integration's in the page
     await click(visible(button(page, "Remove")).first(), 300);
     connects = await s.calls("calendar_connect");
     saves = await s.calls("set_settings");
@@ -2493,15 +2491,11 @@ const SCENARIOS = {
       "and drops it from the settings",
       JSON.stringify(saves.at(-1)?.args.settings?.calendar) === JSON.stringify({ feeds: [], on: true }),
     );
-    await click(visible(button(page, "Remove")).last(), 300);
+    // Disconnect switches the integration off (what Remove did), the box empties the keychain too
+    await click(button(page, "Disconnect"), 300);
     saves = await s.calls("set_settings");
-    s.check("Remove switches the integration off", saves.at(-1)?.args.settings?.calendar?.on === false);
-    s.check(
-      "back on the list, switched off",
-      !(await visible(page.getByRole("switch", { name: "Calendar" }))
-        .first()
-        .isChecked()),
-    );
+    s.check("Disconnect switches the integration off", saves.at(-1)?.args.settings?.calendar?.on === false);
+    s.check("without the box the keychain is left alone", (await s.calls("calendar_connect")).length === 3);
     s.fact(
       "calendar_connect",
       connects.map(c => c.args),
@@ -2560,9 +2554,9 @@ const SCENARIOS = {
   async agentAccess(s) {
     await s.load({ path: "/settings.html" });
     const { page } = s;
-    await click(navButton(page, "Integrations"), 300);
+    await click(navButton(page, "Privacy & access"), 300);
     await click(byText(page, "Productive"), 400);
-    s.check("actions listed", await waitText(page, "Create a task on a board."));
+    s.check("actions listed", await waitText(page, "Create a task in a project's task list."));
     await visible(page.locator("select#act-create_task"))
       .first()
       .selectOption({ label: "Runs" })

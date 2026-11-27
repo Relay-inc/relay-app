@@ -1964,6 +1964,8 @@ function handle(cmd: string, a: Args): unknown {
       if (!a.ids?.length || a.ids.length > 500) throw new Error("1 to 500 mails at a time");
       for (const id of a.ids) movedMails.add(`${a.account}:${id}`);
       return null;
+    case "mail_forget":
+      return null;
     case "mail_test":
       return "Connected: 1,204 mails in INBOX";
     case "mail_connect":

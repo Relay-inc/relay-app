@@ -113,8 +113,8 @@ export type SettingsState = {
     repoMessages: Record<string, Message | null>; // per "<machine>/<repo folder>": what the last action said
   };
   // agent access per extension, from the vault's .relay/config.json: every action, the entry per extension, and why the
-  // last load (`""`) or save (by extension) failed
-  actions: { list: ActionMeta[]; entries: Record<string, ActionEntry>; errors: Record<string, string> };
+  // last load (`""`) or save (by extension) failed, and the tool unfolded on Privacy & access ("" none)
+  actions: { list: ActionMeta[]; entries: Record<string, ActionEntry>; errors: Record<string, string>; open: string };
   // the vault's git backup as saved (null until read) and why the last save failed
   vaultSync: { saved: VaultSync | null; message: Message | null };
   // the shared vaults on General (application/settings/shared-vaults.ts)
@@ -247,7 +247,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     repoBusy: {},
     repoMessages: {},
   },
-  actions: { list: [], entries: {}, errors: {} },
+  actions: { list: [], entries: {}, errors: {}, open: "" },
   vaultSync: { saved: null, message: null },
   shared: {
     status: {},
