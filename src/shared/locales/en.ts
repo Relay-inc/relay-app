@@ -1652,6 +1652,9 @@ const en = {
   "set.keepAwake": "Keep Mac awake while conversations run",
   "set.keepAwakeHelp":
     "While a conversation has a turn running, the Mac doesn't go to sleep when idle, so you can leave it working. Closing the lid still puts it to sleep.",
+  "set.autoKeepChanges": "Keep vault changes automatically",
+  "set.autoKeepChangesHelp":
+    "What Relay’s Claude runs write to the vault (captures, page actions, briefings) no longer waits in Changes for Keep: it comes in kept, under Reviewed, where you can still look at it.",
   "set.autoRetry": "Retry when a usage limit resets",
   "set.autoRetryHelp":
     "When a conversation is refused because the provider's usage limit is reached and there's no other account to switch to, Relay sends it again once the limit resets. The Mac stays awake until then if <b>Keep Mac awake</b> is on.",

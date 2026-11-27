@@ -1677,6 +1677,9 @@ export default {
   "set.keepAwake": "Garder le Mac éveillé pendant les conversations",
   "set.keepAwakeHelp":
     "Tant qu'une conversation a un tour en cours, le Mac ne se met pas en veille par inactivité, vous pouvez donc le laisser travailler. Fermer l'écran le met quand même en veille.",
+  "set.autoKeepChanges": "Garder automatiquement les modifications du coffre",
+  "set.autoKeepChangesHelp":
+    "Ce que les exécutions de Claude dans Relay écrivent dans le coffre (captures, actions de page, briefings) n’attend plus Garder dans Modifications : il arrive déjà gardé, sous Vérifiées, où vous pouvez encore le consulter.",
   "set.autoRetry": "Réessayer quand une limite d'utilisation se réinitialise",
   "set.autoRetryHelp":
     "Quand une conversation est refusée parce que la limite d'utilisation du fournisseur est atteinte et qu'aucun autre compte n'est disponible, Relay la renvoie dès que la limite se réinitialise. Le Mac reste éveillé jusque-là si <b>Garder le Mac éveillé</b> est activé.",

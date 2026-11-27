@@ -2700,6 +2700,7 @@ fn set_settings(app: AppHandle, state: State<App>, mut settings: Value) -> Resul
         relay_remote::sync::write_atomic(&data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap().as_bytes(), None).map_err(|e| e.to_string())?;
         let changed = (ui_lang_of(&cur) != lang, cur["shortcuts"] != s["shortcuts"]);
         *cur = s.clone();
+        changes::AUTO_KEEP.store(s["autoKeepChanges"] == true, std::sync::atomic::Ordering::Relaxed);
         changed
     };
     app.emit("settings-changed", &s).ok(); // the main window follows a change made in the settings window
@@ -3587,6 +3588,7 @@ pub fn run() {
             let settings = norm(fs::read_to_string(data_dir(app.handle()).join("settings.json")).ok()
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default());
             set_cur_lang(ui_lang_of(&settings));
+            changes::AUTO_KEEP.store(settings["autoKeepChanges"] == true, std::sync::atomic::Ordering::Relaxed);
             if cfg!(target_os = "macos") { app.set_menu(build_menu(app.handle(), ui_lang_of(&settings), Some(&settings["shortcuts"]))?)?; }
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
             let machines = machines::Machines::load(&data_dir(app.handle()))?;

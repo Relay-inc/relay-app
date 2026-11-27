@@ -1663,6 +1663,9 @@ export default {
   "set.keepAwake": "Mac wakker houden terwijl gesprekken lopen",
   "set.keepAwakeHelp":
     "Zolang een gesprek een beurt heeft lopen, gaat de Mac niet slapen bij inactiviteit, zodat je hem kan laten doorwerken. De klep sluiten laat hem wel slapen.",
+  "set.autoKeepChanges": "Wijzigingen in de vault automatisch houden",
+  "set.autoKeepChangesHelp":
+    "Wat de Claude-runs van Relay in de vault schrijven (captures, pagina-acties, briefings) wacht niet meer in Wijzigingen op Houden: het komt binnen als gehouden, onder Bekeken, waar je het nog kan nakijken.",
   "set.autoRetry": "Opnieuw proberen als een gebruikslimiet vrijkomt",
   "set.autoRetryHelp":
     "Wordt een gesprek geweigerd omdat de gebruikslimiet van de provider bereikt is en is er geen ander account om naar over te schakelen, dan stuurt Relay het opnieuw zodra de limiet vrijkomt. Staat <b>Mac wakker houden</b> aan, dan blijft de Mac tot dan wakker.",

@@ -15,6 +15,7 @@ import {
   saveFavicons,
   saveKeepAwake,
   saveFiles,
+  saveAutoKeepChanges,
   saveAutoRetry,
   saveTimeFromSessions,
   saveCaptureOnClose,
@@ -67,6 +68,7 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
   const keepAwake = useSettingsStore(s => s.settings.keepAwake !== false);
   const files = useSettingsStore(s => filesOn(s.settings));
   const autoRetry = useSettingsStore(s => s.settings.autoRetry === true);
+  const autoKeep = useSettingsStore(s => s.settings.autoKeepChanges === true);
   const timeFromSessions = useSettingsStore(s => s.settings.timeFromSessions !== false);
   const captureOnClose = useSettingsStore(s => s.settings.captureOnClose !== false);
   const workerCrabs = useSettingsStore(s => s.settings.workerCrabs !== false);
@@ -241,6 +243,9 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
         </Field>
         <Field label={t("set.keepAwake")} id="awake" hint={<Html html={th("set.keepAwakeHelp")} />}>
           <Switch id="awake" on={keepAwake} onToggle={saveKeepAwake} />
+        </Field>
+        <Field label={t("set.autoKeepChanges")} id="autokeep" hint={<Html html={th("set.autoKeepChangesHelp")} />}>
+          <Switch id="autokeep" on={autoKeep} onToggle={saveAutoKeepChanges} />
         </Field>
         <Field label={t("set.autoRetry")} id="retry" hint={<Html html={th("set.autoRetryHelp")} />}>
           <Switch id="retry" on={autoRetry} onToggle={saveAutoRetry} />
