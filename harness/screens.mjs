@@ -310,7 +310,7 @@ const todayDay = async (variant, dark) => {
 };
 const settingsPage = async (tab, sub, fixture = "default", platform = "") => {
   // Projects and Agents are a list and the picked item side by side: the window's default size
-  // Voice and Shortcuts are the design's 1100 x 900, Updates 1100 x 760 (PR #580: two columns on a wide window)
+  // Voice and Shortcuts are the design's 1100 x 900, Updates 1100 x 760 (PR #577: two columns on a wide window)
   const sizes = {
     Projects: [1280, 800],
     Agents: [1280, 800],
@@ -2064,13 +2064,13 @@ const VIEWS = {
     await click("Edit each");
     await intoView("Workspace 9 in the footer's menu");
   },
-  // the filter on top narrows the rows across the sections, the folded ones too (PR #580)
+  // the filter on top narrows the rows across the sections, the folded ones too (PR #577)
   "settings-shortcuts-filter": async () => {
     await settingsPage("Shortcuts");
     await page.getByRole("searchbox", { name: "Filter shortcuts" }).fill("reply");
     await settle(page);
   },
-  // Today's folded rows opened, and a key changed: tinted, with its reset (PR #580)
+  // Today's folded rows opened, and a key changed: tinted, with its reset (PR #577)
   "settings-shortcuts-today": async () => {
     await settingsPage("Shortcuts");
     await page.getByRole("button", { name: /^\d+ more: / }).click();
@@ -2078,28 +2078,28 @@ const VIEWS = {
     await page.keyboard.press("Control+Alt+j");
     await settle(page);
   },
-  // a narrow window: one column (PR #580)
+  // a narrow window: one column (PR #577)
   "settings-shortcuts-narrow": async () => {
     await settingsPage("Shortcuts");
     await page.setViewportSize({ width: 900, height: 900 });
     await settle(page);
   },
-  // Updates with two agents behind (Update all) and one not installed (Set up in Agents) (PR #580)
+  // Updates with two agents behind (Update all) and one not installed (Set up in Agents) (PR #577)
   "settings-updates-all": async () => {
     await settingsPage("Updates", undefined, "updates-all");
   },
-  // Language and Meetings side by side on a wide window (PR #580)
+  // Language and Meetings side by side on a wide window (PR #577)
   "settings-voice-meetings": async () => {
     await settingsPage("Voice");
     await intoView("Write the summary");
   },
-  // Settings › Shortcuts in the dark theme (PR #580)
+  // Settings › Shortcuts in the dark theme (PR #577)
   "settings-shortcuts-dark": async () => {
     await settingsPage("Shortcuts", undefined, "dark");
     await page.getByRole("button", { name: "Edit each" }).click();
     await settle(page);
   },
-  // Voice on a narrow window: Language and Meetings stacked (PR #580)
+  // Voice on a narrow window: Language and Meetings stacked (PR #577)
   "settings-voice-narrow": async () => {
     await settingsPage("Voice");
     await page.setViewportSize({ width: 900, height: 900 });
