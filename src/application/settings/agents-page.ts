@@ -20,6 +20,15 @@ export async function checkAgents(quiet = false) {
     page({ message: { text: String(error), ok: false } });
   }
 }
+/** Claude's skills in this vault (Settings › Agents › Skills); `null` while they are asked, a fresh process reads them from disk. */
+export async function loadSkills() {
+  page({ skills: null });
+  try {
+    page({ skills: await backend.agentSkills("claude") });
+  } catch (error) {
+    page({ skills: [], message: { text: String(error), ok: false } });
+  }
+}
 type AgentsConfig = Settings["agents"];
 /** One change to settings.agents, saved; the backend keeps the default on a switched-on agent. */
 async function saveAgents(change: (agents: AgentsConfig) => void) {

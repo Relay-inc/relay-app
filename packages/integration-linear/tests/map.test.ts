@@ -42,6 +42,8 @@ test("issues carry identifier, state, assignee's first and full name, priority a
   assert.equal(r.urls[1][1], "https://linear.app/bluebird/issue/BLU-13/write-docs");
   assert.equal(r.next, "cursor-1");
   assert.equal(mapIssues(fx("issues-2").data).cards[0].who, "Jan");
+  const mine = mapIssues({ issues: { nodes: [{ id: "x", assignee: { name: "Me", isMe: true } }, { id: "y", assignee: { name: "Jan", isMe: false } }] } });
+  assert.deepEqual(mine.cards.map(c => !!c.me), [true, false], "an issue assigned to the token's user is mine");
 });
 
 test("pages are followed by cursor until the last, and capped", async () => {

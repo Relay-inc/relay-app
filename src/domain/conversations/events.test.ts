@@ -34,6 +34,32 @@ test("text deltas append to the answer, a whole block starts a new one", () => {
   ]);
 });
 
+test("Remote Control: the session shows once it answers, its bridge state follows, off or an exit clears it", () => {
+  // the bridge says "ready" before the answer: not yet a switch
+  const early = run(fresh(), { type: "remote", on: true, state: "ready" }).next;
+  assert.equal(early.remote["c:1"], undefined);
+  const on = run(early, { type: "remote", on: true, url: "https://claude.ai/code/session_x" }).next;
+  assert.deepEqual(on.remote["c:1"], { url: "https://claude.ai/code/session_x", state: "ready" });
+  const connected = run(on, { type: "remote", on: true, state: "connected" }).next;
+  assert.equal(connected.remote["c:1"].state, "connected");
+  assert.equal(run(connected, { type: "remote", on: false }).next.remote["c:1"], undefined);
+  assert.equal(run(connected, { type: "exit" }).next.remote["c:1"], undefined);
+  // it did not turn on: the reason is in the conversation
+  const refused = run(fresh(), { type: "remote", on: false, state: "Remote Control cannot be enabled" }).next;
+  assert.deepEqual(refused.messages["c:1"], [{ kind: "err", text: "Remote Control cannot be enabled" }]);
+});
+
+test("a message typed on the phone goes into the conversation as the user's", () => {
+  const { next } = run(fresh(), { type: "said", text: "from the phone" }, { type: "text", text: "ok", delta: false });
+  assert.deepEqual(
+    next.messages["c:1"].map(item => [item.kind, item.text]),
+    [
+      ["me", "from the phone"],
+      ["ai", "ok"],
+    ],
+  );
+});
+
 test("thinking streams into its own item, apart from the answer", () => {
   const { next } = run(
     fresh(),

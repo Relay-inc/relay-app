@@ -19,7 +19,7 @@ import { boardOf } from "../../../application/navigation/navigation";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { chatBar } from "../../../application/conversations/selectors";
-import { openTerminal, rename } from "../../../application/conversations/actions";
+import { openTerminal, rename, toggleRemote } from "../../../application/conversations/actions";
 import {
   closeTool,
   openProjectPanel,
@@ -53,6 +53,7 @@ import { MoveBar } from "./MoveBar";
 import { RetryBar } from "./RetryBar";
 import { RepoBar } from "./RepoBar";
 import { RepoWorkBar } from "./RepoWorkBar";
+import { BtwCard } from "./BtwCard";
 import { Composer } from "./Composer";
 import { NewReminder } from "./NewReminder";
 import { UsageReload } from "../usage/UsageReload";
@@ -188,6 +189,7 @@ export function ConversationsView({ className }: { className: string }) {
       renamable={bar.renamable}
       noTerm={bar.noTerm}
       locked={bar.locked}
+      remote={bar.remote}
       tools={bar.tools}
       drawer={drawer}
       back={!!bar.tools?.back}
@@ -209,6 +211,7 @@ export function ConversationsView({ className }: { className: string }) {
       onEditProject={bar.tools?.back ? closeTool : openProjectPanel}
       onRename={rename}
       onOpenTerminal={openTerminal}
+      onStopRemote={() => toggleRemote(selected)}
       // a project without repos sends you to the settings to link one
       onOpenPrs={() => (bar.tools?.repos ? openTool(bar.tools.project, PRS) : openSettings())}
       onToggleDrawer={toggleDrawer}
@@ -321,6 +324,7 @@ export function ConversationsView({ className }: { className: string }) {
       <RepoWorkBar className={column} />
       <RetryBar className={column} />
       <MoveBar className={column} session={bar.session} asked={asked} />
+      {onView || agentPage ? null : <BtwCard className={column} />}
       {onView || agentPage ? null : <Composer className={`${column} mt-2 ${orchHint ? "mb-1.5" : "mb-4.5"}`} />}
       {/* who the composer talks to in the orchestrator: the coordinator, or the open worker */}
       {orchHint ? <span className={`${column} mb-4 pl-9 text-[11px] text-tertiary`}>{t(orchHint)}</span> : null}

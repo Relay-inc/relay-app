@@ -111,14 +111,37 @@ export function applyAgentEvent(
       if (!isRelayTurn(event.text)) takeWaiting(state, key);
       else state.taken[key] = (state.taken[key] || 0) + 1;
       return [];
+    case "said":
+      // typed on the phone: Relay did not send it, so nothing waits for it
+      push(state, key, { kind: "me", text: event.text, at: env.now });
+      return [];
+    case "remote": {
+      const on = state.remote[key];
+      if (event.url) state.remote[key] = { url: event.url, state: "ready" };
+      // the bridge's state before the answer, or after Remote Control went off, is not a switch
+      else if (event.on && on) on.state = event.state || on.state;
+      else if (!event.on) {
+        delete state.remote[key];
+        if (event.state) push(state, key, { kind: "err", text: event.state.slice(0, 2000) });
+      }
+      return [];
+    }
     case "commands":
       state.commands[provider] = cleanCommands(event.commands);
       return [];
     case "suggestion":
       if (state.status[key] !== "busy") state.suggestion[key] = event.text;
       return [];
+    case "side_answer": {
+      const pair = state.btw[key]?.find(p => p.id === event.id);
+      if (pair) Object.assign(pair, { answer: event.text, error: event.error });
+      return [];
+    }
     case "draft_saved":
       push(state, key, { kind: "note", text: draftNote(event, env.t) });
+      return [];
+    case "reload":
+      push(state, key, { kind: "note", text: env.t(event.busy ? "note.reloadBusy" : "note.reloaded") });
       return [];
     case "reset":
       delete state.suggestion[key];
@@ -318,6 +341,8 @@ function onProcessExit(state: ConversationsState, key: string, env: EventEnv): E
   }
   state.queued[key] = 0;
   state.status[key] = "idle";
+  // Remote Control ran in the process
+  delete state.remote[key];
   return effects;
 }
 

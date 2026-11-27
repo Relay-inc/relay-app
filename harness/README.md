@@ -70,7 +70,7 @@ transparent over the macOS sidebar material in Tauri; the mock gives `html` the 
 
 Commands answered with stubs (no real effect): `pick_folder` (`pickFolder`, cancelled by default), `pick_path` (cancelled), `open_file` (recorded in `calls`, rejects "not found" for a path containing `missing`), `read_image` (a small PNG for png/jpg/jpeg/gif/webp, rejects otherwise), `mail_connect`, `mail_test`,
 `integration_token`, `integration_import`, `favicons`, `find_icon_sites` (nothing found), `set_project_icon`,
-`set_project_repos`, `ignore_repo`, `ai_title` (first five words), `stop`, `bg`, `open_terminal`, `notify`, `open_settings_window`,
+`set_project_repos`, `ignore_repo`, `remote_control` (answers with `remote` agent events and a made-up link), `ai_title` (first five words), `stop`, `bg`, `open_terminal`, `notify`, `open_settings_window`,
 `plugin:opener|open_url`, `running` (`{}`: no process of the app runs a turn).
 With state in memory: `reminder` (done drops a row or moves a repeating one on, push moves it) and `reminder_add`
 change the snapshot, so undo works; reminder ids are 8 hex characters as the backend makes them. `set_settings` keeps
@@ -106,10 +106,10 @@ new Tauri command (`generate_handler!` in `src-tauri/src/lib.rs`) gets its answe
 
 ## Views (`screens.mjs`)
 
-103 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
+104 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
 conversation-permission, conversation-plan (ExitPlanMode: the plan next to Allow and Deny), conversation-action (an agent action's card), conversation-code (a code block and its header),
 conversation-steps (a tool group unfolded), composer-slash (`/` completion), composer-resolved (the pickers name the CLI's
-defaults), composer-files (a picture and two file chips waiting), conversation-files (a sent message with chips), conversation-unread (a message sent mid-turn, waiting for Claude), conversation-question, conversation-artifact (a page Claude Code published as a claude.ai Artifact: its card), conversation-artifact-open (its Artifact drawer, the page from its file), new-general-draft (the menu event `new-general`, Cmd-Option-T), new-window (a window Cmd-N opened, on Today), terminal. Mail and PRs:
+defaults), composer-files (a picture and two file chips waiting), conversation-files (a sent message with chips), conversation-unread (a message sent mid-turn, waiting for Claude), conversation-question, conversation-artifact (a page Claude Code published as a claude.ai Artifact: its card), conversation-artifact-open (its Artifact drawer, the page from its file), conversation-artifact-back (the same drawer again after another conversation was opened and this one again), new-general-draft (the menu event `new-general`, Cmd-Option-T), new-window (a window Cmd-N opened, on Today), terminal. Mail and PRs:
 mail-second-account, mail-list, mail-plain, mail-html, mail-experimental (Inbox/Other tabs, archive and delete in the
 mail's bar), mail-other (the Other tab), mail-selection (three mails ticked, the bulk bar), prs-list, pr-detail (list and mail or PR side by side). Board:
 board, card-detail (the ticket window), board-list, board-filters, board-presets, board-group, ticket-activity, buddy-menu (a project's Buddy pipelines from its title bar).

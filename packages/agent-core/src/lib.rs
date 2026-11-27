@@ -70,6 +70,8 @@ pub struct Caps {
     pub picked: bool,
     /// Can run on a work machine (Settings › Machines) and be moved there.
     pub remote: bool,
+    /// Can be continued from claude.ai or the Claude phone app while it runs ([`AgentProvider::remote_control`]).
+    pub bridge: bool,
 }
 
 /// Where the provider runs. `bin` is the settings' override or [`AgentProvider::default_bin`].
@@ -177,6 +179,9 @@ pub enum Event {
     /// Live: the agent took up a user message sent to it, at this point of its work (Claude Code only, the echo of
     /// `--replay-user-messages`). A message sent while a turn runs can join that turn instead of starting its own.
     Picked { text: String },
+    /// Remote Control: turned on (`url` the session to open on claude.ai, none when only its `state` changed, "ready",
+    /// "connected" or "failed") or off. Off with a `state` is the reason it did not turn on. Claude Code only.
+    Remote { on: bool, url: Option<String>, state: Option<String> },
     /// Assistant text: a whole block, or with `delta` a piece appended to the last one.
     Text { text: String, delta: bool },
     Thinking { text: String, delta: bool },
@@ -223,6 +228,11 @@ pub enum Event {
     Stderr { text: String },
     /// The slash commands and skills the vault has, as the provider's control pipe lists them on opening.
     Commands { commands: Value },
+    /// The answer to a [`AgentProvider::reload`]: done, or refused because the session was busy.
+    Reload { busy: bool },
+    /// The answer to a side question ([`AgentProvider::side_question`]): `id` is the one it was asked with, `text` the
+    /// answer, or the failure when `error`. Not part of the conversation.
+    SideAnswer { id: String, text: String, error: bool },
     /// The conversation was compacted: what triggered it ("manual" or "auto") and the context's size in tokens before and after.
     Compacted { trigger: Option<String>, pre_tokens: Option<u64>, post_tokens: Option<u64> },
     /// How full the context is: tokens in use now and/or the model's window, each when the provider says. Claude Code only.
@@ -286,6 +296,8 @@ pub trait AgentProvider: Sync {
     fn models(&self) -> Vec<Choice>;
     /// Executable slash commands/skills in this vault, without starting a conversation.
     fn commands(&self, _env: &Env) -> Value { serde_json::json!([]) }
+    /// The skills in this vault with where each comes from (`{name, description, source, state}`), without starting a conversation.
+    fn skills(&self, _env: &Env) -> Value { serde_json::json!([]) }
     fn efforts(&self) -> Vec<Choice> { vec![] }
     /// Whether a session id may go on a command line.
     fn valid_session(&self, id: &str) -> bool { safe_id(id) }
@@ -302,6 +314,15 @@ pub trait AgentProvider: Sync {
     fn control_reply(&self, _id: &Value, _reply: Result<Value, String>) -> Option<String> { None }
     /// `caps.live_model`: the stdin line that changes the model for the turns after it ("": the CLI's own).
     fn set_model(&self, _model: &str) -> Option<String> { None }
+    /// The stdin line that has a running process pick up skills and plugins changed on disk, refused while it is busy.
+    /// Its answer is [`Event::Reload`] and a fresh [`Event::Commands`].
+    fn reload(&self) -> Option<String> { None }
+    /// `caps.bridge`: the stdin line that turns Remote Control on or off, answered by [`Event::Remote`].
+    fn remote_control(&self, _on: bool) -> Option<String> { None }
+    /// `caps.control`: the stdin line that asks the running process a side question (`/btw`), answered from the
+    /// conversation's context without joining it and also while a turn runs, as an [`Event::SideAnswer`] for `id`.
+    /// `history`: the earlier `{question, response}` pairs of the same aside. Claude Code only.
+    fn side_question(&self, _id: &str, _question: &str, _history: &Value) -> Option<String> { None }
     /// Slash commands (without the slash) that take no attachments: refused in the webview before they are sent.
     fn text_only_commands(&self) -> Vec<&'static str> { vec![] }
     /// The stdin line answering a request this provider raised as [`Event::Permission`] (relay = true).

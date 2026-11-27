@@ -190,7 +190,7 @@ impl AgentProvider for Claude {
     fn caps(&self) -> Caps {
         Caps { persistent: true, images: true, thinking: true, permissions: true, questions: true, subagents: true, fork: true,
             terminal: true, background: true, effort: true, limits: true, title: true, write: true, accounts: true,
-            live_model: true, control: true, picked: true, remote: true }
+            live_model: true, control: true, picked: true, remote: true, bridge: true }
     }
     fn npm_package(&self) -> Option<&'static str> { Some("@anthropic-ai/claude-code") }
     fn self_update(&self) -> &'static [&'static str] { &["update"] }
@@ -222,6 +222,19 @@ impl AgentProvider for Claude {
             let v = p.receive(c, |v| v["type"] == "control_response")?;
             let commands = &v["response"]["response"]["commands"];
             Ok(if commands.is_null() { json!([]) } else { commands.clone() })
+        })
+    }
+    fn skills(&self, env: &Env) -> Value {
+        agent_core::discover_commands(env, |p| {
+            let mut cmd = Command::new(env.bin);
+            cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+                "--settings", r#"{"disableAllHooks":true}"#, "--no-session-persistence"]).current_dir(env.vault).env_remove("ANTHROPIC_API_KEY");
+            let c = p.start(cmd)?;
+            p.send(c, json!({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize"}}))?;
+            p.receive(c, |v| v["type"] == "control_response")?;
+            p.send(c, json!({"type": "control_request", "request_id": "skills", "request": {"subtype": "get_skills_dialog"}}))?;
+            let v = p.receive(c, |v| v["type"] == "control_response" && v["response"]["request_id"] == "skills")?;
+            Ok(stream::skills(&v["response"]["response"]["skills"]))
         })
     }
     fn efforts(&self) -> Vec<Choice> {
@@ -305,8 +318,18 @@ impl AgentProvider for Claude {
         };
         Some(json!({"type": "control_response", "response": response}).to_string())
     }
+    // ponytail: undocumented control request (Claude Code 2.1.332), the same one `/btw` sends in the terminal
+    fn side_question(&self, id: &str, question: &str, history: &Value) -> Option<String> {
+        Some(json!({"type": "control_request", "request_id": id, "request": {"subtype": "side_question", "question": question, "history": history}}).to_string())
+    }
     fn set_model(&self, model: &str) -> Option<String> {
         Some(json!({"type": "control_request", "request_id": "model", "request": {"subtype": "set_model", "model": if model.is_empty() { "default" } else { model }}}).to_string())
+    }
+    fn reload(&self) -> Option<String> {
+        Some(json!({"type": "control_request", "request_id": "reload_plugins", "request": {"subtype": "reload_plugins", "refuse_if_busy": true}}).to_string())
+    }
+    fn remote_control(&self, on: bool) -> Option<String> {
+        Some(json!({"type": "control_request", "request_id": "remote", "request": {"subtype": "remote_control", "enabled": on}}).to_string())
     }
     fn respond(&self, req: &agent_core::pending::Request, decision: &Value) -> Option<String> { permission::respond(req, decision) }
     fn input(&self, turn: &Turn) -> Option<String> { Some(stream::user_message(turn).to_string()) }
@@ -576,8 +599,13 @@ mod tests {
         let err = line(PROVIDER.control_reply(&json!("r2"), Err("unsupported".into())));
         assert_eq!(err, json!({"type": "control_response", "response": {"subtype": "error", "request_id": "r2", "error": "unsupported"}}));
         let model = line(PROVIDER.set_model("sonnet"));
+        let ask = line(PROVIDER.side_question("btw-1", "Which colour?", &json!([{"question": "a", "response": "b"}])));
+        assert_eq!((ask["request_id"].as_str(), ask["request"]["subtype"].as_str(), ask["request"]["question"].as_str(), ask["request"]["history"][0]["response"].as_str()), (Some("btw-1"), Some("side_question"), Some("Which colour?"), Some("b")));
         assert_eq!((model["type"].as_str(), model["request"]["subtype"].as_str(), model["request"]["model"].as_str()), (Some("control_request"), Some("set_model"), Some("sonnet")));
         assert_eq!(line(PROVIDER.set_model(""))["request"]["model"], "default");
+        let rc = line(PROVIDER.remote_control(true));
+        assert_eq!((rc["request_id"].as_str(), rc["request"]["subtype"].as_str(), rc["request"]["enabled"].as_bool()), (Some("remote"), Some("remote_control"), Some(true)));
+        assert_eq!(line(PROVIDER.remote_control(false))["request"]["enabled"], false);
     }
     #[test]
     fn terminal_commands() {

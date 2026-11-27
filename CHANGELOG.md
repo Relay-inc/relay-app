@@ -16,7 +16,15 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Added
 
+- A board pipeline can pick up only the tickets assigned to you (Settings › Projects › Pipeline, Only tickets assigned to me); tickets assigned to someone else or to nobody stay in the column. Trello and Linear cards now know when they are yours too, as Productive and GitHub Projects already did (#558)
+- **`/btw` side questions**: type `/btw <question>` in a Claude conversation to ask something about it without interrupting Claude. The answer shows in a small card above the composer, also while Claude is working, and is not added to the conversation. Ask again to follow up; × or Esc closes the card (#559)
+- Continue a Claude Code conversation on claude.ai or the Claude phone app: right-click it in the sidebar and pick Continue on phone. A phone icon in the title bar shows it is on, with the link to open or copy and Stop; what you type on the phone shows up in the conversation. (#562)
+- Settings › Agents lists the skills Claude Code has in your vault, from you, the project or a plugin, and ⌘K gets "Reload skills and plugins" to pick up a skill or plugin you just added without starting a new conversation (#564).
 - Claude Code now suggests your next message after a turn: it shows grey in the empty message field, and Tab or the right arrow takes it. Claude Code's own setting `promptSuggestionEnabled` turns it off. (#566)
+
+### Changed
+
+- Each conversation keeps its own Artifact drawer: switching to another conversation and back opens the same artifact again, in the view you picked (This Mac or claude.ai), and a drawer you closed stays closed. The agents column comes back the same way; the terminal, Git and files drawers still follow the open conversation (#567)
 
 ## [0.0.70] - 2026-11-26
 
