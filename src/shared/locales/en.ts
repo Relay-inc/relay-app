@@ -310,9 +310,6 @@ const en = {
   "composer.agentSharedVault":
     "A conversation in another workspace than Personal runs on Claude Code or Codex: Claude Code keeps to its permission rules there, Relay checks what Codex asks for.",
   "set.tab.agents": "Agents",
-  "ag.default": "Default agent",
-  "ag.defaultHelp":
-    "New conversations start with this agent. The composer can pick another one before the first message.",
   "ag.on": "Use",
   "ag.onLabel": "Show in the composer",
   "ag.status": "Status",
@@ -372,10 +369,7 @@ const en = {
   "ag.accountAutoHelp":
     "When an account’s plan limit is used up, the conversation moves to the next account that has room and goes on right away.",
   "ag.empty": "No agents yet. Add one to start conversations with it.",
-  "ag.listHelp": "Only agents that are switched on show up in the composer. Click one to change its settings.",
   "ag.isDefault": "default",
-  "ag.overview": "Overview",
-  "ag.countOn": "{on} of {total} on",
   "ag.groupOn": "On",
   "ag.groupOff": "Off",
   "ag.notInstalled": "Not installed",

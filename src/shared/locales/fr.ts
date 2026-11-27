@@ -314,9 +314,6 @@ export default {
   "composer.agentSharedVault":
     "Une conversation dans un autre espace de travail que Personnel tourne avec Claude Code ou Codex : Claude Code y suit ses règles d'autorisation, Relay vérifie ce que Codex demande.",
   "set.tab.agents": "Agents",
-  "ag.default": "Agent par défaut",
-  "ag.defaultHelp":
-    "Les nouvelles conversations démarrent avec cet agent. La zone de saisie permet d'en choisir un autre avant le premier message.",
   "ag.on": "Utiliser",
   "ag.onLabel": "Afficher dans la zone de saisie",
   "ag.status": "État",
@@ -378,11 +375,7 @@ export default {
   "ag.accountAutoHelp":
     "Quand la limite du forfait d’un compte est atteinte, la conversation passe au compte suivant qui a de la marge et continue aussitôt.",
   "ag.empty": "Aucun agent pour l'instant. Ajoutez-en un pour démarrer des conversations.",
-  "ag.listHelp":
-    "Seuls les agents activés apparaissent dans le compositeur. Cliquez sur l'un d'eux pour modifier ses réglages.",
   "ag.isDefault": "par défaut",
-  "ag.overview": "Aperçu",
-  "ag.countOn": "{on} sur {total} activés",
   "ag.groupOn": "Activés",
   "ag.groupOff": "Désactivés",
   "ag.notInstalled": "Non installé",

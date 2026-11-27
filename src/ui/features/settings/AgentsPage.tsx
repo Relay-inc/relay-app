@@ -5,24 +5,21 @@ import { checkAgents, clearAgentsMessage } from "../../../application/settings/a
 import { useT } from "../../hooks/useT";
 import { buttonClass, DEFAULT_PILL, EMPTY_LIST } from "./blocks";
 import { AgentGlyph } from "./AgentBits";
-import { AgentOverview } from "./AgentOverview";
 import { AgentSettings, type AgentTab } from "./AgentSettings";
 import { Footer } from "./Footer";
-import { Icon } from "../../components/Icon";
 import { LoadingSection } from "./LoadingSection";
 
 const OFF: AgentCfg = { on: false, bin: "" };
 const ROW =
   "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-s-fg focus-visible:ring-2 ring-s-ring focus-visible:outline-none";
 
-/** Agents: the overview and the agents on the left (on, then off), the picked one's settings on the right. A switch
- *  turns an agent on or off, every change saves at once. What is installed is checked when the window opens. */
+/** Agents: the agents on the left (on, then off), the picked one's settings on the right; its header switches it on or
+ *  off and makes it the default. Every change saves at once. What is installed is checked when the window opens. */
 export function AgentsPage() {
   const { t } = useT();
   const detected = useSettingsStore(s => s.agentsPage.detected);
   const message = useSettingsStore(s => s.agentsPage.message);
   const agents = useSettingsStore(s => s.settings.agents);
-  // "" is the overview
   const [picked, setPicked] = useState("");
   const [tab, setTab] = useState<AgentTab>("general");
   useEffect(() => {
@@ -37,9 +34,13 @@ export function AgentsPage() {
     );
 
   const config = (id: string) => agents?.providers[id] ?? OFF;
-  const current = detected.providers.find(provider => provider.id === picked);
   const onOnes = detected.providers.filter(provider => config(provider.id).on);
   const offOnes = detected.providers.filter(provider => !config(provider.id).on);
+  // the picked one, else the default, else the first listed
+  const current =
+    detected.providers.find(provider => provider.id === picked) ??
+    detected.providers.find(provider => provider.id === agents?.default) ??
+    [...onOnes, ...offOnes][0];
 
   const summary = (id: string) => {
     const { detect } = detected.providers.find(provider => provider.id === id)!;
@@ -49,7 +50,7 @@ export function AgentsPage() {
     return (detect.version || t("ag.installedNoVersion")) + login;
   };
   const row = (id: string, tile: React.ReactNode, name: string, line: string, pill = false) => {
-    const here = id === picked;
+    const here = id === current?.id;
     return (
       <button
         key={id}
@@ -90,14 +91,6 @@ export function AgentsPage() {
         aria-label={t("set.tab.agents")}
         className="flex w-72 flex-none flex-col gap-3 overflow-y-auto border-r border-s-seam px-3 py-4"
       >
-        <div className="grid gap-px">
-          {row(
-            "",
-            <Icon name="agent" className="size-4 fill-none stroke-current stroke-2 glyph text-secondary" />,
-            t("ag.overview"),
-            t("ag.countOn", { on: onOnes.length, total: detected.providers.length }),
-          )}
-        </div>
         {group(t("ag.groupOn"), onOnes)}
         {group(t("ag.groupOff"), offOnes)}
         {!detected.providers.length && <div className={`${EMPTY_LIST} px-2.5`}>{t("ag.empty")}</div>}
@@ -115,7 +108,7 @@ export function AgentsPage() {
         </div>
       </aside>
       <main className="@container min-w-0 flex-1 overflow-y-auto px-8 pt-7 pb-12">
-        {current ? (
+        {current && (
           <AgentSettings
             key={current.id}
             status={current}
@@ -123,13 +116,6 @@ export function AgentsPage() {
             isDefault={agents?.default === current.id}
             tab={tab}
             onTab={setTab}
-          />
-        ) : (
-          <AgentOverview
-            providers={detected.providers}
-            config={config}
-            defaultId={agents?.default ?? ""}
-            onOpen={setPicked}
           />
         )}
       </main>

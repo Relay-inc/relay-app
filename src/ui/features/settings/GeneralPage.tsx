@@ -38,6 +38,7 @@ import { Field } from "./Field";
 import { Footer } from "./Footer";
 import { PathField } from "./PathField";
 import { PermissionsSection } from "./PermissionsSection";
+import { RunDefault } from "./RunDefault";
 import { Section } from "./Section";
 import { Segmented } from "./Segmented";
 import { Switch } from "./Switch";
@@ -195,6 +196,8 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
       </Section>
       <VaultSyncSection />
       <ActionsSection ext="reminders" name={t("act.reminders")} />
+      <ActionsSection ext="knowledge" name={t("act.knowledge")} />
+      <RunDefault />
       <Section title={t("set.sec.interface")} rows>
         <Field label={t("set.theme")} hint={<Html html={th("set.themeHelp")} />}>
           <Segmented label={t("set.theme")} options={themes} value={theme} onPick={changeTheme} />

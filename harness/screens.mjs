@@ -3482,10 +3482,10 @@ const VIEWS = {
   ),
   "settings-integration-mail-experimental": () => settingsPage("Integrations", "Mail", "mailexp"),
   "settings-integration-calendar": () => settingsPage("Integrations", "Calendar", "calendar"),
-  // Settings › Agents on Overview: the list on the left (on, then off), every agent with its status and switch
-  "settings-agents-overview": async () => {
+  // Settings › Agents as it opens: the agents on the left (on, then off), the default one picked
+  "settings-agents": async () => {
     await settingsPage("Agents");
-    await waitText("Overview");
+    await waitText("How it runs");
   },
   // Settings › Agents › Claude Code, General tab: no extra accounts yet (the next view has two, the work one active)
   "settings-agent-claude": async () => {

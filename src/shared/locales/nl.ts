@@ -312,9 +312,6 @@ export default {
   "composer.agentSharedVault":
     "Een gesprek in een andere workspace dan Persoonlijk loopt op Claude Code of Codex: Claude Code houdt zich daar aan zijn permissieregels, Relay controleert wat Codex vraagt.",
   "set.tab.agents": "Agents",
-  "ag.default": "Standaardagent",
-  "ag.defaultHelp":
-    "Nieuwe gesprekken starten met deze agent. In het invoerveld kies je een andere vóór het eerste bericht.",
   "ag.on": "Gebruik",
   "ag.onLabel": "Toon in het invoerveld",
   "ag.status": "Status",
@@ -375,11 +372,7 @@ export default {
   "ag.accountAutoHelp":
     "Is de planlimiet van een account op, dan verhuist het gesprek naar het volgende account met ruimte en gaat het meteen verder.",
   "ag.empty": "Nog geen agents. Voeg er een toe om er gesprekken mee te starten.",
-  "ag.listHelp":
-    "Enkel agents die aanstaan verschijnen in de composer. Klik er een aan om de instellingen te wijzigen.",
   "ag.isDefault": "standaard",
-  "ag.overview": "Overzicht",
-  "ag.countOn": "{on} van {total} aan",
   "ag.groupOn": "Aan",
   "ag.groupOff": "Uit",
   "ag.notInstalled": "Niet geïnstalleerd",

@@ -311,9 +311,6 @@ export default {
   "composer.agentSharedVault":
     "Ein Gespräch in einem anderen Workspace als Persönlich läuft mit Claude Code oder Codex: Claude Code hält sich dort an seine Berechtigungsregeln, Relay prüft, was Codex anfragt.",
   "set.tab.agents": "Agenten",
-  "ag.default": "Standard-Agent",
-  "ag.defaultHelp":
-    "Neue Gespräche starten mit diesem Agenten. Im Eingabefeld lässt sich vor der ersten Nachricht ein anderer wählen.",
   "ag.on": "Verwenden",
   "ag.onLabel": "Im Eingabefeld anzeigen",
   "ag.status": "Status",
@@ -374,11 +371,7 @@ export default {
   "ag.accountAutoHelp":
     "Ist das Planlimit eines Kontos aufgebraucht, zieht die Unterhaltung zum nächsten Konto mit Luft um und geht sofort weiter.",
   "ag.empty": "Noch keine Agents. Füge einen hinzu, um Gespräche damit zu starten.",
-  "ag.listHelp":
-    "Nur eingeschaltete Agents erscheinen im Composer. Klicke auf einen, um seine Einstellungen zu ändern.",
   "ag.isDefault": "Standard",
-  "ag.overview": "Übersicht",
-  "ag.countOn": "{on} von {total} an",
   "ag.groupOn": "An",
   "ag.groupOff": "Aus",
   "ag.notInstalled": "Nicht installiert",
