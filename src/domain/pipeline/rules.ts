@@ -240,10 +240,14 @@ export const answerable = (place: ReturnType<typeof placeOf>) => place.col === "
  *  now on. Null otherwise. */
 export function boardMove(w: Worker, p: Pipeline, column: Column | undefined): "merged" | "adopt" | null {
   if (!column || w.state === "running" || step(w) || w.board === "merged" || w.board === "closed") return null;
-  const own = [p.pick, p.busy, p.review, p.input].includes(column.id);
-  if ((p.merged && column.id === p.merged) || (column.state === "done" && !own)) return "merged";
+  if (finished(p, column)) return "merged";
   return column.id === p.review && !inReview(w) ? "adopt" : null;
 }
+
+/** A column that means a ticket is finished for the pipeline: its merged column, or a done column it does not use. */
+export const finished = (p: Pipeline, column: Column) =>
+  (!!p.merged && column.id === p.merged) ||
+  (column.state === "done" && ![p.pick, p.busy, p.review, p.input].includes(column.id));
 
 /** A move Relay must not make by itself: a person moved the ticket from where the pipeline put it (`own`) to `now`, and
  *  `to` is back from there. Further on: a done column, else a later one on the board. A ticket not on the board, or in

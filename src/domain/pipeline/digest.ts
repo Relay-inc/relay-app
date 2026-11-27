@@ -233,3 +233,15 @@ export function digestText(project: string, rows: DigestRow[], did: string[], d:
     ...part("Running:", of("runs").map(rowText)),
   ].join("\n\n");
 }
+
+/** The tickets a person told the pipeline to leave alone, for the conversation's `tickets` tool: Relay's line with
+ *  the number and link, the title in the ticket's untrusted block. "" when there are none. */
+export function ignoredText(tickets: { number: string; title: string; url: string }[]) {
+  if (!tickets.length) return "";
+  const lines = tickets.map(x => {
+    const url = safeUrl(x.url);
+    const head = `- ${safeRef(x.number) ? `#${safeRef(x.number)}` : "a ticket without a number"}: ignored, Relay leaves it alone until the user unignores it.${url ? ` [ticket](${url})` : ""}`;
+    return `${head}\n${untrusted("ticket", x.title)}`;
+  });
+  return `Ignored:\n${lines.join("\n")}`;
+}

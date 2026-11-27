@@ -58,7 +58,13 @@ export type Pipeline = {
   skill?: string;
   /** Relay's comments on the ticket are internal, kept from the client (Productive); absent: hidden */
   hidden?: boolean;
+  /** tickets a person told the pipeline to leave alone, wherever they are on the board, until they unignore them:
+   *  never picked up, landed or moved, their PRs not followed. Absent: none */
+  ignored?: IgnoredTicket[];
 };
+
+/** A ticket the pipeline leaves alone, by its card id, with what the strip and the conversation name it by. */
+export type IgnoredTicket = { id: string; number: string; title: string; url: string; at: number };
 
 /** What a pipeline worker carries about its ticket (orch.rs keeps it as given). */
 export type Ticket = {

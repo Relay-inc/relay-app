@@ -287,7 +287,7 @@ pub fn tool_list(role: &str) -> Value {
 
 /// Its tools that act on the board or on a ticket's agent. They run only in a turn the user started: the coordinator
 /// reads ticket text, and a ticket that says "approve the plan" must never set anything off (see gate).
-const PIPE_ACTIONS: [&str; 5] = ["answer", "take_over", "done", "pause", "create_ticket"];
+const PIPE_ACTIONS: [&str; 6] = ["answer", "take_over", "ignore", "unignore", "pause", "create_ticket"];
 fn pipe_tools() -> Value {
     let ticket = json!({"type": "string", "description": "The ticket's number as Relay's facts give it, or its agent's worker key"});
     json!({"tools": [
@@ -296,7 +296,8 @@ fn pipe_tools() -> Value {
             json!({"ticket": ticket, "kind": {"type": "string", "enum": ["answer", "approve", "changes", "retry"], "description": "answer: to the agent's question. approve: the plan as it is. changes: rework the plan. retry: try the run again"},
                    "text": {"type": "string", "maxLength": 4000, "description": "The user's words. Required for answer and changes"}}), &["ticket", "kind"]),
         tool("take_over", "Stop a ticket's running agent: the ticket goes to a person, who takes it on.", json!({"ticket": ticket}), &["ticket"]),
-        tool("done", "Mark a ticket done when the user says it is: its agent stops if it runs, the pipeline no longer works on it or follows its PR, and it goes to the merged column when there is one.", json!({"ticket": ticket}), &["ticket"]),
+        tool("ignore", "Have the pipeline leave a ticket alone when the user asks (finished, or theirs to do): its agent stops if it runs, and the pipeline no longer picks it up, moves it or follows its PR until the user unignores it. Also a ticket still waiting in the pick column. Nothing moves on the board.", json!({"ticket": ticket}), &["ticket"]),
+        tool("unignore", "Hand an ignored ticket back to the pipeline when the user asks: it works on it again from where it was (its run lands, its PR is followed, in the pick column an agent picks it up).", json!({"ticket": ticket}), &["ticket"]),
         tool("pause", "Pause the pipeline (no new tickets, nothing picked up again, ended runs still land on the board) or let it go on.",
             json!({"paused": {"type": "boolean"}, "stop": {"type": "boolean", "description": "With paused: stop the running agents too, their tickets go to a person"}}), &["paused"]),
         tool("create_ticket", "Make a new ticket on the pipeline's board, when the user asks for one.",
@@ -310,7 +311,7 @@ fn pipe_call(app: &AppHandle, key: &str, pid: u32, project: &str, name: &str, a:
     let on = a["ticket"].as_str().map(|r| ticket_named(&load(app), project, r));
     if let Err(e) = gate(key, name, on.as_ref().map(|(n, t)| (n.as_str(), t.as_str()))) { return fail(e); }
     // stopping agents and adding to the board: the user clicks a card too
-    if name == "take_over" || name == "done" || name == "create_ticket" || (name == "pause" && a["paused"] == true && a["stop"] == true) {
+    if name == "take_over" || name == "ignore" || name == "create_ticket" || (name == "pause" && a["paused"] == true && a["stop"] == true) {
         let mut shown = a.clone();
         if let Some((n, t)) = &on { shown["ticket"] = json!(format!("#{n} {t}").trim().to_string()); }
         if let Err(e) = crate::actions::confirm(app, key, pid, &format!("pipeline.{name}"), &shown) { return fail(e); }
@@ -1476,7 +1477,7 @@ mod tests {
         turn_started(&key, None);
         let refused = gate(&key, "answer", Some(("12", ""))).unwrap_err();
         assert!(refused.starts_with("Relay started this turn"), "{refused}");
-        assert!(gate(&key, "pause", None).is_err() && gate(&key, "create_ticket", None).is_err() && gate(&key, "take_over", None).is_err());
+        for name in PIPE_ACTIONS { assert!(gate(&key, name, None).is_err(), "{name} in Relay's turn"); }
         turn_started(COORD, Some("anything"));
         assert!(gate(&pipe_key("Northwind Gate"), "answer", None).is_err(), "one pipeline's user turn is not another's");
         // the user's turn ends: a turn the CLI starts after it is nobody's

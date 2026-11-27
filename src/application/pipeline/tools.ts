@@ -5,12 +5,13 @@ import * as backend from "../../infrastructure/backend";
 import {
   answerTicket,
   createTicket,
-  doneTicket,
+  ignoreTicket,
   pausePipeline,
   pipelineFacts,
   pipelinePanel,
   postedWords,
   takeOver,
+  unignoreTicket,
 } from "./runner";
 
 // The tools of a pipeline's conversation (src-tauri orch.rs pipe_call): run here with the runner's own functions, so
@@ -56,10 +57,23 @@ async function run({ project, tool, args }: PipeToolCall): Promise<string> {
     if (!(await takeOver(found.worker))) throw new Error(`the agent of ${nameOf(found)} could not be stopped`);
     return `Stopped the agent ${found.worker.key} of ${nameOf(found)}: the ticket goes to a person. Nothing was posted on it by this tool.`;
   }
-  if (tool === "done") {
-    const found = ticket();
-    await doneTicket(project, found);
-    return `Marked ${nameOf(found)} done: its agent stopped if it ran, and the pipeline no longer works on it or follows its PR.`;
+  if (tool === "ignore") {
+    // also one still waiting in the pick column: the user may take it on themselves before an agent does
+    const found = ticketByRef(panel.tickets, [...panel.bounced, ...(panel.waiting?.tickets ?? [])], str(args.ticket));
+    if (!found)
+      throw new Error(
+        `no single ticket ${str(args.ticket)} in this pipeline: use the number or worker key from Relay's facts`,
+      );
+    await ignoreTicket(project, found);
+    return `Ignored ${nameOf(found)}: its agent stopped if it ran, and the pipeline leaves the ticket alone (no pick-up, no moves, no PR follow-up) until the user unignores it. Nothing was posted on it.`;
+  }
+  if (tool === "unignore") {
+    const ref = str(args.ticket).replace(/^#/, "");
+    const hits = panel.ignored.filter(x => x.number === ref || x.id === ref);
+    if (hits.length !== 1)
+      throw new Error(`no single ignored ticket ${str(args.ticket)}: the \`tickets\` tool lists them`);
+    await unignoreTicket(project, hits[0].id);
+    return `Unignored ${nameOf({ card: hits[0] })}: the pipeline works on it again from where it was.`;
   }
   if (tool === "pause") {
     const paused = args.paused === true;

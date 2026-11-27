@@ -469,6 +469,27 @@ export function settings(fixture: string) {
         parallel: fixture.startsWith("pipeline-strip") ? 2 : 1,
         reviewer: "codex",
         rounds: 3,
+        // pipeline-strip-ignored: two tickets a person told the pipeline to leave alone
+        ...(fixture.startsWith("pipeline-strip-ignored")
+          ? {
+              ignored: [
+                {
+                  id: "t901",
+                  number: "4120",
+                  title: "Export invoices as CSV",
+                  url: "https://tracker.example/4120",
+                  at: 1,
+                },
+                {
+                  id: "t902",
+                  number: "4127",
+                  title: "Fix the login redirect on Safari",
+                  url: "https://tracker.example/4127",
+                  at: 2,
+                },
+              ],
+            }
+          : {}),
       },
     },
     github: { on: true, owners: "acme" },
