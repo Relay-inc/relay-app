@@ -1301,3 +1301,45 @@ export function buddy(path: string): unknown {
   }
   throw new Error(`Buddy 404: ${path}`);
 }
+
+// ---------- Cloud Build (fixture "cloudbuild"): one linked project, two triggers and a manual build, read-only GETs as packages/integration-cloudbuild allows them
+const CONSOLE = "https://console.cloud.google.com/cloud-build/builds";
+export function cloudbuild(path: string): unknown {
+  if (path.startsWith("/v1/projects?"))
+    return {
+      projects: [
+        { projectId: "northwind-web", name: "Northwind Web", lifecycleState: "ACTIVE" },
+        { projectId: "northwind-api", name: "Northwind API", lifecycleState: "ACTIVE" },
+      ],
+    };
+  if (path.startsWith("/v1/projects/northwind-web/locations/global/builds?")) {
+    const build = (
+      id: string,
+      status: string,
+      trigger: string,
+      name: string,
+      branch: string,
+      sha: string,
+      at: string,
+    ) => ({
+      id,
+      status,
+      buildTriggerId: trigger,
+      createTime: at,
+      startTime: at,
+      ...(status === "WORKING" ? {} : { finishTime: at.replace(":00Z", ":40Z") }),
+      logUrl: `${CONSOLE}/${id}?project=northwind-web`,
+      substitutions: trigger ? { TRIGGER_NAME: name, BRANCH_NAME: branch, SHORT_SHA: sha } : {},
+    });
+    return {
+      builds: [
+        build("b4", "WORKING", "t-stage", "Deploy staging", "develop", "c0ffee1", "2026-10-01T07:10:00Z"),
+        build("b3", "FAILURE", "t-prod", "Deploy production", "main", "9f3a2b7", "2026-10-01T06:55:00Z"),
+        build("b2", "SUCCESS", "t-test", "Tests", "feature/checkout", "4d5e6f8", "2026-10-01T06:40:00Z"),
+        build("b1", "SUCCESS", "", "", "", "", "2026-09-30T16:00:00Z"),
+        build("b0", "SUCCESS", "t-prod", "Deploy production", "main", "1a2b3c4", "2026-09-29T09:00:00Z"),
+      ],
+    };
+  }
+  throw new Error(`Google 404: ${path}`);
+}

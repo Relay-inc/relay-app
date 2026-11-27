@@ -50,11 +50,12 @@ export const triggersOf = (answer: unknown): Trigger[] => {
   }
   return [...seen.values()];
 };
-/** GET /v1/projects → the active projects as picker options, id and name. */
+/** GET /v1/projects → the active projects as picker options, by project id: it is what the backend takes, it is unique
+ *  and it is short enough for the picker (display names are neither). */
 export const projectsOf = (answer: unknown) =>
   (((answer as Json | null)?.projects as Json[] | undefined) ?? [])
     .filter(p => p.lifecycleState === undefined || p.lifecycleState === "ACTIVE")
-    .map(p => ({ id: text(p.projectId), name: `${text(p.name) || text(p.projectId)} · ${text(p.projectId)}` }))
+    .map(p => ({ id: text(p.projectId), name: text(p.projectId) }))
     .filter(p => p.id)
     .sort((a, b) => a.name.localeCompare(b.name));
 /** The project's tone: failed wins, then running, then ok. */

@@ -1831,7 +1831,7 @@ const en = {
     "Shows the triggers of a Google Cloud project in the title bar of the vault project it is linked to (Settings › Projects): the status of their last build, a click opens its log in the Google Cloud console. Read-only. The app uses the Google Cloud CLI login, no token is stored in the app: run <code>gcloud auth login</code> in the terminal. The account needs <code>cloudbuild.builds.list</code> on the project. Relay itself sends nothing but reads to Google, whatever the account allows.",
   "cb.check": "Check",
   "cb.connected": "Connected as {account}, projects: {n}",
-  "cb.account": "Connected as {account} via gcloud",
+  "cb.account": "{account}",
   "cb.projectHelp": "Its triggers show in the project's title bar.",
   "cb.none": "None",
   "cb.location": "Location:",

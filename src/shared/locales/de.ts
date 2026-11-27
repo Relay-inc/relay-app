@@ -1858,7 +1858,7 @@ export default {
     "Zeigt die Trigger eines Google-Cloud-Projekts in der Titelleiste des Vault-Projekts, mit dem es verknüpft ist (Einstellungen › Projekte): den Status ihres letzten Builds, ein Klick öffnet sein Log in der Google-Cloud-Konsole. Nur lesen. Die App nutzt die Anmeldung der Google Cloud CLI, in der App wird kein Token gespeichert: Führ <code>gcloud auth login</code> im Terminal aus. Das Konto braucht <code>cloudbuild.builds.list</code> für das Projekt. Relay selbst schickt Google nur Leseanfragen, egal was das Konto erlaubt.",
   "cb.check": "Prüfen",
   "cb.connected": "Verbunden als {account}, Projekte: {n}",
-  "cb.account": "Verbunden als {account} über gcloud",
+  "cb.account": "{account}",
   "cb.projectHelp": "Seine Trigger erscheinen in der Titelleiste des Projekts.",
   "cb.none": "Keine",
   "cb.location": "Standort:",

@@ -140,6 +140,13 @@ if (fixture === "buddy")
     integrations: { ...settings.integrations, buddy: { on: true, host: "api.eu.buddy.works" } },
     buddy: { [vault.projectNames[0]]: { workspace: "acme", project: "web-shop" } },
   };
+// cloudbuild: Cloud Build switched on, the first project linked to a GCP project (fixtures/integrations cloudbuild)
+if (fixture === "cloudbuild")
+  settings = {
+    ...settings,
+    integrations: { ...settings.integrations, cloudbuild: { on: true } },
+    cloudbuild: { [vault.projectNames[0]]: { project: "northwind-web", location: "global" } },
+  };
 // the Pages tab with its folders shown in every workspace, as the views from before issue 420 expect; ?typed=1 opens
 // on the tree by type, the app's default (a fresh vault)
 if (!query.get("typed") && !onboarding)
@@ -1795,6 +1802,8 @@ function handle(cmd: string, a: Args): unknown {
     // GitHub, mail, boards
     case "github_status":
       return "lena";
+    case "gcloud_status":
+      return "sofie.claes@example.com";
     case "github_prs":
       // review-move: the PR on ticket #312 is ready for review, so its card moves on
       return fixture === "review-move"
@@ -2058,6 +2067,7 @@ function handle(cmd: string, a: Args): unknown {
       if (fixture === "linear" && a.provider === "linear") return integ.linear(a.body);
       if (fixture === "ghprojects" && a.provider === "github-projects") return integ.githubProjects(a.body);
       if (fixture === "buddy" && a.provider === "buddy") return integ.buddy(a.path);
+      if (fixture === "cloudbuild" && a.provider === "cloudbuild") return integ.cloudbuild(a.path);
       if (a.provider !== "productive") throw new Error(`${a.provider} is not set up in the harness`);
       return integ.productive(a.method, a.path, a.body);
     case "integration_upload":

@@ -14,6 +14,14 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Added
+
+- **Google Cloud Build** (Settings › Integrations › CI/CD), read-only: link a vault project to a Google Cloud project in Settings › Projects and its title bar shows a Cloud Build button. The dot is the worst status of its triggers, the menu lists each trigger with its last build (branch, commit, when), a click opens the build's log in the Google Cloud console. It uses your `gcloud auth login`, no token is stored in Relay. (PR_NUM)
+
+### Changed
+
+- **Settings › Integrations has a CI/CD group**: Buddy moved there from Other, next to Cloud Build. (PR_NUM)
+
 ## [0.0.72] - 2026-11-27
 
 ### Added

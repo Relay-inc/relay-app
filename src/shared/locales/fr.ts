@@ -1863,7 +1863,7 @@ export default {
     "Affiche les triggers d'un projet Google Cloud dans la barre de titre du projet du coffre auquel il est lié (Réglages › Projets) : le statut de leur dernier build, un clic ouvre son journal dans la console Google Cloud. Lecture seule. L'app utilise la connexion de la CLI Google Cloud, aucun jeton n'est stocké dans l'app : lancez <code>gcloud auth login</code> dans le terminal. Le compte a besoin de <code>cloudbuild.builds.list</code> sur le projet. Relay n'envoie lui-même que des lectures à Google, quoi que le compte permette.",
   "cb.check": "Vérifier",
   "cb.connected": "Connecté en tant que {account}, projets : {n}",
-  "cb.account": "Connecté en tant que {account} via gcloud",
+  "cb.account": "{account}",
   "cb.projectHelp": "Ses triggers s'affichent dans la barre de titre du projet.",
   "cb.none": "Aucun",
   "cb.location": "Emplacement :",

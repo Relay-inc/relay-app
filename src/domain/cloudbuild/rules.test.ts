@@ -65,7 +65,7 @@ test("projects as picker options, refs back", () => {
         { projectId: "northwind-old", lifecycleState: "DELETE_REQUESTED" },
       ],
     }),
-    [{ id: "northwind-web", name: "Northwind Web · northwind-web" }],
+    [{ id: "northwind-web", name: "northwind-web" }],
   );
   assert.deepEqual(refOf("northwind-web", ""), { project: "northwind-web", location: "global" });
   assert.deepEqual(refOf("northwind-web", "europe-west1"), { project: "northwind-web", location: "europe-west1" });
