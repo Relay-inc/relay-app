@@ -4,6 +4,11 @@ import { useT } from "../../hooks/useT";
 import { buttonClass } from "./blocks";
 import { isMac } from "../../../shared/platform";
 
+const CHIP =
+  "inline-flex h-6 items-center rounded-md border px-2 font-sans text-xs whitespace-nowrap transition-colors duration-150 ease-in-out hover:duration-0 focus-visible:ring-1 ring-s-primary focus-visible:outline-none";
+const CHIP_PLAIN = "border-s-input bg-transparent text-s-fg hover:bg-s-hover";
+const CHIP_CHANGED = "border-transparent bg-accent-soft text-accent-text";
+
 /** A shortcut, set by pressing it: a click starts listening (the app's own global shortcuts step aside meanwhile, see
  *  `onListening`), the next combination with a modifier is taken, Escape cancels. With `record` (Settings ›
  *  Shortcuts) that decides what a press makes, plain keys and Escape too: clicking elsewhere cancels. */
@@ -14,6 +19,8 @@ export function ShortcutField({
   onListening,
   record,
   show = shortcutLabel,
+  compact = false,
+  changed = false,
 }: {
   id?: string;
   value: string;
@@ -21,6 +28,9 @@ export function ShortcutField({
   onListening: (listening: boolean) => void;
   record?: (e: KeyboardEvent) => string | null;
   show?: (value: string) => string;
+  /** The small chip of Settings › Shortcuts; `changed` tints it (the key differs from the default) */
+  compact?: boolean;
+  changed?: boolean;
 }) {
   const { t } = useT();
   const [listening, setListening] = useState(false);
@@ -52,7 +62,7 @@ export function ShortcutField({
   return (
     <button
       id={id}
-      className={`${buttonClass()} min-w-28 font-mono ${listening ? "ring-1 ring-s-primary" : ""}`}
+      className={`${compact ? CHIP : `${buttonClass()} min-w-28 font-mono`} ${compact ? (changed ? CHIP_CHANGED : CHIP_PLAIN) : ""} ${listening ? "ring-1 ring-s-primary" : ""}`}
       title={t(record ? "keys.recordHelp" : isMac() ? "voice.shortcutRecordHelp" : "voice.shortcutRecordHelpWin")}
       onClick={() => setListening(!listening)}
       onBlur={() => setListening(false)}

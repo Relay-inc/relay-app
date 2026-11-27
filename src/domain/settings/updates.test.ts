@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { agentBehind, releasesSince } from "./updates.ts";
+import { agentBehind, agentsToUpdate, releasesSince } from "./updates.ts";
 
 const release = (version: string) => ({ version, notes: "", date: null });
 
@@ -23,4 +23,18 @@ test("an agent is behind only when both versions are known and npm's is newer", 
   assert.equal(agentBehind({ ...agent, installed: "0.162.1", latest: "0.162.1" }), false);
   assert.equal(agentBehind({ ...agent, installed: "", latest: "0.162.1" }), false);
   assert.equal(agentBehind({ ...agent, installed: null, latest: "0.162.1" }), false);
+});
+test("update all takes the agents that are behind and have a command", () => {
+  const agent = { name: "A", on: true, installed: "1.0.0", latest: "1.1.0", command: "npm i -g a" };
+  const list = [
+    { ...agent, id: "a" },
+    { ...agent, id: "b", command: null },
+    { ...agent, id: "c", latest: "1.0.0" },
+    { ...agent, id: "d", installed: null },
+    { ...agent, id: "e" },
+  ];
+  assert.deepEqual(
+    agentsToUpdate(list).map(a => a.id),
+    ["a", "e"],
+  );
 });

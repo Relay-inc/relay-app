@@ -32,6 +32,9 @@ export const releasesSince = (status: UpdatesStatus) =>
 /** An installed agent npm has a newer version of. */
 export const agentBehind = (a: AgentUpdate) => !!a.installed && !!a.latest && newerVersion(a.latest, a.installed);
 
+/** The agents Relay can bring up to date: behind, and it knows the command. */
+export const agentsToUpdate = (agents: readonly AgentUpdate[]) => agents.filter(a => agentBehind(a) && a.command);
+
 /** Where each agent says what changed. */
 export const AGENT_CHANGELOG: Record<string, string> = {
   claude: "https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md",
