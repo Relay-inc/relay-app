@@ -247,6 +247,14 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
     Ok(())
 }
 
+/// A control line about one of a running conversation's background tasks ([`AgentProvider::stop_task`], [`AgentProvider::task_output`]).
+pub(crate) fn task_line(state: &App, project: &str, line: impl Fn(&dyn AgentProvider) -> Option<String>) -> Result<(), String> {
+    let mut procs = state.procs.lock().unwrap();
+    let x = procs.get_mut(project).ok_or("not running")?;
+    let Some(l) = crate::agents::get(x.provider).ok().and_then(|p| line(p)) else { return Ok(()) };
+    writeln!(x.stdin, "{l}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())
+}
+
 /// Has a running conversation pick up skills and plugins changed on disk (its answer comes as events). False: no
 /// process runs for it, or its provider cannot, and it reads them when it starts anyway.
 pub(crate) fn reload(state: &App, project: &str) -> Result<bool, String> {

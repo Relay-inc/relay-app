@@ -822,3 +822,13 @@ export function toggleSubsDone() {
     else draft.subsOpen.add(key);
   });
 }
+
+// ---------- the background tasks of the open conversation, above the composer
+/** Stop one of the open conversation's background tasks; its end comes back as events. */
+export function stopTask(id: string) {
+  backend.taskStop(selected(), id).catch(() => {});
+}
+/** Ask for what a background task printed; the answer comes back as the event `task_output`. */
+export function readTaskOutput(id: string) {
+  backend.taskOutput(selected(), id).catch(() => {});
+}

@@ -4,6 +4,7 @@ import type { RepoWork } from "../settings/machines";
 import type { SlashCommand } from "./commands";
 import type {
   AgentSession,
+  BgTask,
   BtwPair,
   Chat,
   ContextUse,
@@ -54,6 +55,11 @@ export type ConversationsState = {
   outsideAt: Record<string, { from: number; to: number }>;
   termOffset: Record<string, number>;
   subs: Record<string, Sub[]>; // per conversation key, polled every 2 s
+  // Claude Code's background tasks per conversation (live only), what a task printed (by task id), and the phrase of
+  // what it does now that replaces "is working" while a turn runs
+  tasks: Record<string, BgTask[]>;
+  taskOutput: Record<string, Record<string, string>>;
+  taskLine: Record<string, string>;
   subsOpen: Set<string>; // conversations whose finished agents are unfolded
   // the slash commands and skills per provider, for the current vault: asked at the start, updated when an agent starts
   commands: Record<string, SlashCommand[]>;
@@ -96,6 +102,9 @@ export const initialConversations = (stored: {
   outsideAt: {},
   termOffset: {},
   subs: {},
+  tasks: {},
+  taskOutput: {},
+  taskLine: {},
   subsOpen: new Set(),
   retries: {},
   remote: {},

@@ -47,6 +47,7 @@ import { PluginView } from "../plugins/PluginView";
 import { PageView } from "../workspace/PageView";
 import { ChatBar } from "./ChatBar";
 import { ProjectPanel } from "./ProjectPanel";
+import { BackgroundTasks } from "./BackgroundTasks";
 import { Subagents } from "./Subagents";
 import { Todos } from "./Todos";
 import { MoveBar } from "./MoveBar";
@@ -314,6 +315,7 @@ export function ConversationsView({ className }: { className: string }) {
         )}
       </div>
       {hasSubagents && !workerPage && !agentPage ? <Subagents className={`${column} mb-1.5`} /> : null}
+      {onView || workerPage || agentPage ? null : <BackgroundTasks className={`${column} mb-1.5`} />}
       {onView || workerPage || agentPage ? null : <Todos className={`${column} mb-1.5`} />}
       {toast && selected !== REM ? (
         <div className={`${column} mb-2`}>
