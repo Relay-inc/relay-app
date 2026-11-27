@@ -464,6 +464,9 @@ export default {
   "pl.none": "Le laisser où il est",
   "pl.label": "Seulement avec le libellé",
   "pl.labelHelp": "Vide : chaque ticket de la colonne.",
+  "pl.mine": "Seulement les tickets qui me sont assignés",
+  "pl.mineHelp":
+    "Les tickets assignés à quelqu'un d'autre ou à personne restent dans la colonne. Productive a besoin de votre ID utilisateur dans Intégrations.",
   "pl.skill": "Skill",
   "pl.skillHelp": "Un skill Claude Code que l'agent suit pour chaque ticket. Vide : le déroulé de Relay.",
   "pl.plan": "D'abord un plan",

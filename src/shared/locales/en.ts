@@ -455,6 +455,9 @@ const en = {
   "pl.none": "Leave it where it is",
   "pl.label": "Only with label",
   "pl.labelHelp": "Empty: every ticket in the column.",
+  "pl.mine": "Only tickets assigned to me",
+  "pl.mineHelp":
+    "Tickets assigned to someone else or to nobody stay in the column. Productive needs your user ID under Integrations.",
   "pl.skill": "Skill",
   "pl.skillHelp": "A Claude Code skill the agent follows per ticket. Empty: Relay's own flow.",
   "pl.plan": "Plan first",
