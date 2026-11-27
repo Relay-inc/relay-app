@@ -3,29 +3,25 @@ import type { IntegrationConfig } from "../../../domain/settings/types";
 import { useSettingsStore } from "../../../application/settings/store";
 import {
   boardSetUp,
-  clearBoard,
   formText,
   importBoard,
   saveBoardForm,
   setBoardField,
 } from "../../../application/settings/integrations";
-import { go } from "../../../application/settings/window";
 import { Html } from "../../components/Html";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
-import { buttonClass, FIELD, FOOTER_IN_ROW, HINT_IN_ROW, STATUS_TEXT, withoutColon } from "./blocks";
+import { buttonClass, FIELD, FOOTER_IN_ROW, HINT_IN_ROW, withoutColon } from "./blocks";
 import { Field } from "./Field";
 import { Footer } from "./Footer";
 import { Section } from "./Section";
-import { SettingsMenu } from "./SettingsMenu";
 import { Switch } from "./Switch";
 
 type ProviderField = BoardProvider["settings"]["fields"][number];
 const NO_CONFIG: IntegrationConfig = {};
 
-/** A board provider's sections on its page in Integrations: the connection (token, the fields of its config), and
- *  where its boards are linked to projects (Settings › Projects, the one place for that). What is typed stays in the
- *  store until Save, so it survives going back to the list. */
+/** A board provider's connection on its page in Integrations: the token and the fields of its config, Import from
+ *  Claude Code, Save and test. What is typed stays in the store until Save, so it survives picking another one. */
 export function BoardSettings({ provider }: { provider: BoardProvider }) {
   const { t, pt, pth } = useT();
   const config = useSettingsStore(s => s.settings.integrations[provider.id]) ?? NO_CONFIG;
@@ -104,18 +100,6 @@ export function BoardSettings({ provider }: { provider: BoardProvider }) {
     );
   };
 
-  // the rarer actions behind "…": take the credentials from Claude Code, clear the token
-  const more = [
-    mcp?.supported
-      ? {
-          id: "import",
-          name: t("int.importClaude"),
-          status: <span className={STATUS_TEXT}>{t(mcp.found ? "int.importFound" : "int.importNone")}</span>,
-        }
-      : null,
-    hasToken ? { id: "clear", name: t("int.clear") } : null,
-  ].filter(x => x != null);
-
   // the other secrets first: the token is the one you get with them (Trello: the API key, then its token)
   const tokenId = `tok-${provider.id}`;
   const fields = provider.settings.fields;
@@ -147,27 +131,21 @@ export function BoardSettings({ provider }: { provider: BoardProvider }) {
         {rest.map(providerField)}
         <div className={FOOTER_IN_ROW}>
           <Footer message={message}>
-            <SettingsMenu
-              up
-              tip={t("int.more")}
-              items={more}
-              onPick={id => (id === "import" ? importBoard(provider) : clearBoard(provider))}
-            />
+            {mcp?.supported && (
+              <button
+                className={buttonClass()}
+                title={t(mcp.found ? "int.importFound" : "int.importNone")}
+                onClick={() => importBoard(provider)}
+              >
+                {t("int.importClaude")}
+              </button>
+            )}
             <button className={buttonClass("primary")} onClick={() => saveBoardForm(provider)}>
               {t("int.save")}
             </button>
           </Footer>
         </div>
       </Section>
-      <Section
-        title={t("int.boards")}
-        desc={t("int.boardsInProjects")}
-        action={
-          <button className={buttonClass()} onClick={() => go("projects")}>
-            {t("int.openProjects")}
-          </button>
-        }
-      />
     </>
   );
 }

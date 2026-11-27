@@ -11,6 +11,7 @@ import { Select } from "../../components/Select";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { buttonClass, ERROR_MESSAGE, SELECT } from "./blocks";
+import { HELP } from "./ProjectSettings";
 import { Section } from "./Section";
 
 const FIELD_SELECT = `${SELECT} h-7.5 w-full text-[13px]`;
@@ -24,11 +25,13 @@ const LEVEL: Record<string, "pc.level.project" | "pc.level.workspace" | "pc.leve
 type Loaded = { of: string; list: Opt[] } | null;
 
 /** The project's board in its General tab: the tracker (the ones set up under Integrations), the tracker's project and
- *  the board, the ones named like the project first. Picking a board links it at once; Unlink drops it. The board is
- *  what the project opens from the sidebar and where its pipeline takes tickets from. */
-export function ProjectBoard({ name, shown }: { name: string; shown: string }) {
+ *  the board in one row, the ones named like the project first. Picking a board links it at once; Unlink drops it. Under
+ *  them a line on what the board is for, with the way on to the pipeline's settings. The board is what the project
+ *  opens from the sidebar and where its pipeline takes tickets from. */
+export function ProjectBoard({ name, shown, onPipeline }: { name: string; shown: string; onPipeline: () => void }) {
   const { t } = useT();
   const linked = useSettingsStore(s => s.settings.boards?.[name]);
+  const on = useSettingsStore(s => !!s.settings.pipelines?.[name]?.on);
   const boards = useSettingsStore(s => s.settings.boards);
   const projects = useSettingsStore(s => s.projectsPage.projects);
   const labels = useSettingsStore(s => s.settings.projects);
@@ -94,8 +97,8 @@ export function ProjectBoard({ name, shown }: { name: string; shown: string }) {
     return other ? { ...b, name: t("pc.boardOf", { board: b.name, project: labelOf(other) }) } : b;
   });
   const field = (id: string, label: string, control: ReactNode) => (
-    <div className="grid content-start gap-1.5">
-      <label htmlFor={id} className="font-medium">
+    <div className="grid content-start gap-1">
+      <label htmlFor={id} className="text-xs text-s-muted">
         {label}
       </label>
       {control}
@@ -105,16 +108,18 @@ export function ProjectBoard({ name, shown }: { name: string; shown: string }) {
   return (
     <Section
       title={t("pc.board")}
-      desc={t("pc.boardHelp", { project: shown })}
       action={
-        linked && (
-          <button className={buttonClass("ghost")} onClick={() => setProjectBoard(name, null)}>
-            {t("int.unlink")}
-          </button>
-        )
+        <>
+          <span className={HELP}>{t("pc.synced")}</span>
+          {linked && (
+            <button className="text-xs text-accent-text hover:underline" onClick={() => setProjectBoard(name, null)}>
+              {t("int.unlink")}
+            </button>
+          )}
+        </>
       }
     >
-      <div className="grid grid-cols-1 gap-4 py-1 @xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 @lg:grid-cols-3">
         {field(
           `pc-tracker-${name}`,
           t("pc.tracker"),
@@ -157,10 +162,13 @@ export function ProjectBoard({ name, shown }: { name: string; shown: string }) {
         )}
       </div>
       {linked && !gone && (
-        <span className="flex items-center gap-1.5 text-xs text-s-muted">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-s-border pt-3">
           <Icon name="check" className="size-3.5 flex-none fill-none stroke-s-ok stroke-2" />
-          {t("pc.boardLinked", { project: shown })}
-        </span>
+          <span className={`${HELP} min-w-56 flex-1`}>{t(on ? "pc.boardLinked" : "pc.boardLinkedOff")}</span>
+          <button className="text-xs text-accent-text hover:underline" onClick={onPipeline}>
+            {t(on ? "pc.pipelineSettings" : "pc.setUpPipeline")}
+          </button>
+        </div>
       )}
       {gone && <span className="text-xs text-s-warn">{t("pc.trackerGone", { tracker: gone.name })}</span>}
       {err && <span className={ERROR_MESSAGE}>{err}</span>}

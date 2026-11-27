@@ -15,9 +15,9 @@ import { ctxOf } from "../board/ctx";
 import { commit } from "./window";
 import { useSettingsStore, type SettingsState } from "./store";
 
-// Settings › Integrations: the ones in use are listed (a board provider set up or added, GitHub and Mail switched on),
-// the others are in the Add menu (Calendar too: it shows under Waiting). In the list means in the sidebar; a row opens the integration's own page, Remove
-// switches it off and keeps the token. The state lives here, so it survives going back to the list. That includes what is typed (the board form,
+// Settings › Integrations: every integration is listed (the board providers, GitHub, Buddy, Mail, Calendar) and its page
+// is on the right. On means in the sidebar (Calendar: under Today); Disconnect switches it off and, when asked, empties
+// its keychain entries, Connect switches it on again. The state lives here, so it survives picking another one. That includes what is typed (the board form,
 // the GitHub owners, the mail add fields): kept as typed, read and emptied by the save use cases.
 const st = () => useSettingsStore.getState();
 const current = () => st().settings;
@@ -59,7 +59,7 @@ export function askMcp() {
       );
 }
 
-/** An integration in or out of the list: on for the sidebar, a board provider's token stays in the keychain. */
+/** An integration on or off: on for the sidebar, its settings and keychain entries stay. */
 export async function switchIntegration(id: string, on: boolean) {
   const next = structuredClone(current());
   if (id === "github") next.github.on = on;
@@ -77,6 +77,36 @@ export async function switchIntegration(id: string, on: boolean) {
       draft.listMessage = fail(error);
     });
   }
+}
+
+/** Disconnect: off, as Remove was, and with `forget` the secrets out of the keychain (a board's or Buddy's token, Mail's
+ *  passwords, Calendar's iCal addresses; GitHub has none). A failing delete leaves it connected. */
+export async function disconnectIntegration(id: string, forget: boolean) {
+  try {
+    if (forget) await forgetSecrets(id);
+  } catch (error) {
+    return change(draft => {
+      draft.listMessage = fail(error);
+    });
+  }
+  await switchIntegration(id, false);
+}
+async function forgetSecrets(id: string) {
+  const provider = PROVIDERS.find(x => x.id === id);
+  if (provider) return clearBoard(provider);
+  if (id === "buddy") {
+    await backend.integrationToken("buddy", "");
+    change(draft => {
+      draft.tokens.buddy = false;
+    });
+  } else if (id === "mail")
+    // only the passwords the app keeps itself (guided accounts, service relay-mail)
+    await backend.mailForget(
+      st()
+        .integrations.mail.edit.accounts.filter(account => account.keychain_service === "relay-mail")
+        .map(account => account.email),
+    );
+  else if (id === "calendar") for (const feed of feeds()) await backend.calendarConnect(feed.email, ""); // an empty address empties its entry
 }
 
 // ---------- the board providers

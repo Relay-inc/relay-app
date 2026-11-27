@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { needsSetup } from "../../../domain/pipeline/rules";
 import { provider as providerById } from "../../../shared/plugins";
 import { useSettingsStore } from "../../../application/settings/store";
+import { saveFavicons } from "../../../application/settings/general-page";
 import { askedProject, findIcons, showProjectsPage } from "../../../application/settings/projects-page";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
-import { BUTTON_GLYPH, buttonClass, EMPTY_LIST } from "./blocks";
+import { BUTTON_GLYPH, EMPTY_LIST } from "./blocks";
 import { Footer } from "./Footer";
 import { LoadingSection } from "./LoadingSection";
+import { SettingsMenu } from "./SettingsMenu";
 import { ProjectIcon } from "./ProjectIcon";
 import { ProjectSettings } from "./ProjectSettings";
 
@@ -28,6 +30,7 @@ export function ProjectsPage({ active }: { active: boolean }) {
   const boards = useSettingsStore(s => s.settings.boards);
   const pageMessage = useSettingsStore(s => s.projectsPage.message);
   const finding = useSettingsStore(s => s.projectsPage.finding);
+  const daily = useSettingsStore(s => s.settings.favicons?.on !== false);
   const windowMessage = useSettingsStore(s => s.message);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -120,15 +123,25 @@ export function ProjectsPage({ active }: { active: boolean }) {
             value={query}
             onChange={e => setQuery(e.target.value)}
           />
-          <button
-            className={buttonClass("plain", true)}
-            onClick={findIcons}
-            title={t("pi.findHelp")}
-            aria-label={t("pi.find")}
-            disabled={finding}
-          >
-            {finding ? <span className="spinner"></span> : <Icon name="wand" className={BUTTON_GLYPH} />}
-          </button>
+          <SettingsMenu
+            width="w-60"
+            tip={t("pi.title")}
+            trigger={
+              finding ? (
+                <span className="spinner"></span>
+              ) : (
+                <>
+                  <Icon name="wand" className={BUTTON_GLYPH} />
+                  <Icon name="chevron" className="size-3 fill-none stroke-current stroke-2" />
+                </>
+              )
+            }
+            items={[
+              { id: "find", name: t("pi.findNow"), tip: t("pi.findHelp") },
+              { id: "daily", name: t("pi.daily"), tip: t("pi.dailyHelp"), checked: daily },
+            ]}
+            onPick={id => (id === "find" ? !finding && findIcons() : saveFavicons(!daily))}
+          />
         </div>
         <div className="flex flex-wrap gap-1.5">
           {pill("all", t("pc.all"))}
