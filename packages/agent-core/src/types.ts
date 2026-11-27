@@ -6,7 +6,7 @@ import type { Locales } from "./i18n";
 export type Caps = {
   persistent: boolean; images: boolean; thinking: boolean; permissions: boolean; questions: boolean; subagents: boolean;
   fork: boolean; terminal: boolean; background: boolean; effort: boolean; limits: boolean; title: boolean; write: boolean; accounts: boolean;
-  liveModel: boolean; control: boolean; picked: boolean; remote: boolean;
+  liveModel: boolean; control: boolean; picked: boolean; remote: boolean; bridge: boolean;
 };
 export type Choice = { id: string; label: string };
 export type Detect = { installed: boolean; bin: string; version?: string | null; loggedIn?: boolean | null; note?: string | null };
@@ -53,9 +53,12 @@ export type AgentEvent =
   | { type: "turn_summary"; category: string; detail: string; needs_action: string } // Claude Code's one-line status after a turn; needs_action is "" unless the user has to act
   | { type: "context"; used?: number | null; window?: number | null } // how full the context is: tokens in use and/or the model's window (Claude Code)
   | { type: "resolved"; model: string; effort?: string | null; default_model: boolean; default_effort: boolean } // what the CLI runs on; default_* when the conversation left it to the CLI
+  | { type: "remote"; on: boolean; url?: string | null; state?: string | null } // Remote Control (Claude Code): on with the session's url, its bridge `state` alone, or off (with `state` the reason it did not turn on)
+  | { type: "said"; text: string }   // added by the app: a message typed elsewhere (the phone, with Remote Control) that the agent took up
   | { type: "stderr"; text: string }   // added by the app: the process's stderr
   | { type: "side_answer"; id: string; text: string; error: boolean } // the answer to a side question (/btw), or why there is none; Claude Code
   | { type: "draft_saved"; folder: string; to: string[]; cc?: string[]; bcc?: string[] } // added by the app: a relay-mail draft (Claude Code only)
+  | { type: "reload"; busy: boolean } // added by the app: the answer to a reload of skills and plugins (Claude Code); busy: refused, a turn runs
   | { type: "commands"; commands: { name: string; description: string; argumentHint?: string }[] } // added by the app: Claude Code's slash commands and skills
   | { type: "exit" };                  // added by the app: the process ended
 

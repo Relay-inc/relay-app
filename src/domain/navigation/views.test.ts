@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { backAfter, type Back } from "./views.ts";
+import { backAfter, drawerOn, type Back } from "./views.ts";
 import { pageKey } from "./keys.ts";
 
 const from = (key: string): Back => ({ key, tool: null, drawer: "terminal", top: 120 });
@@ -18,4 +18,13 @@ test("backAfter: a page goes back to the conversation it was opened from, one le
   assert.equal(backAfter(null, from(pageKey("A.md")), pageKey("B.md")), null, "a page from a page without one");
   assert.equal(backAfter(first, from(pageKey("A.md")), pageKey("A.md")), first, "the same page again");
   assert.deepEqual(backAfter(null, from("__wait"), pageKey("A.md"))?.key, "__wait", "from a view too");
+});
+
+test("drawerOn: a conversation gets back its own drawer, the project's tools follow", () => {
+  assert.equal(drawerOn("artifact", "artifact"), "artifact", "its Artifact again");
+  assert.equal(drawerOn("git", "artifact"), "artifact", "its own drawer over the tool shown");
+  assert.equal(drawerOn("artifact", undefined), "", "the Artifact of the one left closes");
+  assert.equal(drawerOn("agents", undefined), "", "and its agents");
+  assert.equal(drawerOn("git", undefined), "git", "Git follows");
+  assert.equal(drawerOn("", undefined), "");
 });

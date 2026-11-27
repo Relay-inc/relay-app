@@ -36,8 +36,15 @@ import {
 } from "../../../application/navigation/sidebar";
 import { markSeen, markUnseen, newChatHere } from "../../../application/conversations/chats";
 import { useConversationsStore } from "../../../application/conversations/store";
-import { chatsOf, closedOf, sessionIdOf, terminalSessions } from "../../../application/conversations/selectors";
-import { closeAll, closeChat, reopen } from "../../../application/conversations/actions";
+import {
+  canRemote,
+  chatsOf,
+  closedOf,
+  remoteOf,
+  sessionIdOf,
+  terminalSessions,
+} from "../../../application/conversations/selectors";
+import { closeAll, closeChat, reopen, toggleRemote } from "../../../application/conversations/actions";
 import { usageSummary } from "../../../application/usage/usage";
 import { useDerived } from "../../hooks/useDerived";
 import { filesOn } from "../../../application/settings/settings";
@@ -164,6 +171,9 @@ export function NavigationView({ className }: { className: string }) {
           ? { id: "markread", label: t("mail.markRead") }
           : { id: "markunread", label: t("mail.markUnread") },
         ...(sessionIdOf(target.chatKey) ? [{ id: "copyid", label: t("ctx.copyId") }] : []),
+        ...(canRemote(target.chatKey)
+          ? [{ id: "remote", label: t(remoteOf(target.chatKey) ? "ctx.remoteOff" : "ctx.remoteOn") }]
+          : []),
         { id: "close", label: t("nav.close") },
         ...(others.length
           ? [
@@ -211,6 +221,7 @@ export function NavigationView({ className }: { className: string }) {
     } else if (itemId === "markread") markSeen(target.chatKey);
     else if (itemId === "markunread") markUnseen(target.chatKey);
     else if (itemId === "copyid") copyText(sessionIdOf(target.chatKey));
+    else if (itemId === "remote") toggleRemote(target.chatKey);
     else if (itemId === "close") closeChat(target.chatKey);
     else if (itemId.startsWith("chatto:")) {
       const error = await moveChatTo(target.chatKey, itemId.slice("chatto:".length));

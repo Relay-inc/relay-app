@@ -49,6 +49,11 @@ export const projectOf = (key: string) => rules.projectOf(cs(), key);
 export const label = (key: string) => rules.label(cs(), key, t);
 /** The agent's session id behind a conversation (`claude --resume <id>`); empty while a new chat has none yet. */
 export const sessionIdOf = (key: string) => cs().sidOf[key]?.sid ?? termSid(key);
+/** Whether Remote Control can be turned on for a conversation: a Claude Code one on this Mac. */
+export const canRemote = (key: string) =>
+  !!cs().chats[key] && !isTerminal(key) && !isOrchKey(key) && !cs().machines[key] && !!chatCaps(key)?.bridge;
+/** The conversation's Remote Control session, while it is on. */
+export const remoteOf = (key: string) => cs().remote[key];
 /** A project's open conversations (null: the general ones), newest first. */
 export const chatsOf = (project: string | null) => rules.chatsOf(cs(), project);
 /** The sessions open in the terminal that the app did not start; `hidden` the ones closed here. */
@@ -192,6 +197,8 @@ export function chatBar(key: string) {
     pipe: pipeProject(key),
     // the terminal would resume a conversation that touched mail without the app's restrictions
     locked: !!conversation?.fromMail,
+    // Remote Control is on for this conversation: the session to open on claude.ai
+    remote: conversation ? (cs().remote[key] ?? null) : null,
     noTerm: onView ? true : session ? session.kind !== "background" : agentOf(chatAgent(key))?.caps.terminal === false,
     // the view's second crumb: the project's view name when opened from a project, else a one-phrase summary
     sub: tool ? viewName : viewSummary(key),

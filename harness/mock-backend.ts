@@ -1099,6 +1099,10 @@ function handle(cmd: string, a: Args): unknown {
       return fixture === "models" ? integ.agentsStatusManyModels : integ.agentsStatus;
     case "agent_commands":
       return integ.agentCommands(a.provider);
+    case "agent_skills":
+      return integ.agentSkills(a.provider);
+    case "agent_reload":
+      return true;
     case "action_config":
       return { actions: integ.actions, config: structuredClone(actionConfig) };
     case "set_action_config":
@@ -1560,6 +1564,14 @@ function handle(cmd: string, a: Args): unknown {
       return path;
     }
     case "quick_capture_hide":
+      return null;
+    // Remote Control (session/mod.rs remote_control): the answer comes as agent events, a made-up session link
+    case "remote_control":
+      setTimeout(() => {
+        if (!a.on) return emitAgent(a.project, { type: "remote", on: false });
+        emitAgent(a.project, { type: "remote", on: true, url: "https://claude.ai/code/session_northwind" });
+        setTimeout(() => emitAgent(a.project, { type: "remote", on: true, state: "connected" }), 300);
+      }, 200);
       return null;
     // a side question (/btw): its answer comes a moment later, as the backend's `side_answer` event
     case "side_question":

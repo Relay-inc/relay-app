@@ -1,6 +1,6 @@
 import type { Artifact } from "../../../domain/agents/types";
 import { artifactName, glyphOf } from "../../../domain/artifacts/rules";
-import { openArtifact, openInBrowser, useArtifactStore } from "../../../application/artifacts/artifacts";
+import { openArtifact, openInBrowser, useShownArtifact } from "../../../application/artifacts/artifacts";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
@@ -11,7 +11,7 @@ import { kindKey } from "./kind";
  *  link". Lit while the drawer shows it. */
 export function ArtifactCard({ artifact }: { artifact: Artifact }) {
   const { t } = useT();
-  const shown = useArtifactStore(s => s.open?.url === artifact.url);
+  const shown = useShownArtifact()?.open.url === artifact.url;
   const drawerOpen = useNavigationStore(s => s.drawer === "artifact");
   const on = shown && drawerOpen;
   const meta = [

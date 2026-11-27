@@ -12,7 +12,7 @@ import {
 import { push, releaseWaiting } from "../../domain/conversations/events";
 import { outgoing, planSend, refusesImages, sendRequest } from "../../domain/conversations/send";
 import { fileName } from "../../domain/conversations/files";
-import { WAIT } from "../../domain/navigation/views";
+import { WAIT, isView } from "../../domain/navigation/views";
 import { isTerminal, termSid } from "../../domain/navigation/keys";
 import { ORCH, isCoordKey } from "../../domain/orchestrator/rules";
 import type { Settings } from "../../domain/settings/types";
@@ -43,6 +43,7 @@ import {
   terminalSessions,
 } from "./selectors";
 import { newChat, newChatHere, saveChats } from "./chats";
+import { loadCommands } from "./commands";
 import { prepImages, releaseImages } from "./images";
 import { fromPaths, pickedPaths } from "./attachments";
 import { flush } from "./events";
@@ -63,6 +64,24 @@ const note = (key: string, text: string) => {
     push(draft, key, { kind: "note", text });
   });
 };
+
+/** Cmd-K › Reload skills and plugins is for a Claude conversation. */
+export const canReloadSkills = () => {
+  const key = selected();
+  return !isView(key) && !isTerminal(key) && chatAgent(key) === "claude";
+};
+/** The open conversation picks up skills and plugins changed on disk; the answer (done, or busy) comes as a note and
+ *  its new slash commands as an event. One that has no process yet reads them when it starts: only the list is asked again. */
+export async function reloadSkills() {
+  const key = selected();
+  try {
+    if (await backend.agentReload(key)) return;
+    await loadCommands();
+    note(key, t("note.reloaded"));
+  } catch (error) {
+    note(key, String(error));
+  }
+}
 
 // ---------- the composer: what is typed per conversation, images waiting for the next send
 /** What is typed in the open conversation; kept per conversation across switching and restarts. */
@@ -564,6 +583,11 @@ export async function backgroundAction(action: "hide" | "stop" | "attach", id: s
     set(draft => {
       draft.agentsList = draft.agentsList.filter(agent => agent.id !== id);
     });
+}
+/** Remote Control (the terminal's /remote-control): continue the conversation from claude.ai or the phone, or stop that.
+ *  The answer arrives as an agent event; the indicator follows it. */
+export function toggleRemote(key: string) {
+  backend.remoteControl(key, !cs().remote[key]).catch(e => toast(String(e)));
 }
 /** The terminal button: a terminal session opens in iTerm. An app conversation resumes in the project's terminal
  *  drawer, or in iTerm with `external` (Option-click) or without a project (the drawer belongs to a project). */

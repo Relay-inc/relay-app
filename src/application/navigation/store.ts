@@ -10,6 +10,7 @@ import { makeStore } from "../make-store";
 type NavigationState = {
   selected: string; // the open conversation or view (`sel`)
   drawer: Drawer; // the right drawer: what it shows, "" while closed
+  kept: Record<string, Drawer>; // per conversation, its own drawer (ownDrawer) open when it was left, for when it opens again
   tool: Tool | null; // set while a project's board or PRs, opened from its title bar, is what the middle column shows
   projectPanel: boolean; // the conversation's project panel under the title
   agentPage: string; // a subagent of the open conversation shown as its page (openAgent), "" otherwise
@@ -57,6 +58,7 @@ type NavigationState = {
 export const useNavigationStore = makeStore<NavigationState>(() => ({
   selected: (isPrimary() && storage.get<string>("sel", "")) || WAIT, // a window Cmd-N opened starts on Today
   drawer: "",
+  kept: {},
   tool: null,
   projectPanel: false,
   agentPage: "",

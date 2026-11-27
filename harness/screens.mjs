@@ -583,6 +583,24 @@ const VIEWS = {
     await page.frameLocator('iframe[title="Pipeline dashboard"]').getByText("Open deals").waitFor();
     await settle(page);
   },
+  // the Artifact drawer kept per conversation: opened, another conversation opened with Cmd-K, then this one again
+  "conversation-artifact-back": async () => {
+    await open(page, server.url, { sel: keys.artifact });
+    await waitText("The pipeline dashboard is up");
+    await page.getByRole("button", { name: "Open", exact: true }).click();
+    await page.frameLocator('iframe[title="Pipeline dashboard"]').getByText("Open deals").waitFor();
+    for (const text of ["invoice export", "pipeline dashboard"]) {
+      await page.keyboard.press("Meta+k");
+      await settle(page, 200);
+      await page.keyboard.type(text);
+      await settle(page, 300);
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Enter");
+      await settle(page, 400);
+    }
+    await page.frameLocator('iframe[title="Pipeline dashboard"]').getByText("Open deals").waitFor();
+    await settle(page);
+  },
   // a comment sent to Claude on the artifact starts a turn by itself: a note in front of it, the reply as a tool call
   "conversation-artifact-comment": async () => {
     await open(page, server.url, { sel: keys.artifact });
@@ -986,6 +1004,31 @@ const VIEWS = {
     await settle(page, 300);
   },
   // a message sent while Claude works waits under the conversation until Claude reads it (PR: waiting messages)
+  // Remote Control: the sidebar menu's Continue on phone turns it on, the phone icon in the title bar shows it (#PR)
+  "conversation-remote": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator(`[data-key="${keys.switchTo}"]`).first().click({ button: "right" });
+    await click("Continue on phone");
+    await page.getByRole("button", { name: "Remote Control is on" }).waitFor();
+    await settle(page, 500);
+  },
+  // the same with its popover open: open on claude.ai, copy the link, stop; and a message typed on the phone in the log
+  "conversation-remote-popover": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(key => {
+      const send = event => window.__harness.emit("agent", { project: key, provider: "claude", event });
+      send({ type: "remote", on: true, url: "https://claude.ai/code/session_northwind" });
+      send({ type: "remote", on: true, state: "connected" });
+      send({ type: "said", text: "Can you also check the staging build?" });
+      send({ type: "text", text: "Checking the staging build now.", delta: false });
+      send({ type: "turn_end", ok: true, error: null, usage: null, duration_ms: 3100 });
+    }, keys.switchTo);
+    await page.getByRole("button", { name: "Remote Control is on" }).click();
+    await waitText("Open on claude.ai");
+    await settle(page, 300);
+  },
   "conversation-unread": async () => {
     await open(page, server.url, { sel: keys.switchTo });
     await waitText(markers.switchEnd);
@@ -1340,6 +1383,22 @@ const VIEWS = {
     await settingsPage("Agents", undefined, "antigravity");
     await unfold("Antigravity");
     await intoView("Ask");
+  },
+  // Settings › Agents › Skills: Claude's skills in the vault, where each comes from, and Reload
+  "settings-skills": async () => {
+    await settingsPage("Agents");
+    await waitText("northwind:triage");
+    await intoView("northwind:deploy-check");
+  },
+  // Cmd-K in a Claude conversation offers Reload skills and plugins; the busy refusal shows as a note in the conversation
+  "cmd-k-reload-skills": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(key => window.__harness.emitAgent(key, { type: "reload", busy: true }), keys.switchTo);
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.keyboard.type("reload");
+    await settle(page, 300);
   },
   // Settings › Agents › Codex: the Approvals option, Codex's own reviewer first (PR #513)
   "settings-agents-codex-approvals": async () => {
