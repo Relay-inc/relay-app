@@ -26,19 +26,28 @@ export function Field({
   children: ReactNode;
 }) {
   return (
-    <div className={`flex items-center justify-between gap-x-4 gap-y-2 ${wrap ? "flex-wrap" : ""} ${className}`}>
+    <div
+      className={`flex items-center justify-between gap-x-4 gap-y-2 ${wrap ? "flex-wrap" : ""} ${className}`}
+      data-search-row
+    >
       <div className={`flex-1 ${wrap ? "min-w-40" : "min-w-0"}`}>
         <div className="flex items-center gap-1.5">
           {id ? (
-            <label htmlFor={id} className={LABEL}>
+            <label htmlFor={id} className={LABEL} data-search-label>
               {label}
             </label>
           ) : (
-            <span className={LABEL}>{label}</span>
+            <span className={LABEL} data-search-label>
+              {label}
+            </span>
           )}
           {info && <Info text={info} />}
         </div>
-        {hint && <p className={FIELD_HINT}>{hint}</p>}
+        {hint && (
+          <p className={FIELD_HINT} data-search-hint>
+            {hint}
+          </p>
+        )}
       </div>
       <div className={`flex min-h-7 min-w-0 flex-initial items-center justify-end gap-2 ${wrap ? "ml-auto" : ""}`}>
         {children}

@@ -319,6 +319,13 @@ const settingsPage = async (tab, sub, fixture = "default", platform = "") => {
   await click(tab);
   if (sub) await click(sub);
 };
+/** Settings with `query` typed into the search; `pick` presses Return on the first result */
+const settingsSearch = async (query, pick, fixture = "default") => {
+  await settingsPage("General", undefined, fixture);
+  await page.getByRole("searchbox", { name: "Search settings" }).fill(query);
+  if (pick) await page.keyboard.press("Enter");
+  await page.waitForTimeout(pick ? 400 : 100);
+};
 /** Settings › Integrations with `name` picked in the list, `height` tall */
 const integration = async (name, { fixture = "default", height = 1000 } = {}) => {
   await settingsPage("Integrations", name, fixture);
@@ -2115,6 +2122,10 @@ const VIEWS = {
     await waitText("northwind-db", 10000);
     await intoView("claude.ai Tracker");
   },
+  // Settings search (PR settings-search): "keep" typed with the results showing, then the first one picked
+  "settings-search": () => settingsSearch("keep", false),
+  "settings-search-picked": () => settingsSearch("keep", true),
+  "settings-search-dark": () => settingsSearch("keep", true, "dark"),
   "settings-general-dark": () => settingsPage("General", undefined, "dark"),
   // the keys that work in a conversation, Find among them
   // ⌃1 to ⌃9 for the workspaces, changeable like the others (PR #294)
