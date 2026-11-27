@@ -93,6 +93,7 @@ export function applyAgentEvent(
 ): Effect[] {
   // activity can arrive after a reload before the first status poll: it shows the turn, without counting another one
   if (ACTIVITY.includes(event.type)) {
+    delete state.suggestion[key];
     state.status[key] = "busy";
     state.queued[key] = Math.max(1, state.queued[key] || 0);
     // a turn at work that echoed nothing yet answers the oldest waiting message (a slash command never echoes), or
@@ -128,6 +129,9 @@ export function applyAgentEvent(
     case "commands":
       state.commands[provider] = cleanCommands(event.commands);
       return [];
+    case "suggestion":
+      if (state.status[key] !== "busy") state.suggestion[key] = event.text;
+      return [];
     case "side_answer": {
       const pair = state.btw[key]?.find(p => p.id === event.id);
       if (pair) Object.assign(pair, { answer: event.text, error: event.error });
@@ -140,6 +144,7 @@ export function applyAgentEvent(
       push(state, key, { kind: "note", text: env.t(event.busy ? "note.reloadBusy" : "note.reloaded") });
       return [];
     case "reset":
+      delete state.suggestion[key];
       state.messages[key] = [];
       delete state.context[key];
       return [];
@@ -328,6 +333,7 @@ function onProcessExit(state: ConversationsState, key: string, env: EventEnv): E
   const effects: Effect[] = [];
   endCompaction(state.messages[key], "err");
   releaseWaiting(state, key);
+  delete state.suggestion[key];
   // the process stopped while a turn ran: say so, the dots alone would just disappear
   if (state.status[key] === "busy") {
     push(state, key, { kind: "err", text: env.t("work.interrupted") });

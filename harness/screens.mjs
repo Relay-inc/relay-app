@@ -3817,6 +3817,22 @@ const VIEWS = {
     await waitText("Conversation compacted automatically");
     await scrollMain("bottom");
   },
+  // Claude's guess at the next message after a turn: the empty field's placeholder; Tab takes it into the field
+  "conversation-suggestion": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(key => {
+      window.__harness.emitAgent(key, { type: "suggestion", text: "run the tests" });
+    }, keys.switchTo);
+    await page.waitForSelector('textarea[placeholder="run the tests"]');
+    await scrollMain("bottom");
+  },
+  "conversation-suggestion-taken": async () => {
+    await VIEWS["conversation-suggestion"]();
+    await page.focus("textarea");
+    await page.keyboard.press("Tab");
+    await page.waitForFunction(() => document.querySelector("textarea")?.value === "run the tests");
+  },
   // a turn with a to-do list (TodoWrite): the checklist above the composer, the timeline line counting the done ones
   "conversation-todos": async () => {
     await open(page, server.url, { sel: keys.switchTo });

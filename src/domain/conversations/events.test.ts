@@ -468,3 +468,17 @@ test("a model's window is learned from the context event that names it", () => {
   assert.equal(learnWindow(learned, "claude-opus-5-5", { type: "context", used: 9_000 }), learned);
   assert.equal(learnWindow(learned, undefined, { type: "context", window: 200_000 }), learned);
 });
+
+test("a suggested next message waits for the idle conversation and goes with the next turn, a reset or the process", () => {
+  const ended = run(fresh(), { type: "text", text: "done", delta: false }, { type: "turn_end", ok: true }).next;
+  const s = run(ended, { type: "suggestion", text: "run the tests" }).next;
+  assert.equal(s.suggestion["c:1"], "run the tests");
+  assert.equal(run(s, { type: "working" }).next.suggestion["c:1"], undefined);
+  assert.equal(run(s, { type: "reset" }).next.suggestion["c:1"], undefined);
+  assert.equal(run(s, { type: "exit" }).next.suggestion["c:1"], undefined);
+  // one that arrives while a turn runs (the CLI is a step behind) is stale
+  assert.equal(
+    run(fresh(), { type: "working" }, { type: "suggestion", text: "late" }).next.suggestion["c:1"],
+    undefined,
+  );
+});
