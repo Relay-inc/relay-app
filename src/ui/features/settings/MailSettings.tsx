@@ -3,7 +3,6 @@ import type { Key } from "../../../shared/i18n";
 import { numberFormat } from "../../../shared/format";
 import type { MailAcct, MailNew } from "../../../domain/settings/types";
 import { useSettingsStore } from "../../../application/settings/store";
-import { go } from "../../../application/settings/window";
 import {
   addMailAccount,
   clearMailMessage,
@@ -282,14 +281,6 @@ export function MailSettings() {
             value={config.account || emails[0]}
             onChange={setMailAccount}
           />
-        </Field>
-      )}
-      {/* archive, delete, Inbox/Other and bulk actions: switched on in Labs */}
-      {accounts.length > 0 && (
-        <Field label={t("labs.mail")} className="border-t border-s-border pt-3.5">
-          <button className={buttonClass()} onClick={() => go("labs")}>
-            {t("mail.labsOpen")}
-          </button>
         </Field>
       )}
       <div className={FOOTER_IN_ROW}>
