@@ -63,6 +63,9 @@ notes=$(mktemp)
 # how long each step took, at the end (a release builds five times; this shows which one to make faster)
 started=$(date +%s) took=""
 step() { now=$(date +%s); took="$took$1 $((now - started))s, "; started=$now; }
+# CI=true: Tauri's bundle_dmg.sh then skips the Finder (AppleScript) window layout, which fails when the script
+# runs without a logged-in Finder session (from an agent, over ssh). The DMG gets Finder's default layout.
+export CI=true
 pnpm install --frozen-lockfile
 step install
 pnpm tauri build
