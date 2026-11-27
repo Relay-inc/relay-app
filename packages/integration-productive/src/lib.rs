@@ -133,7 +133,7 @@ const ACTIONS: &[Action] = &[
             Some(l) => Err(format!("{} tasks with number {} in project {}", if l.is_empty() { "no" } else { "more than one" }, arg(a, "number").unwrap_or_default(), arg(a, "project").unwrap_or_default())),
         }),
     read("statuses", "The workflow statuses a task of a project can move to: id, name, category (not started, started, closed).", &[("project", "project id")],
-        |_, a| get(format!("/projects/{}", arg_ok(a, "project", digits)?)),
+        |_, a| get(format!("/projects/{}?include=workflow", arg_ok(a, "project", digits)?)),
         |v| v["data"].as_array().map(|d| d.iter().map(|r| json!({ "id": r["id"], "name": r["attributes"]["name"],
             "category": CATEGORIES.get(r["attributes"]["category_id"].as_u64().unwrap_or(0) as usize) })).collect()).unwrap_or_default())
         .then(|_, _, first| match rel_id(first, "workflow") {
@@ -295,6 +295,8 @@ mod tests {
         assert!(then("task", json!({ "number": "4", "project": "3" }), json!({ "data": [{ "id": "1" }, { "id": "2" }] })).unwrap_err().starts_with("more than one"));
         assert!(then("task", json!({ "task": "5" }), json!({ "data": { "id": "5" } })).unwrap().is_none());
         // statuses go through the project's workflow
+        // without include=workflow Productive leaves the relationship's id out
+        assert!((act("statuses").build)(&cfg, &json!({ "project": "3" })).unwrap().url.ends_with("/projects/3?include=workflow"));
         let wf = then("statuses", json!({ "project": "3" }), json!({ "data": { "relationships": { "workflow": { "data": { "id": "9" } } } } })).unwrap().unwrap();
         assert!(wf.url.ends_with("/workflow_statuses?filter[workflow_id]=9&page[size]=200"));
         assert!(then("statuses", json!({ "project": "3" }), json!({ "data": { "relationships": { "workflow": { "data": null } } } })).is_err());

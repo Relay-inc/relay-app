@@ -30,6 +30,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 ### Fixed
 
 - In dark mode the stop button of a running conversation shows a dark icon on its light circle, instead of a white one that was almost invisible. (#575)
+- Productive statuses for a project (the `statuses` action agents use to move a ticket) always answered "this project has no workflow": the project was read without its workflow included, so Productive left the workflow's id out
 - Clicking another project in the sidebar while a project's board is open now shows that project's board. Before, the
   title bar named the new project but the board kept showing the previous project's tickets. (#570)
 
