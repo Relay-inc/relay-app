@@ -20,7 +20,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Changed
 
-- Each conversation keeps its own Artifact drawer: switching to another conversation and back opens the same artifact again, in the view you picked (This Mac or claude.ai), and a drawer you closed stays closed. The agents column comes back the same way; the terminal, Git and files drawers still follow the open conversation
+- Each conversation keeps its own Artifact drawer: switching to another conversation and back opens the same artifact again, in the view you picked (This Mac or claude.ai), and a drawer you closed stays closed. The agents column comes back the same way; the terminal, Git and files drawers still follow the open conversation (#567)
 
 ## [0.0.70] - 2026-11-26
 
