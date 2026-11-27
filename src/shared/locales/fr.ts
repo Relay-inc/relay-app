@@ -314,9 +314,6 @@ export default {
   "composer.agentSharedVault":
     "Une conversation dans un autre espace de travail que Personnel tourne avec Claude Code ou Codex : Claude Code y suit ses règles d'autorisation, Relay vérifie ce que Codex demande.",
   "set.tab.agents": "Agents",
-  "ag.default": "Agent par défaut",
-  "ag.defaultHelp":
-    "Les nouvelles conversations démarrent avec cet agent. La zone de saisie permet d'en choisir un autre avant le premier message.",
   "ag.on": "Utiliser",
   "ag.onLabel": "Afficher dans la zone de saisie",
   "ag.status": "État",
@@ -338,7 +335,6 @@ export default {
   "ag.skillFrom.user": "utilisateur",
   "ag.skillFrom.project": "projet",
   "ag.skillFrom.plugin": "plugin",
-  "ag.caps": "Sait",
   "ag.cap.images": "images",
   "ag.cap.permissions": "autorisations",
   "ag.cap.questions": "questions",
@@ -379,9 +375,18 @@ export default {
   "ag.accountAutoHelp":
     "Quand la limite du forfait d’un compte est atteinte, la conversation passe au compte suivant qui a de la marge et continue aussitôt.",
   "ag.empty": "Aucun agent pour l'instant. Ajoutez-en un pour démarrer des conversations.",
-  "ag.listHelp":
-    "Seuls les agents activés apparaissent dans le compositeur. Cliquez sur l'un d'eux pour modifier ses réglages.",
   "ag.isDefault": "par défaut",
+  "ag.groupOn": "Activés",
+  "ag.groupOff": "Désactivés",
+  "ag.notInstalled": "Non installé",
+  "ag.off": "Désactivé",
+  "ag.makeDefault": "Définir par défaut",
+  "ag.offTitle": "{agent} est désactivé",
+  "ag.offHelp": "Activez-le pour l'utiliser dans les nouvelles conversations et le régler ici.",
+  "ag.switchOn": "Activer",
+  "ag.general": "Général",
+  "ag.runs": "Comment il tourne",
+  "ag.supports": "Prend en charge",
   "int.add": "+ Ajouter une intégration",
   "int.empty":
     "Aucune intégration pour l'instant. Ajoutez-en une pour voir son tableau, ses pull requests ou vos mails dans la barre latérale.",

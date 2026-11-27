@@ -2075,10 +2075,16 @@ const SCENARIOS = {
     s.check("the link sends nothing", (await s.calls("send")).length === sendsBefore);
     await click(button(page, "Start conversation"), 400);
     const created = Object.entries(await s.chatChanges()).filter(([, c]) => c !== "removed");
-    s.check("a conversation under the linked project", created.length === 1 && created[0][1].project === "Northwind Portal");
+    s.check(
+      "a conversation under the linked project",
+      created.length === 1 && created[0][1].project === "Northwind Portal",
+    );
     const typed = (await composerValue(page)) ?? "";
     s.check("the composer names the branch", typed.includes("feat/300-invoice-export-csv"));
-    s.check("the composer asks for the number in the PR title and the link in its body", /PR title/.test(typed) && /PR body/.test(typed));
+    s.check(
+      "the composer asks for the number in the PR title and the link in its body",
+      /PR title/.test(typed) && /PR body/.test(typed),
+    );
     s.fact("composer", typed);
     await page.evaluate(() => window.__harness.deepLink("relay://ticket?provider=productive&id=900100&project=nope"));
     s.check("a board that is not linked says so", await waitText(page, "is linked to a project in Relay"));
@@ -2090,11 +2096,16 @@ const SCENARIOS = {
     // the move happens while the page loads, so every call since the page opened counts, not only those after load()
     const moves = async () =>
       (await s.page.evaluate(() => window.__harness.calls))
-        .filter(c => c.cmd === "integration_call" && c.args.method === "PATCH" && String(c.args.path).startsWith("/tasks/"))
+        .filter(
+          c => c.cmd === "integration_call" && c.args.method === "PATCH" && String(c.args.path).startsWith("/tasks/"),
+        )
         .map(c => c.args);
     await s.load({ fixture: "review-move" });
     await settle(s.page, 1500);
-    s.check("the card moved to the review column once", (await moves()).length === 1 && JSON.stringify((await moves())[0].body).includes("tl4"));
+    s.check(
+      "the card moved to the review column once",
+      (await moves()).length === 1 && JSON.stringify((await moves())[0].body).includes("tl4"),
+    );
     s.fact("moves", await moves());
     await s.load({ fixture: "default" });
     await settle(s.page, 1500);
@@ -2538,7 +2549,10 @@ const SCENARIOS = {
     const { page } = s;
     const claude = async () => (await s.calls("set_settings")).at(-1)?.args.settings?.agents?.providers?.claude;
     await click(navButton(page, "Agents"), 300);
-    await click(page.getByRole("button", { name: /^Claude Code\b/, expanded: false }), 300);
+    await click(
+      page.getByRole("complementary", { name: "Agents" }).getByRole("button", { name: /^Claude Code\b/ }),
+      300,
+    );
     s.check("accounts offered", await waitText(page, "Add account…"));
     s.check("no account choice with only the CLI's own", !(await hasText(page, "New conversations use")));
     await click(button(page, "Add account…"), 300);
@@ -3694,7 +3708,10 @@ const SCENARIOS = {
       await page.keyboard.type(" edited");
       await page.keyboard.press("Meta+s");
       await settle(page, 400);
-      s.check(pre + "the page saves", (await s.calls("write_note")).some(c => c.args.text.includes(" edited")));
+      s.check(
+        pre + "the page saves",
+        (await s.calls("write_note")).some(c => c.args.text.includes(" edited")),
+      );
       // a link in the page opens another page: Back still goes to the conversation (one level)
       await page.locator(".cm-content [data-link]", { hasText: "Portal Architecture" }).first().click();
       await settle(page, 400);

@@ -2,13 +2,14 @@ import { useEffect } from "react";
 import { mcpAction, type McpServer } from "../../../domain/agents/mcp";
 import { loadMcp, runMcp, useMcpStore } from "../../../application/settings/mcp";
 import { useT } from "../../hooks/useT";
-import { buttonClass, ERROR_MESSAGE, HINT_IN_ROW } from "./blocks";
+import { buttonClass, ERROR_MESSAGE } from "./blocks";
+import { Section } from "./Section";
 import { StatusLine } from "./StatusLine";
 
 const LEVEL = { connected: "ok", failed: "warn", "needs-auth": "warn", pending: "off", disabled: "off" } as const;
 
 /** The MCP servers Claude has in this vault: each with its state, the error of a failed one (one muted line, the whole
- *  text on hover) and the one action that fits. Rows of the folded-open row's grid, like the rest of AgentSettings. */
+ *  text on hover) and the one action that fits. The MCP servers tab of Settings › Agents. */
 export function McpServers() {
   const { t } = useT();
   const servers = useMcpStore(s => s.servers);
@@ -50,14 +51,16 @@ export function McpServers() {
   };
 
   return (
-    <div className="grid gap-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[13px] text-s-fg">{t("mcp.title")}</span>
+    <Section
+      title={t("mcp.title")}
+      desc={t("mcp.help")}
+      action={
         <button className={buttonClass("ghost")} disabled={!!busy || !servers} onClick={() => loadMcp(true)}>
           {t("ag.recheck")}
         </button>
-      </div>
-      <p className={HINT_IN_ROW}>{t("mcp.help")}</p>
+      }
+      footer={error?.name === "" ? <span className={ERROR_MESSAGE}>{error.text}</span> : undefined}
+    >
       {!servers ? (
         <span className="inline-flex items-center gap-1.5 text-xs text-s-muted">
           <span className="spinner"></span>
@@ -68,7 +71,6 @@ export function McpServers() {
       ) : (
         <span className="text-xs text-s-faint">{t("mcp.none")}</span>
       )}
-      {error?.name === "" && <span className={ERROR_MESSAGE}>{error.text}</span>}
-    </div>
+    </Section>
   );
 }
