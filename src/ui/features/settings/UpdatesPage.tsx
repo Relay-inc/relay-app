@@ -2,14 +2,22 @@ import { useEffect, type MouseEvent } from "react";
 import { agent } from "../../../shared/plugins";
 import { markdownHtml } from "../../../shared/markdown";
 import { clockTime, dayMonth } from "../../../shared/format";
-import { AGENT_CHANGELOG, agentBehind, releasesSince, type AgentUpdate } from "../../../domain/settings/updates";
+import {
+  AGENT_CHANGELOG,
+  agentBehind,
+  agentsToUpdate,
+  releasesSince,
+  type AgentUpdate,
+} from "../../../domain/settings/updates";
 import { useSettingsStore } from "../../../application/settings/store";
-import { openLink } from "../../../application/settings/window";
+import { go, openLink } from "../../../application/settings/window";
 import {
   checkAgentUpdates,
   checkUpdates,
   installUpdate,
+  ALL,
   updateAgent,
+  updateAllAgents,
 } from "../../../application/settings/updates-page";
 import { Glyph } from "../../components/Glyph";
 import { useT } from "../../hooks/useT";
@@ -39,6 +47,7 @@ export function UpdatesPage({ active }: { active: boolean }) {
   const progress = useSettingsStore(s => s.updatesPage.progress);
   const message = useSettingsStore(s => s.updatesPage.message);
   const agents = useSettingsStore(s => s.updatesPage.agents);
+  const updating = useSettingsStore(s => s.updatesPage.updating);
   useEffect(() => {
     if (!active) return;
     void checkUpdates();
@@ -53,17 +62,21 @@ export function UpdatesPage({ active }: { active: boolean }) {
       })
     : "";
   const pct = progress?.total ? Math.round((progress.done / progress.total) * 100) : null;
-  const installed = (agents ?? []).filter(a => a.installed !== null);
+  const stale = agentsToUpdate(agents ?? []).length;
 
   return (
     <>
       <Section
         title="Relay"
-        desc={[t("upd.version", { version: status.version }), checked].filter(Boolean).join(" · ")}
         action={
-          <button className={buttonClass()} disabled={checking || !!progress} onClick={() => checkUpdates()}>
-            {checking ? t("upd.checking") : t("upd.check")}
-          </button>
+          <>
+            <span className={OK_MESSAGE}>
+              {[t("upd.version", { version: status.version }), checked].filter(Boolean).join(" · ")}
+            </span>
+            <button className={buttonClass()} disabled={checking || !!progress} onClick={() => checkUpdates()}>
+              {checking ? t("upd.checking") : t("upd.check")}
+            </button>
+          </>
         }
         list
       >
@@ -112,21 +125,26 @@ export function UpdatesPage({ active }: { active: boolean }) {
         ))}
       </Section>
       <Section
-        title={t("set.tab.agents")}
-        desc={t("upd.agentsHelp")}
+        title={t("upd.agents")}
+        desc={t("upd.agentsHint")}
         action={
-          <button className={buttonClass()} disabled={!agents} onClick={() => checkAgentUpdates()}>
-            {t("upd.check")}
-          </button>
+          <>
+            {stale > 1 ? (
+              <button className={buttonClass()} disabled={!!updating} onClick={() => updateAllAgents()}>
+                {updating === ALL ? t("upd.updating") : t("upd.updateAll", { n: stale })}
+              </button>
+            ) : null}
+            <button className={buttonClass()} disabled={!agents} onClick={() => checkAgentUpdates()}>
+              {t("upd.check")}
+            </button>
+          </>
         }
         list
       >
         {!agents ? (
           <div className={`${ROW} ${EMPTY_LIST}`}>{t("upd.checking")}</div>
-        ) : installed.length ? (
-          installed.map(a => <AgentRow key={a.id} update={a} />)
         ) : (
-          <div className={`${ROW} ${EMPTY_LIST}`}>{t("upd.noAgents")}</div>
+          agents.map(a => <AgentRow key={a.id} update={a} />)
         )}
       </Section>
     </>
@@ -139,6 +157,7 @@ function AgentRow({ update: a }: { update: AgentUpdate }) {
   const message = useSettingsStore(s => s.updatesPage.agentMessages[a.id]);
   const provider = agent(a.id);
   const behind = agentBehind(a);
+  const missing = a.installed === null;
   const version = a.installed || t("upd.noVersion");
   const line = behind
     ? t("upd.agentBehind", { installed: version, latest: a.latest! })
@@ -149,11 +168,18 @@ function AgentRow({ update: a }: { update: AgentUpdate }) {
     <div className={`${ROW} ${a.on ? "" : "opacity-60"}`}>
       {provider ? <Glyph svg={provider.glyph} className={TILE} /> : null}
       <span className="text-[13px] font-semibold text-s-fg">{a.name}</span>
-      <StatusLine level={behind ? "warn" : a.latest ? "ok" : "off"}>{line}</StatusLine>
+      <StatusLine level={behind ? "warn" : a.latest && !missing ? "ok" : "off"}>
+        {missing ? t("upd.notInstalled") : line}
+      </StatusLine>
       <span className="flex-1"></span>
-      {AGENT_CHANGELOG[a.id] ? (
+      {AGENT_CHANGELOG[a.id] && !missing ? (
         <button className={buttonClass("ghost")} onClick={() => openLink(AGENT_CHANGELOG[a.id])}>
           {t("upd.changelog")}
+        </button>
+      ) : null}
+      {missing ? (
+        <button className="text-xs text-accent-text hover:underline" onClick={() => go("agents")}>
+          {t("upd.setUp")}
         </button>
       ) : null}
       {behind && a.command ? (
@@ -163,7 +189,7 @@ function AgentRow({ update: a }: { update: AgentUpdate }) {
           title={a.command}
           onClick={() => updateAgent(a.id)}
         >
-          {updating === a.id ? t("upd.updating") : t("upd.update")}
+          {updating === a.id || updating === ALL ? t("upd.updating") : t("upd.update")}
         </button>
       ) : null}
       {behind && !a.command ? <span className={`basis-full ${HINT_IN_ROW}`}>{t("upd.agentManual")}</span> : null}

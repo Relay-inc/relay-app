@@ -271,3 +271,15 @@ export function withBindings(settings: Settings, id: string, keys: readonly stri
   else next[id] = [...keys];
   return { ...settings, shortcuts: next };
 }
+
+const plain = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+/** The rows whose label has the query in it, case and accents ignored; every row for an empty query. */
+export const filterRows = <T extends { label: string }>(rows: readonly T[], query: string) => {
+  const q = plain(query);
+  return q ? rows.filter(row => plain(row.label).includes(q)) : rows;
+};
+/** The first `keep` rows, the rest folded behind one "n more" row: unless `open`, or one row would be all it hides. */
+export const foldRows = <T>(rows: readonly T[], keep: number, open = false) =>
+  open || rows.length <= keep + 1
+    ? { shown: rows, more: [] as readonly T[] }
+    : { shown: rows.slice(0, keep), more: rows.slice(keep) };

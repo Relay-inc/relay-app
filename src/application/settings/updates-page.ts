@@ -1,4 +1,5 @@
 import * as backend from "../../infrastructure/backend";
+import { agentsToUpdate } from "../../domain/settings/updates";
 import { t } from "../../shared/i18n";
 import { useSettingsStore } from "./store";
 
@@ -46,9 +47,8 @@ const agentMessage = (id: string, text: string, ok: boolean) =>
   set(draft => {
     draft.updatesPage.agentMessages[id] = { text, ok };
   });
-/** Run the agent's update, then read the versions again. */
-export async function updateAgent(id: string) {
-  page({ updating: id });
+/** Run one agent's update and note how it went. */
+async function runUpdate(id: string) {
   set(draft => {
     draft.updatesPage.agentMessages[id] = null;
   });
@@ -57,8 +57,22 @@ export async function updateAgent(id: string) {
     agentMessage(id, t("upd.agentDone"), true);
   } catch (error) {
     agentMessage(id, String(error), false);
-  } finally {
-    page({ updating: "" });
   }
+}
+/** Run the agent's update, then read the versions again. */
+export async function updateAgent(id: string) {
+  page({ updating: id });
+  await runUpdate(id);
+  page({ updating: "" });
   await checkAgentUpdates();
 }
+/** Every agent that is behind, one after another (two npm installs at once fight over the same cache). */
+export async function updateAllAgents() {
+  const ids = agentsToUpdate(useSettingsStore.getState().updatesPage.agents ?? []).map(a => a.id);
+  page({ updating: ALL });
+  for (const id of ids) await runUpdate(id);
+  page({ updating: "" });
+  await checkAgentUpdates();
+}
+/** `updating` while Update all runs. */
+export const ALL = "*";
