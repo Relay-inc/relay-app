@@ -1411,6 +1411,25 @@ const VIEWS = {
     await field.scrollIntoViewIfNeeded();
     await settle(page);
   },
+  // a project's Cloud Build triggers in its title bar, the menu open: failed, running and passed, and a manual build (PR cloudbuild)
+  "cloudbuild-menu": async () => {
+    await open(page, server.url, { fixture: "cloudbuild", sel: keys.switchTo });
+    await page.getByRole("button", { name: "Cloud Build: a build failed" }).click();
+    await waitText("Deploy production");
+    await waitText("Manual");
+  },
+  // Cloud Build's page in Integrations (gcloud's login, Check) and its GCP project in Settings › Projects (PR cloudbuild)
+  "settings-integration-cloudbuild": () => integration("Cloud Build", { fixture: "cloudbuild" }),
+  "settings-project-cloudbuild": async () => {
+    await projectTab("General", { fixture: "cloudbuild" });
+    const field = page.getByRole("combobox", { name: "Cloud Build", exact: true }).first();
+    await field.scrollIntoViewIfNeeded();
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll("select")].some(s => s.selectedOptions[0]?.text === "northwind-web"),
+    );
+    await field.scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   "board-list": async () => {
     await VIEWS.board();
     await button("List").click();

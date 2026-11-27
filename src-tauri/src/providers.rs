@@ -6,7 +6,8 @@
 // never go back to a webview. The rest of a provider's config is in settings.json under `integrations.<id>`.
 // Listing, moving and mapping cards is the webview's side (the same packages, src/providers/index.ts).
 // Buddy (packages/integration-buddy) is registered here too for its keychain and allowlist, but is no board: it only
-// reads pipelines, and its webview side is src/application/buddy.
+// reads pipelines, and its webview side is src/application/buddy. Cloud Build (integration-cloudbuild) is the same, but
+// its secret is gcloud's access token (gcloud.rs), not a keychain entry.
 
 use serde_json::{json, Value};
 use std::io::Write;
@@ -23,6 +24,7 @@ pub const PROVIDERS: &[&Provider] = &[
     &integration_linear::PROVIDER,
     &integration_github_projects::PROVIDER,
     &integration_buddy::PROVIDER,
+    &integration_cloudbuild::PROVIDER,
 ];
 
 pub fn get(id: &str) -> Result<&'static Provider, String> {
@@ -95,9 +97,17 @@ pub fn call(p: &Provider, cfg: &Value, method: &str, path: &str, body: Option<Va
 pub fn send(p: &Provider, cfg: &Value, method: &str, url: &str, body: Option<Value>) -> Result<Value, String> {
     if !(p.ready)(cfg) { return Err(board_core::t(p.text, p.not_ready)); }
     let token = token(p).ok_or_else(|| trc_v("err.no_token", p.name))?;
+    send_with(p, cfg, method, url, body, &token)
+}
+/// `call` with secrets that do not come from the keychain (Cloud Build: gcloud's access token), still only to an allowed URL.
+pub fn call_with(p: &Provider, cfg: &Value, method: &str, path: &str, body: Option<Value>, secrets: &[String]) -> Result<Value, String> {
+    let url = (p.url)(cfg, method, path, &body).ok_or_else(|| trc_v("err.call", p.name))?;
+    send_with(p, cfg, method, &url, body, secrets)
+}
+fn send_with(p: &Provider, cfg: &Value, method: &str, url: &str, body: Option<Value>, token: &[String]) -> Result<Value, String> {
     // globoff: the [ ] in filter[...] are not curl ranges
     let mut conf = format!("globoff\nurl = {}\nrequest = {method}\n", curl_quote(url));
-    for h in (p.headers)(cfg, &token) { conf += &format!("header = {}\n", curl_quote(&h)); }
+    for h in (p.headers)(cfg, token) { conf += &format!("header = {}\n", curl_quote(&h)); }
     if let Some(b) = body { conf += &format!("data-binary = {}\n", curl_quote(&b.to_string())); }
     let mut ch = Command::new("/usr/bin/curl").args(["-sS", "--max-time", "20", "-K", "-", "-w", "\n%{http_code}"])
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;

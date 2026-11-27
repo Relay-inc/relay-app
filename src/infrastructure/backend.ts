@@ -599,6 +599,8 @@ export const githubPrReview = (
   comments: { path: string; line: number; side: "LEFT" | "RIGHT"; body: string }[],
 ) => invoke<void>("github_pr_review", { repo, number, event, body, comments });
 export const githubStatus = () => invoke<string>("github_status");
+/** The Google account gcloud is signed in with (Cloud Build). */
+export const gcloudStatus = () => invoke<string>("gcloud_status");
 
 // ---------- the Pages graph and Recent
 export const notesGraph = (folder: string) => invoke<NotesGraph>("notes_graph", { folder });

@@ -1,5 +1,6 @@
 import type { BoardRef } from "../board/types";
 import type { BuddyRef } from "../buddy/rules";
+import type { CloudRef } from "../cloudbuild/rules";
 import type { VoiceCfg } from "./voice";
 import type { VaultMap } from "../workspace/types";
 import type { Pipeline } from "../pipeline/types";
@@ -202,6 +203,7 @@ export type Settings = {
   pipelines?: Record<string, Pipeline>; // the board pipeline of a vault project (domain/pipeline)
   pipelinesPaused?: boolean; // every board pipeline paused at once, whatever its own pause (Pipeline.paused)
   buddy?: Record<string, BuddyRef>; // the Buddy project linked to a vault project (domain/buddy)
+  cloudbuild?: Record<string, CloudRef>; // the GCP project linked to a vault project (domain/cloudbuild)
   github: { on: boolean; owners: string };
   mail: MailCfg;
   calendar: CalendarCfg;

@@ -10,8 +10,13 @@ import { PopHeading } from "../board/PopHeading";
 import { POPOVER, POP_ROW } from "../board/toolbar";
 import { BUDDY_MARK } from "./mark";
 
-const TONE_TEXT: Record<Tone, string> = { ok: "text-ok", fail: "text-late", busy: "text-soon", none: "text-tertiary" };
-const when = (iso: string) =>
+export const TONE_TEXT: Record<Tone, string> = {
+  ok: "text-ok",
+  fail: "text-late",
+  busy: "text-soon",
+  none: "text-tertiary",
+};
+export const when = (iso: string) =>
   iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : "";
 
 /** A project's Buddy pipelines in its title bar: the dot is the worst status, the menu each pipeline with its last

@@ -181,6 +181,8 @@ export type SettingsState = {
     // what is typed, read on Save: kept here because a row's fields unmount when it folds shut
     form: BoardForm;
     github: { login: string; error: string; message: Message | null; owners: string | null };
+    // gcloud's login, the account or why there is none
+    cloudbuild: { account: string; error: string };
     mail: {
       edit: MailCfg;
       draft: MailNew;
@@ -271,6 +273,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     mcpAsked: false,
     form: {},
     github: { login: "", error: "", message: null, owners: null },
+    cloudbuild: { account: "", error: "" },
     mail: { edit: EMPTY_SETTINGS.mail, draft: NO_MAIL_DRAFT, busy: "", message: null, tests: {} },
     calendar: { busy: false, message: null },
   },

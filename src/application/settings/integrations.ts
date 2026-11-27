@@ -12,10 +12,11 @@ import {
 } from "../../domain/settings/types";
 import * as backend from "../../infrastructure/backend";
 import { ctxOf } from "../board/ctx";
+import { checkCloudbuild } from "./cloudbuild";
 import { commit } from "./window";
 import { useSettingsStore, type SettingsState } from "./store";
 
-// Settings › Integrations: every integration is listed (the board providers, GitHub, Buddy, Mail, Calendar) and its page
+// Settings › Integrations: every integration is listed (the board providers, GitHub, Buddy, Cloud Build, Mail, Calendar) and its page
 // is on the right. On means in the sidebar (Calendar: under Today); Disconnect switches it off and, when asked, empties
 // its keychain entries, Connect switches it on again. The state lives here, so it survives picking another one. That includes what is typed (the board form,
 // the GitHub owners, the mail add fields): kept as typed, read and emptied by the save use cases.
@@ -41,6 +42,7 @@ export async function loadIntegrations() {
     draft.loaded = true;
   });
   checkGithub();
+  checkCloudbuild();
 }
 /** Whether each provider can take its credentials from Claude Code, asked once when the page shows. */
 export function askMcp() {
@@ -80,7 +82,7 @@ export async function switchIntegration(id: string, on: boolean) {
 }
 
 /** Disconnect: off, as Remove was, and with `forget` the secrets out of the keychain (a board's or Buddy's token, Mail's
- *  passwords, Calendar's iCal addresses; GitHub has none). A failing delete leaves it connected. */
+ *  passwords, Calendar's iCal addresses; GitHub and Cloud Build have none). A failing delete leaves it connected. */
 export async function disconnectIntegration(id: string, forget: boolean) {
   try {
     if (forget) await forgetSecrets(id);

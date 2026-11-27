@@ -2538,6 +2538,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "integration-cloudbuild"
+version = "0.1.0"
+dependencies = [
+ "board-core",
+ "serde_json",
+]
+
+[[package]]
 name = "integration-github-projects"
 version = "0.1.0"
 dependencies = [
@@ -4416,6 +4424,7 @@ dependencies = [
  "futures",
  "hound",
  "integration-buddy",
+ "integration-cloudbuild",
  "integration-github-projects",
  "integration-linear",
  "integration-productive",
