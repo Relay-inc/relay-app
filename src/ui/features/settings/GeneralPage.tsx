@@ -4,7 +4,6 @@ import {
   changeAccent,
   changeLanguage,
   changeTheme,
-  saveFavicons,
   saveWorkerCrabs,
   saveGitDrawer,
   saveSidebar,
@@ -29,8 +28,8 @@ import { Switch } from "./Switch";
 const SWATCH = { relay: "bg-[#3a5ffb]", graphite: "bg-label" };
 
 /** General: how Relay looks and the apps it opens (appearance, accent, the orchestrator's crabs, language, terminal),
- *  the Git button of a project's conversation and the views on top of the sidebar. Until their pages take them over,
- *  the project icons' favicon lookup and where conversations run stay at the bottom. */
+ *  the Git button of a project's conversation and the views on top of the sidebar. Until its page takes it over,
+ *  where conversations run stays at the bottom. */
 export function GeneralPage() {
   const { t, th } = useT();
   const language = useSettingsStore(s => s.settings.language);
@@ -41,7 +40,6 @@ export function GeneralPage() {
   const reordered = useSettingsStore(s => !!s.settings.sidebar?.order?.length);
   const views = useDerived(sidebarViews);
   const more = useSettingsStore(s => s.settings.sidebar?.more !== false);
-  const faviconsOn = useSettingsStore(s => s.settings.favicons?.on !== false);
   const workerCrabs = useSettingsStore(s => s.settings.workerCrabs !== false);
   const gitDrawer = useSettingsStore(s => s.settings.gitDrawer === true);
   // language names stay in their own language, so they are findable whatever the app is set to
@@ -168,11 +166,6 @@ export function GeneralPage() {
           }
         >
           <Switch id="sb-more" on={more} onToggle={on => saveSidebar({ more: on })} />
-        </Field>
-      </Section>
-      <Section title={t("set.favicons")} rows>
-        <Field label={t("set.faviconsOn")} id="favon" hint={<Html html={th("set.faviconsHelp")} />}>
-          <Switch id="favon" on={faviconsOn} onToggle={saveFavicons} />
         </Field>
       </Section>
       <RunDefault />

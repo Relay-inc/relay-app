@@ -19,6 +19,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 - **Keep vault changes automatically** (Settings › General, off by default): what Relay's Claude runs write to the vault comes into the Changes feed already kept, under Reviewed, instead of waiting for Keep one entry at a time
 - **A project's board is picked in one place: Settings › Projects › General**. A Board section with the tracker (only the ones set up under Integrations), its project and the board, the ones named like the project first. Picking a board links it at once, Unlink drops it, and the project list shows which tracker a project uses. Changing the board of a project whose pipeline is on switches the pipeline off until you check its columns (#571)
 
+### Changed
+
+- **Settings › Projects** regrouped: General keeps identity, board and repositories, each saying where it is stored (this Mac or the vault). Base branch and PRs into moved to Pipeline next to the checks as Branches & checks, the ticket flow reads left to right on one line, and the daily website-icon lookup sits in a menu on the list's icon button (#581)
+
 ### Removed
 
 - The other places that linked a board to a project: the board list in Integrations, Vault project in the board's menu and the board picker on a pull request in Today. The board's menu and Today's Link a board now open Settings › Projects on that project (#571)
