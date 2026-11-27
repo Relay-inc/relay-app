@@ -25,6 +25,7 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Changed
 
+- **Settings regrouped into pages in four groups**: General now holds only how Relay looks, with new pages Vault (vault folder, other folders, the files Relay reads, git backup, "Workspace folder" is now "Vault folder"), Automation (the switches for what Relay does on its own, Pause all pipelines is now Run pipelines there and gone from a project's Pipeline tab), Privacy & access (macOS permissions, which only offer System Settings where something is missing, and what agents may do with Reminders and Knowledge workspaces) and Labs (Files, and Mail's archive, delete and Inbox/Other, which moved out of Mail's integration page). Long hints are shortened, with the detail behind an info button (PR_NUMBER)
 - Settings › Agents has the layout of Settings › Projects: your agents on the left (on, then off), the picked agent's settings on the right with tabs (General, and for Claude Code MCP servers and Skills). Its header switches it on or off and makes it the default. Where new conversations run and agent access to Knowledge workspaces moved to Settings › General (#572)
 
 ### Fixed

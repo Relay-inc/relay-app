@@ -1326,7 +1326,10 @@ const VIEWS = {
   "settings-project-board-new": async () => {
     await projectTab("General", { height: 900 });
     // its emoji icon comes first in the row's name
-    await page.getByRole("complementary", { name: "Projects" }).getByRole("button", { name: /Beacon/ }).click();
+    await page
+      .getByRole("complementary", { name: "Projects" })
+      .getByRole("button", { name: /Beacon/ })
+      .click();
     await page.waitForSelector('[id="pc-board-Beacon Billing"]:not([disabled])');
     await settle(page);
   },
@@ -2013,24 +2016,24 @@ const VIEWS = {
   // Settings › General › Git in project conversations, switched on (off by default)
   "settings-git": async () => {
     await settingsPage("General");
-    await click("Git in project conversations");
-    await intoView("Git in project conversations");
+    await click("Git button in project conversations");
+    await intoView("Git button in project conversations");
   },
   // the workers without their crabs (Settings › General › Crabs for the orchestrator's workers off)
   "orchestrator-plain": async () => {
     await open(page, server.url, { fixture: "orch-plain", sel: keys.orch });
     await waitText("Open worker");
   },
-  // Settings › General › Write vault updates when a conversation closes or goes quiet (PR capture-on-idle)
+  // Settings › Automation › Write vault updates when a conversation closes or goes quiet (PR capture-on-idle)
   "settings-capture": async () => {
-    await settingsPage("General");
+    await settingsPage("Automation");
     await intoView("Write vault updates when a conversation closes or goes quiet");
   },
-  // Settings › General › Keep vault changes automatically, switched on (off by default)
+  // Settings › Automation › Keep those changes without asking, switched on (off by default)
   "settings-autokeep": async () => {
-    await settingsPage("General");
-    await click("Keep vault changes automatically");
-    await intoView("Keep vault changes automatically");
+    await settingsPage("Automation");
+    await click("Keep those changes without asking");
+    await intoView("Keep those changes without asking");
   },
   "settings-crabs": async () => {
     await settingsPage("General");
@@ -2041,11 +2044,24 @@ const VIEWS = {
     await waitText("From Relay");
   },
   ...Object.fromEntries(
-    ["General", "Projects", "Agents", "Integrations", "Plugins", "Voice", "Shortcuts", "Updates"].map(tab => [
-      `settings-${tab.toLowerCase()}`,
-      () => settingsPage(tab),
-    ]),
+    [
+      "General",
+      "Vault",
+      "Projects",
+      "Agents",
+      "Integrations",
+      "Plugins",
+      "Automation",
+      "Voice",
+      "Shortcuts",
+      "Updates",
+      "Labs",
+    ].map(tab => [`settings-${tab.toLowerCase()}`, () => settingsPage(tab)]),
   ),
+  // Settings › Privacy & access (PR settings-pages): what macOS lets Relay do, then what agents may do with tools
+  "settings-access": () => settingsPage("Privacy & access"),
+  "settings-automation-dark": () => settingsPage("Automation", undefined, "dark"),
+  "settings-general-dark": () => settingsPage("General", undefined, "dark"),
   // the keys that work in a conversation, Find among them
   // ⌃1 to ⌃9 for the workspaces, changeable like the others (PR #294)
   "settings-shortcuts-workspaces": async () => {
@@ -2425,8 +2441,8 @@ const VIEWS = {
   // the other vault folders under General: a path, Remove, and the project shown under another name (the main vault
   // has one)
   "settings-other-vaults": async () => {
-    await settingsPage("General", undefined, "shared");
-    await intoView("Other workspace folders");
+    await settingsPage("Vault", undefined, "shared");
+    await intoView("Other folders");
   },
   // the side vault's and the workspace's projects in the sidebar, in their own context (found by the search)
   "sidebar-shared": async () => {
@@ -2477,10 +2493,7 @@ const VIEWS = {
   },
   // Settings › General, the Experimental section at the bottom with the Files switch off
   "settings-experimental": async () => {
-    await settingsPage("General", undefined, "files-off");
-    await page.setViewportSize({ width: 900, height: 1350 });
-    await page.getByText("Experimental", { exact: true }).scrollIntoViewIfNeeded();
-    await settle(page);
+    await settingsPage("Labs", undefined, "files-off");
   },
   "pages-tab": async () => {
     await open(page, server.url);
@@ -3464,7 +3477,7 @@ const VIEWS = {
     await intoView("Accent");
   },
   "settings-time": async () => {
-    await settingsPage("General");
+    await settingsPage("Automation");
     await intoView("Propose the day's time from conversations");
   },
   // Windows (W10): dictation from any app switched on, its keys with Ctrl, no Accessibility to allow
@@ -3486,18 +3499,15 @@ const VIEWS = {
   },
   // Settings › General › Permissions on Windows: the microphone only, no Accessibility (W7, W10)
   "settings-permissions-windows": async () => {
-    await settingsPage("General", undefined, "default", "windows");
-    await scrollMain("bottom");
-    await settle(page);
+    await settingsPage("Privacy & access", undefined, "default", "windows");
   },
   // Settings › General › Permissions: the mock has Full Disk Access missing (PR permissions-check)
   "settings-permissions": async () => {
-    await settingsPage("General");
-    await scrollMain("bottom");
-    await settle(page);
+    await settingsPage("Privacy & access");
   },
   "settings-sidebar": async () => {
     await settingsPage("General");
+    await intoView("Top items");
     await scrollMain("bottom");
     await settle(page);
   },
@@ -3608,17 +3618,17 @@ const VIEWS = {
   },
   // Settings › General › Reminders' agent access: add, done and push default to Runs (#PR)
   "settings-reminders-access": async () => {
-    await settingsPage("General");
+    await settingsPage("Privacy & access");
     await intoView("reminders.push");
   },
   // the vault's git backup under General, after a round that pushed
   "settings-vault-sync": async () => {
-    await settingsPage("General");
+    await settingsPage("Vault");
     await intoView("Last sync");
   },
   // the same after a round the remote refused
   "settings-vault-sync-failed": async () => {
-    await settingsPage("General");
+    await settingsPage("Vault");
     await page.evaluate(() =>
       window.__harness.emit("vault-sync", {
         at: Math.floor(Date.now() / 1000) - 60,
