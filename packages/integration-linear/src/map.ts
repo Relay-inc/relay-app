@@ -10,7 +10,7 @@ export const VIEWER = "query Viewer { viewer { id name displayName } }";
 export const TEAMS = "query Teams { teams(first: 100) { nodes { id name key cyclesEnabled projects(first: 50) { nodes { id name } } cycles(first: 20, filter: { isPast: { eq: false } }) { nodes { id number name } } } } }";
 export const ACTIVE_CYCLE = "query Active($id: String!) { team(id: $id) { activeCycle { id } } }";
 export const STATES = "query States($id: String!) { team(id: $id) { states(first: 100) { nodes { id name type position } } } }";
-export const ISSUES = "query Issues($filter: IssueFilter, $after: String) { issues(first: 100, after: $after, filter: $filter) { nodes { id identifier title priority url sortOrder dueDate updatedAt state { id name type } labels { nodes { name } } assignee { name displayName } } pageInfo { hasNextPage endCursor } } }";
+export const ISSUES = "query Issues($filter: IssueFilter, $after: String) { issues(first: 100, after: $after, filter: $filter) { nodes { id identifier title priority url sortOrder dueDate updatedAt state { id name type } labels { nodes { name } } assignee { name displayName isMe } } pageInfo { hasNextPage endCursor } } }";
 /** A new issue in a team's workflow state, in a Linear project or cycle when the board is one (null otherwise). It
  *  answers with the issue as ISSUES does. The backend lets only this exact mutation through (src/lib.rs, CREATE). */
 export const CREATE = "mutation Create($teamId: String!, $stateId: String!, $title: String!, $description: String!, $projectId: String, $cycleId: String) { issueCreate(input: { teamId: $teamId, stateId: $stateId, title: $title, description: $description, projectId: $projectId, cycleId: $cycleId }) { success issue { id identifier title priority url sortOrder dueDate updatedAt state { id name type } labels { nodes { name } } assignee { name displayName } } } }";
@@ -81,6 +81,7 @@ export function mapIssues(data: any): { cards: Card[]; urls: [string, string][];
       placement: Number(i.sortOrder) || 0, due: typeof i.dueDate === "string" ? i.dueDate.slice(0, 10) : null,
       who: String(i.assignee?.displayName || i.assignee?.name || "").split(" ")[0], priority: Number(i.priority) || 0,
       ...(i.assignee ? { whoName: String(i.assignee.name || i.assignee.displayName || "") } : {}),
+      ...(i.assignee?.isMe ? { me: true } : {}),
       ...(i.state?.name ? { status: i.state.name } : {}), ...(i.state?.type ? { state: stateOf(i.state.type), tone: toneFor(i.state.type, i.state.name || "") } : {}),
       ...(i.labels?.nodes?.length ? { labels: i.labels.nodes.map((l: any) => l.name) } : {}), ...(i.updatedAt ? { updated: i.updatedAt } : {}) })),
     urls: nodes.filter((i: any) => i.url).map((i: any) => [i.id, i.url]),

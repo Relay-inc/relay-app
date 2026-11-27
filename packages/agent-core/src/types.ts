@@ -61,6 +61,7 @@ export type AgentEvent =
   | { type: "task_output"; id: string; text: string } // what a background task printed (or why it could not be read)
   | { type: "task_summary"; detail: string | null } // the live one-line phrase of what the agent does mid-turn; null clears it
   | { type: "stderr"; text: string }   // added by the app: the process's stderr
+  | { type: "side_answer"; id: string; text: string; error: boolean } // the answer to a side question (/btw), or why there is none; Claude Code
   | { type: "draft_saved"; folder: string; to: string[]; cc?: string[]; bcc?: string[] } // added by the app: a relay-mail draft (Claude Code only)
   | { type: "commands"; commands: { name: string; description: string; argumentHint?: string }[] } // added by the app: Claude Code's slash commands and skills
   | { type: "exit" };                  // added by the app: the process ended

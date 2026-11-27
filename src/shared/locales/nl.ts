@@ -460,6 +460,9 @@ export default {
   "pl.none": "Laat het staan",
   "pl.label": "Enkel met label",
   "pl.labelHelp": "Leeg: elk ticket in de kolom.",
+  "pl.mine": "Enkel tickets toegewezen aan mij",
+  "pl.mineHelp":
+    "Tickets van iemand anders of van niemand blijven in de kolom. Productive heeft je gebruikers-id nodig onder Integraties.",
   "pl.skill": "Skill",
   "pl.skillHelp": "Een Claude Code-skill die de agent per ticket volgt. Leeg: Relays eigen flow.",
   "pl.plan": "Eerst een plan",
@@ -949,6 +952,8 @@ export default {
   "bar.termMail":
     "Niet beschikbaar voor een gesprek dat mail raakte: de terminal zou het hervatten zonder de beperkingen van de app.",
   "composer.send": "Versturen",
+  "btw.desc": "Stel een zijvraag zonder Claude te onderbreken",
+  "btw.close": "Sluiten",
   "composer.commands": "Commando's en skills",
   copy: "Kopiëren",
   "img.remove": "Verwijderen",

@@ -122,7 +122,7 @@ impl Reader {
             // the control pipe's traffic stays between the CLI and the app, the webview only hears the commands and the failures
             Event::Control { id, server, message } => { sink.control(id, server.as_deref(), message); return; }
             // the set of background tasks is a level: replayed after a restart, the last one is right
-            Event::Stderr { .. } | Event::Commands { .. } | Event::Tasks { .. } => { sink.emit(serde_json::to_value(&ev).unwrap_or_default()); return; }
+            Event::Stderr { .. } | Event::Commands { .. } | Event::Tasks { .. } | Event::SideAnswer { .. } => { sink.emit(serde_json::to_value(&ev).unwrap_or_default()); return; }
             // raised in the provider's own protocol: a card like any other, answered through respond()
             Event::Permission { request } => sink.permission(request),
             Event::Resolved { model, effort } => {

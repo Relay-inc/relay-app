@@ -6,7 +6,7 @@ import { useConversationsStore } from "../../application/conversations/store";
 import { openArtifactLink } from "../../application/artifacts/artifacts";
 import { artifactsIn } from "../../domain/artifacts/rules";
 import { useWorkspaceStore } from "../../application/workspace/store";
-import { escStop, ctrlC } from "../../application/conversations/actions";
+import { escStop, ctrlC, closeBtw } from "../../application/conversations/actions";
 import {
   closeTool,
   toggleQuickAsk,
@@ -68,6 +68,11 @@ function onEscape(e: KeyboardEvent) {
   if (panel.modal) {
     e.preventDefault();
     closeTicket();
+    return;
+  }
+  if (useConversationsStore.getState().btw[selected]) {
+    e.preventDefault();
+    closeBtw(selected);
     return;
   }
   if (useGitStore.getState().discard) {

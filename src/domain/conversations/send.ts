@@ -9,16 +9,21 @@ type SendPlan =
   | { kind: "nothing" } // nothing to send, or the waiting view
   | { kind: "fork"; text: string; take: boolean } // a terminal session: forked into an app conversation, then sent
   | { kind: "wait-outside"; key: string } // a turn runs in a process outside the app: a second one would fork the transcript
+  | { kind: "btw"; key: string; question: string; take: boolean } // `/btw <question>`: a side question, never a message
   | { kind: "send"; key: string; text: string; take: boolean };
 
+/** The question of `/btw <question>`, null for any other text. */
+export const btwQuestion = (text: string) => /^\/btw\s+(\S[\s\S]*)$/.exec(text.trim())?.[1] ?? null;
+
 /** `forced` text, or what is typed in the open conversation (`selected`) with its images and files; `to` a conversation
- *  that is not open (Cmd-K) with `toImages` attachments of its own. */
+ *  that is not open (Cmd-K) with `toImages` attachments of its own. `aside`: the conversation's agent takes `/btw`. */
 export function planSend(
   state: Pick<DraftsState, "typed" | "attached" | "files"> & Pick<ConversationsState, "outside">,
   selected: string,
   forced?: string,
   to?: string,
   toImages = 0,
+  aside = false,
 ): SendPlan {
   const fromComposer = forced === undefined;
   const text = forced ?? (state.typed[selected] ?? "").trim();
@@ -28,6 +33,8 @@ export function planSend(
   if (!to && isTerminal(selected)) return { kind: "fork", text, take };
   const key = to ?? selected;
   if (key in state.outside) return { kind: "wait-outside", key };
+  const question = aside && !to ? btwQuestion(text) : null;
+  if (question) return { kind: "btw", key, question, take };
   return { kind: "send", key, text, take };
 }
 

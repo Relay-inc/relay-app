@@ -54,6 +54,7 @@ import { MoveBar } from "./MoveBar";
 import { RetryBar } from "./RetryBar";
 import { RepoBar } from "./RepoBar";
 import { RepoWorkBar } from "./RepoWorkBar";
+import { BtwCard } from "./BtwCard";
 import { Composer } from "./Composer";
 import { NewReminder } from "./NewReminder";
 import { UsageReload } from "../usage/UsageReload";
@@ -323,6 +324,7 @@ export function ConversationsView({ className }: { className: string }) {
       <RepoWorkBar className={column} />
       <RetryBar className={column} />
       <MoveBar className={column} session={bar.session} asked={asked} />
+      {onView || agentPage ? null : <BtwCard className={column} />}
       {onView || agentPage ? null : <Composer className={`${column} mt-2 ${orchHint ? "mb-1.5" : "mb-4.5"}`} />}
       {/* who the composer talks to in the orchestrator: the coordinator, or the open worker */}
       {orchHint ? <span className={`${column} mb-4 pl-9 text-[11px] text-tertiary`}>{t(orchHint)}</span> : null}

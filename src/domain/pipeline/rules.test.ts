@@ -129,6 +129,16 @@ test("picks: the pick column in board order, the label, running ones left alone,
     "the label matches without case",
   );
   assert.deepEqual(
+    picks(
+      [{ ...card("a", "todo", 1), me: true }, card("b", "todo", 2)],
+      c => c.column,
+      { ...P, mine: true },
+      [],
+    ).fresh.map(c => c.id),
+    ["a"],
+    "only mine: a ticket assigned to someone else or nobody stays",
+  );
+  assert.deepEqual(
     picks([card("a", "todo", 1)], c => c.column, P, [worker("a", "done", { board: "merged" })]).fresh.map(c => c.id),
     ["a"],
     "a merged ticket put back is new work",
