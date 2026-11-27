@@ -5,7 +5,7 @@ import { stripOf, type Need } from "../../../domain/pipeline/strip";
 import {
   answerTicket,
   buildTicket,
-  doneTicket,
+  ignoreTicket,
   openPipelineLink,
   pipelinePanel,
 } from "../../../application/pipeline/runner";
@@ -51,10 +51,10 @@ function NeedCard({ project, need }: { project: string; need: Need<BouncedTicket
     setSending(false);
     if (ok) setOwn("");
   };
-  const done = async () => {
+  const ignore = async () => {
     if (sending) return;
     setSending(true);
-    await doneTicket(project, to).catch(e => toast(String((e as Error)?.message ?? e)));
+    await ignoreTicket(project, to).catch(e => toast(String((e as Error)?.message ?? e)));
     setSending(false);
   };
   const build = () => {
@@ -109,9 +109,10 @@ function NeedCard({ project, need }: { project: string; need: Need<BouncedTicket
         <button
           className="flex-none h-6 px-2 -mr-1.5 rounded-md text-xs text-secondary cursor-default hover:bg-fill hover:text-label disabled:opacity-50"
           disabled={sending}
-          onClick={() => void done()}
+          title={t("ps.ignoreHelp")}
+          onClick={() => void ignore()}
         >
-          {t("ps.done")}
+          {t("ps.ignore")}
         </button>
       </div>
       {need.kind === "moved" ? (

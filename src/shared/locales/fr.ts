@@ -612,7 +612,12 @@ export default {
   "ps.approve": "Approuver",
   "ps.askChanges": "Demander des changements",
   "ps.retry": "Réessayer",
-  "ps.done": "Marquer comme terminé",
+  "ps.ignore": "Ignorer",
+  "ps.ignoreHelp":
+    "Le pipeline laisse ce ticket de côté jusqu'à ce que vous le repreniez. Son agent s'arrête s'il tourne.",
+  "ps.unignore": "Ne plus ignorer",
+  "ps.unignoreHelp": "Le pipeline reprend ce ticket là où il en était.",
+  "ps.lane.ignored": "Ignorés",
   "ps.send": "Envoyer la réponse",
   "ps.planNote": "Ajoute une note, ou dis quoi changer…",
   "ps.planLabel": "Plan à approuver :",

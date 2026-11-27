@@ -15,9 +15,15 @@ import {
   type NeedKind,
 } from "../../../domain/pipeline/strip";
 import type { PrStatus } from "../../../domain/pipeline/types";
-import { openPipelineLink, pipelinePanel, prStatuses, setStripOpen } from "../../../application/pipeline/runner";
+import {
+  openPipelineLink,
+  pipelinePanel,
+  prStatuses,
+  setStripOpen,
+  unignoreTicket,
+} from "../../../application/pipeline/runner";
 import { usePipelineStore } from "../../../application/pipeline/store";
-import { openWorker } from "../../../application/navigation/navigation";
+import { openWorker, toast } from "../../../application/navigation/navigation";
 import { useSettingsStore } from "../../../application/settings/store";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
@@ -41,7 +47,7 @@ const MONO = "font-mono text-[11px]";
  *  the bar jumps to the oldest open question in the conversation (`onJump`); the actions are in the conversation. */
 export function PipeStrip({ project, onJump }: { project: string; onJump: (id: string) => void }) {
   const { t } = useT();
-  const { linked, strip, rounds, parallel, pickName, paused, open } = useDerived(() => {
+  const { linked, strip, rounds, parallel, pickName, paused, ignored, open } = useDerived(() => {
     const panel = pipelinePanel(project);
     return {
       linked: panel.linked,
@@ -50,6 +56,7 @@ export function PipeStrip({ project, onJump }: { project: string; onJump: (id: s
       parallel: panel.parallel,
       pickName: panel.pickName,
       paused: panel.paused || panel.all,
+      ignored: panel.ignored,
       open: !!usePipelineStore.getState().strip[project],
     };
   });
@@ -167,24 +174,54 @@ export function PipeStrip({ project, onJump }: { project: string; onJump: (id: s
                 <ReviewCard key={w.key} worker={w} prs={prs} />
               ))}
             </Lane>
-            <Lane
-              name={t("ps.lane.next")}
-              count={strip.next.length}
-              w="w-48"
-              note={paused ? t("ps.notPicked") : undefined}
-              empty={pickName ? t("ps.emptyNext", { column: pickName }) : t("ps.emptyNextAny")}
-            >
-              {strip.next.map(n => (
-                <button
-                  key={n.id}
-                  className="flex items-baseline gap-1.5 min-h-7.5 px-2.5 py-1 rounded-lg bg-raised border border-separator text-left text-[13px] cursor-default hover:border-separator-strong"
-                  onClick={() => n.url && openPipelineLink(n.url)}
-                >
-                  {n.ref ? <span className="text-xs text-secondary tabular-nums">#{n.ref}</span> : null}
-                  <span className="flex-1 min-w-0 truncate">{n.title}</span>
-                </button>
-              ))}
-            </Lane>
+            {/* the ignored tickets under Up next: out of the flow, each with Unignore */}
+            <div className="w-48 flex-none flex flex-col gap-4">
+              <Lane
+                name={t("ps.lane.next")}
+                count={strip.next.length}
+                w="w-full"
+                note={paused ? t("ps.notPicked") : undefined}
+                empty={pickName ? t("ps.emptyNext", { column: pickName }) : t("ps.emptyNextAny")}
+              >
+                {strip.next.map(n => (
+                  <button
+                    key={n.id}
+                    className="flex items-baseline gap-1.5 min-h-7.5 px-2.5 py-1 rounded-lg bg-raised border border-separator text-left text-[13px] cursor-default hover:border-separator-strong"
+                    onClick={() => n.url && openPipelineLink(n.url)}
+                  >
+                    {n.ref ? <span className="text-xs text-secondary tabular-nums">#{n.ref}</span> : null}
+                    <span className="flex-1 min-w-0 truncate">{n.title}</span>
+                  </button>
+                ))}
+              </Lane>
+              {ignored.length ? (
+                <Lane name={t("ps.lane.ignored")} count={ignored.length} w="w-full" empty="">
+                  {ignored.map(x => (
+                    <div
+                      key={x.id}
+                      className="flex flex-col items-start min-h-7.5 px-2.5 py-1 rounded-lg border border-dashed border-separator-strong leading-snug"
+                    >
+                      <button
+                        className="w-full flex gap-1.5 min-w-0 text-left text-[13px] text-secondary cursor-default hover:underline"
+                        onClick={() => x.url && openPipelineLink(x.url)}
+                      >
+                        {x.number ? <span className="text-xs tabular-nums">#{x.number}</span> : null}
+                        <span className="flex-1 min-w-0 truncate">{x.title}</span>
+                      </button>
+                      <button
+                        className="text-xs text-accent-text cursor-default hover:underline"
+                        title={t("ps.unignoreHelp")}
+                        onClick={() =>
+                          void unignoreTicket(project, x.id).catch(e => toast(String((e as Error)?.message ?? e)))
+                        }
+                      >
+                        {t("ps.unignore")}
+                      </button>
+                    </div>
+                  ))}
+                </Lane>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>

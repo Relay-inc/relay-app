@@ -3886,6 +3886,12 @@ const VIEWS = {
       card.style.boxShadow = "0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent)";
     });
   },
+  // the strip open with two ignored tickets: their lane after Up next, each with Unignore
+  "pipeline-strip-ignored": async (dark = false) => {
+    await VIEWS["pipeline-strip-open"]("pipeline-strip-ignored", dark);
+    await waitText("Ignored");
+  },
+  "pipeline-strip-ignored-dark": async () => VIEWS["pipeline-strip-ignored"](true),
   "pipeline-strip-dark": async () => VIEWS["pipeline-strip"]("pipeline-strip", true),
   "pipeline-strip-open-dark": async () => VIEWS["pipeline-strip-open"]("pipeline-strip", true),
   "pipeline-strip-paused-dark": async () => VIEWS["pipeline-strip-paused"](true),

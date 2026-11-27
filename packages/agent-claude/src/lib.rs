@@ -37,7 +37,7 @@ pub const RELAY_TOOL: &str = "Bash(relay *)";
 pub const ORCH_COORD_TOOLS: [&str; 4] = ["mcp__relay-orch__dispatch", "mcp__relay-orch__workers", "mcp__relay-orch__message", "mcp__relay-orch__stop"];
 pub const ORCH_WORKER_TOOLS: [&str; 3] = ["mcp__relay-orch__step", "mcp__relay-orch__decision", "mcp__relay-orch__report"];
 /// A board pipeline's coordinator: allowed without a card, Relay itself refuses the actions in a turn it started.
-pub const ORCH_PIPE_TOOLS: [&str; 6] = ["mcp__relay-orch__tickets", "mcp__relay-orch__answer", "mcp__relay-orch__take_over", "mcp__relay-orch__done", "mcp__relay-orch__pause", "mcp__relay-orch__create_ticket"];
+pub const ORCH_PIPE_TOOLS: [&str; 7] = ["mcp__relay-orch__tickets", "mcp__relay-orch__answer", "mcp__relay-orch__take_over", "mcp__relay-orch__ignore", "mcp__relay-orch__unignore", "mcp__relay-orch__pause", "mcp__relay-orch__create_ticket"];
 
 pub struct Claude;
 pub static PROVIDER: Claude = Claude;

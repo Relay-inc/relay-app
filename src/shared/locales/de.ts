@@ -608,7 +608,12 @@ export default {
   "ps.approve": "Freigeben",
   "ps.askChanges": "Änderungen anfragen",
   "ps.retry": "Nochmal versuchen",
-  "ps.done": "Als erledigt markieren",
+  "ps.ignore": "Ignorieren",
+  "ps.ignoreHelp":
+    "Die Pipeline lässt dieses Ticket in Ruhe, bis du es wieder aufnimmst. Sein Agent stoppt, falls er läuft.",
+  "ps.unignore": "Nicht mehr ignorieren",
+  "ps.unignoreHelp": "Die Pipeline arbeitet wieder an diesem Ticket, ab dort, wo es war.",
+  "ps.lane.ignored": "Ignoriert",
   "ps.send": "Antwort senden",
   "ps.planNote": "Notiz hinzufügen oder sagen, was sich ändern soll…",
   "ps.planLabel": "Plan zur Freigabe:",

@@ -38,6 +38,7 @@ import {
   adoptDue,
   ADOPT_EVERY,
   boardMove,
+  finished,
   movedOn,
   placeOf,
   stateSince,
@@ -728,4 +729,14 @@ test("a push is tried once more only when it failed on something passing", () =>
   ])
     assert.equal(pushAgain(done(e)), false, e);
   assert.equal(pushAgain(worker("1", "failed", { pr_error: "git push of x failed" })), false);
+});
+
+test("finished: the merged column, or a done column the pipeline does not use (an ignored ticket leaves the list there)", () => {
+  const column = (id: string, state?: Column["state"]): Column => ({ id, name: id, placement: 0, state });
+  const P2 = { ...P, merged: "shipped" };
+  assert.equal(finished(P2, column("shipped")), true);
+  assert.equal(finished(P2, column("closed", "done")), true);
+  assert.equal(finished(P, column("shipped")), false, "no merged column set");
+  assert.equal(finished(P2, column(P2.review, "done")), false, "a column of its own is never finished");
+  assert.equal(finished(P2, column("todo")), false);
 });

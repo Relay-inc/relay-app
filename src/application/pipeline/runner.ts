@@ -9,6 +9,7 @@ import {
   adoptDue,
   boardMove,
   columnOf,
+  finished,
   movedOn,
   EMPTY_PIPELINE,
   placeOf,
@@ -17,6 +18,7 @@ import {
   withPictures,
   buildState,
   inReview,
+  lastWorker,
   manual,
   panelTickets,
   pausedOf,
@@ -41,13 +43,13 @@ import {
   workersOf,
   pickedOf,
 } from "../../domain/pipeline/rules";
-import type { Pipeline, PrStatus, Step, Ticket } from "../../domain/pipeline/types";
+import type { IgnoredTicket, Pipeline, PrStatus, Step, Ticket } from "../../domain/pipeline/types";
 import type { AnswerKind } from "../../domain/pipeline/rules";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
 import { isPrimary } from "../../infrastructure/window";
 import { t, tn } from "../../shared/i18n";
-import { digestRows, digestSig, digestText, safeRef, waiting } from "../../domain/pipeline/digest";
+import { digestRows, digestSig, digestText, ignoredText, safeRef, waiting } from "../../domain/pipeline/digest";
 import { pipeKey } from "../../domain/orchestrator/rules";
 import { notify } from "../conversations/events";
 import { provider as providerOf } from "../../shared/plugins";
@@ -99,6 +101,7 @@ const note = (project: string, line: string) => (did[project] ??= []).push(line)
 // Relay's own lines in the digest: a ticket by its number (or its agent), no column names or other outside text
 // (domain/pipeline/digest.ts digestText)
 const refOf = (w: Worker) => (safeRef(ticketOf(w)?.number) ? `#${safeRef(ticketOf(w)?.number)}` : w.key);
+const numRef = (n: string) => (safeRef(n) ? `#${safeRef(n)}` : "a ticket without a number");
 // what the last digest per project said (digestSig) and what waited on the user in it, kept so a restart sends nothing
 // that is not new
 const said = storage.get<Record<string, { sig: string; waits: string[] }>>("pipelineDigest", {});
@@ -147,7 +150,9 @@ export function pipelineWaits(project: string) {
 export function pipelineFacts(project: string) {
   const panel = pipelinePanel(project);
   const d = { ...panel, paused: panel.paused || panel.all };
-  return digestText(projectName(project), digestRows(d), [], d);
+  return [digestText(projectName(project), digestRows(d), [], d), ignoredText(panel.ignored)]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 /** One pass over every pipeline. Calls while one waits to start make no second one. */
@@ -177,7 +182,7 @@ export function runPipelines() {
 /** The vault project whose pipeline runs on a board, for the ticket window's button. */
 export const pipelineOfBoard = (ref: BoardRef) => pipelineAt(settings().boards, settings().pipelines, ref);
 /** What that button offers for a ticket. */
-export const ticketBuildState = (card: string) => buildState(allWorkers(), card);
+export const ticketBuildState = (card: string) => buildState(everyWorker(), card);
 
 /** The ticket window's "Build with agent": this ticket now, in whatever column it is, also in an automatic pipeline.
  *  A ticket an agent already ran on continues with that agent. Within the pipeline's limit of agents at once. */
@@ -187,6 +192,8 @@ export function buildTicket(ref: BoardRef, card: Pick<Card, "id" | "title" | "nu
     if (!project) return;
     if (pausedOf(settings().pipelines?.[project], settings().pipelinesPaused))
       return toast(t("pl.pausedStart", { project: projectName(project) }));
+    // starting it yourself is the pipeline's again
+    if (ignoredOf(project).some(x => x.id === card.id)) await unignore(project, card.id);
     const b = await open(project, settings().pipelines![project]);
     const mine = workersOf(allWorkers(), project);
     const running = mine.filter(w => w.state === "running").length;
@@ -218,6 +225,7 @@ export function pipelinePanel(project: string) {
   const { waiting: allWaiting, answered, columns } = usePipelineStore.getState();
   const waiting = allWaiting[project];
   const board = columns[project];
+  const ignored = new Set(ignoredOf(project).map(x => x.id));
   return {
     linked: !!p && !!s.boards?.[project],
     on: ready(p),
@@ -245,13 +253,20 @@ export function pipelinePanel(project: string) {
     toPick: tickets
       .filter(w => w.state !== "running" && (answered[ticketOf(w)!.card] ?? 0) > (w.ended ?? 0))
       .map(w => w.key),
-    // sent back before they started, the ones that got a worker since left out
-    bounced: p && !manual(p) ? bouncedOf(project).filter(e => !tickets.some(w => ticketOf(w)?.card === e.id)) : [],
+    // sent back before they started, the ones that got a worker since and the ignored ones left out
+    bounced:
+      p && !manual(p)
+        ? bouncedOf(project).filter(e => !tickets.some(w => ticketOf(w)?.card === e.id) && !ignored.has(e.id))
+        : [],
     // a hand-picked pipeline reads no pick column. A ticket claimed since the board was read shows with its worker
     waiting:
       p && ready(p) && !manual(p) && waiting
-        ? { at: waiting.at, tickets: waiting.tickets.filter(x => !tickets.some(w => ticketOf(w)?.card === x.id)) }
+        ? {
+            at: waiting.at,
+            tickets: waiting.tickets.filter(x => !tickets.some(w => ticketOf(w)?.card === x.id) && !ignored.has(x.id)),
+          }
         : null,
+    ignored: ignoredOf(project),
   };
 }
 
@@ -387,35 +402,54 @@ export function createTicket(project: string, title: string, description: string
   });
 }
 
-/** A person marks a ticket done: its agent stops if it runs, the ticket leaves the pipeline for good (never picked up
- *  or landed again, its PR no longer followed) and goes to the merged column when the pipeline has one and a person did
- *  not already put it in a done column. In the queue, so a pass never lands the stopped run first. */
-export function doneTicket(project: string, to: { worker: Worker } | { card: BouncedTicket }) {
+/** A person tells the pipeline to leave a ticket alone, wherever it is on the board, until they unignore it: its agent
+ *  stops if it runs, and no pass picks it up, lands its run, moves it or follows its PR (allWorkers, runOne). Nothing
+ *  is posted on the ticket. In the queue, so a pass never lands the stopped run first. */
+export function ignoreTicket(
+  project: string,
+  to: { worker: Worker } | { card: Pick<IgnoredTicket, "id" | "number" | "title" | "url"> },
+) {
   return serial(async () => {
-    const p = settings().pipelines?.[project];
-    if (!p) throw new Error("this project has no pipeline");
-    const id = "worker" in to ? ticketOf(to.worker)!.card : to.card.id;
+    const ticket = "worker" in to ? ticketOf(to.worker)! : { ...to.card, card: to.card.id };
     if ("worker" in to) {
       const w = useOrchestratorStore.getState().workers[to.worker.key] ?? to.worker;
       if (w.state === "running" && !(await stopWorker(w.key))) throw new Error("its agent could not be stopped");
-      adopt(await backend.orchBoard(w.key, "merged"));
-    } else
-      setBounced(
-        project,
-        bouncedOf(project).filter(e => e.id !== id),
-      );
-    if (p.merged) {
-      const b = await open(project, p);
-      const card = (await b.prov.cards(ctxOf(b.prov), b.ref)).find(c => c.id === id);
-      const now = b.columns.find(c => c.id === (card ? colOf(b.prov, { group: b.group }, card) : ""));
-      if (card && now?.state !== "done" && now?.id !== p.merged) await move(b, id, p.merged);
     }
-    note(
-      project,
-      `#${"worker" in to ? ticketOf(to.worker)!.number : to.card.number}: a person marked it done, Relay closed it in the pipeline`,
-    );
+    const entry = { id: ticket.card, number: ticket.number, title: ticket.title, url: ticket.url, at: Date.now() };
+    await saveIgnored(project, [...ignoredOf(project).filter(x => x.id !== entry.id), entry]);
+    note(project, `${numRef(ticket.number)}: a person ignored it, Relay leaves it alone until it is unignored`);
   });
 }
+
+/** A person hands an ignored ticket back to the pipeline: it carries on from where it was (its run lands, its PR is
+ *  followed, in the pick column it is picked up), with a pass at once. */
+export async function unignoreTicket(project: string, id: string) {
+  await serial(() => unignore(project, id));
+  runPipelines();
+}
+async function unignore(project: string, id: string) {
+  const x = ignoredOf(project).find(e => e.id === id);
+  if (!x) return;
+  await saveIgnored(
+    project,
+    ignoredOf(project).filter(e => e.id !== id),
+  );
+  note(project, `${numRef(x.number)}: a person unignored it, the pipeline works on it again`);
+}
+
+const ignoredOf = (project: string): IgnoredTicket[] => settings().pipelines?.[project]?.ignored ?? [];
+async function saveIgnored(project: string, ignored: IgnoredTicket[]) {
+  const s = settings();
+  const p = s.pipelines?.[project];
+  if (!p) throw new Error("this project has no pipeline");
+  const failed = await saveMainSettings({ ...s, pipelines: { ...s.pipelines, [project]: { ...p, ignored } } });
+  if (failed) throw new Error(failed);
+}
+/** A worker whose ticket a person told its pipeline to leave alone. */
+const ignoredWorker = (w: Worker) => {
+  const ticket = ticketOf(w);
+  return !!ticket && ignoredOf(ticket.pipeline).some(x => x.id === ticket.card);
+};
 
 /** A person takes a ticket over from its worker: the worker stops, and its stopped run lands the ticket in the input
  *  column like any run that ended without a PR (runOne, paused or not). */
@@ -437,7 +471,9 @@ async function sendWorker(w: Worker, text: string, task: string | null = null) {
   adopt({ ...w, task: task ?? w.task, state: "running", ended: null });
 }
 
-const allWorkers = () => Object.values(useOrchestratorStore.getState().workers).sort((a, b) => a.at - b.at);
+const everyWorker = () => Object.values(useOrchestratorStore.getState().workers).sort((a, b) => a.at - b.at);
+// the workers the pipeline works with: an ignored ticket's are left out of every pass and the panel until it is unignored
+const allWorkers = () => everyWorker().filter(w => !ignoredWorker(w));
 
 type Board = { project: string; prov: BoardProvider; ref: BoardRef; group: string; columns: Column[]; p: Pipeline };
 
@@ -467,6 +503,9 @@ async function runOne(project: string, p: Pipeline) {
   const read = (card: Card) => colOf(prov, { group }, card);
   keepColumns(b, cards, read);
   const col = (card: Card) => usePipelineStore.getState().columns[project]?.of[card.id] ?? read(card);
+  await finishIgnored(b, cards, read);
+  const ignored = new Set(ignoredOf(project).map(x => x.id));
+  const live = cards.filter(c => !ignored.has(c.id));
 
   // runs that ended: their ticket to review or to a person. First Relay's own steps on a fact it found itself, once
   // per worker: a push that failed on something passing goes once more, an agent that ended its turn without a report
@@ -554,11 +593,11 @@ async function runOne(project: string, p: Pipeline) {
   // the pick column: tickets moved back go to their worker again, new ones get a worker while there is room
   if (manual(p)) return;
   const mine = workersOf(allWorkers(), project);
-  await keepWaiting(b, project, waitingIn(cards, col, p, mine));
+  await keepWaiting(b, project, waitingIn(live, col, p, mine));
   // a ticket sent back before it started is the panel's until it leaves the input column (answered, moved, closed)
   const kept = bouncedOf(project).filter(e => cards.some(c => c.id === e.id && col(c) === p.input));
   if (kept.length !== bouncedOf(project).length) setBounced(project, kept);
-  const { fresh, resume: back } = picks(cards, col, p, mine);
+  const { fresh, resume: back } = picks(live, col, p, mine);
   let room = Math.max(1, p.parallel) - mine.filter(w => w.state === "running").length;
   if (room <= 0 || (!fresh.length && !back.length)) return;
   // a run on a spent plan would only stall: wait until the limits read again
@@ -579,6 +618,31 @@ async function runOne(project: string, p: Pipeline) {
     if (room-- <= 0 || !startsNow(settings(), project)) return;
     await claim(b, project, card);
   }
+}
+
+/** An ignored ticket a person finished (in the merged column, or a done column the pipeline does not use) leaves the
+ *  ignored list, and its agent's worker is through, as for any ticket a person moves there (boardMove). */
+async function finishIgnored(b: Board, cards: Card[], read: (card: Card) => string) {
+  const list = ignoredOf(b.project);
+  const gone = list.filter(x => {
+    const card = cards.find(c => c.id === x.id);
+    const column = card && b.columns.find(c => c.id === read(card));
+    return !!column && finished(b.p, column);
+  });
+  if (!gone.length) return;
+  for (const x of gone) {
+    const w = lastWorker(workersOf(everyWorker(), b.project), x.id);
+    if (w && w.state !== "running" && w.board !== "merged" && w.board !== "closed")
+      adopt(await backend.orchBoard(w.key, "merged"));
+    note(
+      b.project,
+      `${numRef(x.number)}: an ignored ticket a person moved to a done column, Relay closed it in the pipeline`,
+    );
+  }
+  await saveIgnored(
+    b.project,
+    list.filter(x => !gone.includes(x)),
+  );
 }
 
 /** A ticket an agent ran on before: back to building, the agent gets what is new on it since, on the ticket and, for
