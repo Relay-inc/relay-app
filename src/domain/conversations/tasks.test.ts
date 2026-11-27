@@ -36,8 +36,16 @@ test("an ended task stays a few seconds after the set drops it, then goes", () =
     ["a1"],
   );
   assert.deepEqual(
-    shownTasks(dropped, 3000 + TASK_LINGER).map(t => t.id),
-    ["a1"],
+    shownTasks(dropped, 3000).map(t => t.id),
+    ["b1"],
+  );
+  assert.deepEqual(shownTasks(dropped, 3000 + TASK_LINGER), []);
+});
+
+test("subagents stay out of the list: the agents list already shows them", () => {
+  assert.deepEqual(
+    shownTasks(applyTasks([], [bash, agent], 0), 0).map(t => t.id),
+    ["b1"],
   );
 });
 

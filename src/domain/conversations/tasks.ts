@@ -32,6 +32,7 @@ export function endTask(tasks: BgTask[] = [], id: string, status: BgTask["status
   return tasks.map(t => (t.id === id && t.status === "running" ? { ...t, status, end: now } : t));
 }
 
-/** What the list shows at `now`: the running tasks and the ones that ended a moment ago. */
+/** What the list shows at `now`: the running tasks and the ones that ended a moment ago. Subagents are left out: the
+ *  conversation's agents list already shows them. */
 export const shownTasks = (tasks: BgTask[], now: number) =>
-  tasks.filter(t => t.status === "running" || now - (t.end ?? 0) < TASK_LINGER);
+  tasks.filter(t => t.kind !== "local_agent" && (t.status === "running" || now - (t.end ?? 0) < TASK_LINGER));
