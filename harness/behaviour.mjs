@@ -305,6 +305,8 @@ const button = (page, name) => page.getByRole("button", { name, exact: true });
 const listed = async (page, text) => (await visible(byText(page, text)).count()) > 0;
 /** a settings section in the window's sidebar, by its name */
 const navButton = (page, name) => page.getByRole("button", { name: new RegExp(`^${name}\\b`) });
+// the Productive board in the sidebar's row of view icons (it has no text, only its label)
+const BOARD = "__board:productive";
 /** the Pages tab: a context's Collections folder unfolded, one group unfolded, Show all clicked: the collection opens on
  *  the group's own rule */
 async function openGroup(page, group, context = "Agency") {
@@ -1994,11 +1996,11 @@ const SCENARIOS = {
     await s.load();
     const { page } = s;
     const card = (await page.evaluate(() => window.__harness.markers)).card;
-    await click(nav(page).getByText("Productive", { exact: true }), 300);
+    await click(nav(page).locator(`[data-view="${BOARD}"]`), 300);
     s.check("board shown", await waitText(page, card));
     await click(byText(page, card), 500);
     s.check("card detail shown", await waitText(page, "Amount excl. VAT"));
-    const comment = visible(page.getByPlaceholder("Leave a comment…")).first();
+    const comment = visible(page.getByPlaceholder(/^(Leave a comment|Comment…)/)).first();
     await comment.fill("Parity comment");
     await click(button(page, "Comment"), 500);
     const writes = async () => (await s.calls("integration_call")).filter(c => c.args.method !== "GET");
@@ -2036,6 +2038,28 @@ const SCENARIOS = {
         String(sends[0].args.text).endsWith("What is left?"),
     );
     s.fact("card send", sends[0]?.args ?? null);
+  },
+
+  // a project click opens its linked board, also when another project's board is open: the cards are that project's,
+  // and a click on the first project shows its cards again
+  async boardFollowsProject(s) {
+    await s.load({ fixture: "twoboards" });
+    const { page } = s;
+    const card = (await page.evaluate(() => window.__harness.markers)).card;
+    const folders = async () =>
+      (await s.calls("integration_call"))
+        .map(c => String(c.args.path))
+        .filter(path => path.startsWith("/tasks?filter[folder_id]="))
+        .map(path => path.split("=")[1].split("&")[0]);
+    await click(page.locator('[data-project="Northwind Portal"]').first(), 300);
+    s.check("Northwind's board shown", await waitText(page, card));
+    await click(page.locator('[data-project="Beacon Billing"]').first(), 300);
+    s.check("Beacon's cards shown", await waitText(page, "Dunning letter template"));
+    s.check("Northwind's cards gone", !(await hasText(page, card)));
+    await click(page.locator('[data-project="Northwind Portal"]').first(), 300);
+    s.check("Northwind's cards shown again", await waitText(page, card));
+    s.check("Beacon's cards gone again", !(await hasText(page, "Dunning letter template")));
+    s.fact("boards loaded", await folders());
   },
 
   // Start conversation names the team's branch: a worktree on <type>/<number>-<slug>, the PR title with the number and
@@ -2091,7 +2115,7 @@ const SCENARIOS = {
   async boardNewTask(s) {
     await s.load();
     const { page } = s;
-    await click(nav(page).getByText("Productive", { exact: true }), 300);
+    await click(nav(page).locator(`[data-view="${BOARD}"]`), 300);
     s.check("board shown", await waitText(page, "Invoice export CSV"));
     const posts = async () =>
       (await s.calls("integration_call")).filter(c => c.args.method === "POST" && c.args.path === "/tasks");
@@ -2142,7 +2166,7 @@ const SCENARIOS = {
     await s.load();
     const { page } = s;
     const before = await s.local([]);
-    await click(nav(page).getByText("Productive", { exact: true }), 300);
+    await click(nav(page).locator(`[data-view="${BOARD}"]`), 300);
     s.check("board shown", await waitText(page, "Invoice export CSV"));
     await click(button(page, "List"), 300);
     s.check(
@@ -2571,7 +2595,10 @@ const SCENARIOS = {
     const { page } = s;
     const claude = async () => (await s.calls("set_settings")).at(-1)?.args.settings?.agents?.providers?.claude;
     await click(navButton(page, "Agents"), 300);
-    await click(page.getByRole("button", { name: /^Claude Code\b/, expanded: false }), 300);
+    await click(
+      page.getByRole("complementary", { name: "Agents" }).getByRole("button", { name: /^Claude Code\b/ }),
+      300,
+    );
     s.check("accounts offered", await waitText(page, "Add account…"));
     s.check("no account choice with only the CLI's own", !(await hasText(page, "New conversations use")));
     await click(button(page, "Add account…"), 300);

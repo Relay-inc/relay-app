@@ -1,150 +1,124 @@
-import { useEffect } from "react";
-import { agent } from "../../../shared/plugins";
-import type { AgentStatus } from "../../../domain/agents/types";
+import { useEffect, useState } from "react";
 import type { AgentCfg } from "../../../domain/settings/types";
 import { useSettingsStore } from "../../../application/settings/store";
-import { checkAgents, clearAgentsMessage, saveAgent, setDefaultAgent } from "../../../application/settings/agents-page";
-import { Glyph } from "../../components/Glyph";
-import { Html } from "../../components/Html";
-import { Select } from "../../components/Select";
+import { checkAgents, clearAgentsMessage } from "../../../application/settings/agents-page";
 import { useT } from "../../hooks/useT";
-import { buttonClass, DEFAULT_PILL, EMPTY_LIST, SELECT, TILE } from "./blocks";
-import { ActionsSection } from "./ActionsSection";
-import { AgentSettings } from "./AgentSettings";
+import { buttonClass, DEFAULT_PILL, EMPTY_LIST } from "./blocks";
+import { AgentGlyph } from "./AgentBits";
+import { AgentSettings, type AgentTab } from "./AgentSettings";
 import { Footer } from "./Footer";
 import { LoadingSection } from "./LoadingSection";
-import { RunDefault } from "./RunDefault";
-import { Section } from "./Section";
-import { SkillsSection } from "./SkillsSection";
-import { SettingsFold } from "./SettingsFold";
-import { StatusLine } from "./StatusLine";
-import { useToggleSet } from "./useToggleSet";
 
 const OFF: AgentCfg = { on: false, bin: "" };
+const ROW =
+  "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-s-fg focus-visible:ring-2 ring-s-ring focus-visible:outline-none";
 
-const agentGlyph = (id: string) => {
-  const provider = agent(id);
-  return provider ? <Glyph svg={provider.glyph} className={TILE} /> : null;
-};
-
-/** Agents: every known agent is listed, a switch turns it on or off (off ones are dimmed). A row folds open to its program and
- *  options. Every change saves at once. What is installed is checked when the window opens. Below, where new
- *  conversations run (with a machine of your own) and the agents' access to knowledge workspaces. */
+/** Agents: the agents on the left (on, then off), the picked one's settings on the right; its header switches it on or
+ *  off and makes it the default. Every change saves at once. What is installed is checked when the window opens. */
 export function AgentsPage() {
-  const { t, th } = useT();
+  const { t } = useT();
   const detected = useSettingsStore(s => s.agentsPage.detected);
   const message = useSettingsStore(s => s.agentsPage.message);
   const agents = useSettingsStore(s => s.settings.agents);
-  const folds = useToggleSet();
+  const [picked, setPicked] = useState("");
+  const [tab, setTab] = useState<AgentTab>("general");
   useEffect(() => {
     checkAgents();
   }, []);
 
-  if (!detected) return <LoadingSection title={t("set.tab.agents")} text={message?.text || t("ag.checking")} />;
+  if (!detected)
+    return (
+      <main className="min-w-0 flex-1 px-8 pt-7">
+        <LoadingSection title={t("set.tab.agents")} text={message?.text || t("ag.checking")} />
+      </main>
+    );
 
   const config = (id: string) => agents?.providers[id] ?? OFF;
-  // switch on (folded open, to set it up) and off
-  const switchTo = (id: string, on: boolean) => {
-    folds.setOpen(id, on);
-    saveAgent(id, { on });
-  };
-  const status = ({ detect }: AgentStatus) => {
-    const found = !detect.installed
-      ? t("ag.missing", { bin: detect.bin })
-      : detect.version
-        ? t("ag.installed", { version: detect.version })
-        : t("ag.installedNoVersion");
-    const login = detect.loggedIn == null ? "" : ` · ${detect.loggedIn ? t("ag.loggedIn") : t("ag.loggedOut")}`;
-    const level = !detect.installed ? "off" : detect.loggedIn === false ? "warn" : "ok";
-    return <StatusLine level={level}>{found + login}</StatusLine>;
-  };
+  const onOnes = detected.providers.filter(provider => config(provider.id).on);
+  const offOnes = detected.providers.filter(provider => !config(provider.id).on);
+  // the picked one, else the default, else the first listed
+  const current =
+    detected.providers.find(provider => provider.id === picked) ??
+    detected.providers.find(provider => provider.id === agents?.default) ??
+    [...onOnes, ...offOnes][0];
 
-  const listed = detected.providers.filter(provider => config(provider.id).on);
-  const rows = detected.providers.length ? (
-    detected.providers.map(provider => {
-      const id = provider.id;
-      const open = folds.isOpen(id) && config(id).on;
-      return (
-        <SettingsFold
-          key={id}
-          id={id}
-          open={open}
-          on={config(id).on}
-          onSwitch={on => switchTo(id, on)}
-          onToggle={() => folds.toggle(id)}
-          icon={agentGlyph(id)}
-          status={status(provider)}
-          name={
-            <>
-              {provider.name}
-              {agents?.default === id && (
-                <>
-                  {" "}
-                  <span className={DEFAULT_PILL}>{t("ag.isDefault")}</span>
-                </>
-              )}
-            </>
-          }
-        >
-          {open && (
-            <AgentSettings
-              status={provider}
-              config={config(id)}
-              agent={agent(id)}
-              onRemove={() => switchTo(id, false)}
-            />
-          )}
-        </SettingsFold>
-      );
-    })
-  ) : (
-    <div className={EMPTY_LIST}>{t("ag.empty")}</div>
-  );
+  const summary = (id: string) => {
+    const { detect } = detected.providers.find(provider => provider.id === id)!;
+    if (!detect.installed) return t("ag.notInstalled");
+    if (!config(id).on) return t("ag.off");
+    const login = detect.loggedIn == null ? "" : ` · ${t(detect.loggedIn ? "ag.loggedIn" : "ag.loggedOut")}`;
+    return (detect.version || t("ag.installedNoVersion")) + login;
+  };
+  const row = (id: string, tile: React.ReactNode, name: string, line: string, pill = false) => {
+    const here = id === current?.id;
+    return (
+      <button
+        key={id}
+        className={`${ROW} ${here ? "bg-s-sel" : "hover:bg-s-hover"}`}
+        aria-current={here ? "true" : undefined}
+        onClick={() => setPicked(id)}
+      >
+        <span className="grid size-7 flex-none place-items-center rounded-md border border-s-border">{tile}</span>
+        <span className="min-w-0 flex-1">
+          <span className={`flex items-center gap-1.5 ${here ? "font-medium" : ""}`}>
+            <span className="truncate">{name}</span>
+            {pill && <span className={`${DEFAULT_PILL} flex-none`}>{t("ag.isDefault")}</span>}
+          </span>
+          <span className="block truncate text-xs text-s-muted">{line}</span>
+        </span>
+      </button>
+    );
+  };
+  const group = (title: string, list: typeof onOnes) =>
+    list.length > 0 && (
+      <div className="grid gap-px">
+        <div className="px-2.5 pt-1.5 pb-1 text-xs font-semibold tracking-wider text-s-muted uppercase">{title}</div>
+        {list.map(provider =>
+          row(
+            provider.id,
+            <AgentGlyph id={provider.id} />,
+            provider.name,
+            summary(provider.id),
+            agents?.default === provider.id,
+          ),
+        )}
+      </div>
+    );
 
   return (
     <>
-      <Section
-        title={t("set.tab.agents")}
-        desc={<Html html={th("ag.listHelp")} />}
-        list
-        footer={
-          <>
-            <button
-              className={buttonClass()}
-              onClick={() => {
-                clearAgentsMessage();
-                checkAgents(true);
-              }}
-            >
-              {t("ag.recheck")}
-            </button>
-            {message && <Footer message={message} />}
-          </>
-        }
+      <aside
+        aria-label={t("set.tab.agents")}
+        className="flex w-72 flex-none flex-col gap-3 overflow-y-auto border-r border-s-seam px-3 py-4"
       >
-        {rows}
-      </Section>
-      {/* with one agent there is nothing to choose */}
-      {listed.length >= 2 && (
-        <Section
-          title={t("ag.default")}
-          desc={<Html html={th("ag.defaultHelp")} />}
-          action={
-            <Select
-              className={SELECT}
-              id="agdefault"
-              aria-label={t("ag.default")}
-              options={listed.map(provider => ({ id: provider.id, name: provider.name }))}
-              value={agents?.default ?? ""}
-              onChange={setDefaultAgent}
-            />
-          }
-        />
-      )}
-      {/* Claude Code's, when it is on and installed */}
-      {detected.providers.some(p => p.id === "claude" && config(p.id).on && p.detect.installed) && <SkillsSection />}
-      <RunDefault />
-      <ActionsSection ext="knowledge" name={t("act.knowledge")} />
+        {group(t("ag.groupOn"), onOnes)}
+        {group(t("ag.groupOff"), offOnes)}
+        {!detected.providers.length && <div className={`${EMPTY_LIST} px-2.5`}>{t("ag.empty")}</div>}
+        <div className="mt-auto flex flex-wrap items-center gap-2 px-1 pt-2">
+          <button
+            className={`${buttonClass()} h-6 px-2 text-xs font-normal`}
+            onClick={() => {
+              clearAgentsMessage();
+              checkAgents(true);
+            }}
+          >
+            {t("ag.recheck")}
+          </button>
+          {message && <Footer message={message} />}
+        </div>
+      </aside>
+      <main className="@container min-w-0 flex-1 overflow-y-auto px-8 pt-7 pb-12">
+        {current && (
+          <AgentSettings
+            key={current.id}
+            status={current}
+            config={config(current.id)}
+            isDefault={agents?.default === current.id}
+            tab={tab}
+            onTab={setTab}
+          />
+        )}
+      </main>
     </>
   );
 }

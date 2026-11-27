@@ -43,13 +43,13 @@ const intoView = async text => {
   await byText(page, text, false).scrollIntoViewIfNeeded();
   await settle(page);
 };
-/** a folded row of a settings list (an agent, an integration), opened by its name */
-const unfold = async name => {
+/** an agent of Settings › Agents, picked in the list on the left, and optionally one of its tabs */
+const pickAgent = async (name, tab) => {
   await page
-    .getByRole("button", { name: new RegExp(`^${name}\\b`), expanded: false })
-    .locator("visible=true")
-    .first()
+    .getByRole("complementary", { name: "Agents" })
+    .getByRole("button", { name: new RegExp(`^${name}\\b`) })
     .click();
+  if (tab) await page.getByRole("tab", { name: tab }).click();
   await settle(page);
 };
 // the Meeting view: a meeting's card on Today opens it
@@ -309,8 +309,10 @@ const todayDay = async (variant, dark) => {
   await settle(page);
 };
 const settingsPage = async (tab, sub, fixture = "default", platform = "") => {
-  // Projects is a list and the picked project side by side: the window's default size
-  await page.setViewportSize(tab === "Projects" ? { width: 1280, height: 800 } : { width: 900, height: 700 });
+  // Projects and Agents are a list and the picked item side by side: the window's default size
+  await page.setViewportSize(
+    tab === "Projects" || tab === "Agents" ? { width: 1280, height: 800 } : { width: 900, height: 700 },
+  );
   await open(page, server.url, { path: "/settings.html", fixture, platform });
   await click(tab);
   if (sub) await click(sub);
@@ -1427,12 +1429,13 @@ const VIEWS = {
   // Settings › Agents › Antigravity: installed and on, the hint and the Ask option, auto first (PR #513)
   "settings-agents-antigravity": async () => {
     await settingsPage("Agents", undefined, "antigravity");
-    await unfold("Antigravity");
+    await pickAgent("Antigravity");
     await intoView("Ask");
   },
   // Settings › Agents › Skills: Claude's skills in the vault, where each comes from, and Reload
   "settings-skills": async () => {
     await settingsPage("Agents");
+    await pickAgent("Claude Code", "Skills");
     await waitText("northwind:triage");
     await intoView("northwind:deploy-check");
   },
@@ -1449,13 +1452,13 @@ const VIEWS = {
   // Settings › Agents › Codex: the Approvals option, Codex's own reviewer first (PR #513)
   "settings-agents-codex-approvals": async () => {
     await settingsPage("Agents");
-    await unfold("Codex");
+    await pickAgent("Codex");
     await intoView("Approvals");
   },
   // Settings › Agents › Claude Code › MCP servers: one row per state, a failed one's error on one muted line
   "settings-agents-mcp": async () => {
     await settingsPage("Agents");
-    await unfold("Claude Code");
+    await pickAgent("Claude Code", "MCP servers");
     await waitText("northwind-db", 10000);
     await intoView("MCP servers");
   },
@@ -3500,21 +3503,31 @@ const VIEWS = {
   ),
   "settings-integration-mail-experimental": () => settingsPage("Integrations", "Mail", "mailexp"),
   "settings-integration-calendar": () => settingsPage("Integrations", "Calendar", "calendar"),
-  // Claude Code's row folded open: no extra accounts yet, then two with the work one active
+  // Settings › Agents as it opens: the agents on the left (on, then off), the default one picked
+  "settings-agents": async () => {
+    await settingsPage("Agents");
+    await waitText("How it runs");
+  },
+  // Settings › Agents › Claude Code, General tab: no extra accounts yet (the next view has two, the work one active)
   "settings-agent-claude": async () => {
     await settingsPage("Agents");
-    await unfold("Claude Code");
+    await pickAgent("Claude Code");
     await intoView("Add account…");
+  },
+  // an agent that is off (OpenCode): General is only the card that switches it on
+  "settings-agent-off": async () => {
+    await settingsPage("Agents");
+    await pickAgent("OpenCode");
   },
   "settings-agent-accounts": async () => {
     await settingsPage("Agents", undefined, "accounts");
-    await unfold("Claude Code");
+    await pickAgent("Claude Code");
     await intoView("Switch accounts automatically");
   },
   // the same, new conversations on the account with the most room: the choice and its hint
   "settings-agent-most-room": async () => {
     await settingsPage("Agents", undefined, "accounts");
-    await unfold("Claude Code");
+    await pickAgent("Claude Code");
     await page.getByLabel("New conversations use").selectOption("most-room");
     await settle(page);
     await intoView("Switch accounts automatically");
@@ -3893,7 +3906,10 @@ const VIEWS = {
       [keys.switchTo, keys.question, keys.long],
     );
     await waitText("Waiting on which sync strategy to use");
-    await page.evaluate(key => document.querySelector(`[data-key="${key}"]`)?.scrollIntoView({ block: "center" }), keys.question);
+    await page.evaluate(
+      key => document.querySelector(`[data-key="${key}"]`)?.scrollIntoView({ block: "center" }),
+      keys.question,
+    );
   },
   // Claude's guess at the next message after a turn: the empty field's placeholder; Tab takes it into the field
   "conversation-suggestion": async () => {

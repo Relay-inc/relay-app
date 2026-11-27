@@ -311,9 +311,6 @@ export default {
   "composer.agentSharedVault":
     "Ein Gespräch in einem anderen Workspace als Persönlich läuft mit Claude Code oder Codex: Claude Code hält sich dort an seine Berechtigungsregeln, Relay prüft, was Codex anfragt.",
   "set.tab.agents": "Agenten",
-  "ag.default": "Standard-Agent",
-  "ag.defaultHelp":
-    "Neue Gespräche starten mit diesem Agenten. Im Eingabefeld lässt sich vor der ersten Nachricht ein anderer wählen.",
   "ag.on": "Verwenden",
   "ag.onLabel": "Im Eingabefeld anzeigen",
   "ag.status": "Status",
@@ -335,7 +332,6 @@ export default {
   "ag.skillFrom.user": "Benutzer",
   "ag.skillFrom.project": "Projekt",
   "ag.skillFrom.plugin": "Plugin",
-  "ag.caps": "Kann",
   "ag.cap.images": "Bilder",
   "ag.cap.permissions": "Berechtigungen",
   "ag.cap.questions": "Fragen",
@@ -375,9 +371,18 @@ export default {
   "ag.accountAutoHelp":
     "Ist das Planlimit eines Kontos aufgebraucht, zieht die Unterhaltung zum nächsten Konto mit Luft um und geht sofort weiter.",
   "ag.empty": "Noch keine Agents. Füge einen hinzu, um Gespräche damit zu starten.",
-  "ag.listHelp":
-    "Nur eingeschaltete Agents erscheinen im Composer. Klicke auf einen, um seine Einstellungen zu ändern.",
   "ag.isDefault": "Standard",
+  "ag.groupOn": "An",
+  "ag.groupOff": "Aus",
+  "ag.notInstalled": "Nicht installiert",
+  "ag.off": "Aus",
+  "ag.makeDefault": "Als Standard festlegen",
+  "ag.offTitle": "{agent} ist aus",
+  "ag.offHelp": "Schalte ihn ein, um ihn in neuen Gesprächen zu nutzen und hier einzurichten.",
+  "ag.switchOn": "Einschalten",
+  "ag.general": "Allgemein",
+  "ag.runs": "Wie er läuft",
+  "ag.supports": "Unterstützt",
   "int.add": "+ Integration hinzufügen",
   "int.empty":
     "Noch keine Integrationen. Füge eine hinzu, um ihr Board, Pull Requests oder Mail in der Seitenleiste zu sehen.",

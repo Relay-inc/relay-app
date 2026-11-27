@@ -312,9 +312,6 @@ export default {
   "composer.agentSharedVault":
     "Een gesprek in een andere workspace dan Persoonlijk loopt op Claude Code of Codex: Claude Code houdt zich daar aan zijn permissieregels, Relay controleert wat Codex vraagt.",
   "set.tab.agents": "Agents",
-  "ag.default": "Standaardagent",
-  "ag.defaultHelp":
-    "Nieuwe gesprekken starten met deze agent. In het invoerveld kies je een andere vóór het eerste bericht.",
   "ag.on": "Gebruik",
   "ag.onLabel": "Toon in het invoerveld",
   "ag.status": "Status",
@@ -336,7 +333,6 @@ export default {
   "ag.skillFrom.user": "gebruiker",
   "ag.skillFrom.project": "project",
   "ag.skillFrom.plugin": "plugin",
-  "ag.caps": "Kan",
   "ag.cap.images": "afbeeldingen",
   "ag.cap.permissions": "toestemmingskaarten",
   "ag.cap.questions": "vragen",
@@ -376,9 +372,18 @@ export default {
   "ag.accountAutoHelp":
     "Is de planlimiet van een account op, dan verhuist het gesprek naar het volgende account met ruimte en gaat het meteen verder.",
   "ag.empty": "Nog geen agents. Voeg er een toe om er gesprekken mee te starten.",
-  "ag.listHelp":
-    "Enkel agents die aanstaan verschijnen in de composer. Klik er een aan om de instellingen te wijzigen.",
   "ag.isDefault": "standaard",
+  "ag.groupOn": "Aan",
+  "ag.groupOff": "Uit",
+  "ag.notInstalled": "Niet geïnstalleerd",
+  "ag.off": "Uit",
+  "ag.makeDefault": "Standaard maken",
+  "ag.offTitle": "{agent} staat uit",
+  "ag.offHelp": "Zet het aan om het in nieuwe gesprekken te gebruiken en hier in te stellen.",
+  "ag.switchOn": "Aanzetten",
+  "ag.general": "Algemeen",
+  "ag.runs": "Hoe het draait",
+  "ag.supports": "Ondersteunt",
   "int.add": "+ Integratie toevoegen",
   "int.empty": "Nog geen integraties. Voeg er een toe om het bord, de pull requests of de mail in de zijbalk te zien.",
   "int.listHelp":

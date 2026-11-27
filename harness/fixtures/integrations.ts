@@ -380,6 +380,11 @@ const SUBTASKS = ["CSV column order", "VAT column per rate", "Export button in t
     assignee: { data: i === 2 ? null : { type: "people", id: PEOPLE[i].id } },
   },
 }));
+const BEACON_TASKS = ["Dunning letter template", "Payment reminder schedule"].map((title, i) => ({
+  ...TASKS[i],
+  id: String(900400 + i),
+  attributes: { ...TASKS[i].attributes, title, number: 40 + i, subtask_count: 0, open_subtask_count: 0 },
+}));
 export const CARD_TITLE = TASK_TITLES[0];
 /** The public 100x100 thumb of the picture attachment; integration_thumb turns it into a data URL. */
 export const THUMB_URL = "https://files.example/thumb/invoice-list.png";
@@ -464,6 +469,8 @@ export function productive(method: string, path: string, body: unknown): unknown
   }
   if (p === "/tasks" && f("parent_task_id") !== null)
     return page(f("parent_task_id") === TASKS[0].id ? SUBTASKS : [], [...PEOPLE, ...STATUSES]);
+  // Beacon Billing's board has its own tasks; every other board the shared ones
+  if (p === "/tasks" && f("folder_id") === "f-p2") return page(BEACON_TASKS, [...LISTS, ...PEOPLE, ...STATUSES]);
   if (p === "/tasks") return page(TASKS, [...LISTS, ...PEOPLE, ...STATUSES]);
   if (p.startsWith("/tasks/"))
     return one([...TASKS, ...SUBTASKS].find(x => x.id === p.split("/")[2]) ?? TASKS[0], [

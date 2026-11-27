@@ -22,8 +22,8 @@ export function SettingsApp() {
   if (!vaultStatus) return null;
   const tab = picked;
   const page = (id: typeof tab) => (tab === id ? "contents" : "hidden");
-  // Projects is a list and the picked project side by side, the full width; the other pages a centred column
-  const wide = tab === "projects";
+  // Projects and Agents are a list and the picked item side by side, the full width; the other pages a centred column
+  const wide = tab === "projects" || tab === "agents";
   // the window's line height is 1.4 (the body's is 1.5), set as a plain property: a leading-* utility would also set
   // --tw-leading, which every text-* below would then inherit
   return (
