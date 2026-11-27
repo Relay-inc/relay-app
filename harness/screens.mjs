@@ -317,6 +317,13 @@ const settingsPage = async (tab, sub, fixture = "default", platform = "") => {
   await click(tab);
   if (sub) await click(sub);
 };
+/** Settings with `query` typed into the search; `pick` presses Return on the first result */
+const settingsSearch = async (query, pick, fixture = "default") => {
+  await settingsPage("General", undefined, fixture);
+  await page.getByRole("searchbox", { name: "Search settings" }).fill(query);
+  if (pick) await page.keyboard.press("Enter");
+  await page.waitForTimeout(pick ? 400 : 100);
+};
 /** Settings › Projects on a project (`name`) and its tab (General or Pipeline), `height` tall */
 const projectTab = async (tabName, { fixture = "default", name = "Northwind Portal", height = 800 } = {}) => {
   await settingsPage("Projects", undefined, fixture);
@@ -2061,6 +2068,10 @@ const VIEWS = {
   // Settings › Privacy & access (PR settings-pages): what macOS lets Relay do, then what agents may do with tools
   "settings-access": () => settingsPage("Privacy & access"),
   "settings-automation-dark": () => settingsPage("Automation", undefined, "dark"),
+  // Settings search (PR settings-search): "keep" typed with the results showing, then the first one picked
+  "settings-search": () => settingsSearch("keep", false),
+  "settings-search-picked": () => settingsSearch("keep", true),
+  "settings-search-dark": () => settingsSearch("keep", true, "dark"),
   "settings-general-dark": () => settingsPage("General", undefined, "dark"),
   // the keys that work in a conversation, Find among them
   // ⌃1 to ⌃9 for the workspaces, changeable like the others (PR #294)

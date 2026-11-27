@@ -33,12 +33,12 @@ export function Section({
       ? "gap-0 p-0 [&>*]:px-3.5 [&>*]:py-3 [&>*+*]:border-t [&>*+*]:border-s-border"
       : "gap-3.5 px-3.5 py-3";
   return (
-    <section className="grid min-w-0 grid-cols-1 gap-2.5 [&>*]:min-w-0">
+    <section className="grid min-w-0 grid-cols-1 gap-2.5 [&>*]:min-w-0" data-search-section>
       <header className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-2.5">
           <div>
             <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-s-fg">
-              {title}
+              <span data-search-title>{title}</span>
               {info && <Info text={info} />}
             </h2>
             {desc && <p className={HINT}>{desc}</p>}
