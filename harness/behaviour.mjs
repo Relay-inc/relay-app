@@ -2476,6 +2476,46 @@ const SCENARIOS = {
       saves.map(c => c.args.settings?.calendar),
     );
   },
+  // Settings › Projects › General › Board: a project without a board gets one of a set-up tracker, the tracker's
+  // project named like it offered first; another board for a project whose pipeline is on switches that off; Unlink
+  async projectBoard(s) {
+    await s.load({ path: "/settings.html", fixture: "pipeline-label" });
+    const { page } = s;
+    const saved = async () => (await s.calls("set_settings")).at(-1)?.args.settings;
+    const pick = async (project, label) => {
+      await page.waitForSelector(`[id="pc-board-${project}"]:not([disabled])`);
+      await visible(page.locator(`[id="pc-board-${project}"]`)).selectOption({ label });
+      await settle(page, 300);
+    };
+    await click(navButton(page, "Projects"), 400);
+    const row = name => page.getByRole("complementary", { name: "Projects" }).getByRole("button", { name });
+    // Beacon's emoji icon comes first in its row's name
+    await click(row(/Beacon/), 400);
+    s.check("no board yet: no Unlink", !(await visible(button(page, "Unlink")).count()));
+    await page.waitForSelector(`[id="pc-in-Beacon Billing"]:not([disabled])`);
+    s.check(
+      "the tracker's project named like it first",
+      (await visible(page.locator(`[id="pc-in-Beacon Billing"]`)).inputValue()) === "p2",
+    );
+    await pick("Beacon Billing", "Board");
+    let next = await saved();
+    const beacon = next?.boards?.["Beacon Billing"];
+    s.check(
+      "the picked board linked",
+      beacon?.provider === "productive" && beacon.project === "p2" && beacon.board === "f-p2",
+    );
+    s.check("its list line names the tracker", await waitText(page, "Productive · Pipeline off"));
+
+    await click(row(/Northwind Portal/), 400);
+    await pick("Northwind Portal", "Maintenance");
+    next = await saved();
+    s.check("another board linked", next?.boards?.["Northwind Portal"]?.board === "f2");
+    s.check("its pipeline switched off", next?.pipelines?.["Northwind Portal"]?.on === false);
+    s.check("and said so", await waitText(page, "Board changed: the pipeline is off until you check its columns."));
+    await click(visible(button(page, "Unlink")).first(), 300);
+    next = await saved();
+    s.check("Unlink drops it", !next?.boards?.["Northwind Portal"] && !!next?.boards?.["Beacon Billing"]);
+  },
   async agentAccess(s) {
     await s.load({ path: "/settings.html" });
     const { page } = s;

@@ -9,7 +9,6 @@ import {
   setPipelineRepo,
   setPipelinesPaused,
 } from "../../../application/settings/pipeline";
-import { go } from "../../../application/settings/window";
 import { Icon } from "../../components/Icon";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
@@ -34,7 +33,7 @@ const FIELD_SELECT = `${SELECT} h-7.5 w-full text-[13px]`;
 
 /** The Pipeline tab of a project: the switch with how it picks up, the board's columns a ticket moves through, how the
  *  agent builds (skill, plan first, checks per repo) and the review after it. */
-export function PipelineSettings({ name }: { name: string }) {
+export function PipelineSettings({ name, onGeneral }: { name: string; onGeneral: () => void }) {
   const { t, any } = useT();
   const stored = useSettingsStore(s => s.settings.pipelines?.[name]);
   const p: Pipeline = { ...EMPTY_PIPELINE, ...stored };
@@ -53,9 +52,9 @@ export function PipelineSettings({ name }: { name: string }) {
   const set = (patch: Partial<Pipeline>) => setPipeline(name, patch);
   const manual = p.mode === "manual";
   const options = (cols?.columns ?? []).map(c => ({ id: c.id, name: c.name }));
-  const integrations = (
-    <button className="text-accent-text underline" onClick={() => go("integrations")}>
-      {t("set.tab.integrations")}
+  const general = (
+    <button className="text-accent-text underline" onClick={onGeneral}>
+      {t("pc.general")}
     </button>
   );
   const column = (k: Step | "input", className = FIELD_SELECT) => (
@@ -100,7 +99,7 @@ export function PipelineSettings({ name }: { name: string }) {
             <p className={`${HELP} mt-0.5`}>{t("pl.help")}</p>
           </div>
           <span className={HELP}>
-            {t(linked ? "pl.linkedIn" : "pl.linkFirst")} {integrations}
+            {t(linked ? "pl.linkedIn" : "pl.linkFirst")} {general}
           </span>
           <Switch id={`pl-${name}`} label={t("pl.title")} on={p.on} disabled={!linked} onToggle={on => set({ on })} />
         </div>

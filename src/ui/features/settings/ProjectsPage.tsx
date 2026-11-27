@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { needsSetup } from "../../../domain/pipeline/rules";
+import { provider as providerById } from "../../../shared/plugins";
 import { useSettingsStore } from "../../../application/settings/store";
 import { findIcons, showProjectsPage } from "../../../application/settings/projects-page";
 import { Icon } from "../../components/Icon";
@@ -52,11 +53,13 @@ export function ProjectsPage({ active }: { active: boolean }) {
   const current = shown.includes(picked) ? picked : (shown[0] ?? "");
   const contexts = [...new Set(shown.map(name => projectOf(name)?.context ?? ""))].sort((a, b) => a.localeCompare(b));
 
-  // how many repos it has and, with a board linked, whether its pipeline is on
+  // how many repos it has and, with a board linked, its tracker and whether its pipeline is on
   const summary = (name: string) => {
     const count = repos[name]?.length ?? 0;
     const parts = [count ? tn("pc.repoCount", count) : t("pc.noRepos")];
-    if (boards?.[name]) parts.push(t(pipelines?.[name]?.on ? "pc.pipelineOn" : "pc.pipelineOff"));
+    const board = boards?.[name];
+    if (board) parts.push(providerById(board.provider)?.name ?? board.provider);
+    if (board) parts.push(t(pipelines?.[name]?.on ? "pc.pipelineOn" : "pc.pipelineOff"));
     return parts.join(" · ");
   };
   const row = (name: string) => {
