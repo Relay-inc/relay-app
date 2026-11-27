@@ -6,7 +6,7 @@ import type { Locales } from "./i18n";
 export type Caps = {
   persistent: boolean; images: boolean; thinking: boolean; permissions: boolean; questions: boolean; subagents: boolean;
   fork: boolean; terminal: boolean; background: boolean; effort: boolean; limits: boolean; title: boolean; write: boolean; accounts: boolean;
-  liveModel: boolean; control: boolean; picked: boolean; remote: boolean; bridge: boolean;
+  liveModel: boolean; control: boolean; picked: boolean; remote: boolean; mcp: boolean; bridge: boolean;
 };
 export type Choice = { id: string; label: string };
 export type Detect = { installed: boolean; bin: string; version?: string | null; loggedIn?: boolean | null; note?: string | null };
@@ -54,6 +54,7 @@ export type AgentEvent =
   | { type: "compacting" }           // Claude Code is summarising the conversation to free context; `compacted` ends it
   | { type: "compacted"; trigger?: string | null; pre_tokens?: number | null; post_tokens?: number | null } // trigger: "manual" | "auto"
   | { type: "context"; used?: number | null; window?: number | null } // how full the context is: tokens in use and/or the model's window (Claude Code)
+  | { type: "suggestion"; text: string } // live, Claude Code only: the message the user will probably send next
   | { type: "resolved"; model: string; effort?: string | null; default_model: boolean; default_effort: boolean } // what the CLI runs on; default_* when the conversation left it to the CLI
   | { type: "tasks"; tasks: BackgroundTask[] } // Claude Code's background tasks after a change: the whole set, it replaces what was shown
   | { type: "task_progress"; id: string; tool_uses?: number | null; tokens?: number | null; last_tool?: string | null; summary?: string | null }

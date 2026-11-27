@@ -783,6 +783,7 @@ const caps = (all: boolean) => ({
   remote: all,
   bridge: all,
   brain: all,
+  mcp: all,
 });
 const choices = (pairs: [string, string][]) => pairs.map(([id, label]) => ({ id, label }));
 export const agentsStatus = {
@@ -903,6 +904,21 @@ export const agentsStatusManyModels = {
         },
   ),
 };
+/** agent_mcp: the MCP servers Claude has in the vault, one per state. */
+export const mcpServers = () => [
+  { name: "acme-docs", status: "connected", error: null, connector: false },
+  { name: "linear", status: "needs-auth", error: null, connector: false },
+  {
+    name: "northwind-db",
+    status: "failed",
+    error: "Error POSTing to endpoint: connect ECONNREFUSED 127.0.0.1:5432 (is the Northwind Portal database running?)",
+    connector: false,
+  },
+  { name: "notion", status: "pending", error: null, connector: false },
+  { name: "scratch", status: "disabled", error: null, connector: false },
+  { name: "claude.ai Calendar", status: "connected", error: null, connector: true },
+  { name: "claude.ai Tracker", status: "needs-auth", error: null, connector: true },
+];
 /** agent_skills: Claude's skills in the vault, where each comes from. */
 export const agentSkills = (provider: string) =>
   provider === "claude"

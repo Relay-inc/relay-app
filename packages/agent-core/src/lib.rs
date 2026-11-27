@@ -18,7 +18,7 @@ use std::process::{Command, Stdio};
 /// Callers budget from this so what matters is not what gets cut. Same value as `WRITE_MAX` in limits.ts.
 pub const WRITE_MAX: usize = 20_000;
 pub mod discover;
-pub use discover::{discover_commands, http_get, Probe};
+pub use discover::{discover_commands, discover_within, http_get, Probe};
 pub mod envelope;
 #[cfg(windows)]
 pub mod job;
@@ -70,6 +70,8 @@ pub struct Caps {
     pub picked: bool,
     /// Can run on a work machine (Settings › Machines) and be moved there.
     pub remote: bool,
+    /// Lists its MCP servers with their state and signs in, reconnects and switches them ([`AgentProvider::mcp`]).
+    pub mcp: bool,
     /// Can be continued from claude.ai or the Claude phone app while it runs ([`AgentProvider::remote_control`]).
     pub bridge: bool,
 }
@@ -237,6 +239,9 @@ pub enum Event {
     Compacted { trigger: Option<String>, pre_tokens: Option<u64>, post_tokens: Option<u64> },
     /// How full the context is: tokens in use now and/or the model's window, each when the provider says. Claude Code only.
     Context { used: Option<u64>, window: Option<u64> },
+    /// The next message the user will probably send, predicted after a turn (Claude Code with `--prompt-suggestions`).
+    /// The composer shows it as its placeholder. Live only, never in history.
+    Suggestion { text: String },
     /// The model (and effort, when the CLI says) it runs on, its own defaults resolved. The app passes it on as
     /// `resolved` with which of the two the conversation left to the CLI, so the composer can name the defaults.
     Resolved { model: String, effort: Option<String> },
@@ -310,6 +315,10 @@ pub trait AgentProvider: Sync {
     /// The skills in this vault with where each comes from (`{name, description, source, state}`), without starting a conversation.
     fn skills(&self, _env: &Env) -> Value { serde_json::json!([]) }
     fn efforts(&self) -> Vec<Choice> { vec![] }
+    /// `caps.mcp`: one action on the MCP servers in this vault, from a short-lived process: `{op:"status"}` answers
+    /// the servers (`[{name, status, error, connector}]`), `{op:"signin"|"reconnect"|"toggle", server, on?}` do it and
+    /// answer the servers after. `open` shows a sign-in page in the browser.
+    fn mcp(&self, _env: &Env, _op: &Value, _open: &dyn Fn(&str)) -> Result<Value, String> { Err("no MCP servers here".into()) }
     /// Whether a session id may go on a command line.
     fn valid_session(&self, id: &str) -> bool { safe_id(id) }
 

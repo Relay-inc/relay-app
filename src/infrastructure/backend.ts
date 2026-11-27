@@ -4,6 +4,7 @@ import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
+import type { McpOp, McpServer } from "../domain/agents/mcp";
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { Skill } from "../domain/agents/types";
 import type { Related } from "../domain/related/rules";
@@ -357,6 +358,8 @@ export const reminderAdd = (text: string, date: string, project: string | null, 
 export const agentsStatus = () => invoke<AgentsStatus>("agents_status");
 /** A provider's slash commands and skills for the current vault. */
 export const agentCommands = (provider: string) => invoke<SlashCommand[]>("agent_commands", { provider });
+/** One action on a provider's MCP servers in the vault (`caps.mcp`): the servers after it. A sign-in answers when done. */
+export const agentMcp = (provider: string, op: McpOp) => invoke<McpServer[]>("agent_mcp", { provider, op });
 /** A provider's skills for the current vault, each with where it comes from. */
 export const agentSkills = (provider: string) => invoke<Skill[]>("agent_skills", { provider });
 /** A running conversation picks up changed skills and plugins; false when none runs. The answer comes as a `reload` event. */

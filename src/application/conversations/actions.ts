@@ -87,6 +87,7 @@ export async function reloadSkills() {
 /** What is typed in the open conversation; kept per conversation across switching and restarts. */
 export function setTyped(value: string) {
   const key = selected();
+  if (value) dropSuggestion(key);
   setDrafts(draft => {
     if (value) draft.typed[key] = value;
     else delete draft.typed[key];
@@ -103,7 +104,21 @@ export function setTyped(value: string) {
   saveChats();
 }
 /** Text into a conversation's composer from elsewhere (a card's "Start conversation"): the draft keeps its title. */
+/** Takes the suggested next message into the field of the open conversation. */
+export function acceptSuggestion() {
+  const key = selected();
+  const text = cs().suggestion[key];
+  if (!text) return;
+  typeInto(key, text);
+}
+export function dropSuggestion(key: string) {
+  if (cs().suggestion[key] === undefined) return;
+  set(draft => {
+    delete draft.suggestion[key];
+  });
+}
 export function typeInto(key: string, value: string) {
+  if (value) dropSuggestion(key);
   setDrafts(draft => {
     draft.typed[key] = value;
   });
