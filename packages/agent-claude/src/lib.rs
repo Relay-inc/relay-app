@@ -50,6 +50,8 @@ pub fn agents_raw(env: &Env) -> Option<String> {
 /// The oldest Claude Code seen taking every flag `command` passes (`--thinking-display` is not in its changelog, so
 /// this is the oldest build checked, not the release that added it). An older one stops each turn on "unknown option".
 const MIN_VERSION: [u32; 3] = [2, 1, 294];
+/// The oldest Claude Code checked to take `--prompt-suggestions`; an older one is not given it.
+const SUGGESTIONS_VERSION: [u32; 3] = [2, 1, 332];
 /// Claude Code's Artifact tools and their comments (see `command`).
 const ARTIFACT_ENV: [(&str, &str); 4] = [("CLAUDE_CODE_ARTIFACT", "1"), ("CLAUDE_CODE_ARTIFACT_VERIFY", "1"),
     ("CLAUDE_CODE_ARTIFACT_VERSIONS", "1"), ("CLAUDE_CODE_ENTRYPOINT", "sdk-ts")];
@@ -60,6 +62,11 @@ const TITLE_SYSTEM: &str = agent_core::prompt::text(include_str!("../../../promp
 fn too_old(version: &str) -> bool {
     let v: Vec<u32> = version.split_whitespace().next().unwrap_or("").split('.').map_while(|n| n.parse().ok()).collect();
     v.len() == 3 && v[..] < MIN_VERSION[..]
+}
+/// Whether `version` is known to take `--prompt-suggestions`. Unreadable counts as not.
+fn takes_suggestions(version: Option<&str>) -> bool {
+    let v: Vec<u32> = version.and_then(|v| v.split_whitespace().next()).unwrap_or("").split('.').map_while(|n| n.parse().ok()).collect();
+    v.len() == 3 && v[..] >= SUGGESTIONS_VERSION[..]
 }
 
 /// Claude Code's transcript folder for a vault: the path with every non-alphanumeric char as `-`.
@@ -224,7 +231,8 @@ impl AgentProvider for Claude {
     fn command(&self, env: &Env, l: &Launch) -> Result<Command, String> {
         // ponytail: runs this Mac's `--version`, so for a work machine (machines.rs) it reads a path that is usually
         // missing here and lets it through. Check there too once proto::Info carries the machine's claude version.
-        if let Some(line) = agent_core::version(env.bin, env.path).filter(|v| too_old(v)) {
+        let version = agent_core::version(env.bin, env.path);
+        if let Some(line) = version.as_deref().filter(|v| too_old(v)) {
             let v = line.split_whitespace().next().unwrap_or_default();
             let [a, b, c] = MIN_VERSION;
             return Err(format!("claude: Claude Code {v} is too old for Relay, it needs {a}.{b}.{c} or newer. Run `claude update` and start the conversation again."));
@@ -249,7 +257,12 @@ impl AgentProvider for Claude {
             .arg("--allowedTools").args(&allowed).arg("--disallowedTools").args(&denied)
             .arg("--append-system-prompt").arg(&system).args(["-n", l.name])
             // each message echoed when Claude takes it up: one sent during a turn often joins that turn
-            .arg("--replay-user-messages")
+            .arg("--replay-user-messages");
+        // ponytail: undocumented (not in `--help`, Claude Code 2.1.332): after a turn the CLI sends a `prompt_suggestion`
+        // event with the likely next message, which the composer shows as its placeholder. The user's own setting
+        // `promptSuggestionEnabled: false` turns it off here too.
+        if takes_suggestions(version.as_deref()) { cmd.arg("--prompt-suggestions"); }
+        cmd
             // ponytail: undocumented switches (Claude Code 2.1.332). ARTIFACT gives the Artifact tools, VERIFY adds
             // ArtifactCheck, and the SDK entrypoint keeps a live subscription so artifact comments reach the running
             // conversation (print mode has none), where its own agent answers it, so the reply shows there (not
@@ -465,6 +478,11 @@ mod tests {
         assert!(!chrome(&Grants { fenced: true, ..Default::default() }), "never in a shared vault");
         assert!(!chrome(&Grants { machine: true, ..Default::default() }), "never on a work machine");
         std::fs::remove_dir_all(&d).ok();
+    }
+    #[test]
+    fn suggestions_only_for_a_claude_that_takes_them() {
+        assert!(takes_suggestions(Some("2.1.332 (Claude Code)")) && takes_suggestions(Some("2.2.0 (Claude Code)")));
+        assert!(!takes_suggestions(Some("2.1.331 (Claude Code)")) && !takes_suggestions(Some("")) && !takes_suggestions(None));
     }
     #[test]
     fn spawn_args_stay_as_before() {

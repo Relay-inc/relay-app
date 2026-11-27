@@ -217,6 +217,7 @@ fn parse(ev: &Value) -> Vec<Event> {
             if let Some(m) = ev["model"].as_str() { out.push(Event::Resolved { model: m.into(), effort: None }); }
         }
         "conversation_reset" => out.push(Event::Reset),
+        "prompt_suggestion" => out.extend(ev["suggestion"].as_str().map(str::trim).filter(|s| !s.is_empty()).map(|text| Event::Suggestion { text: text.into() })),
         "rate_limit_event" if ev["rate_limit_info"]["status"] == "rejected" => {
             // seconds or milliseconds since the epoch
             let resets_at = ev["rate_limit_info"]["resetsAt"].as_i64().map(|s| if s < 1_000_000_000_000 { s * 1000 } else { s });
@@ -411,6 +412,15 @@ mod tests {
         assert_eq!(parse_all(&[init]), [Event::Commands { commands: json!([{"name": "/compact"}]) }]);
         let err = json!({"type": "control_response", "response": {"subtype": "error", "request_id": "model", "error": "nope"}});
         assert_eq!(parse_all(&[err]), [Event::Stderr { text: "relay-mail (model): \"nope\"".into() }]);
+    }
+
+    #[test]
+    fn prompt_suggestion_is_the_next_message() {
+        let s = json!({"type": "prompt_suggestion", "suggestion": " run the tests ", "uuid": "u1", "session_id": "s1"});
+        assert_eq!(parse_all(&[s]), [Event::Suggestion { text: "run the tests".into() }]);
+        // an empty one says nothing
+        let empty = json!({"type": "prompt_suggestion", "suggestion": "", "uuid": "u2", "session_id": "s1"});
+        assert_eq!(parse_all(&[empty]), []);
     }
 
     #[test]

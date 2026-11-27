@@ -227,6 +227,9 @@ pub enum Event {
     Compacted { trigger: Option<String>, pre_tokens: Option<u64>, post_tokens: Option<u64> },
     /// How full the context is: tokens in use now and/or the model's window, each when the provider says. Claude Code only.
     Context { used: Option<u64>, window: Option<u64> },
+    /// The next message the user will probably send, predicted after a turn (Claude Code with `--prompt-suggestions`).
+    /// The composer shows it as its placeholder. Live only, never in history.
+    Suggestion { text: String },
     /// The model (and effort, when the CLI says) it runs on, its own defaults resolved. The app passes it on as
     /// `resolved` with which of the two the conversation left to the CLI, so the composer can name the defaults.
     Resolved { model: String, effort: Option<String> },

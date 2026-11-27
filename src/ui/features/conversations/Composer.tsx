@@ -31,8 +31,10 @@ import {
   vaultChoice,
 } from "../../../application/conversations/selectors";
 import {
+  acceptSuggestion,
   attach,
   attachPaths,
+  dropSuggestion,
   pickAndAttach,
   sendMsg,
   sendOrStop,
@@ -195,6 +197,10 @@ export function Composer({ className }: { className: string }) {
   const attached = useDraftsStore(s => s.attached);
   const files = useDraftsStore(s => s.files);
   const busy = useConversationsStore(s => s.status[selected] === "busy");
+  // Claude Code's guess at the next message: the placeholder of an empty field while nothing runs. Gone with the first
+  // key typed (the field is no longer empty), a new turn, or switching to another conversation
+  const suggestion = useConversationsStore(s => (busy || typed ? "" : (s.suggestion[selected] ?? "")));
+  useEffect(() => () => dropSuggestion(selected), [selected]);
   const dictation = useDictationStore(s => s.phase);
   const level = useDictationStore(s => s.level);
   const progress = useDictationStore(s => s.progress);
@@ -304,6 +310,12 @@ export function Composer({ className }: { className: string }) {
   };
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (onCompletionKey(e)) return;
+    // as in the terminal: Tab or → takes the suggestion, Enter on the empty field still sends nothing
+    if (suggestion && (e.key === "Tab" || e.key === "ArrowRight") && !e.nativeEvent.isComposing && !e.shiftKey) {
+      e.preventDefault();
+      acceptSuggestion();
+      return;
+    }
     // Settings › Shortcuts may move sending to ⌘↵, the textarea then makes the new line on Enter itself
     if (isKey(e.nativeEvent, "chat.send") && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -459,7 +471,7 @@ export function Composer({ className }: { className: string }) {
           }}
           rows={1}
           value={typed}
-          placeholder={placeholder}
+          placeholder={suggestion || placeholder}
           onKeyDown={onKeyDown}
           onSelect={e => setCaret(e.currentTarget.selectionStart)}
           onChange={e => {
