@@ -3,7 +3,6 @@ import type { Key } from "../../../shared/i18n";
 import { numberFormat } from "../../../shared/format";
 import type { MailAcct, MailNew } from "../../../domain/settings/types";
 import { useSettingsStore } from "../../../application/settings/store";
-import { go } from "../../../application/settings/window";
 import {
   addMailAccount,
   clearMailMessage,
@@ -20,6 +19,7 @@ import { useT } from "../../hooks/useT";
 import {
   buttonClass,
   CODE,
+  DEFAULT_PILL,
   ERROR_MESSAGE,
   FIELD,
   FOOTER_IN_ROW,
@@ -243,7 +243,7 @@ export function MailSettings() {
           {accounts.map(account => (
             <div
               key={account.email}
-              className="group flex items-center gap-3 border-t border-s-border py-2.5 first:border-t-0 first:pt-0 last:pb-0"
+              className="flex items-center gap-3 border-t border-s-border py-2.5 first:border-t-0 first:pt-0 last:pb-0"
             >
               <span className="min-w-0 flex-1">
                 <b className="block truncate font-medium">{account.email}</b>
@@ -252,8 +252,11 @@ export function MailSettings() {
                   {account.host ? ` · ${account.host}` : ""}
                 </span>
               </span>
+              {accounts.length >= 2 && account.email === (config.account || emails[0]) && (
+                <span className={DEFAULT_PILL}>{t("ag.isDefault")}</span>
+              )}
               {testResult(account)}
-              <span className="flex items-center gap-1 opacity-0 transition-opacity duration-150 ease-in-out group-focus-within:opacity-100 group-hover:opacity-100">
+              <span className="flex items-center gap-1">
                 <button className={buttonClass()} onClick={() => testMail(account)}>
                   {t("mail.test")}
                 </button>
@@ -282,14 +285,6 @@ export function MailSettings() {
             value={config.account || emails[0]}
             onChange={setMailAccount}
           />
-        </Field>
-      )}
-      {/* archive, delete, Inbox/Other and bulk actions: switched on in Labs */}
-      {accounts.length > 0 && (
-        <Field label={t("labs.mail")} className="border-t border-s-border pt-3.5">
-          <button className={buttonClass()} onClick={() => go("labs")}>
-            {t("mail.labsOpen")}
-          </button>
         </Field>
       )}
       <div className={FOOTER_IN_ROW}>
