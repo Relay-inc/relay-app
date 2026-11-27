@@ -957,6 +957,8 @@ export default {
   "bar.termMail":
     "Nicht verfügbar für ein Gespräch, das Mail berührt hat: das Terminal würde es ohne die Einschränkungen der App fortsetzen.",
   "composer.send": "Senden",
+  "btw.desc": "Eine Zwischenfrage stellen, ohne Claude zu unterbrechen",
+  "btw.close": "Schließen",
   "composer.commands": "Befehle und Skills",
   copy: "Kopieren",
   "img.remove": "Entfernen",

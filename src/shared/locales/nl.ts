@@ -952,6 +952,8 @@ export default {
   "bar.termMail":
     "Niet beschikbaar voor een gesprek dat mail raakte: de terminal zou het hervatten zonder de beperkingen van de app.",
   "composer.send": "Versturen",
+  "btw.desc": "Stel een zijvraag zonder Claude te onderbreken",
+  "btw.close": "Sluiten",
   "composer.commands": "Commando's en skills",
   copy: "Kopiëren",
   "img.remove": "Verwijderen",
