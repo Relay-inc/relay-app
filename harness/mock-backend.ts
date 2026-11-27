@@ -654,6 +654,9 @@ function handle(cmd: string, a: Args): unknown {
       }
       setTimeout(() => emit("shared-vaults", structuredClone(sharedStatus)), 300);
       return null;
+    case "set_machines_default":
+      settings = { ...settings, machines_default: a.id };
+      return null;
     case "machines_list":
       if (fixture === "github") return [{ id: "a1b2c3d4e5f6", name: "Server", online: true, default: false }];
       // shared: its Team server, so a new main-vault conversation's Runs on shows next to the Vault pick
@@ -2026,15 +2029,15 @@ function handle(cmd: string, a: Args): unknown {
       };
     }
     case "plugin_import_list":
-      return fixture.startsWith("plugins") ? ["garmin"] : [];
+      return fixture.startsWith("plugins") ? ["acme-docs", "northwind-db"] : [];
     case "plugin_import":
       return {
-        id: "garmin",
+        id: a.name,
         name: a.name,
         command: "uvx",
-        args: ["garmin-mcp"],
+        args: [a.name],
         env: {},
-        secrets: ["GARMIN_PASSWORD"],
+        secrets: [],
         on: true,
         allowed: [],
         views: [],

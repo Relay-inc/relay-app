@@ -350,9 +350,6 @@ export default {
   "ag.accountAdd": "Ajouter un compte…",
   "ag.accountRemove": "Retirer {name}",
   "ag.accountName": "Nom du compte",
-  "mcp.title": "Serveurs MCP",
-  "mcp.help":
-    "Les serveurs que Claude a dans ce coffre. Un changement vaut pour les nouvelles conversations ; celles en cours gardent leurs serveurs.",
   "mcp.checking": "Vérification…",
   "mcp.none": "Aucun serveur MCP dans ce coffre.",
   "mcp.state.connected": "Connecté",
@@ -385,7 +382,6 @@ export default {
   "ag.offHelp": "Activez-le pour l'utiliser dans les nouvelles conversations et le régler ici.",
   "ag.switchOn": "Activer",
   "ag.general": "Général",
-  "ag.runs": "Comment il tourne",
   "ag.supports": "Prend en charge",
   "int.add": "+ Ajouter une intégration",
   "int.empty":
@@ -2529,9 +2525,7 @@ export default {
   "composer.machineNoMail": "Une conversation sur un e-mail reste sur ce Mac : les outils de courrier tournent ici.",
   "composer.machineSharedVault":
     "Une conversation dans un autre espace de travail que Personnel reste sur ce Mac : une machine de travail n'a que votre espace de travail Personnel.",
-  "mc.runDefaultTitle": "Où s'exécutent les conversations",
   "mc.runDefault": "Les nouvelles conversations s'exécutent sur",
-  "mc.runDefaultHelp": "Chaque nouvelle conversation peut encore choisir un autre endroit à côté du modèle.",
   "mc.line": "Ligne d'association",
   "mc.lineHelp":
     "Lancez <code>relay-server pair</code> sur la machine et collez la ligne ici. Le code ne fonctionne qu'une fois, pendant 10 minutes.",
@@ -2814,13 +2808,25 @@ export default {
   "plug.help":
     "Un plugin est un serveur MCP que Relay démarre sur ce Mac. Celui qui apporte une vue obtient une ligne dans la barre latérale. La vue s'exécute dans un bac à sable, sans accès à Relay ni au réseau, et ne peut appeler que les outils que vous autorisez ici. Les secrets vont dans le trousseau.",
   "plug.add": "Ajouter un plugin",
-  "plug.import": "Importer depuis Claude Code",
+  "ag.newUse": "Les nouvelles conversations utilisent",
+  "ag.defaultAgent": "Agent par défaut",
+  "ag.runsOn": "sur",
+  "ag.machinesHint": "Les machines se gèrent sous Organisations et serveurs.",
+  "ag.version": "Version",
+  "ag.mcpLink": "Serveurs MCP : {n}, dans Plugins →",
+  "ag.accountLeft": "{pct} % restant",
+  "mcp.connector": "Connecteur sur claude.ai",
+  "plug.claudeH": "Exécutés par Claude Code",
+  "plug.relayH": "Exécutés par Relay",
+  "plug.intro":
+    "Les serveurs MCP, dans une seule liste. Relay exécute ses plugins lui-même et donne à un plugin avec une vue une place dans la barre latérale ; Claude Code exécute ses propres serveurs et Relay montre comment ils se portent.",
+  "plug.import": "Importer",
   "plug.importHelp":
-    "Serveurs MCP de la config de Claude Code. Les secrets de leur environnement vont dans le trousseau.",
+    "Depuis la config propre de Claude Code. Importez-en un pour l'exécuter dans Relay à la place. Les secrets de leur environnement vont dans le trousseau.",
   "plug.empty": "Aucun plugin pour l'instant.",
-  "plug.viewStatus": "A une vue",
+  "plug.viewStatus": "A une vue dans la barre latérale",
   "plug.views": "Vues",
-  "plug.noView": "Pas encore de vue trouvée",
+  "plug.noView": "Pas encore de vue",
   "plug.allowed_one": "{n} outil autorisé",
   "plug.allowed_other": "{n} outils autorisés",
   "plug.serverH": "Serveur",

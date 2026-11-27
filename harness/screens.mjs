@@ -1511,12 +1511,18 @@ const VIEWS = {
     await pickAgent("Codex");
     await intoView("Approvals");
   },
-  // Settings › Agents › Claude Code › MCP servers: one row per state, a failed one's error on one muted line
+  // Settings › Plugins › Run by Claude Code (was Agents › MCP servers): one row per state, a failed one's error on one
+  // muted line, the connectors without Import
   "settings-agents-mcp": async () => {
-    await settingsPage("Agents");
-    await pickAgent("Claude Code", "MCP servers");
+    await settingsPage("Plugins");
     await waitText("northwind-db", 10000);
-    await intoView("MCP servers");
+    await intoView("claude.ai Tracker");
+  },
+  // the same with the example plugin set up: Run by Relay above, Import on the servers Relay can take over
+  "settings-plugins-claude": async () => {
+    await settingsPage("Plugins", undefined, "plugins");
+    await waitText("northwind-db", 10000);
+    await intoView("claude.ai Tracker");
   },
   // two Claude accounts, the first used up: each account's limits, the one in use marked
   "usage-accounts": async () => {
@@ -2114,6 +2120,16 @@ const VIEWS = {
   // Settings › Privacy & access (PR settings-pages): what macOS lets Relay do, then what agents may do with tools
   "settings-access": () => settingsPage("Privacy & access"),
   "settings-automation-dark": () => settingsPage("Automation", undefined, "dark"),
+  "settings-agent-claude-dark": async () => {
+    await settingsPage("Agents", undefined, "dark");
+    await pickAgent("Claude Code");
+    await intoView("Add account…");
+  },
+  "settings-plugins-claude-dark": async () => {
+    await settingsPage("Plugins", undefined, "plugins-dark");
+    await waitText("northwind-db", 10000);
+    await intoView("claude.ai Tracker");
+  },
   // Settings search (PR settings-search): "keep" typed with the results showing, then the first one picked
   "settings-search": () => settingsSearch("keep", false),
   "settings-search-picked": () => settingsSearch("keep", true),
@@ -2484,7 +2500,6 @@ const VIEWS = {
   "settings-servers-row": async () => {
     await settingsPage("Agents", undefined, "machines");
     await waitText("Organisations and servers");
-    await intoView("Agent access");
   },
   "settings-shared-vaults": async () => {
     await workspacePage("shared", 1600);
@@ -3640,10 +3655,17 @@ const VIEWS = {
     await page.setViewportSize({ width: 900, height: 1000 });
     await intoView("What agents may do with your tools");
   },
-  // Settings › Agents as it opens: the agents on the left (on, then off), the default one picked
+  // Settings › Agents as it opens: the bar with the default agent, the agents on the left (on, then off), the default one picked
   "settings-agents": async () => {
     await settingsPage("Agents");
-    await waitText("How it runs");
+    await waitText("New conversations use");
+  },
+  // the same with a machine of your own (and one for workspaces only, left out): "on [This Mac]" in the bar
+  "settings-agents-runs-on": async () => {
+    await settingsPage("Agents", undefined, "nomirror");
+    await waitText("Machines are managed under");
+    await page.getByLabel("New conversations run on").selectOption({ label: "Server" });
+    await settle(page);
   },
   // Settings › Agents › Claude Code, General tab: no extra accounts yet (the next view has two, the work one active)
   "settings-agent-claude": async () => {

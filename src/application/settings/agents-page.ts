@@ -63,3 +63,13 @@ export const setDefaultAgent = (id: string) =>
     agents.default = id;
   });
 export const clearAgentsMessage = () => page({ message: null });
+/** What is left of each extra account's plan, in percent, by config folder: the worst of its windows. An account the
+ *  provider says nothing about is left out. */
+export async function accountRoom(id: string) {
+  const room: Record<string, number> = {};
+  const found = (await backend.usageLimits().catch(() => [])).find(p => p.provider === id);
+  for (const account of found?.accounts ?? [])
+    if (account.limits.ok && account.limits.windows.length)
+      room[account.dir] = Math.max(0, Math.round(100 - Math.max(...account.limits.windows.map(w => w.pct))));
+  return room;
+}

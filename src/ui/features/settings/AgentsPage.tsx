@@ -1,20 +1,23 @@
 import { useEffect, useState } from "react";
 import type { AgentCfg } from "../../../domain/settings/types";
 import { useSettingsStore } from "../../../application/settings/store";
-import { checkAgents, clearAgentsMessage } from "../../../application/settings/agents-page";
+import { checkAgents, clearAgentsMessage, setDefaultAgent } from "../../../application/settings/agents-page";
+import { checkAgentUpdates } from "../../../application/settings/updates-page";
+import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
-import { buttonClass, DEFAULT_PILL, EMPTY_LIST } from "./blocks";
+import { buttonClass, DEFAULT_PILL, EMPTY_LIST, SELECT } from "./blocks";
 import { AgentGlyph } from "./AgentBits";
 import { AgentSettings, type AgentTab } from "./AgentSettings";
 import { Footer } from "./Footer";
 import { LoadingSection } from "./LoadingSection";
+import { RunDefault } from "./RunDefault";
 
 const OFF: AgentCfg = { on: false, bin: "" };
 const ROW =
   "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-s-fg focus-visible:ring-2 ring-s-ring focus-visible:outline-none";
 
-/** Agents: the agents on the left (on, then off), the picked one's settings on the right; its header switches it on or
- *  off and makes it the default. Every change saves at once. What is installed is checked when the window opens. */
+/** Agents: a bar with the default agent and where new conversations run, the agents under it on the left (on, then
+ *  off) and the picked one's settings on the right; its header switches it on or off and makes it the default. Every change saves at once. What is installed is checked when the window opens. */
 export function AgentsPage() {
   const { t } = useT();
   const detected = useSettingsStore(s => s.agentsPage.detected);
@@ -24,6 +27,7 @@ export function AgentsPage() {
   const [tab, setTab] = useState<AgentTab>("general");
   useEffect(() => {
     checkAgents();
+    void checkAgentUpdates();
   }, []);
 
   if (!detected)
@@ -86,39 +90,55 @@ export function AgentsPage() {
     );
 
   return (
-    <>
-      <aside
-        aria-label={t("set.tab.agents")}
-        className="flex w-72 flex-none flex-col gap-3 overflow-y-auto border-r border-s-seam px-3 py-4"
-      >
-        {group(t("ag.groupOn"), onOnes)}
-        {group(t("ag.groupOff"), offOnes)}
-        {!detected.providers.length && <div className={`${EMPTY_LIST} px-2.5`}>{t("ag.empty")}</div>}
-        <div className="mt-auto flex flex-wrap items-center gap-2 px-1 pt-2">
-          <button
-            className={`${buttonClass()} h-6 px-2 text-xs font-normal`}
-            onClick={() => {
-              clearAgentsMessage();
-              checkAgents(true);
-            }}
-          >
-            {t("ag.recheck")}
-          </button>
-          {message && <Footer message={message} />}
-        </div>
-      </aside>
-      <main className="@container min-w-0 flex-1 overflow-y-auto px-8 pt-7 pb-12">
-        {current && (
-          <AgentSettings
-            key={current.id}
-            status={current}
-            config={config(current.id)}
-            isDefault={agents?.default === current.id}
-            tab={tab}
-            onTab={setTab}
+    <div className="flex min-h-0 flex-1 flex-col">
+      {onOnes.length > 0 && (
+        <div className="flex flex-none flex-wrap items-center gap-2 border-b border-s-seam bg-well px-8 py-3 text-[13px] text-s-fg">
+          <span>{t("ag.newUse")}</span>
+          <Select
+            className={SELECT}
+            aria-label={t("ag.defaultAgent")}
+            options={onOnes.map(provider => ({ id: provider.id, name: provider.name }))}
+            value={agents?.default ?? ""}
+            onChange={setDefaultAgent}
           />
-        )}
-      </main>
-    </>
+          <RunDefault />
+          <span className="ml-auto text-xs text-s-muted">{t("ag.machinesHint")}</span>
+        </div>
+      )}
+      <div className="flex min-h-0 flex-1">
+        <aside
+          aria-label={t("set.tab.agents")}
+          className="flex w-72 flex-none flex-col gap-3 overflow-y-auto border-r border-s-seam px-3 py-4"
+        >
+          {group(t("ag.groupOn"), onOnes)}
+          {group(t("ag.groupOff"), offOnes)}
+          {!detected.providers.length && <div className={`${EMPTY_LIST} px-2.5`}>{t("ag.empty")}</div>}
+          <div className="mt-auto flex flex-wrap items-center gap-2 px-1 pt-2">
+            <button
+              className={`${buttonClass()} h-6 px-2 text-xs font-normal`}
+              onClick={() => {
+                clearAgentsMessage();
+                checkAgents(true);
+              }}
+            >
+              {t("ag.recheck")}
+            </button>
+            {message && <Footer message={message} />}
+          </div>
+        </aside>
+        <main className="@container min-w-0 flex-1 overflow-y-auto px-8 pt-7 pb-12">
+          {current && (
+            <AgentSettings
+              key={current.id}
+              status={current}
+              config={config(current.id)}
+              isDefault={agents?.default === current.id}
+              tab={tab}
+              onTab={setTab}
+            />
+          )}
+        </main>
+      </div>
+    </div>
   );
 }
