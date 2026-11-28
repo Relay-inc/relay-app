@@ -35,48 +35,40 @@ export function AikidoSettings() {
   };
   return (
     <Section title={t("int.connection")}>
-      <div>
-        <Html as="p" className={HINT_IN_ROW} html={th("ak.help")} />
-        <Field label={withoutColon(t("ak.region"))}>
-          <Select
-            className={SELECT}
-            aria-label={t("ak.region")}
-            options={REGIONS}
-            value={region}
-            onChange={setRegion}
-          />
-        </Field>
-        <Field label={t("ak.clientId")} id="aikido-client-id">
-          <input
-            className={FIELD}
-            id="aikido-client-id"
-            type="password"
-            autoComplete="off"
-            placeholder={hasToken ? t("int.tokenStored") : t("ak.idPaste")}
-            value={clientId}
-            onChange={e => setClientId(e.target.value)}
-            spellCheck={false}
-          />
-        </Field>
-        <Field label={t("ak.secret")} id="aikido-secret">
-          <input
-            className={FIELD}
-            id="aikido-secret"
-            type="password"
-            autoComplete="off"
-            placeholder={hasToken ? t("int.tokenStored") : t("ak.secretPaste")}
-            value={secret}
-            onChange={e => setSecret(e.target.value)}
-            spellCheck={false}
-          />
-        </Field>
-        <div className={FOOTER_IN_ROW}>
-          <Footer message={message}>
-            <button className={buttonClass("primary")} onClick={onSave}>
-              {t("set.save")}
-            </button>
-          </Footer>
-        </div>
+      <Html as="p" className={HINT_IN_ROW} html={th("ak.help")} />
+      <Field label={withoutColon(t("ak.region"))}>
+        <Select className={SELECT} aria-label={t("ak.region")} options={REGIONS} value={region} onChange={setRegion} />
+      </Field>
+      <Field label={t("ak.clientId")} id="aikido-client-id">
+        <input
+          className={FIELD}
+          id="aikido-client-id"
+          type="password"
+          autoComplete="off"
+          placeholder={hasToken ? t("int.tokenStored") : t("ak.idPaste")}
+          value={clientId}
+          onChange={e => setClientId(e.target.value)}
+          spellCheck={false}
+        />
+      </Field>
+      <Field label={t("ak.secret")} id="aikido-secret">
+        <input
+          className={FIELD}
+          id="aikido-secret"
+          type="password"
+          autoComplete="off"
+          placeholder={hasToken ? t("int.tokenStored") : t("ak.secretPaste")}
+          value={secret}
+          onChange={e => setSecret(e.target.value)}
+          spellCheck={false}
+        />
+      </Field>
+      <div className={FOOTER_IN_ROW}>
+        <Footer message={message}>
+          <button className={buttonClass("primary")} onClick={onSave}>
+            {t("set.save")}
+          </button>
+        </Footer>
       </div>
     </Section>
   );
