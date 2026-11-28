@@ -10,6 +10,7 @@ import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { ConversationItem } from "./ConversationItem";
 import { NoteLine } from "./NoteLine";
+import { ProjectHome } from "./ProjectHome";
 import { PendingRequest } from "./PendingRequest";
 import { RouteChoice } from "./RouteChoice";
 import { UserMessage } from "./UserMessage";
@@ -51,6 +52,7 @@ export function ConversationView({ cards = true, empty }: { cards?: boolean; emp
     const id = chatAgent(selected);
     return {
       name: project(projectName) ? shownProject(projectName) : null,
+      home: !session && !coordinator && project(projectName) ? projectName : null, // a vault project's own conversation
       coordinator,
       writing: !!session?.busy,
       agent: agent(id)?.name ?? id,
@@ -73,6 +75,8 @@ export function ConversationView({ cards = true, empty }: { cards?: boolean; emp
             <ConversationItem key={entry.item.id ?? entry.at} item={entry.item} />
           ),
         )
+      ) : where.home && empty === undefined && !busy && !unread?.length ? (
+        <ProjectHome name={where.home} />
       ) : (
         <NoteLine
           text={

@@ -1964,6 +1964,23 @@ const VIEWS = {
     await tab("Pull requests");
     await waitText("Waiting for your review");
   },
+  // a new, empty conversation in a project: its home above the composer, a card each for what waits on you, your
+  // tickets, and the failed build and open PRs (Northwind Portal, fixture builds)
+  "project-home": async () => {
+    await open(page, server.url, { fixture: "builds" });
+    await byText(page, "Northwind Portal").first().hover();
+    await page.getByRole("button", { name: "New conversation about Northwind Portal", exact: true }).click();
+    await settle(page);
+    await waitText("Builds and PRs");
+  },
+  // the same with a single card: Atlas Logistics has only the agent action waiting
+  "project-home-one": async () => {
+    await open(page, server.url);
+    await byText(page, "Atlas Logistics").first().hover();
+    await page.getByRole("button", { name: "New conversation about Atlas Logistics", exact: true }).click();
+    await settle(page);
+    await waitText("Waiting for you");
+  },
   "drawer-builds": async () => {
     await open(page, server.url, { fixture: "builds", sel: keys.switchTo });
     await waitText(markers.switchEnd);

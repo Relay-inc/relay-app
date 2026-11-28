@@ -16,6 +16,8 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Added
 
+- **A project home**: a new, empty conversation in a vault project shows a small overview above the composer instead of a blank column: the project's "Left off" line and when you last worked on it, then a card each for what waits on you, your tickets (in progress first, with a link to the board) and failed or running builds with the open PRs. A row opens the conversation, ticket, or the Builds or PRs tab. It goes away with your first message, and a card with nothing to show is left out. (#PR)
+
 - **The project panel has tabs**: the right drawer of a project conversation now carries a strip of tabs in its header (Pull requests, Builds, Git, Files, Terminal), the open one with its name, each with a dot when it needs you. Builds is new: Buddy pipelines and Cloud Build triggers of the project in one list. A tab's icon also shows in the title bar, before the buttons, while it needs you (a build that runs or failed, a review waiting on you, a PR sent back with changes requested): at most three, red first, then blue, then orange; a click opens the panel on it. (#588)
 
 - **Google Cloud Build** (Settings › Integrations › CI/CD), read-only: link a vault project to a Google Cloud project in Settings › Projects and its title bar shows a Cloud Build button. The dot is the worst status of its triggers, the menu lists each trigger with its last build (branch, commit, when), a click opens the build's log in the Google Cloud console. It uses your `gcloud auth login`, no token is stored in Relay. (#587)
