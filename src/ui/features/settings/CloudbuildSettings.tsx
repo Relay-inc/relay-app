@@ -14,15 +14,13 @@ export function CloudbuildSettings() {
   const [message, setMessage] = useState<Message | null>(null);
   return (
     <Section title={t("int.connection")}>
-      <div>
-        <Html as="p" className={HINT_IN_ROW} html={th("cb.help")} />
-        <div className={FOOTER_IN_ROW}>
-          <Footer message={message}>
-            <button className={buttonClass("primary")} onClick={async () => setMessage(await testCloudbuild())}>
-              {t("cb.check")}
-            </button>
-          </Footer>
-        </div>
+      <Html as="p" className={HINT_IN_ROW} html={th("cb.help")} />
+      <div className={FOOTER_IN_ROW}>
+        <Footer message={message}>
+          <button className={buttonClass("primary")} onClick={async () => setMessage(await testCloudbuild())}>
+            {t("cb.check")}
+          </button>
+        </Footer>
       </div>
     </Section>
   );

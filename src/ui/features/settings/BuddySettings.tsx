@@ -32,30 +32,28 @@ export function BuddySettings() {
   };
   return (
     <Section title={t("int.connection")}>
-      <div>
-        <Html as="p" className={HINT_IN_ROW} html={th("bd.help")} />
-        <Field label={withoutColon(t("bd.region"))}>
-          <Select className={SELECT} aria-label={t("bd.region")} options={HOSTS} value={host} onChange={setHost} />
-        </Field>
-        <Field label="Token" id="buddy-token">
-          <input
-            className={FIELD}
-            id="buddy-token"
-            type="password"
-            autoComplete="off"
-            placeholder={hasToken ? t("int.tokenStored") : t("int.tokenPaste")}
-            value={token}
-            onChange={e => setToken(e.target.value)}
-            spellCheck={false}
-          />
-        </Field>
-        <div className={FOOTER_IN_ROW}>
-          <Footer message={message}>
-            <button className={buttonClass("primary")} onClick={onSave}>
-              {t("set.save")}
-            </button>
-          </Footer>
-        </div>
+      <Html as="p" className={HINT_IN_ROW} html={th("bd.help")} />
+      <Field label={withoutColon(t("bd.region"))}>
+        <Select className={SELECT} aria-label={t("bd.region")} options={HOSTS} value={host} onChange={setHost} />
+      </Field>
+      <Field label="Token" id="buddy-token">
+        <input
+          className={FIELD}
+          id="buddy-token"
+          type="password"
+          autoComplete="off"
+          placeholder={hasToken ? t("int.tokenStored") : t("int.tokenPaste")}
+          value={token}
+          onChange={e => setToken(e.target.value)}
+          spellCheck={false}
+        />
+      </Field>
+      <div className={FOOTER_IN_ROW}>
+        <Footer message={message}>
+          <button className={buttonClass("primary")} onClick={onSave}>
+            {t("set.save")}
+          </button>
+        </Footer>
       </div>
     </Section>
   );

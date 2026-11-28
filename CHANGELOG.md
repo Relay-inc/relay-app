@@ -28,6 +28,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 - **A project's title bar has two buttons on the right**: a More menu (resume in terminal, Remote Control, show in graph, the pipeline's conversation) and the project panel, whose dot is the most urgent of its tabs. The Buddy and Cloud Build buttons, and the PRs, Git, Files and Terminal buttons, moved into the panel's tabs. (#588)
 - **Settings › Integrations has a CI/CD group**: Buddy moved there from Other, next to Cloud Build. (#587)
 
+### Fixed
+
+- **Settings › Integrations › Buddy, Cloud Build and GitHub**: the help text, the fields and the buttons no longer sit on top of each other; they get the same spacing as Productive's and Mail's pages. (#590)
+
 ## [0.0.72] - 2026-11-27
 
 ### Added
