@@ -1344,3 +1344,112 @@ export function cloudbuild(path: string, calm = false): unknown {
   }
   throw new Error(`Google 404: ${path}`);
 }
+
+// ---------- Aikido (fixture aikido*): Orchard Health linked to two code repos, five open issue groups as the
+// Security panel shows them, and their issues from the export. Fictional, like everything here.
+const SEC = (ms: number) => Math.round(ms / 1000);
+const AIKIDO_REPOS = [
+  { id: 101, name: "orchard-web", provider: "github", external_repo_id: "orchard-web", last_scanned_at: SEC(NOW - 2 * HOUR) },
+  { id: 102, name: "orchard-api", provider: "github", external_repo_id: "orchard-api", last_scanned_at: SEC(NOW - 3 * HOUR) },
+  { id: 103, name: "bluebird-app", provider: "github", external_repo_id: "bluebird-app", last_scanned_at: -1 },
+];
+const repoLoc = (id: number) => ({ id, name: AIKIDO_REPOS.find(r => r.id === id)!.name, type: "code_repo" });
+const AIKIDO_GROUPS = [
+  {
+    id: 48201,
+    title: "Prototype pollution in lodash 4.17.15",
+    type: "open_source",
+    severity: "critical",
+    severity_score: 92,
+    locations: [repoLoc(101)],
+    how_to_fix: "Upgrade lodash to 4.17.21 or later.",
+    related_cve_ids: ["CVE-2020-8203"],
+    first_detected_at: SEC(NOW - 30 * DAY),
+  },
+  {
+    id: 48213,
+    title: "SQL injection in OrderRepository::search",
+    type: "sast",
+    severity: "high",
+    severity_score: 78,
+    locations: [repoLoc(102)],
+    how_to_fix:
+      "User input goes straight into the query. Use a prepared statement with parameters instead of string concatenation.",
+    related_cve_ids: [],
+    first_detected_at: SEC(NOW - 19 * DAY),
+  },
+  {
+    id: 48230,
+    title: "Leaked Stripe key in git history",
+    type: "leaked_secret",
+    severity: "high",
+    severity_score: 74,
+    locations: [repoLoc(102)],
+    how_to_fix: "Revoke the key in Stripe, then remove it from the file and keep it in the environment instead.",
+    related_cve_ids: [],
+    first_detected_at: SEC(NOW - 6 * DAY),
+  },
+  {
+    id: 48244,
+    title: "Container runs as root",
+    type: "iac",
+    severity: "medium",
+    severity_score: 45,
+    locations: [repoLoc(102)],
+    how_to_fix: "Add a USER instruction with an unprivileged user to the Dockerfile.",
+    related_cve_ids: [],
+    first_detected_at: SEC(NOW - 40 * DAY),
+  },
+  {
+    id: 48251,
+    title: "Node 20 is end-of-life",
+    type: "eol",
+    severity: "low",
+    severity_score: 20,
+    locations: [repoLoc(101)],
+    how_to_fix: "Move the base image to a supported Node version.",
+    related_cve_ids: [],
+    first_detected_at: SEC(NOW - 12 * DAY),
+  },
+].map(g => ({ description: null, group_status: "new", time_to_fix_minutes: 30, ...g }));
+const issue = (id: number, group: number, repo: number, extra: Record<string, unknown>) => ({
+  id,
+  group_id: group,
+  status: "open",
+  severity: AIKIDO_GROUPS.find(g => g.id === group)!.severity,
+  code_repo_id: repo,
+  code_repo_name: AIKIDO_REPOS.find(r => r.id === repo)!.name,
+  sla_remediate_by: SEC(NOW + 9 * DAY),
+  ...extra,
+});
+const AIKIDO_ISSUES = [
+  issue(9001, 48201, 101, {
+    affected_file: "package.json",
+    affected_package: "lodash",
+    installed_version: "4.17.15",
+    patched_versions: ["4.17.21"],
+    cve_id: "CVE-2020-8203",
+  }),
+  issue(9002, 48213, 102, { affected_file: "src/Repository/OrderRepository.php", start_line: 88, end_line: 88 }),
+  issue(9003, 48213, 102, { affected_file: "src/Repository/CustomerRepository.php", start_line: 41, end_line: 41 }),
+  issue(9004, 48230, 102, { affected_file: "config/.env.dist", start_line: 12, end_line: 12 }),
+  issue(9005, 48244, 102, { affected_file: "Dockerfile", start_line: 1, end_line: 1 }),
+  issue(9006, 48251, 101, { affected_file: "Dockerfile", start_line: 1, end_line: 1 }),
+];
+/** Aikido's public API as integration_call answers it (the backend adds /api/public/v1 and the token). */
+export function aikido(path: string): unknown {
+  const [route, q = ""] = path.split("?");
+  const p = new URLSearchParams(q);
+  if (route === "/repositories/code") return AIKIDO_REPOS;
+  if (route === "/open-issue-groups")
+    return AIKIDO_GROUPS.filter(g => g.locations.some(l => l.id === Number(p.get("filter_code_repo_id"))));
+  if (route === "/issues/export") {
+    const group = Number(p.get("filter_issue_group_id"));
+    const repo = Number(p.get("filter_code_repo_id"));
+    const sev = p.get("filter_severities")?.split(",");
+    return AIKIDO_ISSUES.filter(
+      i => (!group || i.group_id === group) && (!repo || i.code_repo_id === repo) && (!sev || sev.includes(i.severity)),
+    );
+  }
+  throw new Error(`Aikido 404: ${path}`);
+}

@@ -16,7 +16,7 @@ import { checkCloudbuild } from "./cloudbuild";
 import { commit } from "./window";
 import { useSettingsStore, type SettingsState } from "./store";
 
-// Settings › Integrations: every integration is listed (the board providers, GitHub, Buddy, Cloud Build, Mail, Calendar) and its page
+// Settings › Integrations: every integration is listed (the board providers, GitHub, Buddy, Cloud Build, Aikido, Mail, Calendar) and its page
 // is on the right. On means in the sidebar (Calendar: under Today); Disconnect switches it off and, when asked, empties
 // its keychain entries, Connect switches it on again. The state lives here, so it survives picking another one. That includes what is typed (the board form,
 // the GitHub owners, the mail add fields): kept as typed, read and emptied by the save use cases.
@@ -31,9 +31,9 @@ const fail = (error: unknown): Message => ({ text: String(error), ok: false });
 
 /** When the page is first shown: which providers have a token, and GitHub's login. */
 export async function loadIntegrations() {
-  // Buddy is no board, but its token sits in the keychain the same way (packages/integration-buddy)
+  // Buddy and Aikido are no boards, but their secrets sit in the keychain the same way (packages/integration-buddy, -aikido)
   const entries = await Promise.all(
-    [...PROVIDERS.map(provider => provider.id), "buddy"].map(
+    [...PROVIDERS.map(provider => provider.id), "buddy", "aikido"].map(
       async id => [id, await backend.integrationHasToken(id).catch(() => false)] as const,
     ),
   );
@@ -81,7 +81,7 @@ export async function switchIntegration(id: string, on: boolean) {
   }
 }
 
-/** Disconnect: off, as Remove was, and with `forget` the secrets out of the keychain (a board's or Buddy's token, Mail's
+/** Disconnect: off, as Remove was, and with `forget` the secrets out of the keychain (a board's or Buddy's token, Aikido's client, Mail's
  *  passwords, Calendar's iCal addresses; GitHub and Cloud Build have none). A failing delete leaves it connected. */
 export async function disconnectIntegration(id: string, forget: boolean) {
   try {
@@ -96,10 +96,11 @@ export async function disconnectIntegration(id: string, forget: boolean) {
 async function forgetSecrets(id: string) {
   const provider = PROVIDERS.find(x => x.id === id);
   if (provider) return clearBoard(provider);
-  if (id === "buddy") {
-    await backend.integrationToken("buddy", "");
+  if (id === "buddy" || id === "aikido") {
+    // without an account "" empties every secret of the provider (Aikido: client ID and secret)
+    await backend.integrationToken(id, "");
     change(draft => {
-      draft.tokens.buddy = false;
+      draft.tokens[id] = false;
     });
   } else if (id === "mail")
     // only the passwords the app keeps itself (guided accounts, service relay-mail)

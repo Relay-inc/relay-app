@@ -346,6 +346,14 @@ const settingsSearch = async (query, pick, fixture = "default") => {
   if (pick) await page.keyboard.press("Enter");
   await page.waitForTimeout(pick ? 400 : 100);
 };
+/** The Security panel page (harness/aikido.html) of `fixture`, the SQL injection's row unfolded */
+const aikidoPanel = async fixture => {
+  await page.setViewportSize({ width: 1280, height: 820 });
+  await open(page, server.url, { path: "/harness/aikido.html", fixture });
+  await page.getByRole("button", { name: "SQL injection in OrderRepository::search" }).click();
+  await waitText("OrderRepository.php:88");
+  await settle(page);
+};
 /** Settings › Integrations with `name` picked in the list, `height` tall */
 const integration = async (name, { fixture = "default", height = 1000 } = {}) => {
   await settingsPage("Integrations", name, fixture);
@@ -1421,6 +1429,32 @@ const VIEWS = {
     await field.scrollIntoViewIfNeeded();
     await page.waitForFunction(() =>
       [...document.querySelectorAll("select")].some(s => s.selectedOptions[0]?.text === "Web shop · acme"),
+    );
+    await field.scrollIntoViewIfNeeded();
+    await settle(page);
+  },
+  // the Security panel (Aikido) in a 460px drawer, from the harness-only page harness/aikido.html (the drawer's
+  // Security tab mounts it after the drawer tabs land): two repos, five groups, the SQL injection unfolded with its
+  // files, how to fix it and Fix met Claude; in Dutch next to its design, and dark in English (PR aikido)
+  "aikido-panel": () => aikidoPanel("aikido-nl"),
+  "aikido-panel-dark": () => aikidoPanel("aikido-dark"),
+  // the panel on one repo (orchard-api), nothing unfolded
+  "aikido-panel-repo": async () => {
+    await page.setViewportSize({ width: 1280, height: 820 });
+    await open(page, server.url, { path: "/harness/aikido.html", fixture: "aikido" });
+    await page.getByRole("button", { name: /^orchard-api/ }).click();
+    await waitText("Container runs as root");
+    await settle(page);
+  },
+  // Aikido's page in Integrations (region, client ID and secret) and its code repos in Settings › Projects (PR aikido)
+  "settings-integration-aikido": () => integration("Aikido", { fixture: "aikido" }),
+  "settings-project-aikido": async () => {
+    await projectTab("General", { fixture: "aikido", name: ".*Orchard Health" }); // its name follows its icon
+    const field = page.getByRole("combobox", { name: "Add a code repo…" });
+    await field.scrollIntoViewIfNeeded();
+    await waitText("orchard-api");
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll("select")].some(s => [...s.options].some(o => o.text.startsWith("bluebird-app"))),
     );
     await field.scrollIntoViewIfNeeded();
     await settle(page);

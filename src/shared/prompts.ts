@@ -1,6 +1,7 @@
 // Every prompt Relay sends to a model lives in prompts/ as a markdown file (the Rust side reads the same files with
 // include_str!). They are imported here as text, one place for the frontend: `prompts.mail.draft`. A prompt with
 // {{name}} placeholders goes through fill() before it is sent.
+import aikidoFix from "../../prompts/aikido/fix.md?raw";
 import conversationUsageLimitResume from "../../prompts/conversation/usage-limit-resume.md?raw";
 import gitCommitMessage from "../../prompts/git/commit-message.md?raw";
 import mailComposeForward from "../../prompts/mail/compose-forward.md?raw";
@@ -42,6 +43,9 @@ import timeIntroEmpty from "../../prompts/time/intro-empty.md?raw";
 const text = (raw: string) => raw.replace(/\n$/, "");
 
 export const prompts = {
+  aikido: {
+    fix: text(aikidoFix),
+  },
   conversation: {
     usageLimitResume: text(conversationUsageLimitResume),
   },

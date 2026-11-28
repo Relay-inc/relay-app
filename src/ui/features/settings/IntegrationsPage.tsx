@@ -21,6 +21,7 @@ import { buttonClass, HINT, TILE } from "./blocks";
 import { BoardSettings } from "./BoardSettings";
 import { BuddySettings } from "./BuddySettings";
 import { CloudbuildSettings } from "./CloudbuildSettings";
+import { AikidoSettings } from "./AikidoSettings";
 import { BUDDY_LOGO } from "../buddy/mark";
 import { CLOUDBUILD_LOGO } from "../buddy/cloudmark";
 import { CalendarSettings } from "./CalendarSettings";
@@ -50,13 +51,13 @@ const GITHUB_MARK = (
  *  its actions for agents, when it has some. `configured`: there is something to connect again. */
 type Entry = {
   id: string;
-  group: "boards" | "code" | "cicd" | "mail";
+  group: "boards" | "code" | "cicd" | "security" | "mail";
   icon: ReactNode;
   name: string;
   status: ReactNode;
   on: boolean;
   configured: boolean;
-  secret?: "token" | "passwords" | "calendars";
+  secret?: "token" | "client" | "passwords" | "calendars";
   ext?: string;
   page: () => ReactNode;
 };
@@ -64,15 +65,17 @@ const GROUPS = [
   ["boards", "int.gBoards"],
   ["code", "int.gCode"],
   ["cicd", "int.gCicd"],
+  ["security", "int.gSecurity"],
   ["mail", "int.gMail"],
 ] as const;
 const FORGET = {
   token: "int.forgetToken",
+  client: "ak.forgetClient",
   passwords: "int.forgetPasswords",
   calendars: "int.forgetCalendars",
 } as const;
 
-/** Integrations: the board providers, GitHub, Mail, Calendar, Buddy and Cloud Build in groups on the left, the picked one's page on
+/** Integrations: the board providers, GitHub, Mail, Calendar, Buddy, Cloud Build and Aikido in groups on the left, the picked one's page on
  *  the right (its connection, its agent access, Disconnect). On means in the sidebar (Calendar: under Today). A page
  *  reads its own state; this one only knows which are listed and which is picked. */
 export function IntegrationsPage({ active }: { active: boolean }) {
@@ -90,6 +93,8 @@ export function IntegrationsPage({ active }: { active: boolean }) {
   const cloudbuild = useSettingsStore(s => s.integrations.cloudbuild);
   const cloudbuildOn = useSettingsStore(s => s.settings.integrations.cloudbuild?.on === true);
   const buddyToken = useSettingsStore(s => !!s.integrations.tokens.buddy);
+  const aikidoOn = useSettingsStore(s => s.settings.integrations.aikido?.on === true);
+  const aikidoToken = useSettingsStore(s => !!s.integrations.tokens.aikido);
   // per provider: set up, and in use
   const boardsState = useDerived(() =>
     Object.fromEntries(
@@ -201,6 +206,18 @@ export function IntegrationsPage({ active }: { active: boolean }) {
       // gcloud's own login: nothing of ours to connect again, nothing in the keychain; read-only, so no actions for the agent
       configured: !!cloudbuild.account,
       page: () => <CloudbuildSettings />,
+    },
+    {
+      id: "aikido",
+      group: "security",
+      icon: <Icon name="shield" className={TILE} />,
+      name: "Aikido",
+      status: connected(aikidoOn && aikidoToken, t("int.connected")),
+      on: aikidoOn,
+      configured: aikidoToken,
+      secret: "client",
+      // read-only, so no actions for the agent
+      page: () => <AikidoSettings />,
     },
   ];
   const current = entries.find(entry => entry.id === picked) ?? entries[0];

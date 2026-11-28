@@ -204,6 +204,7 @@ export type Settings = {
   pipelinesPaused?: boolean; // every board pipeline paused at once, whatever its own pause (Pipeline.paused)
   buddy?: Record<string, BuddyRef>; // the Buddy project linked to a vault project (domain/buddy)
   cloudbuild?: Record<string, CloudRef>; // the GCP project linked to a vault project (domain/cloudbuild)
+  aikido?: Record<string, number[]>; // the Aikido code repos linked to a vault project (domain/aikido)
   github: { on: boolean; owners: string };
   mail: MailCfg;
   calendar: CalendarCfg;
