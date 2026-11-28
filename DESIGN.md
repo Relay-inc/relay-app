@@ -46,7 +46,9 @@ open. Every column starts with a 48px bar that is also the drag region.
   text. Tool calls fold into one "n steps · duration" group, edits show their diff with line numbers. A permission
   request is an inline card with the exact command, coloured, and Deny / Allow. The composer is the one card with a
   shadow in the conversation: the field, attach, the agent menu, model and effort, send (stop while a turn runs).
-- **Drawer** (460px, Esc or × closes it): a card or note detail, the project terminal, the notes.
+- **Drawer** (460px, Esc or × closes it): a card or note detail, the project terminal, the notes. Its content never
+  widens it. A width dragged wider (360 to 800) yields so the conversation keeps 420px, and below 1120px (sidebar 240 +
+  conversation 420 + drawer 460) the drawer lies over the conversation, from the right edge, instead of a third column.
 - **Settings** is its own native window, 900 x 660: a 208px nav, a 600px content column, cards with hairline rows.
 
 ## Colour

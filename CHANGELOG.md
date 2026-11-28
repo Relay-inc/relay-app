@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Fixed
+
+- **The drawer no longer squeezes the conversation**: a drawer dragged wide leaves the conversation 420 px, and in a window under 1120 px it lies over the conversation instead of taking a column. In a narrow conversation the composer's pickers wrap with the mic and send button kept in view, the pipeline bar wraps, and the project home shows one column with its rows cut short instead of spilling out. (#594)
+
 ## [0.0.73] - 2026-11-28
 
 ### Added

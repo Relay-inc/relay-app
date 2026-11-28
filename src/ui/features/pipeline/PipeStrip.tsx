@@ -83,7 +83,7 @@ export function PipeStrip({ project, onJump }: { project: string; onJump: (id: s
   ] as const;
   return (
     <div className="flex-none">
-      <div className="h-10 flex items-center pl-5 pr-3.5 bg-well border-b border-separator">
+      <div className="min-h-10 flex flex-wrap items-center pl-5 pr-3.5 bg-well border-b border-separator">
         {open ? null : (
           <button
             className={`h-7 -ml-2 mr-2 px-2 flex items-center gap-1.25 rounded-md text-xs cursor-default disabled:opacity-100 ${lit ? "bg-accent-soft" : ""}`}
@@ -97,7 +97,7 @@ export function PipeStrip({ project, onJump }: { project: string; onJump: (id: s
           </button>
         )}
         <button
-          className="flex-1 min-w-0 h-10 flex items-center gap-4.5 cursor-default"
+          className="flex-1 basis-40 min-w-0 h-10 flex items-center gap-4.5 overflow-hidden cursor-default"
           aria-expanded={open}
           aria-controls="pipe-strip"
           aria-label={t(open ? "ps.hide" : "ps.show")}

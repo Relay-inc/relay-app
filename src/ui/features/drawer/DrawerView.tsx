@@ -33,9 +33,9 @@ export function DrawerView({ className, drawer }: { className: string; drawer: E
   // app chrome is not text: no selection in the bar, like a native Mac app
   return (
     <aside className={`relay-drawer ${className}`}>
-      <div className="flex flex-col flex-1 min-h-0 border-l border-separator">
+      <div className="flex flex-col flex-1 min-h-0 min-w-(--drawer-col) border-l border-separator">
         <div
-          className={`h-12 flex-none flex items-center gap-2 ${Panel ? "pl-2.5" : "pl-4.5"} pr-3 border-b border-separator min-w-(--drawer-w) select-none`}
+          className={`h-12 flex-none flex items-center gap-2 ${Panel ? "pl-2.5" : "pl-4.5"} pr-3 border-b border-separator select-none`}
           data-tauri-drag-region
         >
           {Panel ? (
@@ -84,7 +84,7 @@ export function DrawerView({ className, drawer }: { className: string; drawer: E
           )}
         </div>
         <div
-          className={`min-w-(--drawer-w) ${drawer === "workers" || drawer === "agents" ? "overflow-y-auto pt-2.5 px-3 pb-4" : "flex-1 min-h-0 flex flex-col p-3"}`}
+          className={`${drawer === "workers" || drawer === "agents" ? "overflow-y-auto pt-2.5 px-3 pb-4" : "flex-1 min-h-0 flex flex-col p-3"}`}
         >
           {Panel ? <Panel project={toolProject} /> : null}
           {drawer === "workers" ? <WorkersColumn /> : null}
