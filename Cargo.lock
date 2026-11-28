@@ -2530,6 +2530,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "integration-aikido"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "board-core",
+ "serde_json",
+]
+
+[[package]]
 name = "integration-buddy"
 version = "0.1.0"
 dependencies = [
@@ -4423,6 +4432,7 @@ dependencies = [
  "cpal",
  "futures",
  "hound",
+ "integration-aikido",
  "integration-buddy",
  "integration-cloudbuild",
  "integration-github-projects",
