@@ -29,7 +29,7 @@ pub fn sock() -> PathBuf { crate::broker::dir().join("relay.sock") }
 
 /// One command: where it runs and what the user decides about it.
 struct Item { ext: &'static str, id: &'static str, about: &'static str, args: &'static [(&'static str, &'static str)], write: bool, default: Policy, run: Run }
-enum Run { Board(&'static Provider, &'static Action), Mail, Reminders, Calendar, Comments, Knowledge }
+enum Run { Board(&'static Provider, &'static Action), Aikido, Mail, Reminders, Calendar, Comments, Knowledge }
 
 const MAIL: &[(&str, &str, &[(&str, &str)], bool)] = &[
     ("search", "Search Gmail (All Mail) with Gmail search syntax, newest first: ids, senders, subjects, dates.", &[("query", "Gmail search"), ("account?", "account email"), ("limit?", "1 to 50, default 20")], false),
@@ -48,6 +48,9 @@ const REMINDERS: &[(&str, &str, &[(&str, &str)])] = &[
 fn items() -> Vec<Item> {
     let mut out: Vec<Item> = providers::PROVIDERS.iter().flat_map(|p| p.actions.iter().map(move |a|
         Item { ext: p.id, id: a.id, about: a.about, args: a.args, write: a.write, default: a.default, run: Run::Board(p, a) })).collect();
+    // what needs the token exchange or the vault's project links, not one request: the same reads the app does
+    out.push(Item { ext: "aikido", id: "status", about: "Whether Aikido is on, its region, whether a client is stored (yes or no), whether the token exchange works now, and how many code repos the workspace has.", args: &[], write: false, default: Policy::Auto, run: Run::Aikido });
+    out.push(Item { ext: "aikido", id: "match", about: "A vault project's linked GitHub repos beside Aikido's GitHub repos with their raw URL, to see why one does not match. Matching itself runs in the app.", args: &[("project?", "vault project name, all projects when omitted")], write: false, default: Policy::Auto, run: Run::Aikido });
     // a draft only lands in Drafts: it runs without a card, as relay-mail's save_draft does
     out.extend(MAIL.iter().map(|(id, about, args, write)| Item { ext: "mail", id, about, args, write: *write, default: Policy::Auto, run: Run::Mail }));
     // the vault's own file, every change is in its git history: runs without a card, like a mail draft
@@ -100,8 +103,54 @@ fn ready(app: &AppHandle, ext: &str) -> bool {
         "calendar" => !crate::calendar::feeds(&s).is_empty(),
         "comments" => crate::files_on(&s),
         "knowledge" => !crate::shared_vaults::knowledge(&s).is_empty(),
-        id => providers::get(id).is_ok_and(|p| (p.ready)(&s["integrations"][p.id]) && providers::token(p).is_some()),
+        id => providers::get(id).is_ok_and(|p| (p.ready)(&s["integrations"][p.id]) && providers::token(p).is_some()
+            && (!NEEDS_ON.contains(&id) || s["integrations"][p.id]["on"] == true)),
     }
+}
+/// The read-only integrations that are only in `relay help` while switched on (the boards' ids work as before).
+const NEEDS_ON: [&str; 3] = ["buddy", "cloudbuild", "aikido"];
+/// `aikido.status` answers when Aikido is off or has no client: that is what it is for.
+fn always(it: &Item) -> bool { it.ext == "aikido" && it.id == "status" }
+/// Whether `relay help` lists an action: the extension is open to agents and set up (or the action answers anyway).
+fn listed(it: &Item, acts: &Value, ready: impl FnOnce() -> bool) -> bool { access(acts, it.ext) && (always(it) || ready()) }
+fn not_set_up(ext: &str) -> String {
+    if NEEDS_ON.contains(&ext) {
+        let name = providers::get(ext).map_or(ext, |p| p.name);
+        format!("{name} is not connected: Vault › Settings › Integrations › {name}")
+    } else { format!("{ext} is not set up in Relay (Settings)") }
+}
+
+/// buddy and cloudbuild actions take the vault project's name: the settings say which Buddy project or Google Cloud
+/// project it is linked to (`buddy.<project>`, `cloudbuild.<project>`), and the action gets that instead.
+fn linked(s: &Value, ext: &str, args: &Value) -> Result<Value, String> {
+    let mut a = args.clone();
+    let Some(p) = board_core::arg(args, "project") else { return Ok(a) };
+    match ext {
+        "buddy" => {
+            let r = &s["buddy"][&p];
+            let (Some(w), Some(b)) = (r["workspace"].as_str(), r["project"].as_str()) else { return Err(format!("no Buddy project is linked to '{p}': Vault › Settings › Projects")) };
+            (a["workspace"], a["buddy_project"]) = (json!(w), json!(b));
+        }
+        "cloudbuild" => {
+            let r = &s["cloudbuild"][&p];
+            let Some(g) = r["project"].as_str() else { return Err(format!("no Google Cloud project is linked to '{p}': Vault › Settings › Projects")) };
+            (a["gcp_project"], a["location"]) = (json!(g), json!(r["location"].as_str().filter(|l| !l.is_empty()).unwrap_or("global")));
+        }
+        _ => {}
+    }
+    Ok(a)
+}
+/// What goes with a board provider's request: the keychain's secrets, gcloud's access token, or Aikido's exchanged one.
+fn secrets(app: &AppHandle, p: &Provider, cfg: &Value) -> Result<Vec<String>, String> {
+    match p.id {
+        "cloudbuild" => Ok(vec![crate::gcloud::token(&app.state::<crate::App>().path)?]),
+        "aikido" => Ok(vec![crate::aikido::token(cfg)?]),
+        _ => providers::token(p).ok_or_else(|| crate::trc_v("err.no_token", p.name)),
+    }
+}
+fn send(app: &AppHandle, p: &Provider, cfg: &Value, r: board_core::Req) -> Result<Value, String> {
+    if !(p.ready)(cfg) { return Err(board_core::t(p.text, p.not_ready)); }
+    providers::send_with(p, cfg, r.method, &r.url, r.body, &secrets(app, p, cfg)?)
 }
 
 fn acts(app: &AppHandle) -> Value { crate::relay_config::actions(&crate::vault(&app.state::<crate::App>())) }
@@ -199,7 +248,7 @@ fn list(app: &AppHandle, key: &str) -> Result<Value, String> {
     let provider = conversation(app, key).ok_or(NOT_IN_APP)?;
     let s = acts(app);
     let mut ready_of = std::collections::HashMap::new();
-    Ok(items().iter().filter(|it| access(&s, it.ext) && *ready_of.entry(it.ext).or_insert_with(|| ready(app, it.ext))).map(|it| json!({
+    Ok(items().iter().filter(|it| listed(it, &s, || *ready_of.entry(it.ext).or_insert_with(|| ready(app, it.ext)))).map(|it| json!({
         "action": format!("{}.{}", it.ext, it.id), "about": it.about, "args": it.args.iter().map(|(n, a)| json!([n, a])).collect::<Vec<_>>(),
         "policy": effective(&s, it, &provider).as_str(),
     })).collect())
@@ -216,7 +265,7 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, known: bool, action: &str, a
     if let Some(e) = refused(it, known, || crate::in_shared_vault(&app.state::<crate::App>(), key)) { return Err(e.into()); }
     let s = acts(app);
     if !access(&s, it.ext) { return Err(format!("the user switched off agent access to {}", it.ext)); }
-    if !ready(app, it.ext) { return Err(format!("{} is not set up in Relay (Settings)", it.ext)); }
+    if !always(it) && !ready(app, it.ext) { return Err(not_set_up(it.ext)); }
     match effective(&s, it, &provider) {
         Policy::Deny if it.ext == "mail" && !mail_allowed(&provider) => return Err("mail is only available to Claude Code conversations".into()),
         Policy::Deny => return Err(format!("the user does not allow {action}")),
@@ -225,11 +274,15 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, known: bool, action: &str, a
     }
     match it.run {
         Run::Board(p, a) => {
-            let cfg = app.state::<crate::App>().settings.lock().unwrap()["integrations"][p.id].clone();
-            let r = (a.build)(&cfg, args)?;
-            let mut v = providers::send(p, &cfg, r.method, &r.url, r.body)?;
-            if let Some(f) = a.then { if let Some(r) = f(&cfg, args, &v)? { v = providers::send(p, &cfg, r.method, &r.url, r.body)?; } }
+            let s = app.state::<crate::App>().settings.lock().unwrap().clone();
+            let (cfg, args) = (s["integrations"][p.id].clone(), linked(&s, p.id, args)?);
+            let mut v = send(app, p, &cfg, (a.build)(&cfg, &args)?)?;
+            if let Some(f) = a.then { if let Some(r) = f(&cfg, &args, &v)? { v = send(app, p, &cfg, r)?; } }
             Ok((a.out)(&v))
+        }
+        Run::Aikido => {
+            let s = app.state::<crate::App>().settings.lock().unwrap().clone();
+            if it.id == "status" { Ok(crate::aikido::status(&s["integrations"]["aikido"])) } else { crate::aikido::matched(&s, args) }
         }
         Run::Mail => mail(app, key, &provider, it.id, args),
         Run::Reminders => reminder(app, it.id, args),
@@ -445,6 +498,39 @@ mod tests {
         assert!(!access(&json!({"trello": {"access": false, "*": "auto"}}), "trello"));
         // the switch is no policy
         assert_eq!(chosen(&json!({"productive": {"access": true}}), item("productive")), Policy::Ask);
+    }
+    #[test]
+    fn integration_reads_are_auto_and_listed_only_when_on() {
+        let by = |e: &str, i: &str| items().into_iter().find(|x| x.ext == e && x.id == i).unwrap();
+        for (e, i) in [("aikido", "repos"), ("aikido", "groups"), ("aikido", "issues"), ("aikido", "match"), ("buddy", "pipelines"), ("cloudbuild", "builds")] {
+            let it = by(e, i);
+            assert!(!it.write && it.default == Policy::Auto && effective(&json!({}), &it, "claude") == Policy::Auto, "{e}.{i}");
+            assert!(listed(&it, &json!({}), || true) && !listed(&it, &json!({}), || false), "{e}.{i}: listed when set up and on");
+            assert!(!listed(&it, &json!({ e: { "access": false } }), || true), "{e}.{i}: the user's switch");
+            assert!(it.args.iter().all(|(n, _)| !["gcp_project", "location", "token", "client_id", "client_secret"].contains(n)), "{e}.{i}: no credentials as arguments");
+        }
+        // status answers when Aikido is off or has no client, unless the user switched agent access off
+        let st = by("aikido", "status");
+        assert!(listed(&st, &json!({}), || false) && !listed(&st, &json!({ "aikido": { "access": false } }), || true));
+        let line = help(&json!([{ "action": "aikido.status", "about": st.about, "args": [], "policy": "auto" }]));
+        assert!(line.contains("aikido.status  [auto]"), "{line}");
+        assert!(not_set_up("aikido").starts_with("Aikido is not connected: Vault › Settings › Integrations › Aikido"));
+        assert!(not_set_up("buddy").contains("Buddy") && not_set_up("cloudbuild").contains("Cloud Build") && not_set_up("trello").contains("not set up"));
+    }
+    #[test]
+    fn a_vault_project_resolves_to_its_buddy_or_cloud_build_link() {
+        let s = json!({ "buddy": { "Orchard": { "workspace": "acme", "project": "orchard-web" } }, "cloudbuild": { "Orchard": { "project": "orchard-web", "location": "" } } });
+        let b = linked(&s, "buddy", &json!({ "project": "Orchard" })).unwrap();
+        assert_eq!((&b["workspace"], &b["buddy_project"]), (&json!("acme"), &json!("orchard-web")));
+        let c = linked(&s, "cloudbuild", &json!({ "project": "Orchard" })).unwrap();
+        assert_eq!((&c["gcp_project"], &c["location"]), (&json!("orchard-web"), &json!("global")));
+        // what the settings say wins over what the call says
+        assert_eq!(linked(&s, "buddy", &json!({ "project": "Orchard", "workspace": "evil" })).unwrap()["workspace"], "acme");
+        assert!(linked(&s, "buddy", &json!({ "project": "Nope" })).unwrap_err().contains("Vault › Settings › Projects"));
+        assert!(linked(&s, "cloudbuild", &json!({ "project": "Nope" })).is_err());
+        // other extensions' arguments pass untouched
+        assert_eq!(linked(&s, "productive", &json!({ "project": "7" })).unwrap(), json!({ "project": "7" }));
+        assert_eq!(linked(&s, "buddy", &json!({ "workspace": "acme", "buddy_project": "x" })).unwrap(), json!({ "workspace": "acme", "buddy_project": "x" }));
     }
     #[test]
     fn every_action_has_a_unique_name() {

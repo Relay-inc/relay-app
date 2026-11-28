@@ -52,3 +52,22 @@ app, so a client with more scopes than needed still cannot change anything throu
 
 Aikido allows 20 calls a minute per workspace and answers 429 above that: the panel then says so and keeps what it
 showed. Its API has no link to an issue in the app, so "Openen in Aikido" opens the region's issues page.
+
+## Agent actions (`relay aikido.…`)
+
+Read-only, all `auto`, listed in `relay help` while Aikido is on and a client is stored (`aikido.status` always, so it
+can say why not). They go through the same allowlist and token exchange as the app; the client and the token are never
+printed. Each call counts against the 20 calls a minute.
+
+| Action | Arguments | Gives |
+|---|---|---|
+| `aikido.status` | | `on`, `region`, `client_stored` (yes/no), `token` (`ok` or the error), `repos` (first page of 200) |
+| `aikido.repos` | `name?` | code repos: `id`, `name`, `provider`, `url`, `last_scanned_at` (first 200) |
+| `aikido.match` | `project?` | the project's linked GitHub repos beside Aikido's GitHub repos with their raw `url` |
+| `aikido.groups` | `repo` | open issue groups: `id`, `title`, `severity`, `type`, `time_to_fix_minutes`, `locations` (first 100) |
+| `aikido.issues` | `group` or `repo` | open issues: file and lines, package, installed and patched versions, CVE (10 per group, 100 per repo) |
+
+`aikido.match` does not match: the rule lives in `src/domain/aikido/rules.ts` (`matchRepos`) and is the app's only
+copy. The action shows both sides raw, so a slug that differs from the URL (case, `.git`, another owner) is visible
+at a glance. If a repo is linked but not listed under `aikido_github`, Aikido does not have it (or has it under another
+provider).

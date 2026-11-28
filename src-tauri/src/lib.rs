@@ -910,12 +910,13 @@ pub(crate) fn index_script(own: PathBuf, bundled: Option<PathBuf>) -> Option<Pat
 }
 /// GitHub repos per project, as the PRs use them: {project: ["owner/repo", ...]}.
 #[tauri::command]
-fn project_repos(state: State<App>) -> Value {
+fn project_repos(state: State<App>) -> Value { json!(project_repo_map(&state.settings.lock().unwrap().clone())) }
+/// `project_repos` from the settings (the `relay aikido.match` action reads it too).
+pub(crate) fn project_repo_map(s: &Value) -> std::collections::BTreeMap<String, Vec<String>> {
     let mut out: std::collections::BTreeMap<String, Vec<String>> = Default::default();
-    let s = state.settings.lock().unwrap().clone();
-    for v in all_vaults(&s) { for (r, p) in repo_projects(&v) { out.entry(policy::project_key(&s, &v, &p)).or_default().push(r); } }
+    for v in all_vaults(s) { for (r, p) in repo_projects(&v) { out.entry(policy::project_key(s, &v, &p)).or_default().push(r); } }
     for list in out.values_mut() { list.sort(); }
-    json!(out)
+    out
 }
 /// A project's repos in the vault's .relay/config.json.
 #[tauri::command]

@@ -4,7 +4,7 @@
 //! the workspaces, their projects, a project's pipelines and a pipeline's executions, nothing else. Not a board:
 //! the webview side is src/application/buddy, not a package.
 
-use board_core::{t, Provider, Text};
+use board_core::{arg, arg_ok, read, t, Action, Provider, Req, Text};
 use serde_json::{json, Value};
 
 const TEXT: Text = &[
@@ -36,6 +36,22 @@ fn allowed(path: &str) -> bool {
     }
 }
 
+
+// ---------- agent actions (`relay buddy.pipelines`): a read through `PROVIDER.url`, so the allowlist is the only way out.
+// The app turns a vault project name into `workspace` and `buddy_project` from the settings (src-tauri/src/actions.rs).
+
+const ACTIONS: &[Action] = &[
+    read("pipelines", "A Buddy project's pipelines and the status of each one's last run (the first 100). Give the vault project, or workspace and buddy_project.",
+        &[("project?", "vault project name, linked to a Buddy project in Settings"), ("workspace?", "Buddy workspace domain"), ("buddy_project?", "Buddy project name")],
+        |c, a| {
+            if arg(a, "workspace").is_none() || arg(a, "buddy_project").is_none() { return Err("give project (a vault project linked to a Buddy project), or workspace and buddy_project".into()); }
+            let path = format!("/workspaces/{}/projects/{}/pipelines?per_page=100", arg_ok(a, "workspace", slug)?, arg_ok(a, "buddy_project", slug)?);
+            (PROVIDER.url)(c, "GET", &path, &None).map(|url| Req { method: "GET", url, body: None }).ok_or_else(|| "Buddy: that read is not on the allowlist, or no region is set".to_string())
+        },
+        |v| Value::Array(v["pipelines"].as_array().map_or(&[][..], Vec::as_slice).iter().map(|p| json!({ "id": p["id"], "name": p["name"],
+            "disabled": p["disabled"], "last_run_status": p["last_execution_status"], "url": p["html_url"] })).collect())),
+];
+
 pub const PROVIDER: Provider = Provider {
     id: "buddy",
     name: "Buddy",
@@ -66,7 +82,7 @@ pub const PROVIDER: Provider = Provider {
         format!("Buddy {code}: {m}")
     },
     mcp: None,
-    actions: &[],
+    actions: ACTIONS,
 };
 
 #[cfg(test)]
@@ -88,6 +104,33 @@ mod tests {
         }
         for m in ["POST", "PUT", "PATCH", "DELETE", "get"] { assert!((PROVIDER.url)(&c, m, "/workspaces", &None).is_none(), "{m}"); }
         assert!((PROVIDER.url)(&c, "GET", "/workspaces", &Some(json!({ "x": 1 }))).is_none());
+    }
+
+    fn run(args: Value) -> Result<String, String> {
+        board_core::check_args(ACTIONS[0].args, &args)?;
+        (ACTIONS[0].build)(&json!({ "host": "api.eu.buddy.works" }), &args).map(|r| r.url)
+    }
+    #[test]
+    fn pipelines_is_a_read_through_the_allowlist() {
+        assert!(!ACTIONS[0].write && ACTIONS[0].default == board_core::Policy::Auto);
+        let url = run(json!({ "workspace": "acme", "buddy_project": "orchard-web" })).unwrap();
+        assert_eq!(url, "https://api.eu.buddy.works/workspaces/acme/projects/orchard-web/pipelines?per_page=100");
+        let path = url.strip_prefix("https://api.eu.buddy.works").unwrap();
+        assert_eq!((PROVIDER.url)(&json!({ "host": "api.eu.buddy.works" }), "GET", path, &None).as_deref(), Some(url.as_str()));
+        for args in [json!({}), json!({ "workspace": "acme" }), json!({ "workspace": "a b", "buddy_project": "x" }), json!({ "workspace": "acme", "buddy_project": "../x" }),
+            json!({ "workspace": "acme", "buddy_project": "x/pipelines/1/run" }), json!({ "workspace": "acme", "buddy_project": "x", "other": "1" })] {
+            assert!(run(args.clone()).is_err(), "{args}");
+        }
+        assert!((ACTIONS[0].build)(&json!({}), &json!({ "workspace": "acme", "buddy_project": "x" })).is_err(), "no host, no request");
+    }
+    #[test]
+    fn pipelines_answer_reduces_to_the_listed_fields() {
+        let v = json!({ "url": "x", "token": "s3cret", "pipelines": [{ "id": 42, "name": "Deploy", "disabled": false, "last_execution_status": "SUCCESSFUL",
+            "html_url": "https://app.buddy.works/acme/orchard-web/pipelines/pipeline/42", "secret": "s3cret", "actions": [{ "password": "s3cret" }] }] });
+        let out = (ACTIONS[0].out)(&v);
+        assert_eq!(out, json!([{ "id": 42, "name": "Deploy", "disabled": false, "last_run_status": "SUCCESSFUL", "url": "https://app.buddy.works/acme/orchard-web/pipelines/pipeline/42" }]));
+        assert!(!out.to_string().contains("s3cret"));
+        assert_eq!((ACTIONS[0].out)(&Value::Null), json!([]));
     }
     #[test]
     fn the_token_goes_only_to_buddy() {
