@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Added
+
+- **Aikido, Buddy and Cloud Build in the `relay` command**: agents and you in a terminal can read them with `relay aikido.status`, `aikido.repos`, `aikido.match`, `aikido.groups`, `aikido.issues`, `buddy.pipelines` and `cloudbuild.builds`, to see why a project's Security or Builds tab shows what it shows. Read-only, they run without asking, go through the same checks as the app, and never print a token or client secret. (#595)
+
 ### Fixed
 
 - **Aikido's Security tab** shows for a project as soon as its GitHub repos are found in Aikido, also when reading the issues fails: the tab then says why, shows the repos that did answer, and tries again after half a minute or when you open it (before, any failure hid the tab for five minutes). Repo URLs in other shapes (ssh, without https, with more after the repo) now match too, and Save in Settings › Integrations › Aikido says which projects matched. (#593)

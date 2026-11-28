@@ -29,3 +29,12 @@ Only `GET`, without a body, on:
 `<project>` is a GCP project id, `<location>` is `global` or a region like `europe-west1`. Anything else, including
 starting, retrying or cancelling a build, is refused before it leaves the app, so an account with more rights than
 needed still cannot change anything through Relay.
+
+## Agent actions (`relay cloudbuild.builds`)
+
+Read-only, `auto`, listed in `relay help` while Cloud Build is on. It goes through the allowlist above, with gcloud's
+login as the Builds tab does, and never prints the token.
+
+`relay cloudbuild.builds project=<vault project>` (the Google Cloud project linked in Settings › Projects) gives the
+Builds tab's data: the newest build of each trigger among the project's last 50 builds, newest first: `trigger`,
+`status` (Cloud Build's own), `branch`, `commit`, `started`, `finished` and the `log` link (console links only).

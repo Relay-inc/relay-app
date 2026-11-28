@@ -27,3 +27,12 @@ self-hosted Buddy is not supported) on:
 
 with at most `page` and `per_page` as numbers. Anything else, including running a pipeline, is refused before it
 leaves the app, so a token with more scopes than needed still cannot change anything through Relay.
+
+## Agent actions (`relay buddy.pipelines`)
+
+Read-only, `auto`, listed in `relay help` while Buddy is on and a token is stored. It goes through the allowlist above
+and never prints the token.
+
+`relay buddy.pipelines project=<vault project>` (the Buddy project linked in Settings › Projects), or
+`workspace=<domain> buddy_project=<name>`, gives the project's first 100 pipelines: `id`, `name`, `disabled`,
+`last_run_status` (Buddy's own, e.g. `SUCCESSFUL`, `FAILED`, `INPROGRESS`) and `url`.

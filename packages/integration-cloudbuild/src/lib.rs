@@ -3,7 +3,7 @@
 //! over: whatever the login may do, the allowlist below lets through GET on the project list (for the picker) and on a
 //! project's builds, nothing else. Not a board: the webview side is src/application/cloudbuild, not a package.
 
-use board_core::{t, Provider, Text};
+use board_core::{arg_ok, read, t, Action, Provider, Req, Text};
 use serde_json::{json, Value};
 
 const TEXT: Text = &[
@@ -38,6 +38,41 @@ fn allowed(path: &str) -> Option<&'static str> {
     }
 }
 
+
+// ---------- agent actions (`relay cloudbuild.builds`): a read through `PROVIDER.url`, so the allowlist is the only way out.
+// The app turns a vault project name into `gcp_project` and `location` from the settings (src-tauri/src/actions.rs).
+
+/// The newest build of each trigger among the answer's builds, newest trigger first: what the Builds tab lists
+/// (src/domain/cloudbuild/rules.ts triggersOf). Builds from no trigger are one entry with an empty `trigger_id`.
+fn latest(v: &Value) -> Value {
+    let mut builds: Vec<&Value> = v["builds"].as_array().map_or(&[][..], Vec::as_slice).iter().collect();
+    builds.sort_by(|a, b| b["createTime"].as_str().unwrap_or("").cmp(a["createTime"].as_str().unwrap_or("")));
+    let mut seen: Vec<&str> = vec![];
+    let mut out = vec![];
+    for b in builds {
+        let id = b["buildTriggerId"].as_str().unwrap_or("");
+        if seen.contains(&id) { continue; }
+        seen.push(id);
+        let sub = &b["substitutions"];
+        let name = sub["TRIGGER_NAME"].as_str().filter(|n| !n.is_empty()).unwrap_or(id);
+        // only a link into the Google Cloud console is passed on, as the tab does
+        let log = b["logUrl"].as_str().filter(|u| u.starts_with("https://console.cloud.google.com/"));
+        out.push(json!({ "trigger_id": id, "trigger": name, "status": b["status"], "branch": sub["BRANCH_NAME"], "commit": sub["SHORT_SHA"],
+            "started": b["startTime"].as_str().or(b["createTime"].as_str()), "finished": b["finishTime"], "log": log }));
+    }
+    Value::Array(out)
+}
+
+const ACTIONS: &[Action] = &[
+    read("builds", "The last build of each trigger of a vault project's Google Cloud project, among its 50 newest builds: trigger, status, branch, commit, started, finished, log link.",
+        &[("project", "vault project name, linked to a Google Cloud project in Settings")],
+        |c, a| {
+            let path = format!("/v1/projects/{}/locations/{}/builds?pageSize=50", arg_ok(a, "gcp_project", project)?, arg_ok(a, "location", location)?);
+            (PROVIDER.url)(c, "GET", &path, &None).map(|url| Req { method: "GET", url, body: None }).ok_or_else(|| "Cloud Build: that read is not on the allowlist".to_string())
+        },
+        latest),
+];
+
 pub const PROVIDER: Provider = Provider {
     id: "cloudbuild",
     name: "Cloud Build",
@@ -66,7 +101,7 @@ pub const PROVIDER: Provider = Provider {
         format!("Google {code}: {m}")
     },
     mcp: None,
-    actions: &[],
+    actions: ACTIONS,
 };
 
 #[cfg(test)]
@@ -91,6 +126,44 @@ mod tests {
         }
         for m in ["POST", "PUT", "PATCH", "DELETE", "get"] { assert!((PROVIDER.url)(&c, m, "/v1/projects", &None).is_none(), "{m}"); }
         assert!((PROVIDER.url)(&c, "GET", "/v1/projects", &Some(json!({ "x": 1 }))).is_none());
+    }
+
+    fn run(args: Value) -> Result<String, String> {
+        (ACTIONS[0].build)(&json!({}), &args).map(|r| r.url)
+    }
+    #[test]
+    fn builds_is_a_read_through_the_allowlist() {
+        assert!(!ACTIONS[0].write && ACTIONS[0].default == board_core::Policy::Auto);
+        // the vault project name is the one argument the agent gives; the rest comes from the settings
+        assert!(board_core::check_args(ACTIONS[0].args, &json!({ "project": "Orchard" })).is_ok());
+        assert!(board_core::check_args(ACTIONS[0].args, &json!({ "gcp_project": "orchard-web" })).is_err());
+        assert!(board_core::check_args(ACTIONS[0].args, &json!({})).is_err());
+        let url = run(json!({ "gcp_project": "orchard-web", "location": "europe-west1" })).unwrap();
+        assert_eq!(url, "https://cloudbuild.googleapis.com/v1/projects/orchard-web/locations/europe-west1/builds?pageSize=50");
+        let path = url.strip_prefix("https://cloudbuild.googleapis.com").unwrap();
+        assert_eq!((PROVIDER.url)(&json!({}), "GET", path, &None).as_deref(), Some(url.as_str()));
+        for args in [json!({}), json!({ "gcp_project": "orchard-web" }), json!({ "gcp_project": "Orchard", "location": "global" }), json!({ "gcp_project": "orchard-web", "location": "../x" }),
+            json!({ "gcp_project": "orchard-web/locations/global/builds/1:cancel#", "location": "global" }), json!({ "gcp_project": "orchard-web", "location": "global?filter=x" })] {
+            assert!(run(args.clone()).is_err(), "{args}");
+        }
+    }
+    #[test]
+    fn builds_answer_is_the_newest_build_per_trigger() {
+        let v = json!({ "builds": [
+            { "id": "1", "status": "FAILURE", "createTime": "2026-10-01T08:00:00Z", "buildTriggerId": "t1", "substitutions": { "TRIGGER_NAME": "deploy-web", "BRANCH_NAME": "main", "SHORT_SHA": "a1b2c3d" }, "logUrl": "https://console.cloud.google.com/cloud-build/builds/1" },
+            { "id": "2", "status": "SUCCESS", "createTime": "2026-10-01T09:00:00Z", "startTime": "2026-10-01T09:00:05Z", "finishTime": "2026-10-01T09:04:00Z", "buildTriggerId": "t1", "substitutions": { "TRIGGER_NAME": "deploy-web", "BRANCH_NAME": "main", "SHORT_SHA": "e4f5a6b" },
+              "logUrl": "https://console.cloud.google.com/cloud-build/builds/2", "serviceAccount": "s3cret", "secrets": [{ "kmsKeyName": "s3cret" }] },
+            { "id": "3", "status": "WORKING", "createTime": "2026-10-01T07:00:00Z", "logUrl": "https://evil.example/log" },
+        ] });
+        let out = latest(&v);
+        assert_eq!(out.as_array().unwrap().len(), 2);
+        assert_eq!(out[0]["trigger"], "deploy-web");
+        assert_eq!(out[0]["status"], "SUCCESS");
+        assert_eq!(out[0]["commit"], "e4f5a6b");
+        assert_eq!(out[1]["trigger_id"], "");
+        assert_eq!(out[1]["log"], Value::Null, "only the console's own links");
+        assert!(!out.to_string().contains("s3cret"));
+        assert_eq!(latest(&Value::Null), json!([]));
     }
     #[test]
     fn the_token_is_a_bearer_header() {

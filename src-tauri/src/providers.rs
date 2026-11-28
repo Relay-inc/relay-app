@@ -106,7 +106,7 @@ pub fn call_with(p: &Provider, cfg: &Value, method: &str, path: &str, body: Opti
     let url = (p.url)(cfg, method, path, &body).ok_or_else(|| trc_v("err.call", p.name))?;
     send_with(p, cfg, method, &url, body, secrets)
 }
-fn send_with(p: &Provider, cfg: &Value, method: &str, url: &str, body: Option<Value>, token: &[String]) -> Result<Value, String> {
+pub fn send_with(p: &Provider, cfg: &Value, method: &str, url: &str, body: Option<Value>, token: &[String]) -> Result<Value, String> {
     // globoff: the [ ] in filter[...] are not curl ranges
     let mut conf = format!("globoff\nurl = {}\nrequest = {method}\n", curl_quote(url));
     for h in (p.headers)(cfg, token) { conf += &format!("header = {}\n", curl_quote(&h)); }

@@ -7,7 +7,7 @@
 //! src/application/aikido, not a package.
 
 use base64::Engine;
-use board_core::{t, Provider, Text};
+use board_core::{arg, arg_ok, read, t, Action, Provider, Req, Text};
 use serde_json::{json, Value};
 
 const TEXT: Text = &[
@@ -94,6 +94,47 @@ pub fn token_error(code: &str, v: &Value) -> String {
     (PROVIDER.error)(code, v)
 }
 
+
+// ---------- agent actions (`relay aikido.<action>`): reads only, each built through `PROVIDER.url`, so the allowlist
+// above is the only way out. Two more (status, match) need the vault and the token exchange: src-tauri/src/aikido.rs.
+
+/// The allowlist's URL for a GET, or why the path is not on it.
+fn get(cfg: &Value, path: String) -> Result<Req, String> {
+    (PROVIDER.url)(cfg, "GET", &path, &None).map(|url| Req { method: "GET", url, body: None }).ok_or_else(|| "Aikido: that read is not on the allowlist, or no region is set".to_string())
+}
+/// The records of an answer: a top-level array, or the first array inside an object (the docs do not say which
+/// /repositories/code answers).
+pub fn records(v: &Value) -> &[Value] {
+    match v {
+        Value::Array(a) => a,
+        Value::Object(o) => o.values().find_map(Value::as_array).map_or(&[], Vec::as_slice),
+        _ => &[],
+    }
+}
+fn each(v: &Value, f: impl Fn(&Value) -> Value) -> Value { Value::Array(records(v).iter().map(f).collect()) }
+
+const ACTIONS: &[Action] = &[
+    read("repos", "Aikido's code repos (the first 200): id, name, provider, url, last_scanned_at. `name` filters on the repo name.", &[("name?", "repo name filter")],
+        |c, a| {
+            let q = if arg(a, "name").is_some() { format!("&filter_name={}", arg_ok(a, "name", name)?) } else { String::new() };
+            get(c, format!("/repositories/code?per_page=200{q}"))
+        },
+        |v| each(v, |r| json!({ "id": r["id"], "name": r["name"], "provider": r["provider"], "url": r["url"], "last_scanned_at": r["last_scanned_at"] }))),
+    read("groups", "The open issue groups of one Aikido code repo (up to 100): id, title, severity, type, time_to_fix_minutes, locations.", &[("repo", "Aikido code repo id, from repos")],
+        |c, a| get(c, format!("/open-issue-groups?filter_code_repo_id={}&filter_status=open&per_page=100&page=0", arg_ok(a, "repo", id)?)),
+        |v| each(v, |g| json!({ "id": g["id"], "title": g["title"], "severity": g["severity"], "type": g["type"], "time_to_fix_minutes": g["time_to_fix_minutes"],
+            "locations": records(&g["locations"]).iter().filter(|l| l["type"].as_str().is_some_and(|t| t.starts_with("code_repo"))).map(|l| l["name"].clone()).collect::<Vec<_>>() }))),
+    read("issues", "The open issues of a group (up to 10) or of a repo (up to 100), as the app exports them: file and lines, package, installed and patched versions, CVE. Give group or repo.",
+        &[("group?", "issue group id, from groups"), ("repo?", "Aikido code repo id")],
+        |c, a| match (arg(a, "group"), arg(a, "repo")) {
+            (Some(_), None) => get(c, format!("/issues/export?format=json&filter_status=open&filter_issue_group_id={}&per_page=10&page=0", arg_ok(a, "group", id)?)),
+            (None, Some(_)) => get(c, format!("/issues/export?format=json&filter_status=open&filter_code_repo_id={}&per_page=100&page=0", arg_ok(a, "repo", id)?)),
+            _ => Err("give group or repo, one of them".into()),
+        },
+        |v| each(v, |i| json!({ "id": i["id"], "group": i["group_id"], "repo": i["code_repo_name"], "file": i["affected_file"], "start_line": i["start_line"], "end_line": i["end_line"],
+            "package": i["affected_package"], "installed": i["installed_version"], "patched": i["patched_versions"], "cve": i["cve_id"] }))),
+];
+
 pub const PROVIDER: Provider = Provider {
     id: "aikido",
     name: "Aikido",
@@ -129,7 +170,7 @@ pub const PROVIDER: Provider = Provider {
         format!("Aikido {code}: {m}")
     },
     mcp: None,
-    actions: &[],
+    actions: ACTIONS,
 };
 
 #[cfg(test)]
@@ -165,6 +206,52 @@ mod tests {
         }
         for m in ["POST", "PUT", "PATCH", "DELETE", "get"] { assert!((PROVIDER.url)(&c, m, "/repositories/code", &None).is_none(), "{m}"); }
         assert!((PROVIDER.url)(&c, "GET", "/repositories/code", &Some(json!({ "x": 1 }))).is_none());
+    }
+
+    fn run(id: &str, args: Value) -> Result<String, String> {
+        let a = ACTIONS.iter().find(|a| a.id == id).unwrap();
+        board_core::check_args(a.args, &args)?;
+        (a.build)(&json!({ "region": "eu" }), &args).map(|r| r.url)
+    }
+    #[test]
+    fn actions_are_reads_through_the_allowlist() {
+        assert!(ACTIONS.iter().all(|a| !a.write && a.default == board_core::Policy::Auto));
+        let base = "https://app.aikido.dev/api/public/v1";
+        assert_eq!(run("repos", json!({})).unwrap(), format!("{base}/repositories/code?per_page=200"));
+        assert_eq!(run("repos", json!({ "name": "orchard-web" })).unwrap(), format!("{base}/repositories/code?per_page=200&filter_name=orchard-web"));
+        assert_eq!(run("groups", json!({ "repo": "101" })).unwrap(), format!("{base}/open-issue-groups?filter_code_repo_id=101&filter_status=open&per_page=100&page=0"));
+        assert!(run("issues", json!({ "group": "48213" })).unwrap().ends_with("filter_issue_group_id=48213&per_page=10&page=0"));
+        assert!(run("issues", json!({ "repo": "101" })).unwrap().ends_with("filter_code_repo_id=101&per_page=100&page=0"));
+        // every URL an action builds is one the allowlist gives for that path
+        for (id, args) in [("repos", json!({})), ("groups", json!({ "repo": 7 })), ("issues", json!({ "repo": 7 }))] {
+            let url = run(id, args).unwrap();
+            let path = url.strip_prefix(base).unwrap();
+            assert_eq!((PROVIDER.url)(&json!({ "region": "eu" }), "GET", path, &None).as_deref(), Some(url.as_str()));
+        }
+    }
+    #[test]
+    fn arguments_are_checked_and_paths_off_the_list_refused() {
+        for (id, args) in [("repos", json!({ "name": "a b" })), ("repos", json!({ "name": "../x" })), ("repos", json!({ "name": "x&include_inactive=true" })),
+            ("groups", json!({ "repo": "abc" })), ("groups", json!({ "repo": "0" })), ("groups", json!({ "repo": "101&filter_team_id=1" })), ("groups", json!({})),
+            ("issues", json!({})), ("issues", json!({ "group": "1", "repo": "2" })), ("issues", json!({ "group": "x" })), ("issues", json!({ "other": "1" }))] {
+            assert!(run(id, args.clone()).is_err(), "{id} {args}");
+        }
+        for p in ["/issues/48213/ignore", "/teams", "/repositories/code/101/scan", "/issues/export?format=csv"] { assert!(get(&json!({ "region": "eu" }), p.into()).is_err(), "{p}"); }
+        assert!(get(&json!({}), "/repositories/code".into()).is_err(), "no region, no request");
+    }
+    #[test]
+    fn answers_reduce_to_the_listed_fields() {
+        // an answer with credentials among it: none of it reaches the agent
+        let v = json!([{ "id": 101, "name": "orchard-web", "provider": "github", "url": "https://github.com/acme/orchard-web", "last_scanned_at": 1790000000, "access_token": "s3cret", "client_secret": "s3cret" }]);
+        let repos = (ACTIONS[0].out)(&v);
+        assert_eq!(repos[0]["name"], "orchard-web");
+        assert!(!repos.to_string().contains("s3cret"));
+        assert_eq!((ACTIONS[0].out)(&json!({ "repositories": v })), repos, "the first array of an object");
+        let g = (ACTIONS[1].out)(&json!([{ "id": 5, "title": "XSS in checkout", "severity": "high", "type": "sast", "time_to_fix_minutes": 20, "token": "s3cret",
+            "locations": [{ "type": "code_repo", "name": "orchard-web" }, { "type": "cloud", "name": "prod" }] }]));
+        assert_eq!(g[0]["locations"], json!(["orchard-web"]));
+        assert!(!g.to_string().contains("s3cret"));
+        assert_eq!((ACTIONS[2].out)(&json!("nope")), json!([]));
     }
     #[test]
     fn the_token_goes_only_to_aikido() {
