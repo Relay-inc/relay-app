@@ -14,6 +14,8 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+## [0.0.73] - 2026-11-28
+
 ### Added
 
 - **A project home**: a new, empty conversation in a vault project shows a small overview above the composer instead of a blank column: the project's "Left off" line and when you last worked on it, then a card each for what waits on you, your tickets (in progress first, with a link to the board) and failed or running builds with the open PRs. A row opens the conversation, ticket, or the Builds or PRs tab. It goes away with your first message, and a card with nothing to show is left out. (#589)
