@@ -3,11 +3,11 @@ import type { Message } from "../../domain/settings/types";
 import * as backend from "../../infrastructure/backend";
 import { t, tn } from "../../shared/i18n";
 import { useSettingsStore } from "./store";
-import { commit, save } from "./window";
+import { commit } from "./window";
 
-// Settings for Aikido: the region and the API client on its page in Integrations, the code repos per vault project in
-// Settings › Projects. The client ID and secret go to the keychain (vault-app.aikido) and never come back; the backend
-// exchanges them for the token a call carries.
+// Settings for Aikido: the region and the API client on its page in Integrations. Which code repos a vault project
+// shows is not set anywhere: they are its GitHub repos that Aikido scans (application/aikido). The client ID and secret
+// go to the keychain (vault-app.aikido) and never come back; the backend exchanges them for the token a call carries.
 
 const current = () => useSettingsStore.getState().settings;
 const get = (path: string) => backend.integrationCall("aikido", "GET", path, null);
@@ -29,14 +29,4 @@ export async function saveAikido(region: string, clientId: string, secret: strin
   } catch (error) {
     return { text: String(error), ok: false };
   }
-}
-/** Every code repo the client can read, for a project's picker. */
-export const aikidoRepos = async () => reposOf(await get("/repositories/code?per_page=200"));
-/** Link a vault project to these Aikido code repos, or unlink it ([]). */
-export function linkAikido(project: string, ids: number[]) {
-  const aikido = { ...current().aikido };
-  const clean = [...new Set(ids.filter(id => Number.isInteger(id) && id > 0))];
-  if (clean.length) aikido[project] = clean;
-  else delete aikido[project];
-  return save({ ...current(), aikido });
 }

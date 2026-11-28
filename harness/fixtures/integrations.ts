@@ -1349,9 +1349,23 @@ export function cloudbuild(path: string, calm = false): unknown {
 // Security panel shows them, and their issues from the export. Fictional, like everything here.
 const SEC = (ms: number) => Math.round(ms / 1000);
 const AIKIDO_REPOS = [
-  { id: 101, name: "orchard-web", provider: "github", external_repo_id: "orchard-web", last_scanned_at: SEC(NOW - 2 * HOUR) },
-  { id: 102, name: "orchard-api", provider: "github", external_repo_id: "orchard-api", last_scanned_at: SEC(NOW - 3 * HOUR) },
-  { id: 103, name: "bluebird-app", provider: "github", external_repo_id: "bluebird-app", last_scanned_at: -1 },
+  // Orchard Health's GitHub repos (project_repos in fixture aikido), so its Security tab shows both
+  {
+    id: 101,
+    name: "orchard-web",
+    provider: "github",
+    url: "https://github.com/acme/orchard-web",
+    last_scanned_at: SEC(NOW - 2 * HOUR),
+  },
+  {
+    id: 102,
+    name: "orchard-api",
+    provider: "github",
+    url: "https://github.com/acme/orchard-api.git",
+    last_scanned_at: SEC(NOW - 3 * HOUR),
+  },
+  // a repo no project lists
+  { id: 103, name: "bluebird-app", provider: "github", url: "https://github.com/acme/bluebird-app", last_scanned_at: -1 },
 ];
 const repoLoc = (id: number) => ({ id, name: AIKIDO_REPOS.find(r => r.id === id)!.name, type: "code_repo" });
 const AIKIDO_GROUPS = [

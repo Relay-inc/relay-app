@@ -11,7 +11,7 @@ import {
   newAlarms,
   placeOf,
   reposOf,
-  suggest,
+  matchRepos,
   worst,
 } from "./rules.ts";
 
@@ -31,9 +31,15 @@ const group = (id: number, severity: string, score: number, extra: Record<string
 });
 
 test("repos read from an array or a wrapped one, never scanned is 0", () => {
-  const row = { id: 101, name: "orchard-api", provider: "github", external_repo_id: "8812", last_scanned_at: -1 };
+  const row = {
+    id: 101,
+    name: "orchard-api",
+    provider: "github",
+    url: "https://github.com/acme/orchard-api",
+    last_scanned_at: -1,
+  };
   assert.deepEqual(reposOf([row]), [
-    { id: 101, name: "orchard-api", provider: "github", external: "8812", scanned: 0 },
+    { id: 101, name: "orchard-api", provider: "github", url: "https://github.com/acme/orchard-api", scanned: 0 },
   ]);
   assert.equal(reposOf({ repositories: [row, { id: 0, name: "x" }] }).length, 1);
   assert.deepEqual(reposOf(null), []);
@@ -88,14 +94,33 @@ test("issues and where they are", () => {
   assert.equal(placeOf(dep), "package.json · lodash 4.17.15 → 4.17.21");
 });
 
-test("suggestions: GitHub repos named like the project's repos", () => {
+test("a project's Aikido repos follow its GitHub repos by URL", () => {
+  const repo = (id: number, name: string, url: string, provider = "github") => ({ id, name, url, provider });
   const repos = reposOf([
-    { id: 101, name: "orchard-api", provider: "github" },
-    { id: 102, name: "orchard-web", provider: "github" },
-    { id: 103, name: "orchard-api", provider: "gitlab" },
-    { id: 104, name: "bluebird", provider: "github" },
+    repo(101, "orchard-web", "https://github.com/acme/orchard-web"),
+    repo(102, "orchard-api", "https://github.com/Acme/Orchard-API.git/"),
+    repo(103, "orchard-api", "https://gitlab.com/acme/orchard-api", "gitlab"),
+    repo(104, "bluebird-app", "https://github.com/acme/bluebird-app"),
+    repo(105, "shared-ui", ""),
+    repo(106, "tools", ""),
+    repo(107, "tools", "https://github.com/other/tools"),
   ]);
-  assert.deepEqual(suggest(repos, ["acme/orchard-api", "acme/Orchard-Web"]), [101, 102]);
+  assert.deepEqual(matchRepos(repos, ["acme/orchard-web"]), [101], "exact");
+  assert.deepEqual(matchRepos(repos, ["ACME/orchard-web"]), [101], "case");
+  assert.deepEqual(
+    matchRepos(repos, ["acme/orchard-api"]),
+    [102],
+    ".git, a slash and case on Aikido's side; never GitLab",
+  );
+  assert.deepEqual(matchRepos(repos, ["acme/orchard-api.git"]), [102], ".git on the project's side");
+  assert.deepEqual(matchRepos(repos, ["acme/harbor-crm"]), [], "no match");
+  assert.deepEqual(matchRepos(repos, ["acme/shared-ui"]), [105], "no URL: the name, when it is the only one");
+  assert.deepEqual(matchRepos(repos, ["acme/tools"]), [], "no URL and a name two owners have: no guess");
+  assert.deepEqual(
+    matchRepos(reposOf([repo(108, "orchard-web", "", "bitbucket")]), ["acme/orchard-web"]),
+    [],
+    "another provider never, not even by name",
+  );
 });
 
 test("the fix prompt: the findings as untrusted data, the branch, the checkouts, never silencing", () => {

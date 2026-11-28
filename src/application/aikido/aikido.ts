@@ -5,6 +5,7 @@ import {
   groupsOf,
   issuesOf,
   issuesPage,
+  matchRepos,
   mergeGroups,
   newAlarms,
   reposOf,
@@ -23,14 +24,16 @@ import { makeStore } from "../make-store";
 import { select } from "../navigation/navigation";
 import { settings } from "../settings/settings";
 
-// Aikido in the main window: the open issue groups of a vault project's linked code repos (settings.aikido), for the
-// Security panel, and a conversation that fixes them. Read-only: every call is a GET the backend allowlists
-// (packages/integration-aikido), with an access token the backend keeps to itself.
+// Aikido in the main window: the open issue groups of the Aikido code repos that are a vault project's GitHub repos
+// (matched on their URL, domain/aikido matchRepos), for the Security panel, and a conversation that fixes them.
+// Read-only: every call is a GET the backend allowlists (packages/integration-aikido), with an access token the
+// backend keeps to itself.
 
-type ProjectIssues = { groups: Group[] | null; err: string; at: number };
+type ProjectIssues = { groups: Group[] | null; repos: number[]; err: string; at: number };
 type AikidoState = {
-  projects: Record<string, ProjectIssues>; // per vault project
-  repos: { list: AikidoRepo[]; at: number } | null; // every code repo the client sees: names and last scans
+  projects: Record<string, ProjectIssues>; // per vault project: its matched repos and their groups
+  // every code repo the client sees (names, URLs, last scans) and every project's GitHub repos, read together
+  repos: { list: AikidoRepo[]; slugs: Record<string, string[]>; at: number } | null;
   issues: Record<number, Issue[]>; // per group, the open issues (at most 10), once its row unfolded or it is fixed
   seen: Record<string, number[]>; // per vault project, the groups the user saw in the panel
 };
@@ -44,41 +47,61 @@ export const useAikidoStore = makeStore<AikidoState>(() => ({
 const set = useAikidoStore.setState;
 const get = (path: string) => backend.integrationCall("aikido", "GET", path, null);
 
-/** The Aikido code repos linked to a vault project, while Aikido is switched on. */
-export const aikidoOf = (project: string): number[] => {
-  const s = settings();
-  return s.integrations?.aikido?.on === true ? (s.aikido?.[project] ?? []) : [];
-};
+const NONE: number[] = [];
+export const aikidoOn = () => settings().integrations?.aikido?.on === true;
+/** The Aikido code repos of a vault project (its GitHub repos that Aikido scans), while Aikido is switched on; known
+ *  once `loadAikido` read them. */
+export const aikidoOf = (project: string): number[] =>
+  aikidoOn() ? (useAikidoStore.getState().projects[project]?.repos ?? NONE) : NONE;
 const region = () => String(settings().integrations?.aikido?.region ?? "eu");
 
-// ponytail: Aikido allows 20 calls a minute per workspace. Read when the title bar or the tab shows, at most every 5 minutes, no
-// background polling; a refresh is 1 call for the repos plus 1 per linked repo (more only past 100 groups a repo).
+// ponytail: Aikido allows 20 calls a minute per workspace. Read when the title bar or the tab shows, at most every 5
+// minutes, no background polling; a refresh is 1 call per 200 repos (shared by every project) plus 1 per matched
+// repo (more only past 100 groups a repo).
 const FRESH = 5 * 60_000;
 const PAGES = 3;
+const REPO_PAGES = 5;
+let reading: Promise<NonNullable<AikidoState["repos"]>> | null = null;
+/** Aikido's code repos and the projects' GitHub repos, from the store while fresh; one read at a time. */
+function knownRepos() {
+  const had = useAikidoStore.getState().repos;
+  if (had && Date.now() - had.at < FRESH) return Promise.resolve(had);
+  reading ??= (async () => {
+    const list: AikidoRepo[] = [];
+    for (let page = 0; page < REPO_PAGES; page++) {
+      const answer = await get(`/repositories/code?per_page=200&page=${page}`);
+      list.push(...reposOf(answer));
+      if (!Array.isArray(answer) || answer.length < 200) break;
+    }
+    const repos = { list, slugs: await backend.projectRepos(), at: Date.now() };
+    set(draft => {
+      draft.repos = repos;
+    });
+    return repos;
+  })().finally(() => {
+    reading = null;
+  });
+  return reading;
+}
 /** The project's open issue groups, worst first, unless they arrived less than 5 minutes ago. A failure (the rate
  *  limit among them) keeps what was there and says why. */
 export async function loadAikido(project: string, force = false) {
-  const ids = aikidoOf(project);
   const had = useAikidoStore.getState().projects[project];
-  if (!ids.length || (!force && had && Date.now() - had.at < FRESH)) return;
+  if (!aikidoOn() || (!force && had && Date.now() - had.at < FRESH)) return;
+  const keep = { groups: had?.groups ?? null, repos: had?.repos ?? NONE };
   set(draft => {
-    draft.projects[project] = { groups: had?.groups ?? null, err: "", at: Date.now() };
+    draft.projects[project] = { ...keep, err: "", at: Date.now() };
   });
   try {
-    const repos = useAikidoStore.getState().repos;
-    if (!repos || Date.now() - repos.at >= FRESH) {
-      const list = reposOf(await get("/repositories/code?per_page=200"));
-      set(draft => {
-        draft.repos = { list, at: Date.now() };
-      });
-    }
+    const known = await knownRepos();
+    const ids = matchRepos(known.list, known.slugs[project] ?? []);
     const lists = await Promise.all(ids.map(repoGroups));
     set(draft => {
-      draft.projects[project] = { groups: mergeGroups(lists), err: "", at: Date.now() };
+      draft.projects[project] = { groups: mergeGroups(lists), repos: ids, err: "", at: Date.now() };
     });
   } catch (error) {
     set(draft => {
-      draft.projects[project] = { groups: had?.groups ?? null, err: String(error), at: Date.now() };
+      draft.projects[project] = { ...keep, err: String(error), at: Date.now() };
     });
   }
 }

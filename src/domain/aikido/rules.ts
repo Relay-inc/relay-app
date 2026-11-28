@@ -5,8 +5,9 @@ import { fill, prompts, untrusted, untrustedNote } from "../../shared/prompts.ts
 
 export type Severity = "critical" | "high" | "medium" | "low";
 export const SEVERITIES: Severity[] = ["critical", "high", "medium", "low"];
-/** A code repo as Aikido knows it. `scanned`: the last scan, epoch seconds, 0 when never. */
-export type AikidoRepo = { id: number; name: string; provider: string; external: string; scanned: number };
+/** A code repo as Aikido knows it: `url` its page at the provider ("" when Aikido gives none), `scanned` the last scan,
+ *  epoch seconds, 0 when never. */
+export type AikidoRepo = { id: number; name: string; provider: string; url: string; scanned: number };
 /** An open issue group: one finding over one or more places. `repos`: the linked repos it was listed for. */
 export type Group = {
   id: number;
@@ -53,7 +54,7 @@ export const reposOf = (answer: unknown): AikidoRepo[] =>
       id: num(r.id),
       name: text(r.name),
       provider: text(r.provider),
-      external: text(r.external_repo_id),
+      url: text(r.url),
       scanned: Math.max(0, num(r.last_scanned_at)),
     }))
     .filter(r => r.id > 0 && r.name)
@@ -168,11 +169,34 @@ const TYPES: Record<string, string> = {
 };
 export const typeLabel = (type: string) => TYPES[type] ?? type.replace(/_/g, " ");
 
-/** Linked repos a project likely means: Aikido's GitHub repos whose name (or owner/name) is one of its repo slugs. */
-export function suggest(repos: AikidoRepo[], slugs: string[]) {
-  const names = new Set(slugs.flatMap(s => [s.toLowerCase(), s.split("/").pop()!.toLowerCase()]));
-  return repos
-    .filter(r => r.provider === "github" && (names.has(r.name.toLowerCase()) || names.has(r.external.toLowerCase())))
+/** "Owner/Name.git/" → "owner/name": a repo as a project lists it or as the path of its GitHub URL. */
+const slugOf = (s: string) =>
+  s
+    .trim()
+    .toLowerCase()
+    .replace(/\/+$/, "")
+    .replace(/\.git$/, "")
+    .replace(/^\/+/, "");
+const urlPath = (url: string) => {
+  try {
+    return slugOf(new URL(url).pathname);
+  } catch {
+    return "";
+  }
+};
+/** A project's Aikido repos, from the GitHub repos it is linked to (`owner/name`): Aikido's GitHub repos whose URL is
+ *  that repo, case and a trailing `.git` or `/` aside. A repo Aikido gives no URL for matches on its name instead, but
+ *  only when no other GitHub repo in Aikido has that name (two owners, one name: no guess). Other providers never. */
+export function matchRepos(repos: AikidoRepo[], slugs: string[]): number[] {
+  const github = repos.filter(r => r.provider === "github");
+  const wanted = slugs.map(slugOf);
+  return github
+    .filter(r => {
+      if (r.url) return wanted.includes(urlPath(r.url));
+      const name = r.name.toLowerCase();
+      const alone = github.filter(x => x.name.toLowerCase() === name).length === 1;
+      return alone && wanted.some(s => s.split("/").pop() === name);
+    })
     .map(r => r.id);
 }
 

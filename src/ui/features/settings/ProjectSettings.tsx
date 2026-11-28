@@ -19,7 +19,6 @@ import { useT } from "../../hooks/useT";
 import { BUTTON_GLYPH, buttonClass } from "./blocks";
 import { BuddyProject } from "./BuddyProject";
 import { CloudbuildProject } from "./CloudbuildProject";
-import { AikidoProject } from "./AikidoProject";
 import { ChangeInput } from "./ChangeInput";
 import { Field } from "./Field";
 import { PipelineSettings } from "./PipelineSettings";
@@ -110,7 +109,7 @@ function Where({ glyph, children }: { glyph: string; children: ReactNode }) {
   );
 }
 
-/** The General tab: identity, the board, the repos with their checkouts on this Mac, Buddy's project and Aikido's repos. Each says
+/** The General tab: identity, the board, the repos with their checkouts on this Mac, Buddy's project. Each says
  *  where it is stored. The branches and the pipeline's switch are on the Pipeline tab. */
 function General({
   name,
@@ -204,7 +203,6 @@ function General({
 
       <BuddyRow name={name} />
       <CloudbuildRow name={name} />
-      <AikidoRow name={name} />
     </>
   );
 }
@@ -227,17 +225,6 @@ function CloudbuildRow({ name }: { name: string }) {
   return (
     <section className="rounded-xl border border-s-border px-4 py-3">
       <CloudbuildProject name={name} />
-    </section>
-  );
-}
-
-/** Aikido's code repos, while Aikido is on: a row in a card of its own. */
-function AikidoRow({ name }: { name: string }) {
-  const on = useSettingsStore(s => s.settings.integrations.aikido?.on === true);
-  if (!on) return null;
-  return (
-    <section className="rounded-xl border border-s-border px-4 py-3">
-      <AikidoProject name={name} />
     </section>
   );
 }

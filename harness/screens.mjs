@@ -1468,19 +1468,8 @@ const VIEWS = {
     await waitText("Prototype pollution in lodash 4.17.15");
     await settle(page);
   },
-  // Aikido's page in Integrations (region, client ID and secret) and its code repos in Settings › Projects (PR aikido)
+  // Aikido's page in Integrations: region, client ID and secret (PR #590)
   "settings-integration-aikido": () => integration("Aikido", { fixture: "aikido" }),
-  "settings-project-aikido": async () => {
-    await projectTab("General", { fixture: "aikido", name: ".*Orchard Health" }); // its name follows its icon
-    const field = page.getByRole("combobox", { name: "Add a code repo…" });
-    await field.scrollIntoViewIfNeeded();
-    await waitText("orchard-api");
-    await page.waitForFunction(() =>
-      [...document.querySelectorAll("select")].some(s => [...s.options].some(o => o.text.startsWith("bluebird-app"))),
-    );
-    await field.scrollIntoViewIfNeeded();
-    await settle(page);
-  },
   // a project's Cloud Build triggers in the panel's Builds tab: failed, running and passed, and a manual build (PR cloudbuild, PR drawer tabs)
   "cloudbuild-menu": async () => {
     await open(page, server.url, { fixture: "cloudbuild", sel: keys.switchTo });

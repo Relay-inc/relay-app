@@ -1896,7 +1896,7 @@ export default {
   "cb.tone.none": "Cloud Build : aucun build",
   "int.gSecurity": "Sécurité",
   "ak.help":
-    "Affiche les issues ouvertes des dépôts de code Aikido dans le panneau Sécurité du projet du coffre auquel ils sont liés (Réglages › Projets), et lance une conversation qui les corrige. Lecture seule : créez un client dans Aikido › Settings › Integrations › API (REST) avec uniquement les scopes <code>repositories:read</code> et <code>issues:read</code>. L'ID client et le secret vont dans le trousseau. Relay n'envoie à Aikido que des lectures, quoi que le client permette.",
+    "Affiche dans le panneau Sécurité d'un projet du coffre les issues ouvertes des dépôts de code Aikido qui sont ses dépôts GitHub (ceux de sa fiche dans Réglages › Projets, reconnus par l'URL du dépôt ; GitHub uniquement), et lance une conversation qui les corrige. Lecture seule : créez un client dans Aikido › Settings › Integrations › API (REST) avec uniquement les scopes <code>repositories:read</code> et <code>issues:read</code>. L'ID client et le secret vont dans le trousseau. Relay n'envoie à Aikido que des lectures, quoi que le client permette.",
   "ak.region": "Région :",
   "ak.clientId": "ID client",
   "ak.secret": "Secret client",
@@ -1906,12 +1906,7 @@ export default {
   "ak.connected_other": "Connecté, {n} dépôts",
   "ak.needBoth": "Renseignez l'ID client et le secret.",
   "ak.forgetClient": "Supprimer aussi l'ID client et le secret du trousseau",
-  "ak.projectHelp":
-    "Leurs issues ouvertes s'affichent dans le panneau Sécurité du projet. Un projet peut en avoir plusieurs, un frontend et un backend.",
-  "ak.addRepo": "Ajouter un dépôt de code…",
-  "ak.removeRepo": "Délier {repo}",
-  "ak.addSuggested": "Ajouter {list}",
-  "ak.notLinked": "Aucun dépôt de code Aikido lié à ce projet. Liez-les dans Réglages › Projets.",
+  "ak.notLinked": "Aucun des dépôts GitHub de ce projet n'est un dépôt de code dans Aikido.",
   "ak.open": "Aikido · {n} ouvertes",
   "ak.scanned": "analysé {when}",
   "ak.repos": "Dépôts de code",

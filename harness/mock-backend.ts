@@ -150,13 +150,12 @@ if (cloudOn)
     integrations: { ...settings.integrations, cloudbuild: { on: true } },
     cloudbuild: { [vault.projectNames[0]]: { project: "northwind-web", location: "global" } },
   };
-// aikido(-dark): Aikido switched on, Orchard Health linked to its two code repos (fixtures/integrations aikido)
+// aikido(-dark): Aikido switched on; Orchard Health's GitHub repos are two of its code repos (fixtures/integrations aikido)
 const aikidoFixture = fixture.startsWith("aikido");
 if (aikidoFixture)
   settings = {
     ...settings,
     integrations: { ...settings.integrations, aikido: { on: true, region: "eu" } },
-    aikido: { "Orchard Health": [101, 102] },
   };
 // the Pages tab with its folders shown in every workspace, as the views from before issue 420 expect; ?typed=1 opens
 // on the tree by type, the app's default (a fresh vault)

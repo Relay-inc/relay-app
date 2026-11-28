@@ -9,6 +9,7 @@ import {
   type Severity,
 } from "../../../domain/aikido/rules";
 import {
+  aikidoOf,
   fixGroupsWithClaude,
   fixWithClaude,
   loadAikido,
@@ -18,7 +19,7 @@ import {
   repoName,
   useAikidoStore,
 } from "../../../application/aikido/aikido";
-import { useSettingsStore } from "../../../application/settings/store";
+import { useDerived } from "../../hooks/useDerived";
 import { dayMonth, relativeFormat } from "../../../shared/format";
 import { useDismiss } from "../../hooks/useDismiss";
 import { useT } from "../../hooks/useT";
@@ -38,7 +39,6 @@ const SEVERITY = {
   medium: "ak.sev.medium",
   low: "ak.sev.low",
 } as const;
-const NONE: number[] = [];
 const day = (seconds: number, locale: string) => dayMonth(new Date(seconds * 1000).toISOString(), locale);
 
 /** The Security panel of a vault project, the content of the drawer's Security tab: the open Aikido issue groups of
@@ -46,9 +46,7 @@ const day = (seconds: number, locale: string) => dayMonth(new Date(seconds * 100
  *  "Fix met Claude". Showing it loads (at most every 5 minutes) and marks what it lists as seen. */
 export function AikidoPanel({ project }: { project: string }) {
   const { t, locale } = useT();
-  const linked = useSettingsStore(s =>
-    s.settings.integrations.aikido?.on === true ? (s.settings.aikido?.[project] ?? NONE) : NONE,
-  );
+  const linked = useDerived(() => aikidoOf(project));
   const state = useAikidoStore(s => s.projects[project]);
   const repos = useAikidoStore(s => s.repos);
   const [repo, setRepo] = useState<number | null>(null);

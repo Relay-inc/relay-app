@@ -1864,7 +1864,7 @@ const en = {
   "cb.tone.none": "Cloud Build: no builds",
   "int.gSecurity": "Security",
   "ak.help":
-    "Shows the open issues of Aikido code repos in the Security panel of the vault project they are linked to (Settings › Projects), and starts a conversation that fixes them. Read-only: create a client in Aikido › Settings › Integrations › API (REST) with only the scopes <code>repositories:read</code> and <code>issues:read</code>. The client ID and secret go to the keychain. Relay itself sends nothing but reads to Aikido, whatever the client allows.",
+    "Shows the open issues of the Aikido code repos that are a vault project's GitHub repos (the repos on its card in Settings › Projects, matched on the repo's URL; GitHub only) in the project's Security panel, and starts a conversation that fixes them. Read-only: create a client in Aikido › Settings › Integrations › API (REST) with only the scopes <code>repositories:read</code> and <code>issues:read</code>. The client ID and secret go to the keychain. Relay itself sends nothing but reads to Aikido, whatever the client allows.",
   "ak.region": "Region:",
   "ak.clientId": "Client ID",
   "ak.secret": "Client secret",
@@ -1874,12 +1874,7 @@ const en = {
   "ak.connected_other": "Connected, {n} repos",
   "ak.needBoth": "Fill in both the client ID and the secret.",
   "ak.forgetClient": "Also delete the client ID and secret from the keychain",
-  "ak.projectHelp":
-    "Their open issues show in the project's Security panel. A project can have several, a frontend and a backend.",
-  "ak.addRepo": "Add a code repo…",
-  "ak.removeRepo": "Unlink {repo}",
-  "ak.addSuggested": "Add {list}",
-  "ak.notLinked": "No Aikido code repos linked to this project. Link them in Settings › Projects.",
+  "ak.notLinked": "None of this project's GitHub repos is a code repo in Aikido.",
   "ak.open": "Aikido · {n} open",
   "ak.scanned": "scanned {when}",
   "ak.repos": "Code repos",

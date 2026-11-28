@@ -1891,7 +1891,7 @@ export default {
   "cb.tone.none": "Cloud Build: keine Builds",
   "int.gSecurity": "Sicherheit",
   "ak.help":
-    "Zeigt die offenen Issues von Aikido-Code-Repos im Sicherheits-Panel des Vault-Projekts, mit dem sie verknüpft sind (Einstellungen › Projekte), und startet eine Unterhaltung, die sie behebt. Nur lesend: Leg in Aikido › Settings › Integrations › API (REST) einen Client mit nur den Scopes <code>repositories:read</code> und <code>issues:read</code> an. Client-ID und Secret kommen in den Schlüsselbund. Relay selbst schickt Aikido nur Leseanfragen, egal was der Client darf.",
+    "Zeigt im Sicherheits-Panel eines Vault-Projekts die offenen Issues der Aikido-Code-Repos, die seine GitHub-Repos sind (die Repos auf seiner Karte unter Einstellungen › Projekte, erkannt an der URL des Repos; nur GitHub), und startet eine Unterhaltung, die sie behebt. Nur lesend: Leg in Aikido › Settings › Integrations › API (REST) einen Client mit nur den Scopes <code>repositories:read</code> und <code>issues:read</code> an. Client-ID und Secret kommen in den Schlüsselbund. Relay selbst schickt Aikido nur Leseanfragen, egal was der Client darf.",
   "ak.region": "Region:",
   "ak.clientId": "Client-ID",
   "ak.secret": "Client-Secret",
@@ -1901,12 +1901,7 @@ export default {
   "ak.connected_other": "Verbunden, {n} Repos",
   "ak.needBoth": "Trag Client-ID und Secret ein.",
   "ak.forgetClient": "Auch Client-ID und Secret aus dem Schlüsselbund löschen",
-  "ak.projectHelp":
-    "Ihre offenen Issues erscheinen im Sicherheits-Panel des Projekts. Ein Projekt kann mehrere haben, ein Frontend und ein Backend.",
-  "ak.addRepo": "Code-Repo hinzufügen…",
-  "ak.removeRepo": "{repo} entkoppeln",
-  "ak.addSuggested": "{list} hinzufügen",
-  "ak.notLinked": "Keine Aikido-Code-Repos mit diesem Projekt verknüpft. Verknüpf sie unter Einstellungen › Projekte.",
+  "ak.notLinked": "Keines der GitHub-Repos dieses Projekts ist ein Code-Repo in Aikido.",
   "ak.open": "Aikido · {n} offen",
   "ak.scanned": "gescannt {when}",
   "ak.repos": "Code-Repos",

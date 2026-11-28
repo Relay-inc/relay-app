@@ -1878,7 +1878,7 @@ export default {
   "cb.tone.none": "Cloud Build: geen builds",
   "int.gSecurity": "Security",
   "ak.help":
-    "Toont de open issues van Aikido-code-repo's in het Security-paneel van het vault-project waaraan ze gekoppeld zijn (Instellingen › Projecten), en start een gesprek dat ze oplost. Alleen-lezen: maak in Aikido › Settings › Integrations › API (REST) een client aan met enkel de scopes <code>repositories:read</code> en <code>issues:read</code>. De client-ID en het secret gaan naar de sleutelhanger. Relay zelf stuurt Aikido niets dan leesopdrachten, wat de client ook mag.",
+    "Toont de open issues van de Aikido-code-repo's die de GitHub-repo's van een vault-project zijn (de repo's op zijn kaart in Instellingen › Projecten, gekoppeld via de URL van de repo; enkel GitHub) in het Security-paneel van het project, en start een gesprek dat ze oplost. Alleen-lezen: maak in Aikido › Settings › Integrations › API (REST) een client aan met enkel de scopes <code>repositories:read</code> en <code>issues:read</code>. De client-ID en het secret gaan naar de sleutelhanger. Relay zelf stuurt Aikido niets dan leesopdrachten, wat de client ook mag.",
   "ak.region": "Regio:",
   "ak.clientId": "Client-ID",
   "ak.secret": "Client-secret",
@@ -1888,12 +1888,7 @@ export default {
   "ak.connected_other": "Verbonden, {n} repo's",
   "ak.needBoth": "Vul zowel de client-ID als het secret in.",
   "ak.forgetClient": "Ook de client-ID en het secret uit de sleutelhanger verwijderen",
-  "ak.projectHelp":
-    "Hun open issues verschijnen in het Security-paneel van het project. Een project kan er meerdere hebben, een frontend en een backend.",
-  "ak.addRepo": "Code-repo toevoegen…",
-  "ak.removeRepo": "{repo} ontkoppelen",
-  "ak.addSuggested": "{list} toevoegen",
-  "ak.notLinked": "Geen Aikido-code-repo's gekoppeld aan dit project. Koppel ze bij Instellingen › Projecten.",
+  "ak.notLinked": "Geen van de GitHub-repo's van dit project is een code-repo in Aikido.",
   "ak.open": "Aikido · {n} open",
   "ak.scanned": "gescand {when}",
   "ak.repos": "Code-repo's",
