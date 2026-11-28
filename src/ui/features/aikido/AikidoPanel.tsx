@@ -1,7 +1,15 @@
-import { useEffect, useState } from "react";
-import { isAlarm, placeOf, typeLabel, type Group, type Severity } from "../../../domain/aikido/rules";
+import { useEffect, useRef, useState } from "react";
 import {
-  fixAllWithClaude,
+  FIX_FILTERS,
+  fixMatches,
+  placeOf,
+  typeLabel,
+  type FixFilter,
+  type Group,
+  type Severity,
+} from "../../../domain/aikido/rules";
+import {
+  fixGroupsWithClaude,
   fixWithClaude,
   loadAikido,
   loadIssues,
@@ -12,7 +20,10 @@ import {
 } from "../../../application/aikido/aikido";
 import { useSettingsStore } from "../../../application/settings/store";
 import { dayMonth, relativeFormat } from "../../../shared/format";
+import { useDismiss } from "../../hooks/useDismiss";
 import { useT } from "../../hooks/useT";
+import { Icon } from "../../components/Icon";
+import { POPOVER, POP_ROW } from "../board/toolbar";
 
 // critical and high in the overdue red, medium in the today orange, low quiet (DESIGN.md › Colour)
 const DOT: Record<Severity, string> = {
@@ -34,7 +45,7 @@ const day = (seconds: number, locale: string) => dayMonth(new Date(seconds * 100
  *  its linked code repos, worst first, filtered per repo; one row unfolds at a time with where it is, how to fix it and
  *  "Fix met Claude". Showing it loads (at most every 5 minutes) and marks what it lists as seen. */
 export function AikidoPanel({ project }: { project: string }) {
-  const { t, tn, locale } = useT();
+  const { t, locale } = useT();
   const linked = useSettingsStore(s =>
     s.settings.integrations.aikido?.on === true ? (s.settings.aikido?.[project] ?? NONE) : NONE,
   );
@@ -55,9 +66,6 @@ export function AikidoPanel({ project }: { project: string }) {
   const shown = (groups ?? []).filter(g => repo === null || g.repos.includes(repo));
   const name = (id: number) => repoName(id, repos?.list);
   const scanned = Math.max(0, ...(repos?.list ?? []).filter(r => linked.includes(r.id)).map(r => r.scanned));
-  const alarmRepos = (repo === null ? linked : [repo]).filter(id =>
-    shown.some(g => isAlarm(g) && g.repos.includes(id)),
-  );
   const chip = (on: boolean) =>
     `h-6.5 rounded-full px-2.5 text-xs ${on ? "bg-fill-2 text-label" : "border border-separator-strong text-secondary hover:bg-fill"}`;
 
@@ -106,17 +114,77 @@ export function AikidoPanel({ project }: { project: string }) {
 
       <div className="flex items-center justify-between gap-3 border-t border-separator px-4 py-2.5">
         <span className="text-xs text-secondary">{t("ak.codeOnly")}</span>
-        <button
-          className="h-7 rounded-lg border border-separator-strong bg-raised px-3 text-xs hover:bg-fill disabled:opacity-50"
-          disabled={!alarmRepos.length}
-          title={tn("ak.fixAllHelp", alarmRepos.length)}
-          onClick={async () => {
-            for (const id of alarmRepos) await fixAllWithClaude(project, id);
-          }}
-        >
-          {t("ak.fixAll")}
-        </button>
+        <FixButton project={project} groups={shown} repos={repo === null ? linked : [repo]} />
       </div>
+    </div>
+  );
+}
+
+const LABEL = {
+  "critical-high": "ak.fix.critical-high",
+  critical: "ak.fix.critical",
+  "quick-wins": "ak.fix.quick-wins",
+  dependencies: "ak.fix.dependencies",
+  all: "ak.fix.all",
+} as const;
+const SPLIT = "h-7 border border-separator-strong bg-raised text-xs hover:bg-fill disabled:opacity-50";
+
+/** The footer's split button: "Fix kritieke en hoge", and its chevron with the other choices (only critical, quick
+ *  wins, dependency updates, everything), each with how many groups it takes and off at none. Over the repos the chips
+ *  picked, one conversation per repo with something to fix. */
+function FixButton({ project, groups, repos }: { project: string; groups: Group[]; repos: number[] }) {
+  const { t, tn } = useT();
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  useDismiss(root, open, () => setOpen(false));
+  const targets = (filter: FixFilter) =>
+    repos.filter(id => groups.some(g => g.repos.includes(id) && fixMatches(filter, g)));
+  const count = (filter: FixFilter) => groups.filter(g => fixMatches(filter, g)).length;
+  const fix = async (filter: FixFilter) => {
+    setOpen(false);
+    for (const id of targets(filter)) await fixGroupsWithClaude(project, id, filter);
+  };
+  const main = targets("critical-high");
+  return (
+    <div ref={root} className="relative flex">
+      <button
+        className={`${SPLIT} rounded-l-lg px-3`}
+        disabled={!main.length}
+        title={tn("ak.fixAllHelp", main.length)}
+        onClick={() => fix("critical-high")}
+      >
+        {t(LABEL["critical-high"])}
+      </button>
+      <button
+        className={`${SPLIT} -ml-px grid w-7 place-items-center rounded-r-lg ${open ? "bg-fill-2" : ""}`}
+        aria-label={t("ak.fixMore")}
+        title={t("ak.fixMore")}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <Icon name="down" className="glyph size-3.5" />
+      </button>
+      {open && (
+        <div className={`absolute right-0 bottom-full z-30 mb-2 w-64 rounded-lg p-1 ${POPOVER}`} role="menu">
+          {FIX_FILTERS.map(filter => (
+            <button
+              key={filter}
+              type="button"
+              role="menuitem"
+              className={`w-full text-left disabled:opacity-40 ${POP_ROW} ${filter === "quick-wins" ? "h-auto! py-1.5" : ""}`}
+              disabled={!count(filter)}
+              onClick={() => fix(filter)}
+            >
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span>{t(LABEL[filter])}</span>
+                {filter === "quick-wins" && <span className="text-xs text-secondary">{t("ak.quickSub")}</span>}
+              </span>
+              <span className="text-xs text-secondary">{count(filter)}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -18,6 +18,7 @@ export type Group = {
   howToFix: string;
   cves: string[];
   since: number; // first detected, epoch seconds, 0 when unknown
+  minutes: number; // Aikido's estimate of the time to fix it, 0 when unknown
   repos: number[];
 };
 /** One issue of a group, from the export: where it is and what fixes it. */
@@ -75,6 +76,7 @@ export const groupsOf = (answer: unknown, repo: number): Group[] =>
       howToFix: text(g.how_to_fix),
       cves: Array.isArray(g.related_cve_ids) ? g.related_cve_ids.filter(c => typeof c === "string") : [],
       since: num(g.first_detected_at),
+      minutes: num(g.time_to_fix_minutes),
       repos: [repo],
     }));
 
@@ -97,6 +99,32 @@ export const worst = (groups: Group[]): Severity | null =>
 export const isAlarm = (g: Group) => g.severity === "critical" || g.severity === "high";
 /** The critical and high groups the user has not seen yet in this project: what makes the Security tab red. */
 export const newAlarms = (groups: Group[], seen: number[]) => groups.filter(g => isAlarm(g) && !seen.includes(g.id));
+
+/** What "Fix …" in the panel's footer takes on, one conversation per repo: critical and high (the default), only
+ *  critical, quick wins (at most 30 minutes by Aikido's estimate, any severity), dependency updates, everything. */
+export const FIX_FILTERS = ["critical-high", "critical", "quick-wins", "dependencies", "all"] as const;
+export type FixFilter = (typeof FIX_FILTERS)[number];
+export const QUICK_WIN_MINUTES = 30;
+export const fixMatches = (filter: FixFilter, g: Group) =>
+  filter === "critical-high"
+    ? isAlarm(g)
+    : filter === "critical"
+      ? g.severity === "critical"
+      : filter === "quick-wins"
+        ? g.minutes > 0 && g.minutes <= QUICK_WIN_MINUTES
+        : filter === "dependencies"
+          ? g.type === "open_source"
+          : true;
+/** The issue export's own narrowing for a filter, so its 100 issues are the right ones; the rest is narrowed by group
+ *  afterwards (the export cannot filter on the time to fix). */
+export const exportQuery = (filter: FixFilter) =>
+  filter === "critical-high"
+    ? "&filter_severities=critical,high"
+    : filter === "critical"
+      ? "&filter_severities=critical"
+      : filter === "dependencies"
+        ? "&filter_issue_type=open_source"
+        : "";
 
 /** GET /issues/export?… → the issues. */
 export const issuesOf = (answer: unknown): Issue[] =>

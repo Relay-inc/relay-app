@@ -1,13 +1,15 @@
 import {
+  exportQuery,
+  fixMatches,
   fixPrompt,
   groupsOf,
-  isAlarm,
   issuesOf,
   issuesPage,
   mergeGroups,
   newAlarms,
   reposOf,
   type AikidoRepo,
+  type FixFilter,
   type Group,
   type Issue,
 } from "../../domain/aikido/rules";
@@ -163,23 +165,34 @@ export async function fixWithClaude(project: string, groupId: number) {
     names,
   );
 }
-/** "Fix alle kritieke en hoge": one conversation for every critical and high group of one linked repo. */
-export async function fixAllWithClaude(project: string, repoId: number) {
+/** The scope of a filter as a conversation's title and note name it ("quick wins"). */
+const SCOPE = {
+  "critical-high": "ak.scope.critical-high",
+  critical: "ak.scope.critical",
+  "quick-wins": "ak.scope.quick-wins",
+  dependencies: "ak.scope.dependencies",
+  all: "ak.scope.all",
+} as const;
+/** "Fix kritieke en hoge" and the other choices of its menu: one conversation for the groups of one linked repo that
+ *  `filter` takes (domain/aikido FIX_FILTERS), on `fix/aikido-repo-<id>-<filter>`. */
+export async function fixGroupsWithClaude(project: string, repoId: number, filter: FixFilter) {
   const groups = (useAikidoStore.getState().projects[project]?.groups ?? []).filter(
-    g => isAlarm(g) && g.repos.includes(repoId),
+    g => g.repos.includes(repoId) && fixMatches(filter, g),
   );
   if (!groups.length) return;
   const name = repoName(repoId);
+  // ponytail: one export of at most 100 issues per repo; a group past that gets its repo names, not its files
   const issues = issuesOf(
     await get(
-      `/issues/export?format=json&filter_status=open&filter_code_repo_id=${repoId}&filter_severities=critical,high&per_page=100&page=0`,
+      `/issues/export?format=json&filter_status=open&filter_code_repo_id=${repoId}${exportQuery(filter)}&per_page=100&page=0`,
     ).catch(() => []),
   );
+  const scope = t(SCOPE[filter]);
   await start(
     project,
-    t("ak.titleAll", { repo: name }),
-    checkout => t("ak.startedAll", { repo: name, n: groups.length, checkout }),
-    found => fixPrompt(groups, issues, found, `fix/aikido-repo-${repoId}`),
+    t("ak.titleFilter", { scope, repo: name }),
+    checkout => t("ak.startedFilter", { repo: name, scope, n: groups.length, checkout }),
+    found => fixPrompt(groups, issues, found, `fix/aikido-repo-${repoId}-${filter}`),
     [name],
   );
 }

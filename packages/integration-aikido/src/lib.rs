@@ -60,6 +60,8 @@ fn allowed(path: &str) -> bool {
             "filter_status" => v == "open",
             "filter_issue_group_id" | "filter_code_repo_id" => id(v),
             "filter_severities" => severities(v),
+            // the dependency updates of a repo (Fix dependency-updates): only this one type
+            "filter_issue_type" => v == "open_source",
             _ => false,
         }),
         _ => false,
@@ -142,6 +144,8 @@ mod tests {
         assert!(get("/open-issue-groups?filter_code_repo_id=101&filter_status=open&per_page=100&page=0").is_some());
         assert!(get("/issues/export?format=json&filter_status=open&filter_issue_group_id=48213&per_page=10&page=0").is_some());
         assert!(get("/issues/export?format=json&filter_status=open&filter_code_repo_id=101&filter_severities=critical,high&per_page=100").is_some());
+        assert!(get("/issues/export?format=json&filter_status=open&filter_code_repo_id=101&filter_severities=critical&per_page=100").is_some());
+        assert!(get("/issues/export?format=json&filter_status=open&filter_code_repo_id=101&filter_issue_type=open_source&per_page=100").is_some());
         for p in [
             // writes and everything not listed
             "/issues/48213/ignore", "/issues/48213/snooze", "/issues/groups/48213/ignore", "/issues/groups/48213/snooze",
@@ -154,6 +158,8 @@ mod tests {
             "/open-issue-groups?filter_code_repo_id=abc", "/open-issue-groups?filter_code_repo_id=0", "/open-issue-groups?filter_team_id=1",
             "/issues/export?format=csv", "/issues/export?filter_status=all", "/issues/export?per_page=5000",
             "/issues/export?filter_severities=critical,urgent", "/issues/export?filter_cve_id=CVE-2026-1",
+            "/issues/export?filter_issue_type=sast", "/issues/export?filter_issue_type=open_source,sast", "/issues/export?filter_issue_type=",
+            "/open-issue-groups?filter_issue_type=open_source",
         ] {
             assert!(get(p).is_none(), "{p}");
         }

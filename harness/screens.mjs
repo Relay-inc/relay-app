@@ -1450,6 +1450,15 @@ const VIEWS = {
     await waitText("Container runs as root");
     await settle(page);
   },
+  // the footer's split button open: Fix critical and high, only critical, quick wins (≤ 30 min), dependency updates,
+  // everything, each with its count (PR #590)
+  "drawer-security-fix-menu": async () => {
+    await open(page, server.url, { fixture: "aikido", sel: keys.orchard });
+    await tab("Security");
+    await page.getByRole("button", { name: "More ways to fix", exact: true }).click();
+    await waitText("Fix quick wins");
+    await settle(page);
+  },
   // a new conversation in Orchard Health: its home with the Security · Aikido card, the three worst groups (PR #590)
   "project-home-security": async () => {
     await open(page, server.url, { fixture: "aikido" });

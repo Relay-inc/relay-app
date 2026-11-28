@@ -1357,6 +1357,7 @@ const repoLoc = (id: number) => ({ id, name: AIKIDO_REPOS.find(r => r.id === id)
 const AIKIDO_GROUPS = [
   {
     id: 48201,
+    time_to_fix_minutes: 10,
     title: "Prototype pollution in lodash 4.17.15",
     type: "open_source",
     severity: "critical",
@@ -1368,6 +1369,7 @@ const AIKIDO_GROUPS = [
   },
   {
     id: 48213,
+    time_to_fix_minutes: 120,
     title: "SQL injection in OrderRepository::search",
     type: "sast",
     severity: "high",
@@ -1380,6 +1382,7 @@ const AIKIDO_GROUPS = [
   },
   {
     id: 48230,
+    time_to_fix_minutes: 20,
     title: "Leaked Stripe key in git history",
     type: "leaked_secret",
     severity: "high",
@@ -1391,6 +1394,7 @@ const AIKIDO_GROUPS = [
   },
   {
     id: 48244,
+    time_to_fix_minutes: 15,
     title: "Container runs as root",
     type: "iac",
     severity: "medium",
@@ -1402,6 +1406,7 @@ const AIKIDO_GROUPS = [
   },
   {
     id: 48251,
+    time_to_fix_minutes: 240,
     title: "Node 20 is end-of-life",
     type: "eol",
     severity: "low",
@@ -1411,7 +1416,7 @@ const AIKIDO_GROUPS = [
     related_cve_ids: [],
     first_detected_at: SEC(NOW - 12 * DAY),
   },
-].map(g => ({ description: null, group_status: "new", time_to_fix_minutes: 30, ...g }));
+].map(g => ({ description: null, group_status: "new", ...g }));
 const issue = (id: number, group: number, repo: number, extra: Record<string, unknown>) => ({
   id,
   group_id: group,
@@ -1447,8 +1452,13 @@ export function aikido(path: string): unknown {
     const group = Number(p.get("filter_issue_group_id"));
     const repo = Number(p.get("filter_code_repo_id"));
     const sev = p.get("filter_severities")?.split(",");
+    const type = p.get("filter_issue_type");
     return AIKIDO_ISSUES.filter(
-      i => (!group || i.group_id === group) && (!repo || i.code_repo_id === repo) && (!sev || sev.includes(i.severity)),
+      i =>
+        (!group || i.group_id === group) &&
+        (!repo || i.code_repo_id === repo) &&
+        (!sev || sev.includes(i.severity)) &&
+        (!type || AIKIDO_GROUPS.find(g => g.id === i.group_id)!.type === type),
     );
   }
   throw new Error(`Aikido 404: ${path}`);

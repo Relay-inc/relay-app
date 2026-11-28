@@ -35,8 +35,9 @@ Only `GET`, without a body, to the region's host (`app.aikido.dev`, `app.us.aiki
 - `/repositories/code` with `page`, `per_page` (≤ 200), `filter_name`
 - `/open-issue-groups` with `filter_code_repo_id`, `filter_status=open`, `page`, `per_page` (10 to 100)
 - `/issues/export` with `format=json`, `filter_status=open`, `filter_issue_group_id`, `filter_code_repo_id`,
-  `filter_severities` (critical, high, medium, low), `page`, `per_page` (10 to 100): the issues of a group (file and
-  lines, package installed and patched, CVE) for the fix prompt, one call instead of one per issue
+  `filter_severities` (critical, high, medium, low), `filter_issue_type=open_source`, `page`, `per_page` (10 to 100):
+  the issues of a group or of a repo (file and lines, package installed and patched, CVE) for the fix prompt, one call
+  instead of one per issue
 
 Anything else, including ignoring, snoozing or solving an issue and starting a scan, is refused before it leaves the
 app, so a client with more scopes than needed still cannot change anything through Relay.

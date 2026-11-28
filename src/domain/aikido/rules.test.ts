@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  exportQuery,
+  fixMatches,
   fixPrompt,
   groupsOf,
   issuesOf,
@@ -128,4 +130,31 @@ test("the fix prompt: the findings as untrusted data, the branch, the checkouts,
 test("only Aikido's own app opens", () => {
   assert.equal(issuesPage("us"), "https://app.us.aikido.dev/issues");
   assert.equal(issuesPage("evil.com"), "https://app.aikido.dev/issues");
+});
+
+test("fix filters: what each footer choice takes", () => {
+  const [crit, high, med, low] = groupsOf(
+    [
+      group(1, "critical", 95, { type: "open_source", time_to_fix_minutes: 10 }),
+      group(2, "high", 80, { type: "sast", time_to_fix_minutes: 120 }),
+      group(3, "medium", 50, { type: "iac", time_to_fix_minutes: 30 }),
+      group(4, "low", 20, { type: "eol" }),
+    ],
+    101,
+  );
+  const takes = (filter: Parameters<typeof fixMatches>[0]) =>
+    [crit, high, med, low].filter(g => fixMatches(filter, g)).map(g => g.id);
+  assert.deepEqual(takes("critical-high"), [1, 2]);
+  assert.deepEqual(takes("critical"), [1]);
+  assert.deepEqual(takes("quick-wins"), [1, 3], "at most 30 minutes, any severity, never an unknown estimate");
+  assert.deepEqual(takes("dependencies"), [1]);
+  assert.deepEqual(takes("all"), [1, 2, 3, 4]);
+});
+
+test("fix filters narrow the issue export with keys the backend allows", () => {
+  assert.equal(exportQuery("critical-high"), "&filter_severities=critical,high");
+  assert.equal(exportQuery("critical"), "&filter_severities=critical");
+  assert.equal(exportQuery("dependencies"), "&filter_issue_type=open_source");
+  assert.equal(exportQuery("quick-wins"), "");
+  assert.equal(exportQuery("all"), "");
 });
