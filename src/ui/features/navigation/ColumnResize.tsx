@@ -46,7 +46,7 @@ export function ColumnResize({ column }: { column: Column }) {
   return (
     <div
       className="absolute inset-y-0 w-2 z-10 cursor-col-resize"
-      style={{ [side]: `calc(var(${cssVar(column)}) - 4px)` }}
+      style={{ [side]: `calc(var(--${column}-col, var(${cssVar(column)})) - 4px)` }}
       role="separator"
       aria-orientation="vertical"
       onPointerDown={down}

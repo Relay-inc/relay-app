@@ -29,6 +29,21 @@ type Call = { cmd: string; args: Args; at: number };
 
 const query = new URLSearchParams(location.search);
 const fixture = query.get("fixture") || "default";
+// ?long=1: the titles of PRs, builds and Aikido issues run long, as a real project's do (the layout views)
+const longNames = query.get("long") === "1";
+const longer = (v: unknown): unknown =>
+  Array.isArray(v)
+    ? v.map(longer)
+    : v && typeof v === "object"
+      ? Object.fromEntries(
+          Object.entries(v).map(([k, x]) => [
+            k,
+            typeof x === "string" && (k === "name" || k === "title") && x.length > 8
+              ? `${x}, with a title that goes on and on and on, long enough to wrap`
+              : longer(x),
+          ]),
+        )
+      : v;
 // ?platform=windows: the app as WebView2 on Windows runs it, whose user agent names Windows (src/shared/platform.ts):
 // Ctrl keys and their labels, no menu bar, an opaque sidebar
 if (query.get("platform") === "windows")
@@ -1820,9 +1835,11 @@ function handle(cmd: string, a: Args): unknown {
       return "sofie.claes@example.com";
     case "github_prs":
       // review-move: the PR on ticket #312 is ready for review, so its card moves on
-      return fixture === "review-move"
-        ? { ...integ.prs, mine: integ.prs.mine.map(pr => (pr.number === 420 ? { ...pr, draft: false } : pr)) }
-        : integ.prs;
+      return longNames
+        ? longer(integ.prs)
+        : fixture === "review-move"
+          ? { ...integ.prs, mine: integ.prs.mine.map(pr => (pr.number === 420 ? { ...pr, draft: false } : pr)) }
+          : integ.prs;
     case "github_pr":
       return integ.prDetail(a.repo, a.number);
     case "mail_list":
@@ -2079,6 +2096,8 @@ function handle(cmd: string, a: Args): unknown {
     case "integration_token":
       return null;
     case "integration_call":
+      if (longNames && !a.inner && ["buddy", "cloudbuild", "aikido"].includes(a.provider))
+        return longer(handle(cmd, { ...a, inner: true }));
       if (fixture === "linear" && a.provider === "linear") return integ.linear(a.body);
       if (fixture === "ghprojects" && a.provider === "github-projects") return integ.githubProjects(a.body);
       if (buddyOn && a.provider === "buddy") return integ.buddy(a.path, fixture === "builds-running");

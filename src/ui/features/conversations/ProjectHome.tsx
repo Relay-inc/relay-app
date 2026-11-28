@@ -22,7 +22,9 @@ function Row({ row }: { row: HomeRow }) {
         {row.sub ? <span className="truncate text-xs text-secondary">{row.sub}</span> : null}
       </span>
       {row.trail?.text ? (
-        <span className={`flex-none text-xs ${row.trail.tone === "doing" ? "text-soon" : "text-secondary"}`}>
+        <span
+          className={`flex-none max-w-2/5 truncate text-xs ${row.trail.tone === "doing" ? "text-soon" : "text-secondary"}`}
+        >
           {row.trail.text}
         </span>
       ) : null}
@@ -42,16 +44,16 @@ export function ProjectHome({ name }: { name: string }) {
   const [y, m, d] = known.last.split("-").map(Number);
   const last = y && m && d ? new Date(y, m - 1, d).toLocaleDateString(locale, { day: "numeric", month: "short" }) : "";
   return (
-    <div className="flex flex-col gap-5">
+    <div className="@container flex flex-col gap-5">
       <div className="flex flex-col gap-1.5">
         <h1 className="m-0 text-xl font-semibold">{known.label}</h1>
         {known.left ? <p className="m-0 text-base leading-normal text-secondary">{known.left}</p> : null}
         {last ? <p className="m-0 text-xs text-tertiary">{t("home.last", { date: last })}</p> : null}
       </div>
       {cards.length ? (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 @md:grid-cols-2 gap-4">
           {cards.map(card => (
-            <section key={card.id} className="flex flex-col rounded-xl border border-separator p-1.5">
+            <section key={card.id} className="min-w-0 flex flex-col rounded-xl border border-separator p-1.5">
               <div className="flex items-baseline justify-between px-2 py-1.5">
                 <span className="font-semibold">{t(card.title)}</span>
                 {card.link ? (
