@@ -79,6 +79,7 @@ export async function open(
     keep = false,
     typed = false,
     platform = "",
+    long = false,
   } = {},
 ) {
   const q = new URLSearchParams({
@@ -89,6 +90,7 @@ export async function open(
     ...(keep ? { keep: "1" } : {}),
     ...(typed ? { typed: "1" } : {}),
     ...(platform ? { platform } : {}),
+    ...(long ? { long: "1" } : {}),
   });
   await page.goto(`${base}${path}?${q}`);
   await page.waitForFunction(() => window.__harness, null, { timeout: 15000 });

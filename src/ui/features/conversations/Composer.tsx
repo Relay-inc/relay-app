@@ -482,7 +482,7 @@ export function Composer({ className }: { className: string }) {
           }}
           onPaste={e => onPasteFiles(e, attach, attachPaths)}
         ></textarea>
-        <div className="flex items-center gap-0.5 mt-2 -ml-1.5 text-secondary">
+        <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 mt-2 -ml-1.5 text-secondary">
           {/* the + opens the file dialog; what it picks joins what is pasted or dropped, by its path */}
           <button
             className="grid place-items-center size-7 rounded-[7px] border-0 bg-transparent text-secondary hover:bg-fill-2 hover:text-label"
@@ -597,41 +597,43 @@ export function Composer({ className }: { className: string }) {
           {inOrchestrator ? null : pick("model", true)}
           {inOrchestrator ? null : pick("effort", showEffort)}
           <ContextUse />
-          <span className="flex-1"></span>
-          {/* dictates, or stops dictating; the ring grows with the voice */}
-          {voiceOn ? (
+          {/* a narrow column wraps the pickers; the mic and send stay together on the right */}
+          <span className="ml-auto flex items-center">
+            {/* dictates, or stops dictating; the ring grows with the voice */}
+            {voiceOn ? (
+              <button
+                className={`grid place-items-center size-7 mr-1 rounded-full border-0 ${dictation === "recording" ? "bg-late text-on-accent" : "bg-transparent text-secondary hover:bg-fill-2 hover:text-label"}`}
+                style={
+                  dictation === "recording"
+                    ? { boxShadow: `0 0 0 ${Math.round(level * 6)}px var(--color-fill-2)` }
+                    : undefined
+                }
+                title={t(
+                  dictation === "recording"
+                    ? "composer.dictateStop"
+                    : dictation === "transcribing"
+                      ? "composer.transcribing"
+                      : "composer.dictate",
+                  { key: shortcutLabel(shortcut) },
+                )}
+                aria-label={t(dictation === "recording" ? "composer.dictateStop" : "composer.dictate", {
+                  key: shortcutLabel(shortcut),
+                })}
+                disabled={dictation === "transcribing" || dictation === "downloading"}
+                onClick={toggleDictation}
+              >
+                <Icon name="mic" className={`glyph size-4 ${dictation === "transcribing" ? "animate-pulse" : ""}`} />
+              </button>
+            ) : null}
+            {/* sends, or stops the running turn */}
             <button
-              className={`grid place-items-center size-7 mr-1 rounded-full border-0 ${dictation === "recording" ? "bg-late text-on-accent" : "bg-transparent text-secondary hover:bg-fill-2 hover:text-label"}`}
-              style={
-                dictation === "recording"
-                  ? { boxShadow: `0 0 0 ${Math.round(level * 6)}px var(--color-fill-2)` }
-                  : undefined
-              }
-              title={t(
-                dictation === "recording"
-                  ? "composer.dictateStop"
-                  : dictation === "transcribing"
-                    ? "composer.transcribing"
-                    : "composer.dictate",
-                { key: shortcutLabel(shortcut) },
-              )}
-              aria-label={t(dictation === "recording" ? "composer.dictateStop" : "composer.dictate", {
-                key: shortcutLabel(shortcut),
-              })}
-              disabled={dictation === "transcribing" || dictation === "downloading"}
-              onClick={toggleDictation}
+              className={`grid place-items-center size-7 rounded-full border-0 ${busy ? "bg-label text-bg" : "bg-accent hover:bg-accent-hover text-on-accent"}`}
+              aria-label={busy ? t("wait.stop") : t("composer.send")}
+              onClick={sendOrStop}
             >
-              <Icon name="mic" className={`glyph size-4 ${dictation === "transcribing" ? "animate-pulse" : ""}`} />
+              <Icon name={busy ? "stop" : "send"} className="glyph size-3.75 stroke-2" />
             </button>
-          ) : null}
-          {/* sends, or stops the running turn */}
-          <button
-            className={`grid place-items-center size-7 rounded-full border-0 ${busy ? "bg-label text-bg" : "bg-accent hover:bg-accent-hover text-on-accent"}`}
-            aria-label={busy ? t("wait.stop") : t("composer.send")}
-            onClick={sendOrStop}
-          >
-            <Icon name={busy ? "stop" : "send"} className="glyph size-3.75 stroke-2" />
-          </button>
+          </span>
         </div>
       </div>
     </div>

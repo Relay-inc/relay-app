@@ -13,20 +13,27 @@
   cursor: col-resize;
   user-select: none;
 }
-/* the drawer exists while open: the column grows from 0 */
+/* the drawer exists while open: the column grows from 0. Its kept width (--drawer-w, 360 to 800) yields to the
+   conversation, which keeps 420px: a drawer dragged wide in a big window must not squeeze it in a smaller one */
 .relay-app[data-drawer] {
-  grid-template-columns: var(--sidebar-w, 240px) minmax(0, 1fr) var(--drawer-w, 460px);
+  --drawer-col: max(360px, min(var(--drawer-w, 460px), calc(100vw - var(--sidebar-w, 240px) - 420px)));
+  grid-template-columns: var(--sidebar-w, 240px) minmax(0, 1fr) var(--drawer-col);
 }
-@media (max-width: 1100px) {
+/* below sidebar 240 + conversation 420 + drawer 460 there is no room for a third column */
+@media (max-width: 1119px) {
   .relay-app,
   .relay-app[data-drawer] {
     grid-template-columns: var(--sidebar-w, 220px) minmax(0, 1fr);
   }
   /* too narrow for a third column: the drawer lies over the conversation */
+  .relay-app[data-drawer] {
+    --drawer-col: min(var(--drawer-w, 460px), calc(100vw - var(--sidebar-w, 220px)));
+  }
   .relay-drawer {
     position: fixed;
     inset: 0 0 0 auto;
     z-index: 20;
-    width: var(--drawer-w, 460px);
+    width: var(--drawer-col);
+    box-shadow: -8px 0 24px rgb(0 0 0 / 0.12);
   }
 }
