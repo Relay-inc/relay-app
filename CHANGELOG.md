@@ -14,6 +14,8 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+## [0.0.74] - 2026-11-28
+
 ### Added
 
 - **Aikido, Buddy and Cloud Build in the `relay` command**: agents and you in a terminal can read them with `relay aikido.status`, `aikido.repos`, `aikido.match`, `aikido.groups`, `aikido.issues`, `buddy.pipelines` and `cloudbuild.builds`, to see why a project's Security or Builds tab shows what it shows. Read-only, they run without asking, go through the same checks as the app, and never print a token or client secret. (#595)
