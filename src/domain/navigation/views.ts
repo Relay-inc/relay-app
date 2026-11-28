@@ -48,7 +48,7 @@ export const meetingOf = (key: string) => {
  *  the orchestrator's workers, or an Artifact the conversation published. */
 export type Drawer = "" | TabId | "workers" | "agents" | "artifact";
 /** The project panel's tabs (ui/features/drawer/tabs): the drawer shows one of them under a strip of them all. */
-export const TAB_IDS = ["prs", "builds", "git", "files", "terminal"] as const;
+export const TAB_IDS = ["prs", "builds", "security", "git", "files", "terminal"] as const;
 export type TabId = (typeof TAB_IDS)[number];
 export const isTab = (drawer: Drawer): drawer is TabId => (TAB_IDS as readonly string[]).includes(drawer);
 /** What a tab says about its project: something failed, something waits on you, something runs. Nothing is null. */

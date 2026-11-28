@@ -3,6 +3,7 @@ import type { Key } from "../../../shared/i18n";
 import { ATTENTION, isTab, worstOf } from "../../../domain/navigation/views";
 import { buddyOf } from "../../../application/buddy/buddy";
 import { watchBuilds } from "../../../application/builds/builds";
+import { aikidoOf, loadAikido } from "../../../application/aikido/aikido";
 import { cloudOf } from "../../../application/cloudbuild/cloudbuild";
 import { copyText } from "../../components/copy";
 import { Icon } from "../../components/Icon";
@@ -46,6 +47,11 @@ export function ProjectButtons({
   const linked = useDerived(() => !!buddyOf(project) || !!cloudOf(project));
   // a running build is read again while the bar shows; the failed one shows without anyone opening a tab
   useEffect(() => (linked ? watchBuilds(project) : undefined), [project, linked]);
+  // Aikido's issues once when the bar shows (at most every 5 minutes, never polled): its Security icon and the home card
+  const aikido = useDerived(() => aikidoOf(project).length > 0);
+  useEffect(() => {
+    if (aikido) void loadAikido(project);
+  }, [project, aikido]);
 
   const calling = ATTENTION.flatMap(state => tabs.filter(tab => tab.attention === state)).slice(0, MAX_ICONS);
   const dot = worstOf(tabs.map(tab => tab.attention));

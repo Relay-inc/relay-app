@@ -73,6 +73,8 @@ export const PERMISSION_KEY = special("Northwind Portal", "Push the portal fix",
 export const SWITCH_KEY = chats.filter(c => c.project === "Northwind Portal")[1].key;
 chats.filter(c => c.project === "Northwind Portal")[1].title = "Invoice export columns";
 export const QUESTION_KEY = special("Harbor CRM", "Contact sync strategy", 8);
+// a conversation of Orchard Health, the project fixture aikido links to two Aikido code repos
+export const ORCHARD_KEY = chats.find(c => c.project === "Orchard Health")!.key;
 export const ACTION_KEY = special("Atlas Logistics", "Plan the depot import", 11);
 // a conversation that published a claude.ai Artifact (Claude Code's Artifact tool): its card, and the drawer showing its
 // file, which the harness's server has (the mock's relay-artifact address is the path itself)

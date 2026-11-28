@@ -7,6 +7,7 @@ import {
   InformationCircleIcon,
   FlashIcon,
   SecurityCheckIcon,
+  Shield01Icon,
   FlaskConicalIcon,
   Presentation01Icon,
   PaintBoardIcon,
@@ -184,6 +185,8 @@ const ICONS: Record<string, Icon> = {
   vault: Database01Icon,
   flash: FlashIcon,
   shield: SecurityCheckIcon,
+  // the drawer's Security tab (Aikido) and its integration: a plain shield, the checked one is Privacy & access
+  security: Shield01Icon,
   flask: FlaskConicalIcon,
 };
 // the attributes without React's key and the stroke settings the CSS owns

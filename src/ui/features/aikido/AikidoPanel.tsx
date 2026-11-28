@@ -62,7 +62,7 @@ export function AikidoPanel({ project }: { project: string }) {
     `h-6.5 rounded-full px-2.5 text-xs ${on ? "bg-fill-2 text-label" : "border border-separator-strong text-secondary hover:bg-fill"}`;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="-m-3 flex min-h-0 flex-1 flex-col">
       <div className="flex flex-col gap-2.5 px-4 pt-3.5 pb-2">
         <div className="flex items-baseline justify-between gap-3">
           <span className="font-semibold">{t("ak.open", { n: groups?.length ?? 0 })}</span>

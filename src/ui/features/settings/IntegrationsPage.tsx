@@ -210,7 +210,7 @@ export function IntegrationsPage({ active }: { active: boolean }) {
     {
       id: "aikido",
       group: "security",
-      icon: <Icon name="shield" className={TILE} />,
+      icon: <Icon name="security" className={TILE} />,
       name: "Aikido",
       status: connected(aikidoOn && aikidoToken, t("int.connected")),
       on: aikidoOn,

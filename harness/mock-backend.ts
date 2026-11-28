@@ -150,13 +150,11 @@ if (cloudOn)
     integrations: { ...settings.integrations, cloudbuild: { on: true } },
     cloudbuild: { [vault.projectNames[0]]: { project: "northwind-web", location: "global" } },
   };
-// aikido(-nl, -dark): Aikido switched on, Orchard Health linked to its two code repos (fixtures/integrations aikido);
-// -nl in Dutch, to hold the Security panel (harness/aikido.html) next to its design
+// aikido(-dark): Aikido switched on, Orchard Health linked to its two code repos (fixtures/integrations aikido)
 const aikidoFixture = fixture.startsWith("aikido");
 if (aikidoFixture)
   settings = {
     ...settings,
-    ...(fixture === "aikido-nl" ? { language: "nl" } : {}),
     integrations: { ...settings.integrations, aikido: { on: true, region: "eu" } },
     aikido: { "Orchard Health": [101, 102] },
   };
@@ -698,7 +696,7 @@ function handle(cmd: string, a: Args): unknown {
     case "ui_lang":
       return settings.language === "system" || !settings.language ? "en" : settings.language;
     case "ui_locale":
-      return fixture === "aikido-nl" ? "nl-BE" : "en-GB";
+      return "en-GB";
     case "vault_status":
       return vault.vaultStatus(vaultOk);
     case "extra_vaults_status":
@@ -2546,6 +2544,7 @@ const harness = {
   keys: {
     long: conv.LONG_KEY,
     switchTo: conv.SWITCH_KEY,
+    orchard: conv.ORCHARD_KEY,
     permission: conv.PERMISSION_KEY,
     question: conv.QUESTION_KEY,
     action: conv.ACTION_KEY,
