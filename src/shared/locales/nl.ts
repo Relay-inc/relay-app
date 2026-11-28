@@ -1886,6 +1886,8 @@ export default {
   "ak.secretPaste": "Plak het client-secret",
   "ak.connected_one": "Verbonden, {n} repo",
   "ak.connected_other": "Verbonden, {n} repo's",
+  "ak.matched": "Gekoppeld: {list}",
+  "ak.matchedNone": "Geen GitHub-repo's van een project staan in Aikido.",
   "ak.needBoth": "Vul zowel de client-ID als het secret in.",
   "ak.forgetClient": "Ook de client-ID en het secret uit de sleutelhanger verwijderen",
   "ak.notLinked": "Geen van de GitHub-repo's van dit project is een code-repo in Aikido.",

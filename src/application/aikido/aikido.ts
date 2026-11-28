@@ -6,9 +6,8 @@ import {
   issuesOf,
   issuesPage,
   matchRepos,
-  mergeGroups,
   newAlarms,
-  reposOf,
+  settled,
   type AikidoRepo,
   type FixFilter,
   type Group,
@@ -21,6 +20,7 @@ import { t } from "../../shared/i18n";
 import { sendMsg } from "../conversations/actions";
 import { startChat } from "../conversations/chats";
 import { makeStore } from "../make-store";
+import { readRepos } from "./repos";
 import { select } from "../navigation/navigation";
 import { settings } from "../settings/settings";
 
@@ -60,20 +60,13 @@ const region = () => String(settings().integrations?.aikido?.region ?? "eu");
 // repo (more only past 100 groups a repo).
 const FRESH = 5 * 60_000;
 const PAGES = 3;
-const REPO_PAGES = 5;
 let reading: Promise<NonNullable<AikidoState["repos"]>> | null = null;
 /** Aikido's code repos and the projects' GitHub repos, from the store while fresh; one read at a time. */
 function knownRepos() {
   const had = useAikidoStore.getState().repos;
   if (had && Date.now() - had.at < FRESH) return Promise.resolve(had);
   reading ??= (async () => {
-    const list: AikidoRepo[] = [];
-    for (let page = 0; page < REPO_PAGES; page++) {
-      const answer = await get(`/repositories/code?per_page=200&page=${page}`);
-      list.push(...reposOf(answer));
-      if (!Array.isArray(answer) || answer.length < 200) break;
-    }
-    const repos = { list, slugs: await backend.projectRepos(), at: Date.now() };
+    const repos = { list: await readRepos(), slugs: await backend.projectRepos(), at: Date.now() };
     set(draft => {
       draft.repos = repos;
     });
@@ -83,27 +76,39 @@ function knownRepos() {
   });
   return reading;
 }
-/** The project's open issue groups, worst first, unless they arrived less than 5 minutes ago. A failure (the rate
- *  limit among them) keeps what was there and says why. */
+// after a failure the next read may come sooner: a refused call or a dropped network is usually gone in half a minute
+const RETRY = 30_000;
+/** The project's open issue groups, worst first, unless they arrived less than 5 minutes ago (30 seconds after a
+ *  failure). Its matched repos are kept as soon as they are known, so the Security tab shows even when reading the
+ *  groups fails, and says why there. A repo that fails does not hide the others: their groups show, its error with them.
+ *  A failure (the rate limit among them) keeps what was there. */
 export async function loadAikido(project: string, force = false) {
   const had = useAikidoStore.getState().projects[project];
-  if (!aikidoOn() || (!force && had && Date.now() - had.at < FRESH)) return;
+  const wait = had?.err ? RETRY : FRESH;
+  if (!aikidoOn() || (!force && had && Date.now() - had.at < wait)) return;
   const keep = { groups: had?.groups ?? null, repos: had?.repos ?? NONE };
-  set(draft => {
-    draft.projects[project] = { ...keep, err: "", at: Date.now() };
-  });
+  const save = (next: Omit<ProjectIssues, "at">) =>
+    set(draft => {
+      draft.projects[project] = { ...next, at: Date.now() };
+    });
+  save({ ...keep, err: "" });
+  let ids: number[];
   try {
     const known = await knownRepos();
-    const ids = matchRepos(known.list, known.slugs[project] ?? []);
-    const lists = await Promise.all(ids.map(repoGroups));
-    set(draft => {
-      draft.projects[project] = { groups: mergeGroups(lists), repos: ids, err: "", at: Date.now() };
-    });
+    ids = matchRepos(known.list, known.slugs[project] ?? []);
   } catch (error) {
-    set(draft => {
-      draft.projects[project] = { ...keep, err: String(error), at: Date.now() };
-    });
+    return save({ ...keep, err: String(error) });
   }
+  save({ ...keep, repos: ids, err: "" });
+  const results = await Promise.allSettled(ids.map(repoGroups));
+  save({
+    ...settled(
+      results,
+      ids.map(id => repoName(id)),
+      keep.groups,
+    ),
+    repos: ids,
+  });
 }
 async function repoGroups(repo: number) {
   const out: Group[] = [];

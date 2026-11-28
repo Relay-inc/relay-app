@@ -14,6 +14,10 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ## [Unreleased]
 
+### Fixed
+
+- **Aikido's Security tab** shows for a project as soon as its GitHub repos are found in Aikido, also when reading the issues fails: the tab then says why, shows the repos that did answer, and tries again after half a minute or when you open it (before, any failure hid the tab for five minutes). Repo URLs in other shapes (ssh, without https, with more after the repo) now match too, and Save in Settings › Integrations › Aikido says which projects matched.
+
 ## [0.0.73] - 2026-11-28
 
 ### Added

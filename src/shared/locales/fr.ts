@@ -1904,6 +1904,8 @@ export default {
   "ak.secretPaste": "Collez le secret client",
   "ak.connected_one": "Connecté, {n} dépôt",
   "ak.connected_other": "Connecté, {n} dépôts",
+  "ak.matched": "Associés : {list}",
+  "ak.matchedNone": "Aucun dépôt GitHub d'un projet n'est dans Aikido.",
   "ak.needBoth": "Renseignez l'ID client et le secret.",
   "ak.forgetClient": "Supprimer aussi l'ID client et le secret du trousseau",
   "ak.notLinked": "Aucun des dépôts GitHub de ce projet n'est un dépôt de code dans Aikido.",
