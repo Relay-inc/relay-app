@@ -1,5 +1,4 @@
 import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import type { Drawer } from "../../../domain/navigation/views";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { ProjectImg } from "../../components/ProjectImg";
@@ -8,24 +7,18 @@ import { boardOf } from "../../../application/navigation/navigation";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { BoardCrumb } from "../board/BoardCrumb";
 import { BoardActions } from "../board/BoardActions";
-import { BuddyButton } from "../buddy/BuddyButton";
-import { CloudbuildButton } from "../buddy/CloudbuildButton";
-import { RemoteButton } from "./RemoteButton";
+import { ProjectButtons } from "./ProjectButtons";
 
-/** What the bar offers for a project: its tools, the one that is open lit. */
+/** What the bar offers for a project: its panel and the actions in its menu. */
 export type BarTools = {
   project: string; // the vault project the tools are of
-  github: boolean; // GitHub is on: the PRs button shows
-  repos: boolean; // the project has repos; without them the button offers to link one
-  active: "" | "prs"; // the project's PRs are what the centre shows
-  git: boolean; // the Git drawer is switched on (Settings › General)
   pipeline: boolean; // the project has a board pipeline: its button shows
   pipeOpen: boolean; // the pipeline's conversation is the one open: its button does not show
 };
 
 /** The title bar of the centre column: the project (or the view), the conversation's title, a view's own
- *  buttons (`actions`), the project's tools (pull requests, terminal drawer) and the external
- *  terminal button. The shell keys it by the selection, so a title being edited never carries over. */
+ *  buttons (`actions`) and the project's two buttons: its menu and its panel (the drawer's tabs), with the icons of the
+ *  tabs that need you before them. The shell keys it by the selection, so a title being edited never carries over. */
 export function ChatBar({
   heading,
   img,
@@ -40,15 +33,12 @@ export function ChatBar({
   locked,
   remote,
   tools,
-  drawer,
   back,
   actions,
   onEditProject,
   onRename,
   onOpenTerminal,
   onStopRemote,
-  onOpenPrs,
-  onToggleDrawer,
   onOpenPipeline,
   onShowInGraph,
 }: {
@@ -65,15 +55,12 @@ export function ChatBar({
   locked: boolean; // the terminal would resume a conversation that touched mail without the app's restrictions
   remote: { url: string; state: string } | null; // Remote Control is on: the session to open on claude.ai
   tools: BarTools | null; // a vault project is open (or its board or PRs): its tool icons show on the right
-  drawer: Drawer; // what the right drawer shows, the open tool lights up
   back: boolean; // the project's board or PRs is shown: the heading goes back to the conversation
   actions?: ReactNode; // a view's own buttons and quiet text, on the right before the project's tools
   onEditProject: () => void;
   onRename: (title: string) => void;
   onOpenTerminal: (external: boolean) => void;
   onStopRemote: () => void;
-  onOpenPrs: () => void;
-  onToggleDrawer: (tool: "terminal" | "git" | "files") => void;
   onOpenPipeline: () => void;
   onShowInGraph?: () => void;
 }) {
@@ -163,29 +150,6 @@ export function ChatBar({
               onBlur={onTitleBlur}
             />
           </span>
-          {/* resumes the conversation in the terminal drawer, Option-click in iTerm or WezTerm: it belongs to the conversation, so it sits by its title */}
-          <button
-            className="btn-icon disabled:opacity-40"
-            hidden={noTerm}
-            disabled={locked}
-            title={t(locked ? "bar.termMail" : "bar.openTerminalHere")}
-            aria-label={t("bar.openTerminalHere")}
-            onClick={e => onOpenTerminal(e.altKey)}
-          >
-            <Icon name="term" className="glyph size-4" />
-          </button>
-          {remote ? <RemoteButton remote={remote} onStop={onStopRemote} /> : null}
-          {/* the notes this conversation read and wrote, lit in the Pages graph */}
-          {onShowInGraph ? (
-            <button
-              className="btn-icon"
-              title={t("graph.showInTitle")}
-              aria-label={t("graph.showIn")}
-              onClick={onShowInGraph}
-            >
-              <Icon name="graph" className="glyph size-4" />
-            </button>
-          ) : null}
         </>
       ) : null}
       {!editable && sub ? (
@@ -201,75 +165,22 @@ export function ChatBar({
       {actions}
       {board ? <BoardActions provider={board} /> : null}
       {tools ? (
-        <>
-          {tools.github ? (
-            <ToolButton
-              on={tools.active === "prs"}
-              dim={!tools.repos}
-              label={tools.repos ? t("nav.prs") : t("bar.linkRepo")}
-              onClick={onOpenPrs}
-              icon={<Icon name="github" className="glyph size-4" />}
-            />
-          ) : null}
-          <BuddyButton project={tools.project} />
-          <CloudbuildButton project={tools.project} />
-          {/* the pipeline's conversation, from the project's other conversations and its board */}
-          {tools.pipeline && !tools.pipeOpen ? (
-            <ToolButton
-              on={false}
-              label={t("po.open")}
-              onClick={onOpenPipeline}
-              icon={<Icon name="workflow" className="glyph size-4" />}
-            />
-          ) : null}
-          {/* the project's git repos, with the worktrees of the open conversation: only a conversation has them; its
-              folders as a tree next to them */}
-          {(renamable && tools.git ? (["git", "files", "terminal"] as const) : (["files", "terminal"] as const)).map(
-            tool => (
-              <ToolButton
-                key={tool}
-                on={drawer === tool}
-                label={t(`drawer.${tool}`)}
-                onClick={() => onToggleDrawer(tool)}
-                icon={<Icon name={DRAWER_ICONS[tool]} className="glyph size-4" />}
-              />
-            ),
-          )}
-        </>
+        <ProjectButtons
+          project={tools.project}
+          // resumes the conversation in the terminal drawer, Option-click in iTerm or WezTerm
+          terminal={
+            editable && !noTerm
+              ? { title: t(locked ? "bar.termMail" : "bar.openTerminalHere"), disabled: locked }
+              : null
+          }
+          remote={remote}
+          pipeline={tools.pipeline && !tools.pipeOpen}
+          onShowInGraph={onShowInGraph}
+          onOpenTerminal={onOpenTerminal}
+          onStopRemote={onStopRemote}
+          onOpenPipeline={onOpenPipeline}
+        />
       ) : null}
     </div>
-  );
-}
-
-const DRAWER_ICONS = {
-  git: "branch",
-  files: "folder",
-  terminal: "drawerTerm",
-} as const;
-
-// one button per tool, the one that is open lit: a second click goes back (a view) or closes the drawer
-function ToolButton({
-  on,
-  dim = false,
-  label,
-  icon,
-  onClick,
-}: {
-  on: boolean;
-  dim?: boolean;
-  label: string;
-  icon: ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className={`btn-icon ${on ? "bg-accent-soft text-accent-text!" : dim ? "opacity-40 hover:opacity-100" : ""}`}
-      title={label}
-      aria-label={label}
-      aria-pressed={on}
-      onClick={onClick}
-    >
-      {icon}
-    </button>
   );
 }

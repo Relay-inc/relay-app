@@ -20,16 +20,7 @@ import { useConversationsStore } from "../../../application/conversations/store"
 import { useNavigationStore } from "../../../application/navigation/store";
 import { chatBar } from "../../../application/conversations/selectors";
 import { openTerminal, rename, toggleRemote } from "../../../application/conversations/actions";
-import {
-  closeTool,
-  openProjectPanel,
-  openSettings,
-  openTool,
-  toggleDrawer,
-  select,
-  logScrolled,
-  backTop,
-} from "../../../application/navigation/navigation";
+import { closeTool, openProjectPanel, select, logScrolled, backTop } from "../../../application/navigation/navigation";
 import { showInGraph } from "../../../application/navigation/graph";
 import { useDerived } from "../../hooks/useDerived";
 import { useUiRequest } from "../../hooks/useUiRequest";
@@ -81,7 +72,6 @@ import { FindBar } from "./FindBar";
 export function ConversationsView({ className }: { className: string }) {
   const { t } = useT();
   const selected = useNavigationStore(s => s.selected);
-  const drawer = useNavigationStore(s => s.drawer);
   const projectPanel = useNavigationStore(s => s.projectPanel);
   const toast = useNavigationStore(s => s.toast);
   const busy = useConversationsStore(s => s.status[selected] === "busy");
@@ -192,7 +182,6 @@ export function ConversationsView({ className }: { className: string }) {
       locked={bar.locked}
       remote={bar.remote}
       tools={bar.tools}
-      drawer={drawer}
       back={!!bar.tools?.back}
       actions={
         selected === REM ? (
@@ -213,9 +202,6 @@ export function ConversationsView({ className }: { className: string }) {
       onRename={rename}
       onOpenTerminal={openTerminal}
       onStopRemote={() => toggleRemote(selected)}
-      // a project without repos sends you to the settings to link one
-      onOpenPrs={() => (bar.tools?.repos ? openTool(bar.tools.project, PRS) : openSettings())}
-      onToggleDrawer={toggleDrawer}
       // the pipeline's conversation, where the user follows it
       onOpenPipeline={() => bar.tools && select(pipeKey(bar.tools.project))}
       onShowInGraph={bar.renamable && !bar.session ? () => showInGraph(selected) : undefined}

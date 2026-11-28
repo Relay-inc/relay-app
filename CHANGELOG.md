@@ -16,10 +16,13 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 
 ### Added
 
+- **The project panel has tabs**: the right drawer of a project conversation now carries a strip of tabs in its header (Pull requests, Builds, Git, Files, Terminal), the open one with its name, each with a dot when it needs you. Builds is new: Buddy pipelines and Cloud Build triggers of the project in one list. A tab's icon also shows in the title bar, before the buttons, while it needs you (a build that runs or failed, a review waiting on you, a PR sent back with changes requested): at most three, red first, then blue, then orange; a click opens the panel on it. (#588)
+
 - **Google Cloud Build** (Settings › Integrations › CI/CD), read-only: link a vault project to a Google Cloud project in Settings › Projects and its title bar shows a Cloud Build button. The dot is the worst status of its triggers, the menu lists each trigger with its last build (branch, commit, when), a click opens the build's log in the Google Cloud console. It uses your `gcloud auth login`, no token is stored in Relay. (#587)
 
 ### Changed
 
+- **A project's title bar has two buttons on the right**: a More menu (resume in terminal, Remote Control, show in graph, the pipeline's conversation) and the project panel, whose dot is the most urgent of its tabs. The Buddy and Cloud Build buttons, and the PRs, Git, Files and Terminal buttons, moved into the panel's tabs. (#588)
 - **Settings › Integrations has a CI/CD group**: Buddy moved there from Other, next to Cloud Build. (#587)
 
 ## [0.0.72] - 2026-11-27

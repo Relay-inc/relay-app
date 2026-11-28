@@ -10,8 +10,10 @@ import {
   backAfter,
   drawerOn,
   ownDrawer,
+  isTab,
   type Back,
   type Drawer,
+  type TabId,
   type Tool,
 } from "../../domain/navigation/views";
 import { provider } from "../../shared/plugins";
@@ -201,11 +203,17 @@ export function closeTool() {
   if (isTerminal(tool.back) || (chat && !chat.closed)) select(tool.back);
   else openProject(tool.project);
 }
-/** A drawer tool's button: opens it, or closes it when it is the one shown. */
-export const toggleDrawer = (tool: "terminal" | "workers" | "git" | "files" | "agents" | "artifact") =>
+/** A drawer tool's button: opens it, or closes it when it is the one shown. A project tab is remembered, for the panel button. */
+export const toggleDrawer = (tool: Exclude<Drawer, "">) =>
   set(draft => {
     draft.drawer = draft.drawer === tool ? "" : tool;
+    if (isTab(draft.drawer)) draft.lastTab = draft.drawer;
   });
+/** The panel button: closes the drawer while a project tab shows, else opens it on `tab`, the one used last. */
+export const toggleProjectPanel = (tab: TabId) => {
+  const { drawer } = nav();
+  toggleDrawer(isTab(drawer) ? drawer : tab);
+};
 /** A drawer tool open, whatever the drawer showed. */
 export const showDrawer = (tool: "artifact") =>
   set(draft => {
@@ -264,7 +272,7 @@ export async function openProjectSettings(project = "") {
   return backend.openSettingsWindow("projects");
 }
 /** A drawer tool, opened and left open when it already is. */
-export const openDrawer = (tool: Parameters<typeof toggleDrawer>[0]) => {
+export const openDrawer = (tool: Exclude<Drawer, "">) => {
   if (nav().drawer !== tool) toggleDrawer(tool);
 };
 /** A web or mail link in the default browser or mail app: a webview window cannot open them itself. */

@@ -19,7 +19,7 @@ import {
 } from "../../domain/navigation/views";
 import { useWorkspaceStore } from "../workspace/store";
 import { useNavigationStore } from "../navigation/store";
-import { ghOn, settings } from "../settings/settings";
+import { settings } from "../settings/settings";
 import { usePullRequestsStore } from "../pull-requests/store";
 import { useMailStore } from "../mail/store";
 import { unread } from "../../domain/mail/rules";
@@ -202,14 +202,10 @@ export function chatBar(key: string) {
     noTerm: onView ? true : session ? session.kind !== "background" : agentOf(chatAgent(key))?.caps.terminal === false,
     // the view's second crumb: the project's view name when opened from a project, else a one-phrase summary
     sub: tool ? viewName : viewSummary(key),
-    // the project's tools: GitHub (dimmed while it has no repos) and, in the drawer, terminal
+    // the project's tools: its panel (drawer tabs), and the pipeline's conversation in the bar's menu
     tools: toolProject
       ? {
           project: toolProject,
-          github: ghOn(),
-          repos: !!usePullRequestsStore.getState().repos[toolProject]?.length,
-          active: tool && key === PRS ? ("prs" as const) : ("" as const),
-          git: settings().gitDrawer === true,
           pipeline: !!settings().pipelines?.[toolProject] && !!settings().boards?.[toolProject],
           pipeOpen: key === pipeKey(toolProject),
           back: !!tool,

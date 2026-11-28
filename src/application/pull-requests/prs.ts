@@ -2,6 +2,7 @@ import { t } from "../../shared/i18n";
 import { panelItem } from "../../domain/navigation/keys";
 import { linkPrs } from "../today/links";
 import type { PrDetail } from "../../domain/pull-requests/types";
+import type { Attention } from "../../domain/navigation/views";
 import { reviewPrompt, reviewsOf, rowOf, rowProject, secondOpinionPrompt } from "../../domain/pull-requests/rules";
 import { briefingText } from "../../domain/calendar/rules";
 import { ensureHistory } from "../conversations/history";
@@ -177,4 +178,13 @@ export async function answerRepo(key: string, link: boolean) {
   if (!link) return void backend.ignoreRepo(ask.repo);
   await backend.setProjectRepos(ask.project, [...(usePullRequestsStore.getState().repos[ask.project] ?? []), ask.repo]);
   loadPrs();
+}
+
+/** What the PRs tab says about a project: a review waits on you, or a PR of yours was sent back with changes requested
+ *  (the list knows the decision, not the comments). */
+export function prsAttention(name: string): Attention {
+  const list = usePullRequestsStore.getState().list;
+  const waiting = list?.review.some(pr => pr.project === name);
+  const sentBack = list?.mine.some(pr => pr.project === name && pr.review === "CHANGES_REQUESTED");
+  return waiting || sentBack ? "you" : null;
 }

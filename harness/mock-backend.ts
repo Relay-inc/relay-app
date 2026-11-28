@@ -133,15 +133,18 @@ if (shared)
     machines: member ? [] : structuredClone(vault.hubMachines),
     sharedVaults: structuredClone(member ? vault.memberVaults : vault.sharedVaults),
   };
-// buddy: Buddy switched on, the first project linked to a Buddy project (fixtures/integrations buddy)
-if (fixture === "buddy")
+// buddy: Buddy switched on, the first project linked to a Buddy project (fixtures/integrations buddy); builds: both
+// Buddy and Cloud Build, for the project panel's Builds tab (builds-running: none failed, one runs)
+const buddyOn = fixture === "buddy" || fixture === "builds" || fixture === "builds-running";
+const cloudOn = fixture === "cloudbuild" || fixture === "builds" || fixture === "builds-running";
+if (buddyOn)
   settings = {
     ...settings,
     integrations: { ...settings.integrations, buddy: { on: true, host: "api.eu.buddy.works" } },
     buddy: { [vault.projectNames[0]]: { workspace: "acme", project: "web-shop" } },
   };
 // cloudbuild: Cloud Build switched on, the first project linked to a GCP project (fixtures/integrations cloudbuild)
-if (fixture === "cloudbuild")
+if (cloudOn)
   settings = {
     ...settings,
     integrations: { ...settings.integrations, cloudbuild: { on: true } },
@@ -2057,7 +2060,7 @@ function handle(cmd: string, a: Args): unknown {
         a.provider === "productive" ||
         (fixture === "linear" && a.provider === "linear") ||
         (fixture === "ghprojects" && a.provider === "github-projects") ||
-        (fixture === "buddy" && a.provider === "buddy")
+        (buddyOn && a.provider === "buddy")
       );
     case "integration_mcp":
       return { supported: a.provider === "productive", found: false };
@@ -2066,8 +2069,8 @@ function handle(cmd: string, a: Args): unknown {
     case "integration_call":
       if (fixture === "linear" && a.provider === "linear") return integ.linear(a.body);
       if (fixture === "ghprojects" && a.provider === "github-projects") return integ.githubProjects(a.body);
-      if (fixture === "buddy" && a.provider === "buddy") return integ.buddy(a.path);
-      if (fixture === "cloudbuild" && a.provider === "cloudbuild") return integ.cloudbuild(a.path);
+      if (buddyOn && a.provider === "buddy") return integ.buddy(a.path, fixture === "builds-running");
+      if (cloudOn && a.provider === "cloudbuild") return integ.cloudbuild(a.path, fixture === "builds-running");
       if (a.provider !== "productive") throw new Error(`${a.provider} is not set up in the harness`);
       return integ.productive(a.method, a.path, a.body);
     case "integration_upload":

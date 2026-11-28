@@ -46,7 +46,16 @@ export const meetingOf = (key: string) => {
 };
 /** What the right drawer shows, "" while it is closed: one of the project's tools, the open conversation's changes,
  *  the orchestrator's workers, or an Artifact the conversation published. */
-export type Drawer = "" | "terminal" | "workers" | "git" | "files" | "agents" | "artifact";
+export type Drawer = "" | TabId | "workers" | "agents" | "artifact";
+/** The project panel's tabs (ui/features/drawer/tabs): the drawer shows one of them under a strip of them all. */
+export const TAB_IDS = ["prs", "builds", "git", "files", "terminal"] as const;
+export type TabId = (typeof TAB_IDS)[number];
+export const isTab = (drawer: Drawer): drawer is TabId => (TAB_IDS as readonly string[]).includes(drawer);
+/** What a tab says about its project: something failed, something waits on you, something runs. Nothing is null. */
+export type Attention = "fail" | "you" | "busy" | null;
+/** The most pressing of several, in the order they are shown: failed, waiting on you, running. */
+export const ATTENTION: readonly NonNullable<Attention>[] = ["fail", "you", "busy"];
+export const worstOf = (all: Attention[]): Attention => ATTENTION.find(a => all.includes(a)) ?? null;
 /** A conversation's own drawer: its agents or its Artifact. The project's tools (terminal, Git, files) follow whatever
  *  is open instead. */
 export const ownDrawer = (drawer: Drawer) => drawer === "agents" || drawer === "artifact";
