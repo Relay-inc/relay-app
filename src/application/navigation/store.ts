@@ -1,7 +1,7 @@
 import type { BoardRef } from "../../domain/board/types";
 import type { Folder } from "../../domain/navigation/sidebar-folders";
 import type { Touch } from "../../domain/graph/types";
-import { WAIT, type Back, type Drawer, type Tool, type Toast } from "../../domain/navigation/views";
+import { WAIT, type Back, type Drawer, type TabId, type Tool, type Toast } from "../../domain/navigation/views";
 import { storage } from "../../infrastructure/storage";
 import { isPrimary } from "../../infrastructure/window";
 import { makeStore } from "../make-store";
@@ -10,6 +10,7 @@ import { makeStore } from "../make-store";
 type NavigationState = {
   selected: string; // the open conversation or view (`sel`)
   drawer: Drawer; // the right drawer: what it shows, "" while closed
+  lastTab: TabId; // the project panel's tab shown last: the panel button opens on it
   kept: Record<string, Drawer>; // per conversation, its own drawer (ownDrawer) open when it was left, for when it opens again
   tool: Tool | null; // set while a project's board or PRs, opened from its title bar, is what the middle column shows
   projectPanel: boolean; // the conversation's project panel under the title
@@ -58,6 +59,7 @@ type NavigationState = {
 export const useNavigationStore = makeStore<NavigationState>(() => ({
   selected: (isPrimary() && storage.get<string>("sel", "")) || WAIT, // a window Cmd-N opened starts on Today
   drawer: "",
+  lastTab: "files",
   kept: {},
   tool: null,
   projectPanel: false,

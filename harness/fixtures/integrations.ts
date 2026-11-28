@@ -1267,9 +1267,10 @@ export function githubProjects(body: unknown): unknown {
   throw new Error(`GitHub Projects query ${op} is not set up in the harness`);
 }
 
+// `calm` (fixture "builds-running"): nothing failed, only a build runs
 // ---------- Buddy (fixture "buddy"): one linked project, three pipelines, read-only GETs as packages/integration-buddy allows them
 const BUDDY = "https://eu.buddy.works/acme/web-shop/pipelines/pipeline";
-export function buddy(path: string): unknown {
+export function buddy(path: string, calm = false): unknown {
   if (path === "/workspaces") return { workspaces: [{ domain: "acme", name: "Acme" }] };
   if (path.startsWith("/workspaces/acme/projects?"))
     return {
@@ -1279,7 +1280,7 @@ export function buddy(path: string): unknown {
       ],
     };
   const pipelines = [
-    { id: 11, name: "Deploy production", html_url: `${BUDDY}/11`, last_execution_status: "FAILED" },
+    { id: 11, name: "Deploy production", html_url: `${BUDDY}/11`, last_execution_status: calm ? "SUCCESSFUL" : "FAILED" },
     { id: 12, name: "Deploy staging", html_url: `${BUDDY}/12`, last_execution_status: "INPROGRESS" },
     { id: 13, name: "Tests", html_url: `${BUDDY}/13`, last_execution_status: "SUCCESSFUL" },
   ];
@@ -1304,7 +1305,7 @@ export function buddy(path: string): unknown {
 
 // ---------- Cloud Build (fixture "cloudbuild"): one linked project, two triggers and a manual build, read-only GETs as packages/integration-cloudbuild allows them
 const CONSOLE = "https://console.cloud.google.com/cloud-build/builds";
-export function cloudbuild(path: string): unknown {
+export function cloudbuild(path: string, calm = false): unknown {
   if (path.startsWith("/v1/projects?"))
     return {
       projects: [
@@ -1334,7 +1335,7 @@ export function cloudbuild(path: string): unknown {
     return {
       builds: [
         build("b4", "WORKING", "t-stage", "Deploy staging", "develop", "c0ffee1", "2026-10-01T07:10:00Z"),
-        build("b3", "FAILURE", "t-prod", "Deploy production", "main", "9f3a2b7", "2026-10-01T06:55:00Z"),
+        build("b3", calm ? "SUCCESS" : "FAILURE", "t-prod", "Deploy production", "main", "9f3a2b7", "2026-10-01T06:55:00Z"),
         build("b2", "SUCCESS", "t-test", "Tests", "feature/checkout", "4d5e6f8", "2026-10-01T06:40:00Z"),
         build("b1", "SUCCESS", "", "", "", "", "2026-09-30T16:00:00Z"),
         build("b0", "SUCCESS", "t-prod", "Deploy production", "main", "1a2b3c4", "2026-09-29T09:00:00Z"),

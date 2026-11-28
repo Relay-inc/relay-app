@@ -39,6 +39,20 @@ const click = async text => {
   await settle(page);
 };
 const button = name => page.getByRole("button", { name, exact: true }).locator("visible=true").first();
+// the project panel (the drawer's tabs): opened with the title bar's Project panel button when it is closed, then a tab
+// (named "Builds", or "Builds, failed" while it calls for you)
+const tab = async label => {
+  const name = new RegExp(`^${label}(,|$)`);
+  if (!(await page.locator(".relay-drawer").count()))
+    await page.getByRole("button", { name: "Project panel", exact: true }).click();
+  await page.locator(".relay-drawer").getByRole("button", { name }).click();
+  await settle(page, 300);
+};
+// the title bar's More menu, with one of its rows clicked
+const more = async item => {
+  await page.getByRole("button", { name: "More", exact: true }).first().click();
+  if (item) await page.getByRole("menuitem", { name: item }).click();
+};
 const intoView = async text => {
   await byText(page, text, false).scrollIntoViewIfNeeded();
   await settle(page);
@@ -718,7 +732,7 @@ const VIEWS = {
     await open(page, server.url, { sel: keys.long });
     await waitText(markers.longEnd);
     await page.evaluate(() => window.__harness.changeSettings({ gitDrawer: true }));
-    await button("Git").click();
+    await tab("Git");
     await waitText("BalanceSync.php");
     await button("Suggest a message").click();
     await waitText("Skip a balance the sync already added");
@@ -778,7 +792,7 @@ const VIEWS = {
     await page.locator("textarea").locator("visible=true").last().click();
     await page.keyboard.type("Run the sync tests again");
     await page.keyboard.press("Enter");
-    await button("Git").click();
+    await tab("Git");
     await waitText("BalanceSync.php");
     await page.getByRole("textbox", { name: "Commit message" }).fill("Skip a balance the sync already added");
     await settle(page);
@@ -828,7 +842,7 @@ const VIEWS = {
     await open(page, server.url, { sel: keys.long });
     await waitText(markers.longEnd);
     await page.evaluate(() => window.__harness.changeSettings({ gitDrawer: true }));
-    await button("Files").click();
+    await tab("Files");
     await click("beacon");
     await click("src");
     await click("Billing");
@@ -1066,7 +1080,7 @@ const VIEWS = {
     await waitText(markers.switchEnd);
     await page.locator(`[data-key="${keys.switchTo}"]`).first().click({ button: "right" });
     await click("Continue on phone");
-    await page.getByRole("button", { name: "Remote Control is on" }).waitFor();
+    await page.getByRole("button", { name: "More", exact: true }).waitFor();
     await settle(page, 500);
   },
   // the same with its popover open: open on claude.ai, copy the link, stop; and a message typed on the phone in the log
@@ -1081,7 +1095,7 @@ const VIEWS = {
       send({ type: "text", text: "Checking the staging build now.", delta: false });
       send({ type: "turn_end", ok: true, error: null, usage: null, duration_ms: 3100 });
     }, keys.switchTo);
-    await page.getByRole("button", { name: "Remote Control is on" }).click();
+    await more();
     await waitText("Open on claude.ai");
     await settle(page, 300);
   },
@@ -1392,10 +1406,10 @@ const VIEWS = {
     await button("Needs setup").click();
     await settle(page);
   },
-  // a project's Buddy pipelines in its title bar, the menu open: failed, running and passed, each with its last run (PR buddy)
+  // a project's Buddy pipelines in the panel's Builds tab: failed, running and passed, each with its last run (PR buddy, PR drawer tabs)
   "buddy-menu": async () => {
     await open(page, server.url, { fixture: "buddy", sel: keys.switchTo });
-    await page.getByRole("button", { name: "Buddy: a pipeline failed" }).click();
+    await tab("Builds");
     await waitText("Deploy production");
     await waitText("Ada Lovelace");
   },
@@ -1411,10 +1425,10 @@ const VIEWS = {
     await field.scrollIntoViewIfNeeded();
     await settle(page);
   },
-  // a project's Cloud Build triggers in its title bar, the menu open: failed, running and passed, and a manual build (PR cloudbuild)
+  // a project's Cloud Build triggers in the panel's Builds tab: failed, running and passed, and a manual build (PR cloudbuild, PR drawer tabs)
   "cloudbuild-menu": async () => {
     await open(page, server.url, { fixture: "cloudbuild", sel: keys.switchTo });
-    await page.getByRole("button", { name: "Cloud Build: a build failed" }).click();
+    await tab("Builds");
     await waitText("Deploy production");
     await waitText("Manual");
   },
@@ -1931,17 +1945,55 @@ const VIEWS = {
   },
   "drawer-terminal": async () => {
     await VIEWS["project-tools"]();
-    await page.getByRole("button", { name: "Terminal", exact: true, pressed: false }).click();
+    await tab("Terminal");
     await page.waitForSelector(".xterm-screen");
     await page.keyboard.type("git status");
     await settle(page, 500);
     await page.waitForFunction(() => document.querySelector(".xterm-rows")?.textContent?.includes("git status"));
   },
-  // the title bar's terminal button resumes the conversation in a drawer tab named after it, next to a shell whose
+  // the project panel (PR drawer tabs): a quiet title bar (the menu and the panel button only), the panel on its tabs,
+  // and the title bar while things need you: a failed build and a review that waits (red, blue), then a build that
+  // only runs (orange, spinner)
+  "bar-quiet": async () => {
+    await open(page, server.url, { sel: keys.action });
+    await page.getByRole("button", { name: "Project panel", exact: true }).waitFor();
+  },
+  "drawer-prs": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await tab("Pull requests");
+    await waitText("Waiting for your review");
+  },
+  "drawer-builds": async () => {
+    await open(page, server.url, { fixture: "builds", sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.getByRole("button", { name: /^Builds, failed/ }).first().waitFor();
+    await page.screenshot({ path: `${dir}/bar-attention-failed.png` });
+    await tab("Builds");
+    await waitText("Manual");
+  },
+  // once the Builds tab was seen, its failed builds stop calling: the bar goes on with the review that waits and the build
+  // that runs (the panel closed again)
+  "bar-attention-seen": async () => {
+    await VIEWS["drawer-builds"]();
+    await page.getByRole("button", { name: "Project panel", exact: true }).click();
+    await page.getByRole("button", { name: /^Builds, running/ }).first().waitFor();
+  },
+  "bar-attention": async () => {
+    await open(page, server.url, { fixture: "builds-running", sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.getByRole("button", { name: /^Builds, running/ }).first().waitFor();
+  },
+  "bar-menu": async () => {
+    await open(page, server.url, { sel: keys.long });
+    await waitText(markers.longEnd);
+    await more();
+  },
+  // the More menu's resume in terminal resumes the conversation in a drawer tab named after it, next to a shell whose
   // close button is hovered: it fills the tab's right end (#230)
   "drawer-terminal-chat": async () => {
     await VIEWS["project-tools"]();
-    await page.getByRole("button", { name: "Resume in terminal (⌥-click: external terminal)" }).click();
+    await more("Resume in terminal (⌥-click: external terminal)");
     await page.waitForSelector(".xterm-screen");
     await page.getByRole("button", { name: "New terminal" }).click();
     await page.waitForFunction(
@@ -2016,7 +2068,8 @@ const VIEWS = {
   },
   "tool-prs": async () => {
     await VIEWS["project-tools"]();
-    await page.getByRole("button", { name: "Pull requests", exact: true, pressed: false }).click();
+    await tab("Pull requests");
+    await click("Fix the SSO redirect loop on the portal");
     await settle(page, 400);
   },
   // the orchestrator: the coordinator with a folded [Relay] report and the worker board in the drawer (running, done
@@ -4142,7 +4195,7 @@ const VIEWS = {
   "graph-show-conversation": async () => {
     await open(page, server.url, { sel: keys.long });
     await waitText(markers.longEnd);
-    await page.getByRole("button", { name: "Show in graph" }).click();
+    await more("Show in graph");
     await page.waitForTimeout(4000);
   },
   // the pipeline's conversation with its stage strip: the collapsed bar (the default), the strip open with a question, a
