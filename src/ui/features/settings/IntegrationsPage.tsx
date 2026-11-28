@@ -24,6 +24,7 @@ import { CloudbuildSettings } from "./CloudbuildSettings";
 import { AikidoSettings } from "./AikidoSettings";
 import { BUDDY_LOGO } from "../buddy/mark";
 import { CLOUDBUILD_LOGO } from "../buddy/cloudmark";
+import { AIKIDO_GLYPH, AIKIDO_VIEWBOX } from "../aikido/mark";
 import { CalendarSettings } from "./CalendarSettings";
 import { Footer } from "./Footer";
 import { GithubSettings } from "./GithubSettings";
@@ -210,7 +211,7 @@ export function IntegrationsPage({ active }: { active: boolean }) {
     {
       id: "aikido",
       group: "security",
-      icon: <Icon name="security" className={TILE} />,
+      icon: <Glyph svg={AIKIDO_GLYPH} className="size-4" viewBox={AIKIDO_VIEWBOX} />,
       name: "Aikido",
       status: connected(aikidoOn && aikidoToken, t("int.connected")),
       on: aikidoOn,

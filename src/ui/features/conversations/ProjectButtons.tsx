@@ -93,7 +93,7 @@ export function ProjectButtons({
           <button
             key={id}
             type="button"
-            className={`btn-icon ${attention === "busy" ? "w-auto! grid-flow-col gap-1.5 px-2!" : ""} ${ATTENTION_ICON[attention!]}`}
+            className={`btn-icon relative ${attention === "busy" ? "w-auto! grid-flow-col gap-1.5 px-2!" : ""} ${ATTENTION_ICON[attention!]}`}
             title={label}
             aria-label={label}
             onClick={() => openDrawer(id)}
@@ -102,6 +102,11 @@ export function ProjectButtons({
               <span className="size-2.5 rounded-full border-2 border-current border-r-transparent animate-spin"></span>
             ) : null}
             {tab.icon}
+            {tab.brand ? (
+              <span
+                className={`absolute right-1 bottom-1 size-1.5 rounded-full bg-current ${ATTENTION_TEXT[attention!]}`}
+              ></span>
+            ) : null}
           </button>
         );
       })}
