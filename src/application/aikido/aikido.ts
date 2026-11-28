@@ -49,7 +49,7 @@ export const aikidoOf = (project: string): number[] => {
 };
 const region = () => String(settings().integrations?.aikido?.region ?? "eu");
 
-// ponytail: Aikido allows 20 calls a minute per workspace. Refreshed when the panel shows, at most every 5 minutes, no
+// ponytail: Aikido allows 20 calls a minute per workspace. Read when the title bar or the tab shows, at most every 5 minutes, no
 // background polling; a refresh is 1 call for the repos plus 1 per linked repo (more only past 100 groups a repo).
 const FRESH = 5 * 60_000;
 const PAGES = 3;

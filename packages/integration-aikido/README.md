@@ -6,7 +6,8 @@ Aikido Security, read-only. Not a board: it has no webview package, the main win
 `aikido.<vault project>` = `[code_repo_id, …]`) gets the open issue groups of those repos: worst first, a row per
 group with its locations and how to fix it, "Fix met Claude" to start a conversation that fixes exactly those
 findings, and a red attention mark while a critical or high group is there that the user has not seen yet.
-Refreshed when the panel shows, at most every 5 minutes; nothing polls in the background.
+Read when the project's title bar or its Security tab shows, at most every 5 minutes; nothing polls in the background. The
+Security tab, its red title bar icon and the project home's Security · Aikido card all read that one store.
 
 ## Setup
 
