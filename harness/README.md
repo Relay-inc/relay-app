@@ -82,6 +82,13 @@ flag). `mail_move` refuses with the flag off, as the backend does, and otherwise
 thumb URL. `plugins_list`, `plugin_*`: the one example plugin, its view served from a blob (the app uses the `relay-plugin://` scheme, which a browser cannot load), `plugin_call` rolls a fixed 4 and refuses a tool the settings do not allow. `integration_call` serves Productive (Linear in fixture `linear`, GitHub Projects in fixture `ghprojects`, Trello throws); writes (move, status, comment, labels) patch the
 in-memory tasks loosely, and a new task (`POST /tasks`) is added to them.
 
+## Screenshots for the README
+
+`node harness/readme-shots.mjs` regenerates `docs/images/` for the README: it runs the listed views of `screens.mjs` in
+WebKit (1440x900 at 2x, light or dark as the view is) against a dev server that already runs on port 1470
+(`pnpm exec vite --config harness/vite.config.ts --port 1470`), and writes each as a 1600 px wide JPEG at quality 80
+with `sips` (macOS). To change a shot, change the view's name in `SHOTS`. Look at every image and keep the data fictional.
+
 ## Screenshots for a pull request
 
 A PR that changes what someone sees in the app shows it in its description: the new or changed state, and where it
