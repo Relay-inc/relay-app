@@ -1456,10 +1456,13 @@ const AIKIDO_ISSUES = [
   issue(9006, 48251, 101, { affected_file: "Dockerfile", start_line: 1, end_line: 1 }),
 ];
 /** Aikido's public API as integration_call answers it (the backend adds /api/public/v1 and the token). */
-export function aikido(path: string): unknown {
+export function aikido(path: string, failWeb = false): unknown {
   const [route, q = ""] = path.split("?");
   const p = new URLSearchParams(q);
   if (route === "/repositories/code") return AIKIDO_REPOS;
+  // fixture aikido-fail: Aikido refuses orchard-web's groups, orchard-api's still answer
+  if (route === "/open-issue-groups" && failWeb && p.get("filter_code_repo_id") === "101")
+    throw new Error("Aikido 500: Internal server error");
   if (route === "/open-issue-groups")
     return AIKIDO_GROUPS.filter(g => g.locations.some(l => l.id === Number(p.get("filter_code_repo_id"))));
   if (route === "/issues/export") {

@@ -1872,6 +1872,8 @@ const en = {
   "ak.secretPaste": "Paste the client secret",
   "ak.connected_one": "Connected, {n} repo",
   "ak.connected_other": "Connected, {n} repos",
+  "ak.matched": "Matched: {list}",
+  "ak.matchedNone": "No project's GitHub repos are in Aikido.",
   "ak.needBoth": "Fill in both the client ID and the secret.",
   "ak.forgetClient": "Also delete the client ID and secret from the keychain",
   "ak.notLinked": "None of this project's GitHub repos is a code repo in Aikido.",

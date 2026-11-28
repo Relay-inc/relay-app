@@ -1899,6 +1899,8 @@ export default {
   "ak.secretPaste": "Client-Secret einfügen",
   "ak.connected_one": "Verbunden, {n} Repo",
   "ak.connected_other": "Verbunden, {n} Repos",
+  "ak.matched": "Zugeordnet: {list}",
+  "ak.matchedNone": "Keine GitHub-Repos eines Projekts sind in Aikido.",
   "ak.needBoth": "Trag Client-ID und Secret ein.",
   "ak.forgetClient": "Auch Client-ID und Secret aus dem Schlüsselbund löschen",
   "ak.notLinked": "Keines der GitHub-Repos dieses Projekts ist ein Code-Repo in Aikido.",

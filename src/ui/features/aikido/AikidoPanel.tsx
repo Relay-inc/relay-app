@@ -53,7 +53,8 @@ export function AikidoPanel({ project }: { project: string }) {
   const [open, setOpen] = useState<number | null>(null);
   const groups = state?.groups;
   useEffect(() => {
-    loadAikido(project);
+    // opening the tab after a failure tries again at once
+    loadAikido(project, !!useAikidoStore.getState().projects[project]?.err);
   }, [project, linked.length]);
   useEffect(() => {
     if (groups) markSeen(project);
@@ -88,7 +89,7 @@ export function AikidoPanel({ project }: { project: string }) {
             ))}
           </div>
         )}
-        {state?.err && <p className="text-xs text-secondary">{state.err}</p>}
+        {state?.err && <p className="text-xs whitespace-pre-line text-secondary">{state.err}</p>}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2">

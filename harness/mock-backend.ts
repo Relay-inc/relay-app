@@ -165,7 +165,7 @@ if (cloudOn)
     integrations: { ...settings.integrations, cloudbuild: { on: true } },
     cloudbuild: { [vault.projectNames[0]]: { project: "northwind-web", location: "global" } },
   };
-// aikido(-dark): Aikido switched on; Orchard Health's GitHub repos are two of its code repos (fixtures/integrations aikido)
+// aikido(-dark, -fail): Aikido switched on (-fail: orchard-web's issue groups answer with an error); Orchard Health's GitHub repos are two of its code repos (fixtures/integrations aikido)
 const aikidoFixture = fixture.startsWith("aikido");
 if (aikidoFixture)
   settings = {
@@ -2102,7 +2102,7 @@ function handle(cmd: string, a: Args): unknown {
       if (fixture === "ghprojects" && a.provider === "github-projects") return integ.githubProjects(a.body);
       if (buddyOn && a.provider === "buddy") return integ.buddy(a.path, fixture === "builds-running");
       if (cloudOn && a.provider === "cloudbuild") return integ.cloudbuild(a.path, fixture === "builds-running");
-      if (aikidoFixture && a.provider === "aikido") return integ.aikido(a.path);
+      if (aikidoFixture && a.provider === "aikido") return integ.aikido(a.path, fixture === "aikido-fail");
       if (a.provider !== "productive") throw new Error(`${a.provider} is not set up in the harness`);
       return integ.productive(a.method, a.path, a.body);
     case "integration_upload":

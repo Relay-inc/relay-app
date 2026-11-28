@@ -95,6 +95,13 @@ export function mergeGroups(lists: Group[][]): Group[] {
   }
   return sortGroups([...byId.values()]);
 }
+/** A refresh from each matched repo's answer (`names` in the same order): the groups of the repos that answered, one
+ *  line "repo: why" per repo that failed; when every repo failed, what was shown before (`kept`) stays. */
+export function settled(results: PromiseSettledResult<Group[]>[], names: string[], kept: Group[] | null) {
+  const lists = results.flatMap(r => (r.status === "fulfilled" ? [r.value] : []));
+  const errs = results.flatMap((r, i) => (r.status === "rejected" ? [`${names[i]}: ${String(r.reason)}`] : []));
+  return { groups: lists.length || !errs.length ? mergeGroups(lists) : kept, err: errs.join("\n") };
+}
 export const worst = (groups: Group[]): Severity | null =>
   SEVERITIES.find(s => groups.some(g => g.severity === s)) ?? null;
 export const isAlarm = (g: Group) => g.severity === "critical" || g.severity === "high";
@@ -177,25 +184,38 @@ const slugOf = (s: string) =>
     .replace(/\/+$/, "")
     .replace(/\.git$/, "")
     .replace(/^\/+/, "");
-const urlPath = (url: string) => {
-  try {
-    return slugOf(new URL(url).pathname);
-  } catch {
-    return "";
-  }
-};
+/** "owner/name" from a repo URL in any form Aikido may give: https (with more after the repo, like /tree/main),
+ *  without a scheme, ssh (git@github.com:owner/name.git) or the API's (api.github.com/repos/owner/name); "" when it
+ *  names no repo. */
+export function urlSlug(url: string): string {
+  const raw = url.trim();
+  const ssh = raw.match(/^[\w.-]+@[\w.-]+:(.+)$/);
+  let path = ssh?.[1] ?? "";
+  if (!ssh)
+    try {
+      path = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`).pathname;
+    } catch {
+      return "";
+    }
+  const parts = path.split("/").filter(Boolean);
+  if (parts[0] === "repos" && parts.length > 2) parts.shift();
+  return parts.length >= 2 ? slugOf(`${parts[0]}/${parts[1]}`) : "";
+}
 /** A project's Aikido repos, from the GitHub repos it is linked to (`owner/name`): Aikido's GitHub repos whose URL is
- *  that repo, case and a trailing `.git` or `/` aside. A repo Aikido gives no URL for matches on its name instead, but
- *  only when no other GitHub repo in Aikido has that name (two owners, one name: no guess). Other providers never. */
+ *  that repo, case and a trailing `.git` or `/` aside. A repo whose URL names no repo (or that has none) matches on
+ *  its name instead, but only when no other GitHub repo in Aikido has that name (two owners, one name: no guess).
+ *  Other providers never. */
 export function matchRepos(repos: AikidoRepo[], slugs: string[]): number[] {
-  const github = repos.filter(r => r.provider === "github");
+  const github = repos.filter(r => r.provider.toLowerCase() === "github");
   const wanted = slugs.map(slugOf);
+  const last = (s: string) => s.toLowerCase().split("/").pop()!;
   return github
     .filter(r => {
-      if (r.url) return wanted.includes(urlPath(r.url));
-      const name = r.name.toLowerCase();
-      const alone = github.filter(x => x.name.toLowerCase() === name).length === 1;
-      return alone && wanted.some(s => s.split("/").pop() === name);
+      const slug = urlSlug(r.url);
+      if (slug) return wanted.includes(slug);
+      const name = last(r.name);
+      const alone = github.filter(x => last(x.name) === name).length === 1;
+      return alone && wanted.some(s => last(s) === name);
     })
     .map(r => r.id);
 }

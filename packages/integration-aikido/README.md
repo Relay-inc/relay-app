@@ -4,12 +4,16 @@ Aikido Security, read-only. Not a board: it has no webview package, the main win
 `src/application/aikido` (the Security panel, `src/ui/features/aikido/AikidoPanel.tsx`) and the settings' side
 `src/application/settings/aikido.ts`. A vault project's Aikido code repos are worked out, not linked: they are the
 GitHub repos on its card in Settings › Projects (`project_repos`, `owner/name`) that Aikido scans, matched on the repo's
-`url` (case, a trailing `.git` or `/` aside; `matchRepos` in `src/domain/aikido/rules.ts`). A repo Aikido gives no URL
-for matches on its name, only when no other GitHub repo in Aikido has that name. Only GitHub: a GitLab, Bitbucket or
+`url` in any shape (https, with or without more after the repo, no scheme, ssh, the GitHub API's; case and a trailing
+`.git` or `/` aside; `matchRepos` and `urlSlug` in `src/domain/aikido/rules.ts`). A repo whose URL names no repo, or
+that has none, matches on its name, only when no other GitHub repo in Aikido has that name. Only GitHub: a GitLab, Bitbucket or
 Azure DevOps repo in Aikido never matches. The project gets the open issue groups of those repos: worst first, a row per
 group with its locations and how to fix it, "Fix met Claude" to start a conversation that fixes exactly those
 findings, and a red attention mark while a critical or high group is there that the user has not seen yet.
-Read when the project's title bar or its Security tab shows, at most every 5 minutes; nothing polls in the background. The
+Read when the project's title bar or its Security tab shows, at most every 5 minutes (30 seconds after a failure, and
+at once when the tab is opened after one); nothing polls in the background. The matched repos are kept before their
+groups are read, so the tab shows even when that fails, with the error and the groups of the repos that did answer.
+Save in Settings › Integrations › Aikido says which projects matched ("Matched: Orchard Health (2)"). The
 Security tab, its red title bar icon and the project home's Security · Aikido card all read that one store.
 
 ## Setup

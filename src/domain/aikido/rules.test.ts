@@ -12,6 +12,8 @@ import {
   placeOf,
   reposOf,
   matchRepos,
+  settled,
+  urlSlug,
   worst,
 } from "./rules.ts";
 
@@ -182,4 +184,47 @@ test("fix filters narrow the issue export with keys the backend allows", () => {
   assert.equal(exportQuery("dependencies"), "&filter_issue_type=open_source");
   assert.equal(exportQuery("quick-wins"), "");
   assert.equal(exportQuery("all"), "");
+});
+
+test("repo URLs in every shape name their repo", () => {
+  assert.equal(urlSlug("https://github.com/Acme/Orchard-Web"), "acme/orchard-web");
+  assert.equal(urlSlug("https://github.com/acme/orchard-web.git/"), "acme/orchard-web");
+  assert.equal(urlSlug("https://github.com/acme/orchard-web/tree/main"), "acme/orchard-web");
+  assert.equal(urlSlug("github.com/acme/orchard-web"), "acme/orchard-web");
+  assert.equal(urlSlug("git@github.com:acme/orchard-web.git"), "acme/orchard-web");
+  assert.equal(urlSlug("https://api.github.com/repos/acme/orchard-web"), "acme/orchard-web");
+  for (const none of ["", "https://github.com/acme", "not a url at all"]) assert.equal(urlSlug(none), "", none);
+});
+
+test("matching survives the shapes real data may come in", () => {
+  const repos = reposOf([
+    { id: 1, name: "orchard-web", provider: "GitHub", url: "git@github.com:acme/orchard-web.git" },
+    { id: 2, name: "orchard-api", provider: "github", url: "https://github.com/acme/orchard-api/tree/main" },
+    { id: 3, name: "acme/orchard-infra", provider: "github", url: "" },
+    { id: 4, name: "orchard-docs", provider: "github", url: "https://github.com/acme" },
+  ]);
+  const slugs = ["acme/orchard-web", "acme/orchard-api", "acme/orchard-infra", "acme/orchard-docs"];
+  assert.deepEqual(matchRepos(repos, slugs), [3, 2, 4, 1]); // reposOf sorts by name
+});
+
+test("a refresh where one repo fails: the others show, the failure is said", () => {
+  const ok = groupsOf([group(1, "high", 80)], 101);
+  const both = settled(
+    [
+      { status: "fulfilled", value: ok },
+      { status: "rejected", reason: new Error("Aikido 500: boom") },
+    ],
+    ["orchard-api", "orchard-web"],
+    null,
+  );
+  assert.deepEqual(
+    both.groups?.map(g => g.id),
+    [1],
+  );
+  assert.equal(both.err, "orchard-web: Error: Aikido 500: boom");
+  const kept = groupsOf([group(9, "low", 5)], 101);
+  const none = settled([{ status: "rejected", reason: "Aikido's rate limit is reached." }], ["orchard-api"], kept);
+  assert.equal(none.groups, kept, "every repo failed: what was shown stays");
+  assert.equal(none.err, "orchard-api: Aikido's rate limit is reached.");
+  assert.deepEqual(settled([], [], kept), { groups: [], err: "" }, "no matched repo: nothing to show, no error");
 });

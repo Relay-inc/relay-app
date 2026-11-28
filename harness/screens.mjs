@@ -1442,6 +1442,14 @@ const VIEWS = {
   // not seen yet), then the dark twin (PR #590)
   "drawer-security": () => securityTab("aikido"),
   "drawer-security-dark": () => securityTab("aikido-dark"),
+  // reading one repo's groups fails (fixture aikido-fail): the tab still shows, with orchard-api's groups and
+  // orchard-web's error (PR aikido-tab-errors)
+  "drawer-security-error": async () => {
+    await open(page, server.url, { fixture: "aikido-fail", sel: keys.orchard });
+    await tab("Security");
+    await waitText("orchard-web: Error: Aikido 500: Internal server error");
+    await settle(page);
+  },
   // the tab on one repo (orchard-api), nothing unfolded
   "drawer-security-repo": async () => {
     await open(page, server.url, { fixture: "aikido", sel: keys.orchard });
@@ -1470,6 +1478,13 @@ const VIEWS = {
   },
   // Aikido's page in Integrations: region, client ID and secret (PR #590)
   "settings-integration-aikido": () => integration("Aikido", { fixture: "aikido" }),
+  // after Save: how many code repos, and which projects' GitHub repos matched (PR aikido-tab-errors)
+  "settings-integration-aikido-saved": async () => {
+    await integration("Aikido", { fixture: "aikido" });
+    await button("Save").click();
+    await waitText("Matched: Orchard Health (2)");
+    await settle(page);
+  },
   // a project's Cloud Build triggers in the panel's Builds tab: failed, running and passed, and a manual build (PR cloudbuild, PR drawer tabs)
   "cloudbuild-menu": async () => {
     await open(page, server.url, { fixture: "cloudbuild", sel: keys.switchTo });
