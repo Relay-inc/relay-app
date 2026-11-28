@@ -150,6 +150,13 @@ if (cloudOn)
     integrations: { ...settings.integrations, cloudbuild: { on: true } },
     cloudbuild: { [vault.projectNames[0]]: { project: "northwind-web", location: "global" } },
   };
+// aikido(-dark): Aikido switched on; Orchard Health's GitHub repos are two of its code repos (fixtures/integrations aikido)
+const aikidoFixture = fixture.startsWith("aikido");
+if (aikidoFixture)
+  settings = {
+    ...settings,
+    integrations: { ...settings.integrations, aikido: { on: true, region: "eu" } },
+  };
 // the Pages tab with its folders shown in every workspace, as the views from before issue 420 expect; ?typed=1 opens
 // on the tree by type, the app's default (a fresh vault)
 if (!query.get("typed") && !onboarding)
@@ -1047,7 +1054,9 @@ function handle(cmd: string, a: Args): unknown {
     case "project_icons":
       return vault.projectIcons();
     case "project_repos":
-      return vault.projectRepos;
+      return aikidoFixture
+        ? { ...vault.projectRepos, "Orchard Health": ["acme/orchard-web", "acme/orchard-api"] }
+        : vault.projectRepos;
     case "capture_proposals":
       // fixture capture: a closed conversation leaves two changes for the vault (Today's capture item)
       return fixture === "capture"
@@ -1327,7 +1336,9 @@ function handle(cmd: string, a: Args): unknown {
               "acme/northwind-infra": "/Users/demo/Documents/Clients/Northwind Holdings/northwind-infrastructure",
               "acme/northwind-portal": "/Users/demo/code/northwind",
             }
-          : {};
+          : aikidoFixture && a.project === "Orchard Health"
+            ? { "acme/orchard-web": "/Users/demo/code/orchard-web", "acme/orchard-api": "/Users/demo/code/orchard-api" }
+            : {};
       for (const path of a.extra ?? [])
         found[path === "/Users/demo/code/northwind" ? "acme/northwind-portal" : `acme/${path.split("/").pop()}`] = path;
       return Object.entries(found)
@@ -2060,7 +2071,8 @@ function handle(cmd: string, a: Args): unknown {
         a.provider === "productive" ||
         (fixture === "linear" && a.provider === "linear") ||
         (fixture === "ghprojects" && a.provider === "github-projects") ||
-        (buddyOn && a.provider === "buddy")
+        (buddyOn && a.provider === "buddy") ||
+        (aikidoFixture && a.provider === "aikido")
       );
     case "integration_mcp":
       return { supported: a.provider === "productive", found: false };
@@ -2071,6 +2083,7 @@ function handle(cmd: string, a: Args): unknown {
       if (fixture === "ghprojects" && a.provider === "github-projects") return integ.githubProjects(a.body);
       if (buddyOn && a.provider === "buddy") return integ.buddy(a.path, fixture === "builds-running");
       if (cloudOn && a.provider === "cloudbuild") return integ.cloudbuild(a.path, fixture === "builds-running");
+      if (aikidoFixture && a.provider === "aikido") return integ.aikido(a.path);
       if (a.provider !== "productive") throw new Error(`${a.provider} is not set up in the harness`);
       return integ.productive(a.method, a.path, a.body);
     case "integration_upload":
@@ -2530,6 +2543,7 @@ const harness = {
   keys: {
     long: conv.LONG_KEY,
     switchTo: conv.SWITCH_KEY,
+    orchard: conv.ORCHARD_KEY,
     permission: conv.PERMISSION_KEY,
     question: conv.QUESTION_KEY,
     action: conv.ACTION_KEY,

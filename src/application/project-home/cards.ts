@@ -10,6 +10,8 @@ import { usePullRequestsStore } from "../pull-requests/store";
 import { select, openDrawer, openProjectBoard } from "../navigation/navigation";
 import { openCard } from "../navigation/panel";
 import { timeOf } from "../calendar/calendar";
+import { aikidoOf, repoName, useAikidoStore } from "../aikido/aikido";
+import { typeLabel } from "../../domain/aikido/rules";
 
 // A project's home: the cards an empty conversation shows above the composer. A card is one entry in `HOME_CARDS`
 // (same spirit as the drawer's `TABS`): its `build` reads stores only and returns what the card shows now, or null
@@ -112,8 +114,37 @@ const builds: HomeCardDef = {
   },
 };
 
+// critical and high in red, medium in orange; low has no dot of its own, so its severity stands in front
+const SEVERITY = {
+  critical: "ak.sev.critical",
+  high: "ak.sev.high",
+  medium: "ak.sev.medium",
+  low: "ak.sev.low",
+} as const;
+const security: HomeCardDef = {
+  id: "security",
+  build: project => {
+    const groups = (aikidoOf(project).length && useAikidoStore.getState().projects[project]?.groups) || [];
+    const open = () => openDrawer("security");
+    return {
+      title: "home.security",
+      count: groups.length,
+      link: { label: "home.securityAll", open },
+      // worst first already (domain/aikido sortGroups)
+      rows: groups.slice(0, 3).map(group => ({
+        key: String(group.id),
+        lead:
+          group.severity === "low" ? { text: t(SEVERITY.low) } : { dot: group.severity === "medium" ? "busy" : "fail" },
+        title: group.title,
+        sub: [t(SEVERITY[group.severity]), typeLabel(group.type), ...group.repos.map(id => repoName(id))].join(" · "),
+        open,
+      })),
+    };
+  },
+};
+
 /** In the order the grid shows them. */
-export const HOME_CARDS: HomeCardDef[] = [waiting, tickets, builds];
+export const HOME_CARDS: HomeCardDef[] = [waiting, tickets, builds, security];
 
 /** The project's cards that have something to show now. */
 export const homeCards = (project: string) =>

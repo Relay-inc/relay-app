@@ -109,7 +109,7 @@ function Where({ glyph, children }: { glyph: string; children: ReactNode }) {
   );
 }
 
-/** The General tab: identity, the board, the repos with their checkouts on this Mac and Buddy's project. Each says
+/** The General tab: identity, the board, the repos with their checkouts on this Mac, Buddy's project. Each says
  *  where it is stored. The branches and the pipeline's switch are on the Pipeline tab. */
 function General({
   name,

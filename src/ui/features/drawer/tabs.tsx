@@ -5,11 +5,15 @@ import { buildsAttention } from "../../../application/builds/builds";
 import { buddyOf } from "../../../application/buddy/buddy";
 import { cloudOf } from "../../../application/cloudbuild/cloudbuild";
 import { prsAttention } from "../../../application/pull-requests/prs";
+import { aikidoAttention, aikidoOf } from "../../../application/aikido/aikido";
 import { ghOn, settings } from "../../../application/settings/settings";
 import { useDerived } from "../../hooks/useDerived";
 import { Icon } from "../../components/Icon";
+import { Glyph } from "../../components/Glyph";
+import { AIKIDO_GLYPH, AIKIDO_VIEWBOX } from "../aikido/mark";
 import { BuildsPanel } from "./BuildsPanel";
 import { PrsPanel } from "./PrsPanel";
+import { AikidoPanel } from "../aikido/AikidoPanel";
 import { TerminalsPanel } from "../terminals/TerminalsPanel";
 import { GitPanel } from "../git/GitPanel";
 import { FilesPanel } from "../files/FilesPanel";
@@ -23,6 +27,7 @@ export type DrawerTab = {
   Panel: ComponentType<{ project: string }>;
   show: (project: string) => boolean; // the tab exists for this project (an integration is on, a repo is linked)
   attention: (project: string) => Attention; // reads stores only (it runs under useDerived)
+  brand?: boolean; // the icon keeps its own colours (a logo): the title bar marks attention with a dot, not a tint
 };
 
 const icon = (name: string) => <Icon name={name} className="glyph size-4" />;
@@ -36,6 +41,16 @@ export const TABS: DrawerTab[] = [
     Panel: BuildsPanel,
     show: project => !!buddyOf(project) || !!cloudOf(project),
     attention: buildsAttention,
+  },
+  {
+    id: "security",
+    icon: <Glyph svg={AIKIDO_GLYPH} className="size-4" viewBox={AIKIDO_VIEWBOX} />,
+    brand: true,
+    label: "drawer.security",
+    Panel: AikidoPanel,
+    show: project => aikidoOf(project).length > 0,
+    // red while a critical or high Aikido group is there the user has not seen in the panel
+    attention: project => aikidoAttention(project),
   },
   {
     id: "git",

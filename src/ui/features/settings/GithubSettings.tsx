@@ -13,7 +13,7 @@ export function GithubSettings() {
   const owners = useSettingsStore(s => s.integrations.github.owners ?? s.settings.github.owners);
   const message = useSettingsStore(s => s.integrations.github.message);
   return (
-    <div>
+    <>
       <Html as="p" className={HINT_IN_ROW} html={th("gh.help")} />
       <Field label={withoutColon(t("gh.owners"))} id="ghowners">
         <input
@@ -35,6 +35,6 @@ export function GithubSettings() {
           </button>
         </Footer>
       </div>
-    </div>
+    </>
   );
 }

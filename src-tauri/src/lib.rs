@@ -71,6 +71,7 @@ mod orch;
 mod plugins;
 mod providers;
 mod gcloud;
+mod aikido;
 mod pty;
 mod related;
 mod relay_config;
@@ -2749,6 +2750,8 @@ fn integration_token(app: AppHandle, state: State<App>, provider: String, token:
         None if token.trim().is_empty() => for a in p.secrets { providers::set_token(p, a, "")?; },
         a => providers::set_token(p, a.as_deref().unwrap_or("token"), token.trim())?,
     }
+    // a token exchanged for the old client is not this client's
+    if p.id == "aikido" { aikido::forget(); }
     app.emit("settings-changed", state.settings.lock().unwrap().clone()).ok();
     Ok(())
 }
@@ -2758,10 +2761,16 @@ fn integration_token(app: AppHandle, state: State<App>, provider: String, token:
 async fn integration_call(state: State<'_, App>, provider: String, method: String, path: String, body: Option<Value>) -> Result<Value, String> {
     let p = providers::get(&provider)?;
     let cfg = state.settings.lock().unwrap()["integrations"][p.id].clone();
-    // Cloud Build has no keychain entry, its secret is gcloud's access token
+    // Cloud Build has no keychain entry, its secret is gcloud's access token; Aikido's keychain entry is a client that is
+    // exchanged for an access token (aikido.rs), only for a call the allowlist lets through
     let shell = (p.id == "cloudbuild").then(|| state.path.clone());
     tauri::async_runtime::spawn_blocking(move || match shell {
         Some(shell) => providers::call_with(p, &cfg, &method, &path, body, &[gcloud::token(&shell)?]),
+        None if p.id == "aikido" => {
+            if !(p.ready)(&cfg) { return Err(board_core::t(p.text, p.not_ready)); }
+            (p.url)(&cfg, &method, &path, &body).ok_or_else(|| trc_v("err.call", p.name))?;
+            providers::call_with(p, &cfg, &method, &path, body, &[aikido::token(&cfg)?])
+        }
         None => providers::call(p, &cfg, &method, &path, body),
     }).await.map_err(|e| e.to_string())?
 }

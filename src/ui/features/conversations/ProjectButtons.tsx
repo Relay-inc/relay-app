@@ -3,6 +3,7 @@ import type { Key } from "../../../shared/i18n";
 import { ATTENTION, isTab, worstOf } from "../../../domain/navigation/views";
 import { buddyOf } from "../../../application/buddy/buddy";
 import { watchBuilds } from "../../../application/builds/builds";
+import { aikidoOn, loadAikido } from "../../../application/aikido/aikido";
 import { cloudOf } from "../../../application/cloudbuild/cloudbuild";
 import { copyText } from "../../components/copy";
 import { Icon } from "../../components/Icon";
@@ -46,6 +47,11 @@ export function ProjectButtons({
   const linked = useDerived(() => !!buddyOf(project) || !!cloudOf(project));
   // a running build is read again while the bar shows; the failed one shows without anyone opening a tab
   useEffect(() => (linked ? watchBuilds(project) : undefined), [project, linked]);
+  // Aikido's issues once when the bar shows (at most every 5 minutes, never polled): its Security icon and the home card
+  const aikido = useDerived(() => aikidoOn());
+  useEffect(() => {
+    if (aikido) void loadAikido(project);
+  }, [project, aikido]);
 
   const calling = ATTENTION.flatMap(state => tabs.filter(tab => tab.attention === state)).slice(0, MAX_ICONS);
   const dot = worstOf(tabs.map(tab => tab.attention));
@@ -87,7 +93,7 @@ export function ProjectButtons({
           <button
             key={id}
             type="button"
-            className={`btn-icon ${attention === "busy" ? "w-auto! grid-flow-col gap-1.5 px-2!" : ""} ${ATTENTION_ICON[attention!]}`}
+            className={`btn-icon relative ${attention === "busy" ? "w-auto! grid-flow-col gap-1.5 px-2!" : ""} ${ATTENTION_ICON[attention!]}`}
             title={label}
             aria-label={label}
             onClick={() => openDrawer(id)}
@@ -96,6 +102,11 @@ export function ProjectButtons({
               <span className="size-2.5 rounded-full border-2 border-current border-r-transparent animate-spin"></span>
             ) : null}
             {tab.icon}
+            {tab.brand ? (
+              <span
+                className={`absolute right-1 bottom-1 size-1.5 rounded-full bg-current ${ATTENTION_TEXT[attention!]}`}
+              ></span>
+            ) : null}
           </button>
         );
       })}

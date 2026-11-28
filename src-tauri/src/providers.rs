@@ -7,7 +7,8 @@
 // Listing, moving and mapping cards is the webview's side (the same packages, src/providers/index.ts).
 // Buddy (packages/integration-buddy) is registered here too for its keychain and allowlist, but is no board: it only
 // reads pipelines, and its webview side is src/application/buddy. Cloud Build (integration-cloudbuild) is the same, but
-// its secret is gcloud's access token (gcloud.rs), not a keychain entry.
+// its secret is gcloud's access token (gcloud.rs), not a keychain entry. Aikido (integration-aikido) keeps a client in the
+// keychain that aikido.rs exchanges for the access token a call carries.
 
 use serde_json::{json, Value};
 use std::io::Write;
@@ -25,6 +26,7 @@ pub const PROVIDERS: &[&Provider] = &[
     &integration_github_projects::PROVIDER,
     &integration_buddy::PROVIDER,
     &integration_cloudbuild::PROVIDER,
+    &integration_aikido::PROVIDER,
 ];
 
 pub fn get(id: &str) -> Result<&'static Provider, String> {

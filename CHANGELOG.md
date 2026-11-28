@@ -21,11 +21,16 @@ makes the script add it to the release (docs/development.md › Releasing for Wi
 - **The project panel has tabs**: the right drawer of a project conversation now carries a strip of tabs in its header (Pull requests, Builds, Git, Files, Terminal), the open one with its name, each with a dot when it needs you. Builds is new: Buddy pipelines and Cloud Build triggers of the project in one list. A tab's icon also shows in the title bar, before the buttons, while it needs you (a build that runs or failed, a review waiting on you, a PR sent back with changes requested): at most three, red first, then blue, then orange; a click opens the panel on it. (#588)
 
 - **Google Cloud Build** (Settings › Integrations › CI/CD), read-only: link a vault project to a Google Cloud project in Settings › Projects and its title bar shows a Cloud Build button. The dot is the worst status of its triggers, the menu lists each trigger with its last build (branch, commit, when), a click opens the build's log in the Google Cloud console. It uses your `gcloud auth login`, no token is stored in Relay. (#587)
+- **Aikido Security** (Settings › Integrations › Security), read-only: connect with an Aikido API client (scopes `repositories:read` and `issues:read`, kept in the keychain), and a vault project's GitHub repos (Settings › Projects) that Aikido scans are found by their URL, with nothing to link (GitHub repos only). The project panel gets a Security tab that lists the open issue groups worst first, filtered per repo, with where they are and how to fix them; "Fix met Claude" starts a conversation that fixes exactly that finding on its own branch, runs the repo's checks and opens a PR, and the footer's "Fix kritieke en hoge" does that for a repo's critical and high issues, with a menu for only critical, quick wins (≤ 30 min by Aikido's estimate), dependency updates or everything, one conversation per repo. A critical or high issue you have not seen yet puts the Security icon in the title bar in red, and the project home shows a Security · Aikido card with the three worst. (#590)
 
 ### Changed
 
 - **A project's title bar has two buttons on the right**: a More menu (resume in terminal, Remote Control, show in graph, the pipeline's conversation) and the project panel, whose dot is the most urgent of its tabs. The Buddy and Cloud Build buttons, and the PRs, Git, Files and Terminal buttons, moved into the panel's tabs. (#588)
 - **Settings › Integrations has a CI/CD group**: Buddy moved there from Other, next to Cloud Build. (#587)
+
+### Fixed
+
+- **Settings › Integrations › Buddy, Cloud Build and GitHub**: the help text, the fields and the buttons no longer sit on top of each other; they get the same spacing as Productive's and Mail's pages. (#590)
 
 ## [0.0.72] - 2026-11-27
 

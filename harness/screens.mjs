@@ -346,6 +346,18 @@ const settingsSearch = async (query, pick, fixture = "default") => {
   if (pick) await page.keyboard.press("Enter");
   await page.waitForTimeout(pick ? 400 : 100);
 };
+/** Orchard Health's conversation in `fixture`: the title bar's Security icon (saved as bar-attention-security), then
+ *  the Security tab with the SQL injection's row unfolded */
+const securityTab = async fixture => {
+  await open(page, server.url, { fixture, sel: keys.orchard });
+  await page.getByRole("button", { name: "Security, failed", exact: true }).first().waitFor();
+  await settle(page);
+  if (!fixture.endsWith("-dark")) await page.screenshot({ path: `${dir}/bar-attention-security.png` });
+  await tab("Security");
+  await page.getByRole("button", { name: "SQL injection in OrderRepository::search" }).click();
+  await waitText("OrderRepository.php:88");
+  await settle(page);
+};
 /** Settings › Integrations with `name` picked in the list, `height` tall */
 const integration = async (name, { fixture = "default", height = 1000 } = {}) => {
   await settingsPage("Integrations", name, fixture);
@@ -1425,6 +1437,39 @@ const VIEWS = {
     await field.scrollIntoViewIfNeeded();
     await settle(page);
   },
+  // the project panel's Security tab (Aikido) on Orchard Health: two repos, five groups worst first, the SQL injection
+  // unfolded with its files, how to fix it and Fix with Claude; first the title bar calling for it (a critical group
+  // not seen yet), then the dark twin (PR #590)
+  "drawer-security": () => securityTab("aikido"),
+  "drawer-security-dark": () => securityTab("aikido-dark"),
+  // the tab on one repo (orchard-api), nothing unfolded
+  "drawer-security-repo": async () => {
+    await open(page, server.url, { fixture: "aikido", sel: keys.orchard });
+    await tab("Security");
+    await page.locator(".relay-drawer").getByRole("button", { name: /^orchard-api/ }).click();
+    await waitText("Container runs as root");
+    await settle(page);
+  },
+  // the footer's split button open: Fix critical and high, only critical, quick wins (≤ 30 min), dependency updates,
+  // everything, each with its count (PR #590)
+  "drawer-security-fix-menu": async () => {
+    await open(page, server.url, { fixture: "aikido", sel: keys.orchard });
+    await tab("Security");
+    await page.getByRole("button", { name: "More ways to fix", exact: true }).click();
+    await waitText("Fix quick wins");
+    await settle(page);
+  },
+  // a new conversation in Orchard Health: its home with the Security · Aikido card, the three worst groups (PR #590)
+  "project-home-security": async () => {
+    await open(page, server.url, { fixture: "aikido" });
+    await byText(page, "Orchard Health").first().hover();
+    await page.getByRole("button", { name: "New conversation about Orchard Health", exact: true }).click();
+    await waitText("Security · Aikido");
+    await waitText("Prototype pollution in lodash 4.17.15");
+    await settle(page);
+  },
+  // Aikido's page in Integrations: region, client ID and secret (PR #590)
+  "settings-integration-aikido": () => integration("Aikido", { fixture: "aikido" }),
   // a project's Cloud Build triggers in the panel's Builds tab: failed, running and passed, and a manual build (PR cloudbuild, PR drawer tabs)
   "cloudbuild-menu": async () => {
     await open(page, server.url, { fixture: "cloudbuild", sel: keys.switchTo });
